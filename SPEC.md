@@ -504,6 +504,17 @@ Initial MVP command set:
 - `cp`
 - `mv`
 - `ls`
+- `touch`
+- `rmdir`
+- `ln`
+- `chmod`
+- `readlink`
+- `stat`
+- `basename`
+- `dirname`
+- `tree`
+- `du`
+- `file`
 - `find`
 - `grep`
 - `head`
@@ -520,6 +531,17 @@ Initial MVP command set:
 - `pwd`
 
 For `jq`, the runtime should support a practical CLI-compatible subset for agent workflows, including raw-input mode, file-backed filters, variable injection flags, positional argument injection, and basic output-formatting flags. Module loading and stream-mode parity can follow later.
+
+For file/path commands, the runtime now supports a practical agent-oriented subset rather than full GNU parity:
+
+- `touch` supports creation, `-c`, and `-d/--date`
+- `ln` supports hard links plus `-s` and `-f`
+- `chmod` supports octal and symbolic modes plus recursive `-R`
+- `readlink` supports raw link-target output and `-f` canonicalization
+- `stat` supports default output and `-c` formatting for common fields such as name, size, type, and mode
+- `tree` supports `-a`, `-d`, `-L`, and `-f`
+- `du` supports `-a`, `-s`, `-h`, `-c`, and `--max-depth`
+- `file` supports `-b`, `-i`, basic magic-byte detection, shebang detection, and extension-based text detection
 
 For `sed`, the runtime should continue to expose an explicitly documented subset rather than imply GNU `sed` parity. The supported subset is:
 
@@ -830,4 +852,4 @@ These questions should be decided early but do not block the initial scaffold:
 
 1. Which shell builtins should be explicitly denied even if `mvdan/sh` supports them?
 2. Do we want a first-class JSON command set in MVP+1?
-3. When we expose user-facing symlink commands, do we want them in MVP+1 or to keep symlink creation limited to tests and internal fixtures for longer?
+3. When we add a host-backed lower filesystem for `OverlayFS`, do we want it limited to read-only roots at first or to support a narrower write-through mode under policy control?

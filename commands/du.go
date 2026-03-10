@@ -12,11 +12,11 @@ import (
 type DU struct{}
 
 type duOptions struct {
-	showAll    bool
-	summary    bool
-	human      bool
-	total      bool
-	maxDepth   int
+	showAll     bool
+	summary     bool
+	human       bool
+	total       bool
+	maxDepth    int
 	hasMaxDepth bool
 }
 

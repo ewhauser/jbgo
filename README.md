@@ -34,6 +34,17 @@ The repository currently contains:
   - `cp`
   - `mv`
   - `ls`
+  - `touch`
+  - `rmdir`
+  - `ln`
+  - `chmod`
+  - `readlink`
+  - `stat`
+  - `basename`
+  - `dirname`
+  - `tree`
+  - `du`
+  - `file`
   - `find`
   - `grep`
   - `head`
@@ -53,6 +64,8 @@ The implementation is early-stage but coherent and runnable.
 The `jq` command is backed by `gojq` and now supports a broader CLI-compatible subset, including `-R`, `-f`, `--arg`, `--argjson`, `--slurpfile`, `--rawfile`, `--args`, `--jsonargs`, `--raw-output0`, `--indent`, and `--tab`.
 
 The text-tool expansion is also in place. `sort` supports lexical and numeric ordering, reverse, unique, case-folded comparison, keyed sorts via `-k`, and custom field separators via `-t`. `uniq` supports adjacent-run deduping with `-c`, `-d`, and `-u`. `cut` supports `-f`, `-c`, `-d`, and `-s`. `sed` is intentionally a subset: it currently supports `-n`, `-e`, `-i`, numeric and regex addresses, `$`, simple ranges, and the `s`, `d`, `p`, and `q` commands with `g`/`i` substitution flags and alternate delimiters.
+
+The file/path batch is also in place. `touch` supports creation, `-c`, and `-d/--date`; `ln` supports hard links plus `-s` and `-f`; `chmod` supports octal and symbolic modes with recursive `-R`; `readlink` supports raw output plus `-f`; `stat` supports default output plus `-c` format strings; `tree` supports `-a`, `-d`, `-L`, and `-f`; `du` supports `-a`, `-s`, `-h`, `-c`, and `--max-depth`; and `file` supports `-b`, `-i`, simple magic-byte detection, shebang detection, and extension-based text detection.
 
 Network access is still off by default. When configured, the runtime exposes a minimal `curl` command backed by a sandboxed client that enforces URL-prefix allowlists, HTTP-method allowlists, manual redirect revalidation, response-size limits, and optional private-range blocking.
 

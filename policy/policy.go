@@ -12,15 +12,15 @@ import (
 type FileAction string
 
 const (
-	FileActionRead    FileAction = "read"
-	FileActionWrite   FileAction = "write"
-	FileActionStat    FileAction = "stat"
-	FileActionLstat   FileAction = "lstat"
+	FileActionRead     FileAction = "read"
+	FileActionWrite    FileAction = "write"
+	FileActionStat     FileAction = "stat"
+	FileActionLstat    FileAction = "lstat"
 	FileActionReadlink FileAction = "readlink"
-	FileActionReadDir FileAction = "readdir"
-	FileActionMkdir   FileAction = "mkdir"
-	FileActionRemove  FileAction = "remove"
-	FileActionRename  FileAction = "rename"
+	FileActionReadDir  FileAction = "readdir"
+	FileActionMkdir    FileAction = "mkdir"
+	FileActionRemove   FileAction = "remove"
+	FileActionRename   FileAction = "rename"
 )
 
 type NetworkMode string

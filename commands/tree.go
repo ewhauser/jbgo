@@ -12,10 +12,10 @@ import (
 type Tree struct{}
 
 type treeOptions struct {
-	showHidden bool
-	dirsOnly   bool
-	fullPath   bool
-	maxDepth   int
+	showHidden  bool
+	dirsOnly    bool
+	fullPath    bool
+	maxDepth    int
 	hasMaxDepth bool
 }
 
@@ -84,7 +84,7 @@ func (c *Tree) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func (c *Tree) renderChildren(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, prefix string, depth int, opts treeOptions) (dirs int, files int, err error) {
+func (c *Tree) renderChildren(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, prefix string, depth int, opts treeOptions) (dirs, files int, err error) {
 	if !info.IsDir() {
 		return 0, 1, nil
 	}

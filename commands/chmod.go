@@ -132,7 +132,7 @@ func computeChmodMode(current stdfs.FileMode, spec string) (stdfs.FileMode, erro
 	return mode, nil
 }
 
-func chmodWhoMasks(who string) (permMask stdfs.FileMode, specialMask stdfs.FileMode) {
+func chmodWhoMasks(who string) (permMask, specialMask stdfs.FileMode) {
 	if who == "" {
 		who = "a"
 	}
@@ -157,7 +157,7 @@ func chmodWhoMasks(who string) (permMask stdfs.FileMode, specialMask stdfs.FileM
 	return permMask, specialMask
 }
 
-func chmodPermMasks(perms string, current stdfs.FileMode) (permMask stdfs.FileMode, specialMask stdfs.FileMode, err error) {
+func chmodPermMasks(perms string, current stdfs.FileMode) (permMask, specialMask stdfs.FileMode, err error) {
 	for _, ch := range perms {
 		switch ch {
 		case 'r':
