@@ -1,0 +1,37 @@
+[
+  {
+    "name": "relative-find-inventory",
+    "work_dir": "/home/agent/project",
+    "files": {
+      "/home/agent/project/src/app/main.txt": "alpha\n",
+      "/home/agent/project/src/lib/util.txt": "beta\n"
+    },
+    "script": "find src -type f\n",
+    "stdout": "src/app/main.txt\nsrc/lib/util.txt\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "name": "recursive-grep-finds-todos",
+    "work_dir": "/home/agent/project",
+    "files": {
+      "/home/agent/project/src/app/main.go": "// TODO: wire config\n",
+      "/home/agent/project/src/lib/math.go": "// TODO: add tests\n"
+    },
+    "script": "grep -r \"TODO\" src\n",
+    "stdout": "/home/agent/project/src/app/main.go:// TODO: wire config\n/home/agent/project/src/lib/math.go:// TODO: add tests\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "name": "cp-and-tail-work-on-virtual-files",
+    "work_dir": "/home/agent/project",
+    "files": {
+      "/home/agent/project/source.log": "line1\nline2\nline3\n"
+    },
+    "script": "cp source.log copied.log\ntail -n 2 copied.log\n",
+    "stdout": "line2\nline3\n",
+    "stderr": "",
+    "exit_code": 0
+  }
+]

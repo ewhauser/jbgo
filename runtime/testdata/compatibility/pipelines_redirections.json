@@ -1,0 +1,32 @@
+[
+  {
+    "name": "overwrite-append-and-input-redirection",
+    "work_dir": "/home/agent/project",
+    "script": "echo first > log.txt\necho second >> log.txt\ncat < log.txt\n",
+    "stdout": "first\nsecond\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "name": "pipeline-filters-and-slices",
+    "work_dir": "/home/agent/project",
+    "files": {
+      "/home/agent/project/words.txt": "alpha\nbeta\nbeta\n"
+    },
+    "script": "cat words.txt | grep beta | head -n 1\n",
+    "stdout": "beta\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "name": "command-substitution-expands-stdin-command-output",
+    "work_dir": "/home/agent/project",
+    "files": {
+      "/home/agent/project/note.txt": "sandbox\n"
+    },
+    "script": "name=$(cat note.txt)\necho \"hello $name\"\n",
+    "stdout": "hello sandbox\n",
+    "stderr": "",
+    "exit_code": 0
+  }
+]

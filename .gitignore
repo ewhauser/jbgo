@@ -1,0 +1,25 @@
+# Binaries and build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+*.test
+
+# Go coverage and test output
+*.out
+*.coverprofile
+coverage.out
+coverage.html
+
+# Common local build directories
+bin/
+dist/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+.claude

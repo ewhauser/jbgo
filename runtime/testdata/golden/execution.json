@@ -1,0 +1,121 @@
+[
+  {
+    "name": "redirect-then-cat-trace",
+    "work_dir": "/home/agent/project",
+    "script": "echo hi > note.txt\ncat note.txt\n",
+    "stdout": "hi\n",
+    "stderr": "",
+    "exit_code": 0,
+    "events": [
+      {
+        "kind": "file.access",
+        "file": {
+          "action": "read",
+          "path": "/home/agent/project/note.txt"
+        }
+      },
+      {
+        "kind": "file.access",
+        "file": {
+          "action": "write",
+          "path": "/home/agent/project/note.txt"
+        }
+      },
+      {
+        "kind": "file.mutation",
+        "file": {
+          "action": "write",
+          "path": "/home/agent/project/note.txt"
+        }
+      },
+      {
+        "kind": "call.expanded",
+        "command": {
+          "name": "echo",
+          "argv": ["echo", "hi"],
+          "dir": "/home/agent/project",
+          "exit_code": 0,
+          "builtin": true
+        }
+      },
+      {
+        "kind": "call.expanded",
+        "command": {
+          "name": "cat",
+          "argv": ["cat", "note.txt"],
+          "dir": "/home/agent/project",
+          "exit_code": 0
+        }
+      },
+      {
+        "kind": "command.start",
+        "command": {
+          "name": "cat",
+          "argv": ["cat", "note.txt"],
+          "dir": "/home/agent/project",
+          "exit_code": 0
+        }
+      },
+      {
+        "kind": "file.access",
+        "file": {
+          "action": "read",
+          "path": "/home/agent/project/note.txt"
+        }
+      },
+      {
+        "kind": "command.exit",
+        "command": {
+          "name": "cat",
+          "argv": ["cat", "note.txt"],
+          "dir": "/home/agent/project",
+          "exit_code": 0
+        }
+      }
+    ]
+  },
+  {
+    "name": "missing-cat-trace",
+    "work_dir": "/home/agent/project",
+    "script": "cat missing.txt\n",
+    "stdout": "",
+    "stderr": "",
+    "exit_code": 1,
+    "events": [
+      {
+        "kind": "call.expanded",
+        "command": {
+          "name": "cat",
+          "argv": ["cat", "missing.txt"],
+          "dir": "/home/agent/project",
+          "exit_code": 0
+        }
+      },
+      {
+        "kind": "command.start",
+        "command": {
+          "name": "cat",
+          "argv": ["cat", "missing.txt"],
+          "dir": "/home/agent/project",
+          "exit_code": 0
+        }
+      },
+      {
+        "kind": "file.access",
+        "file": {
+          "action": "read",
+          "path": "/home/agent/project/missing.txt"
+        }
+      },
+      {
+        "kind": "command.exit",
+        "command": {
+          "name": "cat",
+          "argv": ["cat", "missing.txt"],
+          "dir": "/home/agent/project",
+          "exit_code": 1
+        }
+      }
+    ]
+  }
+]

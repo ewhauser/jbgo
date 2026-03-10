@@ -1,0 +1,26 @@
+[
+  {
+    "name": "if-test-string-equality",
+    "work_dir": "/home/agent/project",
+    "script": "status=ready\nif test \"$status\" = ready; then echo exists; else echo missing; fi\n",
+    "stdout": "exists\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "name": "for-loop-emits-each-item",
+    "work_dir": "/home/agent/project",
+    "script": "for item in alpha beta gamma; do echo \"item:$item\"; done\n",
+    "stdout": "item:alpha\nitem:beta\nitem:gamma\n",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "name": "while-loop-counts-up",
+    "work_dir": "/home/agent/project",
+    "script": "i=0\nwhile test \"$i\" -lt 3; do echo \"count:$i\"; i=$((i + 1)); done\n",
+    "stdout": "count:0\ncount:1\ncount:2\n",
+    "stderr": "",
+    "exit_code": 0
+  }
+]
