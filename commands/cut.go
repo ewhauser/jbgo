@@ -123,6 +123,8 @@ func parseCutArgs(inv *Invocation) (cutOptions, []string, error) {
 			opts.characters = parsed
 		case arg == "-s":
 			opts.suppressNoDelim = true
+		case arg == "--only-delimited":
+			opts.suppressNoDelim = true
 		default:
 			return cutOptions{}, nil, exitf(inv, 1, "cut: unsupported flag %s", arg)
 		}

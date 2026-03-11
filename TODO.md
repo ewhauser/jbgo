@@ -244,7 +244,7 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `cut`
 
-- [ ] `--only-delimited`
+- [x] `--only-delimited`
 
 #### `date`
 
