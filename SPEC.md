@@ -552,6 +552,7 @@ Initial MVP command set:
 - `base64`
 - `jq`
 - `yq`
+- `sqlite3`
 - `curl` when network access is configured
 - `mkdir`
 - `rm`
@@ -560,6 +561,8 @@ Initial MVP command set:
 For `jq`, the runtime should support a practical CLI-compatible subset for agent workflows, including raw-input mode, file-backed filters, variable injection flags, positional argument injection, and basic output-formatting flags. Module loading and stream-mode parity can follow later.
 
 For `yq`, the runtime should wrap `mikefarah/yq`'s `yqlib` evaluator rather than embedding the upstream Cobra CLI. The supported subset should cover agent-oriented `eval` / `eval-all` flows, input and output format selection, null-input document creation, pretty-print rewriting, exit-status handling, scalar-unwrapping controls, NUL-separated output, expression files, and in-place file updates. All input and output must continue to route through the sandbox filesystem, and `yqlib` file/env operators such as `load()` and `env()` must stay disabled so expressions cannot bypass policy.
+
+For `sqlite3`, the runtime should wrap `ncruces/go-sqlite3` directly rather than embedding the upstream CLI. The initial implementation should open an in-memory SQLite connection, deserialize database bytes from the sandbox filesystem when a file path is requested, execute SQL inside that in-memory connection, and serialize the database back to the sandbox filesystem only after successful writes. The supported subset should cover `:memory:` and file-backed databases, list / CSV / JSON / line / column / table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` must stay disabled so SQL cannot escape the sandbox filesystem or reach host file APIs.
 
 For file/path commands, the runtime now supports a practical agent-oriented subset rather than full GNU parity:
 

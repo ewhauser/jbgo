@@ -108,12 +108,13 @@ This file is the implementation queue derived from [`SPEC.md`](./SPEC.md), espec
 - [x] Add file/path commands: `touch`, `rmdir`, `ln`, `chmod`, `readlink`, `stat`, `basename`, `dirname`, `tree`, `du`, `file`
 - [x] Add text/search commands: `printf`, `rg`, `awk`, `comm`, `paste`, `tr`, `rev`, `nl`, `join`, `split`, `tac`, `diff`, `base64`
 - [x] Add shell/process helpers: `tee`, `env`, `printenv`, `true`, `false`, `which`, `help`, `date`, `sleep`, `timeout`, `xargs`, `bash`, `sh`
-- [ ] Add archive/data commands: `tar`, `gzip`, `gunzip`, `zcat`, `sqlite3`
+- [ ] Add archive/data commands: `tar`, `gzip`, `gunzip`, `zcat`
 
 ### 12. Agent-oriented data tools
 
 - [x] Add `jq` as the first JSON-aware helper
 - [x] Add `yq` as a YAML/JSON-aware helper
+- [x] Add `sqlite3` as a sandboxed relational-data helper
 - [ ] Expand `jq` toward full parity for modules, stream mode, and advanced output flags
 - [x] Design a safe network fetch command with allowlisted hosts
 - [ ] Expand `curl` toward stronger compatibility for safe agent workflows

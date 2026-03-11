@@ -260,6 +260,10 @@ func clampFuzzData(data []byte) []byte {
 	return data[:fuzzMaxDataBytes]
 }
 
+func sqliteStringLiteral(value string) string {
+	return strings.ReplaceAll(value, "'", "''")
+}
+
 func normalizeFuzzText(data []byte) []byte {
 	data = clampFuzzData(data)
 	text := strings.ToValidUTF8(string(data), "?")
