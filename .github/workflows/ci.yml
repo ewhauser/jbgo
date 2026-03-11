@@ -24,4 +24,4 @@ jobs:
 
       - run: make fuzz
         env:
-          FUZZTIME: 3s
+          FUZZTIME: 10s

@@ -35,7 +35,6 @@ Install the module with `go get github.com/ewhauser/jbgo` and import packages fr
 - [Supported Commands](#supported-commands)
 - [Shell Features](#shell-features)
 - [Default Sandbox Layout](#default-sandbox-layout)
-- [Releases](#releases)
 - [Development](#development)
 - [License](#license)
 
@@ -399,21 +398,7 @@ Each fresh session starts with a Unix-like virtual layout:
 
 Those command paths are virtual stubs used for shell resolution. Command implementations still come from the Go registry, not the host filesystem.
 
-## Releases
-
-Push a SemVer tag such as `v0.1.0` to publish a GitHub Release with cross-platform `jbgo` archives and `checksums.txt`. The release contract lives in [`.github/workflows/release.yml`](./.github/workflows/release.yml), [`.github/workflows/release-check.yml`](./.github/workflows/release-check.yml), and [`.goreleaser.yaml`](./.goreleaser.yaml).
-
 ## Development
-
-Common commands:
-
-```bash
-go build ./...
-go test ./...
-go run ./cmd/jbgo < script.sh
-go run github.com/goreleaser/goreleaser/v2@v2.14.3 release --snapshot --clean
-gofmt -w .
-```
 
 For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before making changes.
 

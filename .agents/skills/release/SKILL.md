@@ -23,6 +23,8 @@ Use this skill for release work in the `github.com/ewhauser/jbgo` repository.
 
 ## Cut a release
 
+- After a successful readiness/validation pass, explicitly ask the user whether they want you to create and push a release tag now.
+- Do not create or push a tag unless the user explicitly confirms.
 - Sync `main` before tagging unless the user explicitly asks for another branch.
 - Create annotated SemVer tags in the form `vX.Y.Z`.
 - Push the tag to `origin`; that triggers the GitHub `Release` workflow.
