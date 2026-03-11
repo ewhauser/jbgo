@@ -423,24 +423,24 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `sort`
 
-- [ ] `--check`
-- [ ] `--dictionary-order`
-- [ ] `--field-separator`
-- [ ] `--human-numeric-sort`
-- [ ] `--ignore-leading-blanks`
-- [ ] `--key`
-- [ ] `--month-sort`
-- [ ] `--output`
-- [ ] `--stable`
-- [ ] `--version-sort`
-- [ ] `-M`
-- [ ] `-V`
-- [ ] `-b`
-- [ ] `-c`
-- [ ] `-d`
-- [ ] `-h`
-- [ ] `-o`
-- [ ] `-s`
+- [x] `--check`
+- [x] `--dictionary-order`
+- [x] `--field-separator`
+- [x] `--human-numeric-sort`
+- [x] `--ignore-leading-blanks`
+- [x] `--key`
+- [x] `--month-sort`
+- [x] `--output`
+- [x] `--stable`
+- [x] `--version-sort`
+- [x] `-M`
+- [x] `-V`
+- [x] `-b`
+- [x] `-c`
+- [x] `-d`
+- [x] `-h`
+- [x] `-o`
+- [x] `-s`
 
 #### `split`
 
