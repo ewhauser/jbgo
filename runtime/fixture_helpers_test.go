@@ -53,7 +53,7 @@ type normalizedFileEvent struct {
 	Path   string `json:"path"`
 }
 
-func loadExecutionFixtures(t *testing.T, pattern string) []executionFixture {
+func loadExecutionFixtures(t testing.TB, pattern string) []executionFixture {
 	t.Helper()
 
 	matches, err := filepath.Glob(filepath.Join("testdata", pattern))
@@ -82,7 +82,7 @@ func loadExecutionFixtures(t *testing.T, pattern string) []executionFixture {
 	return fixtures
 }
 
-func runExecutionFixture(t *testing.T, fixture *executionFixture) *ExecutionResult {
+func runExecutionFixture(t testing.TB, fixture *executionFixture) *ExecutionResult {
 	t.Helper()
 
 	session := newSession(t, &Config{})
@@ -101,7 +101,7 @@ func runExecutionFixture(t *testing.T, fixture *executionFixture) *ExecutionResu
 	return result
 }
 
-func seedSessionFiles(t *testing.T, session *Session, files map[string]string) {
+func seedSessionFiles(t testing.TB, session *Session, files map[string]string) {
 	t.Helper()
 
 	paths := make([]string, 0, len(files))

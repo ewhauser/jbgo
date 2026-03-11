@@ -11,7 +11,7 @@ import (
 	"github.com/ewhauser/jbgo/policy"
 )
 
-func newRuntime(t *testing.T, cfg *Config) *Runtime {
+func newRuntime(t testing.TB, cfg *Config) *Runtime {
 	t.Helper()
 
 	rt, err := New(cfg)
@@ -21,7 +21,7 @@ func newRuntime(t *testing.T, cfg *Config) *Runtime {
 	return rt
 }
 
-func newSession(t *testing.T, cfg *Config) *Session {
+func newSession(t testing.TB, cfg *Config) *Session {
 	t.Helper()
 
 	session, err := newRuntime(t, cfg).NewSession(context.Background())
@@ -31,7 +31,7 @@ func newSession(t *testing.T, cfg *Config) *Session {
 	return session
 }
 
-func newRuntimeWithLimits(t *testing.T, limits policy.Limits) *Runtime {
+func newRuntimeWithLimits(t testing.TB, limits policy.Limits) *Runtime {
 	t.Helper()
 
 	return newRuntime(t, &Config{
@@ -43,7 +43,7 @@ func newRuntimeWithLimits(t *testing.T, limits policy.Limits) *Runtime {
 	})
 }
 
-func registryWithCommands(t *testing.T, extras ...commands.Command) *commands.Registry {
+func registryWithCommands(t testing.TB, extras ...commands.Command) *commands.Registry {
 	t.Helper()
 
 	registry := commands.DefaultRegistry()
@@ -64,7 +64,7 @@ func containsLine(lines []string, want string) bool {
 	return false
 }
 
-func mustExecSession(t *testing.T, session *Session, script string) *ExecutionResult {
+func mustExecSession(t testing.TB, session *Session, script string) *ExecutionResult {
 	t.Helper()
 
 	result, err := session.Exec(context.Background(), &ExecutionRequest{Script: script})
@@ -74,7 +74,7 @@ func mustExecSession(t *testing.T, session *Session, script string) *ExecutionRe
 	return result
 }
 
-func writeSessionFile(t *testing.T, session *Session, name string, data []byte) {
+func writeSessionFile(t testing.TB, session *Session, name string, data []byte) {
 	t.Helper()
 
 	if err := session.FileSystem().MkdirAll(context.Background(), path.Dir(name), 0o755); err != nil {
@@ -92,7 +92,7 @@ func writeSessionFile(t *testing.T, session *Session, name string, data []byte) 
 	}
 }
 
-func readSessionFile(t *testing.T, session *Session, name string) []byte {
+func readSessionFile(t testing.TB, session *Session, name string) []byte {
 	t.Helper()
 
 	file, err := session.FileSystem().Open(context.Background(), name)

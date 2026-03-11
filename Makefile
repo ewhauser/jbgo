@@ -1,7 +1,12 @@
-.PHONY: lint test build fuzz release-check release-snapshot
+.PHONY: lint test build fuzz bench-smoke bench-full release-check release-snapshot
 
 FUZZTIME ?= 10s
 GORELEASER_VERSION ?= v2.14.3
+BENCH_SMOKE_COUNT ?= 8
+BENCH_SMOKE_TIME ?= 100ms
+BENCH_FULL_COUNT ?= 10
+BENCH_FULL_TIME ?= 200ms
+BENCH_SMOKE_REGEX ?= Benchmark(NewSession|RuntimeRunSimpleScript|SessionExecWarmSimpleScript|WorkflowCodebaseExploration|CommandRGRecursive|CommandJQTransform)$$
 
 lint:
 	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -48,6 +53,12 @@ fuzz:
 	go test ./runtime -run=^$$ -fuzz=FuzzArchiveCommands -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzGeneratedPrograms -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzAttackMutations -fuzztime=$(FUZZTIME)
+
+bench-smoke:
+	@go test ./runtime -run=^$$ -bench '$(BENCH_SMOKE_REGEX)' -benchmem -count=$(BENCH_SMOKE_COUNT) -benchtime=$(BENCH_SMOKE_TIME)
+
+bench-full:
+	@go test ./runtime -run=^$$ -bench . -benchmem -count=$(BENCH_FULL_COUNT) -benchtime=$(BENCH_FULL_TIME)
 
 release-check:
 	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) check
