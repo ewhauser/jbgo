@@ -111,6 +111,13 @@ func TestSummariesComputePercentagesAndRollups(t *testing.T) {
 		Summary: summarizeTestResults(nil, 3, 0),
 		Passed:  false,
 	}
+	fourth := utilityResult{
+		Name: "cp",
+		Summary: summarizeTestResults([]testResult{
+			{Name: "tests/cp/basic.sh", Status: "skip"},
+		}, 0, 0),
+		Passed: true,
+	}
 
 	if got, want := first.Summary.PassPctSelected, 25.0; got != want {
 		t.Fatalf("first pass_pct_selected = %v, want %v", got, want)
@@ -119,8 +126,8 @@ func TestSummariesComputePercentagesAndRollups(t *testing.T) {
 		t.Fatalf("first pass_pct_runnable = %v, want %v", got, want)
 	}
 
-	overall := summarizeOverall([]utilityResult{first, second, third})
-	if got, want := overall.SelectedTotal, 5; got != want {
+	overall := summarizeOverall([]utilityResult{first, second, third, fourth})
+	if got, want := overall.SelectedTotal, 6; got != want {
 		t.Fatalf("overall selected_total = %d, want %d", got, want)
 	}
 	if got, want := overall.FilteredSkipTotal, 5; got != want {
@@ -135,7 +142,7 @@ func TestSummariesComputePercentagesAndRollups(t *testing.T) {
 	if got, want := overall.Fail, 1; got != want {
 		t.Fatalf("overall fail = %d, want %d", got, want)
 	}
-	if got, want := overall.Skip, 1; got != want {
+	if got, want := overall.Skip, 2; got != want {
 		t.Fatalf("overall skip = %d, want %d", got, want)
 	}
 	if got, want := overall.Unreported, 1; got != want {
@@ -144,15 +151,15 @@ func TestSummariesComputePercentagesAndRollups(t *testing.T) {
 	if got, want := overall.RunnableTotal, 3; got != want {
 		t.Fatalf("overall runnable_total = %d, want %d", got, want)
 	}
-	if got, want := overall.PassPctSelected, 40.0; got != want {
+	if got, want := overall.PassPctSelected, 33.33; got != want {
 		t.Fatalf("overall pass_pct_selected = %v, want %v", got, want)
 	}
 	if got, want := overall.PassPctRunnable, 66.67; got != want {
 		t.Fatalf("overall pass_pct_runnable = %v, want %v", got, want)
 	}
 
-	totals := summarizeUtilityTotals([]utilityResult{first, second, third})
-	if got, want := totals.Total, 3; got != want {
+	totals := summarizeUtilityTotals([]utilityResult{first, second, third, fourth})
+	if got, want := totals.Total, 4; got != want {
 		t.Fatalf("utility total = %d, want %d", got, want)
 	}
 	if got, want := totals.Passed, 1; got != want {
@@ -161,14 +168,57 @@ func TestSummariesComputePercentagesAndRollups(t *testing.T) {
 	if got, want := totals.Failed, 1; got != want {
 		t.Fatalf("utility failed = %d, want %d", got, want)
 	}
-	if got, want := totals.NoRunnableTests, 1; got != want {
+	if got, want := totals.NoRunnableTests, 2; got != want {
 		t.Fatalf("utility no_runnable_tests = %d, want %d", got, want)
 	}
-	if got, want := totals.PassPctTotal, 33.33; got != want {
+	if got, want := totals.PassPctTotal, 25.0; got != want {
 		t.Fatalf("utility pass_pct_total = %v, want %v", got, want)
 	}
 	if got, want := totals.PassPctRunnable, 50.0; got != want {
 		t.Fatalf("utility pass_pct_runnable = %v, want %v", got, want)
+	}
+}
+
+func TestCompleteUtilityResultsAddsInactivePlaceholders(t *testing.T) {
+	results := []utilityResult{
+		{
+			Name:   "basename",
+			Passed: true,
+			Summary: testSummary{
+				SelectedTotal:   1,
+				Pass:            1,
+				RunnableTotal:   1,
+				PassPctSelected: 100,
+				PassPctRunnable: 100,
+			},
+		},
+	}
+	programs := []string{"base32", "basename", "expr"}
+	manifestUtilities := []utilityManifest{{Name: "basename"}, {Name: "cat"}}
+	selectedUtilities := []utilityManifest{{Name: "basename"}}
+	supportedSet := map[string]struct{}{
+		"base32":   {},
+		"basename": {},
+	}
+
+	got := completeUtilityResults(results, programs, manifestUtilities, selectedUtilities, supportedSet)
+	if len(got) != 3 {
+		t.Fatalf("completeUtilityResults() len = %d, want 3", len(got))
+	}
+	if got[0].Name != "base32" || !got[0].Inactive {
+		t.Fatalf("base32 row = %#v, want inactive placeholder", got[0])
+	}
+	if got[0].Reason != "implemented in jbgo, but not included in the compatibility manifest" {
+		t.Fatalf("base32 reason = %q", got[0].Reason)
+	}
+	if got[1].Name != "basename" || got[1].Inactive {
+		t.Fatalf("basename row = %#v, want active result", got[1])
+	}
+	if got[2].Name != "expr" || !got[2].Inactive {
+		t.Fatalf("expr row = %#v, want inactive placeholder", got[2])
+	}
+	if got[2].Reason != "not currently covered by the compatibility manifest" {
+		t.Fatalf("expr reason = %q", got[2].Reason)
 	}
 }
 

@@ -99,6 +99,13 @@ th {
   background: rgba(246,244,239,0.85);
 }
 tbody tr:last-child td { border-bottom: 0; }
+.inactive td {
+  color: var(--muted);
+  background: rgba(246,244,239,0.65);
+}
+.inactive a {
+  color: var(--muted);
+}
 .pill {
   display: inline-block;
   min-width: 64px;
@@ -125,7 +132,7 @@ tbody tr:last-child td { border-bottom: 0; }
 
     <section class="cards">
       <article class="card">
-        <div class="card-label">Overall Test Pass</div>
+        <div class="card-label">Selected Test Pass</div>
         <div class="card-value">{{ formatPercent .Summary.Overall.PassPctSelected }}</div>
         <div class="card-detail">{{ .OverallDetail }}</div>
       </article>
@@ -135,8 +142,8 @@ tbody tr:last-child td { border-bottom: 0; }
         <div class="card-detail">{{ .RunnableDetail }}</div>
       </article>
       <article class="card">
-        <div class="card-label">Command Pass</div>
-        <div class="card-value">{{ formatPercent .Summary.UtilitySummary.PassPctRunnable }}</div>
+        <div class="card-label">Runnable Command Pass</div>
+        <div class="card-value">{{ formatPercentOrNA .CommandPassPercent .CommandPassPercentNA }}</div>
         <div class="card-detail">{{ .CommandDetail }}</div>
       </article>
       <article class="card">
@@ -151,7 +158,7 @@ tbody tr:last-child td { border-bottom: 0; }
         <thead>
           <tr>
             <th>Utility</th>
-            <th>Pass %</th>
+            <th>Runnable %</th>
             <th>Selected</th>
             <th>Pass</th>
             <th>Fail</th>
@@ -165,20 +172,20 @@ tbody tr:last-child td { border-bottom: 0; }
           </tr>
         </thead>
         <tbody>
-          {{- range .Summary.Utilities }}
-          <tr>
+          {{- range .Rows }}
+          <tr class="{{ .RowClass }}">
             <td><strong>{{ .Name }}</strong></td>
-            <td><span class="pill {{ percentageClass .Summary.SelectedTotal .Summary.PassPctSelected }}">{{ formatPercent .Summary.PassPctSelected }}</span></td>
-            <td>{{ .Summary.SelectedTotal }}</td>
-            <td>{{ .Summary.Pass }}</td>
-            <td>{{ .Summary.Fail }}</td>
-            <td>{{ .Summary.Skip }}</td>
-            <td>{{ .Summary.XFail }}</td>
-            <td>{{ .Summary.XPass }}</td>
-            <td>{{ .Summary.Error }}</td>
-            <td>{{ .Summary.Unreported }}</td>
+            <td><span class="pill {{ .PercentClass }}">{{ .Percent }}</span></td>
+            <td>{{ .Selected }}</td>
+            <td>{{ .Pass }}</td>
+            <td>{{ .Fail }}</td>
+            <td>{{ .Skip }}</td>
+            <td>{{ .XFail }}</td>
+            <td>{{ .XPass }}</td>
+            <td>{{ .Error }}</td>
+            <td>{{ .Unreported }}</td>
             <td>{{ if .LogFile }}<a href="{{ .LogFile }}">{{ .LogFile }}</a>{{ else }}<span class="notes">n/a</span>{{ end }}</td>
-            <td class="notes">{{ utilityNote .Reason .Skipped }}</td>
+            <td class="notes">{{ .Notes }}</td>
           </tr>
           {{- end }}
         </tbody>

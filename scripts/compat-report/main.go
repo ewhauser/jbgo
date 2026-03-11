@@ -18,9 +18,8 @@ import (
 var templateFS embed.FS
 
 var indexTemplate = htmltemplate.Must(htmltemplate.New("index.html.tmpl").Funcs(htmltemplate.FuncMap{
-	"formatPercent":   formatPercent,
-	"percentageClass": percentageClass,
-	"utilityNote":     utilityNote,
+	"formatPercent":     formatPercent,
+	"formatPercentOrNA": formatPercentOrNA,
 }).ParseFS(templateFS, "templates/index.html.tmpl"))
 
 var badgeTemplate = texttemplate.Must(texttemplate.New("badge.svg.tmpl").ParseFS(templateFS, "templates/badge.svg.tmpl"))
@@ -64,19 +63,49 @@ type utilityTotals struct {
 }
 
 type utilityResult struct {
-	Name    string      `json:"name"`
-	Skipped []string    `json:"skipped,omitempty"`
-	Summary testSummary `json:"summary"`
-	LogFile string      `json:"log_file,omitempty"`
-	Reason  string      `json:"reason,omitempty"`
+	Name     string      `json:"name"`
+	Inactive bool        `json:"inactive,omitempty"`
+	Skipped  []string    `json:"skipped,omitempty"`
+	Summary  testSummary `json:"summary"`
+	LogFile  string      `json:"log_file,omitempty"`
+	Reason   string      `json:"reason,omitempty"`
 }
 
 type indexView struct {
-	Summary        runSummary
-	OverallDetail  string
-	RunnableDetail string
-	CommandDetail  string
-	FilteredDetail string
+	Summary              runSummary
+	Rows                 []indexUtilityRow
+	CommandSummary       renderedUtilityTotals
+	OverallDetail        string
+	RunnableDetail       string
+	CommandDetail        string
+	FilteredDetail       string
+	CommandPassPercent   float64
+	CommandPassPercentNA bool
+}
+
+type renderedUtilityTotals struct {
+	RunnablePassed int
+	RunnableFailed int
+	SkipOnly       int
+	Empty          int
+	PassPct        float64
+}
+
+type indexUtilityRow struct {
+	Name         string
+	RowClass     string
+	Percent      string
+	PercentClass string
+	Selected     string
+	Pass         string
+	Fail         string
+	Skip         string
+	XFail        string
+	XPass        string
+	Error        string
+	Unreported   string
+	LogFile      string
+	Notes        string
 }
 
 type badgeView struct {
@@ -159,12 +188,17 @@ func writeReport(outputDir string, summary *runSummary) error {
 
 func renderIndex(summary *runSummary) ([]byte, error) {
 	var buf bytes.Buffer
+	commandSummary := summarizeRenderedUtilities(summary.Utilities)
 	view := indexView{
-		Summary:        *summary,
-		OverallDetail:  fmt.Sprintf("%d selected, %d pass, %d fail", summary.Overall.SelectedTotal, summary.Overall.Pass, summary.Overall.Fail),
-		RunnableDetail: fmt.Sprintf("%d runnable, %d skip, %d unreported", summary.Overall.RunnableTotal, summary.Overall.Skip, summary.Overall.Unreported),
-		CommandDetail:  fmt.Sprintf("%d passed, %d failed, %d empty", summary.UtilitySummary.Passed, summary.UtilitySummary.Failed, summary.UtilitySummary.NoRunnableTests),
-		FilteredDetail: fmt.Sprintf("%d extra reported results", summary.Overall.ReportedExtraTotal),
+		Summary:              *summary,
+		Rows:                 buildUtilityRows(summary.Utilities),
+		CommandSummary:       commandSummary,
+		OverallDetail:        fmt.Sprintf("%d selected, %d pass, %d fail, %d skip", summary.Overall.SelectedTotal, summary.Overall.Pass, summary.Overall.Fail, summary.Overall.Skip),
+		RunnableDetail:       fmt.Sprintf("%d runnable, %d pass, %d fail", summary.Overall.RunnableTotal, summary.Overall.Pass, summary.Overall.Fail),
+		CommandDetail:        fmt.Sprintf("%d passed, %d failed, %d skip-only, %d empty", commandSummary.RunnablePassed, commandSummary.RunnableFailed, commandSummary.SkipOnly, commandSummary.Empty),
+		FilteredDetail:       fmt.Sprintf("%d manifest-level skips, %d extra reported results", summary.Overall.FilteredSkipTotal, summary.Overall.ReportedExtraTotal),
+		CommandPassPercent:   commandSummary.PassPct,
+		CommandPassPercentNA: commandSummary.RunnablePassed+commandSummary.RunnableFailed == 0,
 	}
 	if err := indexTemplate.ExecuteTemplate(&buf, "index.html.tmpl", view); err != nil {
 		return nil, err
@@ -201,14 +235,90 @@ func buildBadgeView(summary *runSummary) badgeView {
 	}
 }
 
-func utilityNote(reason string, skipped []string) string {
-	if reason != "" {
-		return reason
+func summarizeRenderedUtilities(results []utilityResult) renderedUtilityTotals {
+	var totals renderedUtilityTotals
+	for i := range results {
+		summary := results[i].Summary
+		switch {
+		case results[i].Inactive:
+			continue
+		case summary.SelectedTotal == 0:
+			totals.Empty++
+		case summary.RunnableTotal == 0:
+			totals.SkipOnly++
+		case summary.Pass == summary.RunnableTotal && summary.Fail == 0 && summary.XPass == 0 && summary.Error == 0 && summary.Unreported == 0:
+			totals.RunnablePassed++
+		default:
+			totals.RunnableFailed++
+		}
 	}
-	if len(skipped) > 0 {
-		return fmt.Sprintf("%d filtered skips", len(skipped))
+	totals.PassPct = percentage(float64(totals.RunnablePassed), float64(totals.RunnablePassed+totals.RunnableFailed))
+	return totals
+}
+
+func buildUtilityRows(results []utilityResult) []indexUtilityRow {
+	rows := make([]indexUtilityRow, 0, len(results))
+	for i := range results {
+		result := &results[i]
+		rows = append(rows, indexUtilityRow{
+			Name:         result.Name,
+			RowClass:     utilityRowClass(result.Inactive),
+			Percent:      utilityPercentText(result),
+			PercentClass: utilityPercentClass(result),
+			Selected:     countOrDash(result.Summary.SelectedTotal, result.Inactive),
+			Pass:         countOrDash(result.Summary.Pass, result.Inactive),
+			Fail:         countOrDash(result.Summary.Fail, result.Inactive),
+			Skip:         countOrDash(result.Summary.Skip, result.Inactive),
+			XFail:        countOrDash(result.Summary.XFail, result.Inactive),
+			XPass:        countOrDash(result.Summary.XPass, result.Inactive),
+			Error:        countOrDash(result.Summary.Error, result.Inactive),
+			Unreported:   countOrDash(result.Summary.Unreported, result.Inactive),
+			LogFile:      result.LogFile,
+			Notes:        utilityNoteText(result),
+		})
+	}
+	return rows
+}
+
+func utilityPercentText(result *utilityResult) string {
+	if result.Inactive {
+		return "-"
+	}
+	if result.Summary.RunnableTotal == 0 {
+		return "n/a"
+	}
+	return formatPercent(result.Summary.PassPctRunnable)
+}
+
+func utilityPercentClass(result *utilityResult) string {
+	if result.Inactive {
+		return "na"
+	}
+	return percentageClass(result.Summary.RunnableTotal, result.Summary.PassPctRunnable)
+}
+
+func utilityRowClass(inactive bool) string {
+	if inactive {
+		return "inactive"
 	}
 	return ""
+}
+
+func utilityNoteText(result *utilityResult) string {
+	var notes []string
+	if result.Reason != "" {
+		notes = append(notes, result.Reason)
+	}
+	if result.Inactive {
+		return strings.Join(notes, "; ")
+	}
+	if result.Summary.SelectedTotal > 0 && result.Summary.RunnableTotal == 0 {
+		notes = append(notes, "all selected tests skipped")
+	}
+	if len(result.Skipped) > 0 {
+		notes = append(notes, fmt.Sprintf("%d filtered skips", len(result.Skipped)))
+	}
+	return strings.Join(notes, "; ")
 }
 
 func badgeTextWidth(text string) int {
@@ -243,6 +353,20 @@ func percentageClass(selected int, percent float64) string {
 	}
 }
 
+func formatPercentOrNA(value float64, na bool) string {
+	if na {
+		return "n/a"
+	}
+	return formatPercent(value)
+}
+
+func countOrDash(value int, inactive bool) string {
+	if inactive {
+		return "-"
+	}
+	return fmt.Sprintf("%d", value)
+}
+
 func formatPercent(value float64) string {
 	if value == 0 {
 		return "0%"
@@ -253,6 +377,13 @@ func formatPercent(value float64) string {
 	formatted := fmt.Sprintf("%.2f", value)
 	formatted = strings.TrimRight(strings.TrimRight(formatted, "0"), ".")
 	return formatted + "%"
+}
+
+func percentage(numerator, denominator float64) float64 {
+	if denominator == 0 {
+		return 0
+	}
+	return math.Round((numerator/denominator)*10000) / 100
 }
 
 func fatalf(format string, args ...any) {

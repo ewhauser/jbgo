@@ -83,6 +83,7 @@ type testSummary struct {
 
 type utilityResult struct {
 	Name         string       `json:"name"`
+	Inactive     bool         `json:"inactive,omitempty"`
 	Tests        []string     `json:"tests"`
 	Skipped      []string     `json:"skipped,omitempty"`
 	TestResults  []testResult `json:"test_results,omitempty"`
@@ -281,6 +282,10 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 		}
 		summary.Utilities = append(summary.Utilities, result)
 		fmt.Printf("%s: %d tests, exit=%d, pass=%s\n", utility.Name, len(tests), makeCheckResult.ExitCode, formatPercent(result.Summary.PassPctSelected))
+	}
+
+	if len(explicitTests) == 0 {
+		summary.Utilities = completeUtilityResults(summary.Utilities, programs, mf.Utilities, selectedUtilities, supportedSet)
 	}
 
 	summary.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
@@ -865,10 +870,14 @@ func summarizeOverall(results []utilityResult) testSummary {
 }
 
 func summarizeUtilityTotals(results []utilityResult) utilityTotals {
-	totals := utilityTotals{Total: len(results)}
+	totals := utilityTotals{}
 	for i := range results {
 		result := &results[i]
-		if result.Summary.SelectedTotal == 0 {
+		if result.Inactive {
+			continue
+		}
+		totals.Total++
+		if result.Summary.RunnableTotal == 0 {
 			totals.NoRunnableTests++
 			continue
 		}
@@ -881,6 +890,57 @@ func summarizeUtilityTotals(results []utilityResult) utilityTotals {
 	totals.PassPctTotal = percentage(totals.Passed, totals.Total)
 	totals.PassPctRunnable = percentage(totals.Passed, totals.Passed+totals.Failed)
 	return totals
+}
+
+func completeUtilityResults(results []utilityResult, programs []string, manifestUtilities, selectedUtilities []utilityManifest, supportedSet map[string]struct{}) []utilityResult {
+	activeByName := make(map[string]utilityResult, len(results))
+	for i := range results {
+		result := results[i]
+		activeByName[result.Name] = result
+	}
+	manifestSet := make(map[string]struct{}, len(manifestUtilities))
+	for _, utility := range manifestUtilities {
+		manifestSet[utility.Name] = struct{}{}
+	}
+	selectedSet := make(map[string]struct{}, len(selectedUtilities))
+	for _, utility := range selectedUtilities {
+		selectedSet[utility.Name] = struct{}{}
+	}
+
+	out := make([]utilityResult, 0, len(programs))
+	for _, name := range programs {
+		if result, ok := activeByName[name]; ok {
+			out = append(out, result)
+			delete(activeByName, name)
+			continue
+		}
+		out = append(out, utilityResult{
+			Name:     name,
+			Inactive: true,
+			Reason:   inactiveUtilityReason(name, manifestSet, selectedSet, supportedSet),
+		})
+	}
+	for i := range results {
+		result := results[i]
+		if _, ok := activeByName[result.Name]; ok {
+			out = append(out, result)
+			delete(activeByName, result.Name)
+		}
+	}
+	return out
+}
+
+func inactiveUtilityReason(name string, manifestSet, selectedSet, supportedSet map[string]struct{}) string {
+	if _, ok := manifestSet[name]; ok {
+		if _, ok := selectedSet[name]; ok {
+			return ""
+		}
+		return "not selected in this run"
+	}
+	if _, ok := supportedSet[name]; ok {
+		return "implemented in jbgo, but not included in the compatibility manifest"
+	}
+	return "not currently covered by the compatibility manifest"
 }
 
 func writeJSON(path string, value any) error {
