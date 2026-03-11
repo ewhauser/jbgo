@@ -804,21 +804,21 @@ func (s *sqliteFS) lookupExactNodeLocked(abs string) (*sqliteNode, error) {
 	return node, err
 }
 
-func (s *sqliteFS) lookupChildLocked(parentID int64, name string) (int64, bool, error) {
-	var childID int64
-	ok, err := s.queryLocked(`SELECT child_id FROM dir_entries WHERE parent_id = ?1 AND name = ?2`, func(stmt *gosqlite.Stmt) error {
+func (s *sqliteFS) lookupChildLocked(parentID int64, name string) (id int64, found bool, err error) {
+	var cid int64
+	ok, qerr := s.queryLocked(`SELECT child_id FROM dir_entries WHERE parent_id = ?1 AND name = ?2`, func(stmt *gosqlite.Stmt) error {
 		if err := stmt.BindInt64(1, parentID); err != nil {
 			return err
 		}
 		return stmt.BindText(2, name)
 	}, func(stmt *gosqlite.Stmt) error {
-		childID = stmt.ColumnInt64(0)
+		cid = stmt.ColumnInt64(0)
 		return nil
 	})
-	if err != nil {
-		return 0, false, err
+	if qerr != nil {
+		return 0, false, qerr
 	}
-	return childID, ok, nil
+	return cid, ok, nil
 }
 
 func (s *sqliteFS) loadNodeLocked(nodeID int64) (*sqliteNode, error) {
@@ -1045,7 +1045,7 @@ func (s *sqliteFS) execLocked(sql string, bind func(*gosqlite.Stmt) error) error
 	return stmt.Exec()
 }
 
-func (s *sqliteFS) queryLocked(sql string, bind func(*gosqlite.Stmt) error, scan func(*gosqlite.Stmt) error) (bool, error) {
+func (s *sqliteFS) queryLocked(sql string, bind, scan func(*gosqlite.Stmt) error) (bool, error) {
 	stmt, _, err := s.conn.Prepare(sql)
 	if err != nil {
 		return false, err

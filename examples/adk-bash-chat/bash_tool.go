@@ -70,14 +70,14 @@ func newPersistentBashTool(ctx context.Context) (*persistentBashTool, error) {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}
 
-	tool := &persistentBashTool{
+	bt := &persistentBashTool{
 		rt:         rt,
 		fixtureDir: mustFixtureDir(),
 	}
-	if err := tool.resetLocked(ctx); err != nil {
+	if err := bt.resetLocked(ctx); err != nil {
 		return nil, err
 	}
-	return tool, nil
+	return bt, nil
 }
 
 func (t *persistentBashTool) Run(ctx tool.Context, input bashToolInput) (bashToolResult, error) {
@@ -181,10 +181,7 @@ func seedLab(ctx context.Context, session *jbruntime.Session, fixtureDir string)
 	result, err := session.Exec(ctx, &jbruntime.ExecutionRequest{
 		Name:    "seed-lab",
 		WorkDir: labDir,
-		Script: strings.Join([]string{
-			"sqlite3 incidents.db < incidents.sql",
-			"mkdir -p " + workDir,
-		}, "\n") + "\n",
+		Script:  "sqlite3 incidents.db < incidents.sql" + "\n" + "mkdir -p " + workDir + "\n",
 	})
 	if err != nil {
 		return fmt.Errorf("bootstrap lab: %w", err)
@@ -204,7 +201,7 @@ func writeVirtualFile(ctx context.Context, fsys jbfs.FileSystem, name string, da
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	_, err = io.Copy(file, strings.NewReader(string(data)))
 	return err

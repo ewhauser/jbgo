@@ -102,12 +102,12 @@ func (a *chatApp) run(ctx context.Context, stdin io.Reader, stdout, stderr io.Wr
 
 	scanner := bufio.NewScanner(stdin)
 	for {
-		fmt.Fprint(stdout, "You> ")
+		_, _ = fmt.Fprint(stdout, "You> ")
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
 				return fmt.Errorf("read input: %w", err)
 			}
-			fmt.Fprintln(stdout)
+			_, _ = fmt.Fprintln(stdout)
 			return nil
 		}
 
@@ -129,12 +129,12 @@ func (a *chatApp) run(ctx context.Context, stdin io.Reader, stdout, stderr io.Wr
 			if err := a.resetChatSession(ctx); err != nil {
 				return err
 			}
-			fmt.Fprintln(stdout, "Reset the ADK conversation and reseeded /home/agent/lab.")
+			_, _ = fmt.Fprintln(stdout, "Reset the ADK conversation and reseeded /home/agent/lab.")
 			continue
 		}
 
 		if err := a.runTurn(ctx, line, stdout, stderr); err != nil {
-			fmt.Fprintf(stderr, "turn failed: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "turn failed: %v\n", err)
 		}
 	}
 }
@@ -174,16 +174,16 @@ func (a *chatApp) runTurn(ctx context.Context, input string, stdout, stderr io.W
 }
 
 func printWelcome(w io.Writer, modelName string, backend backendMode) {
-	fmt.Fprintf(w, "jbgo ADK Bash Chat\nModel: %s\nBackend: %s\n", modelName, backend)
-	fmt.Fprintf(w, "Seeded lab: %s\nWorkspace: %s\n", labDir, workDir)
-	fmt.Fprintln(w, "Commands: /help, /reset, exit")
-	fmt.Fprintln(w, "Try: Which service looks most suspicious after the last deploy? Save a markdown summary in /home/agent/work/summary.md.")
+	_, _ = fmt.Fprintf(w, "jbgo ADK Bash Chat\nModel: %s\nBackend: %s\n", modelName, backend)
+	_, _ = fmt.Fprintf(w, "Seeded lab: %s\nWorkspace: %s\n", labDir, workDir)
+	_, _ = fmt.Fprintln(w, "Commands: /help, /reset, exit")
+	_, _ = fmt.Fprintln(w, "Try: Which service looks most suspicious after the last deploy? Save a markdown summary in /home/agent/work/summary.md.")
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintln(w, "Use normal chat input to ask questions about the seeded ops dataset.")
-	fmt.Fprintln(w, "The app will print each bash tool call and tool result inline so you can see persistent shell activity.")
-	fmt.Fprintln(w, "/reset recreates the ADK conversation and reseeds the sandbox.")
+	_, _ = fmt.Fprintln(w, "Use normal chat input to ask questions about the seeded ops dataset.")
+	_, _ = fmt.Fprintln(w, "The app will print each bash tool call and tool result inline so you can see persistent shell activity.")
+	_, _ = fmt.Fprintln(w, "/reset recreates the ADK conversation and reseeds the sandbox.")
 }
 
 func printEvent(w io.Writer, event *adksession.Event) {
@@ -194,36 +194,36 @@ func printEvent(w io.Writer, event *adksession.Event) {
 	for _, part := range event.Content.Parts {
 		switch {
 		case part.FunctionCall != nil && part.FunctionCall.Name == bashToolName:
-			fmt.Fprintln(w, "\n[bash script]")
-			fmt.Fprintln(w, strings.TrimSpace(fmt.Sprint(part.FunctionCall.Args["script"])))
+			_, _ = fmt.Fprintln(w, "\n[bash script]")
+			_, _ = fmt.Fprintln(w, strings.TrimSpace(fmt.Sprint(part.FunctionCall.Args["script"])))
 		case part.FunctionResponse != nil && part.FunctionResponse.Name == bashToolName:
-			fmt.Fprintln(w, "\n[bash result]")
+			_, _ = fmt.Fprintln(w, "\n[bash result]")
 			if parsed, ok := decodeBashToolResponse(part.FunctionResponse.Response); ok {
-				fmt.Fprintf(w, "exit=%d pwd=%s\n", parsed.ExitCode, parsed.PWD)
+				_, _ = fmt.Fprintf(w, "exit=%d pwd=%s\n", parsed.ExitCode, parsed.PWD)
 				if parsed.Stdout != "" {
-					fmt.Fprintln(w, "stdout:")
-					fmt.Fprint(w, parsed.Stdout)
+					_, _ = fmt.Fprintln(w, "stdout:")
+					_, _ = fmt.Fprint(w, parsed.Stdout)
 					if !strings.HasSuffix(parsed.Stdout, "\n") {
-						fmt.Fprintln(w)
+						_, _ = fmt.Fprintln(w)
 					}
 				}
 				if parsed.Stderr != "" {
-					fmt.Fprintln(w, "stderr:")
-					fmt.Fprint(w, parsed.Stderr)
+					_, _ = fmt.Fprintln(w, "stderr:")
+					_, _ = fmt.Fprint(w, parsed.Stderr)
 					if !strings.HasSuffix(parsed.Stderr, "\n") {
-						fmt.Fprintln(w)
+						_, _ = fmt.Fprintln(w)
 					}
 				}
 				if parsed.StdoutTruncated || parsed.StderrTruncated {
-					fmt.Fprintf(w, "truncated stdout=%t stderr=%t\n", parsed.StdoutTruncated, parsed.StderrTruncated)
+					_, _ = fmt.Fprintf(w, "truncated stdout=%t stderr=%t\n", parsed.StdoutTruncated, parsed.StderrTruncated)
 				}
 			} else {
 				encoded, _ := json.MarshalIndent(part.FunctionResponse.Response, "", "  ")
-				fmt.Fprintln(w, string(encoded))
+				_, _ = fmt.Fprintln(w, string(encoded))
 			}
 		case strings.TrimSpace(part.Text) != "":
-			fmt.Fprintln(w, "\n[assistant]")
-			fmt.Fprintln(w, strings.TrimSpace(part.Text))
+			_, _ = fmt.Fprintln(w, "\n[assistant]")
+			_, _ = fmt.Fprintln(w, strings.TrimSpace(part.Text))
 		}
 	}
 }

@@ -45,10 +45,10 @@ func main() {
 		fail(fmt.Errorf("run script: %w", err))
 	}
 	if result.Stdout != "" {
-		_, _ = io.WriteString(os.Stdout, result.Stdout)
+		_, _ = os.Stdout.WriteString(result.Stdout)
 	}
 	if result.Stderr != "" {
-		_, _ = io.WriteString(os.Stderr, result.Stderr)
+		_, _ = os.Stderr.WriteString(result.Stderr)
 	}
 	os.Exit(result.ExitCode)
 }

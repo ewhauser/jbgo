@@ -106,7 +106,7 @@ func initialResponseParams() responses.ResponseNewParams {
 	}
 }
 
-func followupResponseParams(first *responses.Response, toolCall responses.ResponseFunctionToolCall, output string) responses.ResponseNewParams {
+func followupResponseParams(first *responses.Response, toolCall *responses.ResponseFunctionToolCall, output string) responses.ResponseNewParams {
 	return responses.ResponseNewParams{
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: buildFollowupInput(first, toolCall, output),
@@ -115,35 +115,36 @@ func followupResponseParams(first *responses.Response, toolCall responses.Respon
 	}
 }
 
-func firstFunctionCall(response *responses.Response) (responses.ResponseFunctionToolCall, error) {
+func firstFunctionCall(response *responses.Response) (*responses.ResponseFunctionToolCall, error) {
 	if response == nil {
-		return responses.ResponseFunctionToolCall{}, errors.New("response was nil")
+		return nil, errors.New("response was nil")
 	}
-	for _, item := range response.Output {
-		if item.Type != "function_call" || item.Name != bashToolName {
+	for i := range response.Output {
+		if response.Output[i].Type != "function_call" || response.Output[i].Name != bashToolName {
 			continue
 		}
-		return item.AsFunctionCall(), nil
+		call := response.Output[i].AsFunctionCall()
+		return &call, nil
 	}
-	return responses.ResponseFunctionToolCall{}, fmt.Errorf("response did not contain a %q tool call", bashToolName)
+	return nil, fmt.Errorf("response did not contain a %q tool call", bashToolName)
 }
 
-func buildFollowupInput(first *responses.Response, toolCall responses.ResponseFunctionToolCall, output string) responses.ResponseInputParam {
+func buildFollowupInput(first *responses.Response, toolCall *responses.ResponseFunctionToolCall, output string) responses.ResponseInputParam {
 	input := responses.ResponseInputParam{
 		responses.ResponseInputItemParamOfMessage(examplePrompt, responses.EasyInputMessageRoleUser),
 	}
 
 	if first != nil {
-		for _, item := range first.Output {
-			switch item.Type {
+		for i := range first.Output {
+			switch first.Output[i].Type {
 			case "reasoning":
-				reasoning := item.AsReasoning()
+				reasoning := first.Output[i].AsReasoning()
 				reasoningParam := reasoning.ToParam()
 				input = append(input, responses.ResponseInputItemUnionParam{
 					OfReasoning: &reasoningParam,
 				})
 			case "function_call":
-				call := item.AsFunctionCall()
+				call := first.Output[i].AsFunctionCall()
 				input = append(input, responses.ResponseInputItemParamOfFunctionCall(call.Arguments, call.CallID, call.Name))
 			}
 		}

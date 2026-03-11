@@ -1,6 +1,6 @@
 module github.com/ewhauser/jbgo
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/benhoyt/goawk v1.31.0

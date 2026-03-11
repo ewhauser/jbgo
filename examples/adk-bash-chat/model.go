@@ -111,12 +111,12 @@ func resolveBackend(mode backendMode, env map[string]string) (resolvedBackend, e
 	switch mode {
 	case backendGemini:
 		if apiKey == "" {
-			return resolvedBackend{}, errors.New("Gemini mode requires GOOGLE_API_KEY or GEMINI_API_KEY")
+			return resolvedBackend{}, errors.New("gemini mode requires GOOGLE_API_KEY or GEMINI_API_KEY")
 		}
 		return resolvedBackend{mode: backendGemini, apiKey: apiKey}, nil
 	case backendVertex:
 		if project == "" || location == "" {
-			return resolvedBackend{}, errors.New("Vertex mode requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION or GOOGLE_CLOUD_REGION")
+			return resolvedBackend{}, errors.New("vertex mode requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION or GOOGLE_CLOUD_REGION")
 		}
 		return resolvedBackend{mode: backendVertex, project: project, location: location}, nil
 	case backendAuto:
