@@ -289,11 +289,28 @@ Filesystem choice is controlled through `Config.FSFactory`.
 
 - `jbfs.MemoryFactory{}` is the default: each session gets a fresh in-memory filesystem.
 - `jbfs.OverlayFactory{Lower: ...}` creates a copy-on-write filesystem over another `jbfs.Factory`.
+- `jbfs.HostFactory{Root: ..., VirtualRoot: ..., MaxFileReadBytes: ...}` exposes a read-only host directory at a virtual path and is intended to sit underneath `jbfs.OverlayFactory`. `VirtualRoot` defaults to `/home/agent/project`; `MaxFileReadBytes` defaults to 10 MiB and caps regular-file opens from the host tree.
 - `jbfs.NewSnapshot(ctx, fsys)` creates a read-only point-in-time snapshot of an existing filesystem. If you want snapshot-backed sessions, wrap it behind your own `jbfs.Factory`.
 
-You can also provide your own `jbfs.Factory` implementation for seeded, host-backed, or otherwise custom sandbox filesystems.
+You can also provide your own `jbfs.Factory` implementation for seeded, remote, or otherwise custom sandbox filesystems.
 
 If you already have a Go filesystem implementation, the runtime is flexible about what sits underneath that factory. The integration point is `jbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself, but you can wrap stdlib-compatible or third-party backends behind a `jbfs.Factory`.
+
+For the closest parity with `just-bash`'s real-directory overlay, use `HostFactory` as the lower layer for `OverlayFactory` and point the runtime at the mounted virtual root:
+
+```go
+rt, err := jbruntime.New(&jbruntime.Config{
+	DefaultDir: "/home/agent/project",
+	FSFactory: jbfs.OverlayFactory{
+		Lower: jbfs.HostFactory{
+			Root:        "/path/to/project",
+			VirtualRoot: "/home/agent/project",
+		},
+	},
+})
+```
+
+That gives the session a host-backed read-only project tree while keeping all writes, deletes, and command stubs in the in-memory upper layer. If you want the host tree at `/`, set `VirtualRoot: "/"`.
 
 That makes it practical to integrate things like:
 
@@ -320,7 +337,7 @@ rt, err := jbruntime.New(&jbruntime.Config{
 })
 ```
 
-If you want copy-on-write behavior over an existing Go filesystem, wrap that backend as the lower layer and put `jbfs.OverlayFactory` on top of it.
+If you want copy-on-write behavior over an existing Go filesystem, wrap that backend as the lower layer and put `jbfs.OverlayFactory` on top of it. A direct host read-write backend and a general mount router are still out of scope for the default runtime path.
 
 ### Network Access
 

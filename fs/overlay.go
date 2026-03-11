@@ -176,10 +176,11 @@ func (o *OverlayFS) Readlink(ctx context.Context, name string) (string, error) {
 
 func (o *OverlayFS) Realpath(ctx context.Context, name string) (string, error) {
 	abs := o.resolve(name)
-	if _, _, err := o.visibleInfo(ctx, abs); err != nil {
-		return "", &os.PathError{Op: "realpath", Path: abs, Err: stdfs.ErrNotExist}
+	resolved, err := o.resolveRealpath(ctx, abs, 0)
+	if err != nil {
+		return "", &os.PathError{Op: "realpath", Path: abs, Err: err}
 	}
-	return abs, nil
+	return resolved, nil
 }
 
 func (o *OverlayFS) Symlink(ctx context.Context, target, linkName string) error {
@@ -394,6 +395,58 @@ func (o *OverlayFS) visibleInfo(ctx context.Context, abs string) (stdfs.FileInfo
 		return nil, overlaySourceNone, err
 	}
 	return info, overlaySourceLower, nil
+}
+
+func (o *OverlayFS) resolveRealpath(ctx context.Context, abs string, depth int) (string, error) {
+	abs = Clean(abs)
+	if depth > maxSymlinkDepth {
+		return "", errTooManySymlinks
+	}
+	if abs == "/" {
+		return "/", nil
+	}
+
+	current := "/"
+	parts := strings.Split(strings.TrimPrefix(abs, "/"), "/")
+	for i, part := range parts {
+		next := Resolve(current, part)
+		info, source, err := o.visibleInfo(ctx, next)
+		if err != nil {
+			return "", err
+		}
+		isLast := i == len(parts)-1
+		if info.Mode()&stdfs.ModeSymlink != 0 {
+			target, err := o.readlinkAt(ctx, source, next)
+			if err != nil {
+				return "", err
+			}
+			resolved := Resolve(parentDir(next), target)
+			if !isLast {
+				resolved = Resolve(resolved, path.Join(parts[i+1:]...))
+			}
+			return o.resolveRealpath(ctx, resolved, depth+1)
+		}
+		if isLast {
+			return next, nil
+		}
+		if !info.IsDir() {
+			return "", stdfs.ErrInvalid
+		}
+		current = next
+	}
+
+	return "/", nil
+}
+
+func (o *OverlayFS) readlinkAt(ctx context.Context, source overlaySource, abs string) (string, error) {
+	switch source {
+	case overlaySourceUpper:
+		return o.upper.Readlink(ctx, abs)
+	case overlaySourceLower:
+		return o.lower.Readlink(ctx, abs)
+	default:
+		return "", stdfs.ErrNotExist
+	}
 }
 
 func (o *OverlayFS) resolve(name string) string {

@@ -188,6 +188,24 @@ func TestOverlayFSRenameCopiesUpAndTombstonesSource(t *testing.T) {
 	}
 }
 
+func TestOverlayFSRealpathResolvesLowerSymlinks(t *testing.T) {
+	lower := seededMemory(t, map[string]string{
+		"/safe/target.txt": "hello\n",
+	})
+	if err := lower.Symlink(context.Background(), "target.txt", "/safe/link.txt"); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	overlay := NewOverlay(lower)
+	realpath, err := overlay.Realpath(context.Background(), "/safe/link.txt")
+	if err != nil {
+		t.Fatalf("Realpath() error = %v", err)
+	}
+	if got, want := realpath, "/safe/target.txt"; got != want {
+		t.Fatalf("Realpath() = %q, want %q", got, want)
+	}
+}
+
 func TestSnapshotFSPreservesSourceViewAndRejectsWrites(t *testing.T) {
 	source := seededMemory(t, map[string]string{
 		"/data.txt": "before\n",

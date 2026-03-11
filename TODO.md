@@ -132,10 +132,10 @@ This file is the implementation queue derived from [`SPEC.md`](./SPEC.md), espec
 
 ### 14. Host-backed overlay parity
 
-- [ ] Add a host-backed lower `FileSystem` implementation for `OverlayFS`
-- [ ] Keep reads constrained to explicit host roots while leaving all writes in memory
-- [ ] Add integration tests for copy-on-write behavior against a real directory tree
-- [ ] Document when host-backed overlays are appropriate and when pure virtual FS should remain the default
+- [x] Add a host-backed lower `FileSystem` implementation for `OverlayFS`
+- [x] Keep reads constrained to explicit host roots while leaving all writes in memory
+- [x] Add integration tests for copy-on-write behavior against a real directory tree
+- [x] Document when host-backed overlays are appropriate and when pure virtual FS should remain the default
 
 ### 15. Hardening and maturity
 

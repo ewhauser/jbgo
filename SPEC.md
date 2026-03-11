@@ -179,7 +179,7 @@ Package responsibilities:
 
 - `runtime/`: public API, runtime/session creation, run configuration, result collection, output capture
 - `shell/`: parser and runner adapter; no product policy lives here
-- `fs/`: POSIX-like path normalization, memory filesystem, future overlay/snapshot backends
+- `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `echo`, `cat`, `ls`, and `pwd`
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
@@ -465,7 +465,7 @@ Important properties:
 - paths use POSIX semantics internally
 - the default backend is in-memory
 - the default backend exposes a Unix-like virtual layout rooted at `/`
-- host-backed filesystems, if ever added, must still satisfy policy checks and must never imply host command execution
+- host-backed filesystems must still satisfy policy checks and must never imply host command execution
 - developer-only CLI compatibility runs may use a host-backed filesystem adapter, but that adapter is not the default runtime backend and is only for opt-in test harnesses
 - shell redirects and command file access share the same filesystem view
 - symlink support is optional and must default to the safer behavior when policy is ambiguous
@@ -484,11 +484,13 @@ Implementation detail for the current runtime:
 Current and planned backends:
 
 - `MemoryFS`: default mutable sandbox
+- `HostFS`: read-only host-backed directory view mounted at a configurable virtual root with sanitized errors and a backend-local regular-file read cap
 - `OverlayFS`: copy-on-write backend with a read-only lower layer, writable in-memory upper layer, merged `readdir`, and tombstones for deletions
 - `SnapshotFS`: deterministic read-only clone of another filesystem for tests and replay fixtures
 
 Backend boundary for the current implementation:
 
+- `HostFS` is an opt-in lower-layer backend exposed through `HostFactory`; it is intended to sit underneath `OverlayFactory`, not to replace the default in-memory runtime path
 - `OverlayFS` is intended for runtime/session use and is exposed through `OverlayFactory`
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests
 - `SnapshotFS` is not the default `runtime` session backend because session bootstrap still creates the sandbox layout and command stubs
@@ -946,7 +948,6 @@ The gap analysis against `just-bash` yields two categories: gaps we should close
 
 - broader command coverage for agent workflows, especially deeper parity for the newer archive/compression, helper, and text/search tools
 - stronger execution budgets and policy enforcement, including richer CPU and memory accounting
-- host-backed overlay filesystem support so real directories can be mounted read-only underneath an in-memory writable layer
 - fuller `jq` and `curl` compatibility for structured data flows and safe networked workflows
 - richer tracing and compatibility corpus
 - continued fuzzing depth as new commands land, including additional attack-corpus entries, richer metadata variants, and longer-running schedules outside the default CI path
@@ -967,7 +968,6 @@ The gap analysis against `just-bash` yields two categories: gaps we should close
 - richer trace correlation IDs
 - safe HTTP fetch with policy allowlists
 - resource accounting for CPU and memory budgets
-- host-backed overlay lower filesystems for copy-on-write sessions
 - broader command-family parity with `just-bash`
 - optional line-editing support for the interactive CLI if it can be added without weakening sandbox determinism
 
@@ -983,4 +983,4 @@ These questions should be decided early but do not block the initial scaffold:
 
 1. Which shell builtins should be explicitly denied even if `mvdan/sh` supports them?
 2. Do we want a first-class JSON command set in MVP+1?
-3. When we add a host-backed lower filesystem for `OverlayFS`, do we want it limited to read-only roots at first or to support a narrower write-through mode under policy control?
+3. If we ever add a direct host read-write backend or general mount routing, do we keep those as separate opt-in surfaces rather than folding them into the default runtime contract?
