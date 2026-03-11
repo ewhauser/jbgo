@@ -199,6 +199,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		fuzzSpec("sed", "text",
 			fuzzVariant("", "script", "{program.sed}", "{path.text}"),
 			fuzzVariant("", "flag:n", "-n", "{program.sed}", "{path.text}"),
+			fuzzVariant("", "flag:f", "-f", "{path.sedscript}", "{path.text}"),
 		),
 		fuzzSpec("printf", "shell",
 			fuzzVariant("", "format", "%s\\n", "{token.value}"),

@@ -56,7 +56,7 @@ func (c *Sed) Name() string {
 }
 
 func (c *Sed) Run(ctx context.Context, inv *Invocation) error {
-	opts, files, err := parseSedArgs(inv)
+	opts, files, err := parseSedArgs(ctx, inv)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (c *Sed) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseSedArgs(inv *Invocation) (sedOptions, []string, error) {
+func parseSedArgs(ctx context.Context, inv *Invocation) (sedOptions, []string, error) {
 	args := inv.Args
 	var opts sedOptions
 
@@ -135,11 +135,24 @@ func parseSedArgs(inv *Invocation) (sedOptions, []string, error) {
 			if len(args) < 2 {
 				return sedOptions{}, nil, exitf(inv, 1, "sed: option requires an argument -- 'e'")
 			}
-			opts.scripts = append(opts.scripts, args[1])
+			appendSedScriptSource(&opts.scripts, args[1])
+			args = args[2:]
+			continue
+		case arg == "-f":
+			if len(args) < 2 {
+				return sedOptions{}, nil, exitf(inv, 1, "sed: option requires an argument -- 'f'")
+			}
+			if err := appendSedScriptFile(ctx, inv, &opts.scripts, args[1]); err != nil {
+				return sedOptions{}, nil, err
+			}
 			args = args[2:]
 			continue
 		case strings.HasPrefix(arg, "-e") && len(arg) > 2:
-			opts.scripts = append(opts.scripts, arg[2:])
+			appendSedScriptSource(&opts.scripts, arg[2:])
+		case strings.HasPrefix(arg, "-f") && len(arg) > 2:
+			if err := appendSedScriptFile(ctx, inv, &opts.scripts, arg[2:]); err != nil {
+				return sedOptions{}, nil, err
+			}
 		default:
 			return sedOptions{}, nil, exitf(inv, 1, "sed: unsupported flag %s", arg)
 		}
@@ -150,11 +163,30 @@ func parseSedArgs(inv *Invocation) (sedOptions, []string, error) {
 		if len(args) == 0 {
 			return sedOptions{}, nil, exitf(inv, 1, "sed: missing script")
 		}
-		opts.scripts = append(opts.scripts, args[0])
+		appendSedScriptSource(&opts.scripts, args[0])
 		args = args[1:]
 	}
 
 	return opts, args, nil
+}
+
+func appendSedScriptFile(ctx context.Context, inv *Invocation, scripts *[]string, name string) error {
+	data, _, err := readAllFile(ctx, inv, name)
+	if err != nil {
+		return err
+	}
+	appendSedScriptSource(scripts, string(data))
+	return nil
+}
+
+func appendSedScriptSource(scripts *[]string, source string) {
+	for _, line := range strings.Split(source, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		*scripts = append(*scripts, line)
+	}
 }
 
 func parseSedProgram(scripts []string) ([]sedCommand, error) {

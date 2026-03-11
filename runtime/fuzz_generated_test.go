@@ -88,6 +88,7 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 	writeSessionFile(t, session, "/tmp/copy.txt", []byte("copy-source\n"))
 	writeSessionFile(t, session, "/tmp/remove.txt", []byte("remove-me\n"))
 	writeSessionFile(t, session, "/tmp/script.sh", []byte("echo generated-script\n"))
+	writeSessionFile(t, session, "/tmp/script.sed", []byte("1,3p\n"))
 	writeSessionFile(t, session, "/tmp/join-left.txt", []byte("alpha left-alpha\nbeta left-beta\n"))
 	writeSessionFile(t, session, "/tmp/join-right.txt", []byte("alpha right-alpha\nbeta right-beta\n"))
 	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/dir/nested", 0o755); err != nil {
@@ -148,6 +149,7 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 		"{path.joinleft}":    "/tmp/join-left.txt",
 		"{path.joinright}":   "/tmp/join-right.txt",
 		"{path.script}":      "/tmp/script.sh",
+		"{path.sedscript}":   "/tmp/script.sed",
 		"{program.awk}":      "{print NF}",
 		"{program.sed}":      "1,3p",
 		"{script.echo}":      "echo generated-subshell",
