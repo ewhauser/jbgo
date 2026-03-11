@@ -600,6 +600,7 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `printf` supports the core shell format verbs used by automation scripts, including `%b` escape decoding and `\c` early termination
 - `rg` supports recursive regex search with `-n`, `-i`, `-l`, `-c`, `-g`, `--hidden`, and `--files`
 - `awk` is backed by `goawk` and supports `-F`, `-v`, and `-f`, but keeps `system()`, shell pipes, file writes, and extra file reads disabled inside the sandbox
+- `cut` supports character and field selection, custom delimiters, suppressing non-delimited lines, and `--only-delimited`
 - `comm` supports two-input comparisons plus column suppression via `-1`, `-2`, and `-3`
 - `uniq` supports adjacent-run filtering plus counts, duplicate-only / unique-only modes, and `-i/--ignore-case`
 - `paste` supports parallel and serial modes via `-s` and `-d`, including repeated `-` stdin inputs

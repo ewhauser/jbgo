@@ -190,6 +190,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		fuzzSpec("cut", "text",
 			fuzzVariant("", "flag:c", "-c", "1-3", "{path.text}"),
 			fuzzVariant("", "flag:fd", "-d", ",", "-f", "1", "{path.csv}"),
+			fuzzVariant("", "flag:long", "--only-delimited", "-d", ",", "-f", "1", "{path.csv}"),
 		),
 		fuzzSpec("sed", "text",
 			fuzzVariant("", "script", "{program.sed}", "{path.text}"),
