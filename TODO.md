@@ -195,7 +195,7 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `basename`
 
-- [ ] `--suffix`
+- [x] `--suffix`
 
 #### `cat`
 

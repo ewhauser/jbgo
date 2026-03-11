@@ -124,6 +124,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		),
 		fuzzSpec("basename", "file",
 			fuzzVariant("", "path.read", "{path.text}"),
+			fuzzVariant("", "flag:long", "--suffix", ".txt", "{path.text}"),
 		),
 		fuzzSpec("dirname", "file",
 			fuzzVariant("", "path.read", "{path.text}"),

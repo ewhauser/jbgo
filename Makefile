@@ -20,6 +20,7 @@ fuzz:
 	go test ./runtime -run=^$$ -fuzz=FuzzFilePathCommands -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzDirectoryTraversalCommands -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzTextSearchCommands -fuzztime=$(FUZZTIME)
+	go test ./runtime -run=^$$ -fuzz=FuzzBasenameCommand -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzBase64Command -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzDiffCommand -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzShellProcessCommands -fuzztime=$(FUZZTIME)
