@@ -642,7 +642,7 @@ func compareVersions(a, b string) int {
 	partsB := versionChunkRe.FindAllString(b, -1)
 	maxLen := max(len(partsB), len(partsA))
 
-	for i := 0; i < maxLen; i++ {
+	for i := range maxLen {
 		partA := ""
 		partB := ""
 		if i < len(partsA) {

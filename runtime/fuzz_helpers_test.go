@@ -114,6 +114,7 @@ func assertSuccessfulFuzzExecution(t *testing.T, script []byte, result *Executio
 	}
 	if result == nil {
 		t.Fatalf("nil result for script %q", previewFuzzScript(script))
+		return
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("unexpected exit code %d\nscript=%q\nstderr=%q", result.ExitCode, previewFuzzScript(script), result.Stderr)

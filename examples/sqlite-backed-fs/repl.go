@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"strings"
 
@@ -146,9 +147,7 @@ func cloneEnv(src map[string]string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(src))
-	for key, value := range src {
-		out[key] = value
-	}
+	maps.Copy(out, src)
 	return out
 }
 

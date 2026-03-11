@@ -244,11 +244,7 @@ func decodeBashToolResponse(response any) (bashToolResult, bool) {
 func thinkingDisabledConfig() *genai.GenerateContentConfig {
 	return &genai.GenerateContentConfig{
 		ThinkingConfig: &genai.ThinkingConfig{
-			ThinkingBudget: int32Ptr(0),
+			ThinkingBudget: new(int32),
 		},
 	}
-}
-
-func int32Ptr(v int32) *int32 {
-	return &v
 }

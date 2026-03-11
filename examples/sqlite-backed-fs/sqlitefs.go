@@ -704,8 +704,7 @@ func (s *sqliteFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
 
 	currentPath := "/"
 	currentID := sqliteRootNodeID
-	parts := strings.Split(strings.TrimPrefix(name, "/"), "/")
-	for _, part := range parts {
+	for part := range strings.SplitSeq(strings.TrimPrefix(name, "/"), "/") {
 		nextPath := jbfs.Resolve(currentPath, part)
 
 		childID, ok, err := s.lookupChildLocked(currentID, part)

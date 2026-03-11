@@ -100,6 +100,7 @@ func TestCurlSupportsAuthCookiesRemoteNameAndWriteOut(t *testing.T) {
 	req := client.LastRequest()
 	if req == nil {
 		t.Fatal("LastRequest = nil, want captured request")
+		return
 	}
 	if got, want := req.Method, "GET"; got != want {
 		t.Fatalf("Method = %q, want %q", got, want)
@@ -139,6 +140,7 @@ func TestCurlSupportsURLEncodedDataAndForgivingHeaders(t *testing.T) {
 	req := client.LastRequest()
 	if req == nil {
 		t.Fatal("LastRequest = nil, want captured request")
+		return
 	}
 	if got, want := req.Method, "POST"; got != want {
 		t.Fatalf("Method = %q, want %q", got, want)
@@ -175,6 +177,7 @@ func TestCurlSupportsMultipartAndUploadFile(t *testing.T) {
 	formReq := client.LastRequest()
 	if formReq == nil {
 		t.Fatal("form request = nil, want captured request")
+		return
 	}
 	if got, want := formReq.Method, "POST"; got != want {
 		t.Fatalf("form Method = %q, want %q", got, want)
@@ -204,6 +207,7 @@ func TestCurlSupportsMultipartAndUploadFile(t *testing.T) {
 	uploadReq := client.LastRequest()
 	if uploadReq == nil {
 		t.Fatal("upload request = nil, want captured request")
+		return
 	}
 	if got, want := uploadReq.Method, "PUT"; got != want {
 		t.Fatalf("upload Method = %q, want %q", got, want)
