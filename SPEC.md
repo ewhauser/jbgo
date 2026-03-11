@@ -455,6 +455,7 @@ Important properties:
 - the default backend is in-memory
 - the default backend exposes a Unix-like virtual layout rooted at `/`
 - host-backed filesystems, if ever added, must still satisfy policy checks and must never imply host command execution
+- developer-only test harnesses may use a host-backed filesystem adapter, but that adapter is not the default runtime backend and does not change the no-host-command-execution rule
 - shell redirects and command file access share the same filesystem view
 - symlink support is optional and must default to the safer behavior when policy is ambiguous
 - for backends without symlink creation/traversal support, `Lstat` behaves like `Stat`, `Readlink` fails for non-symlinks, and `Realpath` resolves only existing virtual paths
