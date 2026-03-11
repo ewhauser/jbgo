@@ -1,8 +1,10 @@
 PROJECT ?= $(shell gcloud config get-value project 2>/dev/null)
 LOCATION ?= us-west1
 MODEL ?= gemini-2.5-flash
+SQLITE_FS_DB ?= /tmp/jbgo-sandbox.db
+SQLITE_FS_SCRIPT ?= pwd
 
-.PHONY: run run-vertex-bash-chat
+.PHONY: run run-sqlite-backed-fs run-sqlite-backed-fs-repl run-vertex-bash-chat
 run: run-vertex-bash-chat
 
 run-vertex-bash-chat:
@@ -22,3 +24,11 @@ run-vertex-bash-chat:
 	@GOOGLE_CLOUD_PROJECT="$(PROJECT)" \
 	GOOGLE_CLOUD_LOCATION="$(LOCATION)" \
 	go run ./adk-bash-chat --backend=vertex --model="$(MODEL)"
+
+run-sqlite-backed-fs:
+	@echo "Running sqlite-backed-fs with backing DB $(SQLITE_FS_DB)"
+	@go run ./sqlite-backed-fs --db "$(SQLITE_FS_DB)" --script "$(SQLITE_FS_SCRIPT)"
+
+run-sqlite-backed-fs-repl:
+	@echo "Running sqlite-backed-fs REPL with backing DB $(SQLITE_FS_DB)"
+	@go run ./sqlite-backed-fs --db "$(SQLITE_FS_DB)" --repl

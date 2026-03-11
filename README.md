@@ -279,6 +279,19 @@ go run ./examples/adk-bash-chat --backend=vertex
 
 Use `/reset` inside the chat to recreate the ADK conversation and reseed the sandboxed lab.
 
+`sqlite-backed-fs` shows how to implement a custom `jbfs.FileSystem` on top of a host SQLite database file and pass it into `jbruntime.CustomFileSystem(...)`. Each run starts a fresh sandbox session, but the sandbox filesystem contents persist in the SQLite backing store when you reuse the same `--db` path.
+
+```bash
+go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --script "printf 'hello\\n' > /tmp/hello.txt"
+go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --script "cat /tmp/hello.txt"
+```
+
+It also supports a persistent in-process REPL:
+
+```bash
+go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --repl
+```
+
 ## Configuration
 
 The main configuration surface is `runtime.Config`.
@@ -472,6 +485,8 @@ Common commands from the repo root:
 - `go test ./... ./examples/...`
 - `go run ./examples/openai-tool-call`
 - `go run ./examples/adk-bash-chat`
+- `go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --script "pwd"`
+- `go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --repl`
 
 For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before making changes.
 
