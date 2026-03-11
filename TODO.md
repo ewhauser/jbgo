@@ -500,8 +500,8 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `timeout`
 
-- [ ] `--kill-after`
-- [ ] `--signal`
+- [x] `--kill-after`
+- [x] `--signal`
 
 #### `tr`
 

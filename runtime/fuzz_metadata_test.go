@@ -231,6 +231,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		),
 		fuzzSpec("timeout", "shell",
 			fuzzVariant("", "duration", "{duration.timeout}", "sleep", "{duration.short}"),
+			fuzzVariant("", "flag:long", "--signal", "TERM", "--kill-after", "{duration.short}", "{duration.timeout}", "sleep", "{duration.short}"),
 		),
 		fuzzSpec("xargs", "shell",
 			fuzzVariant("text", "stdin", "-n", "1", "echo"),

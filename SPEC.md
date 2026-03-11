@@ -620,7 +620,7 @@ For the shell/process helper batch, the runtime should expose practical, sandbox
 - `help` exposes runtime-owned help topics for the supported shell builtin surface
 - `date` is intentionally UTC-only and supports `-u/--utc`, `-d/--date`, `-I/--iso-8601`, `-R/--rfc-email`, and `+FORMAT`
 - `sleep` supports decimal durations and `s`, `m`, `h`, and `d` suffixes with a bounded maximum delay
-- `timeout` supports duration-bounded nested command execution and accepts `--foreground`, `-k`, and `-s` as compatibility flags without host signal semantics
+- `timeout` supports duration-bounded nested command execution and accepts `--foreground`, `-k/--kill-after`, and `-s/--signal` as compatibility flags without host signal semantics
 - `xargs` supports the default `echo` behavior plus `-n`, `-I`, `-0`, `-d`, `-t`, and `-r`
 - `bash` and `sh` are nested shell wrappers for `-c`, script files, and stdin scripts; they do not escape to host shells
 

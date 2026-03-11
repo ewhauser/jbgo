@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -52,6 +53,15 @@ func parseTimeoutArgs(inv *Invocation) (timeout time.Duration, argv []string, er
 				return 0, nil, exitf(inv, 1, "timeout: option requires an argument -- %s", args[0])
 			}
 			args = args[2:]
+		case "--kill-after", "--signal":
+			if len(args) < 2 {
+				return 0, nil, exitf(inv, 1, "timeout: option requires an argument -- %s", args[0])
+			}
+			args = args[2:]
+		case "--kill-after=" + strings.TrimPrefix(args[0], "--kill-after="):
+			args = args[1:]
+		case "--signal=" + strings.TrimPrefix(args[0], "--signal="):
+			args = args[1:]
 		default:
 			if args[0] != "" && args[0][0] == '-' {
 				return 0, nil, exitf(inv, 1, "timeout: unrecognized option %s", args[0])
