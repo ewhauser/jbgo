@@ -56,6 +56,8 @@ func parsePasteArgs(inv *Invocation) (pasteOptions, []string, error) {
 		switch {
 		case arg == "-s":
 			opts.serial = true
+		case arg == "--serial":
+			opts.serial = true
 		case arg == "-d":
 			if len(args) < 2 {
 				return pasteOptions{}, nil, exitf(inv, 1, "paste: option requires an argument -- 'd'")
@@ -63,8 +65,17 @@ func parsePasteArgs(inv *Invocation) (pasteOptions, []string, error) {
 			opts.delimiter = []rune(args[1])
 			args = args[2:]
 			continue
+		case arg == "--delimiters":
+			if len(args) < 2 {
+				return pasteOptions{}, nil, exitf(inv, 1, "paste: option requires an argument -- delimiters")
+			}
+			opts.delimiter = []rune(args[1])
+			args = args[2:]
+			continue
 		case strings.HasPrefix(arg, "-d") && len(arg) > 2:
 			opts.delimiter = []rune(arg[2:])
+		case strings.HasPrefix(arg, "--delimiters="):
+			opts.delimiter = []rune(strings.TrimPrefix(arg, "--delimiters="))
 		default:
 			return pasteOptions{}, nil, exitf(inv, 1, "paste: unsupported flag %s", arg)
 		}

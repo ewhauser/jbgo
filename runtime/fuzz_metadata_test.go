@@ -257,6 +257,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		fuzzSpec("paste", "text",
 			fuzzVariant("", "paths", "{path.text}", "{path.alttext}"),
 			fuzzVariant("", "flag:d", "-d", ",", "{path.text}", "{path.alttext}"),
+			fuzzVariant("", "flag:long", "--serial", "--delimiters=,", "{path.text}"),
 		),
 		fuzzSpec("tr", "text",
 			fuzzVariant("text", "stdin", "a-z", "A-Z"),

@@ -414,8 +414,8 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `paste`
 
-- [ ] `--delimiters`
-- [ ] `--serial`
+- [x] `--delimiters`
+- [x] `--serial`
 
 #### `sed`
 
