@@ -283,24 +283,24 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `grep`
 
-- [ ] `--files-without-match`
-- [ ] `--fixed-strings`
-- [ ] `--line-regexp`
-- [ ] `--no-filename`
-- [ ] `--only-matching`
-- [ ] `--perl-regexp`
-- [ ] `--quiet`
-- [ ] `-A`
-- [ ] `-B`
-- [ ] `-C`
-- [ ] `-F`
-- [ ] `-L`
-- [ ] `-P`
-- [ ] `-h`
-- [ ] `-m`
-- [ ] `-o`
-- [ ] `-q`
-- [ ] `-x`
+- [x] `--files-without-match`
+- [x] `--fixed-strings`
+- [x] `--line-regexp`
+- [x] `--no-filename`
+- [x] `--only-matching`
+- [x] `--perl-regexp`
+- [x] `--quiet`
+- [x] `-A`
+- [x] `-B`
+- [x] `-C`
+- [x] `-F`
+- [x] `-L`
+- [x] `-P`
+- [x] `-h`
+- [x] `-m`
+- [x] `-o`
+- [x] `-q`
+- [x] `-x`
 
 #### `gunzip`
 
