@@ -271,15 +271,15 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `find`
 
-- [ ] `-empty`
-- [ ] `-iname`
-- [ ] `-ipath`
-- [ ] `-iregex`
-- [ ] `-mtime`
-- [ ] `-newer`
-- [ ] `-path`
-- [ ] `-regex`
-- [ ] `-size`
+- [x] `-empty`
+- [x] `-iname`
+- [x] `-ipath`
+- [x] `-iregex`
+- [x] `-mtime`
+- [x] `-newer`
+- [x] `-path`
+- [x] `-regex`
+- [x] `-size`
 
 #### `grep`
 

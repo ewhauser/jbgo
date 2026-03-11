@@ -3,8 +3,8 @@ package commands
 import (
 	"context"
 	"fmt"
+	stdfs "io/fs"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/ewhauser/jbgo/policy"
@@ -12,12 +12,30 @@ import (
 
 type Find struct{}
 
-type findOptions struct {
-	namePattern string
-	typeFilter  byte
-	maxDepth    int
-	hasMaxDepth bool
-}
+const findHelpText = `find - search for files in a directory hierarchy
+
+Usage:
+  find [path ...] [expression]
+
+Supported predicates:
+  -name PATTERN       file name matches shell pattern
+  -iname PATTERN      case-insensitive file name match
+  -path PATTERN       displayed path matches shell pattern
+  -ipath PATTERN      case-insensitive displayed path match
+  -regex PATTERN      displayed path matches regular expression
+  -iregex PATTERN     case-insensitive regular expression match
+  -type f|d           filter by file or directory
+  -empty              match empty files and empty directories
+  -mtime N            match modification age in days (+N, -N, N)
+  -newer FILE         match files newer than FILE
+  -size N[ckMGb]      match file size
+  -maxdepth N         descend at most N levels
+  -a, -and            logical AND
+  -o, -or             logical OR
+  -not, !             negate the following expression
+  -print              always true; default output remains enabled
+  --help              show this help text
+`
 
 func NewFind() *Find {
 	return &Find{}
@@ -28,53 +46,17 @@ func (c *Find) Name() string {
 }
 
 func (c *Find) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	if len(args) == 1 && args[0] == "--help" {
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: find [path ...] [-name pattern] [-type f|d] [-maxdepth N]")
+	if len(inv.Args) == 1 && inv.Args[0] == "--help" {
+		_, _ = fmt.Fprint(inv.Stdout, findHelpText)
 		return nil
 	}
 
-	paths := make([]string, 0, len(args))
-	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		paths = append(paths, args[0])
-		args = args[1:]
+	paths, opts, expr, err := parseFindCommandArgs(inv)
+	if err != nil {
+		return err
 	}
-	if len(paths) == 0 {
-		paths = []string{"."}
-	}
-
-	var opts findOptions
-	for len(args) > 0 {
-		switch args[0] {
-		case "-name":
-			if len(args) < 2 {
-				return exitf(inv, 1, "find: missing argument to -name")
-			}
-			opts.namePattern = args[1]
-			args = args[2:]
-		case "-type":
-			if len(args) < 2 {
-				return exitf(inv, 1, "find: missing argument to -type")
-			}
-			if args[1] != "f" && args[1] != "d" {
-				return exitf(inv, 1, "find: Unknown argument to -type: %s", args[1])
-			}
-			opts.typeFilter = args[1][0]
-			args = args[2:]
-		case "-maxdepth":
-			if len(args) < 2 {
-				return exitf(inv, 1, "find: missing argument to -maxdepth")
-			}
-			maxDepth, err := strconv.Atoi(args[1])
-			if err != nil || maxDepth < 0 {
-				return exitf(inv, 1, "find: invalid maxdepth %q", args[1])
-			}
-			opts.maxDepth = maxDepth
-			opts.hasMaxDepth = true
-			args = args[2:]
-		default:
-			return exitf(inv, 1, "find: unknown predicate %q", args[0])
-		}
+	if err := resolveFindExpr(ctx, inv, expr); err != nil {
+		return err
 	}
 
 	exitCode := 0
@@ -90,8 +72,7 @@ func (c *Find) Run(ctx context.Context, inv *Invocation) error {
 			exitCode = 1
 			continue
 		}
-
-		if err := c.walk(ctx, inv, root, rootAbs, rootAbs, 0, opts); err != nil {
+		if err := c.walk(ctx, inv, root, rootAbs, rootAbs, 0, opts, expr); err != nil {
 			return err
 		}
 	}
@@ -102,46 +83,55 @@ func (c *Find) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func findMatches(opts findOptions, name string, isDir bool, depth int) bool {
-	if opts.hasMaxDepth && depth > opts.maxDepth {
-		return false
-	}
-	if opts.namePattern != "" {
-		matched, err := path.Match(opts.namePattern, name)
-		if err != nil || !matched {
-			return false
-		}
-	}
-	if opts.typeFilter == 'f' && isDir {
-		return false
-	}
-	if opts.typeFilter == 'd' && !isDir {
-		return false
-	}
-	return true
-}
-
-func (c *Find) walk(ctx context.Context, inv *Invocation, rootArg, rootAbs, currentAbs string, depth int, opts findOptions) error {
+func (c *Find) walk(ctx context.Context, inv *Invocation, rootArg, rootAbs, currentAbs string, depth int, opts findCommandOptions, expr findExpr) error {
 	info, _, err := statPath(ctx, inv, currentAbs)
 	if err != nil {
 		return err
 	}
-	if findMatches(opts, info.Name(), info.IsDir(), depth) {
-		if _, err := fmt.Fprintln(inv.Stdout, walkDisplayPath(rootArg, rootAbs, currentAbs)); err != nil {
+
+	displayPath := walkDisplayPath(rootArg, rootAbs, currentAbs)
+	var entries []stdfs.DirEntry
+	entriesLoaded := false
+	isEmpty := false
+
+	if info.IsDir() && findExprNeedsEmptyCheck(expr) {
+		entries, _, err = readDir(ctx, inv, currentAbs)
+		if err != nil {
+			return err
+		}
+		entriesLoaded = true
+		isEmpty = len(entries) == 0
+	} else if !info.IsDir() {
+		isEmpty = info.Size() == 0
+	}
+
+	matchCtx := &findEvalContext{
+		displayPath: displayPath,
+		name:        info.Name(),
+		isDir:       info.IsDir(),
+		isEmpty:     isEmpty,
+		mtime:       info.ModTime(),
+		size:        info.Size(),
+	}
+	if evaluateFindExpr(expr, matchCtx) {
+		if _, err := fmt.Fprintln(inv.Stdout, displayPath); err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
 	}
+
 	if !info.IsDir() || (opts.hasMaxDepth && depth >= opts.maxDepth) {
 		return nil
 	}
-
-	entries, _, err := readDir(ctx, inv, currentAbs)
-	if err != nil {
-		return err
+	if !entriesLoaded {
+		entries, _, err = readDir(ctx, inv, currentAbs)
+		if err != nil {
+			return err
+		}
 	}
+
 	for _, entry := range entries {
 		childAbs := path.Join(currentAbs, entry.Name())
-		if err := c.walk(ctx, inv, rootArg, rootAbs, childAbs, depth+1, opts); err != nil {
+		if err := c.walk(ctx, inv, rootArg, rootAbs, childAbs, depth+1, opts, expr); err != nil {
 			return err
 		}
 	}
