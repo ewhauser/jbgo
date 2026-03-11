@@ -13,10 +13,12 @@ import (
 type Split struct{}
 
 type splitOptions struct {
-	lines     int
-	bytes     int
-	numeric   bool
-	suffixLen int
+	lines            int
+	bytes            int
+	chunks           int
+	numeric          bool
+	suffixLen        int
+	additionalSuffix string
 }
 
 func NewSplit() *Split {
@@ -49,6 +51,9 @@ func (c *Split) Run(ctx context.Context, inv *Invocation) error {
 	chunks := splitData(data, opts)
 	for i, chunk := range chunks {
 		target := jbfs.Resolve(inv.Dir, prefix+splitSuffix(i, opts))
+		if opts.additionalSuffix != "" {
+			target += opts.additionalSuffix
+		}
 		if err := writeFileContents(ctx, inv, target, chunk, stdfs.FileMode(0o644)); err != nil {
 			return err
 		}
@@ -109,6 +114,27 @@ func parseSplitArgs(inv *Invocation) (opts splitOptions, inputName, prefix strin
 			opts.lines = 0
 		case arg == "-d":
 			opts.numeric = true
+		case arg == "-n":
+			value, rest, err := parseSplitInt(inv, "n", args[1:])
+			if err != nil {
+				return splitOptions{}, "", "", err
+			}
+			if value <= 0 {
+				return splitOptions{}, "", "", exitf(inv, 1, "split: invalid chunk count %d", value)
+			}
+			opts.chunks = value
+			opts.lines = 0
+			opts.bytes = 0
+			args = rest
+			continue
+		case strings.HasPrefix(arg, "-n") && len(arg) > 2:
+			value, err := strconv.Atoi(arg[2:])
+			if err != nil || value <= 0 {
+				return splitOptions{}, "", "", exitf(inv, 1, "split: invalid chunk count %q", arg[2:])
+			}
+			opts.chunks = value
+			opts.lines = 0
+			opts.bytes = 0
 		case arg == "-a":
 			value, rest, err := parseSplitInt(inv, "a", args[1:])
 			if err != nil {
@@ -120,6 +146,15 @@ func parseSplitArgs(inv *Invocation) (opts splitOptions, inputName, prefix strin
 			opts.suffixLen = value
 			args = rest
 			continue
+		case arg == "--additional-suffix":
+			if len(args) < 2 {
+				return splitOptions{}, "", "", exitf(inv, 1, "split: option requires an argument -- additional-suffix")
+			}
+			opts.additionalSuffix = args[1]
+			args = args[2:]
+			continue
+		case strings.HasPrefix(arg, "--additional-suffix="):
+			opts.additionalSuffix = strings.TrimPrefix(arg, "--additional-suffix=")
 		case strings.HasPrefix(arg, "-a") && len(arg) > 2:
 			value, err := strconv.Atoi(arg[2:])
 			if err != nil || value <= 0 {
@@ -182,6 +217,19 @@ func parseSplitSize(value string) (int, error) {
 func splitData(data []byte, opts splitOptions) [][]byte {
 	if len(data) == 0 {
 		return nil
+	}
+	if opts.chunks > 0 {
+		var chunks [][]byte
+		chunkSize := (len(data) + opts.chunks - 1) / opts.chunks
+		for start := 0; start < len(data); start += chunkSize {
+			end := start + chunkSize
+			if end > len(data) {
+				end = len(data)
+			}
+			chunk := append([]byte(nil), data[start:end]...)
+			chunks = append(chunks, chunk)
+		}
+		return chunks
 	}
 	if opts.bytes > 0 {
 		var chunks [][]byte

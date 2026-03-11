@@ -55,6 +55,23 @@ func TestCPRejectsDirectoryWithoutRecursiveFlag(t *testing.T) {
 	}
 }
 
+func TestCPSupportsNoClobberPreserveAndVerbose(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	setup := mustExecSession(t, session, "echo new > /src.txt\necho old > /dst.txt\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0", setup.ExitCode)
+	}
+
+	result := mustExecSession(t, session, "cp --no-clobber --preserve --verbose /src.txt /dst.txt\ncat /dst.txt\ncp -pv /src.txt /fresh.txt\ncat /fresh.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "old\n'/src.txt' -> '/fresh.txt'\nnew\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestMVCanMoveDirectoryIntoExistingDirectory(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -120,6 +137,23 @@ func TestMVRejectsMissingSource(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "cannot stat") {
 		t.Fatalf("Stderr = %q, want missing-source error", result.Stderr)
+	}
+}
+
+func TestMVSupportsNoClobberVerboseAndMovingFileIntoDirectory(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	setup := mustExecSession(t, session, "mkdir -p /dst\necho src > /src.txt\necho keep > /dst/src.txt\necho move > /move.txt\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0", setup.ExitCode)
+	}
+
+	result := mustExecSession(t, session, "mv --no-clobber /src.txt /dst/src.txt\ncat /dst/src.txt\nmv -v /move.txt /dst\ncat /dst/move.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "keep\nrenamed '/move.txt' -> '/dst/move.txt'\nmove\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 

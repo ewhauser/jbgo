@@ -184,6 +184,23 @@ func TestBasenameAndDirnameHandleSuffixesAndMultipleOperands(t *testing.T) {
 	}
 }
 
+func TestBasenameSupportsLongSuffixFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "basename --suffix .log /tmp/build.log\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "build\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestTreeShowsHiddenFilesAndDepthLimits(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -256,6 +273,19 @@ func TestFileMissingPathReportsErrorOnStdout(t *testing.T) {
 	}
 	if !strings.Contains(result.Stdout, "cannot open") {
 		t.Fatalf("Stdout = %q, want missing-path message", result.Stdout)
+	}
+}
+
+func TestFileSupportsLongBriefAndMimeFlags(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/note.txt", []byte("hello\n"))
+
+	result := mustExecSession(t, session, "file --brief /home/agent/note.txt\nfile --mime /home/agent/note.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "ASCII text\n/home/agent/note.txt: text/plain\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 

@@ -20,19 +20,26 @@ func (c *Head) Run(ctx context.Context, inv *Invocation) error {
 	if err != nil {
 		return err
 	}
+	process := func(data []byte) []byte {
+		if opts.hasBytes {
+			return firstBytes(data, opts.bytes)
+		}
+		return firstLines(data, opts.lines)
+	}
 
 	if len(opts.files) == 0 {
 		data, err := readAllStdin(inv)
 		if err != nil {
 			return err
 		}
-		_, err = inv.Stdout.Write(firstLines(data, opts.lines))
+		_, err = inv.Stdout.Write(process(data))
 		if err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
 		return nil
 	}
 
+	showHeaders := opts.verbose || (!opts.quiet && len(opts.files) > 1)
 	exitCode := 0
 	for i, file := range opts.files {
 		data, _, err := readAllFile(ctx, inv, file)
@@ -41,7 +48,7 @@ func (c *Head) Run(ctx context.Context, inv *Invocation) error {
 			exitCode = 1
 			continue
 		}
-		if len(opts.files) > 1 {
+		if showHeaders {
 			if i > 0 {
 				_, _ = fmt.Fprintln(inv.Stdout)
 			}
@@ -49,7 +56,7 @@ func (c *Head) Run(ctx context.Context, inv *Invocation) error {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
-		if _, err := inv.Stdout.Write(firstLines(data, opts.lines)); err != nil {
+		if _, err := inv.Stdout.Write(process(data)); err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
 	}

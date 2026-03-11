@@ -22,12 +22,18 @@ import (
 type sqliteOutputMode string
 
 const (
-	sqliteModeList   sqliteOutputMode = "list"
-	sqliteModeCSV    sqliteOutputMode = "csv"
-	sqliteModeJSON   sqliteOutputMode = "json"
-	sqliteModeLine   sqliteOutputMode = "line"
-	sqliteModeColumn sqliteOutputMode = "column"
-	sqliteModeTable  sqliteOutputMode = "table"
+	sqliteModeList     sqliteOutputMode = "list"
+	sqliteModeCSV      sqliteOutputMode = "csv"
+	sqliteModeJSON     sqliteOutputMode = "json"
+	sqliteModeLine     sqliteOutputMode = "line"
+	sqliteModeColumn   sqliteOutputMode = "column"
+	sqliteModeTable    sqliteOutputMode = "table"
+	sqliteModeMarkdown sqliteOutputMode = "markdown"
+	sqliteModeTabs     sqliteOutputMode = "tabs"
+	sqliteModeBox      sqliteOutputMode = "box"
+	sqliteModeQuote    sqliteOutputMode = "quote"
+	sqliteModeHTML     sqliteOutputMode = "html"
+	sqliteModeASCII    sqliteOutputMode = "ascii"
 )
 
 type sqliteOptions struct {
@@ -217,6 +223,18 @@ func parseSQLiteArgs(inv *Invocation) (parsed sqliteParsedArgs, err error) {
 			parsed.options.mode = sqliteModeColumn
 		case "-table":
 			parsed.options.mode = sqliteModeTable
+		case "-markdown":
+			parsed.options.mode = sqliteModeMarkdown
+		case "-tabs":
+			parsed.options.mode = sqliteModeTabs
+		case "-box":
+			parsed.options.mode = sqliteModeBox
+		case "-quote":
+			parsed.options.mode = sqliteModeQuote
+		case "-html":
+			parsed.options.mode = sqliteModeHTML
+		case "-ascii":
+			parsed.options.mode = sqliteModeASCII
 		case "-header":
 			parsed.options.header = true
 		case "-noheader":
@@ -522,6 +540,18 @@ func formatSQLiteResult(opts *sqliteOptions, result *sqliteStatementResult) ([]b
 		return formatSQLiteColumn(opts, result, false), nil
 	case sqliteModeTable:
 		return formatSQLiteColumn(opts, result, true), nil
+	case sqliteModeMarkdown:
+		return formatSQLiteMarkdown(opts, result), nil
+	case sqliteModeTabs:
+		return formatSQLiteTabs(opts, result), nil
+	case sqliteModeBox:
+		return formatSQLiteBox(opts, result), nil
+	case sqliteModeQuote:
+		return formatSQLiteQuote(opts, result), nil
+	case sqliteModeHTML:
+		return formatSQLiteHTML(opts, result), nil
+	case sqliteModeASCII:
+		return formatSQLiteASCII(opts, result), nil
 	default:
 		return formatSQLiteList(opts, result), nil
 	}
@@ -674,6 +704,162 @@ func formatSQLiteColumn(opts *sqliteOptions, result *sqliteStatementResult, tabl
 	return buf.Bytes()
 }
 
+func formatSQLiteMarkdown(opts *sqliteOptions, result *sqliteStatementResult) []byte {
+	if len(result.Rows) == 0 && (!opts.header || len(result.Columns) == 0) {
+		return nil
+	}
+	var buf bytes.Buffer
+	if opts.header && len(result.Columns) > 0 {
+		buf.WriteString("| ")
+		buf.WriteString(strings.Join(result.Columns, " | "))
+		buf.WriteString(" |\n|")
+		for i := range result.Columns {
+			if i > 0 {
+				buf.WriteByte('|')
+			}
+			buf.WriteString("---")
+		}
+		buf.WriteString("|\n")
+	}
+	for _, row := range result.Rows {
+		values := make([]string, len(row))
+		for i, value := range row {
+			values[i] = sqliteStringValue(value, opts.nullValue)
+		}
+		buf.WriteString("| ")
+		buf.WriteString(strings.Join(values, " | "))
+		buf.WriteString(" |\n")
+	}
+	return buf.Bytes()
+}
+
+func formatSQLiteTabs(opts *sqliteOptions, result *sqliteStatementResult) []byte {
+	if len(result.Rows) == 0 && (!opts.header || len(result.Columns) == 0) {
+		return nil
+	}
+	var buf bytes.Buffer
+	if opts.header && len(result.Columns) > 0 {
+		buf.WriteString(strings.Join(result.Columns, "\t"))
+		buf.WriteString(opts.newline)
+	}
+	for _, row := range result.Rows {
+		values := make([]string, len(row))
+		for i, value := range row {
+			values[i] = sqliteStringValue(value, opts.nullValue)
+		}
+		buf.WriteString(strings.Join(values, "\t"))
+		buf.WriteString(opts.newline)
+	}
+	return buf.Bytes()
+}
+
+func formatSQLiteBox(opts *sqliteOptions, result *sqliteStatementResult) []byte {
+	if len(result.Columns) == 0 {
+		return nil
+	}
+
+	widths := make([]int, len(result.Columns))
+	for i, name := range result.Columns {
+		widths[i] = len(name)
+	}
+	for _, row := range result.Rows {
+		for i, value := range row {
+			text := sqliteStringValue(value, opts.nullValue)
+			if len(text) > widths[i] {
+				widths[i] = len(text)
+			}
+		}
+	}
+
+	var buf bytes.Buffer
+	writeSQLiteUnicodeBorder(&buf, widths, "┌", "┬", "┐")
+	writeSQLiteUnicodeRow(&buf, result.Columns, widths)
+	writeSQLiteUnicodeBorder(&buf, widths, "├", "┼", "┤")
+	for _, row := range result.Rows {
+		record := make([]string, len(row))
+		for i, value := range row {
+			record[i] = sqliteStringValue(value, opts.nullValue)
+		}
+		writeSQLiteUnicodeRow(&buf, record, widths)
+	}
+	writeSQLiteUnicodeBorder(&buf, widths, "└", "┴", "┘")
+	return buf.Bytes()
+}
+
+func formatSQLiteQuote(opts *sqliteOptions, result *sqliteStatementResult) []byte {
+	if len(result.Rows) == 0 && (!opts.header || len(result.Columns) == 0) {
+		return nil
+	}
+	var buf bytes.Buffer
+	if opts.header && len(result.Columns) > 0 {
+		values := make([]string, len(result.Columns))
+		for i, name := range result.Columns {
+			values[i] = sqliteQuoteString(name)
+		}
+		buf.WriteString(strings.Join(values, ","))
+		buf.WriteString(opts.newline)
+	}
+	for _, row := range result.Rows {
+		values := make([]string, len(row))
+		for i, value := range row {
+			values[i] = sqliteQuoteValue(value)
+		}
+		buf.WriteString(strings.Join(values, ","))
+		buf.WriteString(opts.newline)
+	}
+	return buf.Bytes()
+}
+
+func formatSQLiteHTML(opts *sqliteOptions, result *sqliteStatementResult) []byte {
+	if len(result.Rows) == 0 && (!opts.header || len(result.Columns) == 0) {
+		return nil
+	}
+	var buf bytes.Buffer
+	if opts.header && len(result.Columns) > 0 {
+		buf.WriteString("<TR>")
+		for _, name := range result.Columns {
+			buf.WriteString("<TH>")
+			buf.WriteString(sqliteEscapeHTML(name))
+			buf.WriteString("</TH>")
+		}
+		buf.WriteString("\n</TR>\n")
+	}
+	for _, row := range result.Rows {
+		buf.WriteString("<TR>")
+		for _, value := range row {
+			buf.WriteString("<TD>")
+			buf.WriteString(sqliteEscapeHTML(sqliteStringValue(value, opts.nullValue)))
+			buf.WriteString("</TD>")
+		}
+		buf.WriteString("\n</TR>\n")
+	}
+	return buf.Bytes()
+}
+
+func formatSQLiteASCII(opts *sqliteOptions, result *sqliteStatementResult) []byte {
+	if len(result.Rows) == 0 && (!opts.header || len(result.Columns) == 0) {
+		return nil
+	}
+	const (
+		colSep = "\x1f"
+		rowSep = "\x1e"
+	)
+	var buf bytes.Buffer
+	if opts.header && len(result.Columns) > 0 {
+		buf.WriteString(strings.Join(result.Columns, colSep))
+		buf.WriteString(rowSep)
+	}
+	for _, row := range result.Rows {
+		values := make([]string, len(row))
+		for i, value := range row {
+			values[i] = sqliteStringValue(value, opts.nullValue)
+		}
+		buf.WriteString(strings.Join(values, colSep))
+		buf.WriteString(rowSep)
+	}
+	return buf.Bytes()
+}
+
 func writeSQLiteRow(buf *bytes.Buffer, values []string, widths []int, table bool) {
 	if table {
 		buf.WriteString("| ")
@@ -706,6 +892,32 @@ func writeSQLiteBorder(buf *bytes.Buffer, widths []int, fill byte) {
 	buf.WriteByte('\n')
 }
 
+func writeSQLiteUnicodeRow(buf *bytes.Buffer, values []string, widths []int) {
+	buf.WriteString("│ ")
+	for i, value := range values {
+		if i > 0 {
+			buf.WriteString(" │ ")
+		}
+		buf.WriteString(value)
+		if widths[i] > len(value) {
+			buf.WriteString(strings.Repeat(" ", widths[i]-len(value)))
+		}
+	}
+	buf.WriteString(" │\n")
+}
+
+func writeSQLiteUnicodeBorder(buf *bytes.Buffer, widths []int, left, middle, right string) {
+	buf.WriteString(left)
+	for i, width := range widths {
+		if i > 0 {
+			buf.WriteString(middle)
+		}
+		buf.WriteString(strings.Repeat("─", width+2))
+	}
+	buf.WriteString(right)
+	buf.WriteByte('\n')
+}
+
 func sqliteStringValue(value any, nullValue string) string {
 	switch v := value.(type) {
 	case nil:
@@ -715,10 +927,41 @@ func sqliteStringValue(value any, nullValue string) string {
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case float64:
-		return strconv.FormatFloat(v, 'g', -1, 64)
+		return sqliteFloatString(v)
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func sqliteQuoteString(value string) string {
+	return "'" + value + "'"
+}
+
+func sqliteQuoteValue(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return "NULL"
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return sqliteFloatString(v)
+	default:
+		return sqliteQuoteString(fmt.Sprint(v))
+	}
+}
+
+func sqliteFloatString(value float64) string {
+	return strconv.FormatFloat(value, 'g', 17, 64)
+}
+
+func sqliteEscapeHTML(value string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+	)
+	return replacer.Replace(value)
 }
 
 func sqliteForbiddenStatement(sql string) string {

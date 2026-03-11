@@ -24,6 +24,23 @@ func TestEnvAndPrintEnvScopeNestedEnvironment(t *testing.T) {
 	}
 }
 
+func TestEnvSupportsLongIgnoreEnvironment(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "env --ignore-environment ONLY=present printenv ONLY\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "present\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestTeeAppendsAndWritesMultipleFiles(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -199,6 +216,26 @@ func TestTimeoutStopsNestedCommand(t *testing.T) {
 	}
 }
 
+func TestTimeoutSupportsLongKillAfterAndSignalOptions(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "timeout --signal TERM --kill-after 0.01 0.02 sleep 1 || echo timed\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "timed\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "execution timed out") {
+		t.Fatalf("Stderr = %q, want timeout message", result.Stderr)
+	}
+}
+
 func TestBashRunsNestedCommandString(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -247,5 +284,25 @@ func TestXArgsSupportsBatchingAndReplacement(t *testing.T) {
 	}
 	if got, want := result.Stdout, "a\nb\nitem:left\nitem:right\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestXArgsSupportsLongFlags(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a\\0b\\0' | xargs --null --verbose --max-args 1 echo\nprintf '' | xargs --no-run-if-empty echo skip\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a\nb\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "'echo' 'a'\n'echo' 'b'\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }

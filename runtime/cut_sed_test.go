@@ -40,6 +40,23 @@ func TestCutSupportsCharactersAndSuppressNoDelimiter(t *testing.T) {
 	}
 }
 
+func TestCutSupportsLongOnlyDelimitedFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'left:right\\nplain\\n' > /tmp/in.txt\ncut --only-delimited -d: -f2 /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "right\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCutRequiresFieldOrCharacterSelector(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -122,5 +139,22 @@ func TestSedReturnsMissingFileError(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "/missing.txt") {
 		t.Fatalf("Stderr = %q, want missing-file error", result.Stderr)
+	}
+}
+
+func TestSedSupportsScriptFileFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 's/foo/bar/\\n2p\\n' > /tmp/script.sed\nprintf 'foo\\nfoo\\n' > /tmp/in.txt\nsed -f /tmp/script.sed /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "bar\nbar\nbar\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

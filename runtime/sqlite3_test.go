@@ -95,6 +95,72 @@ func TestSQLite3SupportsLineAndTableFormatting(t *testing.T) {
 	}
 }
 
+func TestSQLite3SupportsAdditionalOutputModes(t *testing.T) {
+	session := newSession(t, nil)
+
+	markdown := mustExecSession(t, session, `sqlite3 -markdown -header :memory: "create table t(a,b); insert into t values (1,'x'); select * from t;"`+"\n")
+	if markdown.ExitCode != 0 {
+		t.Fatalf("markdown ExitCode = %d, want 0; stderr=%q", markdown.ExitCode, markdown.Stderr)
+	}
+	if got, want := markdown.Stdout, "| a | b |\n|---|---|\n| 1 | x |\n"; got != want {
+		t.Fatalf("markdown Stdout = %q, want %q", got, want)
+	}
+
+	tabs := mustExecSession(t, session, `sqlite3 -tabs -header :memory: "create table t(a,b); insert into t values (1,'x'); select * from t;"`+"\n")
+	if tabs.ExitCode != 0 {
+		t.Fatalf("tabs ExitCode = %d, want 0; stderr=%q", tabs.ExitCode, tabs.Stderr)
+	}
+	if got, want := tabs.Stdout, "a\tb\n1\tx\n"; got != want {
+		t.Fatalf("tabs Stdout = %q, want %q", got, want)
+	}
+
+	box := mustExecSession(t, session, `sqlite3 -box :memory: "create table t(id,name); insert into t values (1,'alice'); select * from t;"`+"\n")
+	if box.ExitCode != 0 {
+		t.Fatalf("box ExitCode = %d, want 0; stderr=%q", box.ExitCode, box.Stderr)
+	}
+	for _, want := range []string{"┌", "│ id", "│ 1 "} {
+		if !strings.Contains(box.Stdout, want) {
+			t.Fatalf("box Stdout = %q, want fragment %q", box.Stdout, want)
+		}
+	}
+
+	quote := mustExecSession(t, session, `sqlite3 -quote :memory: "select 1 as a, 'x' as b, null as c;"`+"\n")
+	if quote.ExitCode != 0 {
+		t.Fatalf("quote ExitCode = %d, want 0; stderr=%q", quote.ExitCode, quote.Stderr)
+	}
+	if got, want := quote.Stdout, "1,'x',NULL\n"; got != want {
+		t.Fatalf("quote Stdout = %q, want %q", got, want)
+	}
+
+	html := mustExecSession(t, session, `sqlite3 -html -header :memory: "select '<tag>' as c;"`+"\n")
+	if html.ExitCode != 0 {
+		t.Fatalf("html ExitCode = %d, want 0; stderr=%q", html.ExitCode, html.Stderr)
+	}
+	if got, want := html.Stdout, "<TR><TH>c</TH>\n</TR>\n<TR><TD>&lt;tag&gt;</TD>\n</TR>\n"; got != want {
+		t.Fatalf("html Stdout = %q, want %q", got, want)
+	}
+
+	ascii := mustExecSession(t, session, `sqlite3 -ascii -header :memory: "create table t(a,b); insert into t values (1,2); select * from t;"`+"\n")
+	if ascii.ExitCode != 0 {
+		t.Fatalf("ascii ExitCode = %d, want 0; stderr=%q", ascii.ExitCode, ascii.Stderr)
+	}
+	if got, want := ascii.Stdout, "a\x1fb\x1e1\x1f2\x1e"; got != want {
+		t.Fatalf("ascii Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSQLite3QuoteModeMatchesUpstreamQuotingAndFloatFormatting(t *testing.T) {
+	session := newSession(t, nil)
+
+	result := mustExecSession(t, session, `sqlite3 -quote -header :memory: "select 'O''Reilly' as author, 0.1 as ratio;"`+"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "'author','ratio'\n'O'Reilly',0.10000000000000001\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestSQLite3RunsCmdBeforeMainSQL(t *testing.T) {
 	session := newSession(t, nil)
 

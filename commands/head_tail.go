@@ -9,7 +9,11 @@ import (
 
 type headTailOptions struct {
 	lines    int
+	bytes    int
+	hasBytes bool
 	fromLine bool
+	quiet    bool
+	verbose  bool
 	files    []string
 }
 
@@ -20,7 +24,7 @@ func parseHeadTailArgs(inv *Invocation, cmdName string, allowFromLine bool) (hea
 	for len(args) > 0 {
 		arg := args[0]
 		switch {
-		case arg == "-n":
+		case arg == "-n" || arg == "--lines":
 			if len(args) < 2 {
 				return headTailOptions{}, exitf(inv, 1, "%s: missing argument to -n", cmdName)
 			}
@@ -31,6 +35,33 @@ func parseHeadTailArgs(inv *Invocation, cmdName string, allowFromLine bool) (hea
 			opts.lines = count
 			opts.fromLine = fromLine
 			args = args[2:]
+		case strings.HasPrefix(arg, "--lines="):
+			count, err := strconv.Atoi(strings.TrimPrefix(arg, "--lines="))
+			if err != nil || count < 0 {
+				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of lines", cmdName)
+			}
+			opts.lines = count
+			opts.fromLine = false
+			args = args[1:]
+		case arg == "-c" || arg == "--bytes":
+			if len(args) < 2 {
+				return headTailOptions{}, exitf(inv, 1, "%s: missing argument to -c", cmdName)
+			}
+			count, err := strconv.Atoi(args[1])
+			if err != nil || count < 0 {
+				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of bytes", cmdName)
+			}
+			opts.bytes = count
+			opts.hasBytes = true
+			args = args[2:]
+		case strings.HasPrefix(arg, "--bytes="):
+			count, err := strconv.Atoi(strings.TrimPrefix(arg, "--bytes="))
+			if err != nil || count < 0 {
+				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of bytes", cmdName)
+			}
+			opts.bytes = count
+			opts.hasBytes = true
+			args = args[1:]
 		case strings.HasPrefix(arg, "-n"):
 			count, fromLine, err := parseHeadTailCount(strings.TrimPrefix(arg, "-n"), allowFromLine)
 			if err != nil {
@@ -38,6 +69,20 @@ func parseHeadTailArgs(inv *Invocation, cmdName string, allowFromLine bool) (hea
 			}
 			opts.lines = count
 			opts.fromLine = fromLine
+			args = args[1:]
+		case strings.HasPrefix(arg, "-c"):
+			count, err := strconv.Atoi(strings.TrimPrefix(arg, "-c"))
+			if err != nil || count < 0 {
+				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of bytes", cmdName)
+			}
+			opts.bytes = count
+			opts.hasBytes = true
+			args = args[1:]
+		case arg == "-q" || arg == "--quiet" || arg == "--silent":
+			opts.quiet = true
+			args = args[1:]
+		case arg == "-v" || arg == "--verbose":
+			opts.verbose = true
 			args = args[1:]
 		case len(arg) > 1 && arg[0] == '-' && arg[1] >= '0' && arg[1] <= '9':
 			count, err := strconv.Atoi(arg[1:])
@@ -112,4 +157,24 @@ func linesFrom(data []byte, startLine int) []byte {
 		return nil
 	}
 	return bytes.Join(lines[startLine-1:], nil)
+}
+
+func firstBytes(data []byte, count int) []byte {
+	if count <= 0 {
+		return nil
+	}
+	if count > len(data) {
+		count = len(data)
+	}
+	return append([]byte(nil), data[:count]...)
+}
+
+func lastBytes(data []byte, count int) []byte {
+	if count <= 0 {
+		return nil
+	}
+	if count > len(data) {
+		count = len(data)
+	}
+	return append([]byte(nil), data[len(data)-count:]...)
 }

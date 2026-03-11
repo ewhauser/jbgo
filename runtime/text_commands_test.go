@@ -144,6 +144,40 @@ func TestTailWorksInPipeline(t *testing.T) {
 	}
 }
 
+func TestHeadAndTailSupportLongByteAndHeaderFlags(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'abcdef\\n' > /tmp/a.txt\nprintf 'uvwxyz\\n' > /tmp/b.txt\nhead --bytes=3 --verbose /tmp/a.txt /tmp/b.txt\ntail --bytes=2 --quiet /tmp/a.txt /tmp/b.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "==> /tmp/a.txt <==\nabc\n==> /tmp/b.txt <==\nuvwf\nz\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestTailLongLinesFlagDoesNotEnableFromLineMode(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'one\\ntwo\\nthree\\nfour\\n' > /tmp/in.txt\ntail --lines=+3 /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "two\nthree\nfour\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestWCReportsTotalsForMultipleFiles(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -190,5 +224,22 @@ func TestWCCountsBinaryBytes(t *testing.T) {
 	}
 	if !strings.Contains(result.Stdout, "5 /tmp/binary.bin") {
 		t.Fatalf("Stdout = %q, want byte count for binary file", result.Stdout)
+	}
+}
+
+func TestCatSupportsNumberFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'first\\nsecond\\n' > /tmp/a.txt\nprintf 'third\\n' | cat --number /tmp/a.txt -\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "     1\tfirst\n     2\tsecond\n     3\tthird\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

@@ -40,6 +40,23 @@ func TestCommSupportsStdinAndColumnSuppression(t *testing.T) {
 	}
 }
 
+func TestCommSupportsExplicitColumnFlags(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'apple\\nbanana\\n' > /tmp/left.txt\nprintf 'banana\\ncarrot\\n' > /tmp/right.txt\ncomm -1 /tmp/left.txt /tmp/right.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "\tbanana\ncarrot\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestPasteSupportsRepeatedStdin(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -70,6 +87,23 @@ func TestPasteSerialSupportsCustomDelimiter(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, "one,two,three\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPasteSupportsLongFlags(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'one\\ntwo\\n' > /tmp/in.txt\npaste --serial --delimiters=':' /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "one:two\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -108,6 +142,23 @@ func TestTRSupportsComplementDelete(t *testing.T) {
 	}
 }
 
+func TestTRSupportsLongDeleteAndSqueezeFlags(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'aaabbbccc' | tr --squeeze-repeats abc\nprintf 'abc123' | tr --delete '[:alpha:]'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "abc123"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestRevHandlesUnicode(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -138,6 +189,23 @@ func TestNLSupportsFormattingControls(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, " 10: one\n 15: \n 20: two\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestNLSupportsNumberFormats(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'one\\ntwo\\n' | nl -ba -n rz -w 3\nprintf 'one\\n' | nl -ba -n ln -w 3 -s ':'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "001\tone\n002\ttwo\n1  :one\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -181,6 +249,28 @@ func TestSplitWritesNumberedChunks(t *testing.T) {
 	}
 	if got, want := string(readSessionFile(t, session, "/tmp/out-02")), "five\n"; got != want {
 		t.Fatalf("out-02 = %q, want %q", got, want)
+	}
+}
+
+func TestSplitSupportsChunkingAndAdditionalSuffix(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.txt", []byte("abcdef"))
+
+	result := mustExecSession(t, session, "split -n 3 --additional-suffix=.part /tmp/in.txt /tmp/chunk-\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty output", result.Stdout)
+	}
+	if got, want := string(readSessionFile(t, session, "/tmp/chunk-aa.part")), "ab"; got != want {
+		t.Fatalf("chunk-aa.part = %q, want %q", got, want)
+	}
+	if got, want := string(readSessionFile(t, session, "/tmp/chunk-ab.part")), "cd"; got != want {
+		t.Fatalf("chunk-ab.part = %q, want %q", got, want)
+	}
+	if got, want := string(readSessionFile(t, session, "/tmp/chunk-ac.part")), "ef"; got != want {
+		t.Fatalf("chunk-ac.part = %q, want %q", got, want)
 	}
 }
 
@@ -237,6 +327,23 @@ func TestDiffReportsIdenticalFiles(t *testing.T) {
 	}
 }
 
+func TestDiffSupportsLongFlags(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'alpha\\n' > /tmp/a.txt\nprintf 'ALPHA\\n' > /tmp/b.txt\ndiff --ignore-case --report-identical-files /tmp/a.txt /tmp/b.txt\nprintf 'one\\n' > /tmp/c.txt\nprintf 'two\\n' > /tmp/d.txt\ndiff --brief /tmp/c.txt /tmp/d.txt || true\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "Files /tmp/a.txt and /tmp/b.txt are identical\nFiles /tmp/c.txt and /tmp/d.txt differ\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestBase64RoundTripsThroughPipelines(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -250,6 +357,23 @@ func TestBase64RoundTripsThroughPipelines(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, "hello world"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestBase64SupportsLongWrapFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'hello world' | base64 --wrap=0\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "aGVsbG8gd29ybGQ=\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

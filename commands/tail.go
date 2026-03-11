@@ -22,6 +22,9 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	process := func(data []byte) []byte {
+		if opts.hasBytes {
+			return lastBytes(data, opts.bytes)
+		}
 		if opts.fromLine {
 			return linesFrom(data, opts.lines)
 		}
@@ -40,6 +43,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 		return nil
 	}
 
+	showHeaders := opts.verbose || (!opts.quiet && len(opts.files) > 1)
 	exitCode := 0
 	for i, file := range opts.files {
 		data, _, err := readAllFile(ctx, inv, file)
@@ -48,7 +52,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 			exitCode = 1
 			continue
 		}
-		if len(opts.files) > 1 {
+		if showHeaders {
 			if i > 0 {
 				_, _ = fmt.Fprintln(inv.Stdout)
 			}
