@@ -6,6 +6,7 @@ require (
 	github.com/benhoyt/goawk v1.31.0
 	github.com/itchyny/gojq v0.12.18
 	github.com/mikefarah/yq/v4 v4.52.4
+	github.com/ncruces/go-sqlite3 v0.31.1
 	golang.org/x/term v0.40.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	mvdan.cc/sh/v3 v3.13.0
@@ -30,7 +31,9 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
+	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect

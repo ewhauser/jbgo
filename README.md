@@ -1,276 +1,45 @@
 # just-bash-go
 
-`just-bash-go` is a deterministic, sandbox-only, bash-like runtime for AI agents.
+`just-bash-go` is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
 
-> **Note:** This is beta software. It has not been hardened or security tested and is less mature than [Vercel's implementation](https://github.com/vercel-labs/just-bash). Use at your own risk and please provide feedback.
+It ports the core product idea behind [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash) to a Go-native runtime built on [`mvdan/sh/v3`](https://pkg.go.dev/mvdan.cc/sh/v3).
 
-It ports the core product idea behind `just-bash` into Go, using [`mvdan/sh/v3`](https://pkg.go.dev/mvdan.cc/sh/v3) for shell parsing and evaluation semantics while keeping execution inside a Go-native sandbox:
+Key properties:
 
-- no host shell dependency
 - no host subprocess fallback
 - no compatibility mode
 - virtual filesystem by default
 - explicit Go command registry
-- policy-first execution
-- structured tracing for agent workflows
-- a minimal interactive shell for local sandbox exploration
+- policy-controlled execution
+- structured trace events for agent workflows
+- optional allowlisted network access via `curl`
 
-This project is intentionally not a full Bash reimplementation.
+> **Note:** This is beta software. It has not been hardened or security tested and is less mature than the upstream TypeScript implementation. Use it with care.
 
-## Status
+Requires Go 1.25+.
 
-The repository currently contains:
+## Table of Contents
 
-- a draft architecture spec in [`SPEC.md`](./SPEC.md)
-- a runtime scaffold around `mvdan/sh/v3`
-- an in-memory filesystem backend
-- a sandboxed network client layer with allowlists, redirect checks, and response caps
-- a static policy layer
-- a trace event buffer
-- an initial command registry with:
-  - `echo`
-  - `pwd`
-  - `cat`
-  - `cp`
-  - `mv`
-  - `ls`
-  - `touch`
-  - `rmdir`
-  - `ln`
-  - `chmod`
-  - `readlink`
-  - `stat`
-  - `basename`
-  - `dirname`
-  - `tree`
-  - `du`
-  - `file`
-  - `find`
-  - `grep`
-  - `rg`
-  - `awk`
-  - `head`
-  - `tail`
-  - `wc`
-  - `sort`
-  - `uniq`
-  - `cut`
-  - `sed`
-  - `printf`
-  - `tee`
-  - `env`
-  - `printenv`
-  - `true`
-  - `false`
-  - `which`
-  - `help`
-  - `date`
-  - `sleep`
-  - `timeout`
-  - `xargs`
-  - `bash`
-  - `sh`
-  - `comm`
-  - `paste`
-  - `tr`
-  - `rev`
-  - `nl`
-  - `join`
-  - `split`
-  - `tac`
-  - `diff`
-  - `base64`
-  - `jq`
-  - `yq`
-  - `mkdir`
-  - `rm`
-  - `curl` when network access is explicitly configured
+- [Usage](#usage)
+  - [Basic API](#basic-api)
+  - [Persistent Sessions](#persistent-sessions)
+  - [CLI](#cli)
+- [Configuration](#configuration)
+  - [Filesystem Backends](#filesystem-backends)
+  - [Network Access](#network-access)
+  - [Registry and Policy](#registry-and-policy)
+- [Security Model](#security-model)
+- [Supported Commands](#supported-commands)
+- [Shell Features](#shell-features)
+- [Default Sandbox Layout](#default-sandbox-layout)
+- [Development](#development)
+- [License](#license)
 
-The implementation is early-stage but coherent and runnable.
+## Usage
 
-The `jq` command is backed by `gojq` and now supports a broader CLI-compatible subset, including `-R`, `-f`, `--arg`, `--argjson`, `--slurpfile`, `--rawfile`, `--args`, `--jsonargs`, `--raw-output0`, `--indent`, and `--tab`.
+### Basic API
 
-The `yq` command is backed by `mikefarah/yq`'s `yqlib` layer and currently supports the high-value sandboxed subset for agent workflows: `eval` / `eval-all`, `-p/--input-format`, `-o/--output-format`, `-j`, `-P`, `-n`, `-e`, `-I`, `-i`, `-N`, `-0`, `-r` / `--unwrapScalar`, and `--from-file`. Input and output stay inside the virtual filesystem, and `yqlib`'s own env/file operators such as `env()` and `load()` are disabled so expressions cannot bypass sandbox policy.
-
-The text-tool expansion is also in place. `sort` supports lexical and numeric ordering, reverse, unique, case-folded comparison, keyed sorts via `-k`, and custom field separators via `-t`. `uniq` supports adjacent-run deduping with `-c`, `-d`, and `-u`. `cut` supports `-f`, `-c`, `-d`, and `-s`. `sed` is intentionally a subset: it currently supports `-n`, `-e`, `-i`, numeric and regex addresses, `$`, simple ranges, and the `s`, `d`, `p`, and `q` commands with `g`/`i` substitution flags and alternate delimiters. The newer text/search commands are also implemented as practical subsets: `printf` covers the core shell format verbs plus `%b` escape handling; `rg` supports recursive regex search with `-n`, `-i`, `-l`, `-c`, `-g`, `--hidden`, and `--files`; `awk` is backed by `goawk` with `-F`, `-v`, and `-f` while keeping `system()`, file I/O, and shell pipes disabled; `comm`, `paste`, `tr`, `rev`, `nl`, `join`, `split`, `tac`, `diff`, and `base64` all exist with strong agent-oriented subsets rather than full GNU parity.
-
-The shell/process helper batch is also in place. `tee` supports pass-through writes with `-a`; `env` supports `-i`, `-u`, inline assignments, and scoped nested command execution; `printenv` prints the whole environment or named variables; `which` supports `-a` and `-s`; `help` exposes runtime-owned builtin help topics; `date` is intentionally UTC-only and supports `-u`, `-d/--date`, `-I`, `-R`, and `+FORMAT`; `sleep` supports decimal durations plus `s`/`m`/`h`/`d` suffixes; `timeout` runs nested commands with bounded execution time; `xargs` supports `-n`, `-I`, `-0`, `-d`, `-t`, and `-r`; and `bash` / `sh` are nested shell wrappers implemented inside the same sandbox session rather than host-shell escapes.
-
-The file/path batch is also in place. `touch` supports creation, `-c`, and `-d/--date`; `ln` supports hard links plus `-s` and `-f`; `chmod` supports octal and symbolic modes with recursive `-R`; `readlink` supports raw output plus `-f`; `stat` supports default output plus `-c` format strings; `tree` supports `-a`, `-d`, `-L`, and `-f`; `du` supports `-a`, `-s`, `-h`, `-c`, and `--max-depth`; and `file` supports `-b`, `-i`, simple magic-byte detection, shebang detection, and extension-based text detection.
-
-Network access is still off by default. When configured, the runtime exposes a minimal `curl` command backed by a sandboxed client that enforces URL-prefix allowlists, HTTP-method allowlists, manual redirect revalidation, response-size limits, and optional private-range blocking.
-
-## Design Goals
-
-- Support the subset of shell behavior that AI agents actually need
-- Keep execution deterministic and observable
-- Treat sandboxing as the default and only runtime mode
-- Implement commands in Go instead of spawning OS binaries
-- Keep boundaries clean:
-  - `mvdan/sh` owns shell semantics
-  - `just-bash-go` owns filesystem, commands, policy, and tracing
-
-## Non-Goals
-
-`just-bash-go` does not aim to provide:
-
-- full GNU Bash compatibility
-- readline-style shell UX
-- shell history, advanced TTY behavior, or job control
-- host command passthrough
-- hidden subprocess escape hatches
-
-If a command is not registered, execution fails with a shell-style error.
-
-## Repository Layout
-
-```text
-cmd/just-bash-go/  CLI entrypoint
-commands/          Go-native command implementations and registry
-fs/                Filesystem interfaces and in-memory backend
-network/           Sandboxed HTTP client and URL allowlist enforcement
-policy/            Sandbox policy types and default implementation
-runtime/           Public runtime API and result capture
-shell/             mvdan/sh integration and handler wiring
-trace/             Structured event types and recorder
-SPEC.md            Technical design spec
-```
-
-## Quick Start
-
-### Run the CLI
-
-The CLI reads a script from stdin and executes it inside the sandbox runtime.
-
-```bash
-printf 'echo hi\npwd\n' | go run ./cmd/just-bash-go
-```
-
-Example:
-
-```text
-hi
-/home/agent
-```
-
-Redirects and file reads are also handled inside the virtual filesystem:
-
-```bash
-printf 'echo hi > /tmp.txt\ncat /tmp.txt\n' | go run ./cmd/just-bash-go
-```
-
-### Run the interactive shell
-
-When stdin is a terminal, the CLI starts an interactive shell automatically:
-
-```bash
-go run ./cmd/just-bash-go
-```
-
-You can also force interactive mode explicitly, which is useful when piping a scripted REPL transcript:
-
-```bash
-printf 'pwd\ncd /tmp\npwd\nexit\n' | go run ./cmd/just-bash-go -i
-```
-
-A typical session looks like this:
-
-```text
-~$ pwd
-/home/agent
-~$ cd /tmp
-/tmp$ echo hi > note.txt
-/tmp$ cat note.txt
-hi
-/tmp$ exit
-```
-
-REPL behavior:
-
-- start it with `go run ./cmd/just-bash-go`
-- force REPL mode with `go run ./cmd/just-bash-go -i`
-- leave the shell with `exit` or `exit <code>`
-- use multiline shell constructs normally; the prompt switches to `> ` until the statement is complete
-
-Example multiline input:
-
-```text
-~$ if true; then
-> echo hi
-> fi
-hi
-~$
-```
-
-The interactive shell is intentionally minimal:
-
-- it reuses one sandbox session, so filesystem changes persist
-- it carries forward the working directory and shell-visible variable state between entries
-- it supports multiline input through `mvdan/sh/v3`'s interactive parser
-- it does not provide history, line editing, job control, or host TTY emulation
-
-### Run tests
-
-```bash
-go test ./...
-```
-
-### Run fuzzing
-
-The repository now uses Go's built-in fuzzing framework for runtime safety checks.
-
-```bash
-make fuzz
-```
-
-You can also run an individual target directly:
-
-```bash
-go test ./runtime -run=^$ -fuzz=FuzzRuntimeScript -fuzztime=10s
-```
-
-Current fuzz targets:
-
-- `FuzzRuntimeScript` for general sandboxed script execution
-- `FuzzMalformedScript` for broken syntax, truncated input, and byte-injected scripts
-- `FuzzSessionSequence` for multi-step session execution against one persistent sandbox
-- `FuzzFilePathCommands` for file/path command batches against fuzzed virtual files
-- `FuzzTextSearchCommands` for line-oriented text/search commands with fuzzed text corpora
-- `FuzzShellProcessCommands` for shell/process helpers like `env`, `tee`, `bash`, `sh`, `timeout`, and `xargs`
-- `FuzzDataCommands` for `jq` and related structured-data command flows
-- `FuzzGeneratedPrograms` for metadata-driven command, flag, pipeline, and shell-syntax generation
-- `FuzzAttackMutations` for known sandbox/disclosure/DoS attacks with controlled shell-shape mutations
-
-The fuzz harness also includes:
-
-- per-command fuzz metadata for the current registered command set
-- lightweight command/flag coverage accounting driven by that metadata
-- security-oriented fuzz oracles for host-path leaks, sensitive-output leaks, and internal panic/runtime leakage
-- a committed known-attack corpus in `runtime/testdata/fuzz/known_attacks.json`
-
-## Network Access
-
-Network access is disabled unless you configure it explicitly in `runtime.Config`. When network access is configured, `curl` is registered automatically; otherwise `curl` is not present in the sandbox at all.
-
-```go
-import (
-	jbnetwork "github.com/cadencerpm/just-bash-go/network"
-	jbruntime "github.com/cadencerpm/just-bash-go/runtime"
-)
-
-rt, err := jbruntime.New(&jbruntime.Config{
-	Network: &jbnetwork.Config{
-		AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
-		AllowedMethods:     []jbnetwork.Method{jbnetwork.MethodGet, jbnetwork.MethodHead},
-		MaxResponseBytes:   10 << 20,
-		DenyPrivateRanges:  true,
-	},
-})
-```
-
-The current `curl` subset supports `-L`, `-I`, `-i`, `-X`, `-H`, `-d`, `-o`, `-f`, `-s`, and `-S`.
-
-## Library Example
+Use `runtime.New` to configure a runtime and `Runtime.Run` for one-shot execution.
 
 ```go
 package main
@@ -300,70 +69,232 @@ func main() {
 }
 ```
 
-## Current Architecture
+Output:
 
-Execution currently flows like this:
+```text
+exit=0
+hello
+/home/agent
+```
 
-1. Parse shell source with `mvdan/sh/v3/syntax`
-2. Construct a fresh `interp.Runner`
-3. Wire custom handlers for:
-   - file open
-   - stat
-   - readdir
-   - simple command interception
-   - command dispatch
-4. Resolve commands through the Go registry
-5. Enforce policy on commands and file paths
-6. Capture stdout, stderr, exit code, and trace events
+`Runtime.Run` creates a fresh sandbox session for that call. If you want shared filesystem state across multiple executions, use `Runtime.NewSession`.
 
-One implementation detail matters: the runtime installs an `interp.ExecHandlers(...)` middleware that never falls through to the default host executor, so command execution does not end in `mvdan/sh`'s `DefaultExecHandler`.
+Per-execution controls live on `ExecutionRequest`, including `Env`, `WorkDir`, `Timeout`, `ReplaceEnv`, and `Stdin`. Results include `ExitCode`, `Stdout`, `Stderr`, `FinalEnv`, and trace `Events`.
 
-The interactive CLI is a thin wrapper around the same runtime. It uses `syntax.Parser.InteractiveSeq` to gather multiline statements and executes each completed entry through the normal session-backed `Exec` path.
+### Persistent Sessions
 
-## Why `mvdan/sh`
+Use `Session.Exec` when you want multiple shell executions to share one sandbox filesystem.
 
-`mvdan/sh/v3` gives the project a solid shell engine layer for:
+```go
+package main
 
-- parsing
-- AST representation
-- quoting and expansion behavior
-- pipelines and control flow
-- function and builtin semantics where feasible
+import (
+	"context"
+	"fmt"
 
-That lets this project stay focused on the product-specific layers:
+	jbruntime "github.com/cadencerpm/just-bash-go/runtime"
+)
 
-- sandboxed filesystem
-- command registry
-- policy enforcement
-- tracing
-- deterministic result capture
+func main() {
+	ctx := context.Background()
 
-## Roadmap
+	rt, err := jbruntime.New(&jbruntime.Config{})
+	if err != nil {
+		panic(err)
+	}
 
-Near-term priorities:
+	session, err := rt.NewSession(ctx)
+	if err != nil {
+		panic(err)
+	}
 
-- expand flag depth and higher-order command support
-- strengthen policy enforcement and limits
-- expand trace coverage
-- add more integration tests for agent-style workflows
+	if _, err := session.Exec(ctx, &jbruntime.ExecutionRequest{
+		Script: "echo hello > /shared.txt\n",
+	}); err != nil {
+		panic(err)
+	}
 
-Longer-term possibilities:
+	result, err := session.Exec(ctx, &jbruntime.ExecutionRequest{
+		Script: "cat /shared.txt\npwd\n",
+	})
+	if err != nil {
+		panic(err)
+	}
 
-- overlay and snapshot filesystems
-- JSON-oriented helpers
-- safe network helpers with allowlisted hosts
+	fmt.Print(result.Stdout)
+}
+```
 
-## Contributing
+Output:
 
-Before making larger implementation changes, read [`SPEC.md`](./SPEC.md). The project is opinionated:
+```text
+hello
+/home/agent
+```
 
-- sandbox-only
-- no host subprocess execution
-- no compatibility mode
-- explicit command registry
-- narrow filesystem abstraction
+Session behavior is intentional:
 
-Those constraints are part of the product definition, not temporary limitations.
+- filesystem state persists across `Session.Exec` calls
+- shell-local variables and working directory do not persist across `Session.Exec` calls
+- each execution starts from the session's configured base environment and default workdir unless you override them in the request
+
+That differs from the interactive CLI, which carries shell-visible env and cwd forward between entries.
+
+### CLI
+
+The CLI reads a script from stdin and executes it inside the sandbox runtime.
+
+```bash
+printf 'echo hi\npwd\n' | go run ./cmd/just-bash-go
+```
+
+Example:
+
+```text
+hi
+/home/agent
+```
+
+Redirects and file reads also stay inside the virtual filesystem:
+
+```bash
+printf 'echo hi > /tmp.txt\ncat /tmp.txt\n' | go run ./cmd/just-bash-go
+```
+
+When stdin is a terminal, the CLI starts an interactive shell automatically:
+
+```bash
+go run ./cmd/just-bash-go
+```
+
+You can also force interactive mode explicitly:
+
+```bash
+printf 'pwd\ncd /tmp\npwd\nexit\n' | go run ./cmd/just-bash-go -i
+```
+
+The interactive shell is intentionally minimal:
+
+- it reuses one sandbox session, so filesystem changes persist
+- it carries forward working directory and shell-visible environment state between entries
+- it supports multiline input through `mvdan/sh/v3`'s interactive parser
+- it does not provide history, line editing, job control, or host TTY emulation
+
+## Configuration
+
+The main configuration surface is `runtime.Config`.
+
+### Filesystem Backends
+
+Filesystem choice is controlled through `Config.FSFactory`.
+
+- `jbfs.MemoryFactory{}` is the default: each session gets a fresh in-memory filesystem.
+- `jbfs.OverlayFactory{Lower: ...}` creates a copy-on-write filesystem over another `jbfs.Factory`.
+- `jbfs.NewSnapshot(ctx, fsys)` creates a read-only point-in-time snapshot of an existing filesystem. If you want snapshot-backed sessions, wrap it behind your own `jbfs.Factory`.
+
+You can also provide your own `jbfs.Factory` implementation for seeded, host-backed, or otherwise custom sandbox filesystems.
+
+### Network Access
+
+Network access is disabled by default. When you set `Config.Network` or provide `Config.NetworkClient`, the runtime registers `curl` automatically. Otherwise `curl` is not present in the sandbox at all.
+
+```go
+import (
+	jbnetwork "github.com/cadencerpm/just-bash-go/network"
+	jbruntime "github.com/cadencerpm/just-bash-go/runtime"
+)
+
+rt, err := jbruntime.New(&jbruntime.Config{
+	Network: &jbnetwork.Config{
+		AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
+		AllowedMethods:     []jbnetwork.Method{jbnetwork.MethodGet, jbnetwork.MethodHead},
+		MaxResponseBytes:   10 << 20,
+		DenyPrivateRanges:  true,
+	},
+})
+```
+
+The sandboxed network client enforces:
+
+- URL-prefix allowlists
+- HTTP-method allowlists
+- redirect revalidation
+- response-size limits
+- optional private-range blocking
+
+The current `curl` subset supports `-L`, `-I`, `-i`, `-X`, `-H`, `-d`, `-o`, `-f`, `-s`, and `-S`.
+
+### Registry and Policy
+
+- `Config.Registry` lets you replace or extend the command set.
+- `Config.Policy` controls command allowlists, path allowlists, symlink behavior, and execution limits.
+- Unknown commands never fall through to the host OS; they fail with a shell-style command-not-found error instead.
+
+If you are changing runtime boundaries, command ownership, or sandbox behavior, keep [`SPEC.md`](./SPEC.md) in sync.
+
+## Security Model
+
+- The shell only sees the filesystem and runtime configuration you provide.
+- Command execution is registry-backed. Unknown commands never execute host binaries.
+- There is no host shell fallback and no compatibility mode.
+- Network access is off by default. When enabled, requests are constrained by allowlists and runtime limits.
+- The default static policy applies execution budgets such as command-count, loop-iteration, glob-expansion, substitution-depth, and stdout/stderr capture limits.
+- Trace events capture command execution, file access and mutation, and policy denials for debugging and agent orchestration.
+
+This is not a hardened sandbox. If you need stronger containment against denial-of-service or runtime bugs, use OS- or process-level isolation around it.
+
+## Supported Commands
+
+The default registry currently includes the commands listed in [`commands/registry.go`](./commands/registry.go), grouped here by workflow.
+
+- File and path: `cat`, `cp`, `mv`, `ln`, `ls`, `mkdir`, `rm`, `rmdir`, `touch`, `chmod`, `readlink`, `stat`, `basename`, `dirname`, `tree`, `du`, `file`, `find`
+- Search and text: `grep`, `rg`, `awk`, `sed`, `cut`, `sort`, `uniq`, `head`, `tail`, `wc`, `printf`, `tee`, `comm`, `paste`, `tr`, `rev`, `nl`, `join`, `split`, `tac`, `diff`, `base64`
+- Data: `jq`, `yq`, `sqlite3`
+- Environment and execution: `echo`, `pwd`, `env`, `printenv`, `which`, `help`, `true`, `false`, `date`, `sleep`, `timeout`, `bash`, `sh`
+- Network when configured: `curl`
+
+The project targets high-value agent workflows, not full GNU flag parity for every command. Unsupported commands or flags fail normally.
+
+`sqlite3` is backed by [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) using an in-memory connection plus explicit sandbox filesystem load and writeback. The current subset supports `:memory:` and sandbox file databases, list/CSV/JSON/line/column/table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` are denied so SQL cannot escape the sandbox filesystem.
+
+## Shell Features
+
+Shell parsing and execution are delegated to `mvdan/sh/v3`, with project-owned filesystem, command, policy, and trace layers around it.
+
+The runtime supports a practical shell subset for agent workflows, including:
+
+- pipelines and redirections
+- variable expansion and command substitution
+- conditionals and loops
+- shell functions and common builtins handled by `mvdan/sh`
+- virtual `cd` and `pwd` behavior against the sandbox filesystem
+- nested `bash` and `sh` execution inside the same sandbox session
+
+It is intentionally not a full Bash reimplementation. It does not aim to provide full GNU Bash compatibility, readline-style UX, shell history, job control, or host TTY emulation.
+
+## Default Sandbox Layout
+
+Each fresh session starts with a Unix-like virtual layout:
+
+- home and default working directory: `/home/agent`
+- scratch directory: `/tmp`
+- command directories: `/usr/bin` and `/bin`
+- default `PATH`: `/usr/bin:/bin`
+
+Those command paths are virtual stubs used for shell resolution. Command implementations still come from the Go registry, not the host filesystem.
+
+## Development
+
+Common commands:
+
+```bash
+go build ./...
+go test ./...
+go run ./cmd/just-bash-go < script.sh
+gofmt -w .
+```
+
+For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before making changes.
 
 ## License
 

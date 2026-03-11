@@ -123,6 +123,7 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 		"{path.csv}":         "/tmp/data.csv",
 		"{path.json}":        "/tmp/data.json",
 		"{path.yaml}":        "/tmp/data.yaml",
+		"{path.sqlite}":      "/tmp/fuzz.db",
 		"{path.rawjson}":     "/tmp/raw.json",
 		"{path.base64}":      "/tmp/base64.txt",
 		"{path.dir}":         "/tmp/dir",
@@ -150,6 +151,8 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 		"{jq.build}":         "{value:$value}",
 		"{yq.filter}":        ".value",
 		"{yq.build}":         ".value = \"generated\"",
+		"{sqlite.query}":     "select 1 as n;",
+		"{sqlite.write}":     "create table if not exists t(value text); insert into t values ('seed'); select value from t order by value;",
 	}
 
 	pairs := make([]string, 0, len(values)*2)

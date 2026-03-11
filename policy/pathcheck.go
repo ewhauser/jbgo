@@ -23,7 +23,7 @@ func CheckPath(ctx context.Context, pol Policy, fsys jbfs.FileSystem, action Fil
 
 	resolved, traversed, err := resolveTarget(ctx, fsys, action, target)
 	if err != nil {
-		if errors.Is(err, stdfs.ErrNotExist) {
+		if errors.Is(err, stdfs.ErrNotExist) || errors.Is(err, stdfs.ErrInvalid) {
 			return nil
 		}
 		return err
