@@ -1,6 +1,7 @@
 package commands
 
 import (
+	stdfs "io/fs"
 	"regexp"
 	"time"
 )
@@ -53,6 +54,23 @@ type findSizeExpr struct {
 	comparison findCompare
 }
 
+type findPermMatch string
+
+const (
+	findPermExact findPermMatch = "exact"
+	findPermAll   findPermMatch = "all"
+	findPermAny   findPermMatch = "any"
+)
+
+type findPermExpr struct {
+	mode      stdfs.FileMode
+	matchType findPermMatch
+}
+
+type findPruneExpr struct{}
+
+type findPrintExpr struct{}
+
 type findNotExpr struct {
 	expr findExpr
 }
@@ -67,11 +85,29 @@ type findOrExpr struct {
 	right findExpr
 }
 
-type findTrueExpr struct{}
+type findAction interface{}
+
+type findExecAction struct {
+	command   []string
+	batchMode bool
+}
+
+type findPrintAction struct{}
+
+type findPrint0Action struct{}
+
+type findPrintfAction struct {
+	format string
+}
+
+type findDeleteAction struct{}
 
 type findCommandOptions struct {
 	maxDepth    int
 	hasMaxDepth bool
+	minDepth    int
+	hasMinDepth bool
+	depthFirst  bool
 }
 
 type findEvalContext struct {
@@ -81,4 +117,22 @@ type findEvalContext struct {
 	isEmpty     bool
 	mtime       time.Time
 	size        int64
+	mode        stdfs.FileMode
+}
+
+type findEvalResult struct {
+	matches bool
+	pruned  bool
+	printed bool
+}
+
+type findPrintData struct {
+	path          string
+	name          string
+	size          int64
+	mtime         time.Time
+	mode          stdfs.FileMode
+	isDirectory   bool
+	depth         int
+	startingPoint string
 }

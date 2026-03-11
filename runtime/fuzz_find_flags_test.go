@@ -38,8 +38,23 @@ func FuzzFindFlagsCommand(f *testing.F) {
 		writeSessionFile(t, session, "/tmp/size/large.txt", bytes.Repeat([]byte("x"), 2048))
 		writeSessionFile(t, session, "/tmp/size/exact.txt", []byte("12345"))
 		writeSessionFile(t, session, "/tmp/size/small.txt", []byte("tiny"))
+		writeSessionFile(t, session, "/tmp/perm/run.sh", []byte("#!/bin/sh\n"))
+		writeSessionFile(t, session, "/tmp/perm/plain.txt", text)
+		writeSessionFile(t, session, "/tmp/prune/keep/seen.txt", text)
+		writeSessionFile(t, session, "/tmp/prune/skip/hidden.txt", text)
+		writeSessionFile(t, session, "/tmp/nul/one", []byte("1"))
+		writeSessionFile(t, session, "/tmp/nul/two", []byte("2"))
+		writeSessionFile(t, session, "/tmp/printf/file.txt", []byte("data"))
+		writeSessionFile(t, session, "/tmp/delete/keep.txt", text)
+		writeSessionFile(t, session, "/tmp/delete/remove.tmp", text)
 		if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/empty/emptydir", 0o755); err != nil {
 			t.Fatalf("MkdirAll(emptydir) error = %v", err)
+		}
+		if err := session.FileSystem().Chmod(context.Background(), "/tmp/perm/run.sh", 0o755); err != nil {
+			t.Fatalf("Chmod(run.sh) error = %v", err)
+		}
+		if err := session.FileSystem().Chmod(context.Background(), "/tmp/printf/file.txt", 0o755); err != nil {
+			t.Fatalf("Chmod(printf/file.txt) error = %v", err)
 		}
 
 		now := time.Now().UTC()
@@ -72,7 +87,17 @@ func FuzzFindFlagsCommand(f *testing.F) {
 				"find /tmp/mtime -mtime -7 >/tmp/find-mtime-new.out || true\n" +
 				"find /tmp/newer -newer /tmp/newer/ref.txt >/tmp/find-newer.out || true\n" +
 				"find /tmp/size -size +1k >/tmp/find-size-large.out || true\n" +
-				"find /tmp/size -size 5c >/tmp/find-size-exact.out || true\n",
+				"find /tmp/size -size 5c >/tmp/find-size-exact.out || true\n" +
+				"find /tmp/perm -perm 755 >/tmp/find-perm.out || true\n" +
+				"find /tmp/prune -path '/tmp/prune/skip*' -prune -o -print >/tmp/find-prune.out || true\n" +
+				"find /tmp/prune -mindepth 1 -maxdepth 1 >/tmp/find-mindepth.out || true\n" +
+				"find /tmp/prune -depth -maxdepth 1 >/tmp/find-depth.out || true\n" +
+				"find /tmp/find -name '*.txt' -exec echo FILE {} \\; >/tmp/find-exec-each.out || true\n" +
+				"find /tmp/find -name '*.txt' -exec echo BATCH {} + >/tmp/find-exec-batch.out || true\n" +
+				"find /tmp/nul -mindepth 1 -maxdepth 1 -print0 >/tmp/find-print0.out || true\n" +
+				"find /tmp/printf/file.txt -printf '%f|%p|%P|%m\\n' >/tmp/find-printf.out || true\n" +
+				"find /tmp/delete -name '*.tmp' -delete || true\n" +
+				"find /tmp/delete -print >/tmp/find-delete.out || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)

@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -97,5 +98,117 @@ func TestFindSupportsSizeFlagsIsolated(t *testing.T) {
 	}
 	if got, want := result.Stdout, "/size/large.txt\n/size/exact.txt\n/size/small.txt\n/size/exact.txt\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestFindSupportsPermMindepthDepthAndPrune(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/perm/exact.sh", []byte("#!/bin/sh\n"))
+	writeSessionFile(t, session, "/perm/plain.txt", []byte("plain\n"))
+	if err := session.FileSystem().Chmod(context.Background(), "/perm/exact.sh", 0o755); err != nil {
+		t.Fatalf("Chmod(exact.sh) error = %v", err)
+	}
+	if err := session.FileSystem().Chmod(context.Background(), "/perm/plain.txt", 0o644); err != nil {
+		t.Fatalf("Chmod(plain.txt) error = %v", err)
+	}
+
+	writeSessionFile(t, session, "/tree/root.txt", []byte("root\n"))
+	writeSessionFile(t, session, "/tree/sub/child.txt", []byte("child\n"))
+	writeSessionFile(t, session, "/prune/keep/seen.txt", []byte("seen\n"))
+	writeSessionFile(t, session, "/prune/skip/hidden.txt", []byte("hidden\n"))
+
+	result := mustExecSession(t, session,
+		"find /perm -type f -perm 755\n"+
+			"echo ---\n"+
+			"find /perm -type f -perm -600\n"+
+			"echo ---\n"+
+			"find /perm -type f -perm /111\n"+
+			"echo ---\n"+
+			"find /tree -mindepth 1 -maxdepth 1\n"+
+			"echo ---\n"+
+			"find /tree -depth -maxdepth 1\n"+
+			"echo ---\n"+
+			"find /prune -path '/prune/skip*' -prune -o -print\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 6 {
+		t.Fatalf("Stdout blocks = %q, want 6 blocks", result.Stdout)
+	}
+
+	if got, want := strings.TrimSpace(parts[0]), "/perm/exact.sh"; got != want {
+		t.Fatalf("perm exact = %q, want %q", got, want)
+	}
+	if got, want := parts[1], "/perm/exact.sh\n/perm/plain.txt\n"; got != want {
+		t.Fatalf("perm all = %q, want %q", got, want)
+	}
+	if got, want := strings.TrimSpace(parts[2]), "/perm/exact.sh"; got != want {
+		t.Fatalf("perm any = %q, want %q", got, want)
+	}
+	if got, want := parts[3], "/tree/root.txt\n/tree/sub\n"; got != want {
+		t.Fatalf("mindepth/maxdepth = %q, want %q", got, want)
+	}
+	if got, want := parts[4], "/tree/root.txt\n/tree/sub\n/tree\n"; got != want {
+		t.Fatalf("depth order = %q, want %q", got, want)
+	}
+	if got, want := parts[5], "/prune\n/prune/keep\n/prune/keep/seen.txt\n"; got != want {
+		t.Fatalf("prune output = %q, want %q", got, want)
+	}
+}
+
+func TestFindSupportsExecPrint0PrintfAndDelete(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/exec/a.txt", []byte("a\n"))
+	writeSessionFile(t, session, "/exec/b.txt", []byte("b\n"))
+	writeSessionFile(t, session, "/nul/one", []byte("1"))
+	writeSessionFile(t, session, "/nul/two", []byte("2"))
+	writeSessionFile(t, session, "/printf/file.txt", []byte("data"))
+	if err := session.FileSystem().Chmod(context.Background(), "/printf/file.txt", 0o755); err != nil {
+		t.Fatalf("Chmod(printf/file.txt) error = %v", err)
+	}
+	writeSessionFile(t, session, "/delete/keep.txt", []byte("keep\n"))
+	writeSessionFile(t, session, "/delete/remove.tmp", []byte("remove\n"))
+
+	result := mustExecSession(t, session,
+		"find /exec -name '*.txt' -exec echo FILE {} \\;\n"+
+			"echo ---\n"+
+			"find /exec -name '*.txt' -exec echo BATCH {} +\n"+
+			"echo ---\n"+
+			"find /nul -mindepth 1 -maxdepth 1 -print0 > /tmp/find-zero.out\n"+
+			"stat -c '%s' /tmp/find-zero.out\n"+
+			"echo ---\n"+
+			"find /printf/file.txt -printf '%f|%h|%p|%P|%s|%d|%m|%M\\n'\n"+
+			"echo ---\n"+
+			"find /delete -name '*.tmp' -delete\n"+
+			"find /delete -print\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 5 {
+		t.Fatalf("Stdout blocks = %q, want 5 blocks", result.Stdout)
+	}
+
+	if got, want := parts[0], "FILE /exec/a.txt\nFILE /exec/b.txt\n"; got != want {
+		t.Fatalf("exec each = %q, want %q", got, want)
+	}
+	if got, want := parts[1], "BATCH /exec/a.txt /exec/b.txt\n"; got != want {
+		t.Fatalf("exec batch = %q, want %q", got, want)
+	}
+	if got, want := strings.TrimSpace(parts[2]), "18"; got != want {
+		t.Fatalf("print0 size = %q, want %q", got, want)
+	}
+	if got, want := parts[3], "file.txt|/printf|/printf/file.txt||4|0|755|-rwxr-xr-x\n"; got != want {
+		t.Fatalf("printf output = %q, want %q", got, want)
+	}
+	if got, want := parts[4], "/delete\n/delete/keep.txt\n"; got != want {
+		t.Fatalf("delete output = %q, want %q", got, want)
 	}
 }

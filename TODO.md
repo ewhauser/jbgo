@@ -271,13 +271,22 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `find`
 
+- [x] `-delete`
+- [x] `-depth`
 - [x] `-empty`
+- [x] `-exec`
 - [x] `-iname`
 - [x] `-ipath`
 - [x] `-iregex`
+- [x] `-mindepth`
 - [x] `-mtime`
 - [x] `-newer`
 - [x] `-path`
+- [x] `-perm`
+- [x] `-print`
+- [x] `-print0`
+- [x] `-printf`
+- [x] `-prune`
 - [x] `-regex`
 - [x] `-size`
 

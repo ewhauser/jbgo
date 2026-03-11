@@ -43,50 +43,82 @@ func resolveFindExpr(ctx context.Context, inv *Invocation, expr findExpr) error 
 	}
 }
 
-func evaluateFindExpr(expr findExpr, ctx *findEvalContext) bool {
+func evaluateFindExpr(expr findExpr, ctx *findEvalContext) findEvalResult {
 	switch e := expr.(type) {
 	case nil:
-		return true
+		return findEvalResult{matches: true}
 	case *findNameExpr:
-		return findGlobMatch(ctx.name, e.pattern, e.ignoreCase)
+		return findEvalResult{matches: findGlobMatch(ctx.name, e.pattern, e.ignoreCase)}
 	case *findPathExpr:
-		return findGlobMatch(ctx.displayPath, e.pattern, e.ignoreCase)
+		return findEvalResult{matches: findGlobMatch(ctx.displayPath, e.pattern, e.ignoreCase)}
 	case *findRegexExpr:
-		return e.regex.MatchString(ctx.displayPath)
+		return findEvalResult{matches: e.regex.MatchString(ctx.displayPath)}
 	case *findTypeExpr:
 		if e.fileType == 'f' {
-			return !ctx.isDir
+			return findEvalResult{matches: !ctx.isDir}
 		}
 		if e.fileType == 'd' {
-			return ctx.isDir
+			return findEvalResult{matches: ctx.isDir}
 		}
-		return false
+		return findEvalResult{}
 	case *findEmptyExpr:
-		return ctx.isEmpty
+		return findEvalResult{matches: ctx.isEmpty}
 	case *findMTimeExpr:
 		ageDays := time.Since(ctx.mtime).Hours() / 24
 		switch e.comparison {
 		case findCompareMore:
-			return ageDays > float64(e.days)
+			return findEvalResult{matches: ageDays > float64(e.days)}
 		case findCompareLess:
-			return ageDays < float64(e.days)
+			return findEvalResult{matches: ageDays < float64(e.days)}
 		default:
-			return int(math.Floor(ageDays)) == e.days
+			return findEvalResult{matches: int(math.Floor(ageDays)) == e.days}
 		}
 	case *findNewerExpr:
-		return e.referenceReady && e.referenceFound && ctx.mtime.After(e.resolvedTime)
+		return findEvalResult{matches: e.referenceReady && e.referenceFound && ctx.mtime.After(e.resolvedTime)}
 	case *findSizeExpr:
-		return findSizeMatch(ctx.size, e)
+		return findEvalResult{matches: findSizeMatch(ctx.size, e)}
+	case *findPermExpr:
+		fileMode := ctx.mode.Perm()
+		targetMode := e.mode.Perm()
+		switch e.matchType {
+		case findPermAll:
+			return findEvalResult{matches: fileMode&targetMode == targetMode}
+		case findPermAny:
+			return findEvalResult{matches: fileMode&targetMode != 0}
+		default:
+			return findEvalResult{matches: fileMode == targetMode}
+		}
+	case *findPruneExpr:
+		return findEvalResult{matches: true, pruned: true}
+	case *findPrintExpr:
+		return findEvalResult{matches: true, printed: true}
 	case *findNotExpr:
-		return !evaluateFindExpr(e.expr, ctx)
+		inner := evaluateFindExpr(e.expr, ctx)
+		return findEvalResult{matches: !inner.matches, pruned: inner.pruned}
 	case *findAndExpr:
-		return evaluateFindExpr(e.left, ctx) && evaluateFindExpr(e.right, ctx)
+		left := evaluateFindExpr(e.left, ctx)
+		if !left.matches {
+			return findEvalResult{matches: false, pruned: left.pruned}
+		}
+		right := evaluateFindExpr(e.right, ctx)
+		return findEvalResult{
+			matches: right.matches,
+			pruned:  left.pruned || right.pruned,
+			printed: left.printed || right.printed,
+		}
 	case *findOrExpr:
-		return evaluateFindExpr(e.left, ctx) || evaluateFindExpr(e.right, ctx)
-	case *findTrueExpr:
-		return true
+		left := evaluateFindExpr(e.left, ctx)
+		if left.matches {
+			return left
+		}
+		right := evaluateFindExpr(e.right, ctx)
+		return findEvalResult{
+			matches: right.matches,
+			pruned:  left.pruned || right.pruned,
+			printed: right.printed,
+		}
 	default:
-		return false
+		return findEvalResult{}
 	}
 }
 
