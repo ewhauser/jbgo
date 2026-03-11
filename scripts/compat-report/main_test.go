@@ -13,18 +13,20 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 		GNUVersion:  "9.10",
 		GeneratedAt: "2026-03-11T18:30:00Z",
 		Overall: testSummary{
-			SelectedTotal:   2,
+			SelectedTotal:   3,
 			Pass:            1,
 			Fail:            1,
 			RunnableTotal:   2,
-			PassPctSelected: 50,
+			Skip:            1,
+			PassPctSelected: 33.33,
 			PassPctRunnable: 50,
 		},
 		UtilitySummary: utilityTotals{
-			Total:           2,
+			Total:           3,
 			Passed:          1,
 			Failed:          1,
-			PassPctTotal:    50,
+			NoRunnableTests: 1,
+			PassPctTotal:    33.33,
 			PassPctRunnable: 50,
 		},
 		Utilities: []utilityResult{
@@ -32,6 +34,11 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 				Name:    "basename",
 				LogFile: "basename.log",
 				Summary: testSummary{SelectedTotal: 1, Pass: 1, RunnableTotal: 1, PassPctSelected: 100, PassPctRunnable: 100},
+			},
+			{
+				Name:    "cat",
+				LogFile: "cat.log",
+				Summary: testSummary{SelectedTotal: 1, Skip: 1, RunnableTotal: 0, PassPctSelected: 0, PassPctRunnable: 0},
 			},
 			{
 				Name:   "dirname",
@@ -43,6 +50,11 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 					PassPctSelected: 0,
 					PassPctRunnable: 0,
 				},
+			},
+			{
+				Name:     "base32",
+				Inactive: true,
+				Reason:   "implemented in jbgo, but not included in the compatibility manifest",
 			},
 		},
 	}
@@ -56,7 +68,24 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 		t.Fatalf("ReadFile(index.html) error = %v", err)
 	}
 	index := string(indexData)
-	for _, needle := range []string{"GNU Coreutils Compatibility", "summary.json", "basename.log", "dirname", "50%"} {
+	for _, needle := range []string{
+		"GNU Coreutils Compatibility",
+		"Selected Test Pass",
+		"Runnable Command Pass",
+		"summary.json",
+		"basename.log",
+		"dirname",
+		"cat.log",
+		"base32",
+		"<tr class=\"inactive\">",
+		"implemented in jbgo, but not included in the compatibility manifest",
+		"all selected tests skipped",
+		"1 passed, 1 failed, 1 skip-only, 0 empty",
+		"n/a",
+		">-</span>",
+		"33.33%",
+		"50%",
+	} {
 		if !strings.Contains(index, needle) {
 			t.Fatalf("index.html missing %q", needle)
 		}
@@ -67,8 +96,8 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 		t.Fatalf("ReadFile(badge.svg) error = %v", err)
 	}
 	badge := string(badgeData)
-	if !strings.Contains(badge, "compat") || !strings.Contains(badge, "50%") {
-		t.Fatalf("badge.svg content = %q, want compat and 50%%", badge)
+	if !strings.Contains(badge, "compat") || !strings.Contains(badge, "33.33%") {
+		t.Fatalf("badge.svg content = %q, want compat and 33.33%%", badge)
 	}
 }
 
