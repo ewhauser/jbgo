@@ -22,6 +22,7 @@ Requires Go 1.25+.
 
 - [Usage](#usage)
   - [Basic API](#basic-api)
+  - [Network-Enabled API](#network-enabled-api)
   - [Persistent Sessions](#persistent-sessions)
   - [CLI](#cli)
 - [Configuration](#configuration)
@@ -80,6 +81,47 @@ hello
 `Runtime.Run` creates a fresh sandbox session for that call. If you want shared filesystem state across multiple executions, use `Runtime.NewSession`.
 
 Per-execution controls live on `ExecutionRequest`, including `Env`, `WorkDir`, `Timeout`, `ReplaceEnv`, and `Stdin`. Results include `ExitCode`, `Stdout`, `Stderr`, `FinalEnv`, and trace `Events`.
+
+### Network-Enabled API
+
+If you want `curl` inside the sandbox, opt in at runtime construction time and allowlist the destinations you expect to reach.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	jbnetwork "github.com/cadencerpm/just-bash-go/network"
+	jbruntime "github.com/cadencerpm/just-bash-go/runtime"
+)
+
+func main() {
+	rt, err := jbruntime.New(&jbruntime.Config{
+		Network: &jbnetwork.Config{
+			AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
+			AllowedMethods:     []jbnetwork.Method{jbnetwork.MethodGet, jbnetwork.MethodHead},
+			MaxResponseBytes:   10 << 20,
+			DenyPrivateRanges:  true,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	result, err := rt.Run(context.Background(), &jbruntime.ExecutionRequest{
+		Script: "curl -o /tmp/status.json https://api.example.com/v1/status\ncat /tmp/status.json\n",
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Print(result.Stdout)
+}
+```
+
+Without `Config.Network` or `Config.NetworkClient`, `curl` is not registered in the sandbox at all. For more detail on allowed methods, redirects, and custom clients, see [Network Access](#network-access).
 
 ### Persistent Sessions
 
@@ -194,6 +236,35 @@ Filesystem choice is controlled through `Config.FSFactory`.
 
 You can also provide your own `jbfs.Factory` implementation for seeded, host-backed, or otherwise custom sandbox filesystems.
 
+If you already have a Go filesystem implementation, the runtime is flexible about what sits underneath that factory. The integration point is `jbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself, but you can wrap stdlib-compatible or third-party backends behind a `jbfs.Factory`.
+
+That makes it practical to integrate things like:
+
+- `os.DirFS` or other stdlib `io/fs`-compatible filesystems
+- `embed.FS`
+- `testing/fstest.MapFS`
+- custom in-memory, remote, or policy-aware filesystems from your own codebase
+
+The wrapper is where you adapt your existing implementation to the richer runtime contract: open/create, metadata, directory listing, symlinks, mutation, and cwd management. For example:
+
+```go
+type myFactory struct {
+	base any
+}
+
+func (f myFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
+	return newMyJBFSAdapter(f.base), nil
+}
+
+rt, err := jbruntime.New(&jbruntime.Config{
+	FSFactory: myFactory{
+		base: os.DirFS("/path/to/workspace"),
+	},
+})
+```
+
+If you want copy-on-write behavior over an existing Go filesystem, wrap that backend as the lower layer and put `jbfs.OverlayFactory` on top of it.
+
 ### Network Access
 
 Network access is disabled by default. When you set `Config.Network` or provide `Config.NetworkClient`, the runtime registers `curl` automatically. Otherwise `curl` is not present in the sandbox at all.
@@ -214,6 +285,15 @@ rt, err := jbruntime.New(&jbruntime.Config{
 })
 ```
 
+At runtime, network access works like this:
+
+- `curl` is unavailable unless you explicitly opt in
+- URL access is controlled by prefix allowlists
+- allowed HTTP methods default to `GET` and `HEAD`
+- redirects are revalidated before they are followed
+- response bodies are capped
+- private-range blocking is optional
+
 The sandboxed network client enforces:
 
 - URL-prefix allowlists
@@ -223,6 +303,23 @@ The sandboxed network client enforces:
 - optional private-range blocking
 
 The current `curl` subset supports `-L`, `-I`, `-i`, `-X`, `-H`, `-d`, `-o`, `-f`, `-s`, and `-S`.
+
+Typical uses:
+
+```bash
+# GET an allowlisted endpoint
+curl https://api.example.com/v1/status
+
+# Save a response body into the sandbox filesystem
+curl -o /tmp/response.json https://api.example.com/v1/items
+cat /tmp/response.json
+
+# Opt in to POST by allowing the method in Config.Network
+curl -X POST -H 'content-type: application/json' -d '{"name":"demo"}' \
+  https://api.example.com/v1/items
+```
+
+If you want full control over the transport in tests or embedding code, inject your own `Config.NetworkClient` instead of using `Config.Network`.
 
 ### Registry and Policy
 
@@ -254,6 +351,8 @@ The default registry currently includes the commands listed in [`commands/regist
 - Network when configured: `curl`
 
 The project targets high-value agent workflows, not full GNU flag parity for every command. Unsupported commands or flags fail normally.
+
+`tar`, `gzip`, `gunzip`, and `zcat` are intentionally focused subsets. The current surface covers create/list/extract, gzip-wrapped archives, `-C`, `-k`, `-O`, stdin/stdout flows, and extraction hardening around parent traversal and unsafe symlink targets. Append/update modes and non-gzip codecs are still out of scope.
 
 `sqlite3` is backed by [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) using an in-memory connection plus explicit sandbox filesystem load and writeback. The current subset supports `:memory:` and sandbox file databases, list/CSV/JSON/line/column/table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` are denied so SQL cannot escape the sandbox filesystem.
 
@@ -299,5 +398,3 @@ For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before m
 ## License
 
 This project is licensed under the [Apache License 2.0](./LICENSE).
-`tar`, `gzip`, `gunzip`, and `zcat` are intentionally focused subsets. The current surface covers create/list/extract, gzip-wrapped archives, `-C`, `-k`, `-O`, stdin/stdout flows, and extraction hardening around parent traversal and unsafe symlink targets. Append/update modes and non-gzip codecs are still out of scope.
-
