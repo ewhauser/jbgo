@@ -74,12 +74,12 @@ func parseDiffArgs(inv *Invocation) (opts diffOptions, leftName, rightName strin
 			break
 		}
 		switch arg {
-		case "-u":
-		case "-q":
+		case "-u", "--unified":
+		case "-q", "--brief":
 			opts.brief = true
-		case "-s":
+		case "-s", "--report-identical-files":
 			opts.reportSame = true
-		case "-i":
+		case "-i", "--ignore-case":
 			opts.ignoreCase = true
 		default:
 			return diffOptions{}, "", "", exitf(inv, 2, "diff: unsupported flag %s", arg)

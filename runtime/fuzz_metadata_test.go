@@ -267,6 +267,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		),
 		fuzzSpec("diff", "text",
 			fuzzVariant("", "flag:u", "-u", "{path.text}", "{path.alttext}"),
+			fuzzVariant("", "flag:long", "--brief", "--ignore-case", "{path.text}", "{path.alttext}"),
 		),
 		fuzzSpec("base64", "data",
 			fuzzVariant("", "path.read", "{path.text}"),

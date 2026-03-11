@@ -255,10 +255,10 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `diff`
 
-- [ ] `--brief`
-- [ ] `--ignore-case`
-- [ ] `--report-identical-files`
-- [ ] `--unified`
+- [x] `--brief`
+- [x] `--ignore-case`
+- [x] `--report-identical-files`
+- [x] `--unified`
 
 #### `env`
 
