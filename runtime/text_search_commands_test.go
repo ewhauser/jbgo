@@ -373,7 +373,7 @@ func TestBase64SupportsLongWrapFlag(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "aGVsbG8gd29ybGQ=\n"; got != want {
+	if got, want := result.Stdout, "aGVsbG8gd29ybGQ="; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

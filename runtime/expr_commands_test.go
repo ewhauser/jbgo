@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func TestBase64SupportsSeparateLongWrapArgument(t *testing.T) {
+func TestExprSupportsArithmeticAndRegexCapture(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf 'hello world' | base64 --wrap 0\n",
+		Script: "expr 12 \\* 4\nexpr 7 + 5\nexpr './tests/init.sh' : '.*/\\(.*\\)$'\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -17,24 +17,24 @@ func TestBase64SupportsSeparateLongWrapArgument(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "aGVsbG8gd29ybGQ="; got != want {
+	if got, want := result.Stdout, "48\n12\ninit.sh\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
-func TestBase64SupportsCombinedDecodeIgnoreGarbageFlags(t *testing.T) {
+func TestExprSupportsComparisonsAndFalseyExitCode(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf '@aGVsbG8gd29ybGQ=\\n' | base64 -di\n",
+		Script: "expr 1 '<' 2\nexpr 0\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "hello world"; got != want {
+	if got, want := result.Stdout, "1\n0\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

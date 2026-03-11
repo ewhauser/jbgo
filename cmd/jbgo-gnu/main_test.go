@@ -215,6 +215,18 @@ func TestPrepareResultsDirExplicitClearsOldContents(t *testing.T) {
 	}
 }
 
+func TestImplementedGNUProgramSetIncludesHelperCommands(t *testing.T) {
+	supported := implementedGNUProgramSet()
+	for _, name := range []string{"base32", "base64", "expr"} {
+		if _, ok := supported[name]; !ok {
+			t.Fatalf("implementedGNUProgramSet() missing %q", name)
+		}
+	}
+	if _, ok := supported["definitely-not-a-command"]; ok {
+		t.Fatalf("implementedGNUProgramSet() unexpectedly included unknown command")
+	}
+}
+
 func TestPrepareWorkDirPreservesFileTimes(t *testing.T) {
 	cacheDir := t.TempDir()
 	sourceDir := filepath.Join(t.TempDir(), "source")

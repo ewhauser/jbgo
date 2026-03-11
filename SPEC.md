@@ -571,6 +571,8 @@ Initial MVP command set:
 - `split`
 - `tac`
 - `diff`
+- `expr`
+- `base32`
 - `base64`
 - `tar`
 - `gzip`
@@ -628,6 +630,8 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `join` supports keyed joins via `-1`, `-2`, `-t`, `-a`, `-v`, `-e`, `-o`, and `-i`
 - `split` supports line-based and byte-based splits via `-l`, `-b`, `-d`, and `-a`
 - `diff` supports unified output plus `-q/--brief`, `-s/--report-identical-files`, and `-i/--ignore-case`, and accepts `-u/--unified` as an explicit alias for the default unified format
+- `expr` supports the arithmetic, comparison, logical, and regex-match forms needed by shell-oriented helper scripts, including `:`, `|`, `&`, parentheses, and integer math
+- `base32` supports encode/decode, `-d/--decode`, `-i/--ignore-garbage`, and `-w/--wrap` for GNU-style helper flows and basenc-adjacent compatibility tests
 - `base64` supports encode/decode, `-w/--wrap` line wrapping control, and whitespace-tolerant decoding
 
 For the shell/process helper batch, the runtime should expose practical, sandbox-owned subsets:
@@ -940,6 +944,7 @@ The compatibility harness should stay curated. It is not a Bash conformance suit
 - allow a dedicated scheduled/manual reporting workflow for the harness, separate from the default push and pull-request CI jobs
 - pin one GNU coreutils release in a committed manifest and fetch that release into a local cache on demand
 - run GNU tests utility-by-utility against symlinked `jbgo` utility names, with unsupported GNU utility names replaced by explicit `127` stubs instead of host fallback
+- expose any implemented GNU-overlap helper command in the generated utility directory even when that helper's own suite is not part of the selected run, so dependent GNU tests do not fall through to host tools
 - keep the harness strict about GNU utility names while still allowing the non-coreutils host tooling that the GNU test framework itself needs
 - skip root-only, controlling-TTY, SELinux, and help/version-only cases in the first cut rather than patching expected utility output
 - write a machine-readable `summary.json` with overall rollups, per-utility rollups, and per-test status data so external dashboards can build command-by-test views

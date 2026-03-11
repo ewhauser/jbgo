@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	jbcommands "github.com/ewhauser/jbgo/commands"
 	"github.com/ewhauser/jbgo/internal/compatshims"
 )
 
@@ -231,10 +232,7 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 	if len(explicitTests) != 0 {
 		runTargets = []utilityManifest{{Name: "explicit-tests"}}
 	}
-	supportedSet := make(map[string]struct{}, len(selectedUtilities))
-	for _, utility := range selectedUtilities {
-		supportedSet[utility.Name] = struct{}{}
-	}
+	supportedSet := implementedGNUProgramSet()
 	if err := prepareProgramDir(workDir, jbgoBin, programs, supportedSet); err != nil {
 		return err
 	}
@@ -457,6 +455,14 @@ func prepareProgramDir(workDir, jbgoBin string, programs []string, supported map
 		return err
 	}
 	return nil
+}
+
+func implementedGNUProgramSet() map[string]struct{} {
+	supported := make(map[string]struct{})
+	for _, name := range jbcommands.DefaultRegistry().Names() {
+		supported[name] = struct{}{}
+	}
+	return supported
 }
 
 func disableCheckRebuild(workDir string) error {

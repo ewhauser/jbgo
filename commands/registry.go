@@ -112,6 +112,7 @@ func DefaultRegistry() *Registry {
 		NewSplit(),
 		NewTac(),
 		NewDiff(),
+		NewBase32(),
 		NewBase64(),
 		NewTar(),
 		NewGzip(),
@@ -123,6 +124,7 @@ func DefaultRegistry() *Registry {
 		NewSQLite3(),
 		NewMkdir(),
 		NewRM(),
+		NewExpr(),
 	)
 }
 
