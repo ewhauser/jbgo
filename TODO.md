@@ -137,6 +137,8 @@ This file is the implementation queue derived from [`SPEC.md`](./SPEC.md), espec
 
 ### 15. Hardening and maturity
 
+- [x] Add Go built-in fuzz targets for runtime scripts, malformed inputs, and multi-exec session sequences
+- [ ] Expand fuzz seeds and command-specific fuzz targets alongside new command batches
 - [ ] Expand threat-model-driven security regressions around error sanitization and information disclosure
 - [ ] Add more compatibility corpus cases for the larger command surface as commands land
 - [ ] Audit command metadata/help/version behavior for consistency across the registry

@@ -212,6 +212,26 @@ The interactive shell is intentionally minimal:
 go test ./...
 ```
 
+### Run fuzzing
+
+The repository now uses Go's built-in fuzzing framework for runtime safety checks.
+
+```bash
+make fuzz
+```
+
+You can also run an individual target directly:
+
+```bash
+go test ./runtime -run=^$ -fuzz=FuzzRuntimeScript -fuzztime=10s
+```
+
+Current fuzz targets:
+
+- `FuzzRuntimeScript` for general sandboxed script execution
+- `FuzzMalformedScript` for broken syntax, truncated input, and byte-injected scripts
+- `FuzzSessionSequence` for multi-step session execution against one persistent sandbox
+
 ## Network Access
 
 Network access is disabled unless you configure it explicitly in `runtime.Config`. When network access is configured, `curl` is registered automatically; otherwise `curl` is not present in the sandbox at all.

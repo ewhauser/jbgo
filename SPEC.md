@@ -805,6 +805,7 @@ MVP excludes:
 - add scenario-first multi-step workflow tests for persistent sessions
 - add golden tests for stdout/stderr/exit code/events
 - add determinism tests that compare normalized repeated executions
+- add Go built-in fuzz targets for general scripts, malformed inputs, and multi-exec session sequences
 
 ## 17. Testing Strategy
 
@@ -858,6 +859,25 @@ We should test at four layers, following the same broad split that makes Vercel'
   - stderr
   - normalized trace events
 - repeat multi-step workflows across fresh sessions and compare the normalized results for each step
+
+### 17.5 Built-in fuzzing
+
+Use Go's built-in `testing` fuzzing framework as the base fuzz harness.
+
+The initial target set should live in `runtime/` and cover:
+
+- single-script execution against a runtime with tight policy and timeout limits
+- malformed and byte-injected inputs that should fail gracefully without internal panics or host-path leaks
+- multi-exec session sequences to exercise persistent filesystem state under fuzzed scripts
+
+The fuzz harness should:
+
+- seed each target with a small curated set of valid and malformed scripts
+- keep request-level timeouts and policy limits intentionally tight
+- treat parser errors as acceptable outcomes
+- fail on unexpected internal errors, host-path leakage in error paths, or unbounded execution
+
+As command surface grows, add command-specific fuzz targets and richer seed corpora without replacing the focused regression suite.
 - canonicalize trace event ordering for concurrent pipeline stages before comparison, while still keeping exact event-order goldens for simple serial scripts
 
 The compatibility harness should stay curated. It is not a Bash conformance suite, and it should not imply future host-shell fallback.
@@ -873,6 +893,7 @@ The gap analysis against `just-bash` yields two categories: gaps we should close
 - host-backed overlay filesystem support so real directories can be mounted read-only underneath an in-memory writable layer
 - fuller `jq` and `curl` compatibility for structured data flows and safe networked workflows
 - richer tracing and compatibility corpus
+- broader fuzzing coverage with command-specific targets and deeper security-oriented oracles
 - more polished interactive-shell ergonomics, such as optional line editing and history that do not weaken sandbox determinism
 
 ### 18.2 Intentional Divergences

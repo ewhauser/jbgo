@@ -21,3 +21,7 @@ jobs:
       - run: go build ./...
 
       - run: go test ./...
+
+      - run: make fuzz
+        env:
+          FUZZTIME: 3s

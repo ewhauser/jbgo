@@ -75,10 +75,19 @@ func (m *MVdan) Parse(name, script string) (*syntax.File, error) {
 	return m.parser.Parse(strings.NewReader(script), name)
 }
 
-func (m *MVdan) Run(ctx context.Context, exec *Execution) (*RunResult, error) {
+func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
 	if exec == nil {
 		exec = &Execution{}
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if exec.Stderr != nil {
+				_, _ = fmt.Fprintln(exec.Stderr, sanitizeRunnerPanic(recovered))
+			}
+			result = &RunResult{FinalEnv: envMapFromVars(nil)}
+			runErr = interp.ExitStatus(2)
+		}
+	}()
 	if exec.Dir == "" {
 		exec.Dir = "/"
 	}
@@ -146,11 +155,23 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (*RunResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	runErr := runner.Run(ctx, program)
+	runErr = runner.Run(ctx, program)
 	return &RunResult{
 		FinalEnv:    envMapFromVars(runner.Vars),
 		ShellExited: runner.Exited(),
 	}, runErr
+}
+
+func sanitizeRunnerPanic(recovered any) string {
+	message := fmt.Sprint(recovered)
+	switch {
+	case strings.HasPrefix(message, "unhandled >& arg:"),
+		strings.HasPrefix(message, "unhandled > arg:"),
+		strings.HasPrefix(message, "unhandled < arg:"):
+		return "invalid redirection"
+	default:
+		return "shell execution failed"
+	}
 }
 
 func ExitCode(err error) int {
