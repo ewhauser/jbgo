@@ -519,9 +519,9 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `xargs`
 
-- [ ] `--no-run-if-empty`
-- [ ] `--null`
-- [ ] `--verbose`
+- [x] `--no-run-if-empty`
+- [x] `--null`
+- [x] `--verbose`
 
 #### `zcat`
 

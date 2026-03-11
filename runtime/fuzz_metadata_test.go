@@ -243,6 +243,8 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		),
 		fuzzSpec("xargs", "shell",
 			fuzzVariant("text", "stdin", "-n", "1", "echo"),
+			fuzzVariant("text", "stdin", "--null", "--verbose", "--max-args", "1", "echo"),
+			fuzzVariant("text", "stdin", "--no-run-if-empty", "echo", "skip"),
 		),
 		fuzzSpec("bash", "shell",
 			fuzzVariant("", "flag:c", "-c", "{script.echo}", "ignored", "{token.value}"),

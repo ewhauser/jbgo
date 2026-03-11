@@ -111,6 +111,23 @@ func parseXArgs(inv *Invocation) (opts xargsOptions, cmdArgs []string, err error
 				return xargsOptions{}, nil, exitf(inv, 1, "xargs: invalid max-args %q", arg[2:])
 			}
 			opts.maxArgs = value
+		case arg == "--max-args":
+			if len(args) < 2 {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: option requires an argument -- max-args")
+			}
+			value, err := parsePositiveInt(args[1])
+			if err != nil {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: invalid max-args %q", args[1])
+			}
+			opts.maxArgs = value
+			args = args[2:]
+			continue
+		case strings.HasPrefix(arg, "--max-args="):
+			value, err := parsePositiveInt(strings.TrimPrefix(arg, "--max-args="))
+			if err != nil {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: invalid max-args %q", strings.TrimPrefix(arg, "--max-args="))
+			}
+			opts.maxArgs = value
 		case arg == "-I":
 			if len(args) < 2 {
 				return xargsOptions{}, nil, exitf(inv, 1, "xargs: option requires an argument -- 'I'")
@@ -120,7 +137,18 @@ func parseXArgs(inv *Invocation) (opts xargsOptions, cmdArgs []string, err error
 			continue
 		case strings.HasPrefix(arg, "-I") && len(arg) > 2:
 			opts.replace = arg[2:]
+		case arg == "--replace":
+			if len(args) < 2 {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: option requires an argument -- replace")
+			}
+			opts.replace = args[1]
+			args = args[2:]
+			continue
+		case strings.HasPrefix(arg, "--replace="):
+			opts.replace = strings.TrimPrefix(arg, "--replace=")
 		case arg == "-0":
+			opts.nullInput = true
+		case arg == "--null":
 			opts.nullInput = true
 		case arg == "-d":
 			if len(args) < 2 {
@@ -139,9 +167,30 @@ func parseXArgs(inv *Invocation) (opts xargsOptions, cmdArgs []string, err error
 				return xargsOptions{}, nil, exitf(inv, 1, "xargs: invalid delimiter %q", arg[2:])
 			}
 			opts.delimiter = &decoded
+		case arg == "--delimiter":
+			if len(args) < 2 {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: option requires an argument -- delimiter")
+			}
+			decoded, err := decodeDelimiterValue(args[1])
+			if err != nil {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: invalid delimiter %q", args[1])
+			}
+			opts.delimiter = &decoded
+			args = args[2:]
+			continue
+		case strings.HasPrefix(arg, "--delimiter="):
+			decoded, err := decodeDelimiterValue(strings.TrimPrefix(arg, "--delimiter="))
+			if err != nil {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: invalid delimiter %q", strings.TrimPrefix(arg, "--delimiter="))
+			}
+			opts.delimiter = &decoded
 		case arg == "-t":
 			opts.verbose = true
+		case arg == "--verbose":
+			opts.verbose = true
 		case arg == "-r":
+			opts.noRunIfEmpty = true
+		case arg == "--no-run-if-empty":
 			opts.noRunIfEmpty = true
 		case arg == "-P":
 			if len(args) < 2 {
