@@ -16,6 +16,7 @@ import (
 	"time"
 )
 
+// HostFS exposes a read-only host directory at a virtual sandbox path.
 type HostFS struct {
 	mu sync.RWMutex
 
@@ -35,6 +36,7 @@ const (
 	hostPathMounted
 )
 
+// NewHost creates a concrete host-backed filesystem instance.
 func NewHost(opts HostOptions) (*HostFS, error) {
 	root := strings.TrimSpace(opts.Root)
 	if root == "" {
@@ -87,10 +89,6 @@ func NewHost(opts HostOptions) (*HostFS, error) {
 		cwd:              virtualRoot,
 		maxFileReadBytes: maxFileReadBytes,
 	}, nil
-}
-
-func (f HostFactory) New(context.Context) (FileSystem, error) {
-	return NewHost(f.options())
 }
 
 func (h *HostFS) Open(ctx context.Context, name string) (File, error) {

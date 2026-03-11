@@ -50,11 +50,6 @@ jobs:
 
           git worktree add "$BASE_DIR" "$BASE_SHA"
 
-          cp runtime/bench_helpers_test.go "$BASE_DIR/runtime/"
-          cp runtime/benchmarks_test.go "$BASE_DIR/runtime/"
-          cp runtime/test_helpers_test.go "$BASE_DIR/runtime/"
-          cp runtime/fixture_helpers_test.go "$BASE_DIR/runtime/"
-
           (
             cd "$BASE_DIR"
             go test ./runtime -run=^$ -bench "$BENCH_SMOKE_REGEX" -benchmem -count="$BENCH_SMOKE_COUNT" -benchtime="$BENCH_SMOKE_TIME" > "$ARTIFACT_DIR/base.txt"

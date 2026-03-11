@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// MemoryFS is the default mutable in-memory sandbox filesystem.
 type MemoryFS struct {
 	mu    sync.RWMutex
 	cwd   string
@@ -31,6 +32,7 @@ const maxSymlinkDepth = 40
 
 var errTooManySymlinks = errors.New("too many levels of symbolic links")
 
+// NewMemory creates a fresh in-memory filesystem rooted at "/".
 func NewMemory() *MemoryFS {
 	now := time.Now().UTC()
 	return &MemoryFS{

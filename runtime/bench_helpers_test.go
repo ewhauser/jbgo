@@ -7,27 +7,17 @@ import (
 	jbfs "github.com/ewhauser/jbgo/fs"
 )
 
-type benchmarkOverlayFactory struct {
-	lower jbfs.FileSystem
-}
-
-func (f benchmarkOverlayFactory) New(context.Context) (jbfs.FileSystem, error) {
-	return jbfs.NewOverlay(f.lower), nil
-}
-
 func newSeededRuntime(tb testing.TB, files map[string]string) *Runtime {
 	tb.Helper()
 
 	base := newSession(tb, nil)
 	seedSessionFiles(tb, base, files)
 
-	lower, err := jbfs.NewSnapshot(context.Background(), base.FileSystem())
-	if err != nil {
-		tb.Fatalf("NewSnapshot() error = %v", err)
-	}
-
 	return newRuntime(tb, &Config{
-		FSFactory: benchmarkOverlayFactory{lower: lower},
+		FileSystem: CustomFileSystem(
+			jbfs.Overlay(jbfs.Snapshot(base.FileSystem())),
+			defaultHomeDir,
+		),
 	})
 }
 

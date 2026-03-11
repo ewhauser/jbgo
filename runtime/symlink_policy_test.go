@@ -40,14 +40,14 @@ func (f symlinkFSFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
 
 func TestDefaultPolicyDeniesSymlinkTraversal(t *testing.T) {
 	rt := newRuntime(t, &Config{
-		FSFactory: symlinkFSFactory{
+		FileSystem: CustomFileSystem(symlinkFSFactory{
 			files: map[string]string{
 				"/safe/target.txt": "hello\n",
 			},
 			symlinks: map[string]string{
 				"/safe/link.txt": "target.txt",
 			},
-		},
+		}, defaultHomeDir),
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
@@ -66,14 +66,14 @@ func TestDefaultPolicyDeniesSymlinkTraversal(t *testing.T) {
 
 func TestFollowModeChecksResolvedReadTargetAgainstAllowedRoots(t *testing.T) {
 	rt := newRuntime(t, &Config{
-		FSFactory: symlinkFSFactory{
+		FileSystem: CustomFileSystem(symlinkFSFactory{
 			files: map[string]string{
 				"/denied/secret.txt": "secret\n",
 			},
 			symlinks: map[string]string{
 				"/safe/link.txt": "/denied/secret.txt",
 			},
-		},
+		}, defaultHomeDir),
 		Policy: policy.NewStatic(&policy.Config{
 			ReadRoots:   []string{"/safe", "/usr/bin", "/bin"},
 			WriteRoots:  []string{"/safe"},
@@ -97,14 +97,14 @@ func TestFollowModeChecksResolvedReadTargetAgainstAllowedRoots(t *testing.T) {
 
 func TestFollowModeAllowsSymlinkTraversalWithinAllowedRoots(t *testing.T) {
 	rt := newRuntime(t, &Config{
-		FSFactory: symlinkFSFactory{
+		FileSystem: CustomFileSystem(symlinkFSFactory{
 			files: map[string]string{
 				"/safe/target.txt": "hello\n",
 			},
 			symlinks: map[string]string{
 				"/safe/link.txt": "target.txt",
 			},
-		},
+		}, defaultHomeDir),
 		Policy: policy.NewStatic(&policy.Config{
 			ReadRoots:   []string{"/safe", "/usr/bin", "/bin"},
 			WriteRoots:  []string{"/safe"},
@@ -128,14 +128,14 @@ func TestFollowModeAllowsSymlinkTraversalWithinAllowedRoots(t *testing.T) {
 
 func TestFollowModeChecksResolvedWriteTargetAgainstAllowedRoots(t *testing.T) {
 	rt := newRuntime(t, &Config{
-		FSFactory: symlinkFSFactory{
+		FileSystem: CustomFileSystem(symlinkFSFactory{
 			files: map[string]string{
 				"/denied/.keep": "",
 			},
 			symlinks: map[string]string{
 				"/safe/out": "/denied",
 			},
-		},
+		}, defaultHomeDir),
 		Policy: policy.NewStatic(&policy.Config{
 			ReadRoots:   []string{"/safe", "/usr/bin", "/bin"},
 			WriteRoots:  []string{"/safe"},

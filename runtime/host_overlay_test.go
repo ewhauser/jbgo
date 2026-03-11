@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
 	"github.com/ewhauser/jbgo/policy"
 )
 
@@ -22,13 +21,9 @@ func TestOverlayFactoryWithHostLowerSupportsCopyOnWrite(t *testing.T) {
 	}
 
 	rt := newRuntime(t, &Config{
-		DefaultDir: hostOverlayVirtualRoot,
-		FSFactory: jbfs.OverlayFactory{
-			Lower: jbfs.HostFactory{
-				Root:        root,
-				VirtualRoot: hostOverlayVirtualRoot,
-			},
-		},
+		FileSystem: HostProjectFileSystem(root, HostProjectOptions{
+			VirtualRoot: hostOverlayVirtualRoot,
+		}),
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
@@ -60,13 +55,9 @@ func TestOverlayHostLowerTombstonesDoNotDeleteHostFiles(t *testing.T) {
 	}
 
 	session := newSession(t, &Config{
-		DefaultDir: hostOverlayVirtualRoot,
-		FSFactory: jbfs.OverlayFactory{
-			Lower: jbfs.HostFactory{
-				Root:        root,
-				VirtualRoot: hostOverlayVirtualRoot,
-			},
-		},
+		FileSystem: HostProjectFileSystem(root, HostProjectOptions{
+			VirtualRoot: hostOverlayVirtualRoot,
+		}),
 	})
 
 	result, err := session.Exec(context.Background(), &ExecutionRequest{
@@ -102,13 +93,9 @@ func TestOverlayHostLowerDefaultPolicyDeniesSymlinkTraversal(t *testing.T) {
 	}
 
 	rt := newRuntime(t, &Config{
-		DefaultDir: hostOverlayVirtualRoot,
-		FSFactory: jbfs.OverlayFactory{
-			Lower: jbfs.HostFactory{
-				Root:        root,
-				VirtualRoot: hostOverlayVirtualRoot,
-			},
-		},
+		FileSystem: HostProjectFileSystem(root, HostProjectOptions{
+			VirtualRoot: hostOverlayVirtualRoot,
+		}),
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
@@ -135,13 +122,9 @@ func TestOverlayHostLowerFollowModeAllowsInRootSymlinkReads(t *testing.T) {
 	}
 
 	rt := newRuntime(t, &Config{
-		DefaultDir: hostOverlayVirtualRoot,
-		FSFactory: jbfs.OverlayFactory{
-			Lower: jbfs.HostFactory{
-				Root:        root,
-				VirtualRoot: hostOverlayVirtualRoot,
-			},
-		},
+		FileSystem: HostProjectFileSystem(root, HostProjectOptions{
+			VirtualRoot: hostOverlayVirtualRoot,
+		}),
 		Policy: policy.NewStatic(&policy.Config{
 			ReadRoots:   []string{hostOverlayVirtualRoot, "/usr/bin", "/bin"},
 			WriteRoots:  []string{hostOverlayVirtualRoot},

@@ -201,14 +201,18 @@ type Runtime struct {
 }
 
 type Config struct {
-    FSFactory     fs.Factory
+    FileSystem    FileSystemConfig
     Registry      commands.CommandRegistry
     Policy        Policy
     Engine        shell.Engine
     BaseEnv       map[string]string
-    DefaultDir    string
     Network       *network.Config
     NetworkClient network.Client
+}
+
+type FileSystemConfig struct {
+    Factory    fs.Factory
+    WorkingDir string
 }
 
 type Session struct {
@@ -490,10 +494,12 @@ Current and planned backends:
 
 Backend boundary for the current implementation:
 
-- `HostFS` is an opt-in lower-layer backend exposed through `HostFactory`; it is intended to sit underneath `OverlayFactory`, not to replace the default in-memory runtime path
-- `OverlayFS` is intended for runtime/session use and is exposed through `OverlayFactory`
+- `runtime.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
+- `HostFS` is an opt-in lower-layer backend exposed through `jbfs.Host(...)`; it is intended to sit underneath `jbfs.Overlay(...)`, not to replace the default in-memory runtime path
+- `OverlayFS` is intended for runtime/session use and is exposed through `jbfs.Overlay(...)`
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests
 - `SnapshotFS` is not the default `runtime` session backend because session bootstrap still creates the sandbox layout and command stubs
+- the common host-project workflow should be represented as a high-level runtime helper that mounts a read-only host tree under an in-memory overlay and starts the session in that mounted directory
 
 ## 11. Command Execution Model
 

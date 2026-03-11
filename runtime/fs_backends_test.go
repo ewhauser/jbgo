@@ -33,11 +33,12 @@ func (f seededFSFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
 
 func TestOverlayFactorySupportsShellReadsAndCopyOnWrite(t *testing.T) {
 	rt := newRuntime(t, &Config{
-		FSFactory: jbfs.OverlayFactory{
-			Lower: seededFSFactory{files: map[string]string{
+		FileSystem: CustomFileSystem(
+			jbfs.Overlay(seededFSFactory{files: map[string]string{
 				"/seed.txt": "seed\n",
-			}},
-		},
+			}}),
+			defaultHomeDir,
+		),
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{

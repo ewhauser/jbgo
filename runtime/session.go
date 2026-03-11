@@ -30,7 +30,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	ctx, cancel := executionContext(ctx, req.Timeout)
 	defer cancel()
 
-	workDir := resolveWorkDir(s.cfg.DefaultDir, req.WorkDir)
+	workDir := resolveWorkDir(s.cfg.FileSystem.WorkingDir, req.WorkDir)
 	execEnv := executionEnv(s.cfg.BaseEnv, req)
 	execEnv["PWD"] = workDir
 

@@ -14,12 +14,11 @@ import (
 )
 
 type Config struct {
-	FSFactory     jbfs.Factory
+	FileSystem    FileSystemConfig
 	Registry      commands.CommandRegistry
 	Policy        policy.Policy
 	Engine        shell.Engine
 	BaseEnv       map[string]string
-	DefaultDir    string
 	Network       *network.Config
 	NetworkClient network.Client
 }
@@ -43,17 +42,12 @@ func New(cfg *Config) (*Runtime, error) {
 		cfg = &Config{}
 	}
 	resolved := *cfg
-	if resolved.FSFactory == nil {
-		resolved.FSFactory = jbfs.MemoryFactory{}
-	}
+	resolved.FileSystem = resolved.FileSystem.resolved()
 	if resolved.Registry == nil {
 		resolved.Registry = commands.DefaultRegistry()
 	}
 	if resolved.Engine == nil {
 		resolved.Engine = shell.New()
-	}
-	if resolved.DefaultDir == "" {
-		resolved.DefaultDir = defaultHomeDir
 	}
 	if resolved.NetworkClient == nil && resolved.Network != nil {
 		client, err := network.New(resolved.Network)
@@ -93,12 +87,12 @@ func New(cfg *Config) (*Runtime, error) {
 }
 
 func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
-	fsys, err := r.cfg.FSFactory.New(ctx)
+	fsys, err := r.cfg.FileSystem.Factory.New(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := initializeSandboxLayout(ctx, fsys, r.cfg.BaseEnv, r.cfg.DefaultDir, r.cfg.Registry.Names()); err != nil {
+	if err := initializeSandboxLayout(ctx, fsys, r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir, r.cfg.Registry.Names()); err != nil {
 		return nil, err
 	}
 

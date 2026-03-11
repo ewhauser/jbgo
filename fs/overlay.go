@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+// OverlayFS is a copy-on-write filesystem with a writable in-memory upper
+// layer and a read-only lower layer.
 type OverlayFS struct {
 	lower FileSystem
 	upper *MemoryFS
@@ -21,6 +23,7 @@ type OverlayFS struct {
 	tombstones map[string]struct{}
 }
 
+// NewOverlay creates a concrete overlay filesystem over lower.
 func NewOverlay(lower FileSystem) *OverlayFS {
 	if lower == nil {
 		lower = NewMemory()

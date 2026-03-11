@@ -7,10 +7,12 @@ import (
 	"time"
 )
 
+// SnapshotFS is a read-only clone of another filesystem.
 type SnapshotFS struct {
 	base *MemoryFS
 }
 
+// NewSnapshot clones source into a read-only snapshot filesystem.
 func NewSnapshot(ctx context.Context, source FileSystem) (*SnapshotFS, error) {
 	if source == nil {
 		source = NewMemory()

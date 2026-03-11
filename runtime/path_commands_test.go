@@ -291,11 +291,12 @@ func TestFileSupportsLongBriefAndMimeFlags(t *testing.T) {
 
 func TestOverlayFactorySupportsHardLinksAndMetadataCopyUp(t *testing.T) {
 	rt := newRuntime(t, &Config{
-		FSFactory: jbfs.OverlayFactory{
-			Lower: seededFSFactory{files: map[string]string{
+		FileSystem: CustomFileSystem(
+			jbfs.Overlay(seededFSFactory{files: map[string]string{
 				"/seed.txt": "seed\n",
-			}},
-		},
+			}}),
+			defaultHomeDir,
+		),
 	})
 
 	session, err := rt.NewSession(context.Background())

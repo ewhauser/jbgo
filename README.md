@@ -283,43 +283,34 @@ Use `/reset` inside the chat to recreate the ADK conversation and reseed the san
 
 The main configuration surface is `runtime.Config`.
 
-### Filesystem Backends
+### Filesystem Setup
 
-Filesystem choice is controlled through `Config.FSFactory`.
+Filesystem setup is controlled through `Config.FileSystem`. It carries both:
 
-- `jbfs.MemoryFactory{}` is the default: each session gets a fresh in-memory filesystem.
-- `jbfs.OverlayFactory{Lower: ...}` creates a copy-on-write filesystem over another `jbfs.Factory`.
-- `jbfs.HostFactory{Root: ..., VirtualRoot: ..., MaxFileReadBytes: ...}` exposes a read-only host directory at a virtual path and is intended to sit underneath `jbfs.OverlayFactory`. `VirtualRoot` defaults to `/home/agent/project`; `MaxFileReadBytes` defaults to 10 MiB and caps regular-file opens from the host tree.
-- `jbfs.NewSnapshot(ctx, fsys)` creates a read-only point-in-time snapshot of an existing filesystem. If you want snapshot-backed sessions, wrap it behind your own `jbfs.Factory`.
+- the factory that creates a fresh sandbox filesystem for each session
+- the working directory that sessions start in
 
-You can also provide your own `jbfs.Factory` implementation for seeded, remote, or otherwise custom sandbox filesystems.
+Most callers should use one of these runtime helpers:
 
-If you already have a Go filesystem implementation, the runtime is flexible about what sits underneath that factory. The integration point is `jbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself, but you can wrap stdlib-compatible or third-party backends behind a `jbfs.Factory`.
+- `jbruntime.InMemoryFileSystem()` for the default mutable sandbox
+- `jbruntime.HostProjectFileSystem(root, opts)` for a real host project mounted read-only under an in-memory overlay
+- `jbruntime.CustomFileSystem(factory, workingDir)` for seeded or otherwise custom backends
 
-For the closest parity with `just-bash`'s real-directory overlay, use `HostFactory` as the lower layer for `OverlayFactory` and point the runtime at the mounted virtual root:
+The zero value of `runtime.Config` still gives you an in-memory sandbox rooted at `/home/agent`.
+
+For the closest parity with `just-bash`'s real-directory overlay:
 
 ```go
 rt, err := jbruntime.New(&jbruntime.Config{
-	DefaultDir: "/home/agent/project",
-	FSFactory: jbfs.OverlayFactory{
-		Lower: jbfs.HostFactory{
-			Root:        "/path/to/project",
-			VirtualRoot: "/home/agent/project",
-		},
-	},
+	FileSystem: jbruntime.HostProjectFileSystem("/path/to/project", jbruntime.HostProjectOptions{
+		VirtualRoot: "/home/agent/project",
+	}),
 })
 ```
 
-That gives the session a host-backed read-only project tree while keeping all writes, deletes, and command stubs in the in-memory upper layer. If you want the host tree at `/`, set `VirtualRoot: "/"`.
+That mounts the host directory read-only at `/home/agent/project`, starts the session there, and keeps all writes, deletes, and command stubs in the in-memory upper layer. `VirtualRoot` defaults to `jbfs.DefaultHostVirtualRoot`. `MaxFileReadBytes` defaults to `jbfs.DefaultHostMaxFileReadBytes`. If you want the host tree mounted at `/`, set `VirtualRoot: "/"`.
 
-That makes it practical to integrate things like:
-
-- `os.DirFS` or other stdlib `io/fs`-compatible filesystems
-- `embed.FS`
-- `testing/fstest.MapFS`
-- custom in-memory, remote, or policy-aware filesystems from your own codebase
-
-The wrapper is where you adapt your existing implementation to the richer runtime contract: open/create, metadata, directory listing, symlinks, mutation, and cwd management. For example:
+For seeded or custom backends, implement `jbfs.Factory` and hand it to `CustomFileSystem`:
 
 ```go
 type myFactory struct {
@@ -331,13 +322,24 @@ func (f myFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
 }
 
 rt, err := jbruntime.New(&jbruntime.Config{
-	FSFactory: myFactory{
-		base: os.DirFS("/path/to/workspace"),
-	},
+	FileSystem: jbruntime.CustomFileSystem(
+		myFactory{base: os.DirFS("/path/to/workspace")},
+		"/home/agent",
+	),
 })
 ```
 
-If you want copy-on-write behavior over an existing Go filesystem, wrap that backend as the lower layer and put `jbfs.OverlayFactory` on top of it. A direct host read-write backend and a general mount router are still out of scope for the default runtime path.
+If you want copy-on-write behavior over another backend, wrap it with `jbfs.Overlay(...)` before passing it to `CustomFileSystem`.
+
+Low-level `fs` helpers are available when you need to compose backends directly:
+
+- `jbfs.Memory()` returns a factory for fresh in-memory filesystems
+- `jbfs.Overlay(lower)` returns a copy-on-write factory over another `jbfs.Factory`
+- `jbfs.Host(opts)` returns a factory for a read-only host-backed directory view
+- `jbfs.Snapshot(fsys)` returns a factory that clones an existing filesystem into a read-only snapshot
+- `jbfs.NewMemory`, `jbfs.NewOverlay`, `jbfs.NewHost`, and `jbfs.NewSnapshot` create concrete filesystem instances directly
+
+The runtime integration point is still `jbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself. If you already have a Go filesystem implementation, wrap it behind `jbfs.Factory` and adapt the richer contract: mutation, metadata, directory listing, symlinks, and cwd handling. A direct host read-write backend and a general mount router are still out of scope for the default runtime path.
 
 ### Network Access
 

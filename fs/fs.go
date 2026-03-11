@@ -14,6 +14,7 @@ type File interface {
 	Stat() (stdfs.FileInfo, error)
 }
 
+// FileSystem is the project-owned filesystem contract used by the runtime.
 type FileSystem interface {
 	Open(ctx context.Context, name string) (File, error)
 	OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (File, error)
@@ -33,29 +34,44 @@ type FileSystem interface {
 	Chdir(name string) error
 }
 
+// Factory creates a fresh filesystem instance for a runtime session.
 type Factory interface {
 	New(ctx context.Context) (FileSystem, error)
 }
 
-type MemoryFactory struct{}
+// FactoryFunc adapts a function into a Factory.
+type FactoryFunc func(ctx context.Context) (FileSystem, error)
 
-func (MemoryFactory) New(context.Context) (FileSystem, error) {
-	return NewMemory(), nil
+func (f FactoryFunc) New(ctx context.Context) (FileSystem, error) {
+	return f(ctx)
 }
 
-type OverlayFactory struct {
-	Lower Factory
+// Memory returns a factory that creates a fresh in-memory filesystem per session.
+func Memory() Factory {
+	return FactoryFunc(func(context.Context) (FileSystem, error) {
+		return NewMemory(), nil
+	})
 }
 
-func (f OverlayFactory) New(ctx context.Context) (FileSystem, error) {
-	if f.Lower == nil {
-		return NewOverlay(NewMemory()), nil
-	}
-	lower, err := f.Lower.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return NewOverlay(lower), nil
+// Overlay returns a copy-on-write filesystem factory over lower.
+func Overlay(lower Factory) Factory {
+	return FactoryFunc(func(ctx context.Context) (FileSystem, error) {
+		if lower == nil {
+			return NewOverlay(NewMemory()), nil
+		}
+		base, err := lower.New(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return NewOverlay(base), nil
+	})
+}
+
+// Snapshot returns a factory that clones source into a read-only snapshot per session.
+func Snapshot(source FileSystem) Factory {
+	return FactoryFunc(func(ctx context.Context) (FileSystem, error) {
+		return NewSnapshot(ctx, source)
+	})
 }
 
 func Clean(name string) string {
