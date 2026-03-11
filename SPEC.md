@@ -156,7 +156,7 @@ Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesy
 ## 7. Proposed Package Layout
 
 ```text
-cmd/jbgo/             CLI entrypoint for local execution and demos
+cmd/jbgo/             CLI entrypoint for local execution
 runtime/              top-level runtime API and execution orchestration
 shell/                mvdan/sh integration and handler wiring
 fs/                   project-owned filesystem interfaces and virtual backends
@@ -164,6 +164,7 @@ network/              sandboxed HTTP client, allowlist matching, redirect checks
 commands/             command registry, invocation context, core Go commands
 policy/               sandbox policy types and enforcement decisions
 trace/                structured event model and recorder implementations
+examples/             separate Go module for SDK demos and integration examples
 tests/                integration fixtures and compatibility-style harnesses
 ```
 
@@ -176,9 +177,12 @@ Package responsibilities:
 - `commands/`: registry and Go-native command implementations such as `echo`, `cat`, `ls`, and `pwd`
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
 - `trace/`: event schema, recorder interfaces, and in-memory buffering
+- `examples/`: runnable demos that can depend on external SDKs without affecting the root module build list
 - `tests/`: black-box runtime tests and corpus-driven shell fixtures
 
 We intentionally do not create a `compat/` package because compatibility mode is not a product feature.
+
+The repository itself should be maintained as a committed Go workspace. The root module stays focused on the runtime and CLI, while `examples/` is a separate module used for demos that may need external SDK dependencies or looser version pinning.
 
 ## 8. Core Interfaces
 

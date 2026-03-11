@@ -20,7 +20,9 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - run: go test ./...
+      - run: make build
+
+      - run: make test
 
       - uses: goreleaser/goreleaser-action@v6
         with:

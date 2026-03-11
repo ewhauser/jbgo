@@ -1,5 +1,7 @@
 .PHONY: lint test build fuzz bench-smoke bench-full release-check release-snapshot
 
+GO_PACKAGES := ./... ./examples/...
+
 FUZZTIME ?= 10s
 GORELEASER_VERSION ?= v2.14.3
 BENCH_SMOKE_COUNT ?= 8
@@ -10,13 +12,13 @@ BENCH_SMOKE_REGEX ?= Benchmark(NewSession|RuntimeRunSimpleScript|SessionExecWarm
 
 lint:
 	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	golangci-lint run ./...
+	golangci-lint run $(GO_PACKAGES)
 
 test:
-	go test ./...
+	go test $(GO_PACKAGES)
 
 build:
-	go build ./...
+	go build $(GO_PACKAGES)
 
 fuzz:
 	go test ./runtime -run=^$$ -fuzz=FuzzRuntimeScript -fuzztime=$(FUZZTIME)

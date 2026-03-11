@@ -27,6 +27,7 @@ Install the module with `go get github.com/ewhauser/jbgo` and import packages fr
   - [Network-Enabled API](#network-enabled-api)
   - [Persistent Sessions](#persistent-sessions)
   - [CLI](#cli)
+  - [Workspace Example](#workspace-example)
 - [Configuration](#configuration)
   - [Filesystem Backends](#filesystem-backends)
   - [Network Access](#network-access)
@@ -238,6 +239,19 @@ The CLI can also report embedded release metadata:
 jbgo --version
 ```
 
+### Workspace Example
+
+The repository includes an `examples/` Go module so integration demos can carry their own dependencies without adding them to the root library module.
+
+The first example uses the OpenAI Go SDK Responses API with a function tool named `bash`. The tool implementation calls `runtime.Run`, so the model sees a normal `bash` tool while execution still happens inside the `just-bash-go` sandbox.
+
+```bash
+export OPENAI_API_KEY=your-api-key
+go run ./examples/openai-tool-call
+```
+
+The example hardcodes `gpt-4.1-mini` and asks the model to run a simple `printf` command through the `bash` tool, then print only the tool's stdout.
+
 ## Configuration
 
 The main configuration surface is `runtime.Config`.
@@ -399,6 +413,17 @@ Each fresh session starts with a Unix-like virtual layout:
 Those command paths are virtual stubs used for shell resolution. Command implementations still come from the Go registry, not the host filesystem.
 
 ## Development
+
+This repository is a committed Go workspace:
+
+- the root module contains the runtime, CLI, and tests
+- [`examples/`](./examples) is a separate Go module for demos and external SDK integrations
+
+Common commands from the repo root:
+
+- `go build ./... ./examples/...`
+- `go test ./... ./examples/...`
+- `go run ./examples/openai-tool-call`
 
 For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before making changes.
 
