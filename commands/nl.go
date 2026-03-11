@@ -11,6 +11,7 @@ type NL struct{}
 
 type nlOptions struct {
 	style     byte
+	format    string
 	width     int
 	separator string
 	start     int
@@ -40,7 +41,7 @@ func (c *NL) Run(ctx context.Context, inv *Invocation) error {
 		for _, line := range textLines(input.Data) {
 			out := strings.Repeat(" ", opts.width)
 			if shouldNumberLine(opts.style, line) {
-				out = fmt.Sprintf("%*d", opts.width, number)
+				out = formatNLNumber(opts, number)
 				number += opts.increment
 			}
 			if _, err := fmt.Fprintf(inv.Stdout, "%s%s%s\n", out, opts.separator, line); err != nil {
@@ -55,6 +56,7 @@ func parseNLArgs(inv *Invocation) (nlOptions, []string, error) {
 	args := inv.Args
 	opts := nlOptions{
 		style:     't',
+		format:    "rn",
 		width:     6,
 		separator: "\t",
 		start:     1,
@@ -81,6 +83,19 @@ func parseNLArgs(inv *Invocation) (nlOptions, []string, error) {
 			continue
 		case strings.HasPrefix(arg, "-b") && len(arg) > 2:
 			if err := setNLStyle(inv, &opts, arg[2:]); err != nil {
+				return nlOptions{}, nil, err
+			}
+		case arg == "-n":
+			if len(args) < 2 {
+				return nlOptions{}, nil, exitf(inv, 1, "nl: option requires an argument -- 'n'")
+			}
+			if err := setNLFormat(inv, &opts, args[1]); err != nil {
+				return nlOptions{}, nil, err
+			}
+			args = args[2:]
+			continue
+		case strings.HasPrefix(arg, "-n") && len(arg) > 2:
+			if err := setNLFormat(inv, &opts, arg[2:]); err != nil {
 				return nlOptions{}, nil, err
 			}
 		case arg == "-w":
@@ -153,6 +168,16 @@ func setNLStyle(inv *Invocation, opts *nlOptions, value string) error {
 	return nil
 }
 
+func setNLFormat(inv *Invocation, opts *nlOptions, value string) error {
+	switch value {
+	case "ln", "rn", "rz":
+		opts.format = value
+		return nil
+	default:
+		return exitf(inv, 1, "nl: unsupported numbering format %q", value)
+	}
+}
+
 func parseNLInt(inv *Invocation, flag string, args []string) (value int, rest []string, err error) {
 	if len(args) == 0 {
 		return 0, nil, exitf(inv, 1, "nl: option requires an argument -- '%s'", flag)
@@ -172,6 +197,18 @@ func shouldNumberLine(style byte, line string) bool {
 		return false
 	default:
 		return line != ""
+	}
+}
+
+func formatNLNumber(opts nlOptions, number int) string {
+	value := strconv.Itoa(number)
+	switch opts.format {
+	case "ln":
+		return fmt.Sprintf("%-*s", opts.width, value)
+	case "rz":
+		return fmt.Sprintf("%0*s", opts.width, value)
+	default:
+		return fmt.Sprintf("%*s", opts.width, value)
 	}
 }
 

@@ -22,6 +22,7 @@ fuzz:
 	go test ./runtime -run=^$$ -fuzz=FuzzTextSearchCommands -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzCPFlagsCommand -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzMVFlagsCommand -fuzztime=$(FUZZTIME)
+	go test ./runtime -run=^$$ -fuzz=FuzzNLFlagsCommand -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzCutFlagsCommand -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzUniqFlagsCommand -fuzztime=$(FUZZTIME)
 	go test ./runtime -run=^$$ -fuzz=FuzzEnvCommandFlags -fuzztime=$(FUZZTIME)

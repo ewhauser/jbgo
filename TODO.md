@@ -410,7 +410,7 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `nl`
 
-- [ ] `-n`
+- [x] `-n`
 
 #### `paste`
 
