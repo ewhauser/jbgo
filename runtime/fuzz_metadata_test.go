@@ -101,6 +101,8 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		),
 		fuzzSpec("cp", "file",
 			fuzzVariant("", "path.copy", "{path.text}", "{path.copy}"),
+			fuzzVariant("", "flag:long", "--no-clobber", "--preserve", "--verbose", "{path.text}", "{path.copy}"),
+			fuzzVariant("", "flag:short", "-n", "-p", "-v", "{path.text}", "{path.copy}"),
 		),
 		fuzzSpec("mv", "file",
 			fuzzVariant("", "path.move", "{path.copy}", "{path.moved}"),

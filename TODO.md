@@ -210,12 +210,12 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `cp`
 
-- [ ] `--no-clobber`
-- [ ] `--preserve`
-- [ ] `--verbose`
-- [ ] `-n`
-- [ ] `-p`
-- [ ] `-v`
+- [x] `--no-clobber`
+- [x] `--preserve`
+- [x] `--verbose`
+- [x] `-n`
+- [x] `-p`
+- [x] `-v`
 
 #### `curl`
 

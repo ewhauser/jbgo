@@ -2,7 +2,10 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"strings"
+
+	"github.com/ewhauser/jbgo/policy"
 )
 
 type CP struct{}
@@ -16,17 +19,9 @@ func (c *CP) Name() string {
 }
 
 func (c *CP) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	recursive := false
-
-	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		switch args[0] {
-		case "-r", "-R", "--recursive":
-			recursive = true
-		default:
-			return exitf(inv, 1, "cp: unsupported flag %s", args[0])
-		}
-		args = args[1:]
+	opts, args, err := parseCPArgs(inv)
+	if err != nil {
+		return err
 	}
 
 	if len(args) < 2 {
@@ -47,9 +42,16 @@ func (c *CP) Run(ctx context.Context, inv *Invocation) error {
 		if err != nil {
 			return err
 		}
+		_, _, destExists, err := statMaybe(ctx, inv, policy.FileActionStat, destAbs)
+		if err != nil {
+			return err
+		}
+		if opts.noClobber && destExists {
+			continue
+		}
 
 		if srcInfo.IsDir() {
-			if !recursive {
+			if !opts.recursive {
 				return exitf(inv, 1, "cp: omitting directory %q", source)
 			}
 			if destAbs == srcAbs || strings.HasPrefix(destAbs, srcAbs+"/") {
@@ -64,9 +66,65 @@ func (c *CP) Run(ctx context.Context, inv *Invocation) error {
 		if err := copyFileContents(ctx, inv, srcAbs, destAbs, srcInfo.Mode().Perm()); err != nil {
 			return err
 		}
+
+		if opts.verbose {
+			if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
+				return &ExitError{Code: 1, Err: err}
+			}
+		}
 	}
 
 	return nil
+}
+
+type cpOptions struct {
+	recursive bool
+	noClobber bool
+	preserve  bool
+	verbose   bool
+}
+
+func parseCPArgs(inv *Invocation) (cpOptions, []string, error) {
+	args := inv.Args
+	var opts cpOptions
+	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		arg := args[0]
+		if arg == "--" {
+			return opts, args[1:], nil
+		}
+		switch arg {
+		case "-r", "-R", "--recursive":
+			opts.recursive = true
+		case "-n", "--no-clobber":
+			opts.noClobber = true
+		case "-p", "--preserve":
+			opts.preserve = true
+		case "-v", "--verbose":
+			opts.verbose = true
+		default:
+			if len(arg) > 2 && arg[0] == '-' && arg[1] != '-' {
+				for _, flag := range arg[1:] {
+					switch flag {
+					case 'r', 'R':
+						opts.recursive = true
+					case 'n':
+						opts.noClobber = true
+					case 'p':
+						opts.preserve = true
+					case 'v':
+						opts.verbose = true
+					default:
+						return cpOptions{}, nil, exitf(inv, 1, "cp: unsupported flag -%c", flag)
+					}
+				}
+				args = args[1:]
+				continue
+			}
+			return cpOptions{}, nil, exitf(inv, 1, "cp: unsupported flag %s", arg)
+		}
+		args = args[1:]
+	}
+	return opts, args, nil
 }
 
 var _ Command = (*CP)(nil)
