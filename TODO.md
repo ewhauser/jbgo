@@ -107,7 +107,7 @@ This file is the implementation queue derived from [`SPEC.md`](./SPEC.md), espec
 - [x] Implement a `sed` subset
 - [x] Add file/path commands: `touch`, `rmdir`, `ln`, `chmod`, `readlink`, `stat`, `basename`, `dirname`, `tree`, `du`, `file`
 - [x] Add text/search commands: `printf`, `rg`, `awk`, `comm`, `paste`, `tr`, `rev`, `nl`, `join`, `split`, `tac`, `diff`, `base64`
-- [ ] Add shell/process helpers: `tee`, `env`, `printenv`, `true`, `false`, `which`, `help`, `date`, `sleep`, `timeout`, `xargs`, `bash`, `sh`
+- [x] Add shell/process helpers: `tee`, `env`, `printenv`, `true`, `false`, `which`, `help`, `date`, `sleep`, `timeout`, `xargs`, `bash`, `sh`
 - [ ] Add archive/data commands: `tar`, `gzip`, `gunzip`, `zcat`, `yq`, `sqlite3`
 
 ### 12. Agent-oriented data tools

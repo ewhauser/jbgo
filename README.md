@@ -57,6 +57,19 @@ The repository currently contains:
   - `cut`
   - `sed`
   - `printf`
+  - `tee`
+  - `env`
+  - `printenv`
+  - `true`
+  - `false`
+  - `which`
+  - `help`
+  - `date`
+  - `sleep`
+  - `timeout`
+  - `xargs`
+  - `bash`
+  - `sh`
   - `comm`
   - `paste`
   - `tr`
@@ -77,6 +90,8 @@ The implementation is early-stage but coherent and runnable.
 The `jq` command is backed by `gojq` and now supports a broader CLI-compatible subset, including `-R`, `-f`, `--arg`, `--argjson`, `--slurpfile`, `--rawfile`, `--args`, `--jsonargs`, `--raw-output0`, `--indent`, and `--tab`.
 
 The text-tool expansion is also in place. `sort` supports lexical and numeric ordering, reverse, unique, case-folded comparison, keyed sorts via `-k`, and custom field separators via `-t`. `uniq` supports adjacent-run deduping with `-c`, `-d`, and `-u`. `cut` supports `-f`, `-c`, `-d`, and `-s`. `sed` is intentionally a subset: it currently supports `-n`, `-e`, `-i`, numeric and regex addresses, `$`, simple ranges, and the `s`, `d`, `p`, and `q` commands with `g`/`i` substitution flags and alternate delimiters. The newer text/search commands are also implemented as practical subsets: `printf` covers the core shell format verbs plus `%b` escape handling; `rg` supports recursive regex search with `-n`, `-i`, `-l`, `-c`, `-g`, `--hidden`, and `--files`; `awk` is backed by `goawk` with `-F`, `-v`, and `-f` while keeping `system()`, file I/O, and shell pipes disabled; `comm`, `paste`, `tr`, `rev`, `nl`, `join`, `split`, `tac`, `diff`, and `base64` all exist with strong agent-oriented subsets rather than full GNU parity.
+
+The shell/process helper batch is also in place. `tee` supports pass-through writes with `-a`; `env` supports `-i`, `-u`, inline assignments, and scoped nested command execution; `printenv` prints the whole environment or named variables; `which` supports `-a` and `-s`; `help` exposes runtime-owned builtin help topics; `date` is intentionally UTC-only and supports `-u`, `-d/--date`, `-I`, `-R`, and `+FORMAT`; `sleep` supports decimal durations plus `s`/`m`/`h`/`d` suffixes; `timeout` runs nested commands with bounded execution time; `xargs` supports `-n`, `-I`, `-0`, `-d`, `-t`, and `-r`; and `bash` / `sh` are nested shell wrappers implemented inside the same sandbox session rather than host-shell escapes.
 
 The file/path batch is also in place. `touch` supports creation, `-c`, and `-d/--date`; `ln` supports hard links plus `-s` and `-f`; `chmod` supports octal and symbolic modes with recursive `-R`; `readlink` supports raw output plus `-f`; `stat` supports default output plus `-c` format strings; `tree` supports `-a`, `-d`, `-L`, and `-f`; `du` supports `-a`, `-s`, `-h`, `-c`, and `--max-depth`; and `file` supports `-b`, `-i`, simple magic-byte detection, shebang detection, and extension-based text detection.
 

@@ -527,6 +527,19 @@ Initial MVP command set:
 - `cut`
 - `sed`
 - `printf`
+- `tee`
+- `env`
+- `printenv`
+- `true`
+- `false`
+- `which`
+- `help`
+- `date`
+- `sleep`
+- `timeout`
+- `xargs`
+- `bash`
+- `sh`
 - `comm`
 - `paste`
 - `tr`
@@ -580,6 +593,20 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `split` supports line-based and byte-based splits via `-l`, `-b`, `-d`, and `-a`
 - `diff` supports unified output plus `-q`, `-s`, and `-i`
 - `base64` supports encode/decode, wrap control, and whitespace-tolerant decoding
+
+For the shell/process helper batch, the runtime should expose practical, sandbox-owned subsets:
+
+- `tee` supports stdout passthrough, writing one or more files, and `-a` append mode
+- `env` supports `-i`, `-u NAME`, inline `NAME=value` assignments, and nested command execution with scoped environment replacement
+- `printenv` prints either the whole environment or named variables and exits non-zero when a requested variable is missing
+- `true` and `false` exist as explicit virtual commands, while bare shell builtins remain interpreter-owned unless intentionally shadowed
+- `which` supports `-a` and `-s` over the virtual `PATH`
+- `help` exposes runtime-owned help topics for the supported shell builtin surface
+- `date` is intentionally UTC-only and supports `-u`, `-d/--date`, `-I`, `-R`, and `+FORMAT`
+- `sleep` supports decimal durations and `s`, `m`, `h`, and `d` suffixes with a bounded maximum delay
+- `timeout` supports duration-bounded nested command execution and accepts `--foreground`, `-k`, and `-s` as compatibility flags without host signal semantics
+- `xargs` supports the default `echo` behavior plus `-n`, `-I`, `-0`, `-d`, `-t`, and `-r`
+- `bash` and `sh` are nested shell wrappers for `-c`, script files, and stdin scripts; they do not escape to host shells
 
 For network access, the runtime now exposes a safe `curl` subset instead of ambient host networking. That subset is enabled only when `runtime.Config.Network` or a prebuilt `NetworkClient` is provided. The sandboxed network layer must:
 
@@ -841,7 +868,7 @@ The gap analysis against `just-bash` yields two categories: gaps we should close
 
 ### 18.1 Gaps To Close
 
-- broader command coverage for agent workflows, especially the missing shell/helper and archive/data command families plus deeper parity for the newer text/search tools
+- broader command coverage for agent workflows, especially the remaining archive/data command families plus deeper parity for the newer helper and text/search tools
 - stronger execution budgets and policy enforcement, including richer CPU and memory accounting
 - host-backed overlay filesystem support so real directories can be mounted read-only underneath an in-memory writable layer
 - fuller `jq` and `curl` compatibility for structured data flows and safe networked workflows

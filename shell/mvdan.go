@@ -250,7 +250,7 @@ func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.Cal
 		})
 		recordCommand(exec.Trace, trace.EventCallExpanded, commandInfo)
 
-		if interp.IsBuiltin(args[0]) {
+		if interp.IsBuiltin(args[0]) && shouldRewriteBuiltin(args[0]) {
 			if _, ok := exec.Registry.Lookup(args[0]); ok {
 				rewritten := make([]string, len(args))
 				copy(rewritten[1:], args[1:])
@@ -267,6 +267,15 @@ func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.Cal
 		}
 
 		return args, nil
+	}
+}
+
+func shouldRewriteBuiltin(name string) bool {
+	switch name {
+	case "true", "false":
+		return false
+	default:
+		return true
 	}
 }
 
