@@ -1,7 +1,5 @@
 # just-bash-go
 
-[![GNU compatibility](https://ewhauser.github.io/jbgo/compat/latest/badge.svg)](https://ewhauser.github.io/jbgo/compat/latest/)
-
 `just-bash-go` is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
 
 It ports the core product idea behind [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash) to a Go-native runtime built on [`mvdan/sh/v3`](https://pkg.go.dev/mvdan.cc/sh/v3).
@@ -39,7 +37,6 @@ Install the module with `go get github.com/ewhauser/jbgo` and import packages fr
 - [Shell Features](#shell-features)
 - [Default Sandbox Layout](#default-sandbox-layout)
 - [Development](#development)
-- [Compatibility](#compatibility)
 - [License](#license)
 
 ## Usage
@@ -440,10 +437,6 @@ For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before m
 
 The GNU coreutils compatibility harness is intentionally optional and not part of `make test` or `go test ./...`.
 
-## Compatibility
-
-The latest published GNU coreutils compatibility snapshot lives at [ewhauser.github.io/jbgo/compat/latest](https://ewhauser.github.io/jbgo/compat/latest/). That page is generated from the harness `summary.json` and shows the current overall pass rate plus per-command rollups.
-
 Prepare the pinned GNU source tree:
 
 ```bash
@@ -461,14 +454,7 @@ Useful overrides:
 
 - `GNU_UTILS` limits the utility list.
 - `GNU_TESTS` runs exact GNU test files instead of the manifest-selected utility suites.
-- `GNU_RESULTS_DIR` writes `summary.json` and logs to a fixed directory.
 - `GNU_KEEP_WORKDIR=1` preserves the temporary patched/build workdir.
-
-Render the static report locally from an existing summary file:
-
-```bash
-go run ./scripts/compat-report --summary .cache/gnu/results/run-123/summary.json --output .cache/gnu/results/run-123
-```
 
 ## License
 
