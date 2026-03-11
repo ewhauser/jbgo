@@ -34,6 +34,13 @@ func (c *Basename) Run(_ context.Context, inv *Invocation) error {
 			suffix = args[1]
 			multiple = true
 			args = args[2:]
+		case args[0] == "--suffix":
+			if len(args) < 2 {
+				return exitf(inv, 1, "basename: option requires an argument -- suffix")
+			}
+			suffix = args[1]
+			multiple = true
+			args = args[2:]
 		case strings.HasPrefix(args[0], "--suffix="):
 			suffix = strings.TrimPrefix(args[0], "--suffix=")
 			multiple = true

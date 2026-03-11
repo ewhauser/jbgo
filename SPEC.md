@@ -579,6 +579,7 @@ For file/path commands, the runtime now supports a practical agent-oriented subs
 - `chmod` supports octal and symbolic modes plus recursive `-R`
 - `readlink` supports raw link-target output and `-f` canonicalization
 - `stat` supports default output and `-c` formatting for common fields such as name, size, type, and mode
+- `basename` and `dirname` support multi-operand path trimming, trailing-suffix removal, and Unix-style slash normalization
 - `tree` supports `-a`, `-d`, `-L`, and `-f`
 - `du` supports `-a`, `-s`, `-h`, `-c`, and `--max-depth`
 - `file` supports `-b`, `-i`, basic magic-byte detection, shebang detection, and extension-based text detection
