@@ -1,0 +1,39 @@
+name: Fuzz Full
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-full:
+    name: Fuzz Full (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: shard-1
+            make_var: FUZZ_FULL_SHARD_1
+          - shard: shard-2
+            make_var: FUZZ_FULL_SHARD_2
+          - shard: shard-3
+            make_var: FUZZ_FULL_SHARD_3
+          - shard: shard-4
+            make_var: FUZZ_FULL_SHARD_4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - run: make fuzz-shard
+        env:
+          FUZZ_SHARD: ${{ matrix.make_var }}
+          FUZZTIME: 10s

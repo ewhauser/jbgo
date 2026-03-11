@@ -1,8 +1,9 @@
-.PHONY: lint test build fuzz bench-smoke bench-full gnu-test gnu-test-setup release-check release-snapshot
+.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full gnu-test gnu-test-setup release-check release-snapshot
 
 GO_PACKAGES := ./... ./examples/...
 
 FUZZTIME ?= 10s
+FUZZ_SMOKE_TIME ?= 3s
 GORELEASER_VERSION ?= v2.14.3
 BENCH_SMOKE_COUNT ?= 8
 BENCH_SMOKE_TIME ?= 100ms
@@ -12,6 +13,86 @@ BENCH_SMOKE_REGEX ?= Benchmark(NewSession|RuntimeRunSimpleScript|SessionExecWarm
 GNU_CACHE_DIR ?= .cache/gnu
 GNU_JBGO_BIN ?= $(GNU_CACHE_DIR)/bin/jbgo
 GNU_RESULTS_DIR ?=
+
+FUZZ_SMOKE_SHARD_CORE := \
+	FuzzRuntimeScript \
+	FuzzMalformedScript \
+	FuzzSessionSequence
+
+FUZZ_SMOKE_SHARD_PATHS := \
+	FuzzFilePathCommands \
+	FuzzDirectoryTraversalCommands \
+	FuzzTextSearchCommands
+
+FUZZ_SMOKE_SHARD_DATA := \
+	FuzzSQLiteCommands \
+	FuzzArchiveCommands \
+	FuzzYQCommands
+
+FUZZ_SMOKE_SHARD_SECURITY := \
+	FuzzGeneratedPrograms \
+	FuzzAttackMutations \
+	FuzzShellProcessCommands
+
+FUZZ_SMOKE_TARGETS := \
+	$(FUZZ_SMOKE_SHARD_CORE) \
+	$(FUZZ_SMOKE_SHARD_PATHS) \
+	$(FUZZ_SMOKE_SHARD_DATA) \
+	$(FUZZ_SMOKE_SHARD_SECURITY)
+
+FUZZ_FULL_SHARD_1 := \
+	FuzzRuntimeScript \
+	FuzzSessionSequence \
+	FuzzCPFlagsCommand \
+	FuzzNLFlagsCommand \
+	FuzzCutFlagsCommand \
+	FuzzUniqFlagsCommand \
+	FuzzFileCommandFlags \
+	FuzzBasenameCommand \
+	FuzzJQCompatibilityFlags \
+	FuzzArchiveCommands
+
+FUZZ_FULL_SHARD_2 := \
+	FuzzMalformedScript \
+	FuzzFilePathCommands \
+	FuzzMVFlagsCommand \
+	FuzzPasteFlagsCommand \
+	FuzzFindFlagsCommand \
+	FuzzEnvCommandFlags \
+	FuzzCommCommand \
+	FuzzBase32Command \
+	FuzzBase64Command \
+	FuzzYQCommands
+
+FUZZ_FULL_SHARD_3 := \
+	FuzzDirectoryTraversalCommands \
+	FuzzTextSearchCommands \
+	FuzzSedFlagsCommand \
+	FuzzXArgsFlagsCommand \
+	FuzzGrepFlagsCommand \
+	FuzzTRFlagsCommand \
+	FuzzCatCommand \
+	FuzzDiffCommand \
+	FuzzSQLiteCommands \
+	FuzzGeneratedPrograms
+
+FUZZ_FULL_SHARD_4 := \
+	FuzzLSFlagsCommand \
+	FuzzSortFlagsCommand \
+	FuzzCurlFlagsCommand \
+	FuzzTimeoutCommand \
+	FuzzExprCommand \
+	FuzzShellProcessCommands \
+	FuzzNestedShellCommands \
+	FuzzDataCommands \
+	FuzzSQLiteFileCommands \
+	FuzzAttackMutations
+
+FUZZ_FULL_TARGETS := \
+	$(FUZZ_FULL_SHARD_1) \
+	$(FUZZ_FULL_SHARD_2) \
+	$(FUZZ_FULL_SHARD_3) \
+	$(FUZZ_FULL_SHARD_4)
 
 lint:
 	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -23,47 +104,25 @@ test:
 build:
 	go build $(GO_PACKAGES)
 
-fuzz:
-	go test ./runtime -run=^$$ -fuzz=FuzzRuntimeScript -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzMalformedScript -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzSessionSequence -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzFilePathCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzDirectoryTraversalCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzTextSearchCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzCPFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzMVFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzNLFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzPasteFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzSedFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzSortFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzXArgsFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzCutFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzFindFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzGrepFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzCurlFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzLSFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzUniqFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzEnvCommandFlags -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzTRFlagsCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzTimeoutCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzFileCommandFlags -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzCommCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzCatCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzBase32Command -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzBasenameCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzBase64Command -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzDiffCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzExprCommand -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzShellProcessCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzNestedShellCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzDataCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzJQCompatibilityFlags -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzYQCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzSQLiteCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzSQLiteFileCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzArchiveCommands -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzGeneratedPrograms -fuzztime=$(FUZZTIME)
-	go test ./runtime -run=^$$ -fuzz=FuzzAttackMutations -fuzztime=$(FUZZTIME)
+fuzz: fuzz-full
+
+fuzz-run:
+	@test -n "$(strip $(FUZZ_TARGETS))" || { echo "FUZZ_TARGETS is required"; exit 1; }
+	@set -e; \
+	for target in $(FUZZ_TARGETS); do \
+		echo "==> $$target"; \
+		go test ./runtime -run=^$$ -fuzz=$$target -fuzztime=$(FUZZTIME); \
+	done
+
+fuzz-shard:
+	@test -n "$(FUZZ_SHARD)" || { echo "FUZZ_SHARD is required"; exit 1; }
+	@$(MAKE) --no-print-directory fuzz-run FUZZ_TARGETS="$(strip $($(FUZZ_SHARD)))" FUZZTIME="$(FUZZTIME)"
+
+fuzz-smoke:
+	@$(MAKE) --no-print-directory fuzz-run FUZZ_TARGETS="$(FUZZ_SMOKE_TARGETS)" FUZZTIME="$(FUZZ_SMOKE_TIME)"
+
+fuzz-full:
+	@$(MAKE) --no-print-directory fuzz-run FUZZ_TARGETS="$(FUZZ_FULL_TARGETS)" FUZZTIME="$(FUZZTIME)"
 
 bench-smoke:
 	@go test ./runtime -run=^$$ -bench '$(BENCH_SMOKE_REGEX)' -benchmem -count=$(BENCH_SMOKE_COUNT) -benchtime=$(BENCH_SMOKE_TIME)

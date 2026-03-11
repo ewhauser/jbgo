@@ -22,6 +22,30 @@ jobs:
 
       - run: make test
 
-      - run: make fuzz
+  fuzz-smoke:
+    if: github.event_name == 'pull_request'
+    name: Fuzz Smoke (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: core
+            make_var: FUZZ_SMOKE_SHARD_CORE
+          - shard: paths
+            make_var: FUZZ_SMOKE_SHARD_PATHS
+          - shard: data
+            make_var: FUZZ_SMOKE_SHARD_DATA
+          - shard: security
+            make_var: FUZZ_SMOKE_SHARD_SECURITY
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - run: make fuzz-shard
         env:
-          FUZZTIME: 10s
+          FUZZ_SHARD: ${{ matrix.make_var }}
+          FUZZTIME: 3s
