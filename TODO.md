@@ -505,12 +505,12 @@ Commands that exist in both repos but have flags in upstream not yet ported.
 
 #### `tr`
 
-- [ ] `--delete`
-- [ ] `--squeeze-repeats`
-- [ ] `-C`
-- [ ] `-c`
-- [ ] `-d`
-- [ ] `-s`
+- [x] `--delete`
+- [x] `--squeeze-repeats`
+- [x] `-C`
+- [x] `-c`
+- [x] `-d`
+- [x] `-s`
 
 #### `uniq`
 

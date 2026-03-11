@@ -253,6 +253,7 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		),
 		fuzzSpec("tr", "text",
 			fuzzVariant("text", "stdin", "a-z", "A-Z"),
+			fuzzVariant("text", "flag:long", "--delete", "[:digit:]"),
 		),
 		fuzzSpec("rev", "text",
 			fuzzVariant("", "path.read", "{path.text}"),

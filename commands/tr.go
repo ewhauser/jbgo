@@ -106,6 +106,24 @@ func parseTRArgs(inv *Invocation) (opts trOptions, set1, set2 string, err error)
 		if !strings.HasPrefix(arg, "-") || arg == "-" {
 			break
 		}
+		switch arg {
+		case "-c", "--complement":
+			opts.complement = true
+			args = args[1:]
+			continue
+		case "-C":
+			opts.complement = true
+			args = args[1:]
+			continue
+		case "-d", "--delete":
+			opts.delete = true
+			args = args[1:]
+			continue
+		case "-s", "--squeeze-repeats":
+			opts.squeeze = true
+			args = args[1:]
+			continue
+		}
 		for _, flag := range arg[1:] {
 			switch flag {
 			case 'c', 'C':
