@@ -640,15 +640,22 @@ For network access, the runtime now exposes a safe `curl` subset instead of ambi
 - cap response body size
 - optionally block localhost, private IP literals, and hostnames that resolve to private ranges
 
-The initial `curl` subset is intentionally small and agent-oriented:
+The current `curl` surface remains sandboxed and agent-oriented, but it now tracks the upstream just-bash implementation much more closely. Supported request shaping and output controls include:
 
-- `-L`, `-I`, `-i`, `-X`, `-H`, `-d`, `-o`, `-f`, `-s`, `-S`
-- no cookie jar, auth helpers, multipart forms, or full curl write-out compatibility yet
+- request shaping: `-X/--request`, `-H/--header`, `-d/--data`, `--data-raw`, `--data-binary`, `--data-urlencode`, `-F/--form`, `-T/--upload-file`, `-u/--user`, `-A/--user-agent`, `-e/--referer`, `-b/--cookie`
+- response and output control: `-I/--head`, `-i/--include`, `-o/--output`, `-O/--remote-name`, `-w/--write-out`, `-v/--verbose`, `-f/--fail`, `-s/--silent`, `-S/--show-error`
+- request flow control: redirect following, `--max-redirs` compatibility parsing, `-m/--max-time`, `--connect-timeout`, and `-c/--cookie-jar`
+
+Intentional simplifications relative to real curl remain acceptable for this runtime contract:
+
+- cookie jar output is a raw `Set-Cookie` dump, not the full curl jar format
+- multipart form and `--data-urlencode` behavior follow the upstream just-bash implementation rather than full native curl edge-case compatibility
+- there is no progress meter; `-s` only affects stderr/error presentation
 
 Second-wave commands:
 
 - JSON-aware utilities beyond `jq`
-- richer curl compatibility and higher-level fetch helpers
+- higher-level fetch helpers and any remaining compatibility beyond the current upstream-aligned subset
 
 ## 12. Policy Model
 

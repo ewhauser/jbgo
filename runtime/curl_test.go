@@ -68,8 +68,8 @@ func TestCurlBlocksDisallowedOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 126 {
-		t.Fatalf("ExitCode = %d, want 126", result.ExitCode)
+	if result.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7", result.ExitCode)
 	}
 	if !strings.Contains(result.Stderr, "allowlist") {
 		t.Fatalf("Stderr = %q, want allowlist denial", result.Stderr)
@@ -95,8 +95,8 @@ func TestCurlBlocksDisallowedMethodByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 126 {
-		t.Fatalf("ExitCode = %d, want 126", result.ExitCode)
+	if result.ExitCode != 3 {
+		t.Fatalf("ExitCode = %d, want 3", result.ExitCode)
 	}
 	if !strings.Contains(result.Stderr, "not allowed") {
 		t.Fatalf("Stderr = %q, want method denial", result.Stderr)
@@ -147,15 +147,15 @@ func TestCurlRevalidatesRedirectTargets(t *testing.T) {
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "curl -L " + server.URL + "\n",
+		Script: "curl " + server.URL + "\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 126 {
-		t.Fatalf("ExitCode = %d, want 126", result.ExitCode)
+	if result.ExitCode != 47 {
+		t.Fatalf("ExitCode = %d, want 47", result.ExitCode)
 	}
-	if !strings.Contains(result.Stderr, "redirect denied") {
+	if !strings.Contains(result.Stderr, "Redirect target not in allow-list") {
 		t.Fatalf("Stderr = %q, want redirect denial", result.Stderr)
 	}
 }
