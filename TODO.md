@@ -151,6 +151,393 @@ This file is the implementation queue derived from [`SPEC.md`](./SPEC.md), espec
 - [ ] Audit command metadata/help/version behavior for consistency across the registry
 - [ ] Revisit deterministic virtual identity commands such as `hostname`, `whoami`, and `uname`
 
+## Command Parity
+
+Gap analysis vs [vercel-labs/just-bash](https://github.com/vercel-labs/just-bash).
+Auto-generated — re-run the upstream-diff skill to refresh.
+
+### Missing Commands
+
+- [ ] `alias`
+- [ ] `clear`
+- [ ] `column` (upstream flags: `-t`, `-s`, `-o`, `-c`, `-n`)
+- [ ] `egrep`
+- [ ] `expand` (upstream flags: `-t`, `-i`)
+- [ ] `expr`
+- [ ] `fgrep`
+- [ ] `fold` (upstream flags: `-w`, `-s`, `-b`)
+- [ ] `history` (upstream flags: `-c`)
+- [ ] `hostname`
+- [ ] `html-to-markdown`
+- [ ] `js-exec`
+- [ ] `md5sum`
+- [ ] `node`
+- [ ] `od`
+- [ ] `python`
+- [ ] `python3` (upstream flags: `-c`, `-m`, `--version`)
+- [ ] `seq`
+- [ ] `sha1sum`
+- [ ] `sha256sum`
+- [ ] `strings` (upstream flags: `-n`, `-t`, `-a`, `-e`)
+- [ ] `time`
+- [ ] `unalias`
+- [ ] `unexpand` (upstream flags: `-t`, `-a`)
+- [ ] `whoami`
+- [ ] `xan`
+
+### Missing Flags
+
+Commands that exist in both repos but have flags in upstream not yet ported.
+
+#### `base64`
+
+- [ ] `--wrap`
+
+#### `basename`
+
+- [ ] `--suffix`
+
+#### `cat`
+
+- [ ] `--number`
+- [ ] `-n`
+
+#### `comm`
+
+- [ ] `-1`
+- [ ] `-2`
+- [ ] `-3`
+
+#### `cp`
+
+- [ ] `--no-clobber`
+- [ ] `--preserve`
+- [ ] `--verbose`
+- [ ] `-n`
+- [ ] `-p`
+- [ ] `-v`
+
+#### `curl`
+
+- [ ] `--cookie`
+- [ ] `--cookie-jar`
+- [ ] `--form`
+- [ ] `--max-time`
+- [ ] `--referer`
+- [ ] `--remote-name`
+- [ ] `--upload-file`
+- [ ] `--user`
+- [ ] `--user-agent`
+- [ ] `--verbose`
+- [ ] `--write-out`
+- [ ] `-A`
+- [ ] `-F`
+- [ ] `-O`
+- [ ] `-T`
+- [ ] `-b`
+- [ ] `-c`
+- [ ] `-e`
+- [ ] `-m`
+- [ ] `-u`
+- [ ] `-v`
+- [ ] `-w`
+
+#### `cut`
+
+- [ ] `--only-delimited`
+
+#### `date`
+
+- [ ] `--date`
+- [ ] `--iso-8601`
+- [ ] `--rfc-email`
+- [ ] `--utc`
+
+#### `diff`
+
+- [ ] `--brief`
+- [ ] `--ignore-case`
+- [ ] `--report-identical-files`
+- [ ] `--unified`
+
+#### `env`
+
+- [ ] `--ignore-environment`
+
+#### `file`
+
+- [ ] `--brief`
+- [ ] `--mime`
+
+#### `find`
+
+- [ ] `-empty`
+- [ ] `-iname`
+- [ ] `-ipath`
+- [ ] `-iregex`
+- [ ] `-mtime`
+- [ ] `-newer`
+- [ ] `-path`
+- [ ] `-regex`
+- [ ] `-size`
+
+#### `grep`
+
+- [ ] `--files-without-match`
+- [ ] `--fixed-strings`
+- [ ] `--line-regexp`
+- [ ] `--no-filename`
+- [ ] `--only-matching`
+- [ ] `--perl-regexp`
+- [ ] `--quiet`
+- [ ] `-A`
+- [ ] `-B`
+- [ ] `-C`
+- [ ] `-F`
+- [ ] `-L`
+- [ ] `-P`
+- [ ] `-h`
+- [ ] `-m`
+- [ ] `-o`
+- [ ] `-q`
+- [ ] `-x`
+
+#### `gunzip`
+
+- [ ] `--force`
+- [ ] `--keep`
+- [ ] `--list`
+- [ ] `--name`
+- [ ] `--no-name`
+- [ ] `--quiet`
+- [ ] `--recursive`
+- [ ] `--stdout`
+- [ ] `--suffix`
+- [ ] `--test`
+- [ ] `--verbose`
+- [ ] `-N`
+- [ ] `-S`
+- [ ] `-c`
+- [ ] `-f`
+- [ ] `-k`
+- [ ] `-l`
+- [ ] `-n`
+- [ ] `-q`
+- [ ] `-r`
+- [ ] `-t`
+- [ ] `-v`
+
+#### `gzip`
+
+- [ ] `--best`
+- [ ] `--decompress`
+- [ ] `--fast`
+- [ ] `--force`
+- [ ] `--keep`
+- [ ] `--list`
+- [ ] `--name`
+- [ ] `--no-name`
+- [ ] `--quiet`
+- [ ] `--recursive`
+- [ ] `--stdout`
+- [ ] `--suffix`
+- [ ] `--test`
+- [ ] `--verbose`
+- [ ] `-1`
+- [ ] `-9`
+- [ ] `-N`
+- [ ] `-S`
+- [ ] `-c`
+- [ ] `-d`
+- [ ] `-f`
+- [ ] `-k`
+- [ ] `-l`
+- [ ] `-n`
+- [ ] `-q`
+- [ ] `-r`
+- [ ] `-t`
+- [ ] `-v`
+
+#### `head`
+
+- [ ] `--bytes`
+- [ ] `--lines`
+- [ ] `--quiet`
+- [ ] `--verbose`
+- [ ] `-c`
+- [ ] `-q`
+- [ ] `-v`
+
+#### `jq`
+
+- [ ] `--ascii`
+- [ ] `--color`
+- [ ] `--compact`
+- [ ] `--monochrome`
+- [ ] `-C`
+- [ ] `-M`
+- [ ] `-a`
+
+#### `ls`
+
+- [ ] `--all`
+- [ ] `--almost-all`
+- [ ] `--classify`
+- [ ] `--directory`
+- [ ] `--human-readable`
+- [ ] `--recursive`
+- [ ] `--reverse`
+- [ ] `-1`
+- [ ] `-A`
+- [ ] `-F`
+- [ ] `-R`
+- [ ] `-S`
+- [ ] `-a`
+- [ ] `-d`
+- [ ] `-h`
+- [ ] `-l`
+- [ ] `-r`
+- [ ] `-t`
+
+#### `mv`
+
+- [ ] `--force`
+- [ ] `--no-clobber`
+- [ ] `--verbose`
+- [ ] `-f`
+- [ ] `-n`
+- [ ] `-v`
+
+#### `nl`
+
+- [ ] `-n`
+
+#### `paste`
+
+- [ ] `--delimiters`
+- [ ] `--serial`
+
+#### `sed`
+
+- [ ] `-f`
+
+#### `sort`
+
+- [ ] `--check`
+- [ ] `--dictionary-order`
+- [ ] `--field-separator`
+- [ ] `--human-numeric-sort`
+- [ ] `--ignore-leading-blanks`
+- [ ] `--key`
+- [ ] `--month-sort`
+- [ ] `--output`
+- [ ] `--stable`
+- [ ] `--version-sort`
+- [ ] `-M`
+- [ ] `-V`
+- [ ] `-b`
+- [ ] `-c`
+- [ ] `-d`
+- [ ] `-h`
+- [ ] `-o`
+- [ ] `-s`
+
+#### `split`
+
+- [ ] `--additional-suffix`
+- [ ] `-n`
+
+#### `sqlite3`
+
+- [ ] `-ascii`
+- [ ] `-box`
+- [ ] `-html`
+- [ ] `-markdown`
+- [ ] `-quote`
+- [ ] `-tabs`
+
+#### `tail`
+
+- [ ] `--bytes`
+- [ ] `--lines`
+- [ ] `--quiet`
+- [ ] `--verbose`
+- [ ] `-c`
+- [ ] `-q`
+- [ ] `-v`
+
+#### `tar`
+
+- [ ] `--absolute-names`
+- [ ] `--append`
+- [ ] `--auto-compress`
+- [ ] `--create`
+- [ ] `--directory`
+- [ ] `--exclude`
+- [ ] `--exclude-from`
+- [ ] `--extract`
+- [ ] `--file`
+- [ ] `--files-from`
+- [ ] `--keep-old-files`
+- [ ] `--list`
+- [ ] `--preserve`
+- [ ] `--strip`
+- [ ] `--to-stdout`
+- [ ] `--touch`
+- [ ] `--update`
+- [ ] `--verbose`
+- [ ] `--wildcards`
+- [ ] `-J`
+- [ ] `-P`
+- [ ] `-T`
+- [ ] `-X`
+- [ ] `-a`
+- [ ] `-j`
+- [ ] `-m`
+- [ ] `-p`
+- [ ] `-r`
+- [ ] `-u`
+
+#### `timeout`
+
+- [ ] `--kill-after`
+- [ ] `--signal`
+
+#### `tr`
+
+- [ ] `--delete`
+- [ ] `--squeeze-repeats`
+- [ ] `-C`
+- [ ] `-c`
+- [ ] `-d`
+- [ ] `-s`
+
+#### `uniq`
+
+- [ ] `--ignore-case`
+- [ ] `-i`
+
+#### `xargs`
+
+- [ ] `--no-run-if-empty`
+- [ ] `--null`
+- [ ] `--verbose`
+
+#### `zcat`
+
+- [ ] `--force`
+- [ ] `--list`
+- [ ] `--quiet`
+- [ ] `--suffix`
+- [ ] `--test`
+- [ ] `--verbose`
+- [ ] `-S`
+- [ ] `-f`
+- [ ] `-l`
+- [ ] `-q`
+- [ ] `-t`
+- [ ] `-v`
+
 ## Intentional Non-Goals
 
 Do not add these while working through the backlog:
