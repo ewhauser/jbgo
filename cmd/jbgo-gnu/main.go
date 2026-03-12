@@ -255,16 +255,26 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 		}
 	}
 	if workDir == "" {
-		sourceDir, err := ensureSourceCache(ctx, mf, cacheDir)
-		if err != nil {
-			return err
-		}
-		workDir, err = prepareWorkDir(cacheDir, mf.GNUVersion, sourceDir)
-		if err != nil {
-			return err
-		}
-		if err := configureAndBuild(ctx, makeBin, workDir); err != nil {
-			return err
+		if builtDir, err := findPreviousBuild(cacheDir, mf.GNUVersion); err == nil {
+			workDir, err = prepareWorkDir(cacheDir, mf.GNUVersion, builtDir)
+			if err != nil {
+				return err
+			}
+			if err := relocatePreparedBuild(ctx, workDir); err != nil {
+				return err
+			}
+		} else {
+			sourceDir, err := ensureSourceCache(ctx, mf, cacheDir)
+			if err != nil {
+				return err
+			}
+			workDir, err = prepareWorkDir(cacheDir, mf.GNUVersion, sourceDir)
+			if err != nil {
+				return err
+			}
+			if err := configureAndBuild(ctx, makeBin, workDir); err != nil {
+				return err
+			}
 		}
 	}
 	if !opts.keepWorkdir {
@@ -428,6 +438,28 @@ func ensureSourceCache(ctx context.Context, mf *manifest, cacheDir string) (stri
 		return "", err
 	}
 	return sourceDir, nil
+}
+
+// findPreviousBuild looks for an existing work directory that has already been
+// configured and built (indicated by the presence of config.status). It returns
+// the path so it can be copied as-is, skipping the expensive configure+make.
+func findPreviousBuild(cacheDir, version string) (string, error) {
+	workRoot := filepath.Join(cacheDir, "work")
+	entries, err := os.ReadDir(workRoot)
+	if err != nil {
+		return "", err
+	}
+	prefix := "coreutils-" + version + "-"
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
+			continue
+		}
+		candidate := filepath.Join(workRoot, entry.Name())
+		if _, err := os.Stat(filepath.Join(candidate, "config.status")); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no previous build found for coreutils-%s", version)
 }
 
 func prepareWorkDir(cacheDir, version, sourceDir string) (string, error) {

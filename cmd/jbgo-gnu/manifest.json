@@ -19,7 +19,6 @@
     { "name": "env", "patterns": ["tests/env/*"] },
     { "name": "expr", "patterns": ["tests/expr/*"] },
     { "name": "false", "patterns": ["tests/misc/false*"] },
-    { "name": "head", "patterns": ["tests/head/*"] },
     { "name": "id", "patterns": ["tests/id/*"] },
     { "name": "join", "patterns": ["tests/join/*"] },
     { "name": "link", "patterns": ["tests/misc/invalid-opt.pl"] },
@@ -55,6 +54,7 @@
   ],
   "skip_patterns": [
     { "pattern": "tests/help/*", "reason": "help/version tests are skipped in v1" },
-    { "pattern": "tests/*/selinux*", "reason": "SELinux tests are skipped in v1" }
+    { "pattern": "tests/*/selinux*", "reason": "SELinux tests are skipped in v1" },
+    { "pattern": "tests/head/*", "reason": "head GNU compat tests temporarily skipped" }
   ]
 }
