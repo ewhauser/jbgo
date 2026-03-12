@@ -392,7 +392,7 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -415,27 +415,36 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(a) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("==> a <==\nx\n", time.Second) {
+	if !stdout.WaitForSubstring("==> a <==\nx\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit followed content for a; got %q", stdout.String())
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "b"), []byte("b0\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(b) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("==> b <==\nb0\n", 1500*time.Millisecond) {
+		t.Fatalf("stdout did not emit followed content for b; got %q", stdout.String())
 	}
 
 	if err := os.Rename(filepath.Join(tmp, "a"), filepath.Join(tmp, "b")); err != nil {
 		t.Fatalf("Rename(a,b) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has become inaccessible", time.Second) {
+	if !stderr.WaitForSubstring("'a' has become inaccessible", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report inaccessible file; got %q", stderr.String())
 	}
-	if !stderr.WaitForSubstring("has been replaced", time.Second) {
+	if !stderr.WaitForSubstring("'b' has been replaced", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report replaced file; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("==> b <==\nb0\nx\n", 1500*time.Millisecond) {
+		t.Fatalf("stdout did not emit replacement content for b; got %q", stdout.String())
 	}
 
 	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x2\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(a) second generation error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has appeared", time.Second) {
+	if !stderr.WaitForSubstring("'a' has appeared", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("==> a <==\nx2\n", time.Second) {
+	if !stdout.WaitForSubstring("==> a <==\nx2\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit replacement content for a; got %q", stdout.String())
 	}
 
@@ -450,7 +459,7 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 	if err := bFile.Close(); err != nil {
 		t.Fatalf("Close(b) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("==> b <==\ny\n", time.Second) {
+	if !stdout.WaitForSubstring("==> b <==\ny\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not continue following renamed b; got %q", stdout.String())
 	}
 
@@ -465,7 +474,7 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 	if err := aFile.Close(); err != nil {
 		t.Fatalf("Close(a) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("==> a <==\nz\n", time.Second) {
+	if !stdout.WaitForSubstring("==> a <==\nz\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not continue following recreated a; got %q", stdout.String())
 	}
 
@@ -567,15 +576,15 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryStopsWhenFileDisappears(t *
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	if err := os.WriteFile(filepath.Join(tmp, "file"), nil, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "file"), []byte("seed\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(file) error = %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
-	var stdout strings.Builder
-	var stderr strings.Builder
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
 	done := make(chan struct {
 		exitCode int
 		err      error
@@ -584,14 +593,16 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryStopsWhenFileDisappears(t *
 	go func() {
 		exitCode, err := runCLI(ctx, "gbash", []string{
 			"compat", "exec", "tail", "--follow=name", "-s0.05", "--max-unchanged-stats=1", "file",
-		}, strings.NewReader(""), &stdout, &stderr, false)
+		}, strings.NewReader(""), stdout, stderr, false)
 		done <- struct {
 			exitCode int
 			err      error
 		}{exitCode: exitCode, err: err}
 	}()
 
-	time.Sleep(150 * time.Millisecond)
+	if !stdout.WaitForSubstring("seed\n", time.Second) {
+		t.Fatalf("stdout did not emit initial content; got %q", stdout.String())
+	}
 	if err := os.Rename(filepath.Join(tmp, "file"), filepath.Join(tmp, "file.unfollow")); err != nil {
 		t.Fatalf("Rename(file, file.unfollow) error = %v", err)
 	}
@@ -604,11 +615,11 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryStopsWhenFileDisappears(t *
 		if result.exitCode != 1 {
 			t.Fatalf("exitCode = %d, want 1; stderr=%q", result.exitCode, stderr.String())
 		}
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatalf("tail --follow=name did not exit after the file disappeared; stderr=%q", stderr.String())
 	}
 
-	if !strings.Contains(stderr.String(), "has become inaccessible") {
+	if !strings.Contains(stderr.String(), "'file' has become inaccessible") {
 		t.Fatalf("stderr = %q, want inaccessible diagnostic", stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "no files remaining") {
@@ -626,7 +637,7 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryTracksReappearingFileWhileO
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -649,23 +660,28 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryTracksReappearingFileWhileO
 	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(a) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("x\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("==> a <==\nx\n", time.Second) {
 		t.Fatalf("stdout did not emit initial content; got %q", stdout.String())
 	}
-	time.Sleep(150 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(tmp, "foo"), []byte("foo0\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(foo) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("==> foo <==\nfoo0\n", time.Second) {
+		t.Fatalf("stdout did not emit initial content for foo; got %q", stdout.String())
+	}
 	if err := os.Remove(filepath.Join(tmp, "foo")); err != nil {
 		t.Fatalf("Remove(foo) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has become inaccessible", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("'foo' has become inaccessible", time.Second) {
 		t.Fatalf("stderr did not report inaccessible file; got %q", stderr.String())
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "foo"), []byte("ok ok ok\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(foo) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("'foo' has appeared", time.Second) {
 		t.Fatalf("stderr did not report reappearing file; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("ok ok ok\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("==> foo <==\nfoo0\nok ok ok\n", time.Second) {
 		t.Fatalf("stdout did not resume the reappearing file; got %q", stdout.String())
 	}
 

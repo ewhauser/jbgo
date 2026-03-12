@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	stdfs "io/fs"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ type tailOptions struct {
 type tailFollowState struct {
 	path            string
 	file            gbfs.File
-	identity        string
+	fileInfo        stdfs.FileInfo
 	offset          int64
 	active          bool
 	exists          bool
@@ -166,14 +167,10 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 			return err
 		}
 
-		identity := ""
-		if opts.follow == tailFollowName {
-			identity = tailFileIdentity(info)
-		}
 		states = append(states, tailFollowState{
 			path:          file,
 			file:          followFile,
-			identity:      identity,
+			fileInfo:      info,
 			offset:        int64(len(data)),
 			active:        true,
 			exists:        true,
@@ -327,13 +324,13 @@ func (c *Tail) pollTailByName(
 	if info.IsDir() {
 		state.exists = false
 		state.offset = 0
-		state.identity = ""
+		state.fileInfo = nil
 		state.untailable = true
 		return nil
 	}
 
-	identity := tailFileIdentity(info)
-	replaced := state.exists && state.identity != "" && identity != "" && state.identity != identity
+	sameFile, identityKnown := tailSameFileInfo(state.fileInfo, info)
+	replaced := state.exists && identityKnown && !sameFile
 	if !state.exists && state.announcedAbsent && opts.follow == tailFollowName {
 		if state.untailable {
 			writeTailBecameAccessible(inv, state.path)
@@ -352,7 +349,7 @@ func (c *Tail) pollTailByName(
 
 	if !state.exists || replaced {
 		state.exists = true
-		state.identity = identity
+		state.fileInfo = info
 		state.announcedAbsent = false
 		state.untailable = false
 		state.offset = int64(len(data))
@@ -363,13 +360,13 @@ func (c *Tail) pollTailByName(
 		state.offset = 0
 	}
 	if int64(len(data)) == state.offset {
-		state.identity = identity
+		state.fileInfo = info
 		return nil
 	}
 	if err := writeTailOutput(inv, outputState, state.path, data[state.offset:], showHeaders, false); err != nil {
 		return err
 	}
-	state.identity = identity
+	state.fileInfo = info
 	state.offset = int64(len(data))
 	return nil
 }
@@ -761,12 +758,26 @@ func writeTailOutput(inv *Invocation, outputState *tailOutputState, file string,
 	return nil
 }
 
-func tailFileIdentity(info stdfs.FileInfo) string {
-	dev, ino, ok := tailDeviceAndInode(info)
-	if !ok {
-		return ""
+func tailSameFileInfo(prev, curr stdfs.FileInfo) (same, known bool) {
+	if prev == nil || curr == nil {
+		return false, false
 	}
-	return fmt.Sprintf("%d:%d", dev, ino)
+	if tailSupportsOSSameFile(prev) && tailSupportsOSSameFile(curr) {
+		return os.SameFile(prev, curr), true
+	}
+	devPrev, inoPrev, okPrev := tailDeviceAndInode(prev)
+	devCurr, inoCurr, okCurr := tailDeviceAndInode(curr)
+	if okPrev && okCurr {
+		return devPrev == devCurr && inoPrev == inoCurr, true
+	}
+	return false, false
+}
+
+func tailSupportsOSSameFile(info stdfs.FileInfo) bool {
+	if info == nil || info.Sys() == nil {
+		return false
+	}
+	return os.SameFile(info, info)
 }
 
 func tailDeviceAndInode(info stdfs.FileInfo) (dev, ino uint64, ok bool) {
