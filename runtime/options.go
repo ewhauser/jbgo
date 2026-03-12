@@ -57,9 +57,9 @@ func WithRegistry(registry commands.CommandRegistry) Option {
 	}
 }
 
-func WithPolicy(policy policy.Policy) Option {
+func WithPolicy(p policy.Policy) Option {
 	return func(target *Config) error {
-		target.Policy = policy
+		target.Policy = p
 		return nil
 	}
 }
