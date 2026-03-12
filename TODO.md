@@ -173,7 +173,7 @@ Auto-generated — re-run the upstream-diff skill to refresh.
 - [ ] `od`
 - [ ] `python`
 - [ ] `python3` (upstream flags: `-c`, `-m`, `--version`)
-- [ ] `seq`
+- [x] `seq`
 - [ ] `sha1sum`
 - [x] `sha256sum`
 - [ ] `strings` (upstream flags: `-n`, `-t`, `-a`, `-e`)

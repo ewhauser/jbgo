@@ -155,6 +155,7 @@ The default in-memory sandbox should look Unix-like enough for agent scripts:
 - `/tmp` for scratch files
 - `/bin` and `/usr/bin` as virtual command locations
 - `PATH=/usr/bin:/bin`
+- deterministic identity defaults via `USER=agent`, `LOGNAME=agent`, `GROUP=agent`, `GROUPS=1000`, `UID=1000`, `EUID=1000`, `GID=1000`, `EGID=1000`, and `SHELL=/bin/sh`
 
 Commands remain registry-backed Go implementations. `/bin/ls` and similar paths are virtual command identities, not host executables.
 
@@ -651,6 +652,7 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `split` supports line-based and byte-based splits via `-l`, `-b`, `-d`, and `-a`
 - `diff` supports unified output plus `-q/--brief`, `-s/--report-identical-files`, and `-i/--ignore-case`, and accepts `-u/--unified` as an explicit alias for the default unified format
 - `expr` supports the arithmetic, comparison, logical, and regex-match forms needed by shell-oriented helper scripts, including `:`, `|`, `&`, parentheses, and integer math
+- `seq` supports one-, two-, and three-argument numeric ranges plus `-s/--separator`, `-t/--terminator`, `-w/--equal-width`, and `-f/--format`, including decimal, hexadecimal-float, and infinite bounds within the sandbox runtime
 - `base32` supports encode/decode, `-d/--decode`, `-i/--ignore-garbage`, and `-w/--wrap` for GNU-style helper flows and basenc-adjacent compatibility tests
 - `base64` supports encode/decode, `-w/--wrap` line wrapping control, and whitespace-tolerant decoding
 
@@ -658,6 +660,7 @@ For the shell/process helper batch, the runtime should expose practical, sandbox
 
 - `tee` supports stdout passthrough, writing one or more files, and `-a` append mode
 - `env` supports `-i`, `-u NAME`, inline `NAME=value` assignments, and nested command execution with scoped environment replacement
+- `id` reports a deterministic virtual sandbox identity instead of consulting the host passwd/group database, supports the GNU/BSD-compatible option surface used by uutils (`-a`, `-A`, `-u`, `-g`, `-G`, `-n`, `-r`, `-z`, `-Z`, `-p`, `-P`), and treats audit or security-context output as sandbox-owned compatibility behavior rather than host state
 - `printenv` prints either the whole environment or named variables and exits non-zero when a requested variable is missing
 - `true` and `false` exist as explicit virtual commands, while bare shell builtins remain interpreter-owned unless intentionally shadowed
 - `which` supports `-a` and `-s` over the virtual `PATH`
@@ -666,6 +669,7 @@ For the shell/process helper batch, the runtime should expose practical, sandbox
 - `sleep` supports decimal durations and `s`, `m`, `h`, and `d` suffixes with a bounded maximum delay
 - `timeout` supports duration-bounded nested command execution and accepts `--foreground`, `-k/--kill-after`, and `-s/--signal` as compatibility flags without host signal semantics
 - `xargs` supports the default `echo` behavior plus `-n`, `-I`, `-0`, `-d`, `-t`, and `-r`
+- `yes` repeatedly emits either `y` or the provided argument string using buffered writes and relies on sandbox timeouts or downstream consumers to bound execution
 - `bash` and `sh` are nested shell wrappers for `-c`, script files, and stdin scripts; they do not escape to host shells
 
 For network access, the runtime now exposes a safe `curl` subset instead of ambient host networking. That subset is enabled only when `runtime.Config.Network` or a prebuilt `NetworkClient` is provided. The sandboxed network layer must:

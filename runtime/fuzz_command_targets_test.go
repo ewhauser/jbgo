@@ -128,7 +128,7 @@ func FuzzTextSearchCommands(f *testing.F) {
 		writeSessionFile(t, session, otherPath, []byte(strings.ToUpper(string(text))))
 
 		script := fmt.Appendf(nil,
-			"printf '1,3p\\n' >/tmp/sed.fuzz\nsort %s >/tmp/sort.txt || true\nuniq --ignore-case /tmp/sort.txt >/tmp/uniq.txt || true\ncut --only-delimited -c 1-8 %s >/tmp/cut.txt || true\nsed -f /tmp/sed.fuzz %s >/tmp/sed.txt || true\ngrep -n %s %s >/tmp/grep.txt || true\nrg -n %s /tmp >/tmp/rg.txt || true\nawk '{print NF}' %s >/tmp/awk.txt || true\nhead --bytes=3 %s >/tmp/head.txt || true\ntail --bytes=3 %s >/tmp/tail.txt || true\nwc %s >/tmp/wc.txt\ntr --delete '[:digit:]' < %s >/tmp/tr.txt || true\nrev %s >/tmp/rev.txt || true\nnl -ba -n rz %s >/tmp/nl.txt || true\ntac %s >/tmp/tac.txt || true\nsplit -n 3 --additional-suffix=.part %s /tmp/split- || true\ncat /tmp/split-aa.part >/tmp/split.txt || true\npaste --serial --delimiters=, %s >/tmp/paste.txt || true\ncomm -1 /tmp/sort.txt /tmp/sort.txt >/tmp/comm.txt || true\njoin %s %s >/tmp/join.txt || true\ndiff -u %s %s >/tmp/diff.txt || true\nbase64 --wrap=0 %s | base64 -d >/tmp/base64.txt || true\ncat --number %s >/tmp/cat.txt || true\n",
+			"printf '1,3p\\n' >/tmp/sed.fuzz\nsort %s >/tmp/sort.txt || true\nuniq --ignore-case /tmp/sort.txt >/tmp/uniq.txt || true\ncut --only-delimited -c 1-8 %s >/tmp/cut.txt || true\nsed -f /tmp/sed.fuzz %s >/tmp/sed.txt || true\ngrep -n %s %s >/tmp/grep.txt || true\nrg -n %s /tmp >/tmp/rg.txt || true\nawk '{print NF}' %s >/tmp/awk.txt || true\nhead --bytes=3 %s >/tmp/head.txt || true\ntail --bytes=3 %s >/tmp/tail.txt || true\nwc %s >/tmp/wc.txt\ntr --delete '[:digit:]' < %s >/tmp/tr.txt || true\nrev %s >/tmp/rev.txt || true\nnl -ba -n rz %s >/tmp/nl.txt || true\ntac %s >/tmp/tac.txt || true\nsplit -n 3 --additional-suffix=.part %s /tmp/split- || true\ncat /tmp/split-aa.part >/tmp/split.txt || true\npaste --serial --delimiters=, %s >/tmp/paste.txt || true\ncomm -1 /tmp/sort.txt /tmp/sort.txt >/tmp/comm.txt || true\njoin %s %s >/tmp/join.txt || true\ndiff -u %s %s >/tmp/diff.txt || true\nbase64 --wrap=0 %s | base64 -d >/tmp/base64.txt || true\ncat --number %s >/tmp/cat.txt || true\nseq 1 1 5 >/tmp/seq.txt || true\nseq -w 1 5 >/tmp/seq-width.txt || true\nseq -f '%%.2f' 0 0.5 2 >/tmp/seq-format.txt || true\n",
 			shellQuote(inputPath),
 			shellQuote(inputPath),
 			shellQuote(inputPath),
@@ -182,8 +182,9 @@ func FuzzShellProcessCommands(f *testing.F) {
 		writeSessionFile(t, session, inputPath, text)
 
 		script := fmt.Appendf(nil,
-			"cat %s | tee /tmp/tee.txt >/tmp/tee.out\nenv --ignore-environment ONLY=%s printenv ONLY >/tmp/env.txt\nprintenv HOME >/tmp/printenv.txt\nwhich echo >/tmp/which.txt\nhelp -s pwd >/tmp/help.txt\ndate -u -d 2024-01-02T03:04:05 +%%F >/tmp/date.txt\ndate --utc --date 2024-01-02T03:04:05 +%%Z >/tmp/date-utc.txt\ndate --date 2024-01-02T03:04:05 --iso-8601 >/tmp/date-iso.txt\ndate --date 2024-01-02T03:04:05 --rfc-email >/tmp/date-rfc.txt\nsleep 0.001\ntrue\n/bin/false || true\n",
+			"cat %s | tee /tmp/tee.txt >/tmp/tee.out\nenv --ignore-environment ONLY=%s printenv ONLY >/tmp/env.txt\nprintenv HOME >/tmp/printenv.txt\nwhich echo >/tmp/which.txt\nhelp -s pwd >/tmp/help.txt\ndate -u -d 2024-01-02T03:04:05 +%%F >/tmp/date.txt\ndate --utc --date 2024-01-02T03:04:05 +%%Z >/tmp/date-utc.txt\ndate --date 2024-01-02T03:04:05 --iso-8601 >/tmp/date-iso.txt\ndate --date 2024-01-02T03:04:05 --rfc-email >/tmp/date-rfc.txt\nid >/tmp/id.txt\nid -u >/tmp/id-u.txt\nid -Gn >/tmp/id-gn.txt\nid -A >/tmp/id-audit.txt || true\ntimeout 0.005 yes %s > /tmp/yes.txt || true\nsleep 0.001\ntrue\n/bin/false || true\n",
 			shellQuote(inputPath),
+			shellQuote(value),
 			shellQuote(value),
 		)
 

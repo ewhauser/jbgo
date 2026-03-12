@@ -16,12 +16,24 @@ const (
 	defaultHomeDir = "/home/agent"
 	defaultTempDir = "/tmp"
 	defaultPath    = "/usr/bin:/bin"
+	defaultUser    = "agent"
+	defaultUID     = "1000"
+	defaultGID     = "1000"
 )
 
 func defaultBaseEnv() map[string]string {
 	return map[string]string{
-		"HOME": defaultHomeDir,
-		"PATH": defaultPath,
+		"HOME":    defaultHomeDir,
+		"PATH":    defaultPath,
+		"USER":    defaultUser,
+		"LOGNAME": defaultUser,
+		"GROUP":   defaultUser,
+		"GROUPS":  defaultGID,
+		"UID":     defaultUID,
+		"EUID":    defaultUID,
+		"GID":     defaultGID,
+		"EGID":    defaultGID,
+		"SHELL":   "/bin/sh",
 	}
 }
 

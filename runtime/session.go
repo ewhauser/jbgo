@@ -115,9 +115,9 @@ func executionEnv(baseEnv map[string]string, req *ExecutionRequest) map[string]s
 	}
 	if req.ReplaceEnv {
 		env := mergeEnv(nil, req.Env)
-		for _, key := range []string{"HOME", "UID", "EUID", "GID"} {
+		for key, value := range defaultBaseEnv() {
 			if _, ok := env[key]; !ok {
-				env[key] = ""
+				env[key] = value
 			}
 		}
 		return env
