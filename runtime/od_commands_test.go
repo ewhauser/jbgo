@@ -1,0 +1,55 @@
+package runtime
+
+import "testing"
+
+func TestODHexByteDumpMatchesEchoHelperShape(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.bin", []byte{0x07, 0x08, 0x1b, 0x0c, 0x0a, 0x0d, 0x09, 0x0b})
+
+	result := mustExecSession(t, session, "od -tx1 /tmp/in.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "0000000 07 08 1b 0c 0a 0d 09 0b\n0000010\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestODSupportsSkipReadAndNoAddress(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.bin", []byte{0x01, 0x02, 0x03, 0x04})
+
+	result := mustExecSession(t, session, "od -An -j1 -N2 -tx1 /tmp/in.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, " 02 03\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestODSuppressesDuplicateLinesUnlessVIsSet(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.bin", []byte("ABCDEFGHABCDEFGHijklmnop"))
+
+	result := mustExecSession(t, session, "od -An -w8 -tx1 /tmp/in.bin\nprintf '%s\\n' ---\nod -An -v -w8 -tx1 /tmp/in.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, " 41 42 43 44 45 46 47 48\n*\n 69 6a 6b 6c 6d 6e 6f 70\n---\n 41 42 43 44 45 46 47 48\n 41 42 43 44 45 46 47 48\n 69 6a 6b 6c 6d 6e 6f 70\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestODSupportsEndianWordFormatting(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.bin", []byte{0x01, 0x02, 0x03, 0x04})
+
+	result := mustExecSession(t, session, "od -An --endian=big -tx2 /tmp/in.bin\nprintf '%s\\n' ---\nod -An --endian=little -tx2 /tmp/in.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, " 0102 0304\n---\n 0201 0403\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

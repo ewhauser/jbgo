@@ -284,6 +284,8 @@ func FuzzDataCommands(f *testing.F) {
 
 		script := []byte(
 			"base64 /tmp/input.json | base64 -d >/tmp/base64-json.txt || true\n" +
+				"od -An -tx1 /tmp/input.json >/tmp/od-hex.txt || true\n" +
+				"od -An -c /tmp/input.json >/tmp/od-char.txt || true\n" +
 				"sha256sum /tmp/input.json >/tmp/sha256-file.txt\n" +
 				"cat /tmp/input.json | sha256sum >/tmp/sha256-stdin.txt\n" +
 				"sha256sum /tmp/input.json >/tmp/checksums.txt\n" +

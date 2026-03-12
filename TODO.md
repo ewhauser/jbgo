@@ -170,7 +170,7 @@ Auto-generated — re-run the upstream-diff skill to refresh.
 - [ ] `hostname`
 - [ ] `html-to-markdown`
 - [ ] `md5sum`
-- [ ] `od`
+- [x] `od`
 - [ ] `python`
 - [ ] `python3` (upstream flags: `-c`, `-m`, `--version`)
 - [x] `seq`
