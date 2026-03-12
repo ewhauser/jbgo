@@ -106,3 +106,12 @@ func TestDefaultRegistryMetadataAudit(t *testing.T) {
 	t.Logf("metadata-backed commands: %v", metadataBacked)
 	t.Logf("legacy commands pending migration: %v", legacy)
 }
+
+func TestDefaultRegistryIncludesGNUCompatibilityPlaceholders(t *testing.T) {
+	names := DefaultRegistry().Names()
+	for _, name := range gnuCoreutilsNotImplementedNames {
+		if !slices.Contains(names, name) {
+			t.Fatalf("DefaultRegistry() missing %q placeholder", name)
+		}
+	}
+}

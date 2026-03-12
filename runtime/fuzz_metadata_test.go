@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ewhauser/gbash/commands"
 )
 
 type fuzzCommandMetadata struct {
@@ -535,23 +537,27 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 		}
 	}
 
-	registryNames := slices.DeleteFunc(commandsForFuzzMetadata(tb), func(name string) bool {
+	rt := newFuzzRuntime(tb)
+	registryNames := slices.DeleteFunc(rt.cfg.Registry.Names(), func(name string) bool {
 		return strings.HasPrefix(name, "__jb_")
 	})
 	for _, name := range registryNames {
 		if _, ok := seen[name]; !ok {
+			cmd, ok := rt.cfg.Registry.Lookup(name)
+			if !ok {
+				tb.Fatalf("registry missing command %q during fuzz metadata validation", name)
+			}
+			if _, ok := cmd.(*commands.NotImplemented); ok {
+				spec := fuzzSpec(name, "shell", fuzzVariant("", "placeholder"))
+				specs = append(specs, spec)
+				seen[name] = struct{}{}
+				continue
+			}
 			tb.Fatalf("missing fuzz metadata for registered command %q", name)
 		}
 	}
 
 	return specs
-}
-
-func commandsForFuzzMetadata(tb testing.TB) []string {
-	tb.Helper()
-
-	rt := newFuzzRuntime(tb)
-	return rt.cfg.Registry.Names()
 }
 
 func fuzzSpec(name, category string, variants ...fuzzCommandVariant) fuzzCommandMetadata {

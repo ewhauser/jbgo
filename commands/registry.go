@@ -118,7 +118,7 @@ func (c *lazyCommand) load() (Command, error) {
 }
 
 func DefaultRegistry() *Registry {
-	return NewRegistry(
+	cmds := []Command{
 		NewCDResolve(),
 		NewEcho(),
 		NewPwd(),
@@ -195,7 +195,9 @@ func DefaultRegistry() *Registry {
 		NewMD5Sum(),
 		NewSHA1Sum(),
 		NewSHA256Sum(),
-	)
+	}
+	cmds = append(cmds, gnuCoreutilsNotImplementedCommands()...)
+	return NewRegistry(cmds...)
 }
 
 var _ CommandRegistry = (*Registry)(nil)

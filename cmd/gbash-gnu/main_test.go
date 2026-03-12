@@ -224,7 +224,7 @@ func TestCompleteUtilityResultsAddsInactivePlaceholders(t *testing.T) {
 	}
 }
 
-func TestLoadManifestIncludesNewUtilityCoverage(t *testing.T) {
+func TestLoadManifestIncludesExpandedCompatibilityCoverage(t *testing.T) {
 	mf, err := loadManifest()
 	if err != nil {
 		t.Fatalf("loadManifest() error = %v", err)
@@ -236,10 +236,19 @@ func TestLoadManifestIncludesNewUtilityCoverage(t *testing.T) {
 	}
 
 	for name, want := range map[string][]string{
-		"[":       {"tests/test/*", "tests/misc/invalid-opt.pl"},
-		"head":    {"tests/head/*"},
-		"md5sum":  {"tests/cksum/md5sum*"},
-		"sha1sum": {"tests/cksum/sha1sum*"},
+		"[":         {"tests/test/*", "tests/misc/invalid-opt.pl"},
+		"arch":      {"tests/misc/arch.sh"},
+		"basenc":    {"tests/basenc/basenc.pl", "tests/basenc/bounded-memory.sh", "tests/basenc/large-input.sh"},
+		"cksum":     {"tests/cksum/cksum*"},
+		"dd":        {"tests/dd/*"},
+		"ginstall":  {"tests/install/*"},
+		"head":      {"tests/head/*"},
+		"md5sum":    {"tests/cksum/md5sum*"},
+		"sha1sum":   {"tests/cksum/sha1sum*"},
+		"sha224sum": {"tests/cksum/sha224sum*"},
+		"stdbuf":    {"tests/misc/stdbuf.sh"},
+		"stty":      {"tests/stty/*"},
+		"truncate":  {"tests/truncate/*"},
 	} {
 		got, ok := gotPatterns[name]
 		if !ok {
