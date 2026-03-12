@@ -24,6 +24,13 @@ type wcCounts struct {
 	chars int
 }
 
+type wcLineResult struct {
+	label  string
+	counts wcCounts
+}
+
+const wcMinimumWidth = 7
+
 func NewWC() *WC {
 	return &WC{}
 }
@@ -43,13 +50,24 @@ func (c *WC) Run(ctx context.Context, inv *Invocation) error {
 		if err != nil {
 			return err
 		}
-		return writeWCLine(inv, countWC(data), opts, "")
+		return writeWCLine(inv, countWC(data), opts, "", wcOutputWidth(opts, nil, false))
 	}
 
+	results := make([]wcLineResult, 0, len(files))
 	total := wcCounts{}
 	exitCode := 0
+	hasStdinInput := false
 	for _, file := range files {
-		data, _, err := readAllFile(ctx, inv, file)
+		var (
+			data []byte
+			err  error
+		)
+		if file == "-" {
+			hasStdinInput = true
+			data, err = readAllStdin(inv)
+		} else {
+			data, _, err = readAllFile(ctx, inv, file)
+		}
 		if err != nil {
 			_, _ = fmt.Fprintf(inv.Stderr, "wc: %s: No such file or directory\n", file)
 			exitCode = 1
@@ -60,12 +78,17 @@ func (c *WC) Run(ctx context.Context, inv *Invocation) error {
 		total.words += counts.words
 		total.bytes += counts.bytes
 		total.chars += counts.chars
-		if err := writeWCLine(inv, counts, opts, file); err != nil {
+		results = append(results, wcLineResult{label: file, counts: counts})
+	}
+
+	width := wcOutputWidth(opts, results, hasStdinInput)
+	for _, result := range results {
+		if err := writeWCLine(inv, result.counts, opts, result.label, width); err != nil {
 			return err
 		}
 	}
 	if len(files) > 1 {
-		if err := writeWCLine(inv, total, opts, "total"); err != nil {
+		if err := writeWCLine(inv, total, opts, "total", width); err != nil {
 			return err
 		}
 	}
@@ -134,19 +157,93 @@ func countWC(data []byte) wcCounts {
 	}
 }
 
-func writeWCLine(inv *Invocation, counts wcCounts, opts wcOptions, label string) error {
-	parts := make([]string, 0, 4)
+func wcOutputWidth(opts wcOptions, results []wcLineResult, hasStdinInput bool) int {
+	enabled := wcEnabledCount(opts)
+	if len(results) == 0 {
+		if enabled == 1 {
+			return 1
+		}
+		return wcMinimumWidth
+	}
+	if enabled == 1 && len(results) == 1 {
+		return 1
+	}
+
+	width := 1
+	if hasStdinInput {
+		width = wcMinimumWidth
+	}
+	for _, result := range results {
+		width = max(width, wcCountsWidth(result.counts, opts))
+	}
+	if len(results) > 1 {
+		total := wcCounts{}
+		for _, result := range results {
+			total.lines += result.counts.lines
+			total.words += result.counts.words
+			total.bytes += result.counts.bytes
+			total.chars += result.counts.chars
+		}
+		width = max(width, wcCountsWidth(total, opts))
+	}
+	return width
+}
+
+func wcEnabledCount(opts wcOptions) int {
+	count := 0
 	if opts.lines {
-		parts = append(parts, fmt.Sprintf("%8d", counts.lines))
+		count++
 	}
 	if opts.words {
-		parts = append(parts, fmt.Sprintf("%8d", counts.words))
+		count++
 	}
 	if opts.bytes {
-		parts = append(parts, fmt.Sprintf("%8d", counts.bytes))
+		count++
 	}
 	if opts.chars {
-		parts = append(parts, fmt.Sprintf("%8d", counts.chars))
+		count++
+	}
+	return count
+}
+
+func wcCountsWidth(counts wcCounts, opts wcOptions) int {
+	width := 1
+	for _, value := range wcSelectedCounts(counts, opts) {
+		width = max(width, len(fmt.Sprintf("%d", value)))
+	}
+	return width
+}
+
+func wcSelectedCounts(counts wcCounts, opts wcOptions) []int {
+	values := make([]int, 0, 4)
+	if opts.lines {
+		values = append(values, counts.lines)
+	}
+	if opts.words {
+		values = append(values, counts.words)
+	}
+	if opts.bytes {
+		values = append(values, counts.bytes)
+	}
+	if opts.chars {
+		values = append(values, counts.chars)
+	}
+	return values
+}
+
+func writeWCLine(inv *Invocation, counts wcCounts, opts wcOptions, label string, width int) error {
+	parts := make([]string, 0, 4)
+	if opts.lines {
+		parts = append(parts, fmt.Sprintf("%*d", width, counts.lines))
+	}
+	if opts.words {
+		parts = append(parts, fmt.Sprintf("%*d", width, counts.words))
+	}
+	if opts.bytes {
+		parts = append(parts, fmt.Sprintf("%*d", width, counts.bytes))
+	}
+	if opts.chars {
+		parts = append(parts, fmt.Sprintf("%*d", width, counts.chars))
 	}
 
 	line := strings.Join(parts, " ")

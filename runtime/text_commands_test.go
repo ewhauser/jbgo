@@ -229,7 +229,7 @@ func TestWCCountsWordsFromStdin(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "3"; got != want {
+	if got, want := result.Stdout, "3\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -242,8 +242,25 @@ func TestWCCountsBinaryBytes(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	if !strings.Contains(result.Stdout, "5 /tmp/binary.bin") {
-		t.Fatalf("Stdout = %q, want byte count for binary file", result.Stdout)
+	if got, want := result.Stdout, "5 /tmp/binary.bin\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCCountsLinesFromExplicitStdinWithoutPadding(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a\\nb\\n' | wc -l -\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2 -\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
