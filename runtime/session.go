@@ -33,6 +33,9 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	workDir := resolveWorkDir(s.cfg.FileSystem.WorkingDir, req.WorkDir)
 	execEnv := executionEnv(s.cfg.BaseEnv, req)
 	execEnv["PWD"] = workDir
+	if !s.bootAt.IsZero() {
+		execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
+	}
 
 	if err := initializeSandboxLayout(ctx, s.fs, execEnv, workDir, s.cfg.Registry.Names()); err != nil {
 		return nil, err

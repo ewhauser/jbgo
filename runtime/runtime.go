@@ -6,6 +6,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -29,10 +30,11 @@ type Runtime struct {
 }
 
 type Session struct {
-	cfg Config
-	id  string
-	fs  gbfs.FileSystem
-	mu  sync.Mutex
+	cfg    Config
+	id     string
+	fs     gbfs.FileSystem
+	bootAt time.Time
+	mu     sync.Mutex
 }
 
 type ExecutionRequest = commands.ExecutionRequest
@@ -98,9 +100,10 @@ func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
 	}
 
 	return &Session{
-		cfg: r.cfg,
-		id:  nextTraceID("sess"),
-		fs:  fsys,
+		cfg:    r.cfg,
+		id:     nextTraceID("sess"),
+		fs:     fsys,
+		bootAt: time.Now().UTC(),
 	}, nil
 }
 

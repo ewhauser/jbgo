@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"encoding/binary"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +174,163 @@ func TestDateSupportsLongFlagAliases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUptimeDefaultSincePrettyAndVersion(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	defaultResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "uptime\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(default) error = %v", err)
+	}
+	if defaultResult.ExitCode != 0 {
+		t.Fatalf("default ExitCode = %d, want 0; stderr=%q", defaultResult.ExitCode, defaultResult.Stderr)
+	}
+	defaultPattern := regexp.MustCompile(`^\s\d{2}:\d{2}:\d{2}\s+up\s+\d+:\d{2},\s+1 user,\s+load average: 0\.00, 0\.00, 0\.00\n$`)
+	if !defaultPattern.MatchString(defaultResult.Stdout) {
+		t.Fatalf("Stdout = %q, want uptime default format", defaultResult.Stdout)
+	}
+
+	sinceResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "uptime --since\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(since) error = %v", err)
+	}
+	if sinceResult.ExitCode != 0 {
+		t.Fatalf("since ExitCode = %d, want 0; stderr=%q", sinceResult.ExitCode, sinceResult.Stderr)
+	}
+	if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\n$`).MatchString(sinceResult.Stdout) {
+		t.Fatalf("Stdout = %q, want since timestamp", sinceResult.Stdout)
+	}
+
+	prettyResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "env GBASH_SESSION_BOOT_AT=2000-01-01T00:00:00Z uptime -p\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(pretty) error = %v", err)
+	}
+	if prettyResult.ExitCode != 0 {
+		t.Fatalf("pretty ExitCode = %d, want 0; stderr=%q", prettyResult.ExitCode, prettyResult.Stderr)
+	}
+	if got := prettyResult.Stdout; !strings.HasPrefix(got, "up ") || !strings.Contains(got, "minute") {
+		t.Fatalf("Stdout = %q, want pretty uptime output", got)
+	}
+
+	versionResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "uptime --version\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(version) error = %v", err)
+	}
+	if versionResult.ExitCode != 0 {
+		t.Fatalf("version ExitCode = %d, want 0; stderr=%q", versionResult.ExitCode, versionResult.Stderr)
+	}
+	if got, want := versionResult.Stdout, "uptime (gbash)\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestUptimeReadsBootTimeAndUsersFromUtmpFile(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/utmpx", uptimeTestUtmpFixture(1716371201, 2))
+
+	result := mustExecSession(t, session, "uptime /tmp/utmpx\nuptime -s /tmp/utmpx\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSuffix(result.Stdout, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout = %q, want 2 lines", result.Stdout)
+	}
+	defaultPattern := regexp.MustCompile(`^\s\d{2}:\d{2}:\d{2}\s+up\s+.+,\s+2 users,\s+load average: 0\.00, 0\.00, 0\.00$`)
+	if !defaultPattern.MatchString(lines[0]) {
+		t.Fatalf("first line = %q, want parsed utmp output", lines[0])
+	}
+	if got, want := lines[1], "2024-05-22 03:46:41"; got != want {
+		t.Fatalf("since line = %q, want %q", got, want)
+	}
+}
+
+func TestUptimeReportsFallbackForBadFileOperands(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/no-boot", []byte("hello"))
+
+	missingResult := mustExecSession(t, session, "uptime /tmp/missing\n")
+	if missingResult.ExitCode == 0 {
+		t.Fatalf("missing ExitCode = 0, want non-zero")
+	}
+	if !strings.Contains(missingResult.Stderr, "couldn't get boot time: No such file or directory") {
+		t.Fatalf("Stderr = %q, want missing-file message", missingResult.Stderr)
+	}
+	if !strings.Contains(missingResult.Stdout, "up ???? days ??:??") {
+		t.Fatalf("Stdout = %q, want fallback uptime output", missingResult.Stdout)
+	}
+
+	dirResult := mustExecSession(t, session, "mkdir -p /tmp/dir\nuptime /tmp/dir\n")
+	if dirResult.ExitCode == 0 {
+		t.Fatalf("dir ExitCode = 0, want non-zero")
+	}
+	if !strings.Contains(dirResult.Stderr, "couldn't get boot time: Is a directory") {
+		t.Fatalf("Stderr = %q, want directory message", dirResult.Stderr)
+	}
+
+	noBootResult := mustExecSession(t, session, "uptime /tmp/no-boot\n")
+	if noBootResult.ExitCode == 0 {
+		t.Fatalf("no-boot ExitCode = 0, want non-zero")
+	}
+	if !strings.Contains(noBootResult.Stderr, "couldn't get boot time") {
+		t.Fatalf("Stderr = %q, want parse-failure message", noBootResult.Stderr)
+	}
+}
+
+func TestUptimeRejectsInvalidOptionsAndExtraOperands(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	invalidResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "uptime --definitely-invalid\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(invalid) error = %v", err)
+	}
+	if invalidResult.ExitCode == 0 {
+		t.Fatalf("invalid ExitCode = 0, want non-zero")
+	}
+	if !strings.Contains(invalidResult.Stderr, "unrecognized option") {
+		t.Fatalf("Stderr = %q, want invalid-option error", invalidResult.Stderr)
+	}
+
+	extraResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "uptime a b\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(extra) error = %v", err)
+	}
+	if extraResult.ExitCode == 0 {
+		t.Fatalf("extra ExitCode = 0, want non-zero")
+	}
+	if !strings.Contains(extraResult.Stderr, "unexpected value 'b'") {
+		t.Fatalf("Stderr = %q, want extra-operand error", extraResult.Stderr)
+	}
+}
+
+func uptimeTestUtmpFixture(bootSeconds int32, users int) []byte {
+	record := func(recordType int32, seconds int32) []byte {
+		buf := make([]byte, 384)
+		binary.NativeEndian.PutUint32(buf[0:4], uint32(recordType))
+		binary.NativeEndian.PutUint32(buf[340:344], uint32(seconds))
+		return buf
+	}
+
+	out := make([]byte, 0, 384*(users+1))
+	out = append(out, record(2, bootSeconds)...)
+	for range users {
+		out = append(out, record(7, 0)...)
+	}
+	return out
 }
 
 func TestSleepHonorsShortDuration(t *testing.T) {

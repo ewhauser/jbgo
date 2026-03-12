@@ -161,6 +161,7 @@ func DefaultRegistry() *Registry {
 		NewHelp(),
 		NewDate(),
 		NewID(),
+		NewUptime(),
 		NewSleep(),
 		NewTimeout(),
 		NewXArgs(),
