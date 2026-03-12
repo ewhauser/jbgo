@@ -186,7 +186,10 @@ func loadPermissionGroup(ctx context.Context, inv *Invocation, db *permissionIde
 }
 
 func permissionLookupOwnership(db *permissionIdentityDB, info stdfs.FileInfo) permissionOwnership {
-	meta := jbfs.MetadataFromFileInfo(info)
+	meta, ok := jbfs.OwnershipFromFileInfo(info)
+	if !ok {
+		meta = jbfs.DefaultOwnership()
+	}
 	owner := permissionOwnership{
 		uid: meta.UID,
 		gid: meta.GID,

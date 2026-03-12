@@ -94,6 +94,26 @@ func TestHostFSReadOnlyAndSanitizesErrors(t *testing.T) {
 	}
 }
 
+func TestHostFSStatPreservesRawSysStat(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	fsys, err := NewHost(HostOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewHost() error = %v", err)
+	}
+
+	info, err := fsys.Stat(context.Background(), defaultHostVirtualRoot+"/note.txt")
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if _, ok := info.Sys().(*syscall.Stat_t); !ok {
+		t.Fatalf("Stat().Sys() = %T, want *syscall.Stat_t", info.Sys())
+	}
+}
+
 func TestHostFSReadCapRejectsLargeFiles(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "big.txt"), []byte("hello"), 0o644); err != nil {

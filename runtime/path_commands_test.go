@@ -198,6 +198,18 @@ func TestChownSupportsNamedAndNumericOwners(t *testing.T) {
 	}
 }
 
+func TestChownSupportsZeroOwnerIDs(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo hi > /home/agent/root.txt\nchown 0:0 /home/agent/root.txt\nstat -c '%u:%g:%U:%G' /home/agent/root.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "0:0:0:0"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestChownSupportsReferenceFromAndRecursiveFlags(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -248,6 +260,30 @@ func TestChownNoDereferenceTargetsTheSymlink(t *testing.T) {
 	}
 	if got, want := lines[3], "71:72 symbolic link"; got != want {
 		t.Fatalf("link after -h = %q, want %q", got, want)
+	}
+}
+
+func TestChownDoesNotChangeModTime(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/mtime.txt", []byte("hello\n"))
+
+	before, err := session.FileSystem().Stat(context.Background(), "/home/agent/mtime.txt")
+	if err != nil {
+		t.Fatalf("Stat(before) error = %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	result := mustExecSession(t, session, "chown 123:456 /home/agent/mtime.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	after, err := session.FileSystem().Stat(context.Background(), "/home/agent/mtime.txt")
+	if err != nil {
+		t.Fatalf("Stat(after) error = %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("ModTime after chown = %v, want unchanged from %v", after.ModTime(), before.ModTime())
 	}
 }
 

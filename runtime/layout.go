@@ -7,7 +7,6 @@ import (
 	stdfs "io/fs"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	jbfs "github.com/ewhauser/jbgo/fs"
@@ -17,7 +16,6 @@ const (
 	defaultHomeDir = "/home/agent"
 	defaultTempDir = "/tmp"
 	defaultPath    = "/usr/bin:/bin"
-	defaultEtcDir  = "/etc"
 	defaultUser    = "agent"
 	defaultUID     = "1000"
 	defaultGID     = "1000"
@@ -45,9 +43,6 @@ func initializeSandboxLayout(ctx context.Context, fsys jbfs.FileSystem, env map[
 			return err
 		}
 	}
-	if err := ensureIdentityFiles(ctx, fsys, env); err != nil {
-		return err
-	}
 
 	for _, dir := range commandDirectories(env) {
 		for _, name := range publicCommandNames(commands) {
@@ -63,7 +58,6 @@ func initializeSandboxLayout(ctx context.Context, fsys jbfs.FileSystem, env map[
 func layoutDirectories(env map[string]string, workDir string) []string {
 	dirs := []string{
 		defaultTempDir,
-		defaultEtcDir,
 		workDir,
 	}
 
@@ -73,70 +67,6 @@ func layoutDirectories(env map[string]string, workDir string) []string {
 
 	dirs = append(dirs, commandDirectories(env)...)
 	return uniqueSortedPaths(dirs)
-}
-
-func ensureIdentityFiles(ctx context.Context, fsys jbfs.FileSystem, env map[string]string) error {
-	passwdPath := jbfs.Resolve(defaultEtcDir, "passwd")
-	groupPath := jbfs.Resolve(defaultEtcDir, "group")
-	uid := env["UID"]
-	if _, err := strconv.ParseUint(strings.TrimSpace(uid), 10, 32); err != nil {
-		uid = defaultUID
-	}
-	gid := env["GID"]
-	if _, err := strconv.ParseUint(strings.TrimSpace(gid), 10, 32); err != nil {
-		gid = defaultGID
-	}
-	user := strings.TrimSpace(env["USER"])
-	if user == "" {
-		user = defaultUser
-	}
-	group := strings.TrimSpace(env["GROUP"])
-	if group == "" {
-		group = user
-	}
-	home := strings.TrimSpace(env["HOME"])
-	if home == "" {
-		home = defaultHomeDir
-	}
-	shell := strings.TrimSpace(env["SHELL"])
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-	files := []struct {
-		path string
-		data string
-	}{
-		{
-			path: passwdPath,
-			data: user + ":x:" + uid + ":" + gid + "::" + home + ":" + shell + "\n",
-		},
-		{
-			path: groupPath,
-			data: group + ":x:" + gid + ":\n",
-		},
-	}
-	for _, file := range files {
-		if _, err := fsys.Stat(ctx, file.path); err == nil {
-			continue
-		} else if !errors.Is(err, stdfs.ErrNotExist) {
-			return err
-		}
-		handle, err := fsys.OpenFile(ctx, file.path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err != nil {
-			if errors.Is(err, stdfs.ErrExist) {
-				continue
-			}
-			return err
-		}
-		if _, err := io.WriteString(handle, file.data); err != nil {
-			_ = handle.Close()
-			return err
-		}
-		if err := handle.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func commandDirectories(env map[string]string) []string {

@@ -155,4 +155,7 @@ func (i compatFileInfo) Size() int64        { return i.info.Size() }
 func (i compatFileInfo) Mode() fs.FileMode  { return i.info.Mode() }
 func (i compatFileInfo) ModTime() time.Time { return i.info.ModTime() }
 func (i compatFileInfo) IsDir() bool        { return i.info.IsDir() }
-func (i compatFileInfo) Sys() any           { return jbfs.MetadataFromSys(i.info.Sys()) }
+func (i compatFileInfo) Sys() any           { return i.info.Sys() }
+func (i compatFileInfo) Ownership() (jbfs.FileOwnership, bool) {
+	return jbfs.OwnershipFromSys(i.info.Sys())
+}

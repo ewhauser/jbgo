@@ -270,7 +270,6 @@ func (m *MemoryFS) Chown(_ context.Context, name string, uid, gid uint32, follow
 	}
 	node.uid = uid
 	node.gid = gid
-	node.modTime = time.Now().UTC()
 	m.nodes[abs] = node
 	return nil
 }
@@ -671,11 +670,9 @@ func (fi fileInfo) Size() int64          { return fi.size }
 func (fi fileInfo) Mode() stdfs.FileMode { return fi.mode }
 func (fi fileInfo) ModTime() time.Time   { return fi.modTime }
 func (fi fileInfo) IsDir() bool          { return fi.mode.IsDir() }
-func (fi fileInfo) Sys() any {
-	return FileMetadata{
-		UID: fi.uid,
-		GID: fi.gid,
-	}
+func (fi fileInfo) Sys() any             { return nil }
+func (fi fileInfo) Ownership() (FileOwnership, bool) {
+	return FileOwnership{UID: fi.uid, GID: fi.gid}, true
 }
 
 var _ FileSystem = (*MemoryFS)(nil)

@@ -7,34 +7,35 @@ const (
 	DefaultOwnerGID uint32 = 1000
 )
 
-type FileMetadata struct {
-	UID        uint32
-	GID        uint32
-	Underlying any
+type FileOwnership struct {
+	UID uint32
+	GID uint32
 }
 
-func MetadataFromFileInfo(info stdfs.FileInfo) FileMetadata {
+type ownershipProvider interface {
+	Ownership() (FileOwnership, bool)
+}
+
+func DefaultOwnership() FileOwnership {
+	return FileOwnership{UID: DefaultOwnerUID, GID: DefaultOwnerGID}
+}
+
+func OwnershipFromFileInfo(info stdfs.FileInfo) (FileOwnership, bool) {
 	if info == nil {
-		return FileMetadata{UID: DefaultOwnerUID, GID: DefaultOwnerGID}
+		return FileOwnership{}, false
 	}
-	switch meta := info.Sys().(type) {
-	case FileMetadata:
-		return normalizeMetadata(meta)
-	case *FileMetadata:
-		if meta != nil {
-			return normalizeMetadata(*meta)
+	if provider, ok := info.(ownershipProvider); ok {
+		if ownership, ok := provider.Ownership(); ok {
+			return ownership, true
 		}
 	}
-	meta := MetadataFromSys(info.Sys())
-	if meta.UID == 0 && meta.GID == 0 && meta.Underlying == nil {
-		meta = FileMetadata{UID: DefaultOwnerUID, GID: DefaultOwnerGID, Underlying: info.Sys()}
+	switch ownership := info.Sys().(type) {
+	case FileOwnership:
+		return ownership, true
+	case *FileOwnership:
+		if ownership != nil {
+			return *ownership, true
+		}
 	}
-	return normalizeMetadata(meta)
-}
-
-func normalizeMetadata(meta FileMetadata) FileMetadata {
-	if meta.UID == 0 && meta.GID == 0 && meta.Underlying == nil {
-		return FileMetadata{UID: DefaultOwnerUID, GID: DefaultOwnerGID}
-	}
-	return meta
+	return OwnershipFromSys(info.Sys())
 }

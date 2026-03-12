@@ -556,7 +556,10 @@ func (i namedFileInfo) Size() int64          { return i.info.Size() }
 func (i namedFileInfo) Mode() stdfs.FileMode { return i.info.Mode() }
 func (i namedFileInfo) ModTime() time.Time   { return i.info.ModTime() }
 func (i namedFileInfo) IsDir() bool          { return i.info.IsDir() }
-func (i namedFileInfo) Sys() any             { return MetadataFromSys(i.info.Sys()) }
+func (i namedFileInfo) Sys() any             { return i.info.Sys() }
+func (i namedFileInfo) Ownership() (FileOwnership, bool) {
+	return OwnershipFromSys(i.info.Sys())
+}
 
 type staticFileInfo struct {
 	name    string
@@ -570,11 +573,9 @@ func (i staticFileInfo) Size() int64          { return i.size }
 func (i staticFileInfo) Mode() stdfs.FileMode { return i.mode }
 func (i staticFileInfo) ModTime() time.Time   { return i.modTime }
 func (i staticFileInfo) IsDir() bool          { return i.mode.IsDir() }
-func (i staticFileInfo) Sys() any {
-	return FileMetadata{
-		UID: DefaultOwnerUID,
-		GID: DefaultOwnerGID,
-	}
+func (i staticFileInfo) Sys() any             { return nil }
+func (i staticFileInfo) Ownership() (FileOwnership, bool) {
+	return DefaultOwnership(), true
 }
 
 type fileTooLargeError struct {

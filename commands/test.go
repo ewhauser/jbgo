@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	jbfs "github.com/ewhauser/jbgo/fs"
 	"github.com/ewhauser/jbgo/policy"
 	"golang.org/x/term"
 )
@@ -684,6 +685,9 @@ func testHasPermission(inv *Invocation, info stdfs.FileInfo, mask stdfs.FileMode
 }
 
 func testOwnerIDs(info stdfs.FileInfo) (uid, gid int, ok bool) {
+	if ownership, ok := jbfs.OwnershipFromFileInfo(info); ok {
+		return int(ownership.UID), int(ownership.GID), true
+	}
 	sys := reflect.ValueOf(info.Sys())
 	if !sys.IsValid() {
 		return 0, 0, false

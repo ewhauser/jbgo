@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -81,6 +82,26 @@ func TestHostFSReadsWritesAndResolvesSymlinks(t *testing.T) {
 	}
 	if got, want := string(data), "hello\n"; got != want {
 		t.Fatalf("contents = %q, want %q", got, want)
+	}
+}
+
+func TestHostFSStatPreservesRawSysStat(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	fsys, err := New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDirFromFS(t, fsys), "note.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	info, err := fsys.Stat(context.Background(), "note.txt")
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if _, ok := info.Sys().(*syscall.Stat_t); !ok {
+		t.Fatalf("Stat().Sys() = %T, want *syscall.Stat_t", info.Sys())
 	}
 }
 

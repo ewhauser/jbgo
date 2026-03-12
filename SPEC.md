@@ -153,7 +153,6 @@ The default in-memory sandbox should look Unix-like enough for agent scripts:
 
 - `/home/agent` as the default home and working directory
 - `/tmp` for scratch files
-- `/etc/passwd` and `/etc/group` with deterministic sandbox identity entries
 - `/bin` and `/usr/bin` as virtual command locations
 - `PATH=/usr/bin:/bin`
 - deterministic identity defaults via `USER=agent`, `LOGNAME=agent`, `GROUP=agent`, `GROUPS=1000`, `UID=1000`, `EUID=1000`, `GID=1000`, `EGID=1000`, and `SHELL=/bin/sh`

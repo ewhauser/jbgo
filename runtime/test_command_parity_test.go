@@ -49,6 +49,25 @@ func TestTestSupportsFilePredicatesAndBracketAlias(t *testing.T) {
 	}
 }
 
+func TestTestOwnerPredicatesUseSandboxOwnership(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"echo hi > /tmp/file.txt\n"+
+			"test -O /tmp/file.txt && echo owner\n"+
+			"test -G /tmp/file.txt && echo group\n"+
+			"chown 123:456 /tmp/file.txt\n"+
+			"test -O /tmp/file.txt && echo owner-after\n"+
+			"test -G /tmp/file.txt && echo group-after\n",
+	)
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "owner\ngroup\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestTestReportsParseErrorsAndBracketMismatch(t *testing.T) {
 	session := newSession(t, &Config{})
 

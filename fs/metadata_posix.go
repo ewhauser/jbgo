@@ -4,13 +4,9 @@ package fs
 
 import "syscall"
 
-func MetadataFromSys(sys any) FileMetadata {
+func OwnershipFromSys(sys any) (FileOwnership, bool) {
 	if stat, ok := sys.(*syscall.Stat_t); ok && stat != nil {
-		return FileMetadata{
-			UID:        stat.Uid,
-			GID:        stat.Gid,
-			Underlying: stat,
-		}
+		return FileOwnership{UID: stat.Uid, GID: stat.Gid}, true
 	}
-	return FileMetadata{Underlying: sys}
+	return FileOwnership{}, false
 }
