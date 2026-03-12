@@ -84,20 +84,28 @@ func New(cfg *Config) (*Runner, error) {
 }
 
 func (r *Runner) Exec(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
+	return r.execWithOutputs(ctx, req, nil, nil)
+}
+
+func (r *Runner) execWithOutputs(ctx context.Context, req *commands.ExecutionRequest, liveStdout, liveStderr io.Writer) (*commands.ExecutionResult, error) {
 	if isReentrantExec(ctx, r) {
-		return r.exec(ctx, req)
+		return r.exec(ctx, req, liveStdout, liveStderr)
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.exec(withExecContext(ctx, r), req)
+	return r.exec(withExecContext(ctx, r), req, liveStdout, liveStderr)
 }
 
 func (r *Runner) RunUtility(ctx context.Context, name string, args []string, stdin io.Reader) (*commands.ExecutionResult, error) {
+	return r.RunUtilityStreaming(ctx, name, args, stdin, nil, nil)
+}
+
+func (r *Runner) RunUtilityStreaming(ctx context.Context, name string, args []string, stdin io.Reader, stdout, stderr io.Writer) (*commands.ExecutionResult, error) {
 	if err := validateUtilityName(name); err != nil {
 		return nil, err
 	}
-	return r.Exec(ctx, &commands.ExecutionRequest{
+	return r.execWithOutputs(ctx, &commands.ExecutionRequest{
 		Name:       name,
 		Script:     name + " \"$@\"\n",
 		Args:       append([]string(nil), args...),
@@ -105,10 +113,10 @@ func (r *Runner) RunUtility(ctx context.Context, name string, args []string, std
 		ReplaceEnv: true,
 		WorkDir:    r.cfg.DefaultDir,
 		Stdin:      stdin,
-	})
+	}, stdout, stderr)
 }
 
-func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
+func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveStdout, liveStderr io.Writer) (*commands.ExecutionResult, error) {
 	if req == nil {
 		req = &commands.ExecutionRequest{}
 	}
@@ -126,6 +134,14 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest) (*com
 	limits := r.cfg.Policy.Limits()
 	stdout := newCaptureBuffer(limits.MaxStdoutBytes)
 	stderr := newCaptureBuffer(limits.MaxStderrBytes)
+	stdoutWriter := io.Writer(stdout)
+	if liveStdout != nil {
+		stdoutWriter = io.MultiWriter(stdout, liveStdout)
+	}
+	stderrWriter := io.Writer(stderr)
+	if liveStderr != nil {
+		stderrWriter = io.MultiWriter(stderr, liveStderr)
+	}
 	recorder := trace.NewBuffer()
 	started := time.Now().UTC()
 	runResult, runErr := r.cfg.Engine.Run(ctx, &shell.Execution{
@@ -136,8 +152,8 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest) (*com
 		Dir:               workDir,
 		BuiltinCommandDir: r.cfg.BuiltinCommandDir,
 		Stdin:             stdinOrEmpty(req.Stdin),
-		Stdout:            stdout,
-		Stderr:            stderr,
+		Stdout:            stdoutWriter,
+		Stderr:            stderrWriter,
 		FS:                r.cfg.FS,
 		Registry:          r.cfg.Registry,
 		Policy:            r.cfg.Policy,
@@ -161,7 +177,7 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest) (*com
 		result.FinalEnv = runResult.FinalEnv
 		result.ShellExited = runResult.ShellExited
 	}
-	if handled := classifyExecutionControlError(ctx, req.Timeout, runErr, stderr, result); handled {
+	if handled := classifyExecutionControlError(ctx, req.Timeout, runErr, stderr, liveStderr, result); handled {
 		return result, nil
 	}
 	if runErr != nil && !shell.IsExitStatus(runErr) {
@@ -171,7 +187,7 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest) (*com
 }
 
 func (r *Runner) subexecCallback(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
-	return r.exec(ctx, req)
+	return r.exec(ctx, req, nil, nil)
 }
 
 func validateUtilityName(name string) error {
@@ -224,19 +240,19 @@ func executionContext(ctx context.Context, timeout time.Duration) (context.Conte
 	return context.WithTimeout(ctx, timeout)
 }
 
-func classifyExecutionControlError(ctx context.Context, timeout time.Duration, runErr error, stderr *captureBuffer, result *commands.ExecutionResult) bool {
+func classifyExecutionControlError(ctx context.Context, timeout time.Duration, runErr error, stderr *captureBuffer, liveStderr io.Writer, result *commands.ExecutionResult) bool {
 	if result == nil || runErr == nil {
 		return false
 	}
 	switch {
 	case errors.Is(runErr, context.DeadlineExceeded), errors.Is(ctx.Err(), context.DeadlineExceeded):
-		writeExecutionControlMessage(stderr, timeoutMessage(timeout))
+		writeExecutionControlMessage(stderr, liveStderr, timeoutMessage(timeout))
 		result.ExitCode = 124
 		result.Stderr = stderr.String()
 		result.StderrTruncated = stderr.Truncated()
 		return true
 	case errors.Is(runErr, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
-		writeExecutionControlMessage(stderr, "execution canceled")
+		writeExecutionControlMessage(stderr, liveStderr, "execution canceled")
 		result.ExitCode = 130
 		result.Stderr = stderr.String()
 		result.StderrTruncated = stderr.Truncated()
@@ -246,11 +262,16 @@ func classifyExecutionControlError(ctx context.Context, timeout time.Duration, r
 	}
 }
 
-func writeExecutionControlMessage(stderr *captureBuffer, message string) {
-	if stderr == nil || message == "" {
+func writeExecutionControlMessage(stderr *captureBuffer, liveStderr io.Writer, message string) {
+	if message == "" {
 		return
 	}
-	_, _ = fmt.Fprintln(stderr, message)
+	if stderr != nil {
+		_, _ = fmt.Fprintln(stderr, message)
+	}
+	if liveStderr != nil {
+		_, _ = fmt.Fprintln(liveStderr, message)
+	}
 }
 
 func timeoutMessage(timeout time.Duration) string {

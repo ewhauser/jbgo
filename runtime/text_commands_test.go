@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGrepWorksInPipelineFromStdin(t *testing.T) {
@@ -89,6 +90,25 @@ func TestHeadReadsFirstNLines(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
 	if got, want := result.Stdout, "one\ntwo\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHeadStopsReadingInfinitePipelineAfterRequestedLines(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	result, err := rt.Run(ctx, &ExecutionRequest{
+		Script: "seq inf inf | head -n2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "inf\ninf\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

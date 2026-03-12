@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestRunCLIPrintsVersion(t *testing.T) {
@@ -76,6 +79,44 @@ func TestRunCLICompatExecUnknownCommandReturns127(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecStreamsOutputBeforeExit(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	var stderr strings.Builder
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "jbgo", []string{"compat", "exec", "seq", "999999", "inf"}, strings.NewReader(""), stdout, &stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if !stdout.WaitForSubstring("999999\n1000000\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not stream expected prefix before compat exec exited; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
 func TestRunCLIMulticallUsesArgv0CommandAndBypassesTTYRepl(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
@@ -110,3 +151,49 @@ func TestRunCLIMulticallUsesArgv0CommandAndBypassesTTYRepl(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
+
+type streamingWriter struct {
+	mu  sync.Mutex
+	buf strings.Builder
+	sig chan struct{}
+}
+
+func newStreamingWriter() *streamingWriter {
+	return &streamingWriter{sig: make(chan struct{}, 1)}
+}
+
+func (w *streamingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	if err == nil {
+		select {
+		case w.sig <- struct{}{}:
+		default:
+		}
+	}
+	return n, err
+}
+
+func (w *streamingWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+func (w *streamingWriter) WaitForSubstring(substr string, timeout time.Duration) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		if strings.Contains(w.String(), substr) {
+			return true
+		}
+		select {
+		case <-w.sig:
+		case <-deadline.C:
+			return strings.Contains(w.String(), substr)
+		}
+	}
+}
+
+var _ io.Writer = (*streamingWriter)(nil)

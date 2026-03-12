@@ -126,17 +126,6 @@ func splitLines(data []byte) [][]byte {
 	return lines
 }
 
-func firstLines(data []byte, count int) []byte {
-	if count <= 0 {
-		return nil
-	}
-	lines := splitLines(data)
-	if count > len(lines) {
-		count = len(lines)
-	}
-	return bytes.Join(lines[:count], nil)
-}
-
 func lastLines(data []byte, count int) []byte {
 	if count <= 0 {
 		return nil
@@ -157,16 +146,6 @@ func linesFrom(data []byte, startLine int) []byte {
 		return nil
 	}
 	return bytes.Join(lines[startLine-1:], nil)
-}
-
-func firstBytes(data []byte, count int) []byte {
-	if count <= 0 {
-		return nil
-	}
-	if count > len(data) {
-		count = len(data)
-	}
-	return append([]byte(nil), data[:count]...)
 }
 
 func lastBytes(data []byte, count int) []byte {

@@ -44,10 +44,10 @@ func (c *Seq) Run(ctx context.Context, inv *Invocation) error {
 		return nil
 	}
 	if len(numbers) == 0 {
-		return exitf(inv, 1, "seq: missing operand")
+		return seqUsageErrorf(inv, "missing operand")
 	}
-	if opts.equalWidth && opts.format != "" {
-		return exitf(inv, 1, "seq: format string may not be specified when printing equal width strings")
+	if opts.equalWidth && opts.formatSet {
+		return seqUsageErrorf(inv, "format string may not be specified when printing equal width strings")
 	}
 
 	first := seqOne()
@@ -62,7 +62,7 @@ func (c *Seq) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	if seqValueIsZero(increment.value) {
-		return exitf(inv, 1, "seq: invalid Zero increment value: %q", increment.original)
+		return seqUsageErrorf(inv, "invalid Zero increment value: %s", quoteGNUOperand(increment.original))
 	}
 
 	precision, hasPrecision := selectSeqPrecision(first, increment, last)
@@ -85,7 +85,7 @@ func (c *Seq) Run(ctx context.Context, inv *Invocation) error {
 		}
 		text, err := formatSeqValue(value, opts, precision, hasPrecision, padding)
 		if err != nil {
-			return exitf(inv, 1, "seq: %v", err)
+			return seqErrorf(inv, "seq: %v", err)
 		}
 		if wroteAny {
 			if _, err := writer.WriteString(opts.separator); err != nil {
@@ -132,6 +132,7 @@ type seqOptions struct {
 	terminator string
 	equalWidth bool
 	format     string
+	formatSet  bool
 }
 
 type seqNumber struct {
@@ -188,21 +189,22 @@ func parseSeqArgs(inv *Invocation) (seqOptions, string, []seqNumber, error) {
 			opts.equalWidth = true
 		case arg == "-s" || arg == "--separator":
 			if len(args) == 0 {
-				return seqOptions{}, "", nil, exitf(inv, 1, "seq: option requires an argument -- 's'")
+				return seqOptions{}, "", nil, seqUsageErrorf(inv, "option requires an argument -- 's'")
 			}
 			opts.separator = args[0]
 			args = args[1:]
 		case arg == "-t" || arg == "--terminator":
 			if len(args) == 0 {
-				return seqOptions{}, "", nil, exitf(inv, 1, "seq: option requires an argument -- 't'")
+				return seqOptions{}, "", nil, seqUsageErrorf(inv, "option requires an argument -- 't'")
 			}
 			opts.terminator = args[0]
 			args = args[1:]
 		case arg == "-f" || arg == "--format":
 			if len(args) == 0 {
-				return seqOptions{}, "", nil, exitf(inv, 1, "seq: option requires an argument -- 'f'")
+				return seqOptions{}, "", nil, seqUsageErrorf(inv, "option requires an argument -- 'f'")
 			}
 			opts.format = args[0]
+			opts.formatSet = true
 			args = args[1:]
 		case strings.HasPrefix(arg, "--separator="):
 			opts.separator = strings.TrimPrefix(arg, "--separator=")
@@ -210,12 +212,14 @@ func parseSeqArgs(inv *Invocation) (seqOptions, string, []seqNumber, error) {
 			opts.terminator = strings.TrimPrefix(arg, "--terminator=")
 		case strings.HasPrefix(arg, "--format="):
 			opts.format = strings.TrimPrefix(arg, "--format=")
+			opts.formatSet = true
 		case len(arg) > 2 && strings.HasPrefix(arg, "-s"):
 			opts.separator = arg[2:]
 		case len(arg) > 2 && strings.HasPrefix(arg, "-t"):
 			opts.terminator = arg[2:]
 		case len(arg) > 2 && strings.HasPrefix(arg, "-f"):
 			opts.format = arg[2:]
+			opts.formatSet = true
 		default:
 			parsingOptions = false
 			number, err := parseSeqNumber(arg)
@@ -227,7 +231,7 @@ func parseSeqArgs(inv *Invocation) (seqOptions, string, []seqNumber, error) {
 	}
 
 	if len(numbers) > 3 {
-		return seqOptions{}, "", nil, exitf(inv, 1, "seq: extra operand %q", numbers[3].original)
+		return seqOptions{}, "", nil, seqUsageErrorf(inv, "extra operand %s", quoteGNUOperand(numbers[3].original))
 	}
 	return opts, "", numbers, nil
 }
@@ -258,7 +262,7 @@ func seqParseError(inv *Invocation, arg string, err error) error {
 	if errors.As(err, &parseErr) && parseErr.kind == seqParseNaN {
 		kind = "'not-a-number'"
 	}
-	return exitf(inv, 1, "seq: invalid %s argument: %q", kind, arg)
+	return seqUsageErrorf(inv, "invalid %s argument: %s", kind, quoteGNUOperand(arg))
 }
 
 func parseSeqNumber(input string) (seqNumber, error) {
@@ -365,9 +369,7 @@ func parseSeqDecimal(input string, sign int) (seqValue, error) {
 		num.Neg(num)
 	}
 
-	leadingTrimmed := strings.TrimLeft(intPart+fracPart, "0")
-	missingLeadingZeros := len(intPart+fracPart) - len(leadingTrimmed)
-	scale := len(fracPart) - exp - missingLeadingZeros
+	scale := len(fracPart) - exp
 	if scale < 0 {
 		scale = -scale
 		num.Mul(num, seqPow10(scale))
@@ -644,7 +646,7 @@ func seqAdd(left, right seqValue) (seqValue, error) {
 }
 
 func formatSeqValue(value seqValue, opts seqOptions, precision int, hasPrecision bool, padding int) (string, error) {
-	if opts.format != "" {
+	if opts.formatSet {
 		return seqFormatWithDirective(value, opts.format)
 	}
 	if value.kind == seqPosInf {
@@ -708,7 +710,7 @@ func seqFormatWithDirective(value seqValue, format string) (string, error) {
 		return "", err
 	}
 	if start < 0 {
-		return "", fmt.Errorf("format %q has no %% directive", format)
+		return "", fmt.Errorf("format %s has no %% directive", quoteGNUOperand(format))
 	}
 
 	if value.kind == seqPosInf {
@@ -730,15 +732,15 @@ func seqFindDirective(format string) (start, end int, err error) {
 		if format[i] != '%' {
 			continue
 		}
+		if directiveStart >= 0 && (i+1 >= len(format) || format[i+1] != '%') {
+			return -1, -1, fmt.Errorf("format %s has too many %% directives", quoteGNUOperand(format))
+		}
 		if i+1 >= len(format) {
-			return -1, -1, fmt.Errorf("format %q ends in %%", format)
+			return -1, -1, fmt.Errorf("format %s ends in %%", quoteGNUOperand(format))
 		}
 		if format[i+1] == '%' {
 			i++
 			continue
-		}
-		if directiveStart >= 0 {
-			return -1, -1, fmt.Errorf("format %q has too many %% directives", format)
 		}
 		j := i + 1
 		for j < len(format) && strings.ContainsRune(" +-#0", rune(format[j])) {
@@ -754,7 +756,7 @@ func seqFindDirective(format string) (start, end int, err error) {
 			}
 		}
 		if j >= len(format) {
-			return -1, -1, fmt.Errorf("format %q ends in %%", format)
+			return -1, -1, fmt.Errorf("format %s ends in %%", quoteGNUOperand(format))
 		}
 		switch format[j] {
 		case 'e', 'E', 'f', 'F', 'g', 'G':
@@ -762,7 +764,7 @@ func seqFindDirective(format string) (start, end int, err error) {
 			directiveEnd = j + 1
 			i = j
 		default:
-			return -1, -1, fmt.Errorf("format %q has no %% directive", format)
+			return -1, -1, fmt.Errorf("format %s has no %% directive", quoteGNUOperand(format))
 		}
 	}
 	if directiveStart < 0 {
@@ -791,6 +793,19 @@ func maxInt(values ...int) int {
 		}
 	}
 	return best
+}
+
+func seqUsageErrorf(inv *Invocation, format string, args ...any) error {
+	message := fmt.Sprintf("seq: "+format+"\nTry 'seq --help' for more information.", args...)
+	return seqErrorf(inv, "%s", message)
+}
+
+func seqErrorf(inv *Invocation, format string, args ...any) error {
+	message := fmt.Sprintf(format, args...)
+	if inv != nil && inv.Stderr != nil {
+		_, _ = fmt.Fprintln(inv.Stderr, message)
+	}
+	return &ExitError{Code: 1, Err: errors.New(message)}
 }
 
 var _ Command = (*Seq)(nil)

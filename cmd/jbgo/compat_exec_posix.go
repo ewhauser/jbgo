@@ -45,11 +45,7 @@ func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation
 		return 1, err
 	}
 
-	result, err := runner.RunUtility(ctx, inv.utility, inv.args, stdin)
-	if result != nil {
-		_, _ = io.WriteString(stdout, result.Stdout)
-		_, _ = io.WriteString(stderr, result.Stderr)
-	}
+	result, err := runner.RunUtilityStreaming(ctx, inv.utility, inv.args, stdin, stdout, stderr)
 	if err != nil {
 		return 1, err
 	}
