@@ -21,7 +21,18 @@ func FuzzCommCommand(f *testing.F) {
 		writeSessionFile(t, session, rightPath, normalizeFuzzText(rawRight))
 
 		script := fmt.Appendf(nil,
-			"comm -1 %s %s >/tmp/comm-1.txt || true\ncomm -2 %s %s >/tmp/comm-2.txt || true\ncomm -3 %s %s >/tmp/comm-3.txt || true\n",
+			"comm -1 %s %s >/tmp/comm-1.txt || true\n"+
+				"comm -2 %s %s >/tmp/comm-2.txt || true\n"+
+				"comm -3 %s %s >/tmp/comm-3.txt || true\n"+
+				"comm --total --output-delimiter=, %s %s >/tmp/comm-total.txt || true\n"+
+				"comm --nocheck-order %s %s >/tmp/comm-nocheck.txt || true\n"+
+				"comm --check-order %s %s >/tmp/comm-check.txt || true\n",
+			shellQuote(leftPath),
+			shellQuote(rightPath),
+			shellQuote(leftPath),
+			shellQuote(rightPath),
+			shellQuote(leftPath),
+			shellQuote(rightPath),
 			shellQuote(leftPath),
 			shellQuote(rightPath),
 			shellQuote(leftPath),
@@ -31,6 +42,6 @@ func FuzzCommCommand(f *testing.F) {
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
+		assertSecureFuzzOutcome(t, script, result, err)
 	})
 }
