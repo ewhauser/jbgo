@@ -170,6 +170,7 @@ shell/                mvdan/sh integration and handler wiring
 fs/                   project-owned filesystem interfaces and virtual backends
 network/              sandboxed HTTP client, allowlist matching, redirect checks
 commands/             command registry, invocation context, core Go commands
+contrib/<name>/       separate Go modules for optional heavyweight commands
 policy/               sandbox policy types and enforcement decisions
 trace/                structured event model and recorder implementations
 examples/             separate Go module for SDK demos and integration examples
@@ -183,6 +184,7 @@ Package responsibilities:
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `echo`, `cat`, `ls`, and `pwd`
+- `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
 - `trace/`: event schema, recorder interfaces, and in-memory buffering
 - `examples/`: runnable demos that can depend on external SDKs without affecting the root module build list
@@ -190,7 +192,7 @@ Package responsibilities:
 
 We intentionally do not create a `compat/` package because compatibility mode is not a product feature.
 
-The repository itself should be maintained as a committed Go workspace. The root module stays focused on the runtime and CLI, while `examples/` is a separate module used for demos that may need external SDK dependencies or looser version pinning.
+The repository itself should be maintained as a committed Go workspace. The root module stays focused on the runtime, CLI, and core commands, while direct children under `contrib/` are separate modules for optional heavyweight commands and `examples/` is a separate module used for demos that may need external SDK dependencies or looser version pinning.
 
 ## 8. Core Interfaces
 
@@ -600,7 +602,6 @@ Initial MVP command set:
 - `zcat`
 - `jq`
 - `yq`
-- `sqlite3`
 - `curl` when network access is configured
 - `mkdir`
 - `rm`
@@ -610,7 +611,9 @@ For `jq`, the runtime should support a practical CLI-compatible subset for agent
 
 For `yq`, the runtime should wrap `mikefarah/yq`'s `yqlib` evaluator rather than embedding the upstream Cobra CLI. The supported subset should cover agent-oriented `eval` / `eval-all` flows, input and output format selection, null-input document creation, pretty-print rewriting, exit-status handling, scalar-unwrapping controls, NUL-separated output, expression files, and in-place file updates. All input and output must continue to route through the sandbox filesystem, and `yqlib` file/env operators such as `load()` and `env()` must stay disabled so expressions cannot bypass policy.
 
-For `sqlite3`, the runtime should wrap `ncruces/go-sqlite3` directly rather than embedding the upstream CLI. The initial implementation should open an in-memory SQLite connection, deserialize database bytes from the sandbox filesystem when a file path is requested, execute SQL inside that in-memory connection, and serialize the database back to the sandbox filesystem only after successful writes. The supported subset should cover `:memory:` and file-backed databases, list / CSV / JSON / line / column / table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` must stay disabled so SQL cannot escape the sandbox filesystem or reach host file APIs.
+Contrib commands are registry-backed like core commands, but they are not part of `commands.DefaultRegistry()` and should be imported and registered explicitly by embedders that want them.
+
+For contrib `sqlite3`, the `github.com/ewhauser/gbash/contrib/sqlite3` module should wrap `ncruces/go-sqlite3` directly rather than embedding the upstream CLI. The implementation should open an in-memory SQLite connection, deserialize database bytes from the sandbox filesystem when a file path is requested, execute SQL inside that in-memory connection, and serialize the database back to the sandbox filesystem only after successful writes. The supported subset should cover `:memory:` and file-backed databases, list / CSV / JSON / line / column / table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` must stay disabled so SQL cannot escape the sandbox filesystem or reach host file APIs.
 
 For archive and compression helpers, the runtime should expose explicit subsets rather than imply GNU `tar` or `gzip` parity. `gzip`, `gunzip`, and `zcat` should support file and stdin/stdout flows, `-c`, `-d`, `-f`, `-k`, `-S`, `-t`, and `-v`, with binary-safe streaming and no host-tempfile fallback. `tar` should support create, list, and extract flows with `-c`, `-x`, `-t`, `-f`, `-C`, `-z`, `-v`, `-O`, and `-k`, while rejecting unsupported codecs and append/update modes. Extraction must strip leading slashes, reject parent-traversal entries, and reject symlink targets that escape the extraction root.
 

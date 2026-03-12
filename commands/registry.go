@@ -188,7 +188,6 @@ func DefaultRegistry() *Registry {
 		NewChown(),
 		NewJQ(),
 		NewYQ(),
-		NewSQLite3(),
 		NewMkdir(),
 		NewRM(),
 		NewExpr(),

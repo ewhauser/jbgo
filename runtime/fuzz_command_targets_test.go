@@ -311,52 +311,6 @@ func FuzzYQCommands(f *testing.F) {
 	})
 }
 
-func FuzzSQLiteCommands(f *testing.F) {
-	rt := newFuzzRuntime(f)
-	addStructuredDataSeeds(f)
-	warmFuzzSQLite(f, rt)
-
-	f.Fuzz(func(t *testing.T, rawValue string, rawJSON []byte) {
-		session := newFuzzSession(t, rt)
-		value := prepareStructuredDataFixtures(t, session, rawValue, rawJSON)
-		sql := fmt.Sprintf(
-			"create table t(value text); insert into t values ('%s'); select value from t;",
-			sqliteStringLiteral(value),
-		)
-
-		script := fmt.Appendf(nil,
-			"sqlite3 :memory: %s >/tmp/sqlite-value.txt\n",
-			shellQuote(sql),
-		)
-
-		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
-	})
-}
-
-func FuzzSQLiteFileCommands(f *testing.F) {
-	rt := newFuzzRuntime(f)
-	addStructuredDataSeeds(f)
-	warmFuzzSQLite(f, rt)
-
-	f.Fuzz(func(t *testing.T, rawValue string, rawJSON []byte) {
-		session := newFuzzSession(t, rt)
-		value := prepareStructuredDataFixtures(t, session, rawValue, rawJSON)
-		sql := fmt.Sprintf(
-			"create table if not exists items(value text); insert into items values ('%s'); select value from items order by value;",
-			sqliteStringLiteral(value),
-		)
-
-		script := fmt.Appendf(nil,
-			"sqlite3 -json /tmp/data.db %s >/tmp/sqlite-json.txt\n",
-			shellQuote(sql),
-		)
-
-		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
-	})
-}
-
 func FuzzArchiveCommands(f *testing.F) {
 	rt := newFuzzRuntime(f)
 

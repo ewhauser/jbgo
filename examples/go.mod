@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/ewhauser/gbash v0.0.0
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.0
 	github.com/klauspost/compress v1.18.4
 	github.com/ncruces/go-sqlite3 v0.31.1
 	github.com/openai/openai-go v1.12.0
@@ -81,3 +82,5 @@ require (
 )
 
 replace github.com/ewhauser/gbash => ../
+
+replace github.com/ewhauser/gbash/contrib/sqlite3 => ../contrib/sqlite3

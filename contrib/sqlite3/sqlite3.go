@@ -1,4 +1,4 @@
-package commands
+package sqlite3
 
 import (
 	"bytes"
@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"unicode"
@@ -16,7 +19,8 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/ncruces/go-sqlite3/ext/serdes"
 
-	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/commands"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type sqliteOutputMode string
@@ -85,11 +89,18 @@ func NewSQLite3() *SQLite3 {
 	return &SQLite3{}
 }
 
+func Register(registry commands.CommandRegistry) error {
+	if registry == nil {
+		return nil
+	}
+	return registry.Register(NewSQLite3())
+}
+
 func (c *SQLite3) Name() string {
 	return "sqlite3"
 }
 
-func (c *SQLite3) Run(ctx context.Context, inv *Invocation) error {
+func (c *SQLite3) Run(ctx context.Context, inv *commands.Invocation) error {
 	parsed, err := parseSQLiteArgs(inv)
 	if err != nil {
 		return err
@@ -102,7 +113,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *Invocation) error {
 	case parsed.showVersion:
 		version, err := sqliteVersion(ctx)
 		if err != nil {
-			return &ExitError{Code: 1, Err: err}
+			return &commands.ExitError{Code: 1, Err: err}
 		}
 		_, _ = fmt.Fprintf(inv.Stdout, "sqlite3 (gbash) backed by ncruces/go-sqlite3 v0.31.1 / SQLite %s\n", version)
 		return nil
@@ -113,7 +124,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *Invocation) error {
 	if parsed.sqlText == "" {
 		data, err := io.ReadAll(inv.Stdin)
 		if err != nil {
-			return &ExitError{Code: 1, Err: err}
+			return &commands.ExitError{Code: 1, Err: err}
 		}
 		parsed.sqlText = string(data)
 	}
@@ -131,12 +142,12 @@ func (c *SQLite3) Run(ctx context.Context, inv *Invocation) error {
 
 	conn, err := gosqlite.OpenContext(ctx, ":memory:")
 	if err != nil {
-		return &ExitError{Code: 1, Err: err}
+		return &commands.ExitError{Code: 1, Err: err}
 	}
 	defer func() { _ = conn.Close() }()
 
 	if err := configureSQLiteConn(conn, parsed.options.readonly); err != nil {
-		return &ExitError{Code: 1, Err: err}
+		return &commands.ExitError{Code: 1, Err: err}
 	}
 	if parsed.database != ":memory:" && exists {
 		data, err := readSQLiteDatabase(ctx, inv, dbPath)
@@ -177,7 +188,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseSQLiteArgs(inv *Invocation) (parsed sqliteParsedArgs, err error) {
+func parseSQLiteArgs(inv *commands.Invocation) (parsed sqliteParsedArgs, err error) {
 	parsed.options = sqliteOptions{
 		mode:      sqliteModeList,
 		header:    false,
@@ -287,18 +298,18 @@ func parseSQLiteArgs(inv *Invocation) (parsed sqliteParsedArgs, err error) {
 	return parsed, nil
 }
 
-func sqliteNextArg(inv *Invocation, flag string, args []string) (value string, rest []string, err error) {
+func sqliteNextArg(inv *commands.Invocation, flag string, args []string) (value string, rest []string, err error) {
 	if len(args) == 0 {
 		return "", nil, exitf(inv, 1, "sqlite3: missing argument to %s", flag)
 	}
 	return args[0], args[1:], nil
 }
 
-func resolveSQLiteDatabasePath(ctx context.Context, inv *Invocation, database string) (absPath string, exists bool, err error) {
+func resolveSQLiteDatabasePath(ctx context.Context, inv *commands.Invocation, database string) (absPath string, exists bool, err error) {
 	if database == ":memory:" {
 		return database, false, nil
 	}
-	info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, database)
+	info, abs, exists, err := statMaybe(ctx, inv, database)
 	if err != nil {
 		return "", false, err
 	}
@@ -308,7 +319,7 @@ func resolveSQLiteDatabasePath(ctx context.Context, inv *Invocation, database st
 	return abs, exists, nil
 }
 
-func readSQLiteDatabase(ctx context.Context, inv *Invocation, name string) ([]byte, error) {
+func readSQLiteDatabase(ctx context.Context, inv *commands.Invocation, name string) ([]byte, error) {
 	file, _, err := openRead(ctx, inv, name)
 	if err != nil {
 		return nil, err
@@ -317,9 +328,78 @@ func readSQLiteDatabase(ctx context.Context, inv *Invocation, name string) ([]by
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return nil, &ExitError{Code: 1, Err: err}
+		return nil, &commands.ExitError{Code: 1, Err: err}
 	}
 	return data, nil
+}
+
+func exitf(inv *commands.Invocation, code int, format string, args ...any) error {
+	return commands.Exitf(inv, code, format, args...)
+}
+
+func statMaybe(ctx context.Context, inv *commands.Invocation, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
+	abs = name
+	if inv != nil && inv.FS != nil {
+		abs = inv.FS.Resolve(name)
+	}
+	info, err = inv.FS.Stat(ctx, abs)
+	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) {
+			return nil, abs, false, nil
+		}
+		return nil, "", false, err
+	}
+	return info, abs, true, nil
+}
+
+func openRead(ctx context.Context, inv *commands.Invocation, name string) (gbfs.File, string, error) {
+	abs := name
+	if inv != nil && inv.FS != nil {
+		abs = inv.FS.Resolve(name)
+	}
+	file, err := inv.FS.Open(ctx, abs)
+	if err != nil {
+		return nil, "", err
+	}
+	return file, abs, nil
+}
+
+func ensureParentDirExists(ctx context.Context, inv *commands.Invocation, targetAbs string) error {
+	parent := path.Dir(targetAbs)
+	info, _, exists, err := statMaybe(ctx, inv, parent)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return &commands.ExitError{
+			Code: 1,
+			Err:  fmt.Errorf("%s: No such file or directory", parent),
+		}
+	}
+	if !info.IsDir() {
+		return &commands.ExitError{
+			Code: 1,
+			Err:  fmt.Errorf("%s: Not a directory", parent),
+		}
+	}
+	return nil
+}
+
+func writeFileContents(ctx context.Context, inv *commands.Invocation, targetAbs string, data []byte, perm stdfs.FileMode) error {
+	if err := ensureParentDirExists(ctx, inv, targetAbs); err != nil {
+		return err
+	}
+
+	file, err := inv.FS.OpenFile(ctx, targetAbs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
+	if err != nil {
+		return &commands.ExitError{Code: 1, Err: err}
+	}
+	defer func() { _ = file.Close() }()
+
+	if _, err := file.Write(data); err != nil {
+		return &commands.ExitError{Code: 1, Err: err}
+	}
+	return nil
 }
 
 func configureSQLiteConn(conn *gosqlite.Conn, readonly bool) error {
@@ -402,14 +482,14 @@ func sqliteWriteAction(action gosqlite.AuthorizerActionCode) bool {
 	}
 }
 
-func runSQLiteBatch(_ context.Context, inv *Invocation, conn *gosqlite.Conn, sqlText string, opts *sqliteOptions) (bool, error) {
+func runSQLiteBatch(_ context.Context, inv *commands.Invocation, conn *gosqlite.Conn, sqlText string, opts *sqliteOptions) (bool, error) {
 	remaining := sqlText
 	var wrote bool
 	var hadSQLError bool
 	for {
 		if strings.TrimSpace(remaining) == "" {
 			if hadSQLError {
-				return wrote, &ExitError{Code: 1, Err: errors.New("sqlite3: one or more SQL statements failed")}
+				return wrote, &commands.ExitError{Code: 1, Err: errors.New("sqlite3: one or more SQL statements failed")}
 			}
 			return wrote, nil
 		}
@@ -453,7 +533,7 @@ func runSQLiteBatch(_ context.Context, inv *Invocation, conn *gosqlite.Conn, sql
 			if errors.As(err, &sqlErr) {
 				hadSQLError = true
 				if opts.bail {
-					return wrote, &ExitError{Code: 1, Err: sqlErr.Err}
+					return wrote, &commands.ExitError{Code: 1, Err: sqlErr.Err}
 				}
 				remaining = tail
 				continue
@@ -464,11 +544,11 @@ func runSQLiteBatch(_ context.Context, inv *Invocation, conn *gosqlite.Conn, sql
 		if result != nil {
 			formatted, err := formatSQLiteResult(opts, result)
 			if err != nil {
-				return wrote, &ExitError{Code: 1, Err: err}
+				return wrote, &commands.ExitError{Code: 1, Err: err}
 			}
 			if len(formatted) > 0 {
 				if _, err := inv.Stdout.Write(formatted); err != nil {
-					return wrote, &ExitError{Code: 1, Err: err}
+					return wrote, &commands.ExitError{Code: 1, Err: err}
 				}
 			}
 		}
@@ -476,7 +556,7 @@ func runSQLiteBatch(_ context.Context, inv *Invocation, conn *gosqlite.Conn, sql
 	}
 }
 
-func executeSQLiteStatement(inv *Invocation, stmt *gosqlite.Stmt) (*sqliteStatementResult, bool, error) {
+func executeSQLiteStatement(inv *commands.Invocation, stmt *gosqlite.Stmt) (*sqliteStatementResult, bool, error) {
 	columns := stmt.ColumnCount()
 	var result *sqliteStatementResult
 	if columns > 0 {
@@ -1184,4 +1264,4 @@ Notes:
   - ATTACH, DETACH, VACUUM, virtual-table creation, and load_extension() are disabled.
 `
 
-var _ Command = (*SQLite3)(nil)
+var _ commands.Command = (*SQLite3)(nil)

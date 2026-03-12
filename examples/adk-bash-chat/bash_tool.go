@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ewhauser/gbash/commands"
+	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
 	gbfs "github.com/ewhauser/gbash/fs"
 	gbruntime "github.com/ewhauser/gbash/runtime"
 	"google.golang.org/adk/tool"
@@ -66,7 +68,12 @@ var labFixtures = []fixtureSpec{
 }
 
 func newPersistentBashTool(ctx context.Context) (*persistentBashTool, error) {
-	rt, err := gbruntime.New(&gbruntime.Config{})
+	registry := commands.DefaultRegistry()
+	if err := contribsqlite3.Register(registry); err != nil {
+		return nil, fmt.Errorf("register sqlite3 command: %w", err)
+	}
+
+	rt, err := gbruntime.New(&gbruntime.Config{Registry: registry})
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}

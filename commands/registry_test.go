@@ -73,3 +73,9 @@ func TestRegistryLazyCommandLoadsOnce(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestDefaultRegistryDoesNotIncludeSQLite3(t *testing.T) {
+	if slices.Contains(DefaultRegistry().Names(), "sqlite3") {
+		t.Fatalf("DefaultRegistry() unexpectedly includes sqlite3")
+	}
+}

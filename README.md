@@ -250,7 +250,7 @@ That path is intentionally separate from the default sandbox script and REPL mod
 
 ### Workspace Example
 
-The repository includes an `examples/` Go module so integration demos can carry their own dependencies without adding them to the root library module.
+The repository uses a committed Go workspace. `examples/` is a separate Go module for demos, and `contrib/` contains separate opt-in modules for commands that should not bloat the core library dependency graph.
 
 `openai-tool-call` uses the OpenAI Go SDK Responses API with a function tool named `bash`. The tool implementation calls `runtime.Run`, so the model sees a normal `bash` tool while execution still happens inside the `gbash` sandbox.
 
@@ -413,7 +413,7 @@ If you want full control over the transport in tests or embedding code, inject y
 
 ### Custom Commands
 
-Use `commands.DefineCommand` with a custom `Config.Registry` when you want to add a command or override one of the defaults.
+Use `commands.DefineCommand` with a custom `Config.Registry` when you want to add a command or override one of the defaults. Contrib commands use this same registry hook and live in separate Go modules so optional heavy dependencies stay out of the core `github.com/ewhauser/gbash` module.
 
 ```go
 registry := commands.DefaultRegistry()
@@ -433,6 +433,38 @@ rt, err := runtime.New(&runtime.Config{Registry: registry})
 ```
 
 See [`examples/custom-zstd/main.go`](./examples/custom-zstd/main.go) for a runnable example that adds a `zstd` command. Run it with `cd examples && make run-custom-zstd`.
+
+To opt into the contrib `sqlite3` command:
+
+```go
+package main
+
+import (
+	"context"
+
+	"github.com/ewhauser/gbash/commands"
+	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
+	gbruntime "github.com/ewhauser/gbash/runtime"
+)
+
+func main() {
+	registry := commands.DefaultRegistry()
+	if err := contribsqlite3.Register(registry); err != nil {
+		panic(err)
+	}
+
+	rt, err := gbruntime.New(&gbruntime.Config{Registry: registry})
+	if err != nil {
+		panic(err)
+	}
+
+	_, _ = rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+		Script: `sqlite3 :memory: "select 1;"`,
+	})
+}
+```
+
+The stock `gbash` CLI and zero-config `runtime.New(&runtime.Config{})` only include core commands. Contrib commands are opt-in by design.
 
 ### Registry and Policy
 
@@ -460,7 +492,7 @@ The default registry currently includes the commands listed in [`commands/regist
 
 - File and path: `cat`, `cp`, `mv`, `ln`, `ls`, `mkdir`, `rm`, `rmdir`, `touch`, `chmod`, `readlink`, `stat`, `basename`, `dirname`, `tree`, `du`, `file`, `find`
 - Search and text: `grep`, `rg`, `awk`, `sed`, `cut`, `sort`, `uniq`, `head`, `tail`, `wc`, `printf`, `tee`, `comm`, `paste`, `tr`, `rev`, `nl`, `join`, `split`, `tac`, `diff`, `base64`
-- Archive and data: `tar`, `gzip`, `gunzip`, `zcat`, `jq`, `yq`, `sqlite3`
+- Archive and data: `tar`, `gzip`, `gunzip`, `zcat`, `jq`, `yq`
 - Environment and execution: `echo`, `pwd`, `env`, `printenv`, `which`, `help`, `true`, `false`, `date`, `sleep`, `timeout`, `xargs`, `bash`, `sh`
 - Network when configured: `curl`
 
@@ -468,7 +500,9 @@ The project targets high-value agent workflows, not full GNU flag parity for eve
 
 `tar`, `gzip`, `gunzip`, and `zcat` are intentionally focused subsets. The current surface covers create/list/extract, gzip-wrapped archives, `-C`, `-k`, `-O`, stdin/stdout flows, and extraction hardening around parent traversal and unsafe symlink targets. Append/update modes and non-gzip codecs are still out of scope.
 
-`sqlite3` is backed by [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) using an in-memory connection plus explicit sandbox filesystem load and writeback. The current subset supports `:memory:` and sandbox file databases, list/CSV/JSON/line/column/table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` are denied so SQL cannot escape the sandbox filesystem.
+Optional contrib commands are not part of the default registry. `sqlite3` now lives in [`contrib/sqlite3`](./contrib/sqlite3) so the core library does not pull SQLite's WASM-backed dependency chain by default.
+
+The contrib `sqlite3` command is backed by [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) using an in-memory connection plus explicit sandbox filesystem load and writeback. The current subset supports `:memory:` and sandbox file databases, list/CSV/JSON/line/column/table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` are denied so SQL cannot escape the sandbox filesystem.
 
 ## Shell Features
 
@@ -500,13 +534,14 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 
 This repository is a committed Go workspace:
 
-- the root module contains the runtime, CLI, and tests
+- the root module contains the runtime, CLI, core commands, and tests
+- [`contrib/sqlite3/`](./contrib/sqlite3) is a separate Go module for the optional `sqlite3` command and its heavier dependencies
 - [`examples/`](./examples) is a separate Go module for demos and external SDK integrations
 
 Common commands from the repo root:
 
-- `go build ./... ./examples/...`
-- `go test ./... ./examples/...`
+- `go build ./... ./contrib/sqlite3/... ./examples/...`
+- `go test ./... ./contrib/sqlite3/... ./examples/...`
 - `go run ./examples/openai-tool-call`
 - `go run ./examples/adk-bash-chat`
 - `go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --script "pwd"`

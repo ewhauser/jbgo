@@ -2,5 +2,6 @@ go 1.26.0
 
 use (
 	.
+	./contrib/sqlite3
 	./examples
 )

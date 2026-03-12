@@ -1,6 +1,6 @@
 .PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish release-check release-snapshot
 
-GO_PACKAGES := ./... ./examples/...
+GO_PACKAGES := ./... ./contrib/sqlite3/... ./examples/...
 
 FUZZTIME ?= 10s
 FUZZ_SMOKE_TIME ?= 3s
@@ -30,9 +30,9 @@ FUZZ_SMOKE_SHARD_PATHS := \
 	FuzzTextSearchCommands
 
 FUZZ_SMOKE_SHARD_DATA := \
-	FuzzSQLiteCommands \
 	FuzzArchiveCommands \
-	FuzzYQCommands
+	FuzzYQCommands \
+	./contrib/sqlite3:FuzzSQLiteCommands
 
 FUZZ_SMOKE_SHARD_SECURITY := \
 	FuzzGeneratedPrograms \
@@ -80,7 +80,7 @@ FUZZ_FULL_SHARD_3 := \
 	FuzzTRFlagsCommand \
 	FuzzCatCommand \
 	FuzzDiffCommand \
-	FuzzSQLiteCommands \
+	./contrib/sqlite3:FuzzSQLiteCommands \
 	FuzzGeneratedPrograms
 
 FUZZ_FULL_SHARD_4 := \
@@ -92,7 +92,7 @@ FUZZ_FULL_SHARD_4 := \
 	FuzzShellProcessCommands \
 	FuzzNestedShellCommands \
 	FuzzDataCommands \
-	FuzzSQLiteFileCommands \
+	./contrib/sqlite3:FuzzSQLiteFileCommands \
 	FuzzAttackMutations
 
 FUZZ_FULL_TARGETS := \
@@ -103,7 +103,9 @@ FUZZ_FULL_TARGETS := \
 
 lint:
 	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	golangci-lint run $(GO_PACKAGES)
+	golangci-lint run ./...
+	cd examples && golangci-lint run ./...
+	cd contrib/sqlite3 && golangci-lint run ./...
 
 test:
 	go test $(GO_PACKAGES)
@@ -117,8 +119,16 @@ fuzz-run:
 	@test -n "$(strip $(FUZZ_TARGETS))" || { echo "FUZZ_TARGETS is required"; exit 1; }
 	@set -e; \
 	for target in $(FUZZ_TARGETS); do \
-		echo "==> $$target"; \
-		go test ./runtime -run=^$$ -fuzz=$$target -fuzztime=$(FUZZTIME); \
+		pkg=./runtime; \
+		fuzz_target=$$target; \
+		case "$$target" in \
+			*:* ) \
+				pkg=$${target%%:*}; \
+				fuzz_target=$${target#*:}; \
+				;; \
+		esac; \
+		echo "==> $$pkg $$fuzz_target"; \
+		go test $$pkg -run=^$$ -fuzz=$$fuzz_target -fuzztime=$(FUZZTIME); \
 	done
 
 fuzz-shard:
