@@ -93,8 +93,37 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	states := make([]tailFollowState, 0, len(opts.files))
+	followedStdin := false
 	exitCode := 0
 	for _, file := range opts.files {
+		if file == "-" {
+			if opts.follow == tailFollowName {
+				writeTailCannotFollowStdinByName(inv)
+				exitCode = 1
+				continue
+			}
+			if err := ensureTailStdinAvailable(inv); err != nil {
+				writeTailCannotFstatStdin(inv)
+				exitCode = 1
+				continue
+			}
+			data, err := readAllStdin(inv)
+			if err != nil {
+				return err
+			}
+			if len(data) == 0 && opts.follow != tailFollowNone {
+				writeTailCannotFstatStdin(inv)
+				exitCode = 1
+				continue
+			}
+			if err := writeTailOutput(inv, outputState, tailDisplayName(file), process(data), showHeaders, showHeaders); err != nil {
+				return err
+			}
+			if opts.follow != tailFollowNone {
+				followedStdin = true
+			}
+			continue
+		}
 		data, followFile, err := readTailInitialFile(ctx, inv, file, opts.follow)
 		if err != nil {
 			writeTailMissingError(inv, file)
@@ -146,6 +175,9 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	if len(states) == 0 {
+		if followedStdin {
+			return nil
+		}
 		writeTailNoFilesRemainingError(inv)
 		return &ExitError{Code: 1}
 	}
@@ -369,6 +401,9 @@ func parseTailArgs(inv *Invocation) (tailOptions, error) {
 			args = args[1:]
 			opts.files = append(opts.files, args...)
 			return opts, nil
+		case arg == "-":
+			opts.files = append(opts.files, arg)
+			args = args[1:]
 		case arg == "-n" || arg == "--lines":
 			if len(args) < 2 {
 				return tailOptions{}, exitf(inv, 1, "tail: missing argument to -n")
@@ -561,6 +596,14 @@ func writeTailNoFilesRemainingError(inv *Invocation) {
 	_, _ = fmt.Fprintln(inv.Stderr, "tail: no files remaining")
 }
 
+func writeTailCannotFstatStdin(inv *Invocation) {
+	_, _ = fmt.Fprintln(inv.Stderr, "tail: cannot fstat 'standard input'")
+}
+
+func writeTailCannotFollowStdinByName(inv *Invocation) {
+	_, _ = fmt.Fprintln(inv.Stderr, "tail: cannot follow '-' by name")
+}
+
 func writeTailOutput(inv *Invocation, outputState *tailOutputState, file string, data []byte, showHeaders, forceHeader bool) error {
 	if outputState == nil {
 		outputState = &tailOutputState{}
@@ -610,6 +653,24 @@ func tailFileIdentity(info stdfs.FileInfo) string {
 		return ""
 	}
 	return fmt.Sprintf("%v:%v", dev.Interface(), ino.Interface())
+}
+
+func ensureTailStdinAvailable(inv *Invocation) error {
+	statter, ok := inv.Stdin.(interface {
+		Stat() (stdfs.FileInfo, error)
+	})
+	if !ok {
+		return nil
+	}
+	_, err := statter.Stat()
+	return err
+}
+
+func tailDisplayName(name string) string {
+	if name == "-" {
+		return "standard input"
+	}
+	return name
 }
 
 var _ Command = (*Tail)(nil)

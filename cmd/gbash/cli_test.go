@@ -467,6 +467,93 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryStopsWhenFileDisappears(t *
 	}
 }
 
+func TestRunCLICompatExecTailFollowDashReadsStandardInput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
+		"compat", "exec", "tail", "-f", "-",
+	}, strings.NewReader("line\n"), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "line\n" {
+		t.Fatalf("stdout = %q, want %q", got, "line\n")
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLICompatExecTailFollowDashReportsClosedStdin(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	stdinPath := filepath.Join(tmp, "closed-stdin")
+	if err := os.WriteFile(stdinPath, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(closed-stdin) error = %v", err)
+	}
+	stdin, err := os.Open(stdinPath)
+	if err != nil {
+		t.Fatalf("Open(closed-stdin) error = %v", err)
+	}
+	if err := stdin.Close(); err != nil {
+		t.Fatalf("Close(closed-stdin) error = %v", err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
+		"compat", "exec", "tail", "-f", "-",
+	}, stdin, &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if !strings.Contains(stderr.String(), "cannot fstat 'standard input'") {
+		t.Fatalf("stderr = %q, want cannot-fstat diagnostic", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "no files remaining") {
+		t.Fatalf("stderr = %q, want no-files-remaining diagnostic", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowNameRejectsDash(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
+		"compat", "exec", "tail", "--follow=name", "-",
+	}, strings.NewReader("line\n"), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if !strings.Contains(stderr.String(), "cannot follow '-' by name") {
+		t.Fatalf("stderr = %q, want follow-name stdin rejection", stderr.String())
+	}
+}
+
 func TestRunCLIMulticallUsesArgv0CommandAndBypassesTTYRepl(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
