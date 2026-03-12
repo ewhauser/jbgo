@@ -81,7 +81,15 @@ func compatConfigShellPath(workDir string) (string, error) {
 
 func implementedGNUProgramSet() map[string]struct{} {
 	supported := make(map[string]struct{})
-	for _, name := range gbcommands.DefaultRegistry().Names() {
+	registry := gbcommands.DefaultRegistry()
+	for _, name := range registry.Names() {
+		cmd, ok := registry.Lookup(name)
+		if !ok {
+			continue
+		}
+		if _, placeholder := cmd.(*gbcommands.NotImplemented); placeholder {
+			continue
+		}
 		supported[name] = struct{}{}
 	}
 	return supported
