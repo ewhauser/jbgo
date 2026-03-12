@@ -528,6 +528,15 @@ func TestImplementedGNUProgramSetIncludesHelperCommands(t *testing.T) {
 	}
 }
 
+func TestImplementedGNUProgramSetExcludesNotImplementedPlaceholders(t *testing.T) {
+	supported := implementedGNUProgramSet()
+	for _, name := range []string{"b2sum", "sha224sum", "truncate"} {
+		if _, ok := supported[name]; ok {
+			t.Fatalf("implementedGNUProgramSet() unexpectedly included placeholder %q", name)
+		}
+	}
+}
+
 func TestPrepareWorkDirPreservesFileTimes(t *testing.T) {
 	cacheDir := t.TempDir()
 	sourceDir := filepath.Join(t.TempDir(), "source")
