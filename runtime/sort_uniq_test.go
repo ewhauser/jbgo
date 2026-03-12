@@ -297,3 +297,20 @@ func TestUniqSupportsIgnoreCase(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestUniqSupportsCheckChars(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '0.1\\n0.2\\n0.7\\n1.0\\n' > /tmp/prefix.txt\nuniq -w2 /tmp/prefix.txt\nprintf 'alpha\\nAlps\\nbeta\\n' | uniq --ignore-case --check-chars=2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "0.1\n1.0\nalpha\nbeta\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

@@ -3,13 +3,17 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type Uniq struct{}
 
 type uniqOptions struct {
 	countOnly      bool
+	checkChars     int
+	checkCharsSet  bool
 	duplicatesOnly bool
 	ignoreCase     bool
 	uniqueOnly     bool
@@ -54,7 +58,7 @@ func (c *Uniq) Run(ctx context.Context, inv *Invocation) error {
 		}
 	}
 
-	for _, group := range uniqGroups(lines, opts.ignoreCase) {
+	for _, group := range uniqGroups(lines, opts) {
 		if !shouldPrintUniqGroup(group, opts) {
 			continue
 		}
@@ -88,16 +92,44 @@ func parseUniqArgs(inv *Invocation) (uniqOptions, []string, error) {
 		if !strings.HasPrefix(arg, "-") || arg == "-" {
 			break
 		}
-		switch arg {
-		case "-c", "--count":
+		switch {
+		case arg == "-c" || arg == "--count":
 			opts.countOnly = true
-		case "-d", "--repeated":
+		case arg == "-w" || arg == "--check-chars":
+			if len(args) < 2 {
+				return uniqOptions{}, nil, exitf(inv, 1, "uniq: option requires an argument -- 'w'")
+			}
+			count, err := parseUniqCheckChars(inv, args[1])
+			if err != nil {
+				return uniqOptions{}, nil, err
+			}
+			opts.checkChars = count
+			opts.checkCharsSet = true
+			args = args[1:]
+		case arg == "-d" || arg == "--repeated":
 			opts.duplicatesOnly = true
-		case "-i", "--ignore-case":
+		case arg == "-i" || arg == "--ignore-case":
 			opts.ignoreCase = true
-		case "-u", "--unique":
+		case arg == "-u" || arg == "--unique":
 			opts.uniqueOnly = true
+		case strings.HasPrefix(arg, "--check-chars="):
+			count, err := parseUniqCheckChars(inv, strings.TrimPrefix(arg, "--check-chars="))
+			if err != nil {
+				return uniqOptions{}, nil, err
+			}
+			opts.checkChars = count
+			opts.checkCharsSet = true
 		default:
+			if len(arg) > 2 && strings.HasPrefix(arg, "-w") {
+				count, err := parseUniqCheckChars(inv, arg[2:])
+				if err != nil {
+					return uniqOptions{}, nil, err
+				}
+				opts.checkChars = count
+				opts.checkCharsSet = true
+				args = args[1:]
+				continue
+			}
 			if len(arg) > 2 && arg[0] == '-' && arg[1] != '-' {
 				for _, flag := range arg[1:] {
 					switch flag {
@@ -123,14 +155,22 @@ func parseUniqArgs(inv *Invocation) (uniqOptions, []string, error) {
 	return opts, args, nil
 }
 
-func uniqGroups(lines []string, ignoreCase bool) []uniqGroup {
+func parseUniqCheckChars(inv *Invocation, raw string) (int, error) {
+	count, err := strconv.Atoi(raw)
+	if err != nil || count < 0 {
+		return 0, exitf(inv, 1, "uniq: invalid number of characters to compare")
+	}
+	return count, nil
+}
+
+func uniqGroups(lines []string, opts uniqOptions) []uniqGroup {
 	if len(lines) == 0 {
 		return nil
 	}
 	groups := make([]uniqGroup, 0, len(lines))
 	current := uniqGroup{line: lines[0], count: 1}
 	for _, line := range lines[1:] {
-		if equalUniqLine(line, current.line, ignoreCase) {
+		if equalUniqLine(line, current.line, opts) {
 			current.count++
 			continue
 		}
@@ -141,11 +181,31 @@ func uniqGroups(lines []string, ignoreCase bool) []uniqGroup {
 	return groups
 }
 
-func equalUniqLine(left, right string, ignoreCase bool) bool {
-	if ignoreCase {
+func equalUniqLine(left, right string, opts uniqOptions) bool {
+	if opts.checkCharsSet {
+		left = uniqPrefixChars(left, opts.checkChars)
+		right = uniqPrefixChars(right, opts.checkChars)
+	}
+	if opts.ignoreCase {
 		return strings.EqualFold(left, right)
 	}
 	return left == right
+}
+
+func uniqPrefixChars(line string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(line) <= limit {
+		return line
+	}
+	for idx := range line {
+		if limit == 0 {
+			return line[:idx]
+		}
+		limit--
+	}
+	return line
 }
 
 func shouldPrintUniqGroup(group uniqGroup, opts uniqOptions) bool {
