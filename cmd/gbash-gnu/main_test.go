@@ -224,6 +224,39 @@ func TestCompleteUtilityResultsAddsInactivePlaceholders(t *testing.T) {
 	}
 }
 
+func TestLoadManifestIncludesNewUtilityCoverage(t *testing.T) {
+	mf, err := loadManifest()
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	gotPatterns := make(map[string][]string, len(mf.Utilities))
+	for _, utility := range mf.Utilities {
+		gotPatterns[utility.Name] = utility.Patterns
+	}
+
+	for name, want := range map[string][]string{
+		"[":       {"tests/test/*", "tests/misc/invalid-opt.pl"},
+		"head":    {"tests/head/*"},
+		"md5sum":  {"tests/cksum/md5sum*"},
+		"sha1sum": {"tests/cksum/sha1sum*"},
+	} {
+		got, ok := gotPatterns[name]
+		if !ok {
+			t.Fatalf("manifest missing %q utility", name)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s patterns = %#v, want %#v", name, got, want)
+		}
+	}
+
+	for _, skip := range mf.SkipPatterns {
+		if skip.Pattern == "tests/head/*" {
+			t.Fatalf("manifest still contains head skip: %#v", skip)
+		}
+	}
+}
+
 func TestCombinedTestsForRunsDeduplicatesSharedTests(t *testing.T) {
 	runs := []utilityRun{
 		{

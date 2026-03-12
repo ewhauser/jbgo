@@ -3,6 +3,7 @@
   "tarball_url": "https://ftp.gnu.org/gnu/coreutils/coreutils-9.10.tar.gz",
   "tarball_sha256": "e0bde1fb68509447fc723cf2517e8a8c7fa46769919bb7490ed350a2e9238562",
   "utilities": [
+    { "name": "[", "patterns": ["tests/test/*", "tests/misc/invalid-opt.pl"] },
     { "name": "base32", "patterns": ["tests/basenc/base32.pl"] },
     { "name": "base64", "patterns": ["tests/basenc/base64.pl"] },
     { "name": "basename", "patterns": ["tests/misc/basename*"] },
@@ -20,15 +21,16 @@
     { "name": "env", "patterns": ["tests/env/*"] },
     { "name": "expr", "patterns": ["tests/expr/*"] },
     { "name": "false", "patterns": ["tests/misc/false*"] },
+    { "name": "head", "patterns": ["tests/head/*"] },
     { "name": "id", "patterns": ["tests/id/*"] },
     { "name": "join", "patterns": ["tests/join/*"] },
     { "name": "link", "patterns": ["tests/misc/invalid-opt.pl"] },
     { "name": "ln", "patterns": ["tests/ln/*"] },
     { "name": "ls", "patterns": ["tests/ls/*"] },
+    { "name": "md5sum", "patterns": ["tests/cksum/md5sum*"] },
     { "name": "mkdir", "patterns": ["tests/mkdir/*"] },
     { "name": "mv", "patterns": ["tests/mv/*"] },
     { "name": "nl", "patterns": ["tests/nl/*", "tests/misc/nl*"] },
-    { "name": "od", "patterns": ["tests/od/*"] },
     { "name": "paste", "patterns": ["tests/paste/*", "tests/misc/paste*"] },
     { "name": "printenv", "patterns": ["tests/printenv/*"] },
     { "name": "printf", "patterns": ["tests/printf/*", "tests/misc/printf*"] },
@@ -37,6 +39,7 @@
     { "name": "rm", "patterns": ["tests/rm/*"] },
     { "name": "rmdir", "patterns": ["tests/rmdir/*"] },
     { "name": "seq", "patterns": ["tests/seq/*"] },
+    { "name": "sha1sum", "patterns": ["tests/cksum/sha1sum*"] },
     { "name": "sha256sum", "patterns": ["tests/sum/*", "tests/cksum/*"] },
     { "name": "sleep", "patterns": ["tests/sleep/*", "tests/misc/sleep*"] },
     { "name": "sort", "patterns": ["tests/sort/*"] },
@@ -56,7 +59,6 @@
   ],
   "skip_patterns": [
     { "pattern": "tests/help/*", "reason": "help/version tests are skipped in v1" },
-    { "pattern": "tests/*/selinux*", "reason": "SELinux tests are skipped in v1" },
-    { "pattern": "tests/head/*", "reason": "head GNU compat tests temporarily skipped" }
+    { "pattern": "tests/*/selinux*", "reason": "SELinux tests are skipped in v1" }
   ]
 }
