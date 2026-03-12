@@ -92,4 +92,10 @@ type makeCheckResult struct {
 	Output   []byte
 }
 
+type utilityRun struct {
+	Utility utilityManifest
+	Tests   []string
+	Skipped []string
+}
+
 const sourceCacheVersion = "2"

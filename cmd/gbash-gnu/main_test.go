@@ -224,6 +224,127 @@ func TestCompleteUtilityResultsAddsInactivePlaceholders(t *testing.T) {
 	}
 }
 
+func TestCombinedTestsForRunsDeduplicatesSharedTests(t *testing.T) {
+	runs := []utilityRun{
+		{
+			Utility: utilityManifest{Name: "dir"},
+			Tests:   []string{"tests/misc/invalid-opt.pl"},
+		},
+		{
+			Utility: utilityManifest{Name: "link"},
+			Tests:   []string{"tests/misc/invalid-opt.pl"},
+		},
+		{
+			Utility: utilityManifest{Name: "test"},
+			Tests:   []string{"tests/misc/invalid-opt.pl"},
+		},
+	}
+
+	got := combinedTestsForRuns(runs)
+	want := []string{"tests/misc/invalid-opt.pl"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("combinedTestsForRuns() = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildBatchedUtilityResultsSharesLogAndSynthesizesExitCodes(t *testing.T) {
+	runs := []utilityRun{
+		{
+			Utility: utilityManifest{Name: "basename", Patterns: []string{"tests/misc/basename*"}},
+			Tests:   []string{"tests/misc/basename.pl"},
+		},
+		{
+			Utility: utilityManifest{Name: "dirname", Patterns: []string{"tests/misc/dirname*"}},
+			Tests:   []string{"tests/misc/dirname.pl"},
+		},
+	}
+
+	got := buildBatchedUtilityResults(runs, makeCheckResult{
+		ExitCode: 1,
+		Output: []byte(`
+PASS: tests/misc/basename.pl
+FAIL: tests/misc/dirname.pl
+`),
+	}, "compat.log", "/tmp/compat.log")
+
+	if len(got) != 2 {
+		t.Fatalf("len(results) = %d, want 2", len(got))
+	}
+	if !got[0].Passed || got[0].ExitCode != 0 {
+		t.Fatalf("basename result = %#v, want passed with exit 0", got[0])
+	}
+	if got[0].LogFile != "compat.log" || got[0].LogPath != "/tmp/compat.log" {
+		t.Fatalf("basename log = (%q, %q), want shared compat.log", got[0].LogFile, got[0].LogPath)
+	}
+	if got[1].Passed || got[1].ExitCode != 1 {
+		t.Fatalf("dirname result = %#v, want failed with exit 1", got[1])
+	}
+	if got[1].Summary.Fail != 1 {
+		t.Fatalf("dirname summary = %#v, want one failure", got[1].Summary)
+	}
+}
+
+func TestBuildBatchedUtilityResultsReusesSharedManifestTestAcrossUtilities(t *testing.T) {
+	runs := []utilityRun{
+		{
+			Utility: utilityManifest{Name: "dir", Patterns: []string{"tests/misc/invalid-opt.pl"}},
+			Tests:   []string{"tests/misc/invalid-opt.pl"},
+		},
+		{
+			Utility: utilityManifest{Name: "link", Patterns: []string{"tests/misc/invalid-opt.pl"}},
+			Tests:   []string{"tests/misc/invalid-opt.pl"},
+		},
+		{
+			Utility: utilityManifest{Name: "test", Patterns: []string{"tests/misc/invalid-opt.pl"}},
+			Tests:   []string{"tests/misc/invalid-opt.pl"},
+		},
+	}
+
+	got := buildBatchedUtilityResults(runs, makeCheckResult{
+		ExitCode: 0,
+		Output:   []byte("PASS: tests/misc/invalid-opt.pl\n"),
+	}, "compat.log", "/tmp/compat.log")
+
+	if len(got) != 3 {
+		t.Fatalf("len(results) = %d, want 3", len(got))
+	}
+	for _, result := range got {
+		if !result.Passed || result.ExitCode != 0 {
+			t.Fatalf("%s result = %#v, want passed with exit 0", result.Name, result)
+		}
+		if len(result.TestResults) != 1 || result.TestResults[0].Status != "pass" {
+			t.Fatalf("%s test results = %#v, want shared pass", result.Name, result.TestResults)
+		}
+	}
+}
+
+func TestBuildBatchedUtilityResultsAttributesMatchingExtras(t *testing.T) {
+	runs := []utilityRun{
+		{
+			Utility: utilityManifest{Name: "basename", Patterns: []string{"tests/misc/basename*"}},
+			Tests:   []string{"tests/misc/basename.pl"},
+		},
+	}
+
+	got := buildBatchedUtilityResults(runs, makeCheckResult{
+		ExitCode: 1,
+		Output: []byte(`
+PASS: tests/misc/basename.pl
+FAIL: tests/misc/basename-extra.pl
+`),
+	}, "compat.log", "/tmp/compat.log")
+
+	if len(got) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(got))
+	}
+	if len(got[0].ExtraResults) != 1 || got[0].ExtraResults[0].Name != "tests/misc/basename-extra.pl" {
+		t.Fatalf("extra results = %#v, want matched basename extra", got[0].ExtraResults)
+	}
+	if got[0].Summary.ReportedExtraTotal != 1 {
+		t.Fatalf("reported extra total = %d, want 1", got[0].Summary.ReportedExtraTotal)
+	}
+}
+
 func TestPrepareResultsDirCreatesParentAndRunDir(t *testing.T) {
 	cacheDir := t.TempDir()
 

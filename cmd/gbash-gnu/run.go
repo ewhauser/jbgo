@@ -216,32 +216,70 @@ func executeCompatibilityRun(ctx context.Context, makeBin string, mf *manifest, 
 		WorkDir:    env.workDir,
 		ResultsDir: env.resultsDir,
 	}
-	hadFailure := false
-	for _, utility := range plan.runTargets {
-		tests, skipped, err := resolveUtilityTests(env.workDir, utility, mf.SkipPatterns, plan.explicitTests)
+	utilityRuns, err := resolveUtilityRuns(env.workDir, plan.runTargets, mf.SkipPatterns, plan.explicitTests)
+	if err != nil {
+		return runSummary{}, false, err
+	}
+
+	results, hadFailure, err := executeUtilityRuns(ctx, makeBin, env, plan.configShell, utilityRuns)
+	if err != nil {
+		return runSummary{}, false, err
+	}
+	summary.Utilities = append(summary.Utilities, results...)
+
+	if len(plan.explicitTests) == 0 {
+		summary.Utilities = completeUtilityResults(summary.Utilities, plan.programs, mf.Utilities, plan.selectedUtilities, plan.supportedSet)
+	}
+	return summary, hadFailure, nil
+}
+
+func resolveUtilityRuns(workDir string, runTargets []utilityManifest, globalSkips []skipPattern, explicitTests []string) ([]utilityRun, error) {
+	runs := make([]utilityRun, 0, len(runTargets))
+	for _, utility := range runTargets {
+		tests, skipped, err := resolveUtilityTests(workDir, utility, globalSkips, explicitTests)
 		if err != nil {
-			return runSummary{}, false, err
+			return nil, err
 		}
-		result := utilityResult{
-			Name:    utility.Name,
+		runs = append(runs, utilityRun{
+			Utility: utility,
 			Tests:   tests,
 			Skipped: skipped,
-			Summary: summarizeTestResults(nil, len(skipped), 0),
+		})
+	}
+	return runs, nil
+}
+
+func executeUtilityRuns(ctx context.Context, makeBin string, env *executionEnv, configShell string, runs []utilityRun) ([]utilityResult, bool, error) {
+	if len(runs) <= 1 {
+		return executeUtilityRunsIndividually(ctx, makeBin, env, configShell, runs)
+	}
+	return executeUtilityRunsBatched(ctx, makeBin, env, configShell, runs)
+}
+
+func executeUtilityRunsIndividually(ctx context.Context, makeBin string, env *executionEnv, configShell string, runs []utilityRun) ([]utilityResult, bool, error) {
+	results := make([]utilityResult, 0, len(runs))
+	hadFailure := false
+	for _, run := range runs {
+		result := utilityResult{
+			Name:    run.Utility.Name,
+			Tests:   run.Tests,
+			Skipped: run.Skipped,
+			Summary: summarizeTestResults(nil, len(run.Skipped), 0),
 		}
-		if len(tests) == 0 {
+		if len(run.Tests) == 0 {
 			result.Reason = "no runnable GNU tests matched after applying skip filters"
-			summary.Utilities = append(summary.Utilities, result)
+			results = append(results, result)
 			continue
 		}
 
-		logFile := utility.Name + ".log"
+		logFile := run.Utility.Name + ".log"
 		logPath := filepath.Join(env.resultsDir, logFile)
-		makeCheckResult, err := runMakeCheck(ctx, makeBin, env.workDir, plan.configShell, tests, logPath)
+		makeCheckResult, err := runMakeCheck(ctx, makeBin, env.workDir, configShell, run.Tests, logPath)
 		if err != nil {
-			return runSummary{}, false, err
+			return nil, false, err
 		}
-		result.TestResults, result.ExtraResults = parseReportedTestResults(makeCheckResult.Output, tests)
-		result.Summary = summarizeTestResults(result.TestResults, len(skipped), len(result.ExtraResults))
+		result.TestResults, result.ExtraResults = parseReportedTestResults(makeCheckResult.Output, run.Tests)
+		result.Summary = summarizeTestResults(result.TestResults, len(run.Skipped), len(result.ExtraResults))
 		result.LogFile = logFile
 		result.LogPath = logPath
 		result.ExitCode = makeCheckResult.ExitCode
@@ -249,12 +287,140 @@ func executeCompatibilityRun(ctx context.Context, makeBin string, mf *manifest, 
 		if makeCheckResult.ExitCode != 0 {
 			hadFailure = true
 		}
-		summary.Utilities = append(summary.Utilities, result)
-		fmt.Printf("%s: %d tests, exit=%d, pass=%s\n", utility.Name, len(tests), makeCheckResult.ExitCode, formatPercent(result.Summary.PassPctSelected))
+		results = append(results, result)
+		fmt.Printf("%s: %d tests, exit=%d, pass=%s\n", run.Utility.Name, len(run.Tests), makeCheckResult.ExitCode, formatPercent(result.Summary.PassPctSelected))
+	}
+	return results, hadFailure, nil
+}
+
+func executeUtilityRunsBatched(ctx context.Context, makeBin string, env *executionEnv, configShell string, runs []utilityRun) ([]utilityResult, bool, error) {
+	combinedTests := combinedTestsForRuns(runs)
+	if len(combinedTests) == 0 {
+		results := make([]utilityResult, 0, len(runs))
+		for _, run := range runs {
+			result := utilityResult{
+				Name:    run.Utility.Name,
+				Tests:   run.Tests,
+				Skipped: run.Skipped,
+				Summary: summarizeTestResults(nil, len(run.Skipped), 0),
+				Reason:  "no runnable GNU tests matched after applying skip filters",
+			}
+			results = append(results, result)
+		}
+		return results, false, nil
 	}
 
-	if len(plan.explicitTests) == 0 {
-		summary.Utilities = completeUtilityResults(summary.Utilities, plan.programs, mf.Utilities, plan.selectedUtilities, plan.supportedSet)
+	logFile := "compat.log"
+	logPath := filepath.Join(env.resultsDir, logFile)
+	makeCheckResult, err := runMakeCheck(ctx, makeBin, env.workDir, configShell, combinedTests, logPath)
+	if err != nil {
+		return nil, false, err
 	}
-	return summary, hadFailure, nil
+
+	results := buildBatchedUtilityResults(runs, makeCheckResult, logFile, logPath)
+	hadFailure := false
+	for i := range results {
+		result := &results[i]
+		if !result.Passed && len(result.Tests) != 0 {
+			hadFailure = true
+		}
+		fmt.Printf("%s: %d tests, exit=%d, pass=%s\n", result.Name, len(result.Tests), result.ExitCode, formatPercent(result.Summary.PassPctSelected))
+	}
+	return results, hadFailure, nil
+}
+
+func combinedTestsForRuns(runs []utilityRun) []string {
+	combined := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, run := range runs {
+		for _, test := range run.Tests {
+			if _, ok := seen[test]; ok {
+				continue
+			}
+			seen[test] = struct{}{}
+			combined = append(combined, test)
+		}
+	}
+	return combined
+}
+
+func buildBatchedUtilityResults(runs []utilityRun, makeCheckResult makeCheckResult, logFile, logPath string) []utilityResult {
+	combinedTests := combinedTestsForRuns(runs)
+	combinedResults, combinedExtras := parseReportedTestResults(makeCheckResult.Output, combinedTests)
+	resultByName := make(map[string]testResult, len(combinedResults))
+	for _, result := range combinedResults {
+		resultByName[result.Name] = result
+	}
+
+	results := make([]utilityResult, 0, len(runs))
+	for _, run := range runs {
+		result := utilityResult{
+			Name:    run.Utility.Name,
+			Tests:   run.Tests,
+			Skipped: run.Skipped,
+			Summary: summarizeTestResults(nil, len(run.Skipped), 0),
+		}
+		if len(run.Tests) == 0 {
+			result.Reason = "no runnable GNU tests matched after applying skip filters"
+			results = append(results, result)
+			continue
+		}
+
+		testResults := make([]testResult, 0, len(run.Tests))
+		for _, testName := range run.Tests {
+			canonicalName := filepath.ToSlash(testName)
+			if mapped, ok := resultByName[canonicalName]; ok {
+				testResults = append(testResults, mapped)
+				continue
+			}
+			testResults = append(testResults, testResult{Name: canonicalName, Status: "unreported"})
+		}
+
+		extraResults := extraResultsForUtility(run.Utility, combinedExtras)
+		result.TestResults = testResults
+		result.ExtraResults = extraResults
+		result.Summary = summarizeTestResults(result.TestResults, len(run.Skipped), len(result.ExtraResults))
+		result.LogFile = logFile
+		result.LogPath = logPath
+		result.ExitCode = utilityExitCode(&result.Summary, makeCheckResult.ExitCode)
+		result.Passed = utilityPassed(&result.Summary)
+		results = append(results, result)
+	}
+	return results
+}
+
+func extraResultsForUtility(utility utilityManifest, extras []testResult) []testResult {
+	if len(extras) == 0 {
+		return nil
+	}
+	filtered := make([]testResult, 0)
+	for _, extra := range extras {
+		if utilityMatchesTestPath(utility, extra.Name) {
+			filtered = append(filtered, extra)
+		}
+	}
+	return filtered
+}
+
+func utilityMatchesTestPath(utility utilityManifest, rel string) bool {
+	for _, pattern := range utility.Patterns {
+		if matched, err := filepath.Match(pattern, rel); err == nil && matched {
+			return true
+		}
+	}
+	return false
+}
+
+func utilityPassed(summary *testSummary) bool {
+	return summary.Fail == 0 && summary.XPass == 0 && summary.Error == 0 && summary.Unreported == 0
+}
+
+func utilityExitCode(summary *testSummary, batchExitCode int) int {
+	if utilityPassed(summary) {
+		return 0
+	}
+	if batchExitCode != 0 {
+		return batchExitCode
+	}
+	return 1
 }
