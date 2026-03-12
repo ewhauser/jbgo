@@ -53,7 +53,7 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 		return writePreparedBuildArchive(ctx, mf, opts, makeBin, cacheDir)
 	}
 
-	env, err := prepareExecutionEnvironment(ctx, mf, opts, cacheDir)
+	env, err := prepareExecutionEnvironment(ctx, mf, opts, makeBin, cacheDir)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func writePreparedBuildArchive(ctx context.Context, mf *manifest, opts *options,
 	return nil
 }
 
-func prepareExecutionEnvironment(ctx context.Context, mf *manifest, opts *options, cacheDir string) (*executionEnv, error) {
+func prepareExecutionEnvironment(ctx context.Context, mf *manifest, opts *options, makeBin, cacheDir string) (*executionEnv, error) {
 	gbashBin, err := filepath.Abs(opts.gbashBin)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func prepareExecutionEnvironment(ctx context.Context, mf *manifest, opts *option
 		}
 	}
 
-	workDir, err := prepareExecutionWorkDir(ctx, mf, cacheDir, preparedArchivePath)
+	workDir, err := prepareExecutionWorkDir(ctx, mf, makeBin, cacheDir, preparedArchivePath)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func prepareExecutionEnvironment(ctx context.Context, mf *manifest, opts *option
 	}, nil
 }
 
-func prepareExecutionWorkDir(ctx context.Context, mf *manifest, cacheDir, preparedArchivePath string) (string, error) {
+func prepareExecutionWorkDir(ctx context.Context, mf *manifest, makeBin, cacheDir, preparedArchivePath string) (string, error) {
 	var workDir string
 	var err error
 	if preparedArchivePath != "" {
@@ -165,6 +165,10 @@ func prepareExecutionWorkDir(ctx context.Context, mf *manifest, cacheDir, prepar
 	}
 	workDir, err = prepareWorkDir(cacheDir, mf.GNUVersion, sourceDir)
 	if err != nil {
+		return "", err
+	}
+	if err := configureAndBuild(ctx, makeBin, workDir); err != nil {
+		_ = os.RemoveAll(workDir)
 		return "", err
 	}
 	return workDir, nil
