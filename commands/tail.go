@@ -44,6 +44,7 @@ type tailFollowState struct {
 	file            gbfs.File
 	identity        string
 	offset          int64
+	active          bool
 	exists          bool
 	headerPrinted   bool
 	announcedAbsent bool
@@ -100,6 +101,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 			if opts.follow != tailFollowNone && opts.retry {
 				states = append(states, tailFollowState{
 					path:            file,
+					active:          true,
 					headerPrinted:   false,
 					announcedAbsent: true,
 				})
@@ -129,6 +131,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 			file:          followFile,
 			identity:      identity,
 			offset:        int64(len(data)),
+			active:        true,
 			exists:        true,
 			headerPrinted: headerPrinted,
 		})
@@ -143,6 +146,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	if len(states) == 0 {
+		writeTailNoFilesRemainingError(inv)
 		return &ExitError{Code: 1}
 	}
 
@@ -156,6 +160,9 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 		case <-ticker.C:
 			for i := range states {
 				state := &states[i]
+				if !state.active {
+					continue
+				}
 				var err error
 				if opts.follow == tailFollowDescriptor {
 					err = c.pollTailDescriptor(ctx, inv, state, showHeaders, &opts, process, outputState)
@@ -165,6 +172,10 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 				if err != nil {
 					return err
 				}
+			}
+			if !tailHasActiveStates(states) {
+				writeTailNoFilesRemainingError(inv)
+				return &ExitError{Code: 1}
 			}
 		}
 	}
@@ -199,6 +210,15 @@ func closeTailFollowStates(states []tailFollowState) {
 	}
 }
 
+func tailHasActiveStates(states []tailFollowState) bool {
+	for i := range states {
+		if states[i].active {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Tail) pollTailByName(
 	ctx context.Context,
 	inv *Invocation,
@@ -219,6 +239,9 @@ func (c *Tail) pollTailByName(
 			state.identity = ""
 			if opts.follow == tailFollowName {
 				writeTailInaccessibleError(inv, state.path)
+				if !opts.retry {
+					state.active = false
+				}
 				state.announcedAbsent = true
 				return nil
 			}
@@ -532,6 +555,10 @@ func writeTailMissingError(inv *Invocation, file string) {
 
 func writeTailInaccessibleError(inv *Invocation, file string) {
 	_, _ = fmt.Fprintf(inv.Stderr, "tail: '%s' has become inaccessible: No such file or directory\n", file)
+}
+
+func writeTailNoFilesRemainingError(inv *Invocation) {
+	_, _ = fmt.Fprintln(inv.Stderr, "tail: no files remaining")
 }
 
 func writeTailOutput(inv *Invocation, outputState *tailOutputState, file string, data []byte, showHeaders, forceHeader bool) error {

@@ -387,6 +387,86 @@ func TestRunCLICompatExecTailGroupedQuietFollowFlags(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecTailFollowByNameWithoutRetryFailsWhenMissingInitially(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
+		"compat", "exec", "tail", "--follow=name", "no-such",
+	}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if !strings.Contains(stderr.String(), "cannot open 'no-such'") {
+		t.Fatalf("stderr = %q, want missing-file diagnostic", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "no files remaining") {
+		t.Fatalf("stderr = %q, want no-files-remaining diagnostic", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowByNameWithoutRetryStopsWhenFileDisappears(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.WriteFile(filepath.Join(tmp, "file"), nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(file) error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "--follow=name", "-s0.05", "--max-unchanged-stats=1", "file",
+		}, strings.NewReader(""), &stdout, &stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	time.Sleep(150 * time.Millisecond)
+	if err := os.Rename(filepath.Join(tmp, "file"), filepath.Join(tmp, "file.unfollow")); err != nil {
+		t.Fatalf("Rename(file, file.unfollow) error = %v", err)
+	}
+
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("runCLI() error = %v", result.err)
+		}
+		if result.exitCode != 1 {
+			t.Fatalf("exitCode = %d, want 1; stderr=%q", result.exitCode, stderr.String())
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("tail --follow=name did not exit after the file disappeared; stderr=%q", stderr.String())
+	}
+
+	if !strings.Contains(stderr.String(), "has become inaccessible") {
+		t.Fatalf("stderr = %q, want inaccessible diagnostic", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "no files remaining") {
+		t.Fatalf("stderr = %q, want no-files-remaining diagnostic", stderr.String())
+	}
+}
+
 func TestRunCLIMulticallUsesArgv0CommandAndBypassesTTYRepl(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
