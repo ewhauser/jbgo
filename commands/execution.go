@@ -16,6 +16,8 @@ type ExecutionRequest struct {
 	Timeout    time.Duration
 	ReplaceEnv bool
 	Stdin      io.Reader
+	Stdout     io.Writer
+	Stderr     io.Writer
 }
 
 type ExecutionResult struct {
@@ -23,6 +25,7 @@ type ExecutionResult struct {
 	ShellExited     bool
 	Stdout          string
 	Stderr          string
+	ControlStderr   string
 	FinalEnv        map[string]string
 	StartedAt       time.Time
 	FinishedAt      time.Time

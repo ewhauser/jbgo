@@ -31,13 +31,17 @@ func (c *Timeout) Run(ctx context.Context, inv *Invocation) error {
 		Env:     inv.Env,
 		WorkDir: inv.Cwd,
 		Stdin:   inv.Stdin,
+		Stdout:  inv.Stdout,
+		Stderr:  inv.Stderr,
 		Timeout: timeout,
 	})
 	if err != nil {
 		return err
 	}
-	if err := writeExecutionOutputs(inv, result); err != nil {
-		return err
+	if result != nil && result.ControlStderr != "" {
+		if _, err := fmt.Fprintln(inv.Stderr, result.ControlStderr); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
 	}
 	return exitForExecutionResult(result)
 }

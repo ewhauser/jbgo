@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/ewhauser/gbash/commands"
@@ -44,6 +45,14 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	limits := s.cfg.Policy.Limits()
 	stdout := newCaptureBuffer(limits.MaxStdoutBytes)
 	stderr := newCaptureBuffer(limits.MaxStderrBytes)
+	stdoutWriter := io.Writer(stdout)
+	if req.Stdout != nil {
+		stdoutWriter = io.MultiWriter(stdout, req.Stdout)
+	}
+	stderrWriter := io.Writer(stderr)
+	if req.Stderr != nil {
+		stderrWriter = io.MultiWriter(stderr, req.Stderr)
+	}
 	executionID := nextTraceID("exec")
 	recorder := trace.NewBuffer(
 		trace.WithSessionID(s.id),
@@ -58,8 +67,8 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Env:      execEnv,
 		Dir:      workDir,
 		Stdin:    stdinOrEmpty(req.Stdin),
-		Stdout:   stdout,
-		Stderr:   stderr,
+		Stdout:   stdoutWriter,
+		Stderr:   stderrWriter,
 		FS:       s.fs,
 		Network:  s.cfg.NetworkClient,
 		Registry: s.cfg.Registry,
@@ -138,14 +147,18 @@ func classifyExecutionControlError(ctx context.Context, timeout time.Duration, r
 	}
 	switch {
 	case errors.Is(runErr, context.DeadlineExceeded), errors.Is(ctx.Err(), context.DeadlineExceeded):
-		writeExecutionControlMessage(stderr, timeoutMessage(timeout))
+		message := timeoutMessage(timeout)
+		writeExecutionControlMessage(stderr, message)
 		result.ExitCode = 124
+		result.ControlStderr = message
 		result.Stderr = stderr.String()
 		result.StderrTruncated = stderr.Truncated()
 		return true
 	case errors.Is(runErr, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
-		writeExecutionControlMessage(stderr, "execution canceled")
+		message := "execution canceled"
+		writeExecutionControlMessage(stderr, message)
 		result.ExitCode = 130
+		result.ControlStderr = message
 		result.Stderr = stderr.String()
 		result.StderrTruncated = stderr.Truncated()
 		return true

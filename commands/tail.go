@@ -84,6 +84,9 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 
 	showHeaders := opts.verbose || (!opts.quiet && len(opts.files) > 1)
 	outputState := &tailOutputState{}
+	if err := writeTailWarnings(inv, &opts); err != nil {
+		return err
+	}
 	if len(opts.files) == 0 {
 		data, err := readAllStdin(inv)
 		if err != nil {
@@ -129,6 +132,16 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 		}
 		data, followFile, err := readTailInitialFile(ctx, inv, file, opts.follow)
 		if err != nil {
+			if opts.follow == tailFollowName && opts.retry && tailPathIsUntailable(ctx, inv, file) {
+				writeTailCannotFollowByName(inv, file)
+				states = append(states, tailFollowState{
+					path:            file,
+					active:          true,
+					headerPrinted:   false,
+					announcedAbsent: true,
+				})
+				continue
+			}
 			writeTailMissingError(inv, file)
 			if opts.follow != tailFollowNone && opts.retry {
 				states = append(states, tailFollowState{
@@ -313,13 +326,9 @@ func (c *Tail) pollTailByName(
 	identity := tailFileIdentity(info)
 	replaced := state.exists && state.identity != "" && identity != "" && state.identity != identity
 	if !state.exists && state.announcedAbsent && opts.follow == tailFollowName {
-		if _, err := fmt.Fprintf(inv.Stderr, "tail: '%s' has appeared;  following new file\n", state.path); err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
+		writeTailAppearedFollowingNewFile(inv, state.path)
 	} else if replaced {
-		if _, err := fmt.Fprintf(inv.Stderr, "tail: '%s' has been replaced;  following new file\n", state.path); err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
+		writeTailReplacedFollowingNewFile(inv, state.path)
 		state.offset = 0
 	}
 
@@ -361,6 +370,11 @@ func (c *Tail) pollTailDescriptor(
 	outputState *tailOutputState,
 ) error {
 	if state.file == nil {
+		if opts.retry && tailPathIsUntailable(ctx, inv, state.path) {
+			writeTailUntailableGivingUp(inv, state.path)
+			state.active = false
+			return nil
+		}
 		data, followFile, err := readTailInitialFile(ctx, inv, state.path, tailFollowDescriptor)
 		if err != nil {
 			if !state.announcedAbsent && opts.retry {
@@ -368,6 +382,9 @@ func (c *Tail) pollTailDescriptor(
 				state.announcedAbsent = true
 			}
 			return nil
+		}
+		if state.announcedAbsent {
+			writeTailAppearedFollowingNewFile(inv, state.path)
 		}
 		state.file = followFile
 		state.exists = true
@@ -382,6 +399,7 @@ func (c *Tail) pollTailDescriptor(
 	info, err := state.file.Stat()
 	if err == nil && info.Size() < state.offset {
 		if err := seekTailFileStart(state.file); err == nil {
+			writeTailFileTruncated(inv, state.path)
 			state.offset = 0
 		}
 	}
@@ -622,9 +640,31 @@ func parseTailSleepInterval(raw string) (time.Duration, error) {
 	return time.Duration(value * float64(time.Second)), nil
 }
 
+func tailPathIsUntailable(ctx context.Context, inv *Invocation, name string) bool {
+	info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, name)
+	if err != nil || !exists {
+		return false
+	}
+	return info.IsDir()
+}
+
 func tailPIDIsAlive(pid int) bool {
 	err := syscall.Kill(pid, 0)
 	return err == nil || err == syscall.EPERM
+}
+
+func writeTailWarnings(inv *Invocation, opts *tailOptions) error {
+	switch {
+	case opts.retry && opts.follow == tailFollowNone:
+		if _, err := fmt.Fprintln(inv.Stderr, "tail: warning: --retry ignored; --retry is useful only when following"); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+	case opts.retry && opts.follow == tailFollowDescriptor:
+		if _, err := fmt.Fprintln(inv.Stderr, "tail: warning: --retry only effective for the initial open"); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+	}
+	return nil
 }
 
 func writeTailHeader(inv *Invocation, file string) error {
@@ -638,8 +678,28 @@ func writeTailMissingError(inv *Invocation, file string) {
 	_, _ = fmt.Fprintf(inv.Stderr, "tail: cannot open '%s' for reading: No such file or directory\n", file)
 }
 
+func writeTailCannotFollowByName(inv *Invocation, file string) {
+	_, _ = fmt.Fprintf(inv.Stderr, "tail: cannot follow '%s' by name: Is a directory\n", file)
+}
+
 func writeTailInaccessibleError(inv *Invocation, file string) {
 	_, _ = fmt.Fprintf(inv.Stderr, "tail: '%s' has become inaccessible: No such file or directory\n", file)
+}
+
+func writeTailAppearedFollowingNewFile(inv *Invocation, file string) {
+	_, _ = fmt.Fprintf(inv.Stderr, "tail: '%s' has appeared;  following new file\n", file)
+}
+
+func writeTailReplacedFollowingNewFile(inv *Invocation, file string) {
+	_, _ = fmt.Fprintf(inv.Stderr, "tail: '%s' has been replaced;  following new file\n", file)
+}
+
+func writeTailUntailableGivingUp(inv *Invocation, file string) {
+	_, _ = fmt.Fprintf(inv.Stderr, "tail: '%s' has been replaced with an untailable file; giving up on this name\n", file)
+}
+
+func writeTailFileTruncated(inv *Invocation, file string) {
+	_, _ = fmt.Fprintf(inv.Stderr, "tail: %s: file truncated\n", file)
 }
 
 func writeTailNoFilesRemainingError(inv *Invocation) {

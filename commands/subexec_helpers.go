@@ -56,6 +56,8 @@ func executeCommand(ctx context.Context, inv *Invocation, opts *executeCommandOp
 		WorkDir:    workDir,
 		ReplaceEnv: opts.ReplaceEnv,
 		Stdin:      opts.Stdin,
+		Stdout:     opts.Stdout,
+		Stderr:     opts.Stderr,
 		Timeout:    opts.Timeout,
 	})
 }
@@ -67,6 +69,8 @@ type executeCommandOptions struct {
 	WorkDir    string
 	ReplaceEnv bool
 	Stdin      io.Reader
+	Stdout     io.Writer
+	Stderr     io.Writer
 	Timeout    time.Duration
 }
 

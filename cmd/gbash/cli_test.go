@@ -597,6 +597,141 @@ func TestRunCLICompatExecTailFollowPidExitsBeforeLongSleepWhenPidIsDead(t *testi
 	}
 }
 
+func TestRunCLICompatExecTailRetryWarnsWithoutFollow(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.WriteFile(filepath.Join(tmp, "file"), nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(file) error = %v", err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
+		"compat", "exec", "tail", "--retry", "file",
+	}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if !strings.Contains(stderr.String(), "--retry ignored") {
+		t.Fatalf("stderr = %q, want retry warning", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailRetryDescriptorReportsAppearanceAndTruncation(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "--follow=descriptor", "--retry", "-s0.05", "missing",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if !stderr.WaitForSubstring("--retry only effective for the initial open", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report descriptor retry warning; got %q", stderr.String())
+	}
+	if !stderr.WaitForSubstring("cannot open 'missing'", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "missing"), []byte("X1\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(missing) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report appearing file; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("X1\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit initial followed content; got %q", stdout.String())
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "missing"), []byte("X\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(missing truncate) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("file truncated", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report truncation; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("X1\nX\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit truncated content; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailRetryDescriptorGivesUpOnUntailableReplacement(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	var stdout strings.Builder
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(context.Background(), "gbash", []string{
+			"compat", "exec", "tail", "--follow=descriptor", "--retry", "-s0.05", "missing",
+		}, strings.NewReader(""), &stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if !stderr.WaitForSubstring("cannot open 'missing'", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
+	}
+	if err := os.Mkdir(filepath.Join(tmp, "missing"), 0o755); err != nil {
+		t.Fatalf("Mkdir(missing) error = %v", err)
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", result.exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if !strings.Contains(stderr.String(), "untailable file") {
+		t.Fatalf("stderr = %q, want untailable-file diagnostic", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "no files remaining") {
+		t.Fatalf("stderr = %q, want no-files-remaining diagnostic", stderr.String())
+	}
+}
+
 func TestRunCLICompatExecTailFollowDashReadsStandardInput(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
