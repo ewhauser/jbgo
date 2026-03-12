@@ -117,6 +117,221 @@ func TestRunCLICompatExecStreamsOutputBeforeExit(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecTailFollowMissingFileByName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "-F", "-s0.05", "--max-unchanged-stats=1", "missing/file",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if !stderr.WaitForSubstring("cannot open", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "missing"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "missing", "file"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("x\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit followed content; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowDescriptorSurvivesRename(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.WriteFile(filepath.Join(tmp, "a"), nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(a) error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "-f", "-s0.05", "a",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(a) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("x\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit initial content; got %q", stdout.String())
+	}
+	if err := os.Rename(filepath.Join(tmp, "a"), filepath.Join(tmp, "b")); err != nil {
+		t.Fatalf("Rename(a,b) error = %v", err)
+	}
+	file, err := os.OpenFile(filepath.Join(tmp, "b"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(b) error = %v", err)
+	}
+	if _, err := file.WriteString("y\n"); err != nil {
+		_ = file.Close()
+		t.Fatalf("WriteString(b) error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close(b) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("x\ny\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not continue following renamed file; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	for _, name := range []string{"a", "b"} {
+		if err := os.WriteFile(filepath.Join(tmp, name), nil, 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "-F", "-s0.05", "--max-unchanged-stats=1", "a", "b",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(a) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("==> a <==\nx\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit followed content for a; got %q", stdout.String())
+	}
+
+	if err := os.Rename(filepath.Join(tmp, "a"), filepath.Join(tmp, "b")); err != nil {
+		t.Fatalf("Rename(a,b) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has become inaccessible", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report inaccessible file; got %q", stderr.String())
+	}
+	if !stderr.WaitForSubstring("has been replaced", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report replaced file; got %q", stderr.String())
+	}
+
+	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(a) second generation error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("==> a <==\nx2\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit replacement content for a; got %q", stdout.String())
+	}
+
+	bFile, err := os.OpenFile(filepath.Join(tmp, "b"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(b) error = %v", err)
+	}
+	if _, err := bFile.WriteString("y\n"); err != nil {
+		_ = bFile.Close()
+		t.Fatalf("WriteString(b) error = %v", err)
+	}
+	if err := bFile.Close(); err != nil {
+		t.Fatalf("Close(b) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("==> b <==\ny\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not continue following renamed b; got %q", stdout.String())
+	}
+
+	aFile, err := os.OpenFile(filepath.Join(tmp, "a"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(a) error = %v", err)
+	}
+	if _, err := aFile.WriteString("z\n"); err != nil {
+		_ = aFile.Close()
+		t.Fatalf("WriteString(a) error = %v", err)
+	}
+	if err := aFile.Close(); err != nil {
+		t.Fatalf("Close(a) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("==> a <==\nz\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not continue following recreated a; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
 func TestRunCLIMulticallUsesArgv0CommandAndBypassesTTYRepl(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
