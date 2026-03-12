@@ -467,6 +467,70 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryStopsWhenFileDisappears(t *
 	}
 }
 
+func TestRunCLICompatExecTailFollowByNameWithoutRetryTracksReappearingFileWhileOthersRemain(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	for _, name := range []string{"a", "foo"} {
+		if err := os.WriteFile(filepath.Join(tmp, name), nil, 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "--follow=name", "-s0.05", "--max-unchanged-stats=1", "a", "foo",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(a) error = %v", err)
+	}
+	if !stdout.WaitForSubstring("x\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit initial content; got %q", stdout.String())
+	}
+	if err := os.Remove(filepath.Join(tmp, "foo")); err != nil {
+		t.Fatalf("Remove(foo) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has become inaccessible", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report inaccessible file; got %q", stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "foo"), []byte("ok ok ok\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(foo) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report reappearing file; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("ok ok ok\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not resume the reappearing file; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
 func TestRunCLICompatExecTailFollowDashReadsStandardInput(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

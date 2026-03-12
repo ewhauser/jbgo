@@ -216,6 +216,10 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 				writeTailNoFilesRemainingError(inv)
 				return &ExitError{Code: 1}
 			}
+			if opts.follow == tailFollowName && !opts.retry && !tailHasExistingStates(states) {
+				writeTailNoFilesRemainingError(inv)
+				return &ExitError{Code: 1}
+			}
 		}
 	}
 }
@@ -258,6 +262,18 @@ func tailHasActiveStates(states []tailFollowState) bool {
 	return false
 }
 
+func tailHasExistingStates(states []tailFollowState) bool {
+	for i := range states {
+		if !states[i].active {
+			continue
+		}
+		if states[i].file != nil || states[i].exists {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Tail) pollTailByName(
 	ctx context.Context,
 	inv *Invocation,
@@ -278,9 +294,6 @@ func (c *Tail) pollTailByName(
 			state.identity = ""
 			if opts.follow == tailFollowName {
 				writeTailInaccessibleError(inv, state.path)
-				if !opts.retry {
-					state.active = false
-				}
 				state.announcedAbsent = true
 				return nil
 			}
@@ -294,7 +307,7 @@ func (c *Tail) pollTailByName(
 
 	identity := tailFileIdentity(info)
 	replaced := state.exists && state.identity != "" && identity != "" && state.identity != identity
-	if !state.exists && state.announcedAbsent && opts.follow == tailFollowName && opts.retry {
+	if !state.exists && state.announcedAbsent && opts.follow == tailFollowName {
 		if _, err := fmt.Fprintf(inv.Stderr, "tail: '%s' has appeared;  following new file\n", state.path); err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
