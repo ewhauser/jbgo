@@ -6,6 +6,7 @@ import (
 	"fmt"
 	stdfs "io/fs"
 	"strings"
+	"syscall"
 )
 
 type Stat struct{}
@@ -111,8 +112,12 @@ func renderStatFormat(ctx context.Context, inv *Invocation, abs string, info std
 			}
 		case 's':
 			fmt.Fprintf(&b, "%d", info.Size())
+		case 'd':
+			fmt.Fprintf(&b, "%d", statDevice(info))
 		case 'F':
 			b.WriteString(fileTypeName(info))
+		case 'i':
+			fmt.Fprintf(&b, "%d", statInode(info))
 		case 'a':
 			b.WriteString(formatModeOctal(info.Mode()))
 		case 'A':
@@ -130,6 +135,22 @@ func renderStatFormat(ctx context.Context, inv *Invocation, abs string, info std
 		}
 	}
 	return b.String(), nil
+}
+
+func statDevice(info stdfs.FileInfo) uint64 {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat == nil {
+		return 0
+	}
+	return uint64(stat.Dev)
+}
+
+func statInode(info stdfs.FileInfo) uint64 {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat == nil {
+		return 0
+	}
+	return uint64(stat.Ino)
 }
 
 var _ Command = (*Stat)(nil)

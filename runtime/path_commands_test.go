@@ -87,6 +87,91 @@ func TestRmdirRejectsNonEmptyDirectories(t *testing.T) {
 	}
 }
 
+func TestRmdirIgnoresFailOnNonEmptyParents(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "mkdir -p a/b/c a/x\nrmdir -p --ignore-fail-on-non-empty a/b/c\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	for _, name := range []string{"/home/agent/a/x", "/home/agent/a"} {
+		if _, err := session.FileSystem().Stat(context.Background(), name); err != nil {
+			t.Fatalf("Stat(%q) error = %v, want present", name, err)
+		}
+	}
+	for _, name := range []string{"/home/agent/a/b/c", "/home/agent/a/b"} {
+		if _, err := session.FileSystem().Stat(context.Background(), name); !os.IsNotExist(err) {
+			t.Fatalf("Stat(%q) error = %v, want not exist", name, err)
+		}
+	}
+}
+
+func TestRmdirReportsSymlinkSlashErrors(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	setup := mustExecSession(t, session, "mkdir dir\nmkdir dir/dir2\necho hi > file\nln -s dir sl\nln -s missing dl\nln -s file fl\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	fileLink := mustExecSession(t, session, "rmdir fl/\n")
+	if fileLink.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", fileLink.ExitCode)
+	}
+	if got, want := fileLink.Stderr, "rmdir: failed to remove 'fl/': Not a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+
+	dirLink := mustExecSession(t, session, "rmdir sl/\n")
+	if dirLink.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", dirLink.ExitCode)
+	}
+	if got, want := dirLink.Stderr, "rmdir: failed to remove 'sl/': Symbolic link not followed\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+
+	danglingLink := mustExecSession(t, session, "rmdir dl/\n")
+	if danglingLink.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", danglingLink.ExitCode)
+	}
+	if got, want := danglingLink.Stderr, "rmdir: failed to remove 'dl/': Symbolic link not followed\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRmdirParentsKeepRelativeSymlinkDiagnostics(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	setup := mustExecSession(t, session, "mkdir -p dir/dir2\nln -s dir sl\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	result := mustExecSession(t, session, "rmdir -p sl/dir2\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if got, want := result.Stderr, "rmdir: failed to remove 'sl': Not a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/dir/dir2"); !os.IsNotExist(err) {
+		t.Fatalf("Stat(dir/dir2) error = %v, want not exist", err)
+	}
+}
+
 func TestLNCreatesSymlinkAndReadlinkPrintsTarget(t *testing.T) {
 	rt := newRuntime(t, &Config{
 		Policy: policy.NewStatic(&policy.Config{
@@ -106,6 +191,102 @@ func TestLNCreatesSymlinkAndReadlinkPrintsTarget(t *testing.T) {
 	}
 	if got, want := result.Stdout, "file.txt\n/home/agent/file.txt\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestReadlinkCanonicalizeModes(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	script := strings.Join([]string{
+		"mkdir dir",
+		"mkdir dir/subdir",
+		"echo hi > file",
+		"ln -s file link-file",
+		"ln -s missing link-missing",
+		"ln -s dir/subdir link-sub",
+		"readlink -e file",
+		"readlink -f link-missing/",
+		"readlink -m link-file/more",
+		"readlink -f link-sub/..",
+		"",
+	}, "\n")
+
+	result := mustExecSession(t, session, script)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/home/agent/file\n/home/agent/missing\n/home/agent/file/more\n/home/agent/dir\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestReadlinkZeroAndNoNewlineWithMultipleArgs(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "readlink -n -m --zero /1 /1\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/1\x00/1\x00"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestReadlinkPosixAndVerboseErrors(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	quiet := mustExecSession(t, session, "echo hi > file\nreadlink file\n")
+	if quiet.ExitCode != 1 {
+		t.Fatalf("quiet ExitCode = %d, want 1; stderr=%q", quiet.ExitCode, quiet.Stderr)
+	}
+	if quiet.Stdout != "" || quiet.Stderr != "" {
+		t.Fatalf("quiet output = (%q, %q), want empty output", quiet.Stdout, quiet.Stderr)
+	}
+
+	posix := mustExecSession(t, session, "POSIXLY_CORRECT=1 readlink file\n")
+	if posix.ExitCode != 1 {
+		t.Fatalf("posix ExitCode = %d, want 1; stderr=%q", posix.ExitCode, posix.Stderr)
+	}
+	if got, want := posix.Stderr, "readlink: file: Invalid argument\n"; got != want {
+		t.Fatalf("posix stderr = %q, want %q", got, want)
+	}
+
+	loop := mustExecSession(t, session, "ln -s loop loop\nreadlink -ve loop\n")
+	if loop.ExitCode != 1 {
+		t.Fatalf("loop ExitCode = %d, want 1; stderr=%q", loop.ExitCode, loop.Stderr)
+	}
+	if !strings.Contains(loop.Stderr, "Too many levels of symbolic links") {
+		t.Fatalf("loop stderr = %q, want symlink loop diagnostic", loop.Stderr)
+	}
+}
+
+func TestReadlinkExistingFailsForRemovedWorkingDirectory(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result := mustExecSession(t, session, "mkdir removed\ncd removed\nrmdir ../removed\nreadlink -e .\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if result.Stdout != "" || result.Stderr != "" {
+		t.Fatalf("output = (%q, %q), want empty output", result.Stdout, result.Stderr)
 	}
 }
 
@@ -312,6 +493,19 @@ func TestStatFormatsMultipleFilesAndContinuesOnError(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "missing") {
 		t.Fatalf("Stderr = %q, want missing-file message", result.Stderr)
+	}
+}
+
+func TestStatFormatsDeviceAndInodePlaceholders(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/one.txt", []byte("hello"))
+
+	result := mustExecSession(t, session, "stat -c '%d:%i' /home/agent/one.txt /\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "0:0\n0:0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 

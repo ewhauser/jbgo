@@ -5,12 +5,45 @@ import (
 	"errors"
 	"fmt"
 	stdfs "io/fs"
+	"os"
 	"strings"
+	"syscall"
 
-	"github.com/ewhauser/gbash/policy"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type Readlink struct{}
+
+const readlinkMaxSymlinkDepth = 40
+
+var readlinkLongOptions = []string{
+	"canonicalize",
+	"canonicalize-existing",
+	"canonicalize-missing",
+	"no-newline",
+	"quiet",
+	"silent",
+	"verbose",
+	"zero",
+}
+
+type readlinkOptions struct {
+	canonicalize         bool
+	canonicalizeExisting bool
+	canonicalizeMissing  bool
+	noNewline            bool
+	verbose              bool
+	zero                 bool
+}
+
+type readlinkCanonicalMode int
+
+const (
+	readlinkModeNone readlinkCanonicalMode = iota
+	readlinkModeCanonicalize
+	readlinkModeCanonicalizeExisting
+	readlinkModeCanonicalizeMissing
+)
 
 func NewReadlink() *Readlink {
 	return &Readlink{}
@@ -21,69 +54,333 @@ func (c *Readlink) Name() string {
 }
 
 func (c *Readlink) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	canonicalize := false
-
-	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		switch args[0] {
-		case "-f", "--canonicalize":
-			canonicalize = true
-		case "--":
-			args = args[1:]
-			goto operands
-		default:
-			return exitf(inv, 1, "readlink: unsupported flag %s", args[0])
-		}
-		args = args[1:]
+	opts, args, err := parseReadlinkArgs(inv, inv.Args)
+	if err != nil {
+		return err
 	}
-
-operands:
+	if _, ok := inv.Env["POSIXLY_CORRECT"]; ok {
+		opts.verbose = true
+	}
 	if len(args) == 0 {
 		return exitf(inv, 1, "readlink: missing operand")
 	}
 
-	exitCode := 0
+	lineEnding := "\n"
+	if opts.noNewline && len(args) == 1 {
+		lineEnding = ""
+	} else if opts.zero {
+		lineEnding = "\x00"
+	}
+
+	mode := resolveReadlinkCanonicalMode(opts)
 	for _, name := range args {
-		if canonicalize {
-			abs, err := allowPath(ctx, inv, policy.FileActionStat, name)
-			if err != nil {
-				return err
-			}
-			resolved, err := inv.FS.Realpath(ctx, abs)
-			if err != nil {
-				if errors.Is(err, stdfs.ErrNotExist) {
-					resolved = abs
-				} else {
-					return &ExitError{Code: 1, Err: err}
-				}
-			}
-			if _, err := fmt.Fprintln(inv.Stdout, resolved); err != nil {
+		var out string
+		if mode == readlinkModeNone {
+			out, err = readlinkValue(ctx, inv, name)
+		} else {
+			out, err = canonicalizeReadlink(ctx, inv, name, mode)
+		}
+		if err != nil {
+			return readlinkCommandError(inv, name, err, opts.verbose)
+		}
+		if _, err := fmt.Fprint(inv.Stdout, out); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+		if lineEnding != "" {
+			if _, err := fmt.Fprint(inv.Stdout, lineEnding); err != nil {
 				return &ExitError{Code: 1, Err: err}
+			}
+		}
+	}
+	return nil
+}
+
+func parseReadlinkArgs(inv *Invocation, args []string) (readlinkOptions, []string, error) {
+	opts := readlinkOptions{}
+	for len(args) > 0 {
+		arg := args[0]
+		if arg == "--" {
+			return opts, args[1:], nil
+		}
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			return opts, args, nil
+		}
+		if strings.HasPrefix(arg, "--") {
+			name, ok := inferReadlinkLongOption(arg)
+			if !ok {
+				return readlinkOptions{}, nil, exitf(inv, 1, "readlink: unsupported flag %s", arg)
+			}
+			applyReadlinkLongOption(&opts, name)
+			args = args[1:]
+			continue
+		}
+		if !applyReadlinkShortFlags(&opts, arg) {
+			return readlinkOptions{}, nil, exitf(inv, 1, "readlink: unsupported flag %s", arg)
+		}
+		args = args[1:]
+	}
+	return opts, args, nil
+}
+
+func inferReadlinkLongOption(arg string) (string, bool) {
+	if strings.Contains(arg, "=") {
+		return "", false
+	}
+	name := strings.TrimPrefix(arg, "--")
+	match := ""
+	for _, option := range readlinkLongOptions {
+		if strings.HasPrefix(option, name) {
+			if match != "" {
+				return "", false
+			}
+			match = option
+		}
+	}
+	return match, match != ""
+}
+
+func applyReadlinkLongOption(opts *readlinkOptions, name string) {
+	switch name {
+	case "canonicalize":
+		opts.canonicalize = true
+	case "canonicalize-existing":
+		opts.canonicalizeExisting = true
+	case "canonicalize-missing":
+		opts.canonicalizeMissing = true
+	case "no-newline":
+		opts.noNewline = true
+	case "quiet", "silent":
+		opts.verbose = false
+	case "verbose":
+		opts.verbose = true
+	case "zero":
+		opts.zero = true
+	}
+}
+
+func applyReadlinkShortFlags(opts *readlinkOptions, arg string) bool {
+	if len(arg) < 2 || arg[0] != '-' || strings.HasPrefix(arg, "--") {
+		return false
+	}
+	for _, flag := range arg[1:] {
+		switch flag {
+		case 'f':
+			opts.canonicalize = true
+		case 'e':
+			opts.canonicalizeExisting = true
+		case 'm':
+			opts.canonicalizeMissing = true
+		case 'n':
+			opts.noNewline = true
+		case 'q', 's':
+			opts.verbose = false
+		case 'v':
+			opts.verbose = true
+		case 'z':
+			opts.zero = true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func resolveReadlinkCanonicalMode(opts readlinkOptions) readlinkCanonicalMode {
+	switch {
+	case opts.canonicalizeExisting:
+		return readlinkModeCanonicalizeExisting
+	case opts.canonicalizeMissing:
+		return readlinkModeCanonicalizeMissing
+	case opts.canonicalize:
+		return readlinkModeCanonicalize
+	default:
+		return readlinkModeNone
+	}
+}
+
+func readlinkValue(ctx context.Context, inv *Invocation, name string) (string, error) {
+	return inv.FS.Readlink(ctx, inv.FS.Resolve(name))
+}
+
+func canonicalizeReadlink(ctx context.Context, inv *Invocation, name string, mode readlinkCanonicalMode) (string, error) {
+	absolute, pending := splitReadlinkPath(name)
+	current := []string(nil)
+	if !absolute {
+		cwd := inv.FS.Getwd()
+		if physicalCwd, err := inv.FS.Realpath(ctx, "."); err == nil {
+			cwd = physicalCwd
+		} else if mode == readlinkModeCanonicalizeExisting {
+			return "", err
+		}
+		current = splitReadlinkSegments(cwd)
+	}
+	trailingSlash := strings.HasSuffix(name, "/")
+	depth := 0
+
+	for len(pending) > 0 {
+		part := pending[0]
+		pending = pending[1:]
+
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			if len(current) > 0 {
+				current = current[:len(current)-1]
 			}
 			continue
 		}
 
-		abs, err := allowPath(ctx, inv, policy.FileActionReadlink, name)
+		next := appendPathSegment(current, part)
+		info, err := inv.FS.Lstat(ctx, next)
 		if err != nil {
-			return err
-		}
-		target, err := inv.FS.Readlink(ctx, abs)
-		if err != nil {
-			if errors.Is(err, stdfs.ErrInvalid) || errors.Is(err, stdfs.ErrNotExist) {
-				exitCode = 1
-				continue
+			if !errors.Is(err, stdfs.ErrNotExist) {
+				return "", err
 			}
-			return &ExitError{Code: 1, Err: err}
+			switch mode {
+			case readlinkModeCanonicalizeExisting:
+				return "", err
+			case readlinkModeCanonicalize:
+				if len(pending) > 0 {
+					return "", err
+				}
+				current = append(current, part)
+				return finalizeReadlinkPath(ctx, inv, current, trailingSlash, mode)
+			case readlinkModeCanonicalizeMissing:
+				current = applyReadlinkLexical(append(current, part), pending)
+				return finalizeReadlinkPath(ctx, inv, current, trailingSlash, mode)
+			default:
+				return "", err
+			}
 		}
-		if _, err := fmt.Fprintln(inv.Stdout, target); err != nil {
-			return &ExitError{Code: 1, Err: err}
+
+		if info.Mode()&stdfs.ModeSymlink != 0 {
+			target, err := inv.FS.Readlink(ctx, next)
+			if err != nil {
+				return "", err
+			}
+			depth++
+			if depth > readlinkMaxSymlinkDepth {
+				return "", syscall.ELOOP
+			}
+			targetAbsolute, targetParts := splitReadlinkPath(target)
+			if targetAbsolute {
+				current = nil
+			}
+			pending = append(targetParts, pending...)
+			continue
+		}
+
+		current = append(current, part)
+		if len(pending) > 0 && !info.IsDir() {
+			if mode == readlinkModeCanonicalizeMissing {
+				current = applyReadlinkLexical(current, pending)
+				return finalizeReadlinkPath(ctx, inv, current, trailingSlash, mode)
+			}
+			return "", syscall.ENOTDIR
 		}
 	}
 
-	if exitCode != 0 {
-		return &ExitError{Code: exitCode}
+	return finalizeReadlinkPath(ctx, inv, current, trailingSlash, mode)
+}
+
+func finalizeReadlinkPath(ctx context.Context, inv *Invocation, current []string, trailingSlash bool, mode readlinkCanonicalMode) (string, error) {
+	resolved := pathFromReadlinkSegments(current)
+	if !trailingSlash || mode == readlinkModeCanonicalizeMissing {
+		return resolved, nil
 	}
-	return nil
+
+	info, err := inv.FS.Stat(ctx, resolved)
+	if err != nil {
+		if mode == readlinkModeCanonicalize && errors.Is(err, stdfs.ErrNotExist) {
+			return resolved, nil
+		}
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", syscall.ENOTDIR
+	}
+	return resolved, nil
+}
+
+func splitReadlinkPath(name string) (absolute bool, parts []string) {
+	absolute = strings.HasPrefix(name, "/")
+	trimmed := strings.TrimPrefix(name, "/")
+	if trimmed == "" {
+		return absolute, nil
+	}
+	parts = strings.Split(trimmed, "/")
+	filtered := parts[:0]
+	for _, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		filtered = append(filtered, part)
+	}
+	return absolute, filtered
+}
+
+func splitReadlinkSegments(abs string) []string {
+	_, parts := splitReadlinkPath(gbfs.Clean(abs))
+	return append([]string(nil), parts...)
+}
+
+func appendPathSegment(parts []string, part string) string {
+	if len(parts) == 0 {
+		return "/" + part
+	}
+	return "/" + strings.Join(append(parts, part), "/")
+}
+
+func applyReadlinkLexical(current, pending []string) []string {
+	out := append([]string(nil), current...)
+	for _, part := range pending {
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			if len(out) > 0 {
+				out = out[:len(out)-1]
+			}
+		default:
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func pathFromReadlinkSegments(parts []string) string {
+	if len(parts) == 0 {
+		return "/"
+	}
+	return "/" + strings.Join(parts, "/")
+}
+
+func readlinkCommandError(inv *Invocation, name string, err error, verbose bool) error {
+	if !verbose {
+		return &ExitError{Code: 1}
+	}
+	return exitf(inv, 1, "readlink: %s: %s", name, readlinkErrorText(err))
+}
+
+func readlinkErrorText(err error) string {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return readlinkErrorText(pathErr.Err)
+	}
+
+	switch {
+	case errors.Is(err, stdfs.ErrInvalid), errors.Is(err, syscall.EINVAL):
+		return "Invalid argument"
+	case errors.Is(err, stdfs.ErrNotExist):
+		return "No such file or directory"
+	case errors.Is(err, syscall.ENOTDIR), errors.Is(err, syscall.EISDIR):
+		return "Not a directory"
+	case errors.Is(err, syscall.ELOOP):
+		return "Too many levels of symbolic links"
+	default:
+		return err.Error()
+	}
 }
 
 var _ Command = (*Readlink)(nil)
