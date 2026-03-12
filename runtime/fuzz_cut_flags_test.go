@@ -20,10 +20,11 @@ func FuzzCutFlagsCommand(f *testing.F) {
 		writeSessionFile(t, session, inputPath, normalizeFuzzText(rawData))
 
 		script := []byte(
-			"cut --only-delimited -d: -f2 " + shellQuote(inputPath) + " >/tmp/cut-long.txt || true\n",
+			"cut --only-delimited -d: -f2 " + shellQuote(inputPath) + " >/tmp/cut-long.txt || true\n" +
+				"cut -b1 " + shellQuote(inputPath) + " >/tmp/cut-bytes.txt || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
+		assertSecureFuzzOutcome(t, script, result, err)
 	})
 }

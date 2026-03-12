@@ -23,10 +23,11 @@ func FuzzPasteFlagsCommand(f *testing.F) {
 
 		script := []byte(
 			"paste --serial --delimiters=, " + shellQuote(inputPath) + " >/tmp/paste-serial.txt || true\n" +
-				"paste --delimiters=: " + shellQuote(inputPath) + " " + shellQuote(otherPath) + " >/tmp/paste-parallel.txt || true\n",
+				"paste --delimiters=: " + shellQuote(inputPath) + " " + shellQuote(otherPath) + " >/tmp/paste-parallel.txt || true\n" +
+				"paste -z -d '\\0,' " + shellQuote(inputPath) + " " + shellQuote(otherPath) + " >/tmp/paste-zero.txt || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
+		assertSecureFuzzOutcome(t, script, result, err)
 	})
 }

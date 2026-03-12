@@ -51,7 +51,8 @@ func executeCommand(ctx context.Context, inv *Invocation, opts *executeCommandOp
 
 	argv := append([]string{resolved.Path}, opts.Argv[1:]...)
 	return inv.Exec(ctx, &ExecutionRequest{
-		Script:     shellJoinArgs(argv),
+		Script:     "\"$@\"\n",
+		Args:       argv,
 		Env:        env,
 		WorkDir:    workDir,
 		ReplaceEnv: opts.ReplaceEnv,

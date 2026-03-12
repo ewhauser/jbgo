@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -10,6 +11,7 @@ type Cut struct{}
 
 type cutOptions struct {
 	delimiter       string
+	bytes           []cutRange
 	fields          []cutRange
 	characters      []cutRange
 	suppressNoDelim bool
@@ -40,7 +42,10 @@ func (c *Cut) Run(ctx context.Context, inv *Invocation) error {
 		if err != nil {
 			return err
 		}
-		if err := writeCutOutput(inv, textLines(data), opts); err != nil {
+		if len(opts.bytes) > 0 {
+			return writeCutBytesOutput(inv, data, &opts)
+		}
+		if err := writeCutOutput(inv, textLines(data), &opts); err != nil {
 			return err
 		}
 		return nil
@@ -53,7 +58,13 @@ func (c *Cut) Run(ctx context.Context, inv *Invocation) error {
 			exitCode = 1
 			continue
 		}
-		if err := writeCutOutput(inv, textLines(data), opts); err != nil {
+		if len(opts.bytes) > 0 {
+			if err := writeCutBytesOutput(inv, data, &opts); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := writeCutOutput(inv, textLines(data), &opts); err != nil {
 			return err
 		}
 	}
@@ -78,6 +89,23 @@ func parseCutArgs(inv *Invocation) (cutOptions, []string, error) {
 		}
 
 		switch {
+		case arg == "-b":
+			if len(args) < 2 {
+				return cutOptions{}, nil, exitf(inv, 1, "cut: option requires an argument -- 'b'")
+			}
+			parsed, err := parseCutList(args[1])
+			if err != nil {
+				return cutOptions{}, nil, exitf(inv, 1, "cut: invalid byte list: %s", args[1])
+			}
+			opts.bytes = parsed
+			args = args[2:]
+			continue
+		case strings.HasPrefix(arg, "-b") && len(arg) > 2:
+			parsed, err := parseCutList(arg[2:])
+			if err != nil {
+				return cutOptions{}, nil, exitf(inv, 1, "cut: invalid byte list: %s", arg[2:])
+			}
+			opts.bytes = parsed
 		case arg == "-d":
 			if len(args) < 2 {
 				return cutOptions{}, nil, exitf(inv, 1, "cut: option requires an argument -- 'd'")
@@ -132,13 +160,27 @@ func parseCutArgs(inv *Invocation) (cutOptions, []string, error) {
 	}
 
 	switch {
-	case len(opts.fields) == 0 && len(opts.characters) == 0:
+	case len(opts.bytes) == 0 && len(opts.fields) == 0 && len(opts.characters) == 0:
 		return cutOptions{}, nil, exitf(inv, 1, "cut: you must specify a list of bytes, characters, or fields")
-	case len(opts.fields) > 0 && len(opts.characters) > 0:
-		return cutOptions{}, nil, exitf(inv, 1, "cut: only one of -c or -f may be specified")
+	case cutModeCount(&opts) > 1:
+		return cutOptions{}, nil, exitf(inv, 1, "cut: only one of -b, -c, or -f may be specified")
 	}
 
 	return opts, args, nil
+}
+
+func cutModeCount(opts *cutOptions) int {
+	count := 0
+	if len(opts.bytes) > 0 {
+		count++
+	}
+	if len(opts.characters) > 0 {
+		count++
+	}
+	if len(opts.fields) > 0 {
+		count++
+	}
+	return count
 }
 
 func parseCutList(value string) ([]cutRange, error) {
@@ -199,7 +241,7 @@ func parsePositiveInt(value string) (int, error) {
 	return index, nil
 }
 
-func writeCutOutput(inv *Invocation, lines []string, opts cutOptions) error {
+func writeCutOutput(inv *Invocation, lines []string, opts *cutOptions) error {
 	for _, line := range lines {
 		value, ok := cutLine(line, opts)
 		if !ok {
@@ -212,7 +254,49 @@ func writeCutOutput(inv *Invocation, lines []string, opts cutOptions) error {
 	return nil
 }
 
-func cutLine(line string, opts cutOptions) (string, bool) {
+func writeCutBytesOutput(inv *Invocation, data []byte, opts *cutOptions) error {
+	for _, line := range cutByteLines(data) {
+		selected := cutBytes(line, opts.bytes)
+		if _, err := inv.Stdout.Write(selected); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+		if _, err := fmt.Fprintln(inv.Stdout); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+	}
+	return nil
+}
+
+func cutByteLines(data []byte) [][]byte {
+	if len(data) == 0 {
+		return nil
+	}
+	lines := make([][]byte, 0, 1+bytes.Count(data, []byte{'\n'}))
+	start := 0
+	for i, b := range data {
+		if b != '\n' {
+			continue
+		}
+		lines = append(lines, append([]byte(nil), data[start:i]...))
+		start = i + 1
+	}
+	if start < len(data) {
+		lines = append(lines, append([]byte(nil), data[start:]...))
+	}
+	return lines
+}
+
+func cutBytes(line []byte, ranges []cutRange) []byte {
+	out := make([]byte, 0, len(line))
+	for index, b := range line {
+		if cutIndexSelected(index+1, ranges) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+func cutLine(line string, opts *cutOptions) (string, bool) {
 	if len(opts.characters) > 0 {
 		runes := []rune(line)
 		out := make([]rune, 0, len(runes))

@@ -656,9 +656,10 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `printf` supports the core shell format verbs used by automation scripts, including `%b` escape decoding and `\c` early termination
 - `rg` supports recursive regex search with `-n`, `-i`, `-l`, `-c`, `-g`, `--hidden`, and `--files`
 - `awk` is backed by `goawk` and supports `-F`, `-v`, and `-f`, but keeps `system()`, shell pipes, file writes, and extra file reads disabled inside the sandbox
+- `cut` supports byte, character, and field selection via `-b`, `-c`, and `-f`, plus `-d` and `--only-delimited` for focused GNU/helper-style pipelines
 - `comm` supports two-input comparisons from files or one stdin operand, column suppression via `-1`, `-2`, and `-3`, `--output-delimiter`, `-z/--zero-terminated`, `--total`, and GNU-style sorted-input diagnostics via `--check-order` / `--nocheck-order`
 - `column` supports fill-mode output plus table formatting via `-t/--table`, `-s`, `-o`, `-c`, and `-n`
-- `paste` supports parallel and serial modes via `-s` and `-d`, including repeated `-` stdin inputs
+- `paste` supports parallel and serial modes via `-s` and `-d`, `-z/--zero-terminated`, GNU escape parsing for delimiter lists, repeated `-` stdin inputs, and locale-aware multi-byte or raw-byte delimiters
 - `tr` supports translate, delete, squeeze, complement, ranges, escapes, and a focused set of POSIX character classes
 - `rev` and `tac` support Unicode-safe line reversal and reverse-line streaming
 - `nl` supports GNU-style header, body, and footer numbering controls via `-h`, `-b`, and `-f`; logical page delimiters via `-d`; `-p` no-renumber mode; join-blank-lines via `-l`; number formatting via `-n`, `-s`, `-v`, `-w`, and `-i`; regex-based numbering styles; and byte-preserving input/output for sandbox files and stdin
@@ -674,7 +675,7 @@ For the text/search batch, the runtime should expose useful, explicitly document
 For the shell/process helper batch, the runtime should expose practical, sandbox-owned subsets:
 
 - `tee` streams stdin to stdout and one or more files with unbuffered chunked writes, supports `-a/--append`, `-i/--ignore-interrupts`, `-p`, `--output-error[=MODE]`, and treats `-` as a literal filename while keeping error handling sandbox-owned
-- `env` supports `-i`, `-u NAME`, inline `NAME=value` assignments, and nested command execution with scoped environment replacement
+- `env` supports `-i`, `-u NAME`, inline `NAME=value` assignments, and nested command execution with scoped environment replacement and byte-preserving argv handoff through the session subexec path
 - `id` reports a deterministic virtual sandbox identity instead of consulting the host passwd/group database, supports the GNU/BSD-compatible option surface used by uutils (`-a`, `-A`, `-u`, `-g`, `-G`, `-n`, `-r`, `-z`, `-Z`, `-p`, `-P`), and treats audit or security-context output as sandbox-owned compatibility behavior rather than host state
 - `whoami` reports the deterministic virtual effective username derived from the sandbox identity environment, matching `id -un` instead of consulting host account databases
 - `printenv` prints either the whole environment or named variables and exits non-zero when a requested variable is missing
@@ -1023,7 +1024,7 @@ The gap analysis against `just-bash` yields two categories: gaps we should close
 
 ### 18.3 Post-MVP Investments
 
-- `sort`, `uniq`, `cut`, and `sed` subset
+- broader `sort`, `uniq`, `cut`, and `sed` parity
 - JSON-aware utilities for agent data flows
 - richer trace correlation IDs
 - safe HTTP fetch with policy allowlists
