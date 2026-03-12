@@ -90,7 +90,7 @@ func (c *lazyCommand) Run(ctx context.Context, inv *Invocation) error {
 	if err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
-	return cmd.Run(ctx, inv)
+	return RunCommand(ctx, cmd, inv)
 }
 
 func (c *lazyCommand) load() (Command, error) {

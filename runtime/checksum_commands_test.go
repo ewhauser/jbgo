@@ -347,12 +347,12 @@ func TestChecksumSumRejectsMeaninglessAndUnknownOptions(t *testing.T) {
 		{
 			name:   "unknown-long",
 			script: "md5sum --bogus\n",
-			stderr: "md5sum: unrecognized option '--bogus'\n",
+			stderr: "md5sum: unrecognized option '--bogus'\nTry 'md5sum --help' for more information.\n",
 		},
 		{
 			name:   "unknown-short",
 			script: "md5sum -q\n",
-			stderr: "md5sum: invalid option -- 'q'\n",
+			stderr: "md5sum: invalid option -- 'q'\nTry 'md5sum --help' for more information.\n",
 		},
 	}
 

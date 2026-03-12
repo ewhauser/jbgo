@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"runtime/debug"
 	"strings"
+
+	"github.com/ewhauser/gbash/commands"
 )
 
 var (
@@ -22,18 +23,15 @@ type buildMetadata struct {
 
 func versionText() string {
 	meta := currentBuildMetadata()
-
-	lines := []string{fmt.Sprintf("gbash %s", meta.Version)}
-	if meta.Commit != "" && meta.Commit != "unknown" {
-		lines = append(lines, fmt.Sprintf("commit: %s", meta.Commit))
-	}
-	if meta.Date != "" {
-		lines = append(lines, fmt.Sprintf("built: %s", meta.Date))
-	}
-	if meta.BuiltBy != "" {
-		lines = append(lines, fmt.Sprintf("built-by: %s", meta.BuiltBy))
-	}
-	return strings.Join(lines, "\n") + "\n"
+	var b strings.Builder
+	_ = commands.RenderDetailedVersion(&b, commands.VersionInfo{
+		Name:    "gbash",
+		Version: meta.Version,
+		Commit:  meta.Commit,
+		Date:    meta.Date,
+		BuiltBy: meta.BuiltBy,
+	})
+	return b.String()
 }
 
 func currentBuildMetadata() buildMetadata {

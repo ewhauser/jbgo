@@ -18,6 +18,25 @@ Defines the `Command` interface, `Invocation` struct, and `ExitError` type that 
 - `statPath` / `lstatPath` — stat with path resolution
 - `statMaybe` / `lstatMaybe` — stat that returns `(info, abs, exists, error)` instead of erroring on not-found
 
+### command_spec.go
+Declarative metadata, parsing, and help/version rendering for command implementations. Prefer this for all new commands and for migrations away from ad hoc flag parsing.
+
+- `SpecProvider` — optional interface: `Spec() CommandSpec`
+- `ParsedRunner` — optional interface: `RunParsed(ctx, inv, matches) error`
+- `CommandSpec` — command metadata: `Name`, `About`, `Usage`, `AfterHelp`, `Options`, `Args`, `Parse`, `HelpRenderer`, `VersionRenderer`
+- `OptionSpec` — option definition: short/long names, help text, arity, aliases, repeatability, and optional-value behavior
+- `ArgSpec` — positional argument metadata: requiredness, repeatability, help text, and defaults
+- `ParseConfig` — parser behavior toggles: long-option inference, grouped shorts, attached values, `--` handling, negative-number positional mode, and auto help/version
+- `ParsedCommand` — parsed accessors for options and positionals: `Has`, `Count`, `Value`, `Values`, `Arg`, `Args`, `Positionals`, `OptionOrder`
+- `RunCommand(ctx, cmd, inv)` — executes a command through the spec layer when it implements `SpecProvider` + `ParsedRunner`, otherwise falls back to `Run`
+- `ParseCommandSpec(inv, spec)` — parse `inv.Args` against a `CommandSpec`
+- `RenderCommandHelp` / `RenderCommandVersion` — shared default renderers for utility help/version output
+
+Implementation rule:
+- New command implementations should prefer `Spec() CommandSpec` plus `RunParsed(...)` instead of walking `inv.Args` manually.
+- Command-specific help/version rendering should use `HelpRenderer` / `VersionRenderer` only for real uutils compatibility quirks.
+- Legacy manual parsers should be converted to this new method
+
 ### invocation_capabilities.go
 Creates `Invocation` instances and provides `CommandFS`, the policy-enforced filesystem wrapper.
 

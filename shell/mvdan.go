@@ -362,7 +362,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			}))
 		}
 
-		err = resolved.command.Run(ctx, commands.NewInvocation(&commands.InvocationOptions{
+		err = commands.RunCommand(ctx, resolved.command, commands.NewInvocation(&commands.InvocationOptions{
 			Args:       args[1:],
 			Env:        currentEnv,
 			Cwd:        virtualWD,

@@ -76,17 +76,17 @@ func (c *Tee) Name() string {
 }
 
 func (c *Tee) Run(ctx context.Context, inv *Invocation) error {
-	opts, err := parseTeeArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Tee) Spec() CommandSpec {
+	return teeCommandSpec()
+}
+
+func (c *Tee) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := teeOptionsFromMatches(matches)
 	if err != nil {
 		return err
-	}
-	if opts.showHelp {
-		_, _ = io.WriteString(inv.Stdout, teeHelpText)
-		return nil
-	}
-	if opts.showVersion {
-		_, _ = fmt.Fprintln(inv.Stdout, "tee (gbash)")
-		return nil
 	}
 
 	// GNU tee can ignore SIGINT with -i, but command execution here is in-process
@@ -122,80 +122,47 @@ func (c *Tee) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseTeeArgs(inv *Invocation) (teeOptions, error) {
-	var opts teeOptions
-	ignorePipeErrors := false
-	args := inv.Args
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
-		}
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			break
-		}
-		if strings.HasPrefix(arg, "--") {
-			name, value, hasValue := strings.Cut(arg[2:], "=")
-			option, err := matchTeeLongOption(name)
-			if err != nil {
-				return teeOptions{}, teeUnknownLongOption(inv, arg)
-			}
-			switch option {
-			case "help":
-				if hasValue {
-					return teeOptions{}, teeLongOptionTakesNoValue(inv, arg)
-				}
-				opts.showHelp = true
-			case "version":
-				if hasValue {
-					return teeOptions{}, teeLongOptionTakesNoValue(inv, arg)
-				}
-				opts.showVersion = true
-			case "append":
-				if hasValue {
-					return teeOptions{}, teeLongOptionTakesNoValue(inv, arg)
-				}
-				opts.append = true
-			case "ignore-interrupts":
-				if hasValue {
-					return teeOptions{}, teeLongOptionTakesNoValue(inv, arg)
-				}
-				opts.ignoreInterrupts = true
-			case "output-error":
-				mode, err := parseTeeOutputErrorValue(inv, value, hasValue)
-				if err != nil {
-					return teeOptions{}, err
-				}
-				opts.outputError = mode
-			default:
-				return teeOptions{}, teeUnknownLongOption(inv, arg)
-			}
-			args = args[1:]
-			continue
-		}
+func teeCommandSpec() CommandSpec {
+	return CommandSpec{
+		Name:      "tee",
+		About:     "Copy standard input to each FILE, and also to standard output.",
+		Usage:     "tee [OPTION]... [FILE]...",
+		AfterHelp: "MODE determines behavior with write errors on outputs:\n  warn         diagnose errors writing to any output\n  warn-nopipe  diagnose errors writing to any output not a pipe\n  exit         exit on error writing to any output\n  exit-nopipe  exit on error writing to any output not a pipe",
+		Options: []OptionSpec{
+			{Name: "append", Short: 'a', Long: "append", Help: "append to the given FILEs, do not overwrite"},
+			{Name: "ignore-interrupts", Short: 'i', Long: "ignore-interrupts", Help: "ignore interrupt signals"},
+			{Name: "ignore-pipe-errors", Short: 'p', Help: "diagnose errors writing to non pipes"},
+			{Name: "output-error", Long: "output-error", ValueName: "MODE", Arity: OptionOptionalValue, OptionalValueEqualsOnly: true, Help: "set behavior on write error; see MODE below"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: false,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		HelpRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, teeHelpText)
+			return err
+		},
+	}
+}
 
-		for _, flag := range arg[1:] {
-			switch flag {
-			case 'a':
-				opts.append = true
-			case 'h':
-				opts.showHelp = true
-			case 'i':
-				opts.ignoreInterrupts = true
-			case 'p':
-				ignorePipeErrors = true
-			default:
-				return teeOptions{}, teeUnknownShortOption(inv, flag)
-			}
-		}
-		args = args[1:]
+func parseTeeArgs(inv *Invocation) (teeOptions, error) {
+	matches, action, err := ParseCommandSpec(inv, teeCommandSpec())
+	if err != nil {
+		return teeOptions{}, err
 	}
-	if opts.outputError == nil && ignorePipeErrors {
-		mode := teeOutputErrorWarnNoPipe
-		opts.outputError = &mode
+	opts, err := teeOptionsFromMatches(matches)
+	if err != nil {
+		return teeOptions{}, err
 	}
-	opts.files = append(opts.files, args...)
+	opts.showHelp = action == "help"
+	opts.showVersion = action == "version"
 	return opts, nil
 }
 
@@ -218,6 +185,26 @@ func matchTeeLongOption(name string) (string, error) {
 		return matches[0], nil
 	}
 	return "", errors.New("no long option match")
+}
+
+func teeOptionsFromMatches(matches *ParsedCommand) (teeOptions, error) {
+	opts := teeOptions{
+		append:           matches.Has("append"),
+		ignoreInterrupts: matches.Has("ignore-interrupts"),
+		files:            matches.Args("file"),
+	}
+	if matches.Has("output-error") {
+		mode, err := parseTeeOutputErrorValue(&Invocation{}, matches.Value("output-error"), matches.Value("output-error") != "")
+		if err != nil {
+			return teeOptions{}, err
+		}
+		opts.outputError = mode
+	}
+	if opts.outputError == nil && matches.Has("ignore-pipe-errors") {
+		mode := teeOutputErrorWarnNoPipe
+		opts.outputError = &mode
+	}
+	return opts, nil
 }
 
 func parseTeeOutputErrorValue(inv *Invocation, raw string, hasValue bool) (*teeOutputErrorMode, error) {

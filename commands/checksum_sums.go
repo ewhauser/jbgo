@@ -139,17 +139,47 @@ func (c *checksumSum) Name() string {
 }
 
 func (c *checksumSum) Run(ctx context.Context, inv *Invocation) error {
-	opts, err := c.parseArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *checksumSum) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  c.name,
+		About: fmt.Sprintf("%s - compute or check %s message digests", c.name, c.tagName),
+		Usage: fmt.Sprintf("%s [OPTION]... [FILE]...", c.name),
+		Options: []OptionSpec{
+			{Name: "binary", Short: 'b', Long: "binary", Help: "read in binary mode"},
+			{Name: "check", Short: 'c', Long: "check", Help: fmt.Sprintf("read %s sums from the FILEs and check them", c.tagName)},
+			{Name: "tag", Long: "tag", Help: "create a BSD-style checksum"},
+			{Name: "text", Short: 't', Long: "text", Help: "read in text mode (default)"},
+			{Name: "zero", Short: 'z', Long: "zero", Help: "end each output line with NUL, not newline"},
+			{Name: "ignore-missing", Long: "ignore-missing", Help: "don't fail or report status for missing files"},
+			{Name: "quiet", Long: "quiet", Help: "don't print OK for each successfully verified file"},
+			{Name: "status", Long: "status", Help: "don't output anything, status code shows success"},
+			{Name: "strict", Long: "strict", Help: "exit non-zero for improperly formatted checksum lines"},
+			{Name: "warn", Short: 'w', Long: "warn", Help: "warn about improperly formatted checksum lines"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: false,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		HelpRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := fmt.Fprintf(w, checksumSumsHelpText, c.name, c.tagName, c.name, c.tagName)
+			return err
+		},
+	}
+}
+
+func (c *checksumSum) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := c.optionsFromMatches(inv, matches)
 	if err != nil {
 		return err
-	}
-	if opts.help {
-		_, _ = fmt.Fprintf(inv.Stdout, checksumSumsHelpText, c.name, c.tagName, c.name, c.tagName)
-		return nil
-	}
-	if opts.version {
-		_, _ = fmt.Fprintf(inv.Stdout, "%s (gbash)\n", c.name)
-		return nil
 	}
 	if len(opts.files) == 0 {
 		opts.files = []string{"-"}
@@ -161,98 +191,60 @@ func (c *checksumSum) Run(ctx context.Context, inv *Invocation) error {
 }
 
 func (c *checksumSum) parseArgs(inv *Invocation) (checksumOptions, error) {
+	matches, action, err := ParseCommandSpec(inv, c.Spec())
+	if err != nil {
+		return checksumOptions{}, err
+	}
+	opts, err := c.optionsFromMatches(inv, matches)
+	if err != nil {
+		return checksumOptions{}, err
+	}
+	opts.help = action == "help"
+	opts.version = action == "version"
+	return opts, nil
+}
+
+func (c *checksumSum) optionsFromMatches(inv *Invocation, matches *ParsedCommand) (checksumOptions, error) {
 	opts := checksumOptions{
 		text:      true,
 		verbosity: checksumVerbosityNormal,
 	}
 
-	args := inv.Args
-	for i := range len(args) {
-		arg := args[i]
-		if arg == "--" {
-			opts.files = append(opts.files, args[i+1:]...)
-			break
-		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			opts.files = append(opts.files, arg)
-			continue
-		}
-
-		switch arg {
-		case "--help":
-			opts.help = true
-			continue
-		case "--version":
-			opts.version = true
-			continue
-		case "--check":
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "check":
 			opts.check = true
-			continue
-		case "--binary":
+		case "binary":
 			opts.binary = true
 			opts.text = false
 			opts.binaryFlagSet = true
-			continue
-		case "--text":
+		case "text":
 			opts.text = true
 			opts.binary = false
 			opts.textFlagSet = true
-			continue
-		case "--tag":
+		case "tag":
 			opts.tag = true
 			opts.tagFlagSet = true
-			continue
-		case "--zero":
+		case "zero":
 			opts.zero = true
-			continue
-		case "--ignore-missing":
+		case "ignore-missing":
 			opts.ignoreMissing = true
 			opts.ignoreFlagSet = true
-			continue
-		case "--quiet":
+		case "quiet":
 			opts.verbosity = checksumVerbosityQuiet
 			opts.quietFlagSet = true
-			continue
-		case "--status":
+		case "status":
 			opts.verbosity = checksumVerbosityStatus
 			opts.statusFlagSet = true
-			continue
-		case "--strict":
+		case "strict":
 			opts.strict = true
 			opts.strictFlagSet = true
-			continue
-		case "--warn":
+		case "warn":
 			opts.verbosity = checksumVerbosityWarn
 			opts.warnFlagSet = true
-			continue
-		}
-
-		if strings.HasPrefix(arg, "--") {
-			return checksumOptions{}, writeChecksumUnknownOption(inv, c.name, arg)
-		}
-
-		for _, flag := range arg[1:] {
-			switch flag {
-			case 'b':
-				opts.binary = true
-				opts.text = false
-				opts.binaryFlagSet = true
-			case 'c':
-				opts.check = true
-			case 't':
-				opts.text = true
-				opts.binary = false
-				opts.textFlagSet = true
-			case 'z':
-				opts.zero = true
-			case 'w':
-				opts.verbosity = checksumVerbosityWarn
-				opts.warnFlagSet = true
-			default:
-				return checksumOptions{}, writeChecksumUnknownShort(inv, c.name, string(arg[1:]))
-			}
 		}
 	}
+	opts.files = matches.Args("file")
 
 	if !opts.check {
 		if opts.ignoreFlagSet {

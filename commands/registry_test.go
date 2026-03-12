@@ -79,3 +79,30 @@ func TestDefaultRegistryDoesNotIncludeSQLite3(t *testing.T) {
 		t.Fatalf("DefaultRegistry() unexpectedly includes sqlite3")
 	}
 }
+
+func TestDefaultRegistryMetadataAudit(t *testing.T) {
+	registry := DefaultRegistry()
+	var metadataBacked []string
+	var legacy []string
+
+	for _, name := range registry.Names() {
+		cmd, ok := registry.Lookup(name)
+		if !ok {
+			t.Fatalf("Lookup(%q) ok = false", name)
+		}
+		if _, ok := cmd.(SpecProvider); ok {
+			metadataBacked = append(metadataBacked, name)
+			continue
+		}
+		legacy = append(legacy, name)
+	}
+
+	for _, name := range []string{"md5sum", "seq", "sha1sum", "sha256sum", "tee"} {
+		if !slices.Contains(metadataBacked, name) {
+			t.Fatalf("metadata-backed commands = %v, want %q included", metadataBacked, name)
+		}
+	}
+
+	t.Logf("metadata-backed commands: %v", metadataBacked)
+	t.Logf("legacy commands pending migration: %v", legacy)
+}

@@ -29,22 +29,70 @@ func (c *Seq) Name() string {
 }
 
 func (c *Seq) Run(ctx context.Context, inv *Invocation) error {
-	opts, mode, numbers, err := parseSeqArgs(inv)
-	if err != nil {
-		return err
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Seq) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "seq",
+		About: "Print numbers from FIRST to LAST, in steps of INCREMENT.",
+		Usage: "seq [OPTION]... LAST",
+		AfterHelp: "  or:  seq [OPTION]... FIRST LAST\n" +
+			"  or:  seq [OPTION]... FIRST INCREMENT LAST",
+		Options: []OptionSpec{
+			{Name: "equal-width", Short: 'w', Long: "equal-width", Help: "equalize width by padding with leading zeroes"},
+			{Name: "separator", Short: 's', Long: "separator", ValueName: "STRING", Arity: OptionRequiredValue, Help: "use STRING to separate numbers"},
+			{Name: "terminator", Short: 't', Long: "terminator", ValueName: "STRING", Arity: OptionRequiredValue, Help: "use STRING to terminate each output line"},
+			{Name: "format", Short: 'f', Long: "format", ValueName: "FORMAT", Arity: OptionRequiredValue, Help: "use printf style floating-point FORMAT"},
+		},
+		Args: []ArgSpec{
+			{Name: "number", ValueName: "NUMBER", Repeatable: true, Required: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			NegativeNumberPositional: true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
+			_, err := fmt.Fprintf(w, "%s\n\nUsage: %s\n\nOptions:\n  -f, --format=FORMAT      use printf style floating-point FORMAT\n  -s, --separator=STRING   use STRING to separate numbers\n  -t, --terminator=STRING  use STRING to terminate each output line\n  -w, --equal-width        equalize width by padding with leading zeroes\n  -h, --help               display this help and exit\n      --version            output version information and exit\n\n%s\n", spec.About, spec.Usage, spec.AfterHelp)
+			return err
+		},
 	}
-	switch mode {
-	case "help":
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: seq [OPTION]... LAST")
-		_, _ = fmt.Fprintln(inv.Stdout, "  or:  seq [OPTION]... FIRST LAST")
-		_, _ = fmt.Fprintln(inv.Stdout, "  or:  seq [OPTION]... FIRST INCREMENT LAST")
-		return nil
-	case "version":
-		_, _ = fmt.Fprintln(inv.Stdout, "seq (gbash)")
-		return nil
+}
+
+func (c *Seq) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	var opts seqOptions
+	opts.separator = "\n"
+	opts.terminator = "\n"
+	opts.equalWidth = matches.Has("equal-width")
+	if matches.Has("separator") {
+		opts.separator = matches.Value("separator")
 	}
-	if len(numbers) == 0 {
+	if matches.Has("terminator") {
+		opts.terminator = matches.Value("terminator")
+	}
+	if matches.Has("format") {
+		opts.format = matches.Value("format")
+		opts.formatSet = true
+	}
+
+	rawNumbers := matches.Args("number")
+	if len(rawNumbers) == 0 {
 		return seqUsageErrorf(inv, "missing operand")
+	}
+	if len(rawNumbers) > 3 {
+		return seqUsageErrorf(inv, "extra operand %s", quoteGNUOperand(rawNumbers[3]))
+	}
+	numbers := make([]seqNumber, 0, len(rawNumbers))
+	for _, raw := range rawNumbers {
+		number, err := parseSeqNumber(raw)
+		if err != nil {
+			return seqParseError(inv, raw, err)
+		}
+		numbers = append(numbers, number)
 	}
 	if opts.equalWidth && opts.formatSet {
 		return seqUsageErrorf(inv, "format string may not be specified when printing equal width strings")
