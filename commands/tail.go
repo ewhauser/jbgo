@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -38,6 +39,7 @@ type tailOptions struct {
 	maxUnchangedStats  int
 	disableInotifyHint bool
 	debug              bool
+	pid                int
 }
 
 type tailFollowState struct {
@@ -193,6 +195,9 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	for {
+		if opts.follow != tailFollowNone && opts.pid != 0 && !tailPIDIsAlive(opts.pid) {
+			return nil
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -504,6 +509,23 @@ func parseTailArgs(inv *Invocation) (tailOptions, error) {
 		case arg == "--retry":
 			opts.retry = true
 			args = args[1:]
+		case arg == "--pid":
+			if len(args) < 2 {
+				return tailOptions{}, exitf(inv, 1, "tail: missing argument to --pid")
+			}
+			pid, err := strconv.Atoi(args[1])
+			if err != nil || pid < 0 {
+				return tailOptions{}, exitf(inv, 1, "tail: invalid PID %q", args[1])
+			}
+			opts.pid = pid
+			args = args[2:]
+		case strings.HasPrefix(arg, "--pid="):
+			pid, err := strconv.Atoi(strings.TrimPrefix(arg, "--pid="))
+			if err != nil || pid < 0 {
+				return tailOptions{}, exitf(inv, 1, "tail: invalid PID %q", strings.TrimPrefix(arg, "--pid="))
+			}
+			opts.pid = pid
+			args = args[1:]
 		case arg == "---disable-inotify":
 			opts.disableInotifyHint = true
 			args = args[1:]
@@ -598,6 +620,11 @@ func parseTailSleepInterval(raw string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid interval")
 	}
 	return time.Duration(value * float64(time.Second)), nil
+}
+
+func tailPIDIsAlive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || err == syscall.EPERM
 }
 
 func writeTailHeader(inv *Invocation, file string) error {

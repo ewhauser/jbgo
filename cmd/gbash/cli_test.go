@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -503,6 +504,7 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryTracksReappearingFileWhileO
 	if !stdout.WaitForSubstring("x\n", 500*time.Millisecond) {
 		t.Fatalf("stdout did not emit initial content; got %q", stdout.String())
 	}
+	time.Sleep(150 * time.Millisecond)
 	if err := os.Remove(filepath.Join(tmp, "foo")); err != nil {
 		t.Fatalf("Remove(foo) error = %v", err)
 	}
@@ -528,6 +530,70 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryTracksReappearingFileWhileO
 	}
 	if !strings.Contains(stderr.String(), "execution timed out") {
 		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowPidKeepsRunningWhileLastPidIsAlive(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.WriteFile(filepath.Join(tmp, "here"), nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(here) error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
+	defer cancel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(ctx, "gbash", []string{
+		"compat", "exec", "tail", "-f", "-s0.05", "--pid=2147483647", "--pid=" + strconv.Itoa(os.Getpid()), "here",
+	}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowPidExitsBeforeLongSleepWhenPidIsDead(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.WriteFile(filepath.Join(tmp, "empty"), nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(empty) error = %v", err)
+	}
+
+	start := time.Now()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
+		"compat", "exec", "tail", "-f", "-s10", "--pid=2147483647", "empty",
+	}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if elapsed := time.Since(start); elapsed >= time.Second {
+		t.Fatalf("tail waited too long for a dead pid: %v", elapsed)
 	}
 }
 
