@@ -243,3 +243,181 @@ func TestCatSupportsNumberFlag(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestColumnSupportsTableModeWithShortAndLongFlags(t *testing.T) {
+	tests := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name:   "short",
+			script: "printf 'short long\\nlonger x\\n' | column -t\n",
+			want:   "short   long\nlonger  x\n",
+		},
+		{
+			name:   "long",
+			script: "printf 'name age\\nalice 30\\nbob 25\\n' | column --table\n",
+			want:   "name   age\nalice  30\nbob    25\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newSession(t, &Config{})
+
+			result := mustExecSession(t, session, tc.script)
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.want {
+				t.Fatalf("Stdout = %q, want %q", got, tc.want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
+	}
+}
+
+func TestColumnSupportsSeparatorsOutputDelimitersAndNoMerge(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf 'a,,c\\nd,e,f\\n' | column -t -s, -n -o ' | '\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a |   | c\nd | e | f\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
+func TestColumnFillModeSupportsWidthAndInvalidParseIntBehavior(t *testing.T) {
+	tests := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name:   "width",
+			script: "printf 'a\\nb\\nc\\nd\\ne\\nf\\n' | column -c20\n",
+			want:   "a  b  c  d  e  f\n",
+		},
+		{
+			name:   "invalid-width",
+			script: "printf 'a\\nb\\n' | column -c nope\n",
+			want:   "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newSession(t, &Config{})
+
+			result := mustExecSession(t, session, tc.script)
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.want {
+				t.Fatalf("Stdout = %q, want %q", got, tc.want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
+	}
+}
+
+func TestColumnSupportsDashMultipleFilesAndWhitespaceOnlyInput(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/other.txt", []byte("c d\n"))
+
+	result := mustExecSession(t, session, "printf 'a b\\n' | column -t - /tmp/other.txt\nprintf '   \\n\\t\\n' | column\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a  b\nc  d\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
+func TestColumnMissingFileSuppressesPartialOutput(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/input.txt", []byte("a b\n"))
+
+	result := mustExecSession(t, session, "column -t /tmp/input.txt /tmp/missing.txt\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", result.Stdout)
+	}
+	if got, want := result.Stderr, "column: /tmp/missing.txt: No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestColumnRejectsUnknownOptionsAndMissingArgs(t *testing.T) {
+	tests := []struct {
+		name   string
+		script string
+		stderr string
+	}{
+		{
+			name:   "short",
+			script: "column -z\n",
+			stderr: "column: invalid option -- 'z'\n",
+		},
+		{
+			name:   "long",
+			script: "column --bogus\n",
+			stderr: "column: unrecognized option '--bogus'\n",
+		},
+		{
+			name:   "missing-arg",
+			script: "column -c\n",
+			stderr: "column: option requires an argument -- 'c'\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newSession(t, &Config{})
+
+			result := mustExecSession(t, session, tc.script)
+			if result.ExitCode != 1 {
+				t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+			}
+			if result.Stdout != "" {
+				t.Fatalf("Stdout = %q, want empty", result.Stdout)
+			}
+			if got := result.Stderr; got != tc.stderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.stderr)
+			}
+		})
+	}
+}
+
+func TestColumnHelpWinsOverOtherArgs(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "column --help -z\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "column - columnate lists") {
+		t.Fatalf("Stdout = %q, want help header", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "Usage: column [OPTION]... [FILE]...") {
+		t.Fatalf("Stdout = %q, want usage text", result.Stdout)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}

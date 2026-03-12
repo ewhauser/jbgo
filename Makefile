@@ -67,6 +67,7 @@ FUZZ_FULL_SHARD_2 := \
 FUZZ_FULL_SHARD_3 := \
 	FuzzDirectoryTraversalCommands \
 	FuzzTextSearchCommands \
+	FuzzColumnCommand \
 	FuzzSedFlagsCommand \
 	FuzzXArgsFlagsCommand \
 	FuzzGrepFlagsCommand \

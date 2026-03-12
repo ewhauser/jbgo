@@ -160,7 +160,7 @@ Auto-generated — re-run the upstream-diff skill to refresh.
 
 - [ ] `alias`
 - [ ] `clear`
-- [ ] `column` (upstream flags: `-t`, `-s`, `-o`, `-c`, `-n`)
+- [x] `column` (upstream flags: `-t`, `-s`, `-o`, `-c`, `-n`)
 - [ ] `egrep`
 - [ ] `expand` (upstream flags: `-t`, `-i`)
 - [ ] `expr`

@@ -351,6 +351,54 @@ func FuzzArchiveCommands(f *testing.F) {
 	})
 }
 
+func FuzzColumnCommand(f *testing.F) {
+	rt := newFuzzRuntime(f)
+
+	seeds := []struct {
+		data     []byte
+		sepIndex uint8
+		outIndex uint8
+	}{
+		{[]byte("a b c\nd e f\n"), 0, 0},
+		{[]byte("a,,c\nd,e,f\n"), 1, 1},
+		{[]byte("alpha:beta\ngamma:delta\n"), 2, 2},
+	}
+	for _, seed := range seeds {
+		f.Add(seed.data, seed.sepIndex, seed.outIndex)
+	}
+
+	f.Fuzz(func(t *testing.T, rawData []byte, sepIndex uint8, outIndex uint8) {
+		session := newFuzzSession(t, rt)
+		inputPath := "/tmp/column-input.txt"
+		otherPath := "/tmp/column-other.txt"
+		text := normalizeFuzzText(rawData)
+		separators := []string{"", ",", ":", "\t", "|", " "}
+		outputSeps := []string{"  ", "|", ",", "\t", "", " - "}
+		separator := separators[int(sepIndex)%len(separators)]
+		outputSep := outputSeps[int(outIndex)%len(outputSeps)]
+
+		writeSessionFile(t, session, inputPath, text)
+		writeSessionFile(t, session, otherPath, []byte(strings.ToUpper(string(text))))
+
+		script := fmt.Appendf(nil,
+			"column %s >/tmp/column-default.txt\n"+
+				"column -t -s %s -o %s -n %s >/tmp/column-table.txt\n"+
+				"cat %s | column -c 20 >/tmp/column-stdin.txt\n"+
+				"cat %s | column --table - %s >/tmp/column-dash.txt\n",
+			shellQuote(inputPath),
+			shellQuote(separator),
+			shellQuote(outputSep),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(otherPath),
+		)
+
+		result, err := runFuzzSessionScript(t, session, script)
+		assertSecureFuzzOutcome(t, script, result, err)
+	})
+}
+
 func writeJoinFixtures(t *testing.T, session *Session, text []byte) (leftPath, rightPath string) {
 	t.Helper()
 

@@ -162,6 +162,7 @@ func DefaultRegistry() *Registry {
 		NewBash(),
 		NewSh(),
 		NewComm(),
+		NewColumn(),
 		NewPaste(),
 		NewTR(),
 		NewRev(),
