@@ -131,7 +131,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 			}
 			continue
 		}
-		data, followFile, err := readTailInitialFile(ctx, inv, file, opts.follow)
+		data, followFile, info, err := readTailInitialFile(ctx, inv, file, opts.follow)
 		if err != nil {
 			if opts.follow == tailFollowName && opts.retry && tailPathIsUntailable(ctx, inv, file) {
 				writeTailErrorReadingDirectory(inv, file)
@@ -169,10 +169,7 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 
 		identity := ""
 		if opts.follow == tailFollowName {
-			info, _, statErr := statPath(ctx, inv, file)
-			if statErr == nil {
-				identity = tailFileIdentity(info)
-			}
+			identity = tailFileIdentity(info)
 		}
 		states = append(states, tailFollowState{
 			path:          file,
@@ -245,25 +242,28 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 	}
 }
 
-func readTailInitialFile(ctx context.Context, inv *Invocation, name string, follow tailFollowMode) ([]byte, gbfs.File, error) {
-	if follow == tailFollowDescriptor {
-		file, _, err := openRead(ctx, inv, name)
-		if err != nil {
-			return nil, nil, err
-		}
-		data, err := io.ReadAll(file)
-		if err != nil {
-			_ = file.Close()
-			return nil, nil, &ExitError{Code: 1, Err: err}
-		}
-		return data, file, nil
-	}
-
-	data, _, err := readAllFile(ctx, inv, name)
+func readTailInitialFile(ctx context.Context, inv *Invocation, name string, follow tailFollowMode) ([]byte, gbfs.File, stdfs.FileInfo, error) {
+	file, _, err := openRead(ctx, inv, name)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return data, nil, nil
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, nil, nil, &ExitError{Code: 1, Err: err}
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		_ = file.Close()
+		return nil, nil, nil, &ExitError{Code: 1, Err: err}
+	}
+	if follow == tailFollowDescriptor {
+		return data, file, info, nil
+	}
+	if err := file.Close(); err != nil {
+		return nil, nil, nil, &ExitError{Code: 1, Err: err}
+	}
+	return data, nil, info, nil
 }
 
 func closeTailFollowStates(states []tailFollowState) {
@@ -312,7 +312,6 @@ func (c *Tail) pollTailByName(
 		if state.exists {
 			state.exists = false
 			state.offset = 0
-			state.identity = ""
 			state.untailable = false
 			if opts.follow == tailFollowName {
 				writeTailInaccessibleError(inv, state.path)
@@ -391,7 +390,7 @@ func (c *Tail) pollTailDescriptor(
 			state.active = false
 			return nil
 		}
-		data, followFile, err := readTailInitialFile(ctx, inv, state.path, tailFollowDescriptor)
+		data, followFile, _, err := readTailInitialFile(ctx, inv, state.path, tailFollowDescriptor)
 		if err != nil {
 			if !state.announcedAbsent && opts.retry {
 				writeTailMissingError(inv, state.path)
@@ -767,26 +766,47 @@ func writeTailOutput(inv *Invocation, outputState *tailOutputState, file string,
 }
 
 func tailFileIdentity(info stdfs.FileInfo) string {
+	dev, ino, ok := tailDeviceAndInode(info)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", dev, ino)
+}
+
+func tailDeviceAndInode(info stdfs.FileInfo) (dev, ino uint64, ok bool) {
 	if info == nil {
-		return ""
+		return 0, 0, false
 	}
-	sys := info.Sys()
-	if sys == nil {
-		return ""
+	value := reflect.ValueOf(info.Sys())
+	if !value.IsValid() {
+		return 0, 0, false
 	}
-	value := reflect.ValueOf(sys)
 	if value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return 0, 0, false
+		}
 		value = value.Elem()
 	}
 	if !value.IsValid() || value.Kind() != reflect.Struct {
-		return ""
+		return 0, 0, false
 	}
-	dev := value.FieldByName("Dev")
-	ino := value.FieldByName("Ino")
-	if !dev.IsValid() || !ino.IsValid() {
-		return ""
+	devField := value.FieldByName("Dev")
+	inoField := value.FieldByName("Ino")
+	if !devField.IsValid() || !inoField.IsValid() {
+		return 0, 0, false
 	}
-	return fmt.Sprintf("%v:%v", dev.Interface(), ino.Interface())
+	return tailUintField(devField), tailUintField(inoField), true
+}
+
+func tailUintField(field reflect.Value) uint64 {
+	switch field.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return field.Uint()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return uint64(field.Int())
+	default:
+		return 0
+	}
 }
 
 func ensureTailStdinAvailable(inv *Invocation) error {
