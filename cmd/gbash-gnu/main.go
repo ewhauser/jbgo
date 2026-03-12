@@ -800,7 +800,10 @@ done < "$script_dir/unsupported-programs.txt"
 		return err
 	}
 
-	return patchTestsEnvironment(filepath.Join(workDir, "Makefile"))
+	if err := patchTestsEnvironment(filepath.Join(workDir, "Makefile")); err != nil {
+		return err
+	}
+	return patchTestInitSetupPath(filepath.Join(workDir, "tests", "init.sh"))
 }
 
 func writeLines(path string, lines []string) error {
@@ -829,6 +832,44 @@ func patchTestsEnvironment(makefilePath string) error {
 		return fmt.Errorf("patch TESTS_ENVIRONMENT: marker not found")
 	}
 	return os.WriteFile(makefilePath, []byte(updated), 0o644)
+}
+
+func patchTestInitSetupPath(initPath string) error {
+	data, err := os.ReadFile(initPath)
+	if err != nil {
+		return err
+	}
+	const needle = `setup_ "$@"
+# This trap is here, rather than in the setup_ function, because some
+# shells run the exit trap at shell function exit, rather than script exit.
+trap remove_tmp_ EXIT
+`
+	const injection = `jbgo_path_before_setup_=$PATH
+if test "${abs_top_builddir+set}" = set; then
+  jbgo_src_dir_=$abs_top_builddir/src
+  case $PATH in
+    "$jbgo_src_dir_$PATH_SEPARATOR"*) PATH=${PATH#"$jbgo_src_dir_$PATH_SEPARATOR"} ;;
+    "$jbgo_src_dir_") PATH= ;;
+  esac
+  export PATH
+fi
+
+setup_ "$@"
+PATH=$jbgo_path_before_setup_
+export PATH
+# This trap is here, rather than in the setup_ function, because some
+# shells run the exit trap at shell function exit, rather than script exit.
+trap remove_tmp_ EXIT
+`
+	contents := string(data)
+	if strings.Contains(contents, "jbgo_path_before_setup_=$PATH") {
+		return nil
+	}
+	updated := strings.Replace(contents, needle, injection, 1)
+	if updated == contents {
+		return fmt.Errorf("patch tests/init.sh setup PATH: marker not found")
+	}
+	return os.WriteFile(initPath, []byte(updated), 0o644)
 }
 
 func shellSingleQuoteForScript(value string) string {
