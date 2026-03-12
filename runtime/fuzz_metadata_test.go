@@ -416,6 +416,8 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 			fuzzVariant("", "path.read", "{path.text}"),
 			fuzzVariant("", "flag:ba", "-ba", "{path.text}"),
 			fuzzVariant("", "flag:n", "-n", "rz", "{path.text}"),
+			fuzzVariant("", "flag:sections", "-ha", "-fa", "-d", "x", "{path.text}"),
+			fuzzVariant("", "flag:negative", "-p", "-i", "-10", "{path.text}"),
 		),
 		fuzzSpec("join", "text",
 			fuzzVariant("", "paths", "{path.joinleft}", "{path.joinright}"),

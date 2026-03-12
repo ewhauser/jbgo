@@ -661,7 +661,7 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `paste` supports parallel and serial modes via `-s` and `-d`, including repeated `-` stdin inputs
 - `tr` supports translate, delete, squeeze, complement, ranges, escapes, and a focused set of POSIX character classes
 - `rev` and `tac` support Unicode-safe line reversal and reverse-line streaming
-- `nl` supports body numbering styles plus width, separator, start, and increment controls
+- `nl` supports GNU-style header, body, and footer numbering controls via `-h`, `-b`, and `-f`; logical page delimiters via `-d`; `-p` no-renumber mode; join-blank-lines via `-l`; number formatting via `-n`, `-s`, `-v`, `-w`, and `-i`; regex-based numbering styles; and byte-preserving input/output for sandbox files and stdin
 - `join` supports keyed joins via `-1`, `-2`, `-t`, `-a`, `-v`, `-e`, `-o`, and `-i`
 - `split` supports line-based and byte-based splits via `-l`, `-b`, `-d`, and `-a`
 - `diff` supports unified output plus `-q/--brief`, `-s/--report-identical-files`, and `-i/--ignore-case`, and accepts `-u/--unified` as an explicit alias for the default unified format

@@ -21,10 +21,12 @@ func FuzzNLFlagsCommand(f *testing.F) {
 
 		script := []byte(
 			"nl -ba -n rz -w 3 " + shellQuote(inputPath) + " >/tmp/nl-rz.txt || true\n" +
-				"nl -ba -n ln -w 3 -s : " + shellQuote(inputPath) + " >/tmp/nl-ln.txt || true\n",
+				"nl -ba -n ln -w 3 -s : " + shellQuote(inputPath) + " >/tmp/nl-ln.txt || true\n" +
+				"nl -ha -fa -d x " + shellQuote(inputPath) + " >/tmp/nl-sections.txt || true\n" +
+				"nl -p -l 2 -i -10 " + shellQuote(inputPath) + " >/tmp/nl-neg.txt || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
+		assertSecureFuzzOutcome(t, script, result, err)
 	})
 }
