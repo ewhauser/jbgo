@@ -92,6 +92,105 @@ func TestRunnerRunUtilityUsesStdinAndReturnsCommandFailures(t *testing.T) {
 	}
 }
 
+func TestRunnerRunUtilityStreamingPreservesNestedStdout(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	fsys, err := compatfs.New()
+	if err != nil {
+		t.Fatalf("compatfs.New() error = %v", err)
+	}
+	commandDir := makeCommandDir(t, tmp, []string{"timeout", "cat"})
+
+	runner, err := New(&Config{
+		FS:                fsys,
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": commandDir},
+		DefaultDir:        tmp,
+		BuiltinCommandDir: commandDir,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	result, err := runner.RunUtilityStreaming(
+		context.Background(),
+		"timeout",
+		[]string{"5", "cat"},
+		strings.NewReader("streamed\n"),
+		&stdout,
+		&stderr,
+	)
+	if err != nil {
+		t.Fatalf("RunUtilityStreaming(timeout cat) error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := stdout.String(), "streamed\n"; got != want {
+		t.Fatalf("live stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stdout, "streamed\n"; got != want {
+		t.Fatalf("captured stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("live stderr = %q, want empty", got)
+	}
+}
+
+func TestRunnerRunUtilityStreamingPreservesNestedStderr(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	fsys, err := compatfs.New()
+	if err != nil {
+		t.Fatalf("compatfs.New() error = %v", err)
+	}
+	commandDir := makeCommandDir(t, tmp, []string{"timeout", "tail"})
+
+	runner, err := New(&Config{
+		FS:                fsys,
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": commandDir},
+		DefaultDir:        tmp,
+		BuiltinCommandDir: commandDir,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	result, err := runner.RunUtilityStreaming(
+		context.Background(),
+		"timeout",
+		[]string{"5", "tail", "--retry", "missing"},
+		nil,
+		&stdout,
+		&stderr,
+	)
+	if err != nil {
+		t.Fatalf("RunUtilityStreaming(timeout tail) error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("live stdout = %q, want empty", got)
+	}
+	for _, want := range []string{
+		"tail: warning: --retry ignored; --retry is useful only when following",
+		"tail: cannot open 'missing' for reading: No such file or directory",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("live stderr = %q, want %q", stderr.String(), want)
+		}
+		if !strings.Contains(result.Stderr, want) {
+			t.Fatalf("captured stderr = %q, want %q", result.Stderr, want)
+		}
+	}
+}
+
 func makeCommandDir(t *testing.T, root string, names []string) string {
 	t.Helper()
 	dir := filepath.Join(root, "bin")

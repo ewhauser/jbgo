@@ -170,6 +170,118 @@ func TestRunCLICompatExecTailFollowMissingFileByName(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecTailFollowMissingFlatFileByName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "--follow=name", "--retry", "-s0.05", "--max-unchanged-stats=1", "missing",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if !stderr.WaitForSubstring("cannot open 'missing'", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "missing"), []byte("X\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(missing) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("X\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit followed content; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
+func TestRunCLICompatExecTailFollowUntailableByNameUntilFileAppears(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.Mkdir(filepath.Join(tmp, "untailable"), 0o755); err != nil {
+		t.Fatalf("Mkdir(untailable) error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 900*time.Millisecond)
+	defer cancel()
+
+	stdout := newStreamingWriter()
+	stderr := newStreamingWriter()
+	done := make(chan struct {
+		exitCode int
+		err      error
+	}, 1)
+
+	go func() {
+		exitCode, err := runCLI(ctx, "gbash", []string{
+			"compat", "exec", "tail", "-F", "-s0.05", "--max-unchanged-stats=1", "untailable",
+		}, strings.NewReader(""), stdout, stderr, false)
+		done <- struct {
+			exitCode int
+			err      error
+		}{exitCode: exitCode, err: err}
+	}()
+
+	if !stderr.WaitForSubstring("error reading 'untailable': Is a directory", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report untailable directory read error; got %q", stderr.String())
+	}
+	if !stderr.WaitForSubstring("untailable: cannot follow end of this type of file", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report untailable file; got %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "has become accessible") || strings.Contains(stderr.String(), "has appeared") {
+		t.Fatalf("stderr reported file accessibility before replacement; got %q", stderr.String())
+	}
+
+	if err := os.Remove(filepath.Join(tmp, "untailable")); err != nil {
+		t.Fatalf("Remove(untailable) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "untailable"), []byte("foo\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(untailable) error = %v", err)
+	}
+	if !stderr.WaitForSubstring("has become accessible", 500*time.Millisecond) {
+		t.Fatalf("stderr did not report file accessibility after replacement; got %q", stderr.String())
+	}
+	if !stdout.WaitForSubstring("foo\n", 500*time.Millisecond) {
+		t.Fatalf("stdout did not emit followed content; got %q", stdout.String())
+	}
+
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("runCLI() error = %v", result.err)
+	}
+	if result.exitCode != 124 {
+		t.Fatalf("exitCode = %d, want 124; stderr=%q", result.exitCode, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "execution timed out") {
+		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	}
+}
+
 func TestRunCLICompatExecTailFollowDescriptorSurvivesRename(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

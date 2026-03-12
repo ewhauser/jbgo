@@ -187,7 +187,10 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveS
 }
 
 func (r *Runner) subexecCallback(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
-	return r.exec(ctx, req, nil, nil)
+	if req == nil {
+		return r.exec(ctx, req, nil, nil)
+	}
+	return r.exec(ctx, req, req.Stdout, req.Stderr)
 }
 
 func validateUtilityName(name string) error {

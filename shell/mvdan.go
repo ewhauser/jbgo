@@ -449,6 +449,8 @@ func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[stri
 		Timeout:    req.Timeout,
 		ReplaceEnv: true,
 		Stdin:      req.Stdin,
+		Stdout:     req.Stdout,
+		Stderr:     req.Stderr,
 	}
 	if req.ReplaceEnv {
 		out.Env = mergeEnv(nil, req.Env)
