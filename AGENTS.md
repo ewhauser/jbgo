@@ -1,13 +1,13 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`gbash` is a small Go workspace centered on a deterministic shell runtime. Use [`cmd/gbash/`](/Users/ewhauser/working/cadencerpm/gbash/cmd/gbash) for the CLI entrypoint, [`runtime/`](/Users/ewhauser/working/cadencerpm/gbash/runtime) for orchestration and execution results, [`shell/`](/Users/ewhauser/working/cadencerpm/gbash/shell) for `mvdan/sh` integration, [`commands/`](/Users/ewhauser/working/cadencerpm/gbash/commands) for built-in core command implementations, [`contrib/`](/Users/ewhauser/working/cadencerpm/jbgo/contrib) for optional heavyweight command modules, and [`fs/`](/Users/ewhauser/working/cadencerpm/gbash/fs) for the virtual filesystem. Policy and tracing live in [`policy/`](/Users/ewhauser/working/cadencerpm/gbash/policy) and [`trace/`](/Users/ewhauser/working/cadencerpm/gbash/trace). Read [`SPEC.md`](/Users/ewhauser/working/cadencerpm/gbash/SPEC.md) before changing runtime boundaries or sandbox behavior.
+`gbash` is a small Go workspace centered on a deterministic shell runtime. Use [`cmd/gbash/`](/Users/ewhauser/working/cadencerpm/gbash/cmd/gbash) for the CLI entrypoint, [`runtime/`](/Users/ewhauser/working/cadencerpm/gbash/runtime) for orchestration and execution results, [`shell/`](/Users/ewhauser/working/cadencerpm/gbash/shell) for `mvdan/sh` integration, [`commands/`](/Users/ewhauser/working/cadencerpm/gbash/commands) for built-in core command implementations, [`contrib/`](/Users/ewhauser/working/cadencerpm/jbgo/contrib) for optional heavyweight command modules such as `sqlite3` and `yq`, and [`fs/`](/Users/ewhauser/working/cadencerpm/gbash/fs) for the virtual filesystem. Policy and tracing live in [`policy/`](/Users/ewhauser/working/cadencerpm/gbash/policy) and [`trace/`](/Users/ewhauser/working/cadencerpm/gbash/trace). Read [`SPEC.md`](/Users/ewhauser/working/cadencerpm/gbash/SPEC.md) before changing runtime boundaries or sandbox behavior.
 
 ## Build, Test, and Development Commands
 Use Go 1.25+.
 
-- `go build ./... ./contrib/sqlite3/... ./examples/...` builds all packages and catches compile-time regressions.
-- `go test ./... ./contrib/sqlite3/... ./examples/...` runs the full test suite across the workspace modules.
+- `go build ./... ./contrib/sqlite3/... ./contrib/yq/... ./examples/...` builds all packages and catches compile-time regressions.
+- `go test ./... ./contrib/sqlite3/... ./contrib/yq/... ./examples/...` runs the full test suite across the workspace modules.
 - `go test ./runtime -run TestRunSimpleScript` runs a focused sanity check while iterating.
 - `go run ./cmd/gbash < script.sh` executes a shell snippet through the local CLI.
 - `gofmt -w .` formats the repository with standard Go tooling before review.
@@ -45,4 +45,4 @@ If a request is intentionally small and does not change the documented contract,
 - **upstream-diff** — Diffs this repo against the upstream [vercel-labs/just-bash](https://github.com/vercel-labs/just-bash) TypeScript repo to find missing commands and flags. Run it to refresh the `## Command Parity` section in `TODO.md`. Located at `.claude/skills/upstream-diff/`.
 
 ## Commit & Pull Request Guidelines
-This checkout does not include `.git` history, so no local commit convention can be derived. Use short, imperative commit subjects such as `runtime: normalize command-not-found errors`. Keep commits scoped to one change. PRs should explain user-visible behavior, list commands run (`go test ./... ./contrib/sqlite3/... ./examples/...`), and note any SPEC updates. Include trace or CLI output when changing execution behavior.
+This checkout does not include `.git` history, so no local commit convention can be derived. Use short, imperative commit subjects such as `runtime: normalize command-not-found errors`. Keep commits scoped to one change. PRs should explain user-visible behavior, list commands run (`go test ./... ./contrib/sqlite3/... ./contrib/yq/... ./examples/...`), and note any SPEC updates. Include trace or CLI output when changing execution behavior.

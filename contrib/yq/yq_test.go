@@ -1,16 +1,18 @@
-package runtime
+package yq
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func TestYQReadsYAMLFromStdin(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "printf 'name: alice\\nteam: core\\n' | yq '.name'\n",
 	})
 	if err != nil {
@@ -27,7 +29,7 @@ func TestYQReadsYAMLFromStdin(t *testing.T) {
 func TestYQAutoDetectsJSONFiles(t *testing.T) {
 	t.Parallel()
 
-	session := newSession(t, &Config{})
+	session := newYQSession(t)
 	writeSessionFile(t, session, "/input.json", []byte(`{"name":"alice","team":"core"}`+"\n"))
 
 	result := mustExecSession(t, session, "yq '.name' /input.json\n")
@@ -42,8 +44,8 @@ func TestYQAutoDetectsJSONFiles(t *testing.T) {
 func TestYQSupportsNullInputCreation(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: `yq -n '.a.b = "cat"'` + "\n",
 	})
 	if err != nil {
@@ -60,7 +62,7 @@ func TestYQSupportsNullInputCreation(t *testing.T) {
 func TestYQSupportsExpressionFromFile(t *testing.T) {
 	t.Parallel()
 
-	session := newSession(t, &Config{})
+	session := newYQSession(t)
 	writeSessionFile(t, session, "/filter.yq", []byte(".team\n"))
 
 	result := mustExecSession(t, session, "printf 'name: alice\\nteam: core\\n' | yq --from-file /filter.yq\n")
@@ -75,7 +77,7 @@ func TestYQSupportsExpressionFromFile(t *testing.T) {
 func TestYQSupportsInPlaceEdit(t *testing.T) {
 	t.Parallel()
 
-	session := newSession(t, &Config{})
+	session := newYQSession(t)
 	writeSessionFile(t, session, "/doc.yml", []byte("name: alice\n"))
 
 	result := mustExecSession(t, session, `yq -i '.name = "bob"' /doc.yml`+"\n")
@@ -93,7 +95,7 @@ func TestYQSupportsInPlaceEdit(t *testing.T) {
 func TestYQSupportsEvalAllAcrossFiles(t *testing.T) {
 	t.Parallel()
 
-	session := newSession(t, &Config{})
+	session := newYQSession(t)
 	writeSessionFile(t, session, "/a.yml", []byte("name: alice\n"))
 	writeSessionFile(t, session, "/b.yml", []byte("team: core\n"))
 
@@ -109,8 +111,8 @@ func TestYQSupportsEvalAllAcrossFiles(t *testing.T) {
 func TestYQSupportsOutputFormattingFlags(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: `printf '{"a":1,"b":2}\n' | yq -p json -o json -I 0 '.'` + "\n",
 	})
 	if err != nil {
@@ -127,8 +129,8 @@ func TestYQSupportsOutputFormattingFlags(t *testing.T) {
 func TestYQSupportsExplicitWrappedScalars(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "printf 'name: alice\\n' | yq -o json --unwrapScalar=false '.name'\n",
 	})
 	if err != nil {
@@ -145,8 +147,8 @@ func TestYQSupportsExplicitWrappedScalars(t *testing.T) {
 func TestYQSupportsNulSeparatedOutput(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "printf '- a\\n- b\\n' | yq -0 '.[]'\n",
 	})
 	if err != nil {
@@ -163,8 +165,8 @@ func TestYQSupportsNulSeparatedOutput(t *testing.T) {
 func TestYQExitStatusWhenNoMatchesFound(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "printf 'name: alice\\n' | yq -e '.missing'\n",
 	})
 	if err != nil {
@@ -181,8 +183,8 @@ func TestYQExitStatusWhenNoMatchesFound(t *testing.T) {
 func TestYQDisablesLoadOperators(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: `printf 'name: alice\n' | yq 'load("/etc/passwd")'` + "\n",
 	})
 	if err != nil {
@@ -199,8 +201,8 @@ func TestYQDisablesLoadOperators(t *testing.T) {
 func TestYQDisablesEnvOperators(t *testing.T) {
 	t.Parallel()
 
-	rt := newRuntime(t, &Config{})
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
+	rt := newYQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: `yq -n 'env(MY_VAR)'` + "\n",
 		Env: map[string]string{
 			"MY_VAR": "secret",

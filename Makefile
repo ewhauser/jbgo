@@ -1,6 +1,6 @@
 .PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish release-check release-snapshot
 
-GO_PACKAGES := ./... ./contrib/sqlite3/... ./examples/...
+GO_PACKAGES := ./... ./contrib/sqlite3/... ./contrib/yq/... ./examples/...
 
 FUZZTIME ?= 10s
 FUZZ_SMOKE_TIME ?= 3s
@@ -31,8 +31,8 @@ FUZZ_SMOKE_SHARD_PATHS := \
 
 FUZZ_SMOKE_SHARD_DATA := \
 	FuzzArchiveCommands \
-	FuzzYQCommands \
-	./contrib/sqlite3:FuzzSQLiteCommands
+	./contrib/sqlite3:FuzzSQLiteCommands \
+	./contrib/yq:FuzzYQCommands
 
 FUZZ_SMOKE_SHARD_SECURITY := \
 	FuzzGeneratedPrograms \
@@ -67,8 +67,7 @@ FUZZ_FULL_SHARD_2 := \
 	FuzzEnvCommandFlags \
 	FuzzCommCommand \
 	FuzzBase32Command \
-	FuzzBase64Command \
-	FuzzYQCommands
+	FuzzBase64Command
 
 FUZZ_FULL_SHARD_3 := \
 	FuzzDirectoryTraversalCommands \
@@ -93,6 +92,7 @@ FUZZ_FULL_SHARD_4 := \
 	FuzzNestedShellCommands \
 	FuzzDataCommands \
 	./contrib/sqlite3:FuzzSQLiteFileCommands \
+	./contrib/yq:FuzzYQCommands \
 	FuzzAttackMutations
 
 FUZZ_FULL_TARGETS := \
@@ -106,6 +106,7 @@ lint:
 	golangci-lint run ./...
 	cd examples && golangci-lint run ./...
 	cd contrib/sqlite3 && golangci-lint run ./...
+	cd contrib/yq && golangci-lint run ./...
 
 test:
 	go test $(GO_PACKAGES)

@@ -292,25 +292,6 @@ func FuzzDataCommands(f *testing.F) {
 	})
 }
 
-func FuzzYQCommands(f *testing.F) {
-	rt := newFuzzRuntime(f)
-	addStructuredDataSeeds(f)
-
-	f.Fuzz(func(t *testing.T, rawValue string, rawJSON []byte) {
-		session := newFuzzSession(t, rt)
-		_ = prepareStructuredDataFixtures(t, session, rawValue, rawJSON)
-
-		script := []byte(
-			"yq -p yaml -o yaml '.value' /tmp/input.yaml >/tmp/yq-value.txt\n" +
-				"yq -p json -o json '.items' /tmp/input.json >/tmp/yq-items.txt\n" +
-				"yq -n '.value = \"built\"' >/tmp/yq-build.txt\n",
-		)
-
-		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
-	})
-}
-
 func FuzzArchiveCommands(f *testing.F) {
 	rt := newFuzzRuntime(f)
 
@@ -465,7 +446,6 @@ func prepareStructuredDataFixtures(t *testing.T, session *Session, rawValue stri
 	}
 
 	writeSessionFile(t, session, "/tmp/input.json", validBytes)
-	writeSessionFile(t, session, "/tmp/input.yaml", fmt.Appendf(nil, "value: %s\nitems:\n  - %s\n  - %s\n", value, value, strings.ToUpper(value)))
 	writeSessionFile(t, session, "/tmp/raw.json", clampFuzzData(rawJSON))
 	return value
 }

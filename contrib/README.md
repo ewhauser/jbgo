@@ -11,3 +11,4 @@ Rules for this directory:
 Today that includes:
 
 - `contrib/sqlite3` for the optional sandboxed `sqlite3` command
+- `contrib/yq` for the optional sandboxed `yq` command and its YAML/query stack

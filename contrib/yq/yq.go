@@ -1,16 +1,21 @@
-package commands
+package yq
 
 import (
 	"bytes"
 	"container/list"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
+	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	logging "gopkg.in/op/go-logging.v1"
@@ -48,6 +53,13 @@ type yqFormatConfig struct {
 	unwrapScalar bool
 }
 
+type namedInput struct {
+	Name      string
+	Abs       string
+	Data      []byte
+	FromStdin bool
+}
+
 var yqEvalMu sync.Mutex
 var yqLoggingOnce sync.Once
 
@@ -55,11 +67,18 @@ func NewYQ() *YQ {
 	return &YQ{}
 }
 
+func Register(registry commands.CommandRegistry) error {
+	if registry == nil {
+		return nil
+	}
+	return registry.Register(NewYQ())
+}
+
 func (c *YQ) Name() string {
 	return "yq"
 }
 
-func (c *YQ) Run(ctx context.Context, inv *Invocation) error {
+func (c *YQ) Run(ctx context.Context, inv *commands.Invocation) error {
 	opts, expression, inputs, err := parseYQArgs(inv)
 	if err != nil {
 		return err
@@ -112,7 +131,7 @@ func (c *YQ) Run(ctx context.Context, inv *Invocation) error {
 	if opts.inPlace {
 		info, err := inv.FS.Stat(ctx, namedInputs[0].Abs)
 		if err != nil {
-			return &ExitError{Code: 1, Err: err}
+			return &commands.ExitError{Code: 1, Err: err}
 		}
 		if err := writeFileContents(ctx, inv, namedInputs[0].Abs, output.Bytes(), info.Mode().Perm()); err != nil {
 			return err
@@ -121,7 +140,7 @@ func (c *YQ) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseYQArgs(inv *Invocation) (opts yqOptions, expression string, inputs []string, err error) {
+func parseYQArgs(inv *commands.Invocation) (opts yqOptions, expression string, inputs []string, err error) {
 	opts = yqOptions{
 		mode:         yqModeEval,
 		inputFormat:  "auto",
@@ -172,7 +191,7 @@ func parseYQArgs(inv *Invocation) (opts yqOptions, expression string, inputs []s
 	return opts, expression, inputs, nil
 }
 
-func parseYQLongFlag(inv *Invocation, opts *yqOptions, args []string) ([]string, error) {
+func parseYQLongFlag(inv *commands.Invocation, opts *yqOptions, args []string) ([]string, error) {
 	arg := args[0]
 	name, value, hasValue := splitYQLongFlag(arg)
 
@@ -240,7 +259,7 @@ func parseYQLongFlag(inv *Invocation, opts *yqOptions, args []string) ([]string,
 	return args[1:], nil
 }
 
-func parseYQShortFlags(inv *Invocation, opts *yqOptions, args []string) ([]string, error) {
+func parseYQShortFlags(inv *commands.Invocation, opts *yqOptions, args []string) ([]string, error) {
 	arg := args[0]
 	for idx := 1; idx < len(arg); idx++ {
 		flag := arg[idx]
@@ -293,7 +312,7 @@ func parseYQShortFlags(inv *Invocation, opts *yqOptions, args []string) ([]strin
 	return args[1:], nil
 }
 
-func classifyYQArgs(inv *Invocation, opts *yqOptions, args []string) (expression string, inputs []string, err error) {
+func classifyYQArgs(inv *commands.Invocation, opts *yqOptions, args []string) (expression string, inputs []string, err error) {
 	if opts.expressionFile != "" {
 		if len(args) == 0 {
 			return ".", nil, nil
@@ -317,7 +336,7 @@ func classifyYQArgs(inv *Invocation, opts *yqOptions, args []string) (expression
 	}
 }
 
-func yqLooksLikeInput(inv *Invocation, token string) bool {
+func yqLooksLikeInput(inv *commands.Invocation, token string) bool {
 	if token == "-" {
 		return true
 	}
@@ -340,12 +359,15 @@ func yqLooksLikeInput(inv *Invocation, token string) bool {
 	if _, ok := knownExt[strings.ToLower(filepath.Ext(token))]; ok {
 		return true
 	}
+	if inv == nil || inv.FS == nil {
+		return false
+	}
 
-	info, err := inv.FS.Stat(context.Background(), gbfs.Resolve(inv.Cwd, token))
+	info, err := inv.FS.Stat(context.Background(), inv.FS.Resolve(token))
 	return err == nil && !info.IsDir()
 }
 
-func loadYQExpression(ctx context.Context, inv *Invocation, opts *yqOptions, expression string) (string, error) {
+func loadYQExpression(ctx context.Context, inv *commands.Invocation, opts *yqOptions, expression string) (string, error) {
 	if opts.expressionFile == "" {
 		return expression, nil
 	}
@@ -409,7 +431,7 @@ func resolveYQFormats(opts *yqOptions, inputs []string) (*yqFormatConfig, error)
 	}, nil
 }
 
-func executeYQ(ctx context.Context, inv *Invocation, opts *yqOptions, expression string, inputs []namedInput, formats *yqFormatConfig, out io.Writer) (bool, error) {
+func executeYQ(ctx context.Context, inv *commands.Invocation, opts *yqOptions, expression string, inputs []namedInput, formats *yqFormatConfig, out io.Writer) (bool, error) {
 	encoder, err := newYQEncoder(formats.outputFormat, opts, formats.unwrapScalar)
 	if err != nil {
 		return false, exitf(inv, 1, "yq: %v", err)
@@ -578,11 +600,11 @@ func newYQEncoder(format *yqlib.Format, opts *yqOptions, unwrap bool) (yqlib.Enc
 	}
 }
 
-func normalizeYQError(inv *Invocation, err error) error {
+func normalizeYQError(inv *commands.Invocation, err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := ExitCode(err); ok {
+	if _, ok := commands.ExitCode(err); ok {
 		return err
 	}
 	return exitf(inv, 1, "yq: %v", err)
@@ -594,7 +616,7 @@ func splitYQLongFlag(arg string) (name, value string, hasValue bool) {
 	return before, after, found
 }
 
-func parseYQValue(inv *Invocation, arg, inline string, hasValue bool, rest []string) (value string, remaining []string, err error) {
+func parseYQValue(inv *commands.Invocation, arg, inline string, hasValue bool, rest []string) (value string, remaining []string, err error) {
 	if hasValue {
 		return inline, rest, nil
 	}
@@ -645,6 +667,150 @@ func normalizeYQFormat(format string) string {
 	return format
 }
 
+func exitf(inv *commands.Invocation, code int, format string, args ...any) error {
+	return commands.Exitf(inv, code, format, args...)
+}
+
+func readAllFile(ctx context.Context, inv *commands.Invocation, name string) (data []byte, abs string, err error) {
+	file, abs, err := openRead(ctx, inv, name)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = file.Close() }()
+
+	data, err = io.ReadAll(file)
+	if err != nil {
+		return nil, "", &commands.ExitError{Code: 1, Err: err}
+	}
+	return data, abs, nil
+}
+
+func readAllStdin(inv *commands.Invocation) ([]byte, error) {
+	data, err := io.ReadAll(inv.Stdin)
+	if err != nil {
+		return nil, &commands.ExitError{Code: 1, Err: err}
+	}
+	return data, nil
+}
+
+func readNamedInputs(ctx context.Context, inv *commands.Invocation, names []string, defaultStdin bool) ([]namedInput, error) {
+	if len(names) == 0 {
+		if !defaultStdin {
+			return nil, nil
+		}
+		data, err := readAllStdin(inv)
+		if err != nil {
+			return nil, err
+		}
+		return []namedInput{{
+			Name:      "-",
+			Abs:       "-",
+			Data:      data,
+			FromStdin: true,
+		}}, nil
+	}
+
+	var (
+		inputs      []namedInput
+		stdinData   []byte
+		stdinLoaded bool
+	)
+	for _, name := range names {
+		if name == "-" {
+			if !stdinLoaded {
+				data, err := readAllStdin(inv)
+				if err != nil {
+					return nil, err
+				}
+				stdinData = data
+				stdinLoaded = true
+			}
+			inputs = append(inputs, namedInput{
+				Name:      "-",
+				Abs:       "-",
+				Data:      stdinData,
+				FromStdin: true,
+			})
+			continue
+		}
+		data, abs, err := readAllFile(ctx, inv, name)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, namedInput{
+			Name: path.Base(abs),
+			Abs:  abs,
+			Data: data,
+		})
+	}
+	return inputs, nil
+}
+
+func statMaybe(ctx context.Context, inv *commands.Invocation, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
+	abs = name
+	if inv != nil && inv.FS != nil {
+		abs = inv.FS.Resolve(name)
+	}
+	info, err = inv.FS.Stat(ctx, abs)
+	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) {
+			return nil, abs, false, nil
+		}
+		return nil, "", false, err
+	}
+	return info, abs, true, nil
+}
+
+func openRead(ctx context.Context, inv *commands.Invocation, name string) (gbfs.File, string, error) {
+	abs := name
+	if inv != nil && inv.FS != nil {
+		abs = inv.FS.Resolve(name)
+	}
+	file, err := inv.FS.Open(ctx, abs)
+	if err != nil {
+		return nil, "", err
+	}
+	return file, abs, nil
+}
+
+func ensureParentDirExists(ctx context.Context, inv *commands.Invocation, targetAbs string) error {
+	parent := path.Dir(targetAbs)
+	info, _, exists, err := statMaybe(ctx, inv, parent)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return &commands.ExitError{
+			Code: 1,
+			Err:  fmt.Errorf("%s: No such file or directory", parent),
+		}
+	}
+	if !info.IsDir() {
+		return &commands.ExitError{
+			Code: 1,
+			Err:  fmt.Errorf("%s: Not a directory", parent),
+		}
+	}
+	return nil
+}
+
+func writeFileContents(ctx context.Context, inv *commands.Invocation, targetAbs string, data []byte, perm stdfs.FileMode) error {
+	if err := ensureParentDirExists(ctx, inv, targetAbs); err != nil {
+		return err
+	}
+
+	file, err := inv.FS.OpenFile(ctx, targetAbs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
+	if err != nil {
+		return &commands.ExitError{Code: 1, Err: err}
+	}
+	defer func() { _ = file.Close() }()
+
+	if _, err := file.Write(data); err != nil {
+		return &commands.ExitError{Code: 1, Err: err}
+	}
+	return nil
+}
+
 const yqHelpText = `yq - query YAML and JSON values inside the gbash sandbox
 
 Usage:
@@ -674,4 +840,4 @@ Notes:
 
 const yqVersionText = "yq (gbash) backed by mikefarah/yq v4.52.4\n"
 
-var _ Command = (*YQ)(nil)
+var _ commands.Command = (*YQ)(nil)

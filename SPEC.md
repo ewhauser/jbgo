@@ -601,7 +601,6 @@ Initial MVP command set:
 - `gunzip`
 - `zcat`
 - `jq`
-- `yq`
 - `curl` when network access is configured
 - `mkdir`
 - `rm`
@@ -609,11 +608,11 @@ Initial MVP command set:
 
 For `jq`, the runtime should support a practical CLI-compatible subset for agent workflows, including raw-input mode, file-backed filters, variable injection flags, positional argument injection, and basic output-formatting flags. Module loading and stream-mode parity can follow later.
 
-For `yq`, the runtime should wrap `mikefarah/yq`'s `yqlib` evaluator rather than embedding the upstream Cobra CLI. The supported subset should cover agent-oriented `eval` / `eval-all` flows, input and output format selection, null-input document creation, pretty-print rewriting, exit-status handling, scalar-unwrapping controls, NUL-separated output, expression files, and in-place file updates. All input and output must continue to route through the sandbox filesystem, and `yqlib` file/env operators such as `load()` and `env()` must stay disabled so expressions cannot bypass policy.
-
 Contrib commands are registry-backed like core commands, but they are not part of `commands.DefaultRegistry()` and should be imported and registered explicitly by embedders that want them.
 
 For contrib `sqlite3`, the `github.com/ewhauser/gbash/contrib/sqlite3` module should wrap `ncruces/go-sqlite3` directly rather than embedding the upstream CLI. The implementation should open an in-memory SQLite connection, deserialize database bytes from the sandbox filesystem when a file path is requested, execute SQL inside that in-memory connection, and serialize the database back to the sandbox filesystem only after successful writes. The supported subset should cover `:memory:` and file-backed databases, list / CSV / JSON / line / column / table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` must stay disabled so SQL cannot escape the sandbox filesystem or reach host file APIs.
+
+For contrib `yq`, the `github.com/ewhauser/gbash/contrib/yq` module should wrap `mikefarah/yq`'s `yqlib` evaluator rather than embedding the upstream Cobra CLI. The supported subset should cover agent-oriented `eval` / `eval-all` flows, input and output format selection, null-input document creation, pretty-print rewriting, exit-status handling, scalar-unwrapping controls, NUL-separated output, expression files, and in-place file updates. All input and output must continue to route through the sandbox filesystem, and `yqlib` file/env operators such as `load()` and `env()` must stay disabled so expressions cannot bypass policy.
 
 For archive and compression helpers, the runtime should expose explicit subsets rather than imply GNU `tar` or `gzip` parity. `gzip`, `gunzip`, and `zcat` should support file and stdin/stdout flows, `-c`, `-d`, `-f`, `-k`, `-S`, `-t`, and `-v`, with binary-safe streaming and no host-tempfile fallback. `tar` should support create, list, and extract flows with `-c`, `-x`, `-t`, `-f`, `-C`, `-z`, `-v`, `-O`, and `-k`, while rejecting unsupported codecs and append/update modes. Extraction must strip leading slashes, reject parent-traversal entries, and reject symlink targets that escape the extraction root.
 

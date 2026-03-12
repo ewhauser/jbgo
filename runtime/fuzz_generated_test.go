@@ -68,7 +68,6 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
-	yamlText := fmt.Sprintf("value: %s\nitems:\n  - %s\n  - BETA\n", sanitizeFuzzToken(string(raw)), sanitizeFuzzToken(string(raw)))
 	base64Text := base64.StdEncoding.EncodeToString(textBytes)
 
 	writeSessionFile(t, session, "/tmp/text.txt", textBytes)
@@ -77,7 +76,6 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 	writeSessionFile(t, session, "/tmp/sorted2.txt", []byte(strings.Join(sortedUnique, "\n")+"\n"))
 	writeSessionFile(t, session, "/tmp/data.csv", []byte(csvText))
 	writeSessionFile(t, session, "/tmp/data.json", jsonBytes)
-	writeSessionFile(t, session, "/tmp/data.yaml", []byte(yamlText))
 	writeSessionFile(t, session, "/tmp/raw.json", clampFuzzData(raw))
 	writeSessionFile(t, session, "/tmp/base64.txt", []byte(base64Text))
 	writeSessionFile(t, session, "/tmp/text.txt.gz", buildGzipFixture(t, textBytes))
@@ -128,7 +126,6 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 		"{path.sorted2}":     "/tmp/sorted2.txt",
 		"{path.csv}":         "/tmp/data.csv",
 		"{path.json}":        "/tmp/data.json",
-		"{path.yaml}":        "/tmp/data.yaml",
 		"{path.rawjson}":     "/tmp/raw.json",
 		"{path.base64}":      "/tmp/base64.txt",
 		"{path.gzip}":        "/tmp/text.txt.gz",
@@ -158,8 +155,6 @@ func prepareFuzzFixtures(t *testing.T, session *Session, raw []byte) fuzzFixture
 		"{duration.timeout}": "0.01",
 		"{jq.filter}":        ".value",
 		"{jq.build}":         "{value:$value}",
-		"{yq.filter}":        ".value",
-		"{yq.build}":         ".value = \"generated\"",
 	}
 
 	pairs := make([]string, 0, len(values)*2)
@@ -318,13 +313,6 @@ func generatePipelineScript(t *testing.T, cursor *fuzzCursor, specs []fuzzComman
 				name  string
 				flags []string
 			}{{name: "jq", flags: []string{"-r"}}, {name: "sed", flags: []string{"-n"}}},
-		},
-		{
-			template: "cat {path.yaml} | yq {yq.filter} | sed -n {program.sed} || true\n",
-			hits: []struct {
-				name  string
-				flags []string
-			}{{name: "yq"}, {name: "sed", flags: []string{"-n"}}},
 		},
 	}
 
