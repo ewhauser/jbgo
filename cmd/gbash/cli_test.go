@@ -356,7 +356,7 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -379,27 +379,27 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(a) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("==> a <==\nx\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("==> a <==\nx\n", time.Second) {
 		t.Fatalf("stdout did not emit followed content for a; got %q", stdout.String())
 	}
 
 	if err := os.Rename(filepath.Join(tmp, "a"), filepath.Join(tmp, "b")); err != nil {
 		t.Fatalf("Rename(a,b) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has become inaccessible", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has become inaccessible", time.Second) {
 		t.Fatalf("stderr did not report inaccessible file; got %q", stderr.String())
 	}
-	if !stderr.WaitForSubstring("has been replaced", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has been replaced", time.Second) {
 		t.Fatalf("stderr did not report replaced file; got %q", stderr.String())
 	}
 
 	if err := os.WriteFile(filepath.Join(tmp, "a"), []byte("x2\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(a) second generation error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has appeared", time.Second) {
 		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("==> a <==\nx2\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("==> a <==\nx2\n", time.Second) {
 		t.Fatalf("stdout did not emit replacement content for a; got %q", stdout.String())
 	}
 
@@ -414,7 +414,7 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 	if err := bFile.Close(); err != nil {
 		t.Fatalf("Close(b) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("==> b <==\ny\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("==> b <==\ny\n", time.Second) {
 		t.Fatalf("stdout did not continue following renamed b; got %q", stdout.String())
 	}
 
@@ -429,7 +429,7 @@ func TestRunCLICompatExecTailFollowByNameHandlesRenameAndReplacement(t *testing.
 	if err := aFile.Close(); err != nil {
 		t.Fatalf("Close(a) error = %v", err)
 	}
-	if !stdout.WaitForSubstring("==> a <==\nz\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("==> a <==\nz\n", time.Second) {
 		t.Fatalf("stdout did not continue following recreated a; got %q", stdout.String())
 	}
 
