@@ -1,48 +1,36 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-`gbash` is a small Go workspace centered on a deterministic shell runtime. Use [`cmd/gbash/`](/Users/ewhauser/working/cadencerpm/gbash/cmd/gbash) for the CLI entrypoint, [`runtime/`](/Users/ewhauser/working/cadencerpm/gbash/runtime) for orchestration and execution results, [`shell/`](/Users/ewhauser/working/cadencerpm/gbash/shell) for `mvdan/sh` integration, [`commands/`](/Users/ewhauser/working/cadencerpm/gbash/commands) for built-in core command implementations, [`contrib/`](/Users/ewhauser/working/cadencerpm/jbgo/contrib) for optional heavyweight command modules such as `sqlite3`, `jq`, and `yq`, and [`fs/`](/Users/ewhauser/working/cadencerpm/gbash/fs) for the virtual filesystem. Policy and tracing live in [`policy/`](/Users/ewhauser/working/cadencerpm/gbash/policy) and [`trace/`](/Users/ewhauser/working/cadencerpm/gbash/trace). Read [`SPEC.md`](/Users/ewhauser/working/cadencerpm/gbash/SPEC.md) before changing runtime boundaries or sandbox behavior.
+## Project Overview
+`gbash` is a Go workspace for a deterministic shell runtime. `contrib/` houses optional heavyweight modules (`sqlite3`, `jq`, `yq`, `extras`). Read `SPEC.md` before changing runtime boundaries or sandbox behavior.
 
-## Build, Test, and Development Commands
-Use Go 1.25+.
+## Build & Test
+Use Go 1.26+. The full workspace build/test command spans multiple modules:
 
-- `go build ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...` builds all packages and catches compile-time regressions.
-- `go test ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...` runs the full test suite across the workspace modules.
-- `go test ./runtime -run TestRunSimpleScript` runs a focused sanity check while iterating.
-- `go run ./cmd/gbash < script.sh` executes a shell snippet through the local CLI.
-- `gofmt -w .` formats the repository with standard Go tooling before review.
+```sh
+go build ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
+go test ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
+```
 
-## Coding Style & Naming Conventions
-Follow idiomatic Go. Let `gofmt` control formatting; do not hand-align code. Package names stay short and lowercase (`runtime`, `trace`). Exported types and constructors use `PascalCase`; unexported helpers use `camelCase`. Keep command implementations narrow and explicit, matching the registry pattern in `commands/`. Preserve the project rule that unknown commands never fall through to the host OS.
+## Key Project Rules
+- Unknown commands must never fall through to the host OS.
+- Match the registry pattern in `commands/` when adding new built-in commands.
+- For runtime changes, test exit codes, stdout/stderr, and sandboxed filesystem effects.
+- If a change touches shell semantics or policy, add a regression test in `runtime/` or the relevant package.
 
-## Testing Guidelines
-Add table-driven tests beside the package they cover, using `*_test.go` files and `TestXxx` names. Prefer black-box behavior checks over implementation-detail assertions. For runtime changes, cover exit codes, stdout/stderr, and sandboxed filesystem effects. If a change touches shell semantics or policy enforcement, add at least one regression test in [`runtime/runtime_test.go`](/Users/ewhauser/working/cadencerpm/gbash/runtime/runtime_test.go) or a new package-local test file.
-
-## SPEC Sync Rules
-`SPEC.md` is the repository's product and architecture contract. When a user asks for a new feature, expanded scope, or a behavior change that affects runtime boundaries, supported commands, policy, tracing, filesystem behavior, or roadmap assumptions, update [`SPEC.md`](/Users/ewhauser/working/cadencerpm/gbash/SPEC.md) in the same turn.
-
-Treat SPEC updates as required when:
-
-- adding or removing built-in commands
-- changing sandbox guarantees or policy defaults
-- changing filesystem abstractions or backend expectations
+## SPEC Sync
+`SPEC.md` is the product and architecture contract. Update it in the same turn when:
+- adding/removing built-in commands
+- changing sandbox guarantees, policy defaults, or filesystem abstractions
 - changing `mvdan/sh` integration strategy
-- expanding MVP scope or roadmap commitments
-- introducing new public packages, interfaces, or execution modes
+- expanding scope, roadmap, or introducing new public packages/interfaces
 
-When doing feature work, keep the spec in sync by:
-
-- reading the relevant `SPEC.md` sections before editing code
-- updating the impacted sections after the design is clear
-- keeping implementation details and spec language aligned
-- noting the SPEC update in the final summary when one was required
-
-If a request is intentionally small and does not change the documented contract, architecture, or scope, `SPEC.md` does not need churn. When in doubt, prefer a small SPEC update over silent drift.
+Read the relevant `SPEC.md` sections before editing code, and update them once the design is clear. When in doubt, prefer a small SPEC update over silent drift.
 
 ## Skills
+- **command** — Guide for adding or modifying built-in commands. Located at `.agents/skills/command/`.
+- **implement-coreutils-command** — Port a command from uutils/coreutils Rust repo into Go. Located at `.agents/skills/implement-coreutils-command/`.
+- **release** — Tag-driven GitHub release workflow with GoReleaser. Located at `.agents/skills/release/`.
+- **upstream-diff** — Diff against upstream [vercel-labs/just-bash](https://github.com/vercel-labs/just-bash) to find missing commands/flags. Located at `.claude/skills/upstream-diff/`.
 
-- **release** — Manages the tag-driven GitHub release workflow: validates release readiness, runs GoReleaser checks/snapshots, cuts SemVer tags, and troubleshoots failures. Located at `.agents/skills/release/`.
-- **upstream-diff** — Diffs this repo against the upstream [vercel-labs/just-bash](https://github.com/vercel-labs/just-bash) TypeScript repo to find missing commands and flags. Run it to refresh the `## Command Parity` section in `TODO.md`. Located at `.claude/skills/upstream-diff/`.
-
-## Commit & Pull Request Guidelines
-This checkout does not include `.git` history, so no local commit convention can be derived. Use short, imperative commit subjects such as `runtime: normalize command-not-found errors`. Keep commits scoped to one change. PRs should explain user-visible behavior, list commands run (`go test ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...`), and note any SPEC updates. Include trace or CLI output when changing execution behavior.
+## Commits & PRs
+Use short, imperative subjects scoped to one change (e.g., `runtime: normalize command-not-found errors`). PRs should explain user-visible behavior, note any SPEC updates, and include trace/CLI output when changing execution behavior.
