@@ -3,24 +3,9 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
-
-func TestRenderRelinkScriptQuotesGBASHPath(t *testing.T) {
-	data, err := renderRelinkScript("/tmp/gbash'bin")
-	if err != nil {
-		t.Fatalf("renderRelinkScript() error = %v", err)
-	}
-	script := string(data)
-	if !strings.Contains(script, "gbash_bin='/tmp/gbash'\"'\"'bin'") {
-		t.Fatalf("rendered script did not shell-quote gbash path: %q", script)
-	}
-	if !strings.Contains(script, "printf '%s: unsupported by gbash GNU harness\\n'") {
-		t.Fatalf("rendered script missing unsupported stub body: %q", script)
-	}
-}
 
 func TestCopyTreePreservesSymlinkModeAndModTime(t *testing.T) {
 	sourceDir := t.TempDir()

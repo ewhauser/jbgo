@@ -89,7 +89,7 @@ func readCompatReservedCommands(path string) (map[string]struct{}, error) {
 	}
 
 	out := make(map[string]struct{})
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		name := strings.TrimSpace(line)
 		if name == "" {
 			continue

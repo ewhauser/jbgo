@@ -206,6 +206,7 @@ func TestRunnerHostFallbackKeepsBuiltinAndRegistryPrecedence(t *testing.T) {
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"echo", "seq", "bash", "sh"})
 	hostDir := filepath.Join(tmp, "host-bin")
+	hostPath := commandDir + string(os.PathListSeparator) + hostDir
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(hostDir) error = %v", err)
 	}
@@ -214,7 +215,7 @@ func TestRunnerHostFallbackKeepsBuiltinAndRegistryPrecedence(t *testing.T) {
 
 	runner, err := New(&Config{
 		FS:                fsys,
-		BaseEnv:           map[string]string{"HOME": tmp, "PATH": strings.Join([]string{commandDir, hostDir}, string(os.PathListSeparator))},
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
 		DefaultDir:        tmp,
 		BuiltinCommandDir: commandDir,
 		ResolverMode:      shell.ResolverRegistryThenHostFallback,
@@ -228,7 +229,7 @@ func TestRunnerHostFallbackKeepsBuiltinAndRegistryPrecedence(t *testing.T) {
 		Script: "echo shell\nseq 1 3\n",
 		Env: map[string]string{
 			"HOME": tmp,
-			"PATH": strings.Join([]string{commandDir, hostDir}, string(os.PathListSeparator)),
+			"PATH": hostPath,
 		},
 		ReplaceEnv: true,
 		WorkDir:    tmp,
@@ -261,6 +262,7 @@ func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
 	hostDir := filepath.Join(tmp, "host-bin")
+	hostPath := commandDir + string(os.PathListSeparator) + hostDir
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(hostDir) error = %v", err)
 	}
@@ -268,7 +270,7 @@ func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
 
 	runner, err := New(&Config{
 		FS:                fsys,
-		BaseEnv:           map[string]string{"HOME": tmp, "PATH": strings.Join([]string{commandDir, hostDir}, string(os.PathListSeparator))},
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
 		DefaultDir:        tmp,
 		BuiltinCommandDir: commandDir,
 		ResolverMode:      shell.ResolverRegistryThenHostFallback,
@@ -282,7 +284,7 @@ func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
 		Script: "helpercmd\n",
 		Env: map[string]string{
 			"HOME": tmp,
-			"PATH": strings.Join([]string{commandDir, hostDir}, string(os.PathListSeparator)),
+			"PATH": hostPath,
 		},
 		ReplaceEnv: true,
 		WorkDir:    tmp,
@@ -310,6 +312,7 @@ func TestRunnerHostFallbackDeniesReservedGNUCommands(t *testing.T) {
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
 	hostDir := filepath.Join(tmp, "host-bin")
+	hostPath := commandDir + string(os.PathListSeparator) + hostDir
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(hostDir) error = %v", err)
 	}
@@ -317,7 +320,7 @@ func TestRunnerHostFallbackDeniesReservedGNUCommands(t *testing.T) {
 
 	runner, err := New(&Config{
 		FS:                fsys,
-		BaseEnv:           map[string]string{"HOME": tmp, "PATH": strings.Join([]string{commandDir, hostDir}, string(os.PathListSeparator))},
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
 		DefaultDir:        tmp,
 		BuiltinCommandDir: commandDir,
 		ResolverMode:      shell.ResolverRegistryThenHostFallback,
@@ -332,7 +335,7 @@ func TestRunnerHostFallbackDeniesReservedGNUCommands(t *testing.T) {
 		Script: "futuregnu\n",
 		Env: map[string]string{
 			"HOME": tmp,
-			"PATH": strings.Join([]string{commandDir, hostDir}, string(os.PathListSeparator)),
+			"PATH": hostPath,
 		},
 		ReplaceEnv: true,
 		WorkDir:    tmp,

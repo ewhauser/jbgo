@@ -345,7 +345,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		}
 		start := time.Now().UTC()
 		if !ok {
-			_, hostHandled, hostErr := m.tryHostFallback(ctx, exec, hc, args, virtualWD, start, internal)
+			_, hostHandled, hostErr := m.tryHostFallback(ctx, exec, &hc, args, virtualWD, start, internal)
 			if hostHandled {
 				return hostErr
 			}
@@ -431,9 +431,12 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 	}
 }
 
-func (m *MVdan) tryHostFallback(ctx context.Context, exec *Execution, hc interp.HandlerContext, args []string, virtualWD string, start time.Time, internal bool) (_ *HostExecutionResult, handled bool, err error) {
+func (m *MVdan) tryHostFallback(ctx context.Context, exec *Execution, hc *interp.HandlerContext, args []string, virtualWD string, start time.Time, internal bool) (_ *HostExecutionResult, handled bool, err error) {
 	if internal || exec == nil || exec.ResolverMode != ResolverRegistryThenHostFallback || exec.HostExecutor == nil || len(args) == 0 {
 		return nil, false, nil
+	}
+	if hc == nil {
+		return nil, true, fmt.Errorf("missing handler context for host fallback")
 	}
 	if hostFallbackDenied(exec, args[0]) {
 		return nil, false, nil

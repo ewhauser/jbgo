@@ -30,8 +30,7 @@ func prepareProgramDir(workDir, gbashBin string, programs []string, supported ma
 	supportedNames := make([]string, 0)
 	unsupportedNames := make([]string, 0)
 	for _, name := range programs {
-		path := filepath.Join(srcDir, name)
-		if err := os.RemoveAll(path); err != nil {
+		if err := os.RemoveAll(filepath.Join(srcDir, name)); err != nil {
 			return err
 		}
 		if _, ok := supported[name]; ok {
@@ -50,14 +49,11 @@ func prepareProgramDir(workDir, gbashBin string, programs []string, supported ma
 	if err := compatshims.SymlinkCommands(srcDir, gbashBin, helperShells); err != nil {
 		return err
 	}
-	supportedNames = appendUniqueStrings(supportedNames, helperShells...)
 	if _, ok := supported["install"]; ok {
-		supportedNames = append(supportedNames, "ginstall")
 		if err := compatshims.SymlinkCommands(srcDir, gbashBin, []string{"ginstall"}); err != nil {
 			return err
 		}
 	} else {
-		unsupportedNames = append(unsupportedNames, "ginstall")
 		if err := compatshims.WriteUnsupportedStubs(srcDir, []string{"ginstall"}); err != nil {
 			return err
 		}
@@ -73,21 +69,6 @@ func compatHelperShells(supported map[string]struct{}) []string {
 		}
 	}
 	return names
-}
-
-func appendUniqueStrings(items []string, values ...string) []string {
-	seen := make(map[string]struct{}, len(items)+len(values))
-	for _, item := range items {
-		seen[item] = struct{}{}
-	}
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		items = append(items, value)
-	}
-	return items
 }
 
 func compatConfigShellPath(workDir string) (string, error) {
