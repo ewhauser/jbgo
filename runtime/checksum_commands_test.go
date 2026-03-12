@@ -2,18 +2,82 @@ package runtime
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/sha1"
 	"crypto/sha256"
 	"fmt"
 	"strings"
 	"testing"
 )
 
-func TestSHA256SumHashesFilesAndStdin(t *testing.T) {
-	session := newSession(t, &Config{})
+func TestChecksumSumHashesFilesAndStdin(t *testing.T) {
+	tests := []struct {
+		cmd string
+		sum func([]byte) string
+	}{
+		{cmd: "md5sum", sum: md5Hex},
+		{cmd: "sha1sum", sum: sha1Hex},
+		{cmd: "sha256sum", sum: sha256Hex},
+	}
+
 	alpha := []byte("alpha\n")
 	binary := []byte{0x80, 0x90, 0xa0, 0xb0, 0xff}
-	writeSessionFile(t, session, "/tmp/a.txt", alpha)
-	writeSessionFile(t, session, "/tmp/bin.dat", binary)
+
+	for _, tc := range tests {
+		t.Run(tc.cmd, func(t *testing.T) {
+			session := newSession(t, &Config{})
+			writeSessionFile(t, session, "/tmp/a.txt", alpha)
+			writeSessionFile(t, session, "/tmp/bin.dat", binary)
+
+			cases := []struct {
+				name   string
+				script string
+				want   string
+			}{
+				{
+					name:   "empty-stdin",
+					script: fmt.Sprintf("printf '' | %s\n", tc.cmd),
+					want:   fmt.Sprintf("%s  -\n", tc.sum(nil)),
+				},
+				{
+					name:   "explicit-stdin-argument",
+					script: fmt.Sprintf("cat /tmp/bin.dat | %s -\n", tc.cmd),
+					want:   fmt.Sprintf("%s  -\n", tc.sum(binary)),
+				},
+				{
+					name:   "multiple-files",
+					script: fmt.Sprintf("%s /tmp/a.txt /tmp/bin.dat\n", tc.cmd),
+					want: fmt.Sprintf(
+						"%s  /tmp/a.txt\n%s  /tmp/bin.dat\n",
+						tc.sum(alpha),
+						tc.sum(binary),
+					),
+				},
+			}
+
+			for _, testCase := range cases {
+				t.Run(testCase.name, func(t *testing.T) {
+					result := mustExecSession(t, session, testCase.script)
+					if result.ExitCode != 0 {
+						t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+					}
+					if got := result.Stdout; got != testCase.want {
+						t.Fatalf("Stdout = %q, want %q", got, testCase.want)
+					}
+					if result.Stderr != "" {
+						t.Fatalf("Stderr = %q, want empty", result.Stderr)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestChecksumSumOutputModes(t *testing.T) {
+	session := newSession(t, &Config{})
+	data := []byte("mode-data")
+	writeSessionFile(t, session, "/tmp/input.txt", data)
+	sum := md5Hex(data)
 
 	tests := []struct {
 		name   string
@@ -21,23 +85,19 @@ func TestSHA256SumHashesFilesAndStdin(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "empty-stdin",
-			script: "printf '' | sha256sum\n",
-			want:   fmt.Sprintf("%s  -\n", sha256Hex(nil)),
+			name:   "binary",
+			script: "md5sum --binary /tmp/input.txt\n",
+			want:   fmt.Sprintf("%s */tmp/input.txt\n", sum),
 		},
 		{
-			name:   "explicit-stdin-argument",
-			script: "cat /tmp/bin.dat | sha256sum -\n",
-			want:   fmt.Sprintf("%s  -\n", sha256Hex(binary)),
+			name:   "tag",
+			script: "md5sum --binary --tag /tmp/input.txt\n",
+			want:   fmt.Sprintf("MD5 (/tmp/input.txt) = %s\n", sum),
 		},
 		{
-			name:   "multiple-files",
-			script: "sha256sum /tmp/a.txt /tmp/bin.dat\n",
-			want: fmt.Sprintf(
-				"%s  /tmp/a.txt\n%s  /tmp/bin.dat\n",
-				sha256Hex(alpha),
-				sha256Hex(binary),
-			),
+			name:   "zero",
+			script: "md5sum --zero /tmp/input.txt\n",
+			want:   fmt.Sprintf("%s  /tmp/input.txt\x00", sum),
 		},
 	}
 
@@ -57,43 +117,18 @@ func TestSHA256SumHashesFilesAndStdin(t *testing.T) {
 	}
 }
 
-func TestSHA256SumAcceptsIgnoredModeFlags(t *testing.T) {
-	data := []byte("flag-data")
-	want := fmt.Sprintf("%s  /tmp/input.txt\n", sha256Hex(data))
-
-	tests := []string{"-b", "-t", "--binary", "--text"}
-	for _, flag := range tests {
-		t.Run(flag, func(t *testing.T) {
-			session := newSession(t, &Config{})
-			writeSessionFile(t, session, "/tmp/input.txt", data)
-
-			result := mustExecSession(t, session, fmt.Sprintf("sha256sum %s /tmp/input.txt\n", flag))
-			if result.ExitCode != 0 {
-				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
-			}
-			if got := result.Stdout; got != want {
-				t.Fatalf("Stdout = %q, want %q", got, want)
-			}
-			if result.Stderr != "" {
-				t.Fatalf("Stderr = %q, want empty", result.Stderr)
-			}
-		})
-	}
-}
-
-func TestSHA256SumCheckModeSupportsShortAndLongFlags(t *testing.T) {
+func TestChecksumSumCheckModeSupportsShortAndLongFlags(t *testing.T) {
 	data := []byte("verify-me")
-	sum := strings.ToUpper(sha256Hex(data))
+	sum := strings.ToUpper(md5Hex(data))
 	checksums := fmt.Sprintf("%s */tmp/input.txt\n", sum)
 
-	tests := []string{"-c", "--check"}
-	for _, flag := range tests {
+	for _, flag := range []string{"-c", "--check"} {
 		t.Run(flag, func(t *testing.T) {
 			session := newSession(t, &Config{})
 			writeSessionFile(t, session, "/tmp/input.txt", data)
 			writeSessionFile(t, session, "/tmp/checksums.txt", []byte(checksums))
 
-			result := mustExecSession(t, session, fmt.Sprintf("sha256sum %s /tmp/checksums.txt\n", flag))
+			result := mustExecSession(t, session, fmt.Sprintf("md5sum %s /tmp/checksums.txt\n", flag))
 			if result.ExitCode != 0 {
 				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 			}
@@ -107,14 +142,50 @@ func TestSHA256SumCheckModeSupportsShortAndLongFlags(t *testing.T) {
 	}
 }
 
-func TestSHA256SumCheckModeResolvesTargetsAgainstWorkingDirectory(t *testing.T) {
+func TestChecksumSumCheckModeParsesTaggedAndSingleSpaceFormats(t *testing.T) {
+	session := newSession(t, &Config{})
+	data := []byte("format-data")
+	writeSessionFile(t, session, "/tmp/file.txt", data)
+
+	checks := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "single-space",
+			content: fmt.Sprintf("%s /tmp/file.txt\n", md5Hex(data)),
+		},
+		{
+			name:    "tagged",
+			content: fmt.Sprintf("MD5 (/tmp/file.txt) = %s\n", md5Hex(data)),
+		},
+	}
+
+	for _, tc := range checks {
+		t.Run(tc.name, func(t *testing.T) {
+			writeSessionFile(t, session, "/tmp/checksums.txt", []byte(tc.content))
+			result := mustExecSession(t, session, "md5sum --check /tmp/checksums.txt\n")
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got, want := result.Stdout, "/tmp/file.txt: OK\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
+	}
+}
+
+func TestChecksumSumCheckModeResolvesTargetsAgainstWorkingDirectory(t *testing.T) {
 	session := newSession(t, &Config{})
 	data := []byte("cwd-target")
 	writeSessionFile(t, session, "/tmp/input.txt", data)
-	writeSessionFile(t, session, "/tmp/sub/checksums.txt", fmt.Appendf(nil, "%s  input.txt\n", sha256Hex(data)))
+	writeSessionFile(t, session, "/tmp/sub/checksums.txt", fmt.Appendf(nil, "%s  input.txt\n", md5Hex(data)))
 
 	result, err := session.Exec(context.Background(), &ExecutionRequest{
-		Script:  "sha256sum -c /tmp/sub/checksums.txt\n",
+		Script:  "md5sum -c /tmp/sub/checksums.txt\n",
 		WorkDir: "/tmp",
 	})
 	if err != nil {
@@ -131,111 +202,165 @@ func TestSHA256SumCheckModeResolvesTargetsAgainstWorkingDirectory(t *testing.T) 
 	}
 }
 
-func TestSHA256SumReportsMissingDigestInputsOnStdoutAndContinues(t *testing.T) {
+func TestChecksumSumCheckModeVerbosityAndStrictFlags(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/f.txt", []byte{})
+	writeSessionFile(t, session, "/tmp/ok.md5", []byte("d41d8cd98f00b204e9800998ecf8427e  /tmp/f.txt\n"))
+	writeSessionFile(t, session, "/tmp/mixed.md5", []byte("d41d8cd98f00b204e9800998ecf8427e  /tmp/f.txt\ninvalid\n"))
+	writeSessionFile(t, session, "/tmp/fail.md5", []byte("ffffffffffffffffffffffffffffffff  /tmp/f.txt\n"))
+
+	quiet := mustExecSession(t, session, "md5sum --quiet --check /tmp/ok.md5\n")
+	if quiet.ExitCode != 0 || quiet.Stdout != "" || quiet.Stderr != "" {
+		t.Fatalf("quiet result = %+v, want silent success", quiet)
+	}
+
+	warn := mustExecSession(t, session, "md5sum --warn --check /tmp/mixed.md5\n")
+	if warn.ExitCode != 0 {
+		t.Fatalf("warn ExitCode = %d, want 0; stderr=%q", warn.ExitCode, warn.Stderr)
+	}
+	if got, want := warn.Stdout, "/tmp/f.txt: OK\n"; got != want {
+		t.Fatalf("warn Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(warn.Stderr, "improperly formatted MD5 checksum line") {
+		t.Fatalf("warn Stderr = %q, want per-line warning", warn.Stderr)
+	}
+	if !strings.Contains(warn.Stderr, "WARNING: 1 line is improperly formatted") {
+		t.Fatalf("warn Stderr = %q, want summary warning", warn.Stderr)
+	}
+
+	strict := mustExecSession(t, session, "md5sum --strict --check /tmp/mixed.md5\n")
+	if strict.ExitCode != 1 {
+		t.Fatalf("strict ExitCode = %d, want 1", strict.ExitCode)
+	}
+	if got, want := strict.Stdout, "/tmp/f.txt: OK\n"; got != want {
+		t.Fatalf("strict Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(strict.Stderr, "WARNING: 1 line is improperly formatted") {
+		t.Fatalf("strict Stderr = %q, want summary warning", strict.Stderr)
+	}
+
+	status := mustExecSession(t, session, "md5sum --status --check /tmp/fail.md5\n")
+	if status.ExitCode != 1 {
+		t.Fatalf("status ExitCode = %d, want 1", status.ExitCode)
+	}
+	if status.Stdout != "" || status.Stderr != "" {
+		t.Fatalf("status output = stdout %q stderr %q, want empty", status.Stdout, status.Stderr)
+	}
+}
+
+func TestChecksumSumCheckModeIgnoreMissing(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/f.txt", []byte("foobar\n"))
+	writeSessionFile(t, session, "/tmp/checksums.txt", []byte(strings.Join([]string{
+		fmt.Sprintf("%s  /tmp/f.txt", md5Hex([]byte("foobar\n"))),
+		fmt.Sprintf("%s  /tmp/missing.txt", md5Hex([]byte("missing"))),
+		"",
+	}, "\n")))
+
+	result := mustExecSession(t, session, "md5sum --check --ignore-missing /tmp/checksums.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/tmp/f.txt: OK\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+
+	writeSessionFile(t, session, "/tmp/only-missing.md5", fmt.Appendf(nil, "%s  /tmp/missing.txt\n", md5Hex([]byte("missing"))))
+	onlyMissing := mustExecSession(t, session, "md5sum --check --ignore-missing /tmp/only-missing.md5\n")
+	if onlyMissing.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", onlyMissing.ExitCode)
+	}
+	if onlyMissing.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", onlyMissing.Stdout)
+	}
+	if !strings.Contains(onlyMissing.Stderr, "no file was verified") {
+		t.Fatalf("Stderr = %q, want no-file-verified message", onlyMissing.Stderr)
+	}
+}
+
+func TestChecksumSumReportsMissingInputsToStderrAndContinues(t *testing.T) {
 	session := newSession(t, &Config{})
 	data := []byte("present")
 	writeSessionFile(t, session, "/tmp/present.txt", data)
 
-	result := mustExecSession(t, session, "sha256sum /tmp/missing.txt /tmp/present.txt\n")
+	result := mustExecSession(t, session, "md5sum /tmp/missing.txt /tmp/present.txt\n")
 	if result.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
 	}
-	want := fmt.Sprintf(
-		"sha256sum: /tmp/missing.txt: No such file or directory\n%s  /tmp/present.txt\n",
-		sha256Hex(data),
-	)
-	if got := result.Stdout; got != want {
+	if got, want := result.Stdout, fmt.Sprintf("%s  /tmp/present.txt\n", md5Hex(data)); got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if result.Stderr != "" {
-		t.Fatalf("Stderr = %q, want empty", result.Stderr)
-	}
-}
-
-func TestSHA256SumCheckModeReportsFailuresAndUnreadableTargets(t *testing.T) {
-	session := newSession(t, &Config{})
-	data := []byte("actual")
-	writeSessionFile(t, session, "/tmp/present.txt", data)
-	writeSessionFile(t, session, "/tmp/checksums.txt", []byte(strings.Join([]string{
-		fmt.Sprintf("%s  /tmp/present.txt", sha256Hex([]byte("wrong"))),
-		fmt.Sprintf("%s  /tmp/missing.txt", sha256Hex([]byte("missing"))),
-		"not a checksum line",
-		"",
-	}, "\n")))
-
-	result := mustExecSession(t, session, "sha256sum -c /tmp/checksums.txt\n")
-	if result.ExitCode != 1 {
-		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
-	}
-	want := "/tmp/present.txt: FAILED\n" +
-		"/tmp/missing.txt: FAILED open or read\n" +
-		"sha256sum: WARNING: 2 computed checksums did NOT match\n"
-	if got := result.Stdout; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
-	}
-	if result.Stderr != "" {
-		t.Fatalf("Stderr = %q, want empty", result.Stderr)
-	}
-}
-
-func TestSHA256SumCheckModeIgnoresMalformedLines(t *testing.T) {
-	session := newSession(t, &Config{})
-	writeSessionFile(t, session, "/tmp/checksums.txt", []byte("not a checksum line\nalso invalid\n"))
-
-	result := mustExecSession(t, session, "sha256sum -c /tmp/checksums.txt\n")
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
-	}
-	if result.Stdout != "" {
-		t.Fatalf("Stdout = %q, want empty", result.Stdout)
-	}
-	if result.Stderr != "" {
-		t.Fatalf("Stderr = %q, want empty", result.Stderr)
-	}
-}
-
-func TestSHA256SumMissingChecksumListFailsOnStderr(t *testing.T) {
-	session := newSession(t, &Config{})
-
-	result := mustExecSession(t, session, "sha256sum -c /tmp/missing.txt\n")
-	if result.ExitCode != 1 {
-		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
-	}
-	if result.Stdout != "" {
-		t.Fatalf("Stdout = %q, want empty", result.Stdout)
-	}
-	if got, want := result.Stderr, "sha256sum: /tmp/missing.txt: No such file or directory\n"; got != want {
+	if got, want := result.Stderr, "md5sum: /tmp/missing.txt: No such file or directory\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
 
-func TestSHA256SumRejectsUnknownOptions(t *testing.T) {
+func TestChecksumSumMissingChecksumListFailsOnStderr(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "md5sum -c /tmp/missing.txt\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", result.Stdout)
+	}
+	if got, want := result.Stderr, "md5sum: /tmp/missing.txt: No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestChecksumSumRejectsMeaninglessAndUnknownOptions(t *testing.T) {
 	tests := []struct {
 		name   string
-		arg    string
+		script string
 		stderr string
 	}{
 		{
-			name:   "short",
-			arg:    "-z",
-			stderr: "sha256sum: invalid option -- 'z'\n",
+			name:   "ignore-missing-without-check",
+			script: "md5sum --ignore-missing\n",
+			stderr: "md5sum: the --ignore-missing option is meaningful only when verifying checksums\n",
 		},
 		{
-			name:   "combined-short",
-			arg:    "-bc",
-			stderr: "sha256sum: invalid option -- 'bc'\n",
+			name:   "quiet-without-check",
+			script: "md5sum --quiet\n",
+			stderr: "md5sum: the --quiet option is meaningful only when verifying checksums\n",
 		},
 		{
-			name:   "long",
-			arg:    "--bogus",
-			stderr: "sha256sum: unrecognized option '--bogus'\n",
+			name:   "tag-with-text",
+			script: "md5sum --tag --text /tmp/file.txt\n",
+			stderr: "md5sum: --tag does not support --text mode\n",
+		},
+		{
+			name:   "tag-with-check",
+			script: "md5sum --tag --check /tmp/file.txt\n",
+			stderr: "md5sum: the --tag option is meaningless when verifying checksums\n",
+		},
+		{
+			name:   "binary-with-check",
+			script: "md5sum --binary --check /tmp/file.txt\n",
+			stderr: "md5sum: the --binary and --text options are meaningless when verifying checksums\n",
+		},
+		{
+			name:   "unknown-long",
+			script: "md5sum --bogus\n",
+			stderr: "md5sum: unrecognized option '--bogus'\n",
+		},
+		{
+			name:   "unknown-short",
+			script: "md5sum -q\n",
+			stderr: "md5sum: invalid option -- 'q'\n",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			session := newSession(t, &Config{})
-			result := mustExecSession(t, session, fmt.Sprintf("sha256sum %s\n", tc.arg))
+			writeSessionFile(t, session, "/tmp/file.txt", []byte("x"))
+			result := mustExecSession(t, session, tc.script)
 			if result.ExitCode != 1 {
 				t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
 			}
@@ -249,22 +374,40 @@ func TestSHA256SumRejectsUnknownOptions(t *testing.T) {
 	}
 }
 
-func TestSHA256SumHelpShowsUsageAndWinsOverOtherArgs(t *testing.T) {
+func TestChecksumSumHelpAndVersion(t *testing.T) {
 	session := newSession(t, &Config{})
 
-	result := mustExecSession(t, session, "sha256sum --help -z\n")
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	help := mustExecSession(t, session, "sha1sum --help\n")
+	if help.ExitCode != 0 {
+		t.Fatalf("help ExitCode = %d, want 0; stderr=%q", help.ExitCode, help.Stderr)
 	}
-	if !strings.Contains(result.Stdout, "sha256sum - compute SHA256 message digest") {
-		t.Fatalf("Stdout = %q, want help header", result.Stdout)
+	if !strings.Contains(help.Stdout, "sha1sum - compute or check SHA1 message digests") {
+		t.Fatalf("help Stdout = %q, want header", help.Stdout)
 	}
-	if !strings.Contains(result.Stdout, "Usage: sha256sum [OPTION]... [FILE]...") {
-		t.Fatalf("Stdout = %q, want usage text", result.Stdout)
+	if help.Stderr != "" {
+		t.Fatalf("help Stderr = %q, want empty", help.Stderr)
 	}
-	if result.Stderr != "" {
-		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+
+	version := mustExecSession(t, session, "sha256sum --version\n")
+	if version.ExitCode != 0 {
+		t.Fatalf("version ExitCode = %d, want 0; stderr=%q", version.ExitCode, version.Stderr)
 	}
+	if got, want := version.Stdout, "sha256sum (gbash)\n"; got != want {
+		t.Fatalf("version Stdout = %q, want %q", got, want)
+	}
+	if version.Stderr != "" {
+		t.Fatalf("version Stderr = %q, want empty", version.Stderr)
+	}
+}
+
+func md5Hex(data []byte) string {
+	sum := md5.Sum(data)
+	return fmt.Sprintf("%x", sum)
+}
+
+func sha1Hex(data []byte) string {
+	sum := sha1.Sum(data)
+	return fmt.Sprintf("%x", sum)
 }
 
 func sha256Hex(data []byte) string {

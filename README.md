@@ -495,7 +495,7 @@ The default registry includes commands for file ops, text processing, archival, 
 | File and path | `basename` `cat` `chmod` `chown` `cp` `dirname` `du` `file` `find` `ln` `link` `ls` `dir` `mkdir` `mv` `readlink` `rm` `rmdir` `stat` `touch` `tree` |
 | Search and text | `awk` `base32` `base64` `column` `comm` `cut` `diff` `grep` `head` `join` `nl` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `tac` `tail` `tee` `tr` `uniq` `wc` |
 | Archive | `gzip` `gunzip` `tar` `zcat` |
-| Environment and execution | `bash` `date` `echo` `env` `expr` `false` `help` `id` `printenv` `pwd` `sh` `sha256sum` `sleep` `timeout` `true` `uptime` `which` `xargs` `yes` |
+| Environment and execution | `bash` `date` `echo` `env` `expr` `false` `help` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha256sum` `sleep` `timeout` `true` `uptime` `which` `xargs` `yes` |
 | Network (when configured) | `curl` |
 
 The goal is high-value agent workflows, not full GNU flag parity. Unsupported commands or flags fail with a shell-style error.

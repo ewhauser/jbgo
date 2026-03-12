@@ -163,18 +163,18 @@ Auto-generated — re-run the upstream-diff skill to refresh.
 - [x] `column` (upstream flags: `-t`, `-s`, `-o`, `-c`, `-n`)
 - [ ] `egrep`
 - [ ] `expand` (upstream flags: `-t`, `-i`)
-- [ ] `expr`
 - [ ] `fgrep`
+- [ ] `expr`
 - [ ] `fold` (upstream flags: `-w`, `-s`, `-b`)
 - [ ] `history` (upstream flags: `-c`)
 - [ ] `hostname`
 - [ ] `html-to-markdown`
-- [ ] `md5sum`
+- [x] `md5sum`
 - [x] `od`
 - [ ] `python`
 - [ ] `python3` (upstream flags: `-c`, `-m`, `--version`)
 - [x] `seq`
-- [ ] `sha1sum`
+- [x] `sha1sum`
 - [x] `sha256sum`
 - [ ] `strings` (upstream flags: `-n`, `-t`, `-a`, `-e`)
 - [ ] `time`

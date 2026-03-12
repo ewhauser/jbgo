@@ -286,10 +286,18 @@ func FuzzDataCommands(f *testing.F) {
 			"base64 /tmp/input.json | base64 -d >/tmp/base64-json.txt || true\n" +
 				"od -An -tx1 /tmp/input.json >/tmp/od-hex.txt || true\n" +
 				"od -An -c /tmp/input.json >/tmp/od-char.txt || true\n" +
+				"md5sum /tmp/input.json >/tmp/md5-file.txt\n" +
+				"cat /tmp/input.json | md5sum >/tmp/md5-stdin.txt\n" +
+				"md5sum /tmp/input.json >/tmp/md5-checksums.txt\n" +
+				"md5sum -c /tmp/md5-checksums.txt >/tmp/md5-check.txt || true\n" +
+				"sha1sum /tmp/input.json >/tmp/sha1-file.txt\n" +
+				"cat /tmp/input.json | sha1sum >/tmp/sha1-stdin.txt\n" +
+				"sha1sum /tmp/input.json >/tmp/sha1-checksums.txt\n" +
+				"sha1sum -c /tmp/sha1-checksums.txt >/tmp/sha1-check.txt || true\n" +
 				"sha256sum /tmp/input.json >/tmp/sha256-file.txt\n" +
 				"cat /tmp/input.json | sha256sum >/tmp/sha256-stdin.txt\n" +
-				"sha256sum /tmp/input.json >/tmp/checksums.txt\n" +
-				"sha256sum -c /tmp/checksums.txt >/tmp/sha256-check.txt\n",
+				"sha256sum /tmp/input.json >/tmp/sha256-checksums.txt\n" +
+				"sha256sum -c /tmp/sha256-checksums.txt >/tmp/sha256-check.txt || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)

@@ -594,6 +594,8 @@ Initial MVP command set:
 - `tac`
 - `diff`
 - `expr`
+- `md5sum`
+- `sha1sum`
 - `sha256sum`
 - `base32`
 - `base64`
@@ -616,7 +618,7 @@ For contrib `yq`, the `github.com/ewhauser/gbash/contrib/yq` module should wrap 
 
 For archive and compression helpers, the runtime should expose explicit subsets rather than imply GNU `tar` or `gzip` parity. `gzip`, `gunzip`, and `zcat` should support file and stdin/stdout flows, `-c`, `-d`, `-f`, `-k`, `-S`, `-t`, and `-v`, with binary-safe streaming and no host-tempfile fallback. `tar` should support create, list, and extract flows with `-c`, `-x`, `-t`, `-f`, `-C`, `-z`, `-v`, `-O`, and `-k`, while rejecting unsupported codecs and append/update modes. Extraction must strip leading slashes, reject parent-traversal entries, and reject symlink targets that escape the extraction root.
 
-For checksum helpers, the runtime should support `sha256sum` over files and stdin plus upstream-compatible verification with `-c/--check`. The command should also accept and ignore `-b`, `-t`, `--binary`, and `--text` for just-bash parity, parse checksum lines in the upstream `hash + optional mode marker + path` format, and keep the upstream stream behavior where digest-mode missing inputs report to stdout while missing checksum-list files fail immediately on stderr.
+For checksum helpers, the runtime should expose shared uutils-style implementations for `md5sum`, `sha1sum`, and `sha256sum`. These commands should support file and stdin hashing, BSD tagged output via `--tag`, binary/text output markers, NUL-terminated output via `-z/--zero`, and upstream-compatible verification with `-c/--check`, `--quiet`, `--status`, `--warn`, `--strict`, and `--ignore-missing`. Verification must parse the upstream tagged and untagged checksum-file formats, including the GNU single-space variant, and checksum-list read failures must fail on stderr while regular digest computation continues past unreadable inputs.
 
 For file/path commands, the runtime now supports a practical agent-oriented subset rather than full GNU parity:
 

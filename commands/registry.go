@@ -192,6 +192,8 @@ func DefaultRegistry() *Registry {
 		NewMkdir(),
 		NewRM(),
 		NewExpr(),
+		NewMD5Sum(),
+		NewSHA1Sum(),
 		NewSHA256Sum(),
 	)
 }
