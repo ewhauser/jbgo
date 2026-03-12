@@ -4,19 +4,9 @@
 
 It ports the core product idea behind [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash) to a Go-native runtime built on [`mvdan/sh/v3`](https://pkg.go.dev/mvdan.cc/sh/v3).
 
-Key properties:
-
-- no host subprocess fallback
-- no default compatibility mode
-- virtual filesystem by default
-- explicit Go command registry
-- policy-controlled execution
-- structured trace events for agent workflows
-- optional allowlisted network access via `curl`
-
 > **Note:** This is beta software. It has not been hardened or security tested and is less mature than the upstream TypeScript implementation. Use it with care.
 
-Requires Go 1.25+.
+Requires Go 1.26+
 
 Install the module with `go get github.com/ewhauser/gbash` and import packages from `github.com/ewhauser/gbash/...`.
 
