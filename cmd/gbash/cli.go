@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 
@@ -73,7 +74,7 @@ func parseCLIOptions(args []string, stderr io.Writer) (cliOptions, error) {
 
 func parseCompatInvocation(argv0 string, args []string) (*compatInvocation, error) {
 	if utility := multicallUtilityName(argv0); utility != "" {
-		commandDir, err := resolveCommandDir(filepath.Dir(argv0))
+		commandDir, err := resolveCompatCommandDir(argv0)
 		if err != nil {
 			return nil, err
 		}
@@ -116,6 +117,18 @@ func resolveCommandDir(dir string) (string, error) {
 		return "", err
 	}
 	return filepath.ToSlash(resolved), nil
+}
+
+func resolveCompatCommandDir(argv0 string) (string, error) {
+	if strings.Contains(argv0, string(os.PathSeparator)) {
+		return resolveCommandDir(filepath.Dir(argv0))
+	}
+
+	resolved, err := osexec.LookPath(argv0)
+	if err != nil {
+		return "", err
+	}
+	return resolveCommandDir(filepath.Dir(resolved))
 }
 
 func runScript(ctx context.Context, rt *gbruntime.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {

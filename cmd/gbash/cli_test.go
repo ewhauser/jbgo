@@ -116,6 +116,34 @@ func TestRunCLICompatExecUnknownCommandReturns127(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecYesReportsSingleWriteErrorOnDevFull(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	info, err := os.Stat("/dev/full")
+	if err != nil || info.Mode()&os.ModeDevice == 0 {
+		t.Skip("/dev/full unavailable")
+	}
+
+	full, err := os.OpenFile("/dev/full", os.O_WRONLY, 0)
+	if err != nil {
+		t.Skipf("OpenFile(/dev/full) error = %v", err)
+	}
+	defer func() { _ = full.Close() }()
+
+	var stderr strings.Builder
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"compat", "exec", "yes", "x"}, strings.NewReader(""), full, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
+	}
+	if got, want := strings.Count(stderr.String(), "yes: standard output"), 1; got != want {
+		t.Fatalf("stderr = %q, want %d write diagnostic", stderr.String(), want)
+	}
+}
+
 func TestRunCLICompatExecEnvSupportsDoubleDashCommandSeparator(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
@@ -1131,6 +1159,40 @@ func TestRunCLIMulticallUsesArgv0CommandAndBypassesTTYRepl(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "~$") {
 		t.Fatalf("stdout = %q, did not expect interactive prompt", stdout.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLIMulticallBareArgv0ResolvesCommandDirFromPATH(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	commandDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(commandDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	for _, name := range []string{"sh", "echo", "printf"} {
+		commandPath := filepath.Join(commandDir, name)
+		if err := os.WriteFile(commandPath, []byte("# compat shim\n"), 0o755); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", commandPath, err)
+		}
+	}
+	t.Setenv("PATH", commandDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "sh", []string{"-c", "printf 'ok\\n'; echo $#", "ignored", "1", "2", "3"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	}
+	if got, want := stdout.String(), "ok\n3\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("stderr = %q, want empty", got)

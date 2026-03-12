@@ -688,7 +688,7 @@ For the shell/process helper batch, the runtime should expose practical, sandbox
 - `sleep` supports decimal durations and `s`, `m`, `h`, and `d` suffixes with a bounded maximum delay
 - `timeout` supports duration-bounded nested command execution and accepts `--foreground`, `-k/--kill-after`, and `-s/--signal` as compatibility flags without host signal semantics
 - `xargs` supports the default `echo` behavior plus `-n`, `-I`, `-0`, `-d`, `-t`, and `-r`
-- `yes` repeatedly emits either `y` or the provided argument string using buffered writes and relies on sandbox timeouts or downstream consumers to bound execution
+- `yes` follows the uutils/GNU operand model (`y` by default, otherwise space-joined operands plus a trailing newline), fills its 16 KiB write buffer with only whole-record copies, ignores broken-pipe termination, and reports other stdout write failures as `yes: standard output: ...`
 - `bash` and `sh` are nested shell wrappers for `-c`, script files, and stdin scripts; they do not escape to host shells
 
 For network access, the runtime now exposes a safe `curl` subset instead of ambient host networking. That subset is enabled only when `runtime.Config.Network` or a prebuilt `NetworkClient` is provided. The sandboxed network layer must:

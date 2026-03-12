@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -93,6 +94,27 @@ func TestYesRepeatsDefaultAndCustomOperandsUntilTimeout(t *testing.T) {
 	}
 }
 
+func TestYesPreservesWholeRecordsAtGNUBoundaries(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	for _, size := range []int{1, 1999, 4095, 4096, 8191, 8192, 16383, 16384} {
+		t.Run(fmt.Sprintf("size=%d", size), func(t *testing.T) {
+			script := fmt.Sprintf(
+				"yes \"$(printf '%%%ds' '')\" | head -n2 | uniq > /tmp/yes.out\nwc -l < /tmp/yes.out\nhead -n1 /tmp/yes.out | wc -c\n",
+				size,
+			)
+			result := mustExecSession(t, session, script)
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			want := fmt.Sprintf("1\n%d\n", size+1)
+			if result.Stdout != want {
+				t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+			}
+		})
+	}
+}
+
 func TestYesRejectsUnknownOptionsAndSupportsHelpVersion(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -103,8 +125,9 @@ func TestYesRejectsUnknownOptionsAndSupportsHelpVersion(t *testing.T) {
 	if helpResult.ExitCode != 0 {
 		t.Fatalf("help ExitCode = %d, want 0; stderr=%q", helpResult.ExitCode, helpResult.Stderr)
 	}
-	if !strings.Contains(helpResult.Stdout, "usage: yes [STRING]...") {
-		t.Fatalf("Stdout = %q, want help text", helpResult.Stdout)
+	const wantHelp = "Repeatedly display a line with STRING (or 'y')\n\nUsage: yes [STRING]...\n\nArguments:\n  [STRING]...  [default: y]\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version\n"
+	if got := helpResult.Stdout; got != wantHelp {
+		t.Fatalf("Stdout = %q, want %q", got, wantHelp)
 	}
 
 	versionResult, err := rt.Run(context.Background(), &ExecutionRequest{Script: "yes --version\n"})
@@ -114,8 +137,53 @@ func TestYesRejectsUnknownOptionsAndSupportsHelpVersion(t *testing.T) {
 	if versionResult.ExitCode != 0 {
 		t.Fatalf("version ExitCode = %d, want 0; stderr=%q", versionResult.ExitCode, versionResult.Stderr)
 	}
-	if !strings.Contains(versionResult.Stdout, "yes (gbash)") {
-		t.Fatalf("Stdout = %q, want version text", versionResult.Stdout)
+	const wantVersion = "yes (uutils coreutils) 0.7.0\n"
+	if got := versionResult.Stdout; got != wantVersion {
+		t.Fatalf("Stdout = %q, want %q", got, wantVersion)
+	}
+
+	shortHelpResult, err := rt.Run(context.Background(), &ExecutionRequest{Script: "yes -h\n"})
+	if err != nil {
+		t.Fatalf("Run(short-help) error = %v", err)
+	}
+	if shortHelpResult.ExitCode != 0 {
+		t.Fatalf("short-help ExitCode = %d, want 0; stderr=%q", shortHelpResult.ExitCode, shortHelpResult.Stderr)
+	}
+	if got := shortHelpResult.Stdout; got != wantHelp {
+		t.Fatalf("Stdout = %q, want %q", got, wantHelp)
+	}
+
+	shortVersionResult, err := rt.Run(context.Background(), &ExecutionRequest{Script: "yes -V\n"})
+	if err != nil {
+		t.Fatalf("Run(short-version) error = %v", err)
+	}
+	if shortVersionResult.ExitCode != 0 {
+		t.Fatalf("short-version ExitCode = %d, want 0; stderr=%q", shortVersionResult.ExitCode, shortVersionResult.Stderr)
+	}
+	if got := shortVersionResult.Stdout; got != wantVersion {
+		t.Fatalf("Stdout = %q, want %q", got, wantVersion)
+	}
+
+	endOfOptionsResult, err := rt.Run(context.Background(), &ExecutionRequest{Script: "yes -- --help | head -n1\n"})
+	if err != nil {
+		t.Fatalf("Run(end-of-options) error = %v", err)
+	}
+	if endOfOptionsResult.ExitCode != 0 {
+		t.Fatalf("end-of-options ExitCode = %d, want 0; stderr=%q", endOfOptionsResult.ExitCode, endOfOptionsResult.Stderr)
+	}
+	if got, want := endOfOptionsResult.Stdout, "--help\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+
+	inferredVersionResult, err := rt.Run(context.Background(), &ExecutionRequest{Script: "yes --ver\n"})
+	if err != nil {
+		t.Fatalf("Run(inferred-version) error = %v", err)
+	}
+	if inferredVersionResult.ExitCode != 0 {
+		t.Fatalf("inferred-version ExitCode = %d, want 0; stderr=%q", inferredVersionResult.ExitCode, inferredVersionResult.Stderr)
+	}
+	if got := inferredVersionResult.Stdout; got != wantVersion {
+		t.Fatalf("Stdout = %q, want %q", got, wantVersion)
 	}
 
 	invalidResult, err := rt.Run(context.Background(), &ExecutionRequest{Script: "yes --bogus\n"})
@@ -126,6 +194,9 @@ func TestYesRejectsUnknownOptionsAndSupportsHelpVersion(t *testing.T) {
 		t.Fatalf("invalid ExitCode = 0, want non-zero")
 	}
 	if !strings.Contains(invalidResult.Stderr, "unrecognized option") {
+		t.Fatalf("Stderr = %q, want invalid-option error", invalidResult.Stderr)
+	}
+	if !strings.Contains(invalidResult.Stderr, "Try 'yes --help' for more information.") {
 		t.Fatalf("Stderr = %q, want invalid-option error", invalidResult.Stderr)
 	}
 }
