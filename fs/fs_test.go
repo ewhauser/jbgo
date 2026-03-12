@@ -103,6 +103,26 @@ func TestMemoryFSReadlinkRejectsNonSymlink(t *testing.T) {
 	}
 }
 
+func TestMemoryFSRenameRejectsRoot(t *testing.T) {
+	mem := NewMemory()
+
+	err := mem.Rename(context.Background(), "/", "/tmp/root")
+	if err == nil {
+		t.Fatal("Rename(/) error = nil, want permission")
+	}
+	if !errors.Is(err, stdfs.ErrPermission) {
+		t.Fatalf("Rename(/) error = %v, want permission", err)
+	}
+
+	info, err := mem.Stat(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("Stat(/) error = %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("Stat(/).IsDir() = false, want true")
+	}
+}
+
 func TestOverlayFSReadsFromLowerAndWritesToUpper(t *testing.T) {
 	lower := seededMemory(t, map[string]string{
 		"/base.txt":       "base\n",

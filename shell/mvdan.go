@@ -175,7 +175,9 @@ func sanitizeRunnerPanic(recovered any) string {
 	switch {
 	case strings.HasPrefix(message, "unhandled >& arg:"),
 		strings.HasPrefix(message, "unhandled > arg:"),
-		strings.HasPrefix(message, "unhandled < arg:"):
+		strings.HasPrefix(message, "unhandled < arg:"),
+		strings.HasPrefix(message, "unsupported redirect fd:"),
+		strings.HasPrefix(message, "unhandled redirect op:"):
 		return "invalid redirection"
 	default:
 		return "shell execution failed"

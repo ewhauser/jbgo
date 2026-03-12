@@ -589,6 +589,7 @@ Initial MVP command set:
 - `tac`
 - `diff`
 - `expr`
+- `sha256sum`
 - `base32`
 - `base64`
 - `tar`
@@ -610,6 +611,8 @@ For `yq`, the runtime should wrap `mikefarah/yq`'s `yqlib` evaluator rather than
 For `sqlite3`, the runtime should wrap `ncruces/go-sqlite3` directly rather than embedding the upstream CLI. The initial implementation should open an in-memory SQLite connection, deserialize database bytes from the sandbox filesystem when a file path is requested, execute SQL inside that in-memory connection, and serialize the database back to the sandbox filesystem only after successful writes. The supported subset should cover `:memory:` and file-backed databases, list / CSV / JSON / line / column / table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` must stay disabled so SQL cannot escape the sandbox filesystem or reach host file APIs.
 
 For archive and compression helpers, the runtime should expose explicit subsets rather than imply GNU `tar` or `gzip` parity. `gzip`, `gunzip`, and `zcat` should support file and stdin/stdout flows, `-c`, `-d`, `-f`, `-k`, `-S`, `-t`, and `-v`, with binary-safe streaming and no host-tempfile fallback. `tar` should support create, list, and extract flows with `-c`, `-x`, `-t`, `-f`, `-C`, `-z`, `-v`, `-O`, and `-k`, while rejecting unsupported codecs and append/update modes. Extraction must strip leading slashes, reject parent-traversal entries, and reject symlink targets that escape the extraction root.
+
+For checksum helpers, the runtime should support `sha256sum` over files and stdin plus upstream-compatible verification with `-c/--check`. The command should also accept and ignore `-b`, `-t`, `--binary`, and `--text` for just-bash parity, parse checksum lines in the upstream `hash + optional mode marker + path` format, and keep the upstream stream behavior where digest-mode missing inputs report to stdout while missing checksum-list files fail immediately on stderr.
 
 For file/path commands, the runtime now supports a practical agent-oriented subset rather than full GNU parity:
 

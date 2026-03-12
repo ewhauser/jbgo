@@ -91,7 +91,15 @@ func validateSupportedRedirections(program *syntax.File) error {
 
 		redir, ok := node.(*syntax.Redirect)
 		if !ok {
+			if _, ok := node.(*syntax.ProcSubst); ok {
+				walkErr = &shellValidationError{message: "invalid redirection"}
+				return false
+			}
 			return true
+		}
+		if redir.N != nil && !isSupportedRedirectFD(redir.N.Value) {
+			walkErr = &shellValidationError{message: "invalid redirection"}
+			return false
 		}
 
 		switch redir.Op {
@@ -105,6 +113,9 @@ func validateSupportedRedirections(program *syntax.File) error {
 				walkErr = &shellValidationError{message: "invalid redirection"}
 				return false
 			}
+		case syntax.RdrClob, syntax.AppClob, syntax.RdrAllClob, syntax.AppAllClob:
+			walkErr = &shellValidationError{message: "invalid redirection"}
+			return false
 		}
 		return true
 	})
@@ -122,6 +133,15 @@ func isSupportedDupOutTarget(target string) bool {
 
 func isSupportedDupInTarget(target string) bool {
 	return target == "-"
+}
+
+func isSupportedRedirectFD(fd string) bool {
+	switch fd {
+	case "", "0", "1", "2":
+		return true
+	default:
+		return false
+	}
 }
 
 func estimateWordGlobOps(word *syntax.Word) int64 {

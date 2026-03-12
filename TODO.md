@@ -175,7 +175,7 @@ Auto-generated — re-run the upstream-diff skill to refresh.
 - [ ] `python3` (upstream flags: `-c`, `-m`, `--version`)
 - [ ] `seq`
 - [ ] `sha1sum`
-- [ ] `sha256sum`
+- [x] `sha256sum`
 - [ ] `strings` (upstream flags: `-n`, `-t`, `-a`, `-e`)
 - [ ] `time`
 - [ ] `unalias`

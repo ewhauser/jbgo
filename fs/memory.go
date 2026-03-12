@@ -307,6 +307,9 @@ func (m *MemoryFS) Rename(_ context.Context, oldName, newName string) error {
 	if err != nil {
 		return &os.PathError{Op: "rename", Path: Resolve(m.cwd, oldName), Err: err}
 	}
+	if oldAbs == "/" {
+		return &os.PathError{Op: "rename", Path: oldAbs, Err: stdfs.ErrPermission}
+	}
 	newAbs, node, err := m.resolvePathLocked(newName, false, true)
 	if err != nil {
 		return &os.PathError{Op: "rename", Path: Resolve(m.cwd, newName), Err: err}
@@ -450,7 +453,11 @@ func (m *MemoryFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 		return "", nil, errTooManySymlinks
 	}
 	if abs == "/" {
-		return "/", m.nodes["/"], nil
+		node := m.nodes["/"]
+		if node == nil {
+			return "", nil, stdfs.ErrNotExist
+		}
+		return "/", node, nil
 	}
 
 	current := "/"
@@ -481,7 +488,11 @@ func (m *MemoryFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 		current = next
 	}
 
-	return "/", m.nodes["/"], nil
+	node := m.nodes["/"]
+	if node == nil {
+		return "", nil, stdfs.ErrNotExist
+	}
+	return "/", node, nil
 }
 
 func (m *MemoryFS) rebuildDirectoryChildrenLocked() {
