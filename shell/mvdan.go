@@ -40,6 +40,9 @@ type Execution struct {
 	VisiblePWD        string
 	HasVisiblePWD     bool
 	BuiltinCommandDir string
+	ResolverMode      ResolverMode
+	ReservedCommands  map[string]struct{}
+	HostExecutor      HostExecutor
 	Stdin             io.Reader
 	Stdout            io.Writer
 	Stderr            io.Writer
@@ -340,7 +343,12 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			}
 			return err
 		}
+		start := time.Now().UTC()
 		if !ok {
+			_, hostHandled, hostErr := m.tryHostFallback(ctx, exec, &hc, args, virtualWD, start, internal)
+			if hostHandled {
+				return hostErr
+			}
 			return shellFailure(ctx, 127, "%s: command not found", args[0])
 		}
 
@@ -349,10 +357,6 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 				recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, 126, resolved.source)
 				return shellFailure(ctx, 126, "%v", err)
 			}
-		}
-
-		start := time.Now().UTC()
-		if !internal {
 			recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(args, false, &commandTraceResolution{
 				Dir:              virtualWD,
 				Position:         hc.Pos.String(),
@@ -425,6 +429,85 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		}
 		return err
 	}
+}
+
+func (m *MVdan) tryHostFallback(ctx context.Context, exec *Execution, hc *interp.HandlerContext, args []string, virtualWD string, start time.Time, internal bool) (_ *HostExecutionResult, handled bool, err error) {
+	if internal || exec == nil || exec.ResolverMode != ResolverRegistryThenHostFallback || exec.HostExecutor == nil || len(args) == 0 {
+		return nil, false, nil
+	}
+	if hc == nil {
+		return nil, true, fmt.Errorf("missing handler context for host fallback")
+	}
+	if hostFallbackDenied(exec, args[0]) {
+		return nil, false, nil
+	}
+
+	currentEnv := envMap(hc.Env)
+	source := hostResolutionSource(args[0])
+	resolvedName := path.Base(args[0])
+	recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(args, false, &commandTraceResolution{
+		Dir:              virtualWD,
+		Position:         hc.Pos.String(),
+		ResolvedName:     resolvedName,
+		ResolvedPath:     args[0],
+		ResolutionSource: source,
+	}))
+	result, err := exec.HostExecutor.Run(ctx, &HostExecutionRequest{
+		Path:   args[0],
+		Args:   append([]string(nil), args...),
+		Env:    currentEnv,
+		Dir:    virtualWD,
+		Stdin:  hc.Stdin,
+		Stdout: hc.Stdout,
+		Stderr: hc.Stderr,
+	})
+	if errors.Is(err, ErrHostCommandNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, true, err
+	}
+	if result == nil {
+		return nil, true, fmt.Errorf("host command %q returned no result", args[0])
+	}
+
+	recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(args, false, &commandTraceResolution{
+		Dir:              virtualWD,
+		Position:         hc.Pos.String(),
+		ExitCode:         result.ExitCode,
+		Duration:         time.Since(start),
+		ResolvedName:     resolvedName,
+		ResolvedPath:     result.ResolvedPath,
+		ResolutionSource: source,
+	}))
+	if result.ExitCode == 0 {
+		return result, true, nil
+	}
+	return result, true, interp.ExitStatus(result.ExitCode)
+}
+
+func hostFallbackDenied(exec *Execution, name string) bool {
+	base := path.Base(name)
+	if exec == nil || strings.TrimSpace(base) == "" {
+		return true
+	}
+	if interp.IsBuiltin(base) && shouldRewriteBuiltin(base) {
+		return true
+	}
+	if exec.Registry != nil {
+		if _, ok := exec.Registry.Lookup(base); ok {
+			return true
+		}
+	}
+	_, reserved := exec.ReservedCommands[base]
+	return reserved
+}
+
+func hostResolutionSource(name string) string {
+	if strings.Contains(name, "/") {
+		return "host-path"
+	}
+	return "host-path-search"
 }
 
 func subexecInvoker(execFn func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error), currentEnv map[string]string, currentDir string) func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error) {

@@ -34,6 +34,9 @@ type Config struct {
 	BaseEnv           map[string]string
 	DefaultDir        string
 	BuiltinCommandDir string
+	ResolverMode      shell.ResolverMode
+	ReservedCommands  map[string]struct{}
+	HostExecutor      shell.HostExecutor
 }
 
 type Runner struct {
@@ -59,6 +62,10 @@ func New(cfg *Config) (*Runner, error) {
 	if resolved.Engine == nil {
 		resolved.Engine = shell.New()
 	}
+	if resolved.ResolverMode == "" {
+		resolved.ResolverMode = shell.ResolverRegistryOnly
+	}
+	resolved.ReservedCommands = shell.CloneReservedNames(resolved.ReservedCommands)
 	if resolved.DefaultDir == "" {
 		resolved.DefaultDir = resolved.FS.Getwd()
 	}
@@ -155,6 +162,9 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveS
 		VisiblePWD:        visiblePWD,
 		HasVisiblePWD:     hasVisiblePWD,
 		BuiltinCommandDir: r.cfg.BuiltinCommandDir,
+		ResolverMode:      r.cfg.ResolverMode,
+		ReservedCommands:  shell.CloneReservedNames(r.cfg.ReservedCommands),
+		HostExecutor:      r.cfg.HostExecutor,
 		Stdin:             stdinOrEmpty(req.Stdin),
 		Stdout:            stdoutWriter,
 		Stderr:            stderrWriter,

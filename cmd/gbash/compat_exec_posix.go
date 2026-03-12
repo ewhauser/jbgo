@@ -13,6 +13,7 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/internal/compatrun"
 	"github.com/ewhauser/gbash/internal/compatshims"
+	"github.com/ewhauser/gbash/shell"
 )
 
 func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
@@ -35,11 +36,18 @@ func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation
 
 	env := environMap(os.Environ())
 	env["PATH"] = prependCommandDir(commandDir, env["PATH"])
+	resolverMode, reservedCommands, hostExecutor, err := compatResolverConfig(env)
+	if err != nil {
+		return 1, err
+	}
 	runner, err := compatrun.New(&compatrun.Config{
 		Registry:          registry,
 		BaseEnv:           env,
 		DefaultDir:        filepath.ToSlash(cwd),
 		BuiltinCommandDir: commandDir,
+		ResolverMode:      resolverMode,
+		ReservedCommands:  reservedCommands,
+		HostExecutor:      hostExecutor,
 	})
 	if err != nil {
 		return 1, err
@@ -53,6 +61,42 @@ func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation
 		return 1, fmt.Errorf("compat runner returned no result")
 	}
 	return result.ExitCode, nil
+}
+
+func compatResolverConfig(env map[string]string) (shell.ResolverMode, map[string]struct{}, shell.HostExecutor, error) {
+	mode := shell.ResolverMode(strings.TrimSpace(env["GBASH_COMPAT_RESOLVER_MODE"]))
+	if mode == "" {
+		return shell.ResolverRegistryOnly, nil, nil, nil
+	}
+	if mode != shell.ResolverRegistryThenHostFallback {
+		return "", nil, nil, fmt.Errorf("unsupported compat resolver mode %q", mode)
+	}
+
+	reservedCommands, err := readCompatReservedCommands(strings.TrimSpace(env["GBASH_COMPAT_RESERVED_COMMANDS_FILE"]))
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return mode, reservedCommands, shell.NewOSHostExecutor(), nil
+}
+
+func readCompatReservedCommands(path string) (map[string]struct{}, error) {
+	if path == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read compat reserved commands: %w", err)
+	}
+
+	out := make(map[string]struct{})
+	for line := range strings.SplitSeq(string(data), "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" {
+			continue
+		}
+		out[name] = struct{}{}
+	}
+	return out, nil
 }
 
 func makeCompatCommandDir(registry commands.CommandRegistry) (dir string, cleanup func(), err error) {

@@ -33,6 +33,15 @@ func WithConfig(cfg *Config) Option {
 		if cfg.BaseEnv != nil {
 			target.BaseEnv = cfg.BaseEnv
 		}
+		if cfg.ResolverMode != "" {
+			target.ResolverMode = cfg.ResolverMode
+		}
+		if cfg.ReservedNames != nil {
+			target.ReservedNames = cfg.ReservedNames
+		}
+		if cfg.HostExecutor != nil {
+			target.HostExecutor = cfg.HostExecutor
+		}
 		if cfg.Network != nil {
 			target.Network = cfg.Network
 		}
@@ -74,6 +83,27 @@ func WithEngine(engine shell.Engine) Option {
 func WithBaseEnv(env map[string]string) Option {
 	return func(target *Config) error {
 		target.BaseEnv = env
+		return nil
+	}
+}
+
+func WithResolverMode(mode shell.ResolverMode) Option {
+	return func(target *Config) error {
+		target.ResolverMode = mode
+		return nil
+	}
+}
+
+func WithReservedNames(names map[string]struct{}) Option {
+	return func(target *Config) error {
+		target.ReservedNames = names
+		return nil
+	}
+}
+
+func WithHostExecutor(executor shell.HostExecutor) Option {
+	return func(target *Config) error {
+		target.HostExecutor = executor
 		return nil
 	}
 }

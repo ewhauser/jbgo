@@ -392,8 +392,18 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	workDir := t.TempDir()
 	makeBin := filepath.Join(workDir, "fake-make.sh")
 	envPath := filepath.Join(workDir, "config-shell.txt")
+	resolverModePath := filepath.Join(workDir, "resolver-mode.txt")
+	reservedPath := filepath.Join(workDir, "reserved-path.txt")
 	logPath := filepath.Join(workDir, "make.log")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$CONFIG_SHELL\" > " + shellSingleQuoteForScript(envPath) + "\nprintf 'PASS: tests/misc/example.sh\\n'\n"
+	hookDir := filepath.Join(workDir, "build-aux", "gbash-harness")
+	if err := os.MkdirAll(hookDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(hookDir) error = %v", err)
+	}
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$CONFIG_SHELL\" > " + shellSingleQuoteForScript(envPath) + "\n" +
+		"printf '%s\\n' \"$GBASH_COMPAT_RESOLVER_MODE\" > " + shellSingleQuoteForScript(resolverModePath) + "\n" +
+		"printf '%s\\n' \"$GBASH_COMPAT_RESERVED_COMMANDS_FILE\" > " + shellSingleQuoteForScript(reservedPath) + "\n" +
+		"printf 'PASS: tests/misc/example.sh\\n'\n"
 	if err := os.WriteFile(makeBin, []byte(script), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake make) error = %v", err)
 	}
@@ -413,6 +423,16 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	if got := string(data); got != configShell+"\n" {
 		t.Fatalf("CONFIG_SHELL = %q, want %q", got, configShell+"\\n")
 	}
+	if data, err := os.ReadFile(resolverModePath); err != nil {
+		t.Fatalf("ReadFile(resolver mode) error = %v", err)
+	} else if got := string(data); got != "registry-then-host-fallback\n" {
+		t.Fatalf("GBASH_COMPAT_RESOLVER_MODE = %q, want %q", got, "registry-then-host-fallback\\n")
+	}
+	if data, err := os.ReadFile(reservedPath); err != nil {
+		t.Fatalf("ReadFile(reserved path) error = %v", err)
+	} else if got := string(data); got != filepath.Join(workDir, "build-aux", "gbash-harness", "gnu-programs.txt")+"\n" {
+		t.Fatalf("GBASH_COMPAT_RESERVED_COMMANDS_FILE = %q", got)
+	}
 }
 
 func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
@@ -421,24 +441,12 @@ func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(srcDir) error = %v", err)
 	}
-	testsDir := filepath.Join(workDir, "tests")
-	if err := os.MkdirAll(testsDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(testsDir) error = %v", err)
-	}
-	makefile := "check-am: all-am\nTESTS_ENVIRONMENT = \\\n  env PATH=\"$(abs_top_builddir)/src:$$PATH\" \\\n"
-	if err := os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(makefile), 0o644); err != nil {
-		t.Fatalf("WriteFile(Makefile) error = %v", err)
-	}
-	initBody := "setup_ \"$@\"\n# This trap is here, rather than in the setup_ function, because some\n# shells run the exit trap at shell function exit, rather than script exit.\ntrap remove_tmp_ EXIT\n"
-	if err := os.WriteFile(filepath.Join(testsDir, "init.sh"), []byte(initBody), 0o644); err != nil {
-		t.Fatalf("WriteFile(init.sh) error = %v", err)
-	}
 	gbashBin := filepath.Join(workDir, "gbash")
 	if err := os.WriteFile(gbashBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("WriteFile(gbashBin) error = %v", err)
 	}
 
-	err := prepareProgramDir(workDir, gbashBin, []string{"sort"}, map[string]struct{}{
+	err := prepareProgramDir(workDir, gbashBin, []string{"sort", "expr"}, map[string]struct{}{
 		"bash": {},
 		"sh":   {},
 		"sort": {},
@@ -457,59 +465,12 @@ func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
 			t.Fatalf("%q is not a symlink", path)
 		}
 	}
-}
-
-func TestPatchTestsEnvironmentRemovesLegacyJbgoRelinkHook(t *testing.T) {
-	makefilePath := filepath.Join(t.TempDir(), "Makefile")
-	contents := "TESTS_ENVIRONMENT = \\\n" +
-		"  $(SHELL) '$(abs_top_builddir)/build-aux/gbash-harness/relink.sh' '$(abs_top_builddir)/src' || exit $$?; \\\n" +
-		"  $(SHELL) '$(abs_top_builddir)/build-aux/jbgo-harness/relink.sh' '$(abs_top_builddir)/src' || exit $$?; \\\n" +
-		"  env PATH=\"$(abs_top_builddir)/src:$$PATH\" \\\n"
-	if err := os.WriteFile(makefilePath, []byte(contents), 0o644); err != nil {
-		t.Fatalf("WriteFile(Makefile) error = %v", err)
-	}
-
-	if err := patchTestsEnvironment(makefilePath); err != nil {
-		t.Fatalf("patchTestsEnvironment() error = %v", err)
-	}
-
-	data, err := os.ReadFile(makefilePath)
+	data, err := os.ReadFile(filepath.Join(workDir, "build-aux", "gbash-harness", "gnu-programs.txt"))
 	if err != nil {
-		t.Fatalf("ReadFile(Makefile) error = %v", err)
+		t.Fatalf("ReadFile(gnu-programs.txt) error = %v", err)
 	}
-	got := string(data)
-	if strings.Contains(got, "build-aux/jbgo-harness/relink.sh") {
-		t.Fatalf("Makefile still references jbgo relink hook: %q", got)
-	}
-	if count := strings.Count(got, "build-aux/gbash-harness/relink.sh"); count != 1 {
-		t.Fatalf("gbash relink hook count = %d, want 1; contents=%q", count, got)
-	}
-}
-
-func TestPatchTestInitSetupPathIsIdempotent(t *testing.T) {
-	initPath := filepath.Join(t.TempDir(), "init.sh")
-	original := "setup_ \"$@\"\n# This trap is here, rather than in the setup_ function, because some\n# shells run the exit trap at shell function exit, rather than script exit.\ntrap remove_tmp_ EXIT\n"
-	if err := os.WriteFile(initPath, []byte(original), 0o644); err != nil {
-		t.Fatalf("WriteFile(init.sh) error = %v", err)
-	}
-
-	if err := patchTestInitSetupPath(initPath); err != nil {
-		t.Fatalf("patchTestInitSetupPath() error = %v", err)
-	}
-	if err := patchTestInitSetupPath(initPath); err != nil {
-		t.Fatalf("second patchTestInitSetupPath() error = %v", err)
-	}
-
-	data, err := os.ReadFile(initPath)
-	if err != nil {
-		t.Fatalf("ReadFile(init.sh) error = %v", err)
-	}
-	contents := string(data)
-	if count := strings.Count(contents, "jbgo_path_before_setup_=$PATH"); count != 1 {
-		t.Fatalf("jbgo setup guard count = %d, want 1; contents=%q", count, contents)
-	}
-	if !strings.Contains(contents, "PATH=$jbgo_path_before_setup_\nexport PATH\n") {
-		t.Fatalf("patched init.sh missing PATH restore; contents=%q", contents)
+	if got := string(data); got != "expr\nsort\n" {
+		t.Fatalf("gnu-programs.txt = %q, want sorted reserved program list", got)
 	}
 }
 
