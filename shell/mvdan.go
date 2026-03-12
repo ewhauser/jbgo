@@ -233,7 +233,7 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 		if mutationAction := fileMutationAction(flag); mutationAction != "" {
 			recordFileMutation(exec.Trace, mutationAction, abs, "", "")
 		}
-		return file, nil
+		return commands.WrapRedirectedFile(file, abs, flag), nil
 	}
 }
 

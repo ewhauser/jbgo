@@ -240,6 +240,48 @@ func FuzzShellProcessCommands(f *testing.F) {
 	})
 }
 
+func FuzzEchoCommand(f *testing.F) {
+	rt := newFuzzRuntime(f)
+
+	seeds := []struct {
+		data  []byte
+		value string
+	}{
+		{[]byte("alpha beta\n"), "VALUE"},
+		{[]byte("one\ntwo\nthree\n"), "nested-value"},
+		{[]byte{0x00, 0x01, 0x1b, 0xff}, "with spaces"},
+	}
+	for _, seed := range seeds {
+		f.Add(seed.data, seed.value)
+	}
+
+	f.Fuzz(func(t *testing.T, rawData []byte, rawValue string) {
+		session := newFuzzSession(t, rt)
+		value := sanitizeFuzzToken(rawValue)
+		escaped := fuzzEchoEscapedLiteral(rawData)
+
+		script := fmt.Appendf(nil,
+			"echo %s >/tmp/echo-default.txt\n"+
+				"echo -n %s >/tmp/echo-no-newline.txt\n"+
+				"echo -e %s >/tmp/echo-escapes.txt\n"+
+				"echo -E %s >/tmp/echo-literal.txt\n"+
+				"POSIXLY_CORRECT=1 echo -n -E %s >/tmp/echo-posix.txt\n"+
+				"echo -- %s >/tmp/echo-double-dash.txt\n"+
+				"echo --version >/tmp/echo-version.txt\n"+
+				"echo --help >/tmp/echo-help.txt\n",
+			shellQuote(value),
+			shellQuote(value),
+			shellQuote(escaped),
+			shellQuote(escaped),
+			shellQuote(escaped),
+			shellQuote(value),
+		)
+
+		result, err := runFuzzSessionScript(t, session, script)
+		assertSecureFuzzOutcome(t, script, result, err)
+	})
+}
+
 func FuzzNestedShellCommands(f *testing.F) {
 	rt := newFuzzRuntime(f)
 
@@ -272,6 +314,42 @@ func FuzzNestedShellCommands(f *testing.F) {
 		result, err := runFuzzSessionScript(t, session, script)
 		assertSuccessfulFuzzExecution(t, script, result, err)
 	})
+}
+
+func fuzzEchoEscapedLiteral(rawData []byte) string {
+	data := clampFuzzData(rawData)
+	if len(data) == 0 {
+		return `\n`
+	}
+
+	hexDigits := "0123456789abcdef"
+	var b strings.Builder
+	for i, ch := range data {
+		switch i % 6 {
+		case 0:
+			b.WriteString(`\x`)
+			b.WriteByte(hexDigits[ch>>4])
+			b.WriteByte(hexDigits[ch&0x0f])
+		case 1:
+			b.WriteString(`\0`)
+			b.WriteByte('0' + ((ch >> 6) & 0x07))
+			b.WriteByte('0' + ((ch >> 3) & 0x07))
+			b.WriteByte('0' + (ch & 0x07))
+		case 2:
+			b.WriteString(`\\`)
+		case 3:
+			b.WriteString(`\n`)
+		case 4:
+			b.WriteByte('A' + (ch % 26))
+		default:
+			b.WriteByte('a' + (ch % 26))
+		}
+		if i == len(data)/2 {
+			b.WriteString(`\c`)
+			break
+		}
+	}
+	return b.String()
 }
 
 func FuzzDataCommands(f *testing.F) {

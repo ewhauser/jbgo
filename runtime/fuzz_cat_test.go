@@ -24,12 +24,22 @@ func FuzzCatCommand(f *testing.F) {
 		writeSessionFile(t, session, inputPath, clampFuzzData(rawData))
 
 		script := fmt.Appendf(nil,
-			"cat --number %s >/tmp/cat-numbered.txt\ncat -n %s >/tmp/cat-short.txt\n",
+			"cat --number %s >/tmp/cat-numbered.txt\n"+
+				"cat -n %s >/tmp/cat-short.txt\n"+
+				"cat -E %s >/tmp/cat-ends.txt\n"+
+				"cat -b -s %s >/tmp/cat-nonblank.txt\n"+
+				"cat -A %s >/tmp/cat-visible.txt\n"+
+				"cat %s >>%s || true\n",
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
 			shellQuote(inputPath),
 			shellQuote(inputPath),
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
+		assertSecureFuzzOutcome(t, script, result, err)
 	})
 }

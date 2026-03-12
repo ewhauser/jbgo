@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"maps"
 	"strings"
 	"sync"
@@ -136,11 +137,11 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveS
 	stderr := newCaptureBuffer(limits.MaxStderrBytes)
 	stdoutWriter := io.Writer(stdout)
 	if liveStdout != nil {
-		stdoutWriter = io.MultiWriter(stdout, liveStdout)
+		stdoutWriter = newTeeWriter(stdout, liveStdout)
 	}
 	stderrWriter := io.Writer(stderr)
 	if liveStderr != nil {
-		stderrWriter = io.MultiWriter(stderr, liveStderr)
+		stderrWriter = newTeeWriter(stderr, liveStderr)
 	}
 	recorder := trace.NewBuffer()
 	started := time.Now().UTC()
@@ -340,6 +341,62 @@ func (b *captureBuffer) String() string {
 
 func (b *captureBuffer) Truncated() bool {
 	return b.truncated
+}
+
+type teeWriter struct {
+	left  io.Writer
+	right io.Writer
+}
+
+func newTeeWriter(left, right io.Writer) io.Writer {
+	return &teeWriter{left: left, right: right}
+}
+
+func (w *teeWriter) Write(p []byte) (int, error) {
+	if err := teeWriteOne(w.left, p); err != nil {
+		return 0, err
+	}
+	if err := teeWriteOne(w.right, p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (w *teeWriter) Stat() (stdfs.FileInfo, error) {
+	if statter, ok := w.right.(interface {
+		Stat() (stdfs.FileInfo, error)
+	}); ok {
+		return statter.Stat()
+	}
+	return nil, stdfs.ErrInvalid
+}
+
+func (w *teeWriter) Seek(offset int64, whence int) (int64, error) {
+	if seeker, ok := w.right.(io.Seeker); ok {
+		return seeker.Seek(offset, whence)
+	}
+	return 0, stdfs.ErrInvalid
+}
+
+func (w *teeWriter) Fd() uintptr {
+	if file, ok := w.right.(interface{ Fd() uintptr }); ok {
+		return file.Fd()
+	}
+	return 0
+}
+
+func teeWriteOne(dst io.Writer, p []byte) error {
+	if dst == nil {
+		return nil
+	}
+	n, err := dst.Write(p)
+	if err != nil {
+		return err
+	}
+	if n != len(p) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 type execContextKey struct{}

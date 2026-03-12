@@ -61,6 +61,42 @@ func TestRunCLICompatExecPassesStdin(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecCatRejectsAppendToSelf(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	target := filepath.Join(tmp, "out")
+	if err := os.WriteFile(target, []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	stdoutFile, err := os.OpenFile(target, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	defer func() { _ = stdoutFile.Close() }()
+
+	var stderr strings.Builder
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"compat", "exec", "cat", "out"}, strings.NewReader(""), stdoutFile, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if got, want := stderr.String(), "cat: out: input file is output file\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if got, want := string(data), "x\n"; got != want {
+		t.Fatalf("file contents = %q, want %q", got, want)
+	}
+}
+
 func TestRunCLICompatExecUnknownCommandReturns127(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

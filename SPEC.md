@@ -628,7 +628,7 @@ For checksum helpers, the runtime should expose shared uutils-style implementati
 For file/path commands, the runtime now supports a practical agent-oriented subset rather than full GNU parity:
 
 - `touch` supports creation, `-c`, and `-d/--date`
-- `cat` supports stdin or file concatenation plus `-n/--number` line numbering
+- `cat` supports stdin or file concatenation plus GNU-style `-A`, `-b`, `-e`, `-E`, `-n`, `-s`, `-t`, `-T`, `-u`, and `-v`, including visible end-of-line and nonprinting rendering and same-file overwrite protection for redirected stdin/stdout
 - `ln` supports hard links plus `-s` and `-f`
 - `link` exposes the strict two-operand hard-link form used by GNU/coreutils compatibility harnesses
 - `dir` reuses the supported `ls` option subset but defaults to non-long directory listings with `dir`-specific help/version text
@@ -656,12 +656,12 @@ For the text/search batch, the runtime should expose useful, explicitly document
 - `printf` supports the core shell format verbs used by automation scripts, including `%b` escape decoding and `\c` early termination
 - `rg` supports recursive regex search with `-n`, `-i`, `-l`, `-c`, `-g`, `--hidden`, and `--files`
 - `awk` is backed by `goawk` and supports `-F`, `-v`, and `-f`, but keeps `system()`, shell pipes, file writes, and extra file reads disabled inside the sandbox
-- `comm` supports two-input comparisons plus column suppression via `-1`, `-2`, and `-3`
+- `comm` supports two-input comparisons from files or one stdin operand, column suppression via `-1`, `-2`, and `-3`, `--output-delimiter`, `-z/--zero-terminated`, `--total`, and GNU-style sorted-input diagnostics via `--check-order` / `--nocheck-order`
 - `column` supports fill-mode output plus table formatting via `-t/--table`, `-s`, `-o`, `-c`, and `-n`
 - `paste` supports parallel and serial modes via `-s` and `-d`, including repeated `-` stdin inputs
 - `tr` supports translate, delete, squeeze, complement, ranges, escapes, and a focused set of POSIX character classes
 - `rev` and `tac` support Unicode-safe line reversal and reverse-line streaming
-- `nl` supports body numbering styles plus width, separator, start, and increment controls
+- `nl` supports GNU-style header, body, and footer numbering controls via `-h`, `-b`, and `-f`; logical page delimiters via `-d`; `-p` no-renumber mode; join-blank-lines via `-l`; number formatting via `-n`, `-s`, `-v`, `-w`, and `-i`; regex-based numbering styles; and byte-preserving input/output for sandbox files and stdin
 - `join` supports keyed joins via `-1`, `-2`, `-t`, `-a`, `-v`, `-e`, `-o`, and `-i`
 - `split` supports line-based and byte-based splits via `-l`, `-b`, `-d`, and `-a`
 - `diff` supports unified output plus `-q/--brief`, `-s/--report-identical-files`, and `-i/--ignore-case`, and accepts `-u/--unified` as an explicit alias for the default unified format

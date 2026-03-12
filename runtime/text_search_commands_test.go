@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -71,6 +72,106 @@ func TestCommSupportsExplicitColumnFlags(t *testing.T) {
 	}
 	if got, want := result.Stdout, "\tbanana\ncarrot\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCommSupportsTotalDelimiterAndZeroTerminated(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '1\\0' > /tmp/left.txt\nprintf '3\\0' >> /tmp/left.txt\nprintf '3\\0' >> /tmp/left.txt\nprintf '3' >> /tmp/left.txt\nprintf '2\\0' > /tmp/right.txt\nprintf '2\\0' >> /tmp/right.txt\nprintf '3\\0' >> /tmp/right.txt\nprintf '3\\0' >> /tmp/right.txt\nprintf '3' >> /tmp/right.txt\ncomm -z --total --output-delimiter=, /tmp/left.txt /tmp/right.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	want := []byte("1\x00,2\x00,2\x00,,3\x00,,3\x00,,3\x001,2,3,total\x00")
+	if got := []byte(result.Stdout); !bytes.Equal(got, want) {
+		t.Fatalf("Stdout bytes = %v, want %v", got, want)
+	}
+}
+
+func TestCommSupportsCheckOrderAndNoCheckOrder(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	defaultResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '1\\n3\\n' > /tmp/left.txt\nprintf '3\\n2\\n' > /tmp/right.txt\ncomm /tmp/left.txt /tmp/right.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("default Run() error = %v", err)
+	}
+	if defaultResult.ExitCode != 1 {
+		t.Fatalf("default ExitCode = %d, want 1", defaultResult.ExitCode)
+	}
+	if got, want := defaultResult.Stdout, "1\n\t\t3\n\t2\n"; got != want {
+		t.Fatalf("default Stdout = %q, want %q", got, want)
+	}
+	if got, want := defaultResult.Stderr, "comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n"; got != want {
+		t.Fatalf("default Stderr = %q, want %q", got, want)
+	}
+
+	checkResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '1\\n3\\n' > /tmp/left.txt\nprintf '3\\n2\\n' > /tmp/right.txt\ncomm --check-order /tmp/left.txt /tmp/right.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("check-order Run() error = %v", err)
+	}
+	if checkResult.ExitCode != 1 {
+		t.Fatalf("check-order ExitCode = %d, want 1", checkResult.ExitCode)
+	}
+	if got, want := checkResult.Stdout, "1\n\t\t3\n"; got != want {
+		t.Fatalf("check-order Stdout = %q, want %q", got, want)
+	}
+	if got, want := checkResult.Stderr, "comm: file 2 is not in sorted order\n"; got != want {
+		t.Fatalf("check-order Stderr = %q, want %q", got, want)
+	}
+
+	noCheckResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '1\\n3\\n' > /tmp/left.txt\nprintf '3\\n2\\n' > /tmp/right.txt\ncomm --nocheck-order /tmp/left.txt /tmp/right.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("nocheck-order Run() error = %v", err)
+	}
+	if noCheckResult.ExitCode != 0 {
+		t.Fatalf("nocheck-order ExitCode = %d, want 0; stderr=%q", noCheckResult.ExitCode, noCheckResult.Stderr)
+	}
+	if got, want := noCheckResult.Stdout, "1\n\t\t3\n\t2\n"; got != want {
+		t.Fatalf("nocheck-order Stdout = %q, want %q", got, want)
+	}
+	if got := noCheckResult.Stderr; got != "" {
+		t.Fatalf("nocheck-order Stderr = %q, want empty", got)
+	}
+}
+
+func TestCommReportsGNUOperandErrors(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	missingAfter, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "comm a\n",
+	})
+	if err != nil {
+		t.Fatalf("missing-after Run() error = %v", err)
+	}
+	if got, want := missingAfter.ExitCode, 1; got != want {
+		t.Fatalf("missing-after ExitCode = %d, want %d", got, want)
+	}
+	if got, want := missingAfter.Stderr, "comm: missing operand after 'a'\nTry 'comm --help' for more information.\n"; got != want {
+		t.Fatalf("missing-after Stderr = %q, want %q", got, want)
+	}
+
+	extra, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "comm a b c\n",
+	})
+	if err != nil {
+		t.Fatalf("extra Run() error = %v", err)
+	}
+	if got, want := extra.ExitCode, 1; got != want {
+		t.Fatalf("extra ExitCode = %d, want %d", got, want)
+	}
+	if got, want := extra.Stderr, "comm: extra operand 'c'\nTry 'comm --help' for more information.\n"; got != want {
+		t.Fatalf("extra Stderr = %q, want %q", got, want)
 	}
 }
 
