@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ewhauser/jbgo/commands"
-	"github.com/ewhauser/jbgo/internal/compatrun"
-	"github.com/ewhauser/jbgo/internal/compatshims"
+	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/compatrun"
+	"github.com/ewhauser/gbash/internal/compatshims"
 )
 
 func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
@@ -60,7 +60,7 @@ func makeCompatCommandDir(registry commands.CommandRegistry) (dir string, cleanu
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve executable: %w", err)
 	}
-	dir, err = os.MkdirTemp("", "jbgo-compat-bin-*")
+	dir, err = os.MkdirTemp("", "gbash-compat-bin-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("create compat command dir: %w", err)
 	}

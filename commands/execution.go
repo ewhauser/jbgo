@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/ewhauser/jbgo/trace"
+	"github.com/ewhauser/gbash/trace"
 )
 
 type ExecutionRequest struct {

@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type SHA256Sum struct{}

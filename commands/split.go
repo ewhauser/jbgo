@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type Split struct{}
@@ -50,7 +50,7 @@ func (c *Split) Run(ctx context.Context, inv *Invocation) error {
 
 	chunks := splitData(data, opts)
 	for i, chunk := range chunks {
-		target := jbfs.Resolve(inv.Cwd, prefix+splitSuffix(i, opts))
+		target := gbfs.Resolve(inv.Cwd, prefix+splitSuffix(i, opts))
 		if opts.additionalSuffix != "" {
 			target += opts.additionalSuffix
 		}

@@ -114,7 +114,7 @@ func TestYesRejectsUnknownOptionsAndSupportsHelpVersion(t *testing.T) {
 	if versionResult.ExitCode != 0 {
 		t.Fatalf("version ExitCode = %d, want 0; stderr=%q", versionResult.ExitCode, versionResult.Stderr)
 	}
-	if !strings.Contains(versionResult.Stdout, "yes (jbgo)") {
+	if !strings.Contains(versionResult.Stdout, "yes (gbash)") {
 		t.Fatalf("Stdout = %q, want version text", versionResult.Stdout)
 	}
 

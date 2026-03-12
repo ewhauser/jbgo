@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ewhauser/jbgo/commands"
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type timeoutProbe struct{}

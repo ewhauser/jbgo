@@ -1,11 +1,11 @@
 ## Executive summary
-`just-bash-go` is a deterministic shell runtime intended to execute untrusted or semi-trusted shell text inside a sandbox, but its effective security boundary depends heavily on embedder configuration. The strongest risk themes are boundary misconfiguration around filesystem and network access, availability exhaustion from large-input and nested-execution paths, a concrete symlink-policy gap in `OverlayFS`, and trace leakage of sensitive command arguments. Evidence anchors: `runtime/runtime.go` / `New`, `runtime/session.go` / `Session.exec`, `shell/mvdan.go` / `Run` and `execHandler`, `fs/overlay.go` / `Realpath`, `commands/io_helpers.go` / `readAllFile`, `network/network.go` / `HTTPClient.Do`, `trace/trace.go` / `CommandEvent`.
+`gbash` is a deterministic shell runtime intended to execute untrusted or semi-trusted shell text inside a sandbox, but its effective security boundary depends heavily on embedder configuration. The strongest risk themes are boundary misconfiguration around filesystem and network access, availability exhaustion from large-input and nested-execution paths, a concrete symlink-policy gap in `OverlayFS`, and trace leakage of sensitive command arguments. Evidence anchors: `runtime/runtime.go` / `New`, `runtime/session.go` / `Session.exec`, `shell/mvdan.go` / `Run` and `execHandler`, `fs/overlay.go` / `Realpath`, `commands/io_helpers.go` / `readAllFile`, `network/network.go` / `HTTPClient.Do`, `trace/trace.go` / `CommandEvent`.
 
 ## Scope and assumptions
-- In scope: `cmd/jbgo/`, `runtime/`, `shell/`, `commands/`, `fs/`, `policy/`, `network/`, `trace/`, `SPEC.md`, `README.md`.
+- In scope: `cmd/gbash/`, `runtime/`, `shell/`, `commands/`, `fs/`, `policy/`, `network/`, `trace/`, `SPEC.md`, `README.md`.
 - Out of scope: tests, fuzz fixtures, and local development tooling except where they provide evidence about intended runtime behavior.
 - Confirmed context: untrusted scripts are expected; a session is intended to be single-tenant; network egress and non-memory filesystem backends may be enabled by operator/user configuration.
-- Assumption: the repository is primarily a library/runtime plus a local CLI, not a standalone network service with built-in authentication or tenancy controls. Evidence anchors: `cmd/jbgo/cli.go` / `runCLI`, `runtime/runtime.go` / `Runtime`, `README.md`.
+- Assumption: the repository is primarily a library/runtime plus a local CLI, not a standalone network service with built-in authentication or tenancy controls. Evidence anchors: `cmd/gbash/cli.go` / `runCLI`, `runtime/runtime.go` / `Runtime`, `README.md`.
 - Assumption: the default posture is virtual filesystem, no host subprocess fallback, network off unless a client is injected, and symlink traversal denied. Evidence anchors: `runtime/runtime.go` / `New`, `policy/policy.go` / `SymlinkDeny`, `shell/mvdan.go` / `execHandler`.
 - Open questions that would materially change ranking:
   - Which concrete lower filesystem backends will be used in production beyond `MemoryFS` and whether any expose host-mounted secrets or shared workspaces.
@@ -14,7 +14,7 @@
 
 ## System model
 ### Primary components
-- CLI front end: `cmd/jbgo/cli.go` reads script text from stdin or launches the interactive shell in `cmd/jbgo/repl.go`, then delegates execution to the runtime.
+- CLI front end: `cmd/gbash/cli.go` reads script text from stdin or launches the interactive shell in `cmd/gbash/repl.go`, then delegates execution to the runtime.
 - Runtime/session layer: `runtime/runtime.go` / `Runtime.New`, `Runtime.NewSession`, and `runtime/session.go` / `Session.exec` build the session filesystem, registry, policy, environment, output buffers, and trace recorder.
 - Shell engine: `shell/mvdan.go` / `MVdan.Run` parses and executes shell ASTs using `mvdan/sh` with project-owned handlers for file access, command resolution, and nested execution.
 - Command registry and implementations: `commands/registry.go` / `DefaultRegistry` defines the executable surface area; commands run as Go code, not host subprocesses. Unknown commands fail with `127` in `shell/mvdan.go` / `execHandler`.
@@ -35,7 +35,7 @@
   - Channel/protocol: CLI stdin or Go API (`ExecutionRequest`).
   - Security guarantees: shell parsing, budget validation, loop instrumentation, output truncation; no authn/authz layer is built into the repo.
   - Validation/normalization: parse with `mvdan/sh`, `validateExecutionBudgets`, `instrumentLoopBudgets`, working-directory resolution.
-  - Evidence anchors: `cmd/jbgo/cli.go` / `runScript`, `cmd/jbgo/repl.go` / `runInteractiveShell`, `runtime/session.go` / `Session.exec`, `shell/validation.go`, `shell/instrument.go`.
+  - Evidence anchors: `cmd/gbash/cli.go` / `runScript`, `cmd/gbash/repl.go` / `runInteractiveShell`, `runtime/session.go` / `Session.exec`, `shell/validation.go`, `shell/instrument.go`.
 - Shell engine -> Command registry
   - Data crossing: resolved command name/path and argv.
   - Channel/protocol: in-process dispatch via `interp.ExecHandler`.
@@ -46,7 +46,7 @@
   - Data crossing: file paths, directory traversals, reads, writes, renames, symlink operations, file contents.
   - Channel/protocol: `fs.FileSystem` interface.
   - Security guarantees: path root checks and default symlink denial, but enforcement quality depends on backend `Realpath` behavior.
-  - Validation/normalization: `policy.CheckPath`, `jbfs.Resolve`, backend `Realpath`.
+  - Validation/normalization: `policy.CheckPath`, `gbfs.Resolve`, backend `Realpath`.
   - Evidence anchors: `policy/pathcheck.go` / `CheckPath`, `policy/policy.go` / `Static.AllowPath`, `shell/mvdan.go` / `openHandler`, `readDirHandler`, `statHandler`, `commands/command.go` / `allowPath`.
 - Commands -> Optional network
   - Data crossing: URL, method, headers, body, redirects, response body.
@@ -86,7 +86,7 @@ flowchart TD
 
 ## Attacker model
 ### Capabilities
-- Provide arbitrary shell text through stdin, REPL input, or `ExecutionRequest.Script`. Evidence anchors: `cmd/jbgo/cli.go` / `runScript`, `cmd/jbgo/repl.go` / `runInteractiveShell`, `runtime/session.go` / `Session.exec`.
+- Provide arbitrary shell text through stdin, REPL input, or `ExecutionRequest.Script`. Evidence anchors: `cmd/gbash/cli.go` / `runScript`, `cmd/gbash/repl.go` / `runInteractiveShell`, `runtime/session.go` / `Session.exec`.
 - Control command arguments, pathnames, stdin, and per-execution environment/workdir overrides. Evidence anchors: `commands/command.go` / `Invocation`, `runtime/runtime.go` / `ExecutionRequest`.
 - Use nested shell execution through `bash`, `sh`, `env`, `timeout`, and `xargs`, still inside the same session. Evidence anchors: `commands/bash.go`, `commands/env.go`, `commands/timeout.go`, `commands/xargs.go`, `commands/subexec_helpers.go`.
 - If network is enabled, fully control `curl` request URL, method, headers, body, and redirect-follow behavior within the configured network client envelope. Evidence anchors: `commands/curl.go` / `Run`, `network/network.go` / `Request` and `HTTPClient.Do`.
@@ -100,8 +100,8 @@ flowchart TD
 ## Entry points and attack surfaces
 | Surface | How reached | Trust boundary | Notes | Evidence (repo path / symbol) |
 | --- | --- | --- | --- | --- |
-| Script stdin | `go run ./cmd/jbgo < script.sh` or API caller passes `ExecutionRequest.Script` | Untrusted script -> runtime | Primary arbitrary-code input for batch execution. | `cmd/jbgo/cli.go` / `runScript`; `runtime/runtime.go` / `ExecutionRequest` |
-| Interactive REPL input | TTY stdin or `-i` flag | Untrusted script -> long-lived session | Persists filesystem and shell-visible env across entries. | `cmd/jbgo/repl.go` / `runInteractiveShell`, `nextInteractiveState` |
+| Script stdin | `go run ./cmd/gbash < script.sh` or API caller passes `ExecutionRequest.Script` | Untrusted script -> runtime | Primary arbitrary-code input for batch execution. | `cmd/gbash/cli.go` / `runScript`; `runtime/runtime.go` / `ExecutionRequest` |
+| Interactive REPL input | TTY stdin or `-i` flag | Untrusted script -> long-lived session | Persists filesystem and shell-visible env across entries. | `cmd/gbash/repl.go` / `runInteractiveShell`, `nextInteractiveState` |
 | Nested subexec wrappers | `bash`, `sh`, `env`, `timeout`, `xargs` | Untrusted command -> nested execution engine | Amplifies work factor while staying inside same sandbox session. | `commands/bash.go`; `commands/env.go`; `commands/timeout.go`; `commands/xargs.go` |
 | Filesystem operations | Redirections, built-in commands, command lookup | Runtime -> FS backend | The highest-value boundary for confidentiality and integrity. | `shell/mvdan.go` / `openHandler`, `lookupCommandPath`; `commands/command.go` / `allowPath` |
 | HTTP egress | `curl` when network configured | Runtime -> external/internal HTTP services | Entirely config-dependent; includes potential SSRF and exfil paths. | `commands/curl.go` / `Run`; `network/network.go` / `HTTPClient.Do` |

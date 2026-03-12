@@ -7,7 +7,7 @@ import (
 
 type Kind string
 
-const SchemaVersion = "just-bash-go.trace.v1"
+const SchemaVersion = "gbash.trace.v1"
 
 const (
 	EventCallExpanded Kind = "call.expanded"

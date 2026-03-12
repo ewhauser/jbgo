@@ -1,9 +1,9 @@
-module github.com/ewhauser/jbgo/examples
+module github.com/ewhauser/gbash/examples
 
 go 1.26.0
 
 require (
-	github.com/ewhauser/jbgo v0.0.0
+	github.com/ewhauser/gbash v0.0.0
 	github.com/klauspost/compress v1.18.4
 	github.com/ncruces/go-sqlite3 v0.31.1
 	github.com/openai/openai-go v1.12.0
@@ -80,4 +80,4 @@ require (
 	rsc.io/ordered v1.1.1 // indirect
 )
 
-replace github.com/ewhauser/jbgo => ../
+replace github.com/ewhauser/gbash => ../

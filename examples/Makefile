@@ -1,7 +1,7 @@
 PROJECT ?= $(shell gcloud config get-value project 2>/dev/null)
 LOCATION ?= us-west1
 MODEL ?= gemini-2.5-flash
-SQLITE_FS_DB ?= /tmp/jbgo-sandbox.db
+SQLITE_FS_DB ?= /tmp/gbash-sandbox.db
 SQLITE_FS_SCRIPT ?= pwd
 
 .PHONY: run run-custom-zstd run-sqlite-backed-fs run-sqlite-backed-fs-repl run-vertex-bash-chat

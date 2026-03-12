@@ -13,8 +13,8 @@ import (
 	"strings"
 	"sync"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbfs "github.com/ewhauser/gbash/fs"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 	"google.golang.org/adk/tool"
 )
 
@@ -38,11 +38,11 @@ type bashToolResult struct {
 }
 
 type persistentBashTool struct {
-	rt         *jbruntime.Runtime
+	rt         *gbruntime.Runtime
 	fixtureDir string
 
 	mu      sync.Mutex
-	session *jbruntime.Session
+	session *gbruntime.Session
 	state   bashState
 }
 
@@ -66,7 +66,7 @@ var labFixtures = []fixtureSpec{
 }
 
 func newPersistentBashTool(ctx context.Context) (*persistentBashTool, error) {
-	rt, err := jbruntime.New(&jbruntime.Config{})
+	rt, err := gbruntime.New(&gbruntime.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}
@@ -93,7 +93,7 @@ func (t *persistentBashTool) runScript(ctx context.Context, input bashToolInput)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	result, err := t.session.Exec(ctx, &jbruntime.ExecutionRequest{
+	result, err := t.session.Exec(ctx, &gbruntime.ExecutionRequest{
 		Name:       "adk-bash",
 		Script:     input.Script,
 		Env:        cloneMap(t.state.env),
@@ -136,7 +136,7 @@ func (t *persistentBashTool) resetLocked(ctx context.Context) error {
 	return nil
 }
 
-func nextBashState(current bashState, result *jbruntime.ExecutionResult) bashState {
+func nextBashState(current bashState, result *gbruntime.ExecutionResult) bashState {
 	next := current
 	if result == nil || result.FinalEnv == nil {
 		if next.workDir == "" {
@@ -155,7 +155,7 @@ func nextBashState(current bashState, result *jbruntime.ExecutionResult) bashSta
 	return next
 }
 
-func seedLab(ctx context.Context, session *jbruntime.Session, fixtureDir string) error {
+func seedLab(ctx context.Context, session *gbruntime.Session, fixtureDir string) error {
 	if session == nil {
 		return errors.New("session is nil")
 	}
@@ -179,7 +179,7 @@ func seedLab(ctx context.Context, session *jbruntime.Session, fixtureDir string)
 		}
 	}
 
-	result, err := session.Exec(ctx, &jbruntime.ExecutionRequest{
+	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
 		Name:    "seed-lab",
 		WorkDir: labDir,
 		Script:  "sqlite3 incidents.db < incidents.sql" + "\n" + "mkdir -p " + workDir + "\n",
@@ -194,7 +194,7 @@ func seedLab(ctx context.Context, session *jbruntime.Session, fixtureDir string)
 	return nil
 }
 
-func writeVirtualFile(ctx context.Context, fsys jbfs.FileSystem, name string, data []byte) error {
+func writeVirtualFile(ctx context.Context, fsys gbfs.FileSystem, name string, data []byte) error {
 	if err := fsys.MkdirAll(ctx, path.Dir(name), 0o755); err != nil {
 		return err
 	}

@@ -7,7 +7,7 @@ import (
 	stdfs "io/fs"
 	"strings"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Link struct{}
@@ -87,6 +87,6 @@ const linkHelpText = `Usage: link FILE1 FILE2
 Call the link function to create a link named FILE2 to an existing FILE1.
 `
 
-const linkVersionText = "link (jbgo) dev\n"
+const linkVersionText = "link (gbash) dev\n"
 
 var _ Command = (*Link)(nil)

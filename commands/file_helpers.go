@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func ensureParentDirExists(ctx context.Context, inv *Invocation, targetAbs string) error {

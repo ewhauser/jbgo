@@ -1,7 +1,7 @@
 ---
 name: command
 description: >
-  Guide for adding new built-in commands or modifying existing ones in just-bash-go.
+  Guide for adding new built-in commands or modifying existing ones in gbash.
   Use this skill whenever the user asks to add a shell command (e.g., "add xxd", "implement seq",
   "add a new builtin"), modify an existing command's behavior, add flags to a command, or fix a
   bug in a command implementation. Also trigger when the user mentions command implementations,

@@ -40,7 +40,7 @@ func (c *Seq) Run(ctx context.Context, inv *Invocation) error {
 		_, _ = fmt.Fprintln(inv.Stdout, "  or:  seq [OPTION]... FIRST INCREMENT LAST")
 		return nil
 	case "version":
-		_, _ = fmt.Fprintln(inv.Stdout, "seq (jbgo)")
+		_, _ = fmt.Fprintln(inv.Stdout, "seq (gbash)")
 		return nil
 	}
 	if len(numbers) == 0 {

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 	"golang.org/x/term"
 )
 
@@ -42,7 +42,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return 0, nil
 	}
 
-	rt, err := jbruntime.New(&jbruntime.Config{})
+	rt, err := gbruntime.New(&gbruntime.Config{})
 	if err != nil {
 		return 1, fmt.Errorf("init runtime: %w", err)
 	}
@@ -54,7 +54,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 }
 
 func parseCLIOptions(args []string, stderr io.Writer) (cliOptions, error) {
-	fs := flag.NewFlagSet("jbgo", flag.ContinueOnError)
+	fs := flag.NewFlagSet("gbash", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	var opts cliOptions
@@ -87,10 +87,10 @@ func parseCompatInvocation(argv0 string, args []string) (*compatInvocation, erro
 		return nil, nil
 	}
 	if len(args) < 2 || args[1] != "exec" {
-		return nil, fmt.Errorf("usage: jbgo compat exec <utility> [args...]")
+		return nil, fmt.Errorf("usage: gbash compat exec <utility> [args...]")
 	}
 	if len(args) < 3 {
-		return nil, fmt.Errorf("jbgo compat exec requires a utility name")
+		return nil, fmt.Errorf("gbash compat exec requires a utility name")
 	}
 	return &compatInvocation{
 		utility: args[2],
@@ -101,7 +101,7 @@ func parseCompatInvocation(argv0 string, args []string) (*compatInvocation, erro
 func multicallUtilityName(argv0 string) string {
 	base := strings.TrimSpace(filepath.Base(argv0))
 	base = strings.TrimSuffix(base, filepath.Ext(base))
-	if base == "" || base == "jbgo" {
+	if base == "" || base == "gbash" {
 		return ""
 	}
 	return base
@@ -118,13 +118,13 @@ func resolveCommandDir(dir string) (string, error) {
 	return filepath.ToSlash(resolved), nil
 }
 
-func runScript(ctx context.Context, rt *jbruntime.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runScript(ctx context.Context, rt *gbruntime.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	src, err := io.ReadAll(stdin)
 	if err != nil {
 		return 1, fmt.Errorf("read stdin: %w", err)
 	}
 
-	result, err := rt.Run(ctx, &jbruntime.ExecutionRequest{
+	result, err := rt.Run(ctx, &gbruntime.ExecutionRequest{
 		Name:   "stdin",
 		Script: string(src),
 	})

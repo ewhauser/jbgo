@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ewhauser/jbgo/commands"
-	"github.com/ewhauser/jbgo/network"
+	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/network"
 )
 
 type stubNetworkClient struct{}

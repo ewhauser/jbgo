@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ewhauser/jbgo/commands"
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/internal/compatfs"
-	"github.com/ewhauser/jbgo/policy"
-	"github.com/ewhauser/jbgo/shell"
-	"github.com/ewhauser/jbgo/trace"
+	"github.com/ewhauser/gbash/commands"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/compatfs"
+	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell"
+	"github.com/ewhauser/gbash/trace"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 )
 
 type Config struct {
-	FS                jbfs.FileSystem
+	FS                gbfs.FileSystem
 	Registry          commands.CommandRegistry
 	Policy            policy.Policy
 	Engine            shell.Engine
@@ -214,7 +214,7 @@ func resolveWorkDir(defaultDir, workDir string) string {
 	if workDir == "" {
 		return defaultDir
 	}
-	return jbfs.Resolve(defaultDir, workDir)
+	return gbfs.Resolve(defaultDir, workDir)
 }
 
 func executionEnv(baseEnv map[string]string, req *commands.ExecutionRequest) map[string]string {

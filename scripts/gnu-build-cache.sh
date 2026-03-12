@@ -5,20 +5,20 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 GNU_BUILD_CACHE_VERSION=${GNU_BUILD_CACHE_VERSION:-v1}
-GNU_BUILD_CACHE_REPO=${GNU_BUILD_CACHE_REPO:-ewhauser/jbgo}
+GNU_BUILD_CACHE_REPO=${GNU_BUILD_CACHE_REPO:-ewhauser/gbash}
 GNU_BUILD_CACHE_TAG=${GNU_BUILD_CACHE_TAG:-gnu-build-cache-v1}
 GNU_CACHE_DIR=${GNU_CACHE_DIR:-.cache/gnu}
-GNU_JBGO_BIN=${GNU_JBGO_BIN:-${GNU_CACHE_DIR}/bin/jbgo}
+GNU_GBASH_BIN=${GNU_GBASH_BIN:-${GNU_CACHE_DIR}/bin/gbash}
 
 if [[ "$GNU_CACHE_DIR" != /* ]]; then
   GNU_CACHE_DIR="$REPO_ROOT/$GNU_CACHE_DIR"
 fi
-if [[ "$GNU_JBGO_BIN" != /* ]]; then
-  GNU_JBGO_BIN="$REPO_ROOT/$GNU_JBGO_BIN"
+if [[ "$GNU_GBASH_BIN" != /* ]]; then
+  GNU_GBASH_BIN="$REPO_ROOT/$GNU_GBASH_BIN"
 fi
 
 GNU_VERSION=$(
-  python3 - "$REPO_ROOT/cmd/jbgo-gnu/manifest.json" <<'PY'
+  python3 - "$REPO_ROOT/cmd/gbash-gnu/manifest.json" <<'PY'
 import json, sys
 with open(sys.argv[1], "r", encoding="utf-8") as f:
     print(json.load(f)["gnu_version"])
@@ -142,7 +142,7 @@ publish_archive() {
 
   (
     cd "$REPO_ROOT"
-    go run ./cmd/jbgo-gnu --cache-dir "$GNU_CACHE_DIR" --write-prepared-build-archive "$archive"
+    go run ./cmd/gbash-gnu --cache-dir "$GNU_CACHE_DIR" --write-prepared-build-archive "$archive"
   )
 
   sha256=$(compute_sha256 "$archive")
@@ -156,7 +156,7 @@ publish_archive() {
     gh release create "$GNU_BUILD_CACHE_TAG" \
       -R "$GNU_BUILD_CACHE_REPO" \
       --title "GNU build cache" \
-      --notes "Prepared GNU coreutils build caches for the jbgo compatibility harness."
+      --notes "Prepared GNU coreutils build caches for the gbash compatibility harness."
   fi
 
   gh release upload "$GNU_BUILD_CACHE_TAG" \
@@ -173,7 +173,7 @@ run_harness() {
   local use_archive=1
 
   ensure_archive_dir
-  mkdir -p "$(dirname "$GNU_JBGO_BIN")"
+  mkdir -p "$(dirname "$GNU_GBASH_BIN")"
 
   if [[ "${GNU_FORCE_REBUILD:-0}" == "1" ]]; then
     use_archive=0
@@ -186,10 +186,10 @@ run_harness() {
 
   (
     cd "$REPO_ROOT"
-    go build -o "$GNU_JBGO_BIN" ./cmd/jbgo
+    go build -o "$GNU_GBASH_BIN" ./cmd/gbash
   )
 
-  local cmd=(go run ./cmd/jbgo-gnu --cache-dir "$GNU_CACHE_DIR" --jbgo-bin "$GNU_JBGO_BIN")
+  local cmd=(go run ./cmd/gbash-gnu --cache-dir "$GNU_CACHE_DIR" --gbash-bin "$GNU_GBASH_BIN")
   if [[ -n "${GNU_RESULTS_DIR:-}" ]]; then
     cmd+=(--results-dir "$GNU_RESULTS_DIR")
   fi
@@ -207,7 +207,7 @@ publish_local_archive() {
   ensure_archive_dir
   (
     cd "$REPO_ROOT"
-    go run ./cmd/jbgo-gnu --cache-dir "$GNU_CACHE_DIR" --write-prepared-build-archive "$ARCHIVE_PATH"
+    go run ./cmd/gbash-gnu --cache-dir "$GNU_CACHE_DIR" --write-prepared-build-archive "$ARCHIVE_PATH"
   )
   local sha256
   sha256=$(compute_sha256 "$ARCHIVE_PATH")

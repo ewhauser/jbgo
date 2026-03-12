@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ewhauser/jbgo/commands"
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/shell"
-	"github.com/ewhauser/jbgo/trace"
+	"github.com/ewhauser/gbash/commands"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/shell"
+	"github.com/ewhauser/gbash/trace"
 )
 
 func (s *Session) Exec(ctx context.Context, req *ExecutionRequest) (*ExecutionResult, error) {
@@ -98,7 +98,7 @@ func (s *Session) subexecCallback(ctx context.Context, req *commands.ExecutionRe
 	return s.exec(ctx, req)
 }
 
-func (s *Session) FileSystem() jbfs.FileSystem {
+func (s *Session) FileSystem() gbfs.FileSystem {
 	return s.fs
 }
 
@@ -106,7 +106,7 @@ func resolveWorkDir(defaultDir, workDir string) string {
 	if workDir == "" {
 		return defaultDir
 	}
-	return jbfs.Resolve(defaultDir, workDir)
+	return gbfs.Resolve(defaultDir, workDir)
 }
 
 func executionEnv(baseEnv map[string]string, req *ExecutionRequest) map[string]string {

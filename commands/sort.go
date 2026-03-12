@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type Sort struct{}
@@ -148,7 +148,7 @@ func (c *Sort) Run(ctx context.Context, inv *Invocation) error {
 
 	output := encodeSortRecords(lines, opts.zeroTerminated)
 	if opts.outputFile != "" {
-		targetAbs := jbfs.Resolve(inv.Cwd, opts.outputFile)
+		targetAbs := gbfs.Resolve(inv.Cwd, opts.outputFile)
 		if err := writeFileContents(ctx, inv, targetAbs, output, 0o644); err != nil {
 			return err
 		}
@@ -1374,6 +1374,6 @@ Supported options:
   --help                show this help text
 `
 
-const sortVersionText = "sort (jbgo) dev\n"
+const sortVersionText = "sort (gbash) dev\n"
 
 var _ Command = (*Sort)(nil)

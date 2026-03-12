@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 	gosqlite "github.com/ncruces/go-sqlite3"
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
@@ -28,7 +28,7 @@ type sqliteFSFactory struct {
 	dbPath string
 }
 
-func (f sqliteFSFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
+func (f sqliteFSFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
 	return newSQLiteFS(ctx, f.dbPath)
 }
 
@@ -145,11 +145,11 @@ func (s *sqliteFS) close() error {
 	return s.conn.Close()
 }
 
-func (s *sqliteFS) Open(ctx context.Context, name string) (jbfs.File, error) {
+func (s *sqliteFS) Open(ctx context.Context, name string) (gbfs.File, error) {
 	return s.OpenFile(ctx, name, os.O_RDONLY, 0)
 }
 
-func (s *sqliteFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (jbfs.File, error) {
+func (s *sqliteFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (gbfs.File, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (s *sqliteFS) OpenFile(ctx context.Context, name string, flag int, perm std
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	requested := jbfs.Resolve(s.cwd, name)
+	requested := gbfs.Resolve(s.cwd, name)
 	var (
 		abs  string
 		node *sqliteNode
@@ -273,7 +273,7 @@ func (s *sqliteFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, error
 
 	abs, node, err := s.resolvePathLocked(name, true, false)
 	if err != nil {
-		return nil, &os.PathError{Op: "stat", Path: jbfs.Resolve(s.cwd, name), Err: err}
+		return nil, &os.PathError{Op: "stat", Path: gbfs.Resolve(s.cwd, name), Err: err}
 	}
 	return newSQLiteFileInfo(path.Base(abs), node), nil
 }
@@ -288,7 +288,7 @@ func (s *sqliteFS) Lstat(ctx context.Context, name string) (stdfs.FileInfo, erro
 
 	abs, node, err := s.resolvePathLocked(name, false, false)
 	if err != nil {
-		return nil, &os.PathError{Op: "lstat", Path: jbfs.Resolve(s.cwd, name), Err: err}
+		return nil, &os.PathError{Op: "lstat", Path: gbfs.Resolve(s.cwd, name), Err: err}
 	}
 	return newSQLiteFileInfo(path.Base(abs), node), nil
 }
@@ -303,7 +303,7 @@ func (s *sqliteFS) ReadDir(ctx context.Context, name string) ([]stdfs.DirEntry, 
 
 	abs, node, err := s.resolvePathLocked(name, true, false)
 	if err != nil {
-		return nil, &os.PathError{Op: "readdir", Path: jbfs.Resolve(s.cwd, name), Err: err}
+		return nil, &os.PathError{Op: "readdir", Path: gbfs.Resolve(s.cwd, name), Err: err}
 	}
 	if !node.mode.IsDir() {
 		return nil, &os.PathError{Op: "readdir", Path: abs, Err: stdfs.ErrInvalid}
@@ -334,7 +334,7 @@ func (s *sqliteFS) Readlink(ctx context.Context, name string) (string, error) {
 
 	abs, node, err := s.resolvePathLocked(name, false, false)
 	if err != nil {
-		return "", &os.PathError{Op: "readlink", Path: jbfs.Resolve(s.cwd, name), Err: err}
+		return "", &os.PathError{Op: "readlink", Path: gbfs.Resolve(s.cwd, name), Err: err}
 	}
 	if node.mode&stdfs.ModeSymlink == 0 {
 		return "", &os.PathError{Op: "readlink", Path: abs, Err: stdfs.ErrInvalid}
@@ -352,7 +352,7 @@ func (s *sqliteFS) Realpath(ctx context.Context, name string) (string, error) {
 
 	abs, _, err := s.resolvePathLocked(name, true, false)
 	if err != nil {
-		return "", &os.PathError{Op: "realpath", Path: jbfs.Resolve(s.cwd, name), Err: err}
+		return "", &os.PathError{Op: "realpath", Path: gbfs.Resolve(s.cwd, name), Err: err}
 	}
 	return abs, nil
 }
@@ -366,7 +366,7 @@ func (s *sqliteFS) Symlink(ctx context.Context, target, linkName string) error {
 	defer s.mu.Unlock()
 
 	return s.withWriteTxLocked(func() error {
-		abs := jbfs.Resolve(s.cwd, linkName)
+		abs := gbfs.Resolve(s.cwd, linkName)
 		if _, err := s.lookupExactNodeLocked(abs); err == nil {
 			return &os.PathError{Op: "symlink", Path: abs, Err: stdfs.ErrExist}
 		} else if !errors.Is(err, stdfs.ErrNotExist) {
@@ -398,7 +398,7 @@ func (s *sqliteFS) Link(ctx context.Context, oldName, newName string) error {
 	return s.withWriteTxLocked(func() error {
 		oldAbs, node, err := s.resolvePathLocked(oldName, false, false)
 		if err != nil {
-			return &os.PathError{Op: "link", Path: jbfs.Resolve(s.cwd, oldName), Err: err}
+			return &os.PathError{Op: "link", Path: gbfs.Resolve(s.cwd, oldName), Err: err}
 		}
 		if node.mode.IsDir() {
 			return &os.PathError{Op: "link", Path: oldAbs, Err: stdfs.ErrInvalid}
@@ -406,7 +406,7 @@ func (s *sqliteFS) Link(ctx context.Context, oldName, newName string) error {
 
 		newAbs, existing, err := s.resolvePathLocked(newName, false, true)
 		if err != nil {
-			return &os.PathError{Op: "link", Path: jbfs.Resolve(s.cwd, newName), Err: err}
+			return &os.PathError{Op: "link", Path: gbfs.Resolve(s.cwd, newName), Err: err}
 		}
 		if existing != nil {
 			return &os.PathError{Op: "link", Path: newAbs, Err: stdfs.ErrExist}
@@ -424,7 +424,7 @@ func (s *sqliteFS) Link(ctx context.Context, oldName, newName string) error {
 }
 
 func (s *sqliteFS) Chown(_ context.Context, name string, _, _ uint32, _ bool) error {
-	return &os.PathError{Op: "chown", Path: jbfs.Resolve(s.cwd, name), Err: stdfs.ErrPermission}
+	return &os.PathError{Op: "chown", Path: gbfs.Resolve(s.cwd, name), Err: stdfs.ErrPermission}
 }
 
 func (s *sqliteFS) Chmod(ctx context.Context, name string, mode stdfs.FileMode) error {
@@ -438,7 +438,7 @@ func (s *sqliteFS) Chmod(ctx context.Context, name string, mode stdfs.FileMode) 
 	return s.withWriteTxLocked(func() error {
 		_, node, err := s.resolvePathLocked(name, true, false)
 		if err != nil {
-			return &os.PathError{Op: "chmod", Path: jbfs.Resolve(s.cwd, name), Err: err}
+			return &os.PathError{Op: "chmod", Path: gbfs.Resolve(s.cwd, name), Err: err}
 		}
 		typeBits := node.mode &^ stdfs.ModePerm
 		node.mode = typeBits | mode.Perm()
@@ -458,7 +458,7 @@ func (s *sqliteFS) Chtimes(ctx context.Context, name string, _, mtime time.Time)
 	return s.withWriteTxLocked(func() error {
 		_, node, err := s.resolvePathLocked(name, true, false)
 		if err != nil {
-			return &os.PathError{Op: "chtimes", Path: jbfs.Resolve(s.cwd, name), Err: err}
+			return &os.PathError{Op: "chtimes", Path: gbfs.Resolve(s.cwd, name), Err: err}
 		}
 		if mtime.IsZero() {
 			mtime = time.Now().UTC()
@@ -476,7 +476,7 @@ func (s *sqliteFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMod
 	defer s.mu.Unlock()
 
 	return s.withWriteTxLocked(func() error {
-		return s.mkdirAllLocked(jbfs.Resolve(s.cwd, name), perm)
+		return s.mkdirAllLocked(gbfs.Resolve(s.cwd, name), perm)
 	})
 }
 
@@ -491,7 +491,7 @@ func (s *sqliteFS) Remove(ctx context.Context, name string, recursive bool) erro
 	return s.withWriteTxLocked(func() error {
 		abs, node, err := s.resolvePathLocked(name, false, false)
 		if err != nil {
-			return &os.PathError{Op: "remove", Path: jbfs.Resolve(s.cwd, name), Err: err}
+			return &os.PathError{Op: "remove", Path: gbfs.Resolve(s.cwd, name), Err: err}
 		}
 		if abs == "/" {
 			return &os.PathError{Op: "remove", Path: abs, Err: stdfs.ErrPermission}
@@ -537,12 +537,12 @@ func (s *sqliteFS) Rename(ctx context.Context, oldName, newName string) error {
 	return s.withWriteTxLocked(func() error {
 		oldAbs, node, err := s.resolvePathLocked(oldName, false, false)
 		if err != nil {
-			return &os.PathError{Op: "rename", Path: jbfs.Resolve(s.cwd, oldName), Err: err}
+			return &os.PathError{Op: "rename", Path: gbfs.Resolve(s.cwd, oldName), Err: err}
 		}
 
 		newAbs, existing, err := s.resolvePathLocked(newName, false, true)
 		if err != nil {
-			return &os.PathError{Op: "rename", Path: jbfs.Resolve(s.cwd, newName), Err: err}
+			return &os.PathError{Op: "rename", Path: gbfs.Resolve(s.cwd, newName), Err: err}
 		}
 		if existing != nil {
 			return &os.PathError{Op: "rename", Path: newAbs, Err: stdfs.ErrExist}
@@ -583,7 +583,7 @@ func (s *sqliteFS) Chdir(name string) error {
 
 	abs, node, err := s.resolvePathLocked(name, true, false)
 	if err != nil {
-		return &os.PathError{Op: "chdir", Path: jbfs.Resolve(s.cwd, name), Err: err}
+		return &os.PathError{Op: "chdir", Path: gbfs.Resolve(s.cwd, name), Err: err}
 	}
 	if !node.mode.IsDir() {
 		return &os.PathError{Op: "chdir", Path: abs, Err: stdfs.ErrInvalid}
@@ -593,11 +593,11 @@ func (s *sqliteFS) Chdir(name string) error {
 }
 
 func (s *sqliteFS) resolvePathLocked(name string, followFinal, allowMissingFinal bool) (string, *sqliteNode, error) {
-	return s.resolveAbsLocked(jbfs.Resolve(s.cwd, name), followFinal, allowMissingFinal, 0)
+	return s.resolveAbsLocked(gbfs.Resolve(s.cwd, name), followFinal, allowMissingFinal, 0)
 }
 
 func (s *sqliteFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal bool, depth int) (string, *sqliteNode, error) {
-	abs = jbfs.Clean(abs)
+	abs = gbfs.Clean(abs)
 	if depth > sqliteMaxSymlinkDepth {
 		return "", nil, errTooManySymlinks
 	}
@@ -620,20 +620,20 @@ func (s *sqliteFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 		}
 		if !ok {
 			if isLast && allowMissingFinal {
-				return jbfs.Resolve(currentPath, part), nil, nil
+				return gbfs.Resolve(currentPath, part), nil, nil
 			}
 			return "", nil, stdfs.ErrNotExist
 		}
 
-		nextPath := jbfs.Resolve(currentPath, part)
+		nextPath := gbfs.Resolve(currentPath, part)
 		node, err := s.loadNodeLocked(childID)
 		if err != nil {
 			return "", nil, err
 		}
 		if node.mode&stdfs.ModeSymlink != 0 && (!isLast || followFinal) {
-			target := jbfs.Resolve(parentDir(nextPath), node.target)
+			target := gbfs.Resolve(parentDir(nextPath), node.target)
 			if !isLast {
-				target = jbfs.Resolve(target, path.Join(parts[i+1:]...))
+				target = gbfs.Resolve(target, path.Join(parts[i+1:]...))
 			}
 			return s.resolveAbsLocked(target, true, allowMissingFinal && isLast, depth+1)
 		}
@@ -652,7 +652,7 @@ func (s *sqliteFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 }
 
 func (s *sqliteFS) resolveCreatePathLocked(abs string, depth int) (string, error) {
-	abs = jbfs.Clean(abs)
+	abs = gbfs.Clean(abs)
 	if depth > sqliteMaxSymlinkDepth {
 		return "", errTooManySymlinks
 	}
@@ -665,14 +665,14 @@ func (s *sqliteFS) resolveCreatePathLocked(abs string, depth int) (string, error
 	parts := strings.Split(strings.TrimPrefix(abs, "/"), "/")
 	for i, part := range parts {
 		isLast := i == len(parts)-1
-		nextPath := jbfs.Resolve(currentPath, part)
+		nextPath := gbfs.Resolve(currentPath, part)
 
 		childID, ok, err := s.lookupChildLocked(currentID, part)
 		if err != nil {
 			return "", err
 		}
 		if !ok {
-			return jbfs.Resolve(currentPath, path.Join(parts[i:]...)), nil
+			return gbfs.Resolve(currentPath, path.Join(parts[i:]...)), nil
 		}
 
 		node, err := s.loadNodeLocked(childID)
@@ -680,9 +680,9 @@ func (s *sqliteFS) resolveCreatePathLocked(abs string, depth int) (string, error
 			return "", err
 		}
 		if node.mode&stdfs.ModeSymlink != 0 {
-			target := jbfs.Resolve(parentDir(nextPath), node.target)
+			target := gbfs.Resolve(parentDir(nextPath), node.target)
 			if !isLast {
-				target = jbfs.Resolve(target, path.Join(parts[i+1:]...))
+				target = gbfs.Resolve(target, path.Join(parts[i+1:]...))
 			}
 			return s.resolveCreatePathLocked(target, depth+1)
 		}
@@ -701,7 +701,7 @@ func (s *sqliteFS) resolveCreatePathLocked(abs string, depth int) (string, error
 }
 
 func (s *sqliteFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
-	name = jbfs.Clean(name)
+	name = gbfs.Clean(name)
 	if name == "/" {
 		return nil
 	}
@@ -709,7 +709,7 @@ func (s *sqliteFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
 	currentPath := "/"
 	currentID := sqliteRootNodeID
 	for part := range strings.SplitSeq(strings.TrimPrefix(name, "/"), "/") {
-		nextPath := jbfs.Resolve(currentPath, part)
+		nextPath := gbfs.Resolve(currentPath, part)
 
 		childID, ok, err := s.lookupChildLocked(currentID, part)
 		if err != nil {
@@ -1208,7 +1208,7 @@ func parentDir(name string) string {
 	if name == "/" {
 		return "/"
 	}
-	return jbfs.Clean(path.Dir(name))
+	return gbfs.Clean(path.Dir(name))
 }
 
 func canRead(flag int) bool {
@@ -1224,7 +1224,7 @@ func canWrite(flag int) bool {
 	}
 }
 
-var _ jbfs.Factory = sqliteFSFactory{}
-var _ jbfs.FileSystem = (*sqliteFS)(nil)
-var _ jbfs.File = (*sqliteFile)(nil)
+var _ gbfs.Factory = sqliteFSFactory{}
+var _ gbfs.FileSystem = (*sqliteFS)(nil)
+var _ gbfs.File = (*sqliteFile)(nil)
 var _ stdfs.FileInfo = sqliteFileInfo{}

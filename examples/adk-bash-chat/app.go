@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	appName       = "jbgo_adk_bash_chat"
+	appName       = "gbash_adk_bash_chat"
 	defaultUserID = "demo-user"
 	bashToolName  = "bash"
 )
@@ -43,7 +43,7 @@ func newChatApp(ctx context.Context, llm model.LLM, modelName string, backend re
 
 	bashFunctionTool, err := functiontool.New(functiontool.Config{
 		Name:        bashToolName,
-		Description: "Run a bash script inside a persistent jbgo sandbox session. Files, working directory, and exported environment variables persist across calls.",
+		Description: "Run a bash script inside a persistent gbash sandbox session. Files, working directory, and exported environment variables persist across calls.",
 	}, bashToolRunner.Run)
 	if err != nil {
 		return nil, fmt.Errorf("create bash function tool: %w", err)
@@ -174,7 +174,7 @@ func (a *chatApp) runTurn(ctx context.Context, input string, stdout, stderr io.W
 }
 
 func printWelcome(w io.Writer, modelName string, backend backendMode) {
-	_, _ = fmt.Fprintf(w, "jbgo ADK Bash Chat\nModel: %s\nBackend: %s\n", modelName, backend)
+	_, _ = fmt.Fprintf(w, "gbash ADK Bash Chat\nModel: %s\nBackend: %s\n", modelName, backend)
 	_, _ = fmt.Fprintf(w, "Seeded lab: %s\nWorkspace: %s\n", labDir, workDir)
 	_, _ = fmt.Fprintln(w, "Commands: /help, /reset, exit")
 	_, _ = fmt.Fprintln(w, "Try: Which service looks most suspicious after the last deploy? Save a markdown summary in /home/agent/work/summary.md.")

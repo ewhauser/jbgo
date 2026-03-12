@@ -38,7 +38,7 @@ optionLoop:
 			_, _ = fmt.Fprintln(inv.Stdout, "usage: base64 [OPTION]... [FILE]")
 			return nil
 		case arg == "--version":
-			_, _ = fmt.Fprintln(inv.Stdout, "base64 (jbgo)")
+			_, _ = fmt.Fprintln(inv.Stdout, "base64 (gbash)")
 			return nil
 		case arg == "--decode":
 			decode = true

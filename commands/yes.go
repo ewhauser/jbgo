@@ -31,7 +31,7 @@ func (c *Yes) Run(ctx context.Context, inv *Invocation) error {
 		_, _ = fmt.Fprintln(inv.Stdout, "usage: yes [STRING]...")
 		return nil
 	case "version":
-		_, _ = fmt.Fprintln(inv.Stdout, "yes (jbgo)")
+		_, _ = fmt.Fprintln(inv.Stdout, "yes (gbash)")
 		return nil
 	}
 

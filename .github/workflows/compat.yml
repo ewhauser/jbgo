@@ -94,7 +94,7 @@ jobs:
           <head>
             <meta charset="utf-8">
             <meta http-equiv="refresh" content="0; url=./compat/latest/">
-            <title>jbgo compatibility</title>
+            <title>gbash compatibility</title>
           </head>
           <body>
             <p>Redirecting to <a href="./compat/latest/">the latest compatibility report</a>.</p>
@@ -109,7 +109,7 @@ jobs:
       - name: Summarize compat run
         if: always()
         env:
-          PAGE_URL: https://ewhauser.github.io/jbgo/compat/latest/
+          PAGE_URL: https://ewhauser.github.io/gbash/compat/latest/
           COMPAT_EXIT_CODE: ${{ steps.run-compat.outputs.exit_code }}
           PUBLISHABLE: ${{ steps.publish-state.outputs.publishable }}
           DEPLOYABLE: ${{ steps.publish-state.outputs.deployable }}

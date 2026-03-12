@@ -139,6 +139,6 @@ const basenameHelpText = `Usage: basename NAME [SUFFIX]
 Print NAME with any leading directory components removed.
 `
 
-const basenameVersionText = "basename (jbgo) dev\n"
+const basenameVersionText = "basename (gbash) dev\n"
 
 var _ Command = (*Basename)(nil)

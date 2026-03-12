@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf16"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Column struct{}

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ewhauser/jbgo/commands"
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func newRuntime(t testing.TB, cfg *Config) *Runtime {

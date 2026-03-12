@@ -54,7 +54,7 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 			{
 				Name:     "base32",
 				Inactive: true,
-				Reason:   "implemented in jbgo, but not included in the compatibility manifest",
+				Reason:   "implemented in gbash, but not included in the compatibility manifest",
 			},
 		},
 	}
@@ -78,7 +78,7 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 		"cat.log",
 		"base32",
 		"<tr class=\"inactive\">",
-		"implemented in jbgo, but not included in the compatibility manifest",
+		"implemented in gbash, but not included in the compatibility manifest",
 		"all selected tests skipped",
 		"1 passed, 1 failed, 1 skip-only, 0 empty",
 		"n/a",

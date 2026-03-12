@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 const defaultWorkDir = "/home/agent"
@@ -31,8 +31,8 @@ func run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []
 		return 1, err
 	}
 
-	rt, err := jbruntime.New(&jbruntime.Config{
-		FileSystem: jbruntime.CustomFileSystem(
+	rt, err := gbruntime.New(&gbruntime.Config{
+		FileSystem: gbruntime.CustomFileSystem(
 			sqliteFSFactory{dbPath: opts.dbPath},
 			opts.workDir,
 		),
@@ -54,7 +54,7 @@ func run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []
 		script = string(data)
 	}
 
-	result, err := rt.Run(ctx, &jbruntime.ExecutionRequest{
+	result, err := rt.Run(ctx, &gbruntime.ExecutionRequest{
 		Name:   "sqlite-backed-fs",
 		Script: script,
 	})

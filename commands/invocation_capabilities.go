@@ -10,10 +10,10 @@ import (
 	"os"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/network"
-	"github.com/ewhauser/jbgo/policy"
-	"github.com/ewhauser/jbgo/trace"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/network"
+	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/trace"
 )
 
 type FetchRequest = network.Request
@@ -27,7 +27,7 @@ type InvocationOptions struct {
 	Stdin                 io.Reader
 	Stdout                io.Writer
 	Stderr                io.Writer
-	FileSystem            jbfs.FileSystem
+	FileSystem            gbfs.FileSystem
 	Network               network.Client
 	Policy                policy.Policy
 	Trace                 trace.Recorder
@@ -37,7 +37,7 @@ type InvocationOptions struct {
 
 type CommandFS struct {
 	cwd    string
-	fsys   jbfs.FileSystem
+	fsys   gbfs.FileSystem
 	pol    policy.Policy
 	trace  trace.Recorder
 	stderr io.Writer
@@ -55,7 +55,7 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 	inv := &Invocation{
 		Args:                  append([]string(nil), opts.Args...),
 		Env:                   cloneEnv(opts.Env),
-		Cwd:                   jbfs.Resolve("/", opts.Cwd),
+		Cwd:                   gbfs.Resolve("/", opts.Cwd),
 		Stdin:                 opts.Stdin,
 		Stdout:                opts.Stdout,
 		Stderr:                opts.Stderr,
@@ -83,12 +83,12 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 
 func (fs *CommandFS) Resolve(name string) string {
 	if fs == nil {
-		return jbfs.Clean(name)
+		return gbfs.Clean(name)
 	}
-	return jbfs.Resolve(fs.cwd, name)
+	return gbfs.Resolve(fs.cwd, name)
 }
 
-func (fs *CommandFS) Open(ctx context.Context, name string) (jbfs.File, error) {
+func (fs *CommandFS) Open(ctx context.Context, name string) (gbfs.File, error) {
 	abs, err := fs.prepare(ctx, policy.FileActionRead, name)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (fs *CommandFS) Open(ctx context.Context, name string) (jbfs.File, error) {
 	return file, nil
 }
 
-func (fs *CommandFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (jbfs.File, error) {
+func (fs *CommandFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (gbfs.File, error) {
 	abs := fs.Resolve(name)
 	if canRead := flag&(os.O_WRONLY|os.O_RDWR) != os.O_WRONLY; canRead {
 		if err := fs.check(ctx, policy.FileActionRead, abs); err != nil {
@@ -294,7 +294,7 @@ func (fs *CommandFS) Chdir(name string) error {
 	return nil
 }
 
-func (fs *CommandFS) raw() jbfs.FileSystem {
+func (fs *CommandFS) raw() gbfs.FileSystem {
 	return fs.fsys
 }
 

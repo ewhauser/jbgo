@@ -225,7 +225,7 @@ func TestSortSupportsVersionFlag(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stdout, "sort (jbgo)") {
+	if !strings.Contains(result.Stdout, "sort (gbash)") {
 		t.Fatalf("Stdout = %q, want version banner", result.Stdout)
 	}
 }

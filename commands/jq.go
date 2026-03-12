@@ -714,7 +714,7 @@ func sortedMapKeys[V any](values map[string]V) []string {
 	return keys
 }
 
-const jqHelpText = `jq - query JSON values inside the just-bash-go sandbox
+const jqHelpText = `jq - query JSON values inside the gbash sandbox
 
 Usage:
   jq [options] <filter> [file ...]
@@ -747,4 +747,4 @@ Supported options:
   --tab                  use tabs for indentation
 `
 
-const jqVersionText = "jq (just-bash-go) backed by gojq v0.12.18\n"
+const jqVersionText = "jq (gbash) backed by gojq v0.12.18\n"

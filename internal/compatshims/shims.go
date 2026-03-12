@@ -52,6 +52,6 @@ func replaceWithSymlink(path, target string) error {
 }
 
 func stubScript(name string) string {
-	message := strings.NewReplacer("\\", "\\\\", "\"", "\\\"").Replace(name + ": unsupported in jbgo GNU compatibility harness")
+	message := strings.NewReplacer("\\", "\\\\", "\"", "\\\"").Replace(name + ": unsupported in gbash GNU compatibility harness")
 	return fmt.Sprintf("#!/bin/sh\nprintf \"%s\\n\" >&2\nexit 127\n", message)
 }

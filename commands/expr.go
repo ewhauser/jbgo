@@ -29,7 +29,7 @@ func (c *Expr) Run(_ context.Context, inv *Invocation) error {
 		return nil
 	}
 	if args[0] == "--version" {
-		_, _ = fmt.Fprintln(inv.Stdout, "expr (jbgo)")
+		_, _ = fmt.Fprintln(inv.Stdout, "expr (gbash)")
 		return nil
 	}
 	if args[0] == "--" {

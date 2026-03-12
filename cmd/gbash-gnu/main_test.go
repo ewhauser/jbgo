@@ -210,7 +210,7 @@ func TestCompleteUtilityResultsAddsInactivePlaceholders(t *testing.T) {
 	if got[0].Name != "base32" || !got[0].Inactive {
 		t.Fatalf("base32 row = %#v, want inactive placeholder", got[0])
 	}
-	if got[0].Reason != "implemented in jbgo, but not included in the compatibility manifest" {
+	if got[0].Reason != "implemented in gbash, but not included in the compatibility manifest" {
 		t.Fatalf("base32 reason = %q", got[0].Reason)
 	}
 	if got[1].Name != "basename" || got[1].Inactive {
@@ -276,7 +276,7 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	if err := os.WriteFile(makeBin, []byte(script), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake make) error = %v", err)
 	}
-	configShell := "/tmp/jbgo-bash"
+	configShell := "/tmp/gbash-bash"
 
 	result, err := runMakeCheck(context.Background(), makeBin, workDir, configShell, []string{"tests/misc/example.sh"}, logPath)
 	if err != nil {
@@ -304,12 +304,12 @@ func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workDir, "Makefile"), []byte(makefile), 0o644); err != nil {
 		t.Fatalf("WriteFile(Makefile) error = %v", err)
 	}
-	jbgoBin := filepath.Join(workDir, "jbgo")
-	if err := os.WriteFile(jbgoBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile(jbgoBin) error = %v", err)
+	gbashBin := filepath.Join(workDir, "gbash")
+	if err := os.WriteFile(gbashBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(gbashBin) error = %v", err)
 	}
 
-	err := prepareProgramDir(workDir, jbgoBin, []string{"sort"}, map[string]struct{}{
+	err := prepareProgramDir(workDir, gbashBin, []string{"sort"}, map[string]struct{}{
 		"bash": {},
 		"sh":   {},
 		"sort": {},
@@ -474,10 +474,10 @@ func TestExtractTarGzPreservesTarHeaderModTimes(t *testing.T) {
 	}
 }
 
-func TestParseOptionsAllowsPreparedArchiveWriterWithoutJBGOBin(t *testing.T) {
+func TestParseOptionsAllowsPreparedArchiveWriterWithoutGBASHBin(t *testing.T) {
 	argv := os.Args
 	t.Cleanup(func() { os.Args = argv })
-	os.Args = []string{"jbgo-gnu", "--write-prepared-build-archive", "/tmp/prepared.tar.gz"}
+	os.Args = []string{"gbash-gnu", "--write-prepared-build-archive", "/tmp/prepared.tar.gz"}
 
 	opts, err := parseOptions()
 	if err != nil {
@@ -491,7 +491,7 @@ func TestParseOptionsAllowsPreparedArchiveWriterWithoutJBGOBin(t *testing.T) {
 func TestParseOptionsRejectsConflictingPreparedArchiveFlags(t *testing.T) {
 	argv := os.Args
 	t.Cleanup(func() { os.Args = argv })
-	os.Args = []string{"jbgo-gnu", "--jbgo-bin", "/tmp/jbgo", "--prepared-build-archive", "/tmp/in.tar.gz", "--write-prepared-build-archive", "/tmp/out.tar.gz"}
+	os.Args = []string{"gbash-gnu", "--gbash-bin", "/tmp/gbash", "--prepared-build-archive", "/tmp/in.tar.gz", "--write-prepared-build-archive", "/tmp/out.tar.gz"}
 
 	if _, err := parseOptions(); err == nil {
 		t.Fatalf("parseOptions() error = nil, want conflict error")

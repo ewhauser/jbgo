@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/network"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/network"
 )
 
 type Curl struct{}
@@ -148,7 +148,7 @@ func (c *Curl) Run(ctx context.Context, inv *Invocation) error {
 		if filename == "" {
 			filename = extractCurlFilename(requestURL)
 		}
-		if err := writeFileContents(ctx, inv, jbfs.Resolve(inv.Cwd, filename), curlOutputFileBody(opts, resp), 0o644); err != nil {
+		if err := writeFileContents(ctx, inv, gbfs.Resolve(inv.Cwd, filename), curlOutputFileBody(opts, resp), 0o644); err != nil {
 			return err
 		}
 		if !opts.verbose {
@@ -556,7 +556,7 @@ func saveCurlCookies(ctx context.Context, inv *Invocation, opts *curlOptions, re
 	if setCookie == "" {
 		return nil
 	}
-	return writeFileContents(ctx, inv, jbfs.Resolve(inv.Cwd, opts.cookieJar), []byte(setCookie), 0o644)
+	return writeFileContents(ctx, inv, gbfs.Resolve(inv.Cwd, opts.cookieJar), []byte(setCookie), 0o644)
 }
 
 func buildCurlOutput(opts *curlOptions, resp *network.Response, requestURL string) *bytes.Buffer {

@@ -16,7 +16,7 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/ncruces/go-sqlite3/ext/serdes"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type sqliteOutputMode string
@@ -104,7 +104,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *Invocation) error {
 		if err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
-		_, _ = fmt.Fprintf(inv.Stdout, "sqlite3 (just-bash-go) backed by ncruces/go-sqlite3 v0.31.1 / SQLite %s\n", version)
+		_, _ = fmt.Fprintf(inv.Stdout, "sqlite3 (gbash) backed by ncruces/go-sqlite3 v0.31.1 / SQLite %s\n", version)
 		return nil
 	case parsed.database == "":
 		return exitf(inv, 1, "sqlite3: missing database argument")
@@ -1152,7 +1152,7 @@ func sqliteVersion(ctx context.Context) (string, error) {
 	return stmt.ColumnText(0), nil
 }
 
-const sqliteHelpText = `sqlite3 - SQLite database CLI inside the just-bash-go sandbox
+const sqliteHelpText = `sqlite3 - SQLite database CLI inside the gbash sandbox
 
 Usage:
   sqlite3 [OPTIONS] DATABASE [SQL]

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ewhauser/jbgo/policy"
-	"github.com/ewhauser/jbgo/trace"
+	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/trace"
 )
 
 func TestTraceEventsIncludeSchemaSessionAndExecutionIDs(t *testing.T) {

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ewhauser/jbgo/commands"
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/network"
-	"github.com/ewhauser/jbgo/policy"
-	"github.com/ewhauser/jbgo/shell"
+	"github.com/ewhauser/gbash/commands"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/network"
+	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell"
 )
 
 type Config struct {
@@ -31,7 +31,7 @@ type Runtime struct {
 type Session struct {
 	cfg Config
 	id  string
-	fs  jbfs.FileSystem
+	fs  gbfs.FileSystem
 	mu  sync.Mutex
 }
 

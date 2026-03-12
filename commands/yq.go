@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	logging "gopkg.in/op/go-logging.v1"
 )
@@ -341,7 +341,7 @@ func yqLooksLikeInput(inv *Invocation, token string) bool {
 		return true
 	}
 
-	info, err := inv.FS.Stat(context.Background(), jbfs.Resolve(inv.Cwd, token))
+	info, err := inv.FS.Stat(context.Background(), gbfs.Resolve(inv.Cwd, token))
 	return err == nil && !info.IsDir()
 }
 
@@ -645,7 +645,7 @@ func normalizeYQFormat(format string) string {
 	return format
 }
 
-const yqHelpText = `yq - query YAML and JSON values inside the just-bash-go sandbox
+const yqHelpText = `yq - query YAML and JSON values inside the gbash sandbox
 
 Usage:
   yq [eval|e|eval-all|ea] [options] [expression] [file ...]
@@ -672,6 +672,6 @@ Notes:
   - yqlib env and file operators are disabled; use explicit command arguments instead.
 `
 
-const yqVersionText = "yq (just-bash-go) backed by mikefarah/yq v4.52.4\n"
+const yqVersionText = "yq (gbash) backed by mikefarah/yq v4.52.4\n"
 
 var _ Command = (*YQ)(nil)

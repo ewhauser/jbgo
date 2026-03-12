@@ -24,8 +24,8 @@ import (
 	"strings"
 	"time"
 
-	jbcommands "github.com/ewhauser/jbgo/commands"
-	"github.com/ewhauser/jbgo/internal/compatshims"
+	gbcommands "github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/compatshims"
 )
 
 //go:embed manifest.json
@@ -52,7 +52,7 @@ type skipPattern struct {
 
 type options struct {
 	cacheDir                  string
-	jbgoBin                   string
+	gbashBin                  string
 	utils                     string
 	tests                     string
 	resultsDir                string
@@ -145,9 +145,9 @@ func main() {
 
 func parseOptions() (options, error) {
 	var opts options
-	fs := flag.NewFlagSet("jbgo-gnu", flag.ContinueOnError)
+	fs := flag.NewFlagSet("gbash-gnu", flag.ContinueOnError)
 	fs.StringVar(&opts.cacheDir, "cache-dir", ".cache/gnu", "cache directory for GNU sources and results")
-	fs.StringVar(&opts.jbgoBin, "jbgo-bin", "", "path to the jbgo binary under test")
+	fs.StringVar(&opts.gbashBin, "gbash-bin", "", "path to the gbash binary under test")
 	fs.StringVar(&opts.utils, "utils", strings.TrimSpace(os.Getenv("GNU_UTILS")), "comma or space separated utility list")
 	fs.StringVar(&opts.tests, "tests", strings.TrimSpace(os.Getenv("GNU_TESTS")), "comma or newline separated explicit GNU test files")
 	fs.StringVar(&opts.resultsDir, "results-dir", strings.TrimSpace(os.Getenv("GNU_RESULTS_DIR")), "directory to write summary.json, logs, and published report assets")
@@ -167,8 +167,8 @@ func parseOptions() (options, error) {
 	if strings.TrimSpace(opts.preparedBuildArchive) != "" && strings.TrimSpace(opts.writePreparedBuildArchive) != "" {
 		return options{}, fmt.Errorf("--prepared-build-archive and --write-prepared-build-archive cannot be combined")
 	}
-	if !opts.setupOnly && strings.TrimSpace(opts.writePreparedBuildArchive) == "" && strings.TrimSpace(opts.jbgoBin) == "" {
-		return options{}, fmt.Errorf("--jbgo-bin is required unless --setup or --write-prepared-build-archive is used")
+	if !opts.setupOnly && strings.TrimSpace(opts.writePreparedBuildArchive) == "" && strings.TrimSpace(opts.gbashBin) == "" {
+		return options{}, fmt.Errorf("--gbash-bin is required unless --setup or --write-prepared-build-archive is used")
 	}
 	return opts, nil
 }
@@ -226,11 +226,11 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 		return nil
 	}
 
-	jbgoBin, err := filepath.Abs(opts.jbgoBin)
+	gbashBin, err := filepath.Abs(opts.gbashBin)
 	if err != nil {
 		return err
 	}
-	if err := ensureExecutable(jbgoBin); err != nil {
+	if err := ensureExecutable(gbashBin); err != nil {
 		return err
 	}
 
@@ -251,7 +251,7 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 	if preparedArchivePath != "" {
 		workDir, err = prepareWorkDirFromPreparedArchive(ctx, cacheDir, mf.GNUVersion, preparedArchivePath)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "jbgo-gnu: prepared build archive unavailable (%v); falling back to full build\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "gbash-gnu: prepared build archive unavailable (%v); falling back to full build\n", err)
 		}
 	}
 	if workDir == "" {
@@ -295,7 +295,7 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 		runTargets = []utilityManifest{{Name: "explicit-tests"}}
 	}
 	supportedSet := implementedGNUProgramSet()
-	if err := prepareProgramDir(workDir, jbgoBin, programs, supportedSet); err != nil {
+	if err := prepareProgramDir(workDir, gbashBin, programs, supportedSet); err != nil {
 		return err
 	}
 	configShell, err := compatConfigShellPath(workDir)
@@ -661,7 +661,7 @@ func listGNUPrograms(ctx context.Context, workDir string) ([]string, error) {
 	return lines, nil
 }
 
-func prepareProgramDir(workDir, jbgoBin string, programs []string, supported map[string]struct{}) error {
+func prepareProgramDir(workDir, gbashBin string, programs []string, supported map[string]struct{}) error {
 	srcDir := filepath.Join(workDir, "src")
 	supportedNames := make([]string, 0)
 	unsupportedNames := make([]string, 0)
@@ -676,20 +676,20 @@ func prepareProgramDir(workDir, jbgoBin string, programs []string, supported map
 			unsupportedNames = append(unsupportedNames, name)
 		}
 	}
-	if err := compatshims.SymlinkCommands(srcDir, jbgoBin, supportedNames); err != nil {
+	if err := compatshims.SymlinkCommands(srcDir, gbashBin, supportedNames); err != nil {
 		return err
 	}
 	if err := compatshims.WriteUnsupportedStubs(srcDir, unsupportedNames); err != nil {
 		return err
 	}
 	helperShells := compatHelperShells(supported)
-	if err := compatshims.SymlinkCommands(srcDir, jbgoBin, helperShells); err != nil {
+	if err := compatshims.SymlinkCommands(srcDir, gbashBin, helperShells); err != nil {
 		return err
 	}
 	supportedNames = appendUniqueStrings(supportedNames, helperShells...)
 	if _, ok := supported["install"]; ok {
 		supportedNames = append(supportedNames, "ginstall")
-		if err := compatshims.SymlinkCommands(srcDir, jbgoBin, []string{"ginstall"}); err != nil {
+		if err := compatshims.SymlinkCommands(srcDir, gbashBin, []string{"ginstall"}); err != nil {
 			return err
 		}
 	} else {
@@ -698,7 +698,7 @@ func prepareProgramDir(workDir, jbgoBin string, programs []string, supported map
 			return err
 		}
 	}
-	if err := installTestRelinkHook(workDir, jbgoBin, supportedNames, unsupportedNames); err != nil {
+	if err := installTestRelinkHook(workDir, gbashBin, supportedNames, unsupportedNames); err != nil {
 		return err
 	}
 	return nil
@@ -739,7 +739,7 @@ func compatConfigShellPath(workDir string) (string, error) {
 
 func implementedGNUProgramSet() map[string]struct{} {
 	supported := make(map[string]struct{})
-	for _, name := range jbcommands.DefaultRegistry().Names() {
+	for _, name := range gbcommands.DefaultRegistry().Names() {
 		supported[name] = struct{}{}
 	}
 	return supported
@@ -758,8 +758,8 @@ func disableCheckRebuild(workDir string) error {
 	return os.WriteFile(makefilePath, []byte(updated), 0o644)
 }
 
-func installTestRelinkHook(workDir, jbgoBin string, supportedNames, unsupportedNames []string) error {
-	hookDir := filepath.Join(workDir, "build-aux", "jbgo-harness")
+func installTestRelinkHook(workDir, gbashBin string, supportedNames, unsupportedNames []string) error {
+	hookDir := filepath.Join(workDir, "build-aux", "gbash-harness")
 	if err := os.MkdirAll(hookDir, 0o755); err != nil {
 		return err
 	}
@@ -777,12 +777,12 @@ set -eu
 
 src_dir=$1
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-jbgo_bin=%s
+gbash_bin=%s
 
 while IFS= read -r name || [ -n "$name" ]; do
   [ -n "$name" ] || continue
   rm -rf "$src_dir/$name"
-  ln -sf "$jbgo_bin" "$src_dir/$name"
+  ln -sf "$gbash_bin" "$src_dir/$name"
 done < "$script_dir/supported-programs.txt"
 
 while IFS= read -r name || [ -n "$name" ]; do
@@ -790,12 +790,12 @@ while IFS= read -r name || [ -n "$name" ]; do
   rm -rf "$src_dir/$name"
   cat > "$src_dir/$name" <<'EOF'
 #!/bin/sh
-printf '%%s: unsupported by jbgo GNU harness\n' "$(basename "$0")" >&2
+printf '%%s: unsupported by gbash GNU harness\n' "$(basename "$0")" >&2
 exit 127
 EOF
   chmod 755 "$src_dir/$name"
 done < "$script_dir/unsupported-programs.txt"
-`, shellSingleQuoteForScript(jbgoBin))
+`, shellSingleQuoteForScript(gbashBin))
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		return err
 	}
@@ -819,9 +819,9 @@ func patchTestsEnvironment(makefilePath string) error {
 		return err
 	}
 	const needle = "TESTS_ENVIRONMENT = \\\n"
-	const injection = "TESTS_ENVIRONMENT = \\\n  $(SHELL) '$(abs_top_builddir)/build-aux/jbgo-harness/relink.sh' '$(abs_top_builddir)/src' || exit $$?; \\\n"
+	const injection = "TESTS_ENVIRONMENT = \\\n  $(SHELL) '$(abs_top_builddir)/build-aux/gbash-harness/relink.sh' '$(abs_top_builddir)/src' || exit $$?; \\\n"
 	contents := string(data)
-	if strings.Contains(contents, "build-aux/jbgo-harness/relink.sh") {
+	if strings.Contains(contents, "build-aux/gbash-harness/relink.sh") {
 		return nil
 	}
 	updated := strings.Replace(contents, needle, injection, 1)
@@ -1213,7 +1213,7 @@ func inactiveUtilityReason(name string, manifestSet, selectedSet, supportedSet m
 		return "not selected in this run"
 	}
 	if _, ok := supportedSet[name]; ok {
-		return "implemented in jbgo, but not included in the compatibility manifest"
+		return "implemented in gbash, but not included in the compatibility manifest"
 	}
 	return "not currently covered by the compatibility manifest"
 }
@@ -1405,7 +1405,7 @@ func extractTarGz(archivePath, destination string) error {
 }
 
 func sourceCacheCurrent(sourceDir string) (bool, error) {
-	data, err := os.ReadFile(filepath.Join(sourceDir, ".jbgo-cache-version"))
+	data, err := os.ReadFile(filepath.Join(sourceDir, ".gbash-cache-version"))
 	if errorsIsNotExist(err) {
 		return false, nil
 	}
@@ -1416,7 +1416,7 @@ func sourceCacheCurrent(sourceDir string) (bool, error) {
 }
 
 func writeSourceCacheVersion(sourceDir string) error {
-	return os.WriteFile(filepath.Join(sourceDir, ".jbgo-cache-version"), []byte(sourceCacheVersion+"\n"), 0o644)
+	return os.WriteFile(filepath.Join(sourceDir, ".gbash-cache-version"), []byte(sourceCacheVersion+"\n"), 0o644)
 }
 
 func ensureExecutable(path string) error {
@@ -1425,7 +1425,7 @@ func ensureExecutable(path string) error {
 		return err
 	}
 	if info.IsDir() {
-		return fmt.Errorf("%s is a directory, want jbgo binary", path)
+		return fmt.Errorf("%s is a directory, want gbash binary", path)
 	}
 	if info.Mode()&0o111 == 0 {
 		return fmt.Errorf("%s is not executable", path)
@@ -1457,7 +1457,7 @@ func parseList(raw string) []string {
 }
 
 func fatalf(format string, args ...any) {
-	_, _ = fmt.Fprintf(os.Stderr, "jbgo-gnu: "+format+"\n", args...)
+	_, _ = fmt.Fprintf(os.Stderr, "gbash-gnu: "+format+"\n", args...)
 	os.Exit(1)
 }
 

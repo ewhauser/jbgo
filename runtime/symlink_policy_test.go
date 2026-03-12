@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/policy"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type symlinkFSFactory struct {
@@ -15,8 +15,8 @@ type symlinkFSFactory struct {
 	symlinks map[string]string
 }
 
-func (f symlinkFSFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
-	mem := jbfs.NewMemory()
+func (f symlinkFSFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
+	mem := gbfs.NewMemory()
 	for name, contents := range f.files {
 		file, err := mem.OpenFile(ctx, name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {

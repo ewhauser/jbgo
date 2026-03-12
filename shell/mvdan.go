@@ -15,11 +15,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ewhauser/jbgo/commands"
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/network"
-	"github.com/ewhauser/jbgo/policy"
-	"github.com/ewhauser/jbgo/trace"
+	"github.com/ewhauser/gbash/commands"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/network"
+	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/trace"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -41,7 +41,7 @@ type Execution struct {
 	Stdin             io.Reader
 	Stdout            io.Writer
 	Stderr            io.Writer
-	FS                jbfs.FileSystem
+	FS                gbfs.FileSystem
 	Network           network.Client
 	Registry          commands.CommandRegistry
 	Policy            policy.Policy
@@ -206,7 +206,7 @@ func IsExitStatus(err error) bool {
 func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 	return func(ctx context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
 		state := handlerState(ctx, exec)
-		abs := jbfs.Resolve(virtualDir(state.Env, state.Dir), name)
+		abs := gbfs.Resolve(virtualDir(state.Env, state.Dir), name)
 
 		if canRead := flag&(os.O_WRONLY|os.O_RDWR) != os.O_WRONLY; canRead {
 			if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionRead, abs); err != nil {
@@ -240,7 +240,7 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 func (m *MVdan) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
 	return func(ctx context.Context, name string) ([]stdfs.DirEntry, error) {
 		state := handlerState(ctx, exec)
-		abs := jbfs.Resolve(virtualDir(state.Env, state.Dir), name)
+		abs := gbfs.Resolve(virtualDir(state.Env, state.Dir), name)
 		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionReadDir, abs); err != nil {
 			recordPolicyDenied(exec.Trace, err, string(policy.FileActionReadDir), abs, "", 126, "")
 			return nil, handlerPathError(ctx, state.Stderr, "readdir", abs, err)
@@ -253,7 +253,7 @@ func (m *MVdan) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
 func (m *MVdan) statHandler(exec *Execution) interp.StatHandlerFunc {
 	return func(ctx context.Context, name string, _ bool) (stdfs.FileInfo, error) {
 		state := handlerState(ctx, exec)
-		abs := jbfs.Resolve(virtualDir(state.Env, state.Dir), name)
+		abs := gbfs.Resolve(virtualDir(state.Env, state.Dir), name)
 		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, abs); err != nil {
 			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), abs, "", 126, "")
 			return nil, handlerPathError(ctx, state.Stderr, "stat", abs, err)
@@ -314,7 +314,7 @@ func builtinCommandDir(exec *Execution) string {
 	if exec == nil || strings.TrimSpace(exec.BuiltinCommandDir) == "" {
 		return "/bin"
 	}
-	return jbfs.Clean(exec.BuiltinCommandDir)
+	return gbfs.Clean(exec.BuiltinCommandDir)
 }
 
 func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.ExecHandlerFunc {
@@ -480,7 +480,7 @@ func allowBuiltin(ctx context.Context, pol policy.Policy, name string, argv []st
 	return pol.AllowBuiltin(ctx, name, argv)
 }
 
-func allowPath(ctx context.Context, pol policy.Policy, fsys jbfs.FileSystem, action policy.FileAction, name string) error {
+func allowPath(ctx context.Context, pol policy.Policy, fsys gbfs.FileSystem, action policy.FileAction, name string) error {
 	return policy.CheckPath(ctx, pol, fsys, action, name)
 }
 
@@ -555,7 +555,7 @@ func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.
 	}
 
 	for _, pathDir := range pathDirs(env, dir) {
-		fullPath := jbfs.Resolve(pathDir, name)
+		fullPath := gbfs.Resolve(pathDir, name)
 		resolved, ok, err := lookupCommandPath(ctx, exec, dir, fullPath, "path-search", name)
 		if err != nil {
 			return nil, false, err
@@ -569,7 +569,7 @@ func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.
 }
 
 func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, commandName string) (_ *resolvedCommand, ok bool, err error) {
-	fullPath := jbfs.Resolve(dir, name)
+	fullPath := gbfs.Resolve(dir, name)
 	if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, fullPath); err != nil {
 		recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), fullPath, commandName, 126, source)
 		return nil, false, err
@@ -604,7 +604,7 @@ func pathDirs(env expand.Environ, dir string) []string {
 		if entry == "" {
 			continue
 		}
-		dirs = append(dirs, jbfs.Resolve(dir, entry))
+		dirs = append(dirs, gbfs.Resolve(dir, entry))
 	}
 	return dirs
 }
@@ -623,9 +623,9 @@ func shellFailureToWriter(_ context.Context, stderr io.Writer, code int, format 
 
 func virtualDir(env expand.Environ, dir string) string {
 	if pwd := strings.TrimSpace(env.Get("PWD").String()); strings.HasPrefix(pwd, "/") {
-		return jbfs.Clean(pwd)
+		return gbfs.Clean(pwd)
 	}
-	return jbfs.Clean(dir)
+	return gbfs.Clean(dir)
 }
 
 type resolvedHandlerState struct {

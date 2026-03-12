@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Diff commands and flags between vercel-labs/just-bash (TypeScript upstream)
-and just-bash-go (Go port).
+and gbash (Go port).
 
 Outputs a structured markdown section suitable for appending to TODO.md.
 
@@ -404,7 +404,7 @@ def clone_upstream(dest: Path) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Diff just-bash upstream vs Go port")
     parser.add_argument("upstream", type=Path, help="Path to vercel-labs/just-bash checkout")
-    parser.add_argument("go_repo", type=Path, help="Path to just-bash-go repo")
+    parser.add_argument("go_repo", type=Path, help="Path to gbash repo")
     parser.add_argument("--update-todo", action="store_true",
                         help="Write results into TODO.md instead of stdout")
     parser.add_argument("--json", action="store_true",

@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Gzip struct {
@@ -286,7 +286,7 @@ func gunzipStream(src io.Reader, dst io.Writer) error {
 }
 
 func gzipHelpText(commandName string) string {
-	return fmt.Sprintf(`%s - gzip-compatible compression inside the just-bash-go sandbox
+	return fmt.Sprintf(`%s - gzip-compatible compression inside the gbash sandbox
 
 Usage:
   %s [OPTIONS] [FILE...]

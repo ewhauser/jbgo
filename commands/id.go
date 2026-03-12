@@ -34,7 +34,7 @@ func (c *ID) Run(_ context.Context, inv *Invocation) error {
 		_, _ = fmt.Fprintln(inv.Stdout, "usage: id [OPTION]... [USER]...")
 		return nil
 	case "version":
-		_, _ = fmt.Fprintln(inv.Stdout, "id (jbgo)")
+		_, _ = fmt.Fprintln(inv.Stdout, "id (gbash)")
 		return nil
 	}
 
@@ -50,7 +50,7 @@ func (c *ID) Run(_ context.Context, inv *Invocation) error {
 		if len(opts.users) > 0 {
 			return exitf(inv, 1, "id: cannot print security context when user specified")
 		}
-		contextValue := strings.TrimSpace(inv.Env["JBGO_SECURITY_CONTEXT"])
+		contextValue := strings.TrimSpace(inv.Env["GBASH_SECURITY_CONTEXT"])
 		if contextValue == "" {
 			return exitf(inv, 1, "id: --context (-Z) works only on an SELinux/SMACK-enabled kernel")
 		}

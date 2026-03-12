@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/policy"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type commandResolution struct {
@@ -83,7 +83,7 @@ func resolveCommand(ctx context.Context, inv *Invocation, env map[string]string,
 	}
 
 	for _, pathDir := range commandSearchDirs(env, dir) {
-		candidate := jbfs.Resolve(pathDir, name)
+		candidate := gbfs.Resolve(pathDir, name)
 		info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, candidate)
 		if err != nil {
 			return nil, false, err
@@ -111,7 +111,7 @@ func resolveAllCommands(ctx context.Context, inv *Invocation, env map[string]str
 	matches := make([]string, 0)
 	seen := make(map[string]struct{})
 	for _, pathDir := range commandSearchDirs(env, dir) {
-		candidate := jbfs.Resolve(pathDir, name)
+		candidate := gbfs.Resolve(pathDir, name)
 		info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, candidate)
 		if err != nil {
 			return nil, err
@@ -140,7 +140,7 @@ func commandSearchDirs(env map[string]string, dir string) []string {
 		if entry == "" {
 			continue
 		}
-		resolved := jbfs.Resolve(dir, entry)
+		resolved := gbfs.Resolve(dir, entry)
 		if _, ok := seen[resolved]; ok {
 			continue
 		}

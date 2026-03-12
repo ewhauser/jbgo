@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ewhauser/jbgo/network"
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/network"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func FuzzCurlFlagsCommand(f *testing.F) {

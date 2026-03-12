@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 const cdResolveCommandName = "__jb_cd_resolve"
@@ -24,7 +24,7 @@ func (c *CDResolve) Run(ctx context.Context, inv *Invocation) error {
 		return exitf(inv, 2, "%s: usage: %s <cwd> <target>", c.Name(), c.Name())
 	}
 
-	next := jbfs.Resolve(inv.Args[0], inv.Args[1])
+	next := gbfs.Resolve(inv.Args[0], inv.Args[1])
 	info, _, err := statPath(ctx, inv, next)
 	if err != nil {
 		return exitf(inv, 1, "cd: no such file or directory: %q", inv.Args[1])

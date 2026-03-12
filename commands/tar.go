@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/policy"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Tar struct{}
@@ -189,7 +189,7 @@ func runTarCreate(ctx context.Context, inv *Invocation, opts *tarOptions, operan
 	}
 
 	for _, operand := range operands {
-		sourceAbs := jbfs.Resolve(baseDir, operand)
+		sourceAbs := gbfs.Resolve(baseDir, operand)
 		info, _, err := lstatPath(ctx, inv, sourceAbs)
 		if err != nil {
 			return err
@@ -273,7 +273,7 @@ func runTarExtract(ctx context.Context, inv *Invocation, opts *tarOptions) error
 			continue
 		}
 
-		targetAbs := jbfs.Resolve(baseDir, entryName)
+		targetAbs := gbfs.Resolve(baseDir, entryName)
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := tarEnsureDir(ctx, inv, targetAbs, stdfs.FileMode(header.Mode)); err != nil {
@@ -587,7 +587,7 @@ func tarExtractHardlink(ctx context.Context, inv *Invocation, baseDir, targetAbs
 	if err != nil {
 		return exitf(inv, 1, "tar: %v", err)
 	}
-	linkAbs := jbfs.Resolve(baseDir, linkName)
+	linkAbs := gbfs.Resolve(baseDir, linkName)
 	if err := tarEnsureParents(ctx, inv, targetAbs); err != nil {
 		return err
 	}
@@ -641,7 +641,7 @@ func tarEnsureParents(ctx context.Context, inv *Invocation, targetAbs string) er
 	return nil
 }
 
-const tarHelpText = `tar - archive helper inside the just-bash-go sandbox
+const tarHelpText = `tar - archive helper inside the gbash sandbox
 
 Usage:
   tar -c[f] ARCHIVE [PATH...]

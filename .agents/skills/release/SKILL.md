@@ -1,15 +1,15 @@
 ---
 name: release
-description: Manage the tag-driven GitHub release workflow for the `github.com/ewhauser/jbgo` repository. Use when Codex needs to validate release readiness, run GoReleaser checks or snapshots, inspect or update release automation, prepare or publish a SemVer tag, or troubleshoot missing `jbgo` binaries, checksums, or build metadata in GitHub Releases.
+description: Manage the tag-driven GitHub release workflow for the `github.com/ewhauser/gbash` repository. Use when Codex needs to validate release readiness, run GoReleaser checks or snapshots, inspect or update release automation, prepare or publish a SemVer tag, or troubleshoot missing `gbash` binaries, checksums, or build metadata in GitHub Releases.
 ---
 
 # Release
 
-Use this skill for release work in the `github.com/ewhauser/jbgo` repository.
+Use this skill for release work in the `github.com/ewhauser/gbash` repository.
 
 ## Load the release surface
 
-- Read `.goreleaser.yaml`, `.github/workflows/release.yml`, `.github/workflows/release-check.yml`, `Makefile`, `README.md`, `cmd/jbgo/cli.go`, and `cmd/jbgo/version.go` before changing release behavior.
+- Read `.goreleaser.yaml`, `.github/workflows/release.yml`, `.github/workflows/release-check.yml`, `Makefile`, `README.md`, `cmd/gbash/cli.go`, and `cmd/gbash/version.go` before changing release behavior.
 - Check `git status --short` and current tags before cutting or troubleshooting a release.
 - Prefer `make release-check` and `make release-snapshot` so local validation uses the pinned GoReleaser version from `Makefile`.
 
@@ -19,7 +19,7 @@ Use this skill for release work in the `github.com/ewhauser/jbgo` repository.
 - Run `make release-check` after editing `.goreleaser.yaml` or release workflows.
 - Run `make release-snapshot` before tagging when packaging, ldflags, archive naming, or workflow behavior changed.
 - Confirm snapshot output includes Linux and macOS `.tar.gz` archives, Windows `.zip` archives, and `checksums.txt`.
-- Confirm `jbgo --version` reports embedded build metadata by running `go run ./cmd/jbgo --version` locally or by inspecting a produced binary.
+- Confirm `gbash --version` reports embedded build metadata by running `go run ./cmd/gbash --version` locally or by inspecting a produced binary.
 
 ## Cut a release
 
@@ -42,7 +42,7 @@ git push origin v0.1.0
 - If `make release-check` fails, fix `.goreleaser.yaml` or workflow syntax before touching tags.
 - If `make release-snapshot` succeeds locally but GitHub release fails, compare the pinned GoReleaser version in `Makefile` with the versions in the workflows and inspect the GitHub Actions logs.
 - If artifacts are missing or misnamed, inspect the archive and checksum sections in `.goreleaser.yaml`.
-- If `jbgo --version` is wrong, inspect `.goreleaser.yaml` `ldflags` plus `cmd/jbgo/cli.go` and `cmd/jbgo/version.go`.
+- If `gbash --version` is wrong, inspect `.goreleaser.yaml` `ldflags` plus `cmd/gbash/cli.go` and `cmd/gbash/version.go`.
 
 ## Keep the process aligned
 

@@ -6,10 +6,10 @@ import (
 	stdfs "io/fs"
 	"path"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
-func CheckPath(ctx context.Context, pol Policy, fsys jbfs.FileSystem, action FileAction, target string) error {
+func CheckPath(ctx context.Context, pol Policy, fsys gbfs.FileSystem, action FileAction, target string) error {
 	target = cleanAbs(target)
 	if pol == nil {
 		return nil
@@ -42,7 +42,7 @@ func CheckPath(ctx context.Context, pol Policy, fsys jbfs.FileSystem, action Fil
 	return nil
 }
 
-func resolveTarget(ctx context.Context, fsys jbfs.FileSystem, action FileAction, target string) (resolved string, traversed bool, err error) {
+func resolveTarget(ctx context.Context, fsys gbfs.FileSystem, action FileAction, target string) (resolved string, traversed bool, err error) {
 	switch action {
 	case FileActionRead, FileActionStat, FileActionReadDir:
 		resolved, err := fsys.Realpath(ctx, target)

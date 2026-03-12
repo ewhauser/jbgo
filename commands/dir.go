@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Dir struct{}
@@ -297,6 +297,6 @@ Supported options:
   --version           show version information
 `
 
-const dirVersionText = "dir (jbgo) dev\n"
+const dirVersionText = "dir (gbash) dev\n"
 
 var _ Command = (*Dir)(nil)

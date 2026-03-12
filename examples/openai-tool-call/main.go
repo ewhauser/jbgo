@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 )
@@ -163,12 +163,12 @@ func executeBashTool(ctx context.Context, arguments string) (string, error) {
 		return "", errors.New("bash tool call did not include a script")
 	}
 
-	rt, err := jbruntime.New(&jbruntime.Config{})
+	rt, err := gbruntime.New(&gbruntime.Config{})
 	if err != nil {
 		return "", fmt.Errorf("create runtime: %w", err)
 	}
 
-	result, err := rt.Run(ctx, &jbruntime.ExecutionRequest{
+	result, err := rt.Run(ctx, &gbruntime.ExecutionRequest{
 		Script: args.Script,
 	})
 	if err != nil {

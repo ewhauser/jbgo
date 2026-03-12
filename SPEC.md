@@ -1,11 +1,11 @@
-# just-bash-go
+# gbash
 
 Status: Draft v0.1
 Last updated: 2026-03-12
 
 ## 1. Purpose
 
-`just-bash-go` is a deterministic, policy-controlled, sandbox-only, bash-like runtime for AI agents.
+`gbash` is a deterministic, policy-controlled, sandbox-only, bash-like runtime for AI agents.
 
 It preserves the product idea behind Vercel's `just-bash` while making different implementation choices:
 
@@ -19,7 +19,7 @@ The target is not "Bash in Go". The target is a practical shell-shaped runtime f
 
 ## 2. Product Definition
 
-`just-bash-go` is a shell runtime with the following product contract:
+`gbash` is a shell runtime with the following product contract:
 
 - it accepts shell-like scripts and command snippets
 - it evaluates a pragmatic subset of shell semantics
@@ -40,7 +40,7 @@ The runtime is optimized for LLM and agent workloads:
 
 ## 3. Goals
 
-1. Port the `just-bash` concept to a Go-native runtime named `just-bash-go`.
+1. Port the `just-bash` concept to a Go-native runtime named `gbash`.
 2. Use `mvdan/sh/v3` for parsing, ASTs, expansion semantics, control flow, and interpreter behavior where feasible.
 3. Support only sandbox mode.
 4. Use explicit Go command implementations instead of host subprocesses.
@@ -50,7 +50,7 @@ The runtime is optimized for LLM and agent workloads:
 
 ## 4. Non-Goals
 
-`just-bash-go` will not:
+`gbash` will not:
 
 - implement full GNU Bash behavior
 - provide job control, shell history, readline-style editing, or host TTY emulation
@@ -129,14 +129,14 @@ The CLI also provides a minimal interactive shell mode. That mode is a front-end
 
 The CLI also exposes a developer-only compatibility path for external test harnesses:
 
-- `jbgo compat exec <utility> [args...]` runs one registered utility directly instead of reading a shell script from stdin
+- `gbash compat exec <utility> [args...]` runs one registered utility directly instead of reading a shell script from stdin
 - multicall invocation through `argv[0]` is supported so symlinked names like `ls` or `printf` can dispatch to the same path
 - this mode is CLI-only and opt-in; it is not the default library/runtime contract
-- it uses a host-backed filesystem view and host environment specifically so external suites such as GNU coreutils tests can treat `jbgo` like a utility binary
+- it uses a host-backed filesystem view and host environment specifically so external suites such as GNU coreutils tests can treat `gbash` like a utility binary
 
 ### 6.1 Session model
 
-`just-bash-go` should expose a long-lived session abstraction.
+`gbash` should expose a long-lived session abstraction.
 
 - `Runtime` is a factory for configured sessions
 - `Runtime.Run` is a one-shot convenience that creates a fresh session and discards it after execution
@@ -164,7 +164,7 @@ Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesy
 ## 7. Proposed Package Layout
 
 ```text
-cmd/jbgo/             CLI entrypoint for local execution
+cmd/gbash/             CLI entrypoint for local execution
 runtime/              top-level runtime API and execution orchestration
 shell/                mvdan/sh integration and handler wiring
 fs/                   project-owned filesystem interfaces and virtual backends
@@ -513,8 +513,8 @@ Current and planned backends:
 Backend boundary for the current implementation:
 
 - `runtime.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
-- `HostFS` is an opt-in lower-layer backend exposed through `jbfs.Host(...)`; it is intended to sit underneath `jbfs.Overlay(...)`, not to replace the default in-memory runtime path
-- `OverlayFS` is intended for runtime/session use and is exposed through `jbfs.Overlay(...)`
+- `HostFS` is an opt-in lower-layer backend exposed through `gbfs.Host(...)`; it is intended to sit underneath `gbfs.Overlay(...)`, not to replace the default in-memory runtime path
+- `OverlayFS` is intended for runtime/session use and is exposed through `gbfs.Overlay(...)`
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests
 - `SnapshotFS` is not the default `runtime` session backend because session bootstrap still creates the sandbox layout and command stubs
 - the common host-project workflow should be represented as a high-level runtime helper that mounts a read-only host tree under an in-memory overlay and starts the session in that mounted directory
@@ -524,7 +524,7 @@ Backend boundary for the current implementation:
 There are two categories of executable behavior:
 
 1. shell builtins and shell control-flow behavior from `mvdan/sh`
-2. registered Go commands owned by `just-bash-go`
+2. registered Go commands owned by `gbash`
 
 Rules:
 
@@ -773,7 +773,7 @@ Tracing should be useful both for debugging and for building higher-level agent 
 
 Implementation detail for the current runtime:
 
-- the schema is project-owned and versioned as `just-bash-go.trace.v1`
+- the schema is project-owned and versioned as `gbash.trace.v1`
 - the core runtime does not adopt OpenTelemetry as its event schema or transport contract
 - every event carries `session_id` and `execution_id`
 - command events carry `resolved_name`, `resolved_path`, and `resolution_source`
@@ -971,11 +971,11 @@ The compatibility harness should stay curated. It is not a Bash conformance suit
 
 ### 17.6 GNU coreutils compatibility harness
 
-- provide an optional developer command that runs selected GNU coreutils tests against the current `jbgo` binary
+- provide an optional developer command that runs selected GNU coreutils tests against the current `gbash` binary
 - keep it outside `go test ./...`, `make test`, and the default CI path
 - allow a dedicated scheduled/manual reporting workflow for the harness, separate from the default push and pull-request CI jobs
 - pin one GNU coreutils release in a committed manifest and fetch that release into a local cache on demand
-- run GNU tests utility-by-utility against symlinked `jbgo` utility names, with unsupported GNU utility names replaced by explicit `127` stubs instead of host fallback
+- run GNU tests utility-by-utility against symlinked `gbash` utility names, with unsupported GNU utility names replaced by explicit `127` stubs instead of host fallback
 - expose any implemented GNU-overlap helper command in the generated utility directory even when that helper's own suite is not part of the selected run, so dependent GNU tests do not fall through to host tools
 - keep the harness strict about GNU utility names while still allowing the non-coreutils host tooling that the GNU test framework itself needs
 - skip root-only, controlling-TTY, SELinux, and help/version-only cases in the first cut rather than patching expected utility output

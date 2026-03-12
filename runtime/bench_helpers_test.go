@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 func newSeededRuntime(tb testing.TB, files map[string]string) *Runtime {
@@ -15,7 +15,7 @@ func newSeededRuntime(tb testing.TB, files map[string]string) *Runtime {
 
 	return newRuntime(tb, &Config{
 		FileSystem: CustomFileSystem(
-			jbfs.Overlay(jbfs.Snapshot(base.FileSystem())),
+			gbfs.Overlay(gbfs.Snapshot(base.FileSystem())),
 			defaultHomeDir,
 		),
 	})

@@ -25,7 +25,7 @@ jobs:
             gh release create "$GNU_BUILD_CACHE_TAG" \
               -R "$GNU_BUILD_CACHE_REPO" \
               --title "GNU build cache" \
-              --notes "Prepared GNU coreutils build caches for the jbgo compatibility harness."
+              --notes "Prepared GNU coreutils build caches for the gbash compatibility harness."
           fi
 
   publish:

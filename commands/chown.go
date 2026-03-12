@@ -28,7 +28,7 @@ func (c *Chown) Run(ctx context.Context, inv *Invocation) error {
 		_, _ = fmt.Fprintln(inv.Stdout, "usage: chown [OPTION]... [OWNER][:[GROUP]] FILE...")
 		return nil
 	case "version":
-		_, _ = fmt.Fprintln(inv.Stdout, "chown (jbgo)")
+		_, _ = fmt.Fprintln(inv.Stdout, "chown (gbash)")
 		return nil
 	}
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func resolveFindExpr(ctx context.Context, inv *Invocation, expr findExpr) error {

@@ -23,7 +23,7 @@ type buildMetadata struct {
 func versionText() string {
 	meta := currentBuildMetadata()
 
-	lines := []string{fmt.Sprintf("jbgo %s", meta.Version)}
+	lines := []string{fmt.Sprintf("gbash %s", meta.Version)}
 	if meta.Commit != "" && meta.Commit != "unknown" {
 		lines = append(lines, fmt.Sprintf("commit: %s", meta.Commit))
 	}

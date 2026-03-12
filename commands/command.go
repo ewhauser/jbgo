@@ -7,9 +7,9 @@ import (
 	"io"
 	stdfs "io/fs"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/policy"
-	"github.com/ewhauser/jbgo/trace"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/trace"
 )
 
 type Command interface {
@@ -103,12 +103,12 @@ func exitCodeForError(err error) int {
 
 func allowPath(_ context.Context, inv *Invocation, _ policy.FileAction, name string) (string, error) {
 	if inv == nil || inv.FS == nil {
-		return jbfs.Clean(name), nil
+		return gbfs.Clean(name), nil
 	}
 	return inv.FS.Resolve(name), nil
 }
 
-func openRead(ctx context.Context, inv *Invocation, name string) (jbfs.File, string, error) {
+func openRead(ctx context.Context, inv *Invocation, name string) (gbfs.File, string, error) {
 	abs, err := allowPath(ctx, inv, policy.FileActionRead, name)
 	if err != nil {
 		return nil, "", err

@@ -1,6 +1,6 @@
-# jbgo
+# gbash
 
-`jbgo` (`just-bash-go`) is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
+`gbash` is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
 
 It ports the core product idea behind [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash) to a Go-native runtime built on [`mvdan/sh/v3`](https://pkg.go.dev/mvdan.cc/sh/v3).
 
@@ -18,7 +18,7 @@ Key properties:
 
 Requires Go 1.25+.
 
-Install the module with `go get github.com/ewhauser/jbgo` and import packages from `github.com/ewhauser/jbgo/...`.
+Install the module with `go get github.com/ewhauser/gbash` and import packages from `github.com/ewhauser/gbash/...`.
 
 ## Table of Contents
 
@@ -53,16 +53,16 @@ import (
 	"context"
 	"fmt"
 
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func main() {
-	rt, err := jbruntime.New(&jbruntime.Config{})
+	rt, err := gbruntime.New(&gbruntime.Config{})
 	if err != nil {
 		panic(err)
 	}
 
-	result, err := rt.Run(context.Background(), &jbruntime.ExecutionRequest{
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "echo hello\npwd\n",
 	})
 	if err != nil {
@@ -97,15 +97,15 @@ import (
 	"context"
 	"fmt"
 
-	jbnetwork "github.com/ewhauser/jbgo/network"
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbnetwork "github.com/ewhauser/gbash/network"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func main() {
-	rt, err := jbruntime.New(&jbruntime.Config{
-		Network: &jbnetwork.Config{
+	rt, err := gbruntime.New(&gbruntime.Config{
+		Network: &gbnetwork.Config{
 			AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
-			AllowedMethods:     []jbnetwork.Method{jbnetwork.MethodGet, jbnetwork.MethodHead},
+			AllowedMethods:     []gbnetwork.Method{gbnetwork.MethodGet, gbnetwork.MethodHead},
 			MaxResponseBytes:   10 << 20,
 			DenyPrivateRanges:  true,
 		},
@@ -114,7 +114,7 @@ func main() {
 		panic(err)
 	}
 
-	result, err := rt.Run(context.Background(), &jbruntime.ExecutionRequest{
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "curl -o /tmp/status.json https://api.example.com/v1/status\ncat /tmp/status.json\n",
 	})
 	if err != nil {
@@ -138,13 +138,13 @@ import (
 	"context"
 	"fmt"
 
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func main() {
 	ctx := context.Background()
 
-	rt, err := jbruntime.New(&jbruntime.Config{})
+	rt, err := gbruntime.New(&gbruntime.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -154,13 +154,13 @@ func main() {
 		panic(err)
 	}
 
-	if _, err := session.Exec(ctx, &jbruntime.ExecutionRequest{
+	if _, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
 		Script: "echo hello > /shared.txt\n",
 	}); err != nil {
 		panic(err)
 	}
 
-	result, err := session.Exec(ctx, &jbruntime.ExecutionRequest{
+	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
 		Script: "cat /shared.txt\npwd\n",
 	})
 	if err != nil {
@@ -191,15 +191,15 @@ That differs from the interactive CLI, which carries shell-visible env and cwd f
 The CLI reads a script from stdin and executes it inside the sandbox runtime.
 
 ```bash
-go install github.com/ewhauser/jbgo/cmd/jbgo@latest
+go install github.com/ewhauser/gbash/cmd/gbash@latest
 ```
 
-Tagged builds are also published as prebuilt archives on the [GitHub Releases page](https://github.com/ewhauser/jbgo/releases).
+Tagged builds are also published as prebuilt archives on the [GitHub Releases page](https://github.com/ewhauser/gbash/releases).
 
-After installation, run the binary directly. From a local checkout, replace `jbgo` with `go run ./cmd/jbgo`.
+After installation, run the binary directly. From a local checkout, replace `gbash` with `go run ./cmd/gbash`.
 
 ```bash
-printf 'echo hi\npwd\n' | jbgo
+printf 'echo hi\npwd\n' | gbash
 ```
 
 Example:
@@ -212,19 +212,19 @@ hi
 Redirects and file reads also stay inside the virtual filesystem:
 
 ```bash
-printf 'echo hi > /tmp.txt\ncat /tmp.txt\n' | jbgo
+printf 'echo hi > /tmp.txt\ncat /tmp.txt\n' | gbash
 ```
 
 When stdin is a terminal, the CLI starts an interactive shell automatically:
 
 ```bash
-jbgo
+gbash
 ```
 
 You can also force interactive mode explicitly:
 
 ```bash
-printf 'pwd\ncd /tmp\npwd\nexit\n' | jbgo -i
+printf 'pwd\ncd /tmp\npwd\nexit\n' | gbash -i
 ```
 
 The interactive shell is intentionally minimal:
@@ -237,13 +237,13 @@ The interactive shell is intentionally minimal:
 The CLI can also report embedded release metadata:
 
 ```bash
-jbgo --version
+gbash --version
 ```
 
 For developer-only utility execution, the CLI also exposes an opt-in compatibility path:
 
 ```bash
-jbgo compat exec printf '%s\n' hello
+gbash compat exec printf '%s\n' hello
 ```
 
 That path is intentionally separate from the default sandbox script and REPL modes. It exists so external compatibility harnesses can invoke one registered utility at a time against the host filesystem and host environment.
@@ -252,7 +252,7 @@ That path is intentionally separate from the default sandbox script and REPL mod
 
 The repository includes an `examples/` Go module so integration demos can carry their own dependencies without adding them to the root library module.
 
-`openai-tool-call` uses the OpenAI Go SDK Responses API with a function tool named `bash`. The tool implementation calls `runtime.Run`, so the model sees a normal `bash` tool while execution still happens inside the `just-bash-go` sandbox.
+`openai-tool-call` uses the OpenAI Go SDK Responses API with a function tool named `bash`. The tool implementation calls `runtime.Run`, so the model sees a normal `bash` tool while execution still happens inside the `gbash` sandbox.
 
 ```bash
 export OPENAI_API_KEY=your-api-key
@@ -261,7 +261,7 @@ go run ./examples/openai-tool-call
 
 The example hardcodes `gpt-4.1-mini` and asks the model to run a simple `printf` command through the `bash` tool, then print only the tool's stdout.
 
-`adk-bash-chat` uses [`adk-go`](https://github.com/google/adk-go) to build a local CLI chatbot around a persistent `jbgo` bash tool session. It seeds an ops analytics lab under `/home/agent/lab`, prints each bash tool call and result inline, and carries forward filesystem changes, `PWD`, and exported environment variables across turns.
+`adk-bash-chat` uses [`adk-go`](https://github.com/google/adk-go) to build a local CLI chatbot around a persistent `gbash` bash tool session. It seeds an ops analytics lab under `/home/agent/lab`, prints each bash tool call and result inline, and carries forward filesystem changes, `PWD`, and exported environment variables across turns.
 
 Gemini API:
 
@@ -280,17 +280,17 @@ go run ./examples/adk-bash-chat --backend=vertex
 
 Use `/reset` inside the chat to recreate the ADK conversation and reseed the sandboxed lab.
 
-`sqlite-backed-fs` shows how to implement a custom `jbfs.FileSystem` on top of a host SQLite database file and pass it into `jbruntime.CustomFileSystem(...)`. Each run starts a fresh sandbox session, but the sandbox filesystem contents persist in the SQLite backing store when you reuse the same `--db` path.
+`sqlite-backed-fs` shows how to implement a custom `gbfs.FileSystem` on top of a host SQLite database file and pass it into `gbruntime.CustomFileSystem(...)`. Each run starts a fresh sandbox session, but the sandbox filesystem contents persist in the SQLite backing store when you reuse the same `--db` path.
 
 ```bash
-go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --script "printf 'hello\\n' > /tmp/hello.txt"
-go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --script "cat /tmp/hello.txt"
+go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --script "printf 'hello\\n' > /tmp/hello.txt"
+go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --script "cat /tmp/hello.txt"
 ```
 
 It also supports a persistent in-process REPL:
 
 ```bash
-go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --repl
+go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --repl
 ```
 
 ## Configuration
@@ -306,54 +306,54 @@ Filesystem setup is controlled through `Config.FileSystem`. It carries both:
 
 Most callers should use one of these runtime helpers:
 
-- `jbruntime.InMemoryFileSystem()` for the default mutable sandbox
-- `jbruntime.HostProjectFileSystem(root, opts)` for a real host project mounted read-only under an in-memory overlay
-- `jbruntime.CustomFileSystem(factory, workingDir)` for seeded or otherwise custom backends
+- `gbruntime.InMemoryFileSystem()` for the default mutable sandbox
+- `gbruntime.HostProjectFileSystem(root, opts)` for a real host project mounted read-only under an in-memory overlay
+- `gbruntime.CustomFileSystem(factory, workingDir)` for seeded or otherwise custom backends
 
 The zero value of `runtime.Config` still gives you an in-memory sandbox rooted at `/home/agent`.
 
 For the closest parity with `just-bash`'s real-directory overlay:
 
 ```go
-rt, err := jbruntime.New(&jbruntime.Config{
-	FileSystem: jbruntime.HostProjectFileSystem("/path/to/project", jbruntime.HostProjectOptions{
+rt, err := gbruntime.New(&gbruntime.Config{
+	FileSystem: gbruntime.HostProjectFileSystem("/path/to/project", gbruntime.HostProjectOptions{
 		VirtualRoot: "/home/agent/project",
 	}),
 })
 ```
 
-That mounts the host directory read-only at `/home/agent/project`, starts the session there, and keeps all writes, deletes, and command stubs in the in-memory upper layer. `VirtualRoot` defaults to `jbfs.DefaultHostVirtualRoot`. `MaxFileReadBytes` defaults to `jbfs.DefaultHostMaxFileReadBytes`. If you want the host tree mounted at `/`, set `VirtualRoot: "/"`.
+That mounts the host directory read-only at `/home/agent/project`, starts the session there, and keeps all writes, deletes, and command stubs in the in-memory upper layer. `VirtualRoot` defaults to `gbfs.DefaultHostVirtualRoot`. `MaxFileReadBytes` defaults to `gbfs.DefaultHostMaxFileReadBytes`. If you want the host tree mounted at `/`, set `VirtualRoot: "/"`.
 
-For seeded or custom backends, implement `jbfs.Factory` and hand it to `CustomFileSystem`:
+For seeded or custom backends, implement `gbfs.Factory` and hand it to `CustomFileSystem`:
 
 ```go
 type myFactory struct {
 	base any
 }
 
-func (f myFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
+func (f myFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
 	return newMyJBFSAdapter(f.base), nil
 }
 
-rt, err := jbruntime.New(&jbruntime.Config{
-	FileSystem: jbruntime.CustomFileSystem(
+rt, err := gbruntime.New(&gbruntime.Config{
+	FileSystem: gbruntime.CustomFileSystem(
 		myFactory{base: os.DirFS("/path/to/workspace")},
 		"/home/agent",
 	),
 })
 ```
 
-If you want copy-on-write behavior over another backend, wrap it with `jbfs.Overlay(...)` before passing it to `CustomFileSystem`.
+If you want copy-on-write behavior over another backend, wrap it with `gbfs.Overlay(...)` before passing it to `CustomFileSystem`.
 
 Low-level `fs` helpers are available when you need to compose backends directly:
 
-- `jbfs.Memory()` returns a factory for fresh in-memory filesystems
-- `jbfs.Overlay(lower)` returns a copy-on-write factory over another `jbfs.Factory`
-- `jbfs.Host(opts)` returns a factory for a read-only host-backed directory view
-- `jbfs.Snapshot(fsys)` returns a factory that clones an existing filesystem into a read-only snapshot
-- `jbfs.NewMemory`, `jbfs.NewOverlay`, `jbfs.NewHost`, and `jbfs.NewSnapshot` create concrete filesystem instances directly
+- `gbfs.Memory()` returns a factory for fresh in-memory filesystems
+- `gbfs.Overlay(lower)` returns a copy-on-write factory over another `gbfs.Factory`
+- `gbfs.Host(opts)` returns a factory for a read-only host-backed directory view
+- `gbfs.Snapshot(fsys)` returns a factory that clones an existing filesystem into a read-only snapshot
+- `gbfs.NewMemory`, `gbfs.NewOverlay`, `gbfs.NewHost`, and `gbfs.NewSnapshot` create concrete filesystem instances directly
 
-The runtime integration point is still `jbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself. If you already have a Go filesystem implementation, wrap it behind `jbfs.Factory` and adapt the richer contract: mutation, metadata, directory listing, symlinks, and cwd handling. A direct host read-write backend and a general mount router are still out of scope for the default runtime path.
+The runtime integration point is still `gbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself. If you already have a Go filesystem implementation, wrap it behind `gbfs.Factory` and adapt the richer contract: mutation, metadata, directory listing, symlinks, and cwd handling. A direct host read-write backend and a general mount router are still out of scope for the default runtime path.
 
 ### Network Access
 
@@ -361,14 +361,14 @@ Network access is disabled by default. When you set `Config.Network` or provide 
 
 ```go
 import (
-	jbnetwork "github.com/ewhauser/jbgo/network"
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbnetwork "github.com/ewhauser/gbash/network"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
-rt, err := jbruntime.New(&jbruntime.Config{
-	Network: &jbnetwork.Config{
+rt, err := gbruntime.New(&gbruntime.Config{
+	Network: &gbnetwork.Config{
 		AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
-		AllowedMethods:     []jbnetwork.Method{jbnetwork.MethodGet, jbnetwork.MethodHead},
+		AllowedMethods:     []gbnetwork.Method{gbnetwork.MethodGet, gbnetwork.MethodHead},
 		MaxResponseBytes:   10 << 20,
 		DenyPrivateRanges:  true,
 	},
@@ -509,8 +509,8 @@ Common commands from the repo root:
 - `go test ./... ./examples/...`
 - `go run ./examples/openai-tool-call`
 - `go run ./examples/adk-bash-chat`
-- `go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --script "pwd"`
-- `go run ./examples/sqlite-backed-fs --db /tmp/jbgo-sandbox.db --repl`
+- `go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --script "pwd"`
+- `go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --repl`
 
 For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before making changes.
 

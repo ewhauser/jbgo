@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ewhauser/jbgo/commands"
-	"github.com/ewhauser/jbgo/internal/compatfs"
+	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/compatfs"
 )
 
 func TestRunnerExecSupportsNestedSubexecAndHostWorkdir(t *testing.T) {

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	gbfs "github.com/ewhauser/gbash/fs"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func TestSQLiteFSFileLifecycle(t *testing.T) {
@@ -246,7 +246,7 @@ func TestSQLiteBackedRuntimePersistsAcrossRuns(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "sandbox.db")
 
 	first := newSQLiteRuntime(t, dbPath)
-	result, err := first.Run(context.Background(), &jbruntime.ExecutionRequest{
+	result, err := first.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "printf 'persisted\\n' > /tmp/persist.txt\n",
 	})
 	if err != nil {
@@ -257,7 +257,7 @@ func TestSQLiteBackedRuntimePersistsAcrossRuns(t *testing.T) {
 	}
 
 	second := newSQLiteRuntime(t, dbPath)
-	result, err = second.Run(context.Background(), &jbruntime.ExecutionRequest{
+	result, err = second.Run(context.Background(), &gbruntime.ExecutionRequest{
 		Script: "cat /tmp/persist.txt\n",
 	})
 	if err != nil {
@@ -476,11 +476,11 @@ func newTestSQLiteFSAt(t *testing.T, dbPath string) *sqliteFS {
 	return fsys
 }
 
-func newSQLiteRuntime(t *testing.T, dbPath string) *jbruntime.Runtime {
+func newSQLiteRuntime(t *testing.T, dbPath string) *gbruntime.Runtime {
 	t.Helper()
 
-	rt, err := jbruntime.New(&jbruntime.Config{
-		FileSystem: jbruntime.CustomFileSystem(
+	rt, err := gbruntime.New(&gbruntime.Config{
+		FileSystem: gbruntime.CustomFileSystem(
 			sqliteFSFactory{dbPath: dbPath},
 			defaultWorkDir,
 		),
@@ -491,7 +491,7 @@ func newSQLiteRuntime(t *testing.T, dbPath string) *jbruntime.Runtime {
 	return rt
 }
 
-func writeFSFile(t *testing.T, fsys jbfs.FileSystem, name, contents string) {
+func writeFSFile(t *testing.T, fsys gbfs.FileSystem, name, contents string) {
 	t.Helper()
 
 	file, err := fsys.OpenFile(context.Background(), name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -506,7 +506,7 @@ func writeFSFile(t *testing.T, fsys jbfs.FileSystem, name, contents string) {
 	}
 }
 
-func readFSFile(t *testing.T, fsys jbfs.FileSystem, name string) string {
+func readFSFile(t *testing.T, fsys gbfs.FileSystem, name string) string {
 	t.Helper()
 
 	file, err := fsys.Open(context.Background(), name)

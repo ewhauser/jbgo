@@ -3,13 +3,13 @@ package runtime
 import (
 	"strings"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 // FileSystemConfig describes how a runtime session gets its sandbox filesystem
 // and what working directory it should start in.
 type FileSystemConfig struct {
-	Factory    jbfs.Factory
+	Factory    gbfs.Factory
 	WorkingDir string
 }
 
@@ -22,13 +22,13 @@ type HostProjectOptions struct {
 // InMemoryFileSystem returns the default session filesystem setup.
 func InMemoryFileSystem() FileSystemConfig {
 	return FileSystemConfig{
-		Factory:    jbfs.Memory(),
+		Factory:    gbfs.Memory(),
 		WorkingDir: defaultHomeDir,
 	}
 }
 
 // CustomFileSystem wires an arbitrary filesystem factory into the runtime.
-func CustomFileSystem(factory jbfs.Factory, workingDir string) FileSystemConfig {
+func CustomFileSystem(factory gbfs.Factory, workingDir string) FileSystemConfig {
 	return FileSystemConfig{
 		Factory:    factory,
 		WorkingDir: workingDir,
@@ -40,10 +40,10 @@ func CustomFileSystem(factory jbfs.Factory, workingDir string) FileSystemConfig 
 func HostProjectFileSystem(root string, opts HostProjectOptions) FileSystemConfig {
 	virtualRoot := strings.TrimSpace(opts.VirtualRoot)
 	if virtualRoot == "" {
-		virtualRoot = jbfs.DefaultHostVirtualRoot
+		virtualRoot = gbfs.DefaultHostVirtualRoot
 	}
 	return FileSystemConfig{
-		Factory: jbfs.Overlay(jbfs.Host(jbfs.HostOptions{
+		Factory: gbfs.Overlay(gbfs.Host(gbfs.HostOptions{
 			Root:             root,
 			VirtualRoot:      virtualRoot,
 			MaxFileReadBytes: opts.MaxFileReadBytes,
@@ -54,12 +54,12 @@ func HostProjectFileSystem(root string, opts HostProjectOptions) FileSystemConfi
 
 func (cfg FileSystemConfig) resolved() FileSystemConfig {
 	if cfg.Factory == nil {
-		cfg.Factory = jbfs.Memory()
+		cfg.Factory = gbfs.Memory()
 	}
 	cfg.WorkingDir = strings.TrimSpace(cfg.WorkingDir)
 	if cfg.WorkingDir == "" {
 		cfg.WorkingDir = defaultHomeDir
 	}
-	cfg.WorkingDir = jbfs.Clean(cfg.WorkingDir)
+	cfg.WorkingDir = gbfs.Clean(cfg.WorkingDir)
 	return cfg
 }

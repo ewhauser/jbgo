@@ -6,15 +6,15 @@ import (
 	"os"
 	"testing"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type seededFSFactory struct {
 	files map[string]string
 }
 
-func (f seededFSFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
-	mem := jbfs.NewMemory()
+func (f seededFSFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
+	mem := gbfs.NewMemory()
 	for name, contents := range f.files {
 		file, err := mem.OpenFile(ctx, name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
@@ -34,7 +34,7 @@ func (f seededFSFactory) New(ctx context.Context) (jbfs.FileSystem, error) {
 func TestOverlayFactorySupportsShellReadsAndCopyOnWrite(t *testing.T) {
 	rt := newRuntime(t, &Config{
 		FileSystem: CustomFileSystem(
-			jbfs.Overlay(seededFSFactory{files: map[string]string{
+			gbfs.Overlay(seededFSFactory{files: map[string]string{
 				"/seed.txt": "seed\n",
 			}}),
 			defaultHomeDir,

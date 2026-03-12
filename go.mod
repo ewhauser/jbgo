@@ -1,4 +1,4 @@
-module github.com/ewhauser/jbgo
+module github.com/ewhauser/gbash
 
 go 1.26.0
 

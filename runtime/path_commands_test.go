@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/policy"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestTouchCreatesFilesAndPreservesExistingContent(t *testing.T) {
@@ -427,7 +427,7 @@ func TestFileSupportsLongBriefAndMimeFlags(t *testing.T) {
 func TestOverlayFactorySupportsHardLinksAndMetadataCopyUp(t *testing.T) {
 	rt := newRuntime(t, &Config{
 		FileSystem: CustomFileSystem(
-			jbfs.Overlay(seededFSFactory{files: map[string]string{
+			gbfs.Overlay(seededFSFactory{files: map[string]string{
 				"/seed.txt": "seed\n",
 			}}),
 			defaultHomeDir,
@@ -451,7 +451,7 @@ func TestOverlayFactorySupportsHardLinksAndMetadataCopyUp(t *testing.T) {
 	}
 }
 
-func readTestFSFile(t *testing.T, fsys jbfs.FileSystem, name string) string {
+func readTestFSFile(t *testing.T, fsys gbfs.FileSystem, name string) string {
 	t.Helper()
 
 	file, err := fsys.Open(context.Background(), name)

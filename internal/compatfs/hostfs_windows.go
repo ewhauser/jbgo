@@ -8,7 +8,7 @@ import (
 	stdfs "io/fs"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 var errUnsupported = errors.New("host compatibility filesystem is unsupported on Windows")
@@ -19,9 +19,9 @@ func New() (*HostFS, error) {
 	return nil, errUnsupported
 }
 
-func (HostFS) Open(context.Context, string) (jbfs.File, error) { return nil, unsupportedError() }
+func (HostFS) Open(context.Context, string) (gbfs.File, error) { return nil, unsupportedError() }
 
-func (HostFS) OpenFile(context.Context, string, int, stdfs.FileMode) (jbfs.File, error) {
+func (HostFS) OpenFile(context.Context, string, int, stdfs.FileMode) (gbfs.File, error) {
 	return nil, unsupportedError()
 }
 
@@ -61,4 +61,4 @@ func unsupportedError() error {
 	return &stdfs.PathError{Op: "compatfs", Path: "/", Err: errUnsupported}
 }
 
-var _ jbfs.FileSystem = (*HostFS)(nil)
+var _ gbfs.FileSystem = (*HostFS)(nil)

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type permissionVerbosityLevel uint8
@@ -186,9 +186,9 @@ func loadPermissionGroup(ctx context.Context, inv *Invocation, db *permissionIde
 }
 
 func permissionLookupOwnership(db *permissionIdentityDB, info stdfs.FileInfo) permissionOwnership {
-	meta, ok := jbfs.OwnershipFromFileInfo(info)
+	meta, ok := gbfs.OwnershipFromFileInfo(info)
 	if !ok {
-		meta = jbfs.DefaultOwnership()
+		meta = gbfs.DefaultOwnership()
 	}
 	owner := permissionOwnership{
 		uid: meta.UID,

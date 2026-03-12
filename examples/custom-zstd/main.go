@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ewhauser/jbgo/commands"
-	jbruntime "github.com/ewhauser/jbgo/runtime"
+	"github.com/ewhauser/gbash/commands"
+	gbruntime "github.com/ewhauser/gbash/runtime"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -32,12 +32,12 @@ func main() {
 		os.Exit(2)
 	}
 
-	rt, err := jbruntime.New(&jbruntime.Config{Registry: registry})
+	rt, err := gbruntime.New(&gbruntime.Config{Registry: registry})
 	if err != nil {
 		fail(fmt.Errorf("create runtime: %w", err))
 	}
 
-	result, err := rt.Run(ctx, &jbruntime.ExecutionRequest{
+	result, err := rt.Run(ctx, &gbruntime.ExecutionRequest{
 		Name:   "custom-zstd",
 		Script: string(script),
 	})

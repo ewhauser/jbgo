@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type HostFS struct {
@@ -26,11 +26,11 @@ func New() (*HostFS, error) {
 	return &HostFS{cwd: filepath.Clean(cwd)}, nil
 }
 
-func (h *HostFS) Open(_ context.Context, name string) (jbfs.File, error) {
+func (h *HostFS) Open(_ context.Context, name string) (gbfs.File, error) {
 	return h.OpenFile(context.Background(), name, os.O_RDONLY, 0)
 }
 
-func (h *HostFS) OpenFile(_ context.Context, name string, flag int, perm fs.FileMode) (jbfs.File, error) {
+func (h *HostFS) OpenFile(_ context.Context, name string, flag int, perm fs.FileMode) (gbfs.File, error) {
 	return os.OpenFile(h.resolve(name), flag, perm)
 }
 
@@ -156,6 +156,6 @@ func (i compatFileInfo) Mode() fs.FileMode  { return i.info.Mode() }
 func (i compatFileInfo) ModTime() time.Time { return i.info.ModTime() }
 func (i compatFileInfo) IsDir() bool        { return i.info.IsDir() }
 func (i compatFileInfo) Sys() any           { return i.info.Sys() }
-func (i compatFileInfo) Ownership() (jbfs.FileOwnership, bool) {
-	return jbfs.OwnershipFromSys(i.info.Sys())
+func (i compatFileInfo) Ownership() (gbfs.FileOwnership, bool) {
+	return gbfs.OwnershipFromSys(i.info.Sys())
 }

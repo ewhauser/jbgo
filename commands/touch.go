@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ewhauser/jbgo/policy"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Touch struct{}

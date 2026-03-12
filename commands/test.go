@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
-	"github.com/ewhauser/jbgo/policy"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 	"golang.org/x/term"
 )
 
@@ -685,7 +685,7 @@ func testHasPermission(inv *Invocation, info stdfs.FileInfo, mask stdfs.FileMode
 }
 
 func testOwnerIDs(info stdfs.FileInfo) (uid, gid int, ok bool) {
-	if ownership, ok := jbfs.OwnershipFromFileInfo(info); ok {
+	if ownership, ok := gbfs.OwnershipFromFileInfo(info); ok {
 		return int(ownership.UID), int(ownership.GID), true
 	}
 	sys := reflect.ValueOf(info.Sys())
@@ -846,6 +846,6 @@ const testBracketHelpText = `Usage: test EXPRESSION
 Evaluate expressions.
 `
 
-const testBracketVersionText = "[ (jbgo) dev\n"
+const testBracketVersionText = "[ (gbash) dev\n"
 
 var _ Command = (*Test)(nil)

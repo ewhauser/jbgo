@@ -61,7 +61,7 @@ func (c *Help) Run(_ context.Context, inv *Invocation) error {
 	}
 done:
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(inv.Stdout, "just-bash-go shell builtins:")
+		_, _ = fmt.Fprintln(inv.Stdout, "gbash shell builtins:")
 		names := make([]string, 0, len(builtinHelp))
 		for name := range builtinHelp {
 			names = append(names, name)

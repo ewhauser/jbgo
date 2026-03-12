@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	jbfs "github.com/ewhauser/jbgo/fs"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 const (
@@ -37,7 +37,7 @@ func defaultBaseEnv() map[string]string {
 	}
 }
 
-func initializeSandboxLayout(ctx context.Context, fsys jbfs.FileSystem, env map[string]string, workDir string, commands []string) error {
+func initializeSandboxLayout(ctx context.Context, fsys gbfs.FileSystem, env map[string]string, workDir string, commands []string) error {
 	for _, dir := range layoutDirectories(env, workDir) {
 		if err := fsys.MkdirAll(ctx, dir, 0o755); err != nil {
 			return err
@@ -62,7 +62,7 @@ func layoutDirectories(env map[string]string, workDir string) []string {
 	}
 
 	if home := strings.TrimSpace(env["HOME"]); home != "" {
-		dirs = append(dirs, jbfs.Clean(home))
+		dirs = append(dirs, gbfs.Clean(home))
 	}
 
 	dirs = append(dirs, commandDirectories(env)...)
@@ -81,13 +81,13 @@ func commandDirectories(env map[string]string) []string {
 		if dir == "" {
 			continue
 		}
-		dirs = append(dirs, jbfs.Clean(dir))
+		dirs = append(dirs, gbfs.Clean(dir))
 	}
 	return uniqueSortedPaths(dirs)
 }
 
-func ensureCommandStub(ctx context.Context, fsys jbfs.FileSystem, dir, name string) error {
-	fullPath := jbfs.Resolve(dir, name)
+func ensureCommandStub(ctx context.Context, fsys gbfs.FileSystem, dir, name string) error {
+	fullPath := gbfs.Resolve(dir, name)
 
 	_, err := fsys.Stat(ctx, fullPath)
 	switch {
@@ -106,7 +106,7 @@ func ensureCommandStub(ctx context.Context, fsys jbfs.FileSystem, dir, name stri
 	}
 	defer func() { _ = file.Close() }()
 
-	_, err = io.WriteString(file, "# just-bash-go virtual command stub: "+name+"\n")
+	_, err = io.WriteString(file, "# gbash virtual command stub: "+name+"\n")
 	return err
 }
 
@@ -114,7 +114,7 @@ func uniqueSortedPaths(paths []string) []string {
 	out := make([]string, 0, len(paths))
 	seen := make(map[string]struct{}, len(paths))
 	for _, dir := range paths {
-		dir = jbfs.Clean(dir)
+		dir = gbfs.Clean(dir)
 		if _, ok := seen[dir]; ok {
 			continue
 		}
