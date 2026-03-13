@@ -6,7 +6,6 @@ import (
 	stdfs "io/fs"
 	"path"
 	"strconv"
-	"strings"
 )
 
 type DU struct{}
@@ -29,49 +28,41 @@ func (c *DU) Name() string {
 }
 
 func (c *DU) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	var opts duOptions
+	return RunCommand(ctx, c, inv)
+}
 
-	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		switch {
-		case args[0] == "-a":
-			opts.showAll = true
-			args = args[1:]
-		case args[0] == "-s":
-			opts.summary = true
-			args = args[1:]
-		case args[0] == "-h":
-			opts.human = true
-			args = args[1:]
-		case args[0] == "-c":
-			opts.total = true
-			args = args[1:]
-		case args[0] == "--max-depth":
-			if len(args) < 2 {
-				return exitf(inv, 1, "du: option requires an argument -- max-depth")
-			}
-			maxDepth, err := strconv.Atoi(args[1])
-			if err != nil || maxDepth < 0 {
-				return exitf(inv, 1, "du: invalid maximum depth %q", args[1])
-			}
-			opts.maxDepth = maxDepth
-			opts.hasMaxDepth = true
-			args = args[2:]
-		case strings.HasPrefix(args[0], "--max-depth="):
-			value := strings.TrimPrefix(args[0], "--max-depth=")
-			maxDepth, err := strconv.Atoi(value)
-			if err != nil || maxDepth < 0 {
-				return exitf(inv, 1, "du: invalid maximum depth %q", value)
-			}
-			opts.maxDepth = maxDepth
-			opts.hasMaxDepth = true
-			args = args[1:]
-		default:
-			return exitf(inv, 1, "du: unsupported flag %s", args[0])
-		}
+func (c *DU) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "du",
+		About: "Estimate file space usage.",
+		Usage: "du [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "all", Short: 'a', Long: "all", Help: "write counts for all files, not just directories"},
+			{Name: "summarize", Short: 's', Long: "summarize", Help: "display only a total for each argument"},
+			{Name: "human-readable", Short: 'h', Long: "human-readable", Help: "print sizes in human readable format"},
+			{Name: "total", Short: 'c', Long: "total", Help: "produce a grand total"},
+			{Name: "max-depth", Long: "max-depth", Arity: OptionRequiredValue, ValueName: "N", Help: "print the total for a directory only if it is N or fewer levels below the command line argument"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:      true,
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+			AutoHelp:              true,
+			AutoVersion:           true,
+		},
+	}
+}
+
+func (c *DU) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := parseDUMatches(inv, matches)
+	if err != nil {
+		return err
 	}
 
-	targets := args
+	targets := matches.Args("file")
 	if len(targets) == 0 {
 		targets = []string{"."}
 	}
@@ -101,6 +92,30 @@ func (c *DU) Run(ctx context.Context, inv *Invocation) error {
 		return &ExitError{Code: exitCode}
 	}
 	return nil
+}
+
+func parseDUMatches(inv *Invocation, matches *ParsedCommand) (duOptions, error) {
+	opts := duOptions{}
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "all":
+			opts.showAll = true
+		case "summarize":
+			opts.summary = true
+		case "human-readable":
+			opts.human = true
+		case "total":
+			opts.total = true
+		case "max-depth":
+			maxDepth, err := strconv.Atoi(matches.Value("max-depth"))
+			if err != nil || maxDepth < 0 {
+				return duOptions{}, exitf(inv, 1, "du: invalid maximum depth %q", matches.Value("max-depth"))
+			}
+			opts.maxDepth = maxDepth
+			opts.hasMaxDepth = true
+		}
+	}
+	return opts, nil
 }
 
 func (c *DU) emit(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, depth int, opts duOptions) (int64, error) {
@@ -151,3 +166,5 @@ func formatDUSize(size int64, human bool) string {
 }
 
 var _ Command = (*DU)(nil)
+var _ SpecProvider = (*DU)(nil)
+var _ ParsedRunner = (*DU)(nil)

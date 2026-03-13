@@ -24,8 +24,7 @@ type findToken struct {
 	op   findCompare
 }
 
-func parseFindCommandArgs(inv *Invocation) ([]string, findCommandOptions, findExpr, []findAction, error) {
-	args := inv.Args
+func parseFindCommandArgs(inv *Invocation, args []string) ([]string, findCommandOptions, findExpr, []findAction, error) {
 	paths := make([]string, 0, len(args))
 	for len(args) > 0 && !findStartsExpression(args[0]) {
 		paths = append(paths, args[0])

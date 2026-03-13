@@ -9,6 +9,12 @@ import (
 
 type Date struct{}
 
+type dateOptions struct {
+	current    time.Time
+	formatKind string
+	formatText string
+}
+
 func NewDate() *Date {
 	return &Date{}
 }
@@ -17,27 +23,52 @@ func (c *Date) Name() string {
 	return "date"
 }
 
-func (c *Date) Run(_ context.Context, inv *Invocation) error {
-	current, formatKind, formatText, err := parseDateArgs(inv)
+func (c *Date) Run(ctx context.Context, inv *Invocation) error {
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Date) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "date",
+		About: "Display the current time in the given FORMAT, or set the system date.",
+		Usage: "date [-u|--utc] [-d STRING|--date STRING] [+FORMAT] [-I|--iso-8601|-R|--rfc-email]",
+		Options: []OptionSpec{
+			{Name: "utc", Short: 'u', Long: "utc", Aliases: []string{"universal"}, HelpAliases: []string{"universal"}, Help: "print or set Coordinated Universal Time (UTC)"},
+			{Name: "date", Short: 'd', Long: "date", Arity: OptionRequiredValue, ValueName: "STRING", Help: "display time described by STRING, not 'now'"},
+			{Name: "iso-8601", Short: 'I', Long: "iso-8601", Help: "output date/time in ISO 8601 format"},
+			{Name: "rfc-email", Short: 'R', Long: "rfc-email", Help: "output date and time in RFC 5322 format"},
+		},
+		Args: []ArgSpec{
+			{Name: "format", ValueName: "FORMAT", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:      true,
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+			AutoHelp:              true,
+			AutoVersion:           true,
+		},
+	}
+}
+
+func (c *Date) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := parseDateMatches(inv, matches)
 	if err != nil {
 		return err
 	}
 	var output string
-	switch formatKind {
-	case "help":
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: date [-u|--utc] [-d STRING|--date STRING] [+FORMAT] [-I|--iso-8601|-R|--rfc-email]")
-		return nil
+	switch opts.formatKind {
 	case "iso":
-		output = current.Format("2006-01-02T15:04:05-0700")
+		output = opts.current.Format("2006-01-02T15:04:05-0700")
 	case "rfc":
-		output = current.Format(time.RFC1123Z)
+		output = opts.current.Format(time.RFC1123Z)
 	case "custom":
-		output, err = formatDateString(current, formatText)
+		output, err = formatDateString(opts.current, opts.formatText)
 		if err != nil {
 			return exitf(inv, 1, "date: %v", err)
 		}
 	default:
-		output = current.Format("Mon Jan _2 15:04:05 UTC 2006")
+		output = opts.current.Format("Mon Jan _2 15:04:05 UTC 2006")
 	}
 	_, err = fmt.Fprintln(inv.Stdout, output)
 	if err != nil {
@@ -46,46 +77,54 @@ func (c *Date) Run(_ context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseDateArgs(inv *Invocation) (current time.Time, formatKind, formatText string, err error) {
-	args := inv.Args
-	current = time.Now().UTC()
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case arg == "--help":
-			return current, "help", "", nil
-		case arg == "-u" || arg == "--utc":
-			args = args[1:]
-		case arg == "-I" || arg == "--iso-8601":
-			formatKind = "iso"
-			args = args[1:]
-		case arg == "-R" || arg == "--rfc-email":
-			formatKind = "rfc"
-			args = args[1:]
-		case arg == "-d" || arg == "--date":
-			if len(args) < 2 {
-				return time.Time{}, "", "", exitf(inv, 1, "date: option requires an argument -- 'd'")
-			}
-			current, err = parseDateInput(args[1], current)
-			if err != nil {
-				return time.Time{}, "", "", exitf(inv, 1, "date: invalid date %q", args[1])
-			}
-			args = args[2:]
-		case strings.HasPrefix(arg, "--date="):
-			current, err = parseDateInput(strings.TrimPrefix(arg, "--date="), current)
-			if err != nil {
-				return time.Time{}, "", "", exitf(inv, 1, "date: invalid date %q", strings.TrimPrefix(arg, "--date="))
-			}
-			args = args[1:]
-		case len(arg) > 1 && arg[0] == '+':
-			formatKind = "custom"
-			formatText = arg[1:]
-			args = args[1:]
-		default:
-			return time.Time{}, "", "", exitf(inv, 1, "date: unsupported argument %s", arg)
-		}
+func (c *Date) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil {
+		return nil
 	}
-	return current, formatKind, formatText, nil
+	clone := *inv
+	clone.Args = normalizeDateArgs(inv.Args)
+	return &clone
+}
+
+func parseDateMatches(inv *Invocation, matches *ParsedCommand) (dateOptions, error) {
+	opts := dateOptions{current: time.Now().UTC()}
+	if matches.Has("date") {
+		current, err := parseDateInput(matches.Value("date"), opts.current)
+		if err != nil {
+			return dateOptions{}, exitf(inv, 1, "date: invalid date %q", matches.Value("date"))
+		}
+		opts.current = current
+	}
+	if matches.Has("iso-8601") {
+		opts.formatKind = "iso"
+	}
+	if matches.Has("rfc-email") {
+		opts.formatKind = "rfc"
+	}
+	for _, arg := range matches.Positionals() {
+		if len(arg) > 1 && arg[0] == '+' {
+			opts.formatKind = "custom"
+			opts.formatText = arg[1:]
+			continue
+		}
+		return dateOptions{}, exitf(inv, 1, "date: unsupported argument %s", arg)
+	}
+	return opts, nil
+}
+
+func normalizeDateArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(args))
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "+") && len(arg) > 1 {
+			normalized = append(normalized, "--", arg)
+			continue
+		}
+		normalized = append(normalized, arg)
+	}
+	return normalized
 }
 
 func parseDateInput(value string, now time.Time) (time.Time, error) {
@@ -172,3 +211,6 @@ func formatDateString(current time.Time, format string) (string, error) {
 }
 
 var _ Command = (*Date)(nil)
+var _ SpecProvider = (*Date)(nil)
+var _ ParsedRunner = (*Date)(nil)
+var _ ParseInvocationNormalizer = (*Date)(nil)

@@ -61,14 +61,42 @@ func (c *Find) Name() string {
 }
 
 func (c *Find) Run(ctx context.Context, inv *Invocation) error {
-	if len(inv.Args) == 1 && inv.Args[0] == "--help" {
-		if _, err := fmt.Fprint(inv.Stdout, findHelpText); err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Find) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "find",
+		About: "search for files in a directory hierarchy",
+		Usage: "find [path ...] [expression]",
+		Options: []OptionSpec{
+			{Name: "help", Long: "help", Help: "show this help text"},
+		},
+		Args: []ArgSpec{
+			{Name: "arg", ValueName: "ARG", Repeatable: true},
+		},
+		HelpRenderer: renderStaticHelp(findHelpText),
+	}
+}
+
+func (c *Find) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil {
 		return nil
 	}
+	if len(inv.Args) == 1 && inv.Args[0] == "--help" {
+		return inv
+	}
+	clone := *inv
+	clone.Args = append([]string{"--"}, inv.Args...)
+	return &clone
+}
 
-	paths, opts, expr, actions, err := parseFindCommandArgs(inv)
+func (c *Find) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return renderStaticHelp(findHelpText)(inv.Stdout, c.Spec())
+	}
+
+	paths, opts, expr, actions, err := parseFindCommandArgs(inv, matches.Args("arg"))
 	if err != nil {
 		return err
 	}
@@ -524,3 +552,6 @@ func applyFindWidth(value string, width, precision int) string {
 }
 
 var _ Command = (*Find)(nil)
+var _ SpecProvider = (*Find)(nil)
+var _ ParsedRunner = (*Find)(nil)
+var _ ParseInvocationNormalizer = (*Find)(nil)

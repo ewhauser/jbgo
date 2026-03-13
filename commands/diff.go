@@ -28,7 +28,35 @@ func (c *Diff) Name() string {
 }
 
 func (c *Diff) Run(ctx context.Context, inv *Invocation) error {
-	opts, leftName, rightName, err := parseDiffArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Diff) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "diff",
+		About: "Compare files line by line.",
+		Usage: "diff [OPTION]... FILES",
+		Options: []OptionSpec{
+			{Name: "unified", Short: 'u', Long: "unified", Help: "output unified format"},
+			{Name: "brief", Short: 'q', Long: "brief", Help: "report only when files differ"},
+			{Name: "report-identical-files", Short: 's', Long: "report-identical-files", Help: "report when two files are the same"},
+			{Name: "ignore-case", Short: 'i', Long: "ignore-case", Help: "ignore case differences in file contents"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:      true,
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+			AutoHelp:              true,
+			AutoVersion:           true,
+		},
+	}
+}
+
+func (c *Diff) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, leftName, rightName, err := parseDiffMatches(inv, matches)
 	if err != nil {
 		return err
 	}
@@ -62,30 +90,20 @@ func (c *Diff) Run(ctx context.Context, inv *Invocation) error {
 	return &ExitError{Code: 1}
 }
 
-func parseDiffArgs(inv *Invocation) (opts diffOptions, leftName, rightName string, err error) {
-	args := inv.Args
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
-		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			break
-		}
-		switch arg {
-		case "-u", "--unified":
-		case "-q", "--brief":
+func parseDiffMatches(inv *Invocation, matches *ParsedCommand) (opts diffOptions, leftName, rightName string, err error) {
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "brief":
 			opts.brief = true
-		case "-s", "--report-identical-files":
+		case "report-identical-files":
 			opts.reportSame = true
-		case "-i", "--ignore-case":
+		case "ignore-case":
 			opts.ignoreCase = true
-		default:
-			return diffOptions{}, "", "", exitf(inv, 2, "diff: unsupported flag %s", arg)
+		case "unified":
+			// accepted; unified is the only output format currently implemented
 		}
-		args = args[1:]
 	}
+	args := matches.Args("file")
 	if len(args) != 2 {
 		return diffOptions{}, "", "", exitf(inv, 2, "diff: expected exactly two input files")
 	}
@@ -167,3 +185,5 @@ func writeUnifiedDiff(inv *Invocation, leftName, rightName string, left, right [
 }
 
 var _ Command = (*Diff)(nil)
+var _ SpecProvider = (*Diff)(nil)
+var _ ParsedRunner = (*Diff)(nil)

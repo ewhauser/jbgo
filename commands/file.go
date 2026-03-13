@@ -22,30 +22,39 @@ func (c *FileCmd) Name() string {
 }
 
 func (c *FileCmd) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	brief := false
-	mimeOnly := false
+	return RunCommand(ctx, c, inv)
+}
 
-	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		switch args[0] {
-		case "-b", "--brief":
-			brief = true
-		case "-i", "--mime":
-			mimeOnly = true
-		case "-bi", "-ib":
-			brief = true
-			mimeOnly = true
-		case "-L", "--dereference":
-			// Accepted for compatibility; current implementation reports the link object.
-		default:
-			return exitf(inv, 1, "file: unsupported flag %s", args[0])
-		}
-		args = args[1:]
+func (c *FileCmd) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "file",
+		About: "Determine file type.",
+		Usage: "file [OPTION]... FILE...",
+		Options: []OptionSpec{
+			{Name: "brief", Short: 'b', Long: "brief", Help: "do not prepend filenames to output lines"},
+			{Name: "mime", Short: 'i', Long: "mime", Help: "output MIME type strings"},
+			{Name: "dereference", Short: 'L', Long: "dereference", Help: "follow symbolic links"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
 	}
+}
 
+func (c *FileCmd) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	args := matches.Args("file")
 	if len(args) == 0 {
 		return exitf(inv, 1, "file: missing operand")
 	}
+	brief, mimeOnly := parseFileMatches(matches)
 
 	exitCode := 0
 	for _, name := range args {
@@ -77,6 +86,23 @@ func (c *FileCmd) Run(ctx context.Context, inv *Invocation) error {
 		return &ExitError{Code: exitCode}
 	}
 	return nil
+}
+
+func parseFileMatches(matches *ParsedCommand) (brief, mimeOnly bool) {
+	if matches == nil {
+		return false, false
+	}
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "brief":
+			brief = true
+		case "mime":
+			mimeOnly = true
+		case "dereference":
+			// Accepted for compatibility; current implementation reports the link object.
+		}
+	}
+	return brief, mimeOnly
 }
 
 func detectFileType(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo) (description, mime string, err error) {
@@ -171,3 +197,5 @@ func isASCIIText(data []byte) bool {
 }
 
 var _ Command = (*FileCmd)(nil)
+var _ SpecProvider = (*FileCmd)(nil)
+var _ ParsedRunner = (*FileCmd)(nil)

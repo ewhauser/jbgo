@@ -20,8 +20,6 @@ type commOptions struct {
 	total           bool
 	checkOrder      bool
 	noCheckOrder    bool
-	showHelp        bool
-	showVersion     bool
 }
 
 type commOrderChecker struct {
@@ -39,17 +37,47 @@ func (c *Comm) Name() string {
 }
 
 func (c *Comm) Run(ctx context.Context, inv *Invocation) error {
-	opts, leftName, rightName, err := parseCommArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Comm) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "comm",
+		About: "Compare sorted files FILE1 and FILE2 line by line.",
+		Usage: "comm [OPTION]... FILE1 FILE2",
+		Options: []OptionSpec{
+			{Name: "column-1", Short: '1', Help: "suppress column 1 (lines unique to FILE1)"},
+			{Name: "column-2", Short: '2', Help: "suppress column 2 (lines unique to FILE2)"},
+			{Name: "column-3", Short: '3', Help: "suppress column 3 (lines that appear in both files)"},
+			{Name: "check-order", Long: "check-order", Help: "check that the input is correctly sorted"},
+			{Name: "nocheck-order", Long: "nocheck-order", Help: "do not check that the input is correctly sorted"},
+			{Name: "output-delimiter", Long: "output-delimiter", ValueName: "STR", Arity: OptionRequiredValue, Help: "separate columns with STR"},
+			{Name: "total", Long: "total", Help: "output a summary"},
+			{Name: "zero-terminated", Short: 'z', Long: "zero-terminated", Help: "line delimiter is NUL, not newline"},
+		},
+		Args: []ArgSpec{
+			{Name: "file1", ValueName: "FILE1", Help: "first input file"},
+			{Name: "file2", ValueName: "FILE2", Help: "second input file"},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:      true,
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+			AutoHelp:              true,
+			AutoVersion:           true,
+		},
+		HelpRenderer: renderStaticHelp(commHelpText),
+		VersionRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, commVersionText)
+			return err
+		},
+	}
+}
+
+func (c *Comm) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, leftName, rightName, err := parseCommMatches(inv, matches)
 	if err != nil {
 		return err
-	}
-	if opts.showHelp {
-		_, _ = io.WriteString(inv.Stdout, commHelpText)
-		return nil
-	}
-	if opts.showVersion {
-		_, _ = io.WriteString(inv.Stdout, commVersionText)
-		return nil
 	}
 
 	leftData, leftLabel, err := readCommInput(ctx, inv, leftName)
@@ -130,36 +158,32 @@ finish:
 	return nil
 }
 
-func parseCommArgs(inv *Invocation) (opts commOptions, leftName, rightName string, err error) {
+func parseCommMatches(inv *Invocation, matches *ParsedCommand) (opts commOptions, leftName, rightName string, err error) {
 	opts.outputDelimiter = "\t"
-	args := append([]string(nil), inv.Args...)
-
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
-		}
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			break
-		}
-		if strings.HasPrefix(arg, "--") {
-			consumed, parseErr := parseCommLongOption(inv, args, &opts)
-			if parseErr != nil {
-				return commOptions{}, "", "", parseErr
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "column-1":
+			opts.suppress[1] = true
+		case "column-2":
+			opts.suppress[2] = true
+		case "column-3":
+			opts.suppress[3] = true
+		case "zero-terminated":
+			opts.zeroTerminated = true
+		case "total":
+			opts.total = true
+		case "check-order":
+			opts.checkOrder = true
+		case "nocheck-order":
+			opts.noCheckOrder = true
+		case "output-delimiter":
+			if err := setCommDelimiter(inv, &opts, matches.Value("output-delimiter")); err != nil {
+				return commOptions{}, "", "", err
 			}
-			if opts.showHelp || opts.showVersion {
-				return opts, "", "", nil
-			}
-			args = args[consumed:]
-			continue
 		}
-		if parseErr := parseCommShortOptions(inv, arg, &opts); parseErr != nil {
-			return commOptions{}, "", "", parseErr
-		}
-		args = args[1:]
 	}
 
+	args := matches.Positionals()
 	switch len(args) {
 	case 0:
 		return commOptions{}, "", "", commUsageError(inv, "comm: missing operand")
@@ -176,98 +200,6 @@ func parseCommArgs(inv *Invocation) (opts commOptions, leftName, rightName strin
 		return commOptions{}, "", "", exitf(inv, 1, "comm: only one input file may be standard input")
 	}
 	return opts, args[0], args[1], nil
-}
-
-func parseCommLongOption(inv *Invocation, args []string, opts *commOptions) (int, error) {
-	arg := args[0]
-	name := strings.TrimPrefix(arg, "--")
-	value := ""
-	hasValue := false
-	if before, after, ok := strings.Cut(name, "="); ok {
-		name = before
-		value = after
-		hasValue = true
-	}
-
-	match, err := matchCommLongOption(inv, name)
-	if err != nil {
-		return 0, err
-	}
-	switch match {
-	case "help":
-		opts.showHelp = true
-		return 1, nil
-	case "version":
-		opts.showVersion = true
-		return 1, nil
-	case "total":
-		opts.total = true
-		return 1, nil
-	case "zero-terminated":
-		opts.zeroTerminated = true
-		return 1, nil
-	case "check-order":
-		opts.checkOrder = true
-		return 1, nil
-	case "nocheck-order":
-		opts.noCheckOrder = true
-		return 1, nil
-	case "output-delimiter":
-		if hasValue {
-			return 1, setCommDelimiter(inv, opts, value)
-		}
-		if len(args) < 2 {
-			return 0, commUsageError(inv, "comm: option '--output-delimiter' requires an argument")
-		}
-		return 2, setCommDelimiter(inv, opts, args[1])
-	default:
-		return 0, commOptionf(inv, "comm: unrecognized option '%s'", arg)
-	}
-}
-
-func matchCommLongOption(inv *Invocation, name string) (string, error) {
-	candidates := []string{
-		"check-order",
-		"help",
-		"nocheck-order",
-		"output-delimiter",
-		"total",
-		"version",
-		"zero-terminated",
-	}
-	for _, candidate := range candidates {
-		if candidate == name {
-			return candidate, nil
-		}
-	}
-	var matches []string
-	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, name) {
-			matches = append(matches, candidate)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", commOptionf(inv, "comm: unrecognized option '%s'", "--"+name)
-	case 1:
-		return matches[0], nil
-	default:
-		return "", commOptionf(inv, "comm: option '%s' is ambiguous", "--"+name)
-	}
-}
-
-func parseCommShortOptions(inv *Invocation, arg string, opts *commOptions) error {
-	for i := 1; i < len(arg); i++ {
-		switch arg[i] {
-		case '1', '2', '3':
-			opts.suppress[arg[i]-'0'] = true
-		case 'z':
-			opts.zeroTerminated = true
-		default:
-			return commOptionf(inv, "comm: invalid option -- '%c'", arg[i])
-		}
-	}
-	return nil
 }
 
 func setCommDelimiter(inv *Invocation, opts *commOptions, value string) error {
@@ -432,10 +364,6 @@ func commUsageError(inv *Invocation, format string, args ...any) error {
 	return exitf(inv, 1, format+"\nTry 'comm --help' for more information.", args...)
 }
 
-func commOptionf(inv *Invocation, format string, args ...any) error {
-	return exitf(inv, 1, format+"\nTry 'comm --help' for more information.", args...)
-}
-
 const commHelpText = `Usage: comm [OPTION]... FILE1 FILE2
 Compare sorted files FILE1 and FILE2 line by line.
 
@@ -455,3 +383,5 @@ Compare sorted files FILE1 and FILE2 line by line.
 const commVersionText = "comm (gbash) dev\n"
 
 var _ Command = (*Comm)(nil)
+var _ SpecProvider = (*Comm)(nil)
+var _ ParsedRunner = (*Comm)(nil)
