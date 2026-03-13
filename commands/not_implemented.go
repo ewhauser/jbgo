@@ -32,7 +32,6 @@ var gnuCoreutilsNotImplementedNames = []string{
 	"csplit",
 	"dd",
 	"df",
-	"dircolors",
 	"expand",
 	"factor",
 	"fmt",
