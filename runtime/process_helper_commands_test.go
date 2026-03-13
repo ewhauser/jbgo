@@ -1311,7 +1311,7 @@ func TestBashHelpUsesSpecParser(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := "usage: bash [-c command_string [name [arg ...]]] [script [arg ...]]\nusage: sh [-c command_string [name [arg ...]]] [script [arg ...]]\n"
+	want := "usage: bash [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
@@ -1365,6 +1365,43 @@ func TestShDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	}
 	if got, want := result.Stdout, "value\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestBashGroupedShortFlagsSetShellOptionsForCommandString(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -ceu 'echo \"$MISSING\"'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
+	}
+	if !strings.Contains(result.Stderr, "unbound variable") {
+		t.Fatalf("Stderr = %q, want nounset diagnostic", result.Stderr)
+	}
+}
+
+func TestBashDashOpipefailAffectsCommandString(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -e -o pipefail -c 'false | true; echo after'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
 	}
 }
 

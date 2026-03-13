@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,13 +10,9 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/commands"
 	"golang.org/x/term"
 )
-
-type cliOptions struct {
-	interactive bool
-	showVersion bool
-}
 
 type compatInvocation struct {
 	utility    string
@@ -34,11 +29,25 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return runCompatInvocation(ctx, argv0, *compat, stdin, stdout, stderr)
 	}
 
-	opts, err := parseCLIOptions(args, stderr)
+	parsed, err := commands.ParseBashInvocation(args, commands.BashInvocationConfig{
+		Name:             "gbash",
+		AllowInteractive: true,
+		LongInteractive:  true,
+	})
 	if err != nil {
 		return 2, err
 	}
-	if opts.showVersion {
+	switch parsed.Action {
+	case "help":
+		if err := commands.RenderBashInvocationHelp(stdout, commands.BashInvocationConfig{
+			Name:             "gbash",
+			AllowInteractive: true,
+			LongInteractive:  true,
+		}); err != nil {
+			return 1, err
+		}
+		return 0, nil
+	case "version":
 		_, _ = io.WriteString(stdout, versionText())
 		return 0, nil
 	}
@@ -48,28 +57,10 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return 1, fmt.Errorf("init runtime: %w", err)
 	}
 
-	if opts.interactive || stdinTTY {
-		return runInteractiveShell(ctx, rt, stdin, stdout, stderr)
+	if parsed.Source == commands.BashSourceStdin && (parsed.Interactive || stdinTTY) {
+		return runInteractiveShell(ctx, rt, stdin, stdout, stderr, parsed.Prelude())
 	}
-	return runScript(ctx, rt, stdin, stdout, stderr)
-}
-
-func parseCLIOptions(args []string, stderr io.Writer) (cliOptions, error) {
-	fs := flag.NewFlagSet("gbash", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-
-	var opts cliOptions
-	fs.BoolVar(&opts.interactive, "i", false, "run an interactive shell session")
-	fs.BoolVar(&opts.interactive, "interactive", false, "run an interactive shell session")
-	fs.BoolVar(&opts.showVersion, "version", false, "print version information")
-
-	if err := fs.Parse(args); err != nil {
-		return cliOptions{}, err
-	}
-	if fs.NArg() != 0 {
-		return cliOptions{}, fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
-	return opts, nil
+	return runBashInvocation(ctx, rt, parsed, stdin, stdout, stderr)
 }
 
 func parseCompatInvocation(argv0 string, args []string) (*compatInvocation, error) {
@@ -131,16 +122,44 @@ func resolveCompatCommandDir(argv0 string) (string, error) {
 	return resolveCommandDir(filepath.Dir(resolved))
 }
 
-func runScript(ctx context.Context, rt *gbash.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
-	src, err := io.ReadAll(stdin)
-	if err != nil {
-		return 1, fmt.Errorf("read stdin: %w", err)
+func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *commands.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if parsed == nil {
+		parsed = &commands.BashInvocation{Name: "gbash", Source: commands.BashSourceStdin}
 	}
 
-	result, err := rt.Run(ctx, &gbash.ExecutionRequest{
-		Name:   "stdin",
-		Script: string(src),
-	})
+	var (
+		script      string
+		execStdin   io.Reader = stdin
+		readErr     error
+		missingPath string
+	)
+	switch parsed.Source {
+	case commands.BashSourceCommandString:
+		script = parsed.CommandString
+	case commands.BashSourceFile:
+		data, err := os.ReadFile(parsed.ScriptPath)
+		if err != nil {
+			readErr = err
+			missingPath = parsed.ScriptPath
+			break
+		}
+		script = string(data)
+	default:
+		var data []byte
+		data, readErr = io.ReadAll(stdin)
+		if readErr == nil {
+			script = string(data)
+		}
+		execStdin = nil
+	}
+	if readErr != nil {
+		if missingPath != "" {
+			return 127, fmt.Errorf("%s: No such file or directory", missingPath)
+		}
+		return 1, fmt.Errorf("read script: %w", readErr)
+	}
+
+	result, err := rt.Run(ctx, parsed.BuildExecutionRequest(nil, "", execStdin, script))
 	if result != nil {
 		_, _ = io.WriteString(stdout, result.Stdout)
 		_, _ = io.WriteString(stderr, result.Stderr)

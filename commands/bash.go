@@ -23,65 +23,36 @@ func (c *Bash) Name() string {
 }
 
 func (c *Bash) Run(ctx context.Context, inv *Invocation) error {
-	return RunCommand(ctx, c, inv)
-}
-
-func (c *Bash) Spec() CommandSpec {
-	return CommandSpec{
-		Name:  c.name,
-		Usage: c.name + " [-c command_string [name [arg ...]]] [script [arg ...]]",
-		Options: []OptionSpec{
-			{Name: "command", Short: 'c', ValueName: "command_string", Arity: OptionRequiredValue, Help: "read commands from command_string"},
-			{Name: "stdin", Short: 's', Help: "read commands from standard input"},
-		},
-		Args: []ArgSpec{
-			{Name: "arg", ValueName: "arg", Repeatable: true},
-		},
-		Parse: ParseConfig{
-			StopAtFirstPositional: true,
-			AutoHelp:              true,
-			AutoVersion:           true,
-		},
-		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
-			_, err := fmt.Fprintf(w, "usage: %s\n", spec.Usage)
-			return err
-		},
-	}
-}
-
-func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	if inv.Exec == nil {
 		return fmt.Errorf("%s: subexec callback missing", c.name)
 	}
 
-	if matches.Has("command") {
-		positional := matches.Args("arg")
-		if len(positional) > 0 {
-			positional = positional[1:]
+	parsed, err := ParseBashInvocation(inv.Args, BashInvocationConfig{Name: c.name})
+	if err != nil {
+		return exitf(inv, 2, "%v", err)
+	}
+	switch parsed.Action {
+	case "help":
+		return RenderBashInvocationUsage(inv.Stdout, BashInvocationConfig{Name: c.name})
+	case "version":
+		return RenderSimpleVersion(inv.Stdout, c.name)
+	}
+
+	switch parsed.Source {
+	case BashSourceCommandString:
+		return c.executeInlineScript(ctx, inv, parsed, parsed.CommandString, inv.Stdin)
+	case BashSourceFile:
+		scriptData, _, err := readAllFile(ctx, inv, parsed.ScriptPath)
+		if err != nil {
+			return exitf(inv, 127, "%s: %s: No such file or directory", c.name, parsed.ScriptPath)
 		}
-		return c.executeInlineScript(ctx, inv, matches.Value("command"), positional, inv.Stdin)
+		return c.executeInlineScript(ctx, inv, parsed, string(scriptData), inv.Stdin)
+	default:
+		return c.executeStdinScript(ctx, inv, parsed)
 	}
-
-	if matches.Has("stdin") || len(matches.Args("arg")) == 0 {
-		return c.executeStdinScript(ctx, inv, matches.Args("arg"))
-	}
-
-	args := matches.Args("arg")
-	scriptData, _, err := readAllFile(ctx, inv, args[0])
-	if err != nil {
-		return exitf(inv, 127, "%s: %s: No such file or directory", c.name, args[0])
-	}
-	result, err := inv.Exec(ctx, c.executionRequest(inv, string(scriptData), args[1:], inv.Stdin))
-	if err != nil {
-		return err
-	}
-	if err := writeExecutionOutputs(inv, result); err != nil {
-		return err
-	}
-	return exitForExecutionResult(result)
 }
 
-func (c *Bash) executeStdinScript(ctx context.Context, inv *Invocation, positional []string) error {
+func (c *Bash) executeStdinScript(ctx context.Context, inv *Invocation, parsed *BashInvocation) error {
 	data, err := io.ReadAll(inv.Stdin)
 	if err != nil {
 		return &ExitError{Code: 1, Err: err}
@@ -89,11 +60,11 @@ func (c *Bash) executeStdinScript(ctx context.Context, inv *Invocation, position
 	if len(data) == 0 {
 		return nil
 	}
-	return c.executeInlineScript(ctx, inv, string(data), positional, nil)
+	return c.executeInlineScript(ctx, inv, parsed, string(data), nil)
 }
 
-func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, script string, positional []string, stdin io.Reader) error {
-	result, err := inv.Exec(ctx, c.executionRequest(inv, script, positional, stdin))
+func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed *BashInvocation, script string, stdin io.Reader) error {
+	result, err := inv.Exec(ctx, parsed.BuildExecutionRequest(inv.Env, inv.Cwd, stdin, script))
 	if err != nil {
 		return err
 	}
@@ -103,23 +74,4 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, script 
 	return exitForExecutionResult(result)
 }
 
-func (c *Bash) executionRequest(inv *Invocation, script string, positional []string, stdin io.Reader) *ExecutionRequest {
-	req := &ExecutionRequest{
-		Name:            c.name,
-		Interpreter:     c.name,
-		Script:          script,
-		Args:            positional,
-		Env:             inv.Env,
-		WorkDir:         inv.Cwd,
-		Stdin:           stdin,
-		PassthroughArgs: append([]string(nil), inv.Args...),
-	}
-	if len(req.PassthroughArgs) == 0 {
-		req.PassthroughArgs = []string{"-s"}
-	}
-	return req
-}
-
 var _ Command = (*Bash)(nil)
-var _ SpecProvider = (*Bash)(nil)
-var _ ParsedRunner = (*Bash)(nil)

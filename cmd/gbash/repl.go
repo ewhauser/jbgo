@@ -22,7 +22,7 @@ type interactiveState struct {
 	env     map[string]string
 }
 
-func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, stdin io.Reader, stdout, stderr io.Writer, startupPrelude string) (int, error) {
 	session, err := rt.NewSession(ctx)
 	if err != nil {
 		return 1, fmt.Errorf("init session: %w", err)
@@ -55,6 +55,9 @@ func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, stdin io.Reader
 		script, err := renderStatements(printer, stmts)
 		if err != nil {
 			return 1, fmt.Errorf("render interactive statements: %w", err)
+		}
+		if startupPrelude != "" {
+			script = startupPrelude + script
 		}
 
 		env := cloneEnv(state.env)
