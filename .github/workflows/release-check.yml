@@ -9,24 +9,21 @@ permissions:
   contents: read
 
 jobs:
-  goreleaser-snapshot:
+  cross-compile:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
     env:
+      CGO_ENABLED: "0"
       GOOS: ${{ matrix.goos }}
-      GORELEASER_CURRENT_TAG: v0.0.0-snapshot
+      GOARCH: ${{ matrix.goarch }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: v2.14.3
-          args: release --snapshot --clean --skip=changelog --split
+      - run: go build -trimpath ./cmd/gbash
