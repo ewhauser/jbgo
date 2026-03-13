@@ -249,7 +249,7 @@ func TestRunnerExecKeepsBuiltinAndRegistryPrecedenceOverPATHShadow(t *testing.T)
 	}
 }
 
-func TestRunnerExecRejectsUnregisteredPATHExecutable(t *testing.T) {
+func TestRunnerExecRunsShebangPATHExecutableViaRegisteredInterpreter(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
@@ -257,13 +257,13 @@ func TestRunnerExecRejectsUnregisteredPATHExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compatfs.New() error = %v", err)
 	}
-	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
+	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh", "echo"})
 	hostDir := filepath.Join(tmp, "host-bin")
 	hostPath := commandDir + string(os.PathListSeparator) + hostDir
 	if err := os.MkdirAll(hostDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(hostDir) error = %v", err)
 	}
-	writeExecutableFile(t, filepath.Join(hostDir, "helpercmd"), "#!/bin/sh\nprintf 'helper:%s\\n' \"$PWD\"\n/bin/cat\n")
+	writeExecutableFile(t, filepath.Join(hostDir, "helpercmd"), "#!/bin/sh\necho helper\n")
 
 	runner, err := New(&Config{
 		FS:                fsys,
@@ -283,7 +283,55 @@ func TestRunnerExecRejectsUnregisteredPATHExecutable(t *testing.T) {
 		},
 		ReplaceEnv: true,
 		WorkDir:    tmp,
-		Stdin:      strings.NewReader("streamed\n"),
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got := result.Stdout; got != "helper\n" {
+		t.Fatalf("Stdout = %q, want helper output", got)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestRunnerExecRejectsUnregisteredPathExecutableWithoutShebang(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	fsys, err := compatfs.New()
+	if err != nil {
+		t.Fatalf("compatfs.New() error = %v", err)
+	}
+	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
+	hostDir := filepath.Join(tmp, "host-bin")
+	hostPath := commandDir + string(os.PathListSeparator) + hostDir
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(hostDir) error = %v", err)
+	}
+	writeExecutableFile(t, filepath.Join(hostDir, "helpercmd"), "echo helper\n")
+
+	runner, err := New(&Config{
+		FS:                fsys,
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
+		DefaultDir:        tmp,
+		BuiltinCommandDir: commandDir,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := runner.Exec(context.Background(), &commands.ExecutionRequest{
+		Script: "helpercmd\n",
+		Env: map[string]string{
+			"HOME": tmp,
+			"PATH": hostPath,
+		},
+		ReplaceEnv: true,
+		WorkDir:    tmp,
 	})
 	if err != nil {
 		t.Fatalf("Exec() error = %v", err)

@@ -18,89 +18,42 @@ type headTailOptions struct {
 	files    []string
 }
 
-func parseHeadTailArgs(inv *Invocation, cmdName string, allowFromLine bool) (headTailOptions, error) {
-	args := inv.Args
-	opts := headTailOptions{lines: 10}
+func headOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (headTailOptions, error) {
+	opts := headTailOptions{
+		lines:   10,
+		quiet:   matches.Has("quiet"),
+		verbose: matches.Has("verbose"),
+		files:   matches.Args("file"),
+	}
+	if matches.Has("lines") {
+		count, fromLine, err := parseHeadTailCount(matches.Value("lines"), false)
+		if err != nil {
+			return headTailOptions{}, exitf(inv, 1, "head: invalid number of lines")
+		}
+		opts.lines = count
+		opts.fromLine = fromLine
+	}
+	if matches.Has("bytes") {
+		count, err := parseHeadTailNumber(matches.Value("bytes"))
+		if err != nil {
+			return headTailOptions{}, exitf(inv, 1, "head: invalid number of bytes")
+		}
+		opts.bytes = count
+		opts.hasBytes = true
+	}
+	return opts, nil
+}
 
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case arg == "-n" || arg == "--lines":
-			if len(args) < 2 {
-				return headTailOptions{}, exitf(inv, 1, "%s: missing argument to -n", cmdName)
-			}
-			count, fromLine, err := parseHeadTailCount(args[1], allowFromLine)
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of lines", cmdName)
-			}
-			opts.lines = count
-			opts.fromLine = fromLine
-			args = args[2:]
-		case strings.HasPrefix(arg, "--lines="):
-			count, fromLine, err := parseHeadTailCount(strings.TrimPrefix(arg, "--lines="), allowFromLine)
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of lines", cmdName)
-			}
-			opts.lines = count
-			opts.fromLine = fromLine
-			args = args[1:]
-		case arg == "-c" || arg == "--bytes":
-			if len(args) < 2 {
-				return headTailOptions{}, exitf(inv, 1, "%s: missing argument to -c", cmdName)
-			}
-			count, err := parseHeadTailNumber(args[1])
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of bytes", cmdName)
-			}
-			opts.bytes = count
-			opts.hasBytes = true
-			args = args[2:]
-		case strings.HasPrefix(arg, "--bytes="):
-			count, err := parseHeadTailNumber(strings.TrimPrefix(arg, "--bytes="))
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of bytes", cmdName)
-			}
-			opts.bytes = count
-			opts.hasBytes = true
-			args = args[1:]
-		case strings.HasPrefix(arg, "-n"):
-			count, fromLine, err := parseHeadTailCount(strings.TrimPrefix(arg, "-n"), allowFromLine)
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of lines", cmdName)
-			}
-			opts.lines = count
-			opts.fromLine = fromLine
-			args = args[1:]
-		case strings.HasPrefix(arg, "-c"):
-			count, err := parseHeadTailNumber(strings.TrimPrefix(arg, "-c"))
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of bytes", cmdName)
-			}
-			opts.bytes = count
-			opts.hasBytes = true
-			args = args[1:]
-		case arg == "-q" || arg == "--quiet" || arg == "--silent":
-			opts.quiet = true
-			args = args[1:]
-		case arg == "-v" || arg == "--verbose":
-			opts.verbose = true
-			args = args[1:]
-		case len(arg) > 1 && arg[0] == '-' && arg[1] >= '0' && arg[1] <= '9':
-			count, err := strconv.Atoi(arg[1:])
-			if err != nil {
-				return headTailOptions{}, exitf(inv, 1, "%s: invalid number of lines", cmdName)
-			}
-			opts.lines = count
-			args = args[1:]
-		case strings.HasPrefix(arg, "-"):
-			return headTailOptions{}, exitf(inv, 1, "%s: unsupported flag %s", cmdName, arg)
-		default:
-			opts.files = append(opts.files, arg)
-			args = args[1:]
+func isDecimalDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false
 		}
 	}
-
-	return opts, nil
+	return true
 }
 
 func parseHeadTailCount(value string, allowFromLine bool) (count int, fromLine bool, err error) {

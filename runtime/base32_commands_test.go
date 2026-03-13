@@ -55,3 +55,37 @@ func TestBase32OmitsTrailingNewlineForEmptyInput(t *testing.T) {
 		t.Fatalf("Stdout = %q, want empty output", result.Stdout)
 	}
 }
+
+func TestBase32SupportsShortAliasAndInferredLongOptions(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'JBSWY3DPFQQFO33SNRSCC===\\n' | base32 -D --ig\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "Hello, World!"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestBase32SupportsFileInputAndInferredWrapFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'Hello, World!\\n' > /tmp/input.txt\nbase32 --wr=8 /tmp/input.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "JBSWY3DP\nFQQFO33S\nNRSCCCQ=\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

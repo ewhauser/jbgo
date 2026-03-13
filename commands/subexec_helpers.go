@@ -143,7 +143,7 @@ func commandSearchDirs(env map[string]string, dir string) []string {
 	for entry := range strings.SplitSeq(pathValue, ":") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
-			continue
+			entry = "."
 		}
 		resolved := gbfs.Resolve(dir, entry)
 		if _, ok := seen[resolved]; ok {

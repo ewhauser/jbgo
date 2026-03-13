@@ -2,9 +2,13 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"strings"
+
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Env struct{}
@@ -27,15 +31,78 @@ func (c *PrintEnv) Name() string {
 }
 
 func (c *Env) Run(ctx context.Context, inv *Invocation) error {
-	if len(inv.Args) > 0 && inv.Args[0] == "--help" {
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: env [-i] [-u NAME] [NAME=VALUE ...] [COMMAND [ARG...]]")
-		return nil
-	}
-	replaceEnv, unset, setPairs, argv, err := parseEnvArgs(inv)
+	parseInv := *inv
+	parseInv.Args = normalizeEnvDashAlias(inv.Args)
+
+	spec := c.Spec()
+	matches, action, err := ParseCommandSpec(&parseInv, &spec)
 	if err != nil {
-		return err
+		return rewriteEnvParseError(err)
 	}
+	switch action {
+	case "help":
+		return RenderCommandHelp(inv.Stdout, &spec)
+	case "version":
+		return RenderCommandVersion(inv.Stdout, &spec)
+	default:
+		return c.RunParsed(ctx, inv, matches)
+	}
+}
+
+func (c *Env) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "env",
+		Usage: "env [-i] [-u NAME] [NAME=VALUE ...] [COMMAND [ARG...]]",
+		Options: []OptionSpec{
+			{Name: "ignore-environment", Short: 'i', Long: "ignore-environment", Help: "start with an empty environment"},
+			{Name: "chdir", Short: 'C', Long: "chdir", ValueName: "DIR", Arity: OptionRequiredValue, Help: "change working directory to DIR"},
+			{Name: "argv0", Short: 'a', Long: "argv0", ValueName: "ARG", Arity: OptionRequiredValue, Help: "pass ARG as argv[0] of the command to execute"},
+			{Name: "debug", Short: 'v', Long: "debug", Help: "print verbose information for each processing step"},
+			{Name: "unset", Short: 'u', Long: "unset", ValueName: "NAME", Arity: OptionRequiredValue, Repeatable: true, Help: "remove variable from the environment"},
+		},
+		Args: []ArgSpec{
+			{Name: "item", ValueName: "ARG", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			StopAtFirstPositional:    true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
+			_, err := fmt.Fprintf(w, "usage: %s\n", spec.Usage)
+			return err
+		},
+	}
+}
+
+func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	replaceEnv := matches.Has("ignore-environment")
+	unset := matches.Values("unset")
+	for _, name := range unset {
+		if err := validateEnvUnsetName(inv, name); err != nil {
+			return err
+		}
+	}
+
+	setPairs, argv := splitEnvAssignments(matches.Args("item"))
+	if len(argv) > 0 && argv[0] == "--" {
+		argv = argv[1:]
+	}
+
 	env := buildEnv(inv.Env, replaceEnv, unset, setPairs)
+	workDir := inv.Cwd
+	if matches.Has("chdir") {
+		if len(argv) == 0 {
+			return exitf(inv, 125, "env: must specify command with --chdir (-C)\nTry 'env --help' for more information.")
+		}
+		resolved, err := resolveEnvWorkingDir(ctx, inv, matches.Value("chdir"))
+		if err != nil {
+			return err
+		}
+		workDir = resolved
+	}
 	if len(argv) == 0 {
 		for _, line := range sortedEnvPairs(env) {
 			if _, err := fmt.Fprintln(inv.Stdout, line); err != nil {
@@ -52,12 +119,17 @@ func (c *Env) Run(ctx context.Context, inv *Invocation) error {
 			searchEnv["PATH"] = pathValue
 		}
 	}
+	if matches.Has("debug") && len(argv) > 0 {
+		if err := writeEnvDebug(inv, argv, matches); err != nil {
+			return err
+		}
+	}
 
 	result, err := executeCommand(ctx, inv, &executeCommandOptions{
 		Argv:       argv,
 		Env:        env,
 		SearchEnv:  searchEnv,
-		WorkDir:    inv.Cwd,
+		WorkDir:    workDir,
 		ReplaceEnv: true,
 		Stdin:      inv.Stdin,
 	})
@@ -70,27 +142,54 @@ func (c *Env) Run(ctx context.Context, inv *Invocation) error {
 	return exitForExecutionResult(result)
 }
 
-func (c *PrintEnv) Run(_ context.Context, inv *Invocation) error {
-	if len(inv.Args) > 0 && inv.Args[0] == "--help" {
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: printenv [NAME...]")
-		return nil
+func (c *PrintEnv) Run(ctx context.Context, inv *Invocation) error {
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *PrintEnv) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "printenv",
+		Usage: "printenv [NAME...]",
+		Options: []OptionSpec{
+			{Name: "null", Short: '0', Long: "null", Help: "end each output line with NUL, not newline"},
+		},
+		Args: []ArgSpec{
+			{Name: "name", ValueName: "NAME", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			AutoHelp:    true,
+			AutoVersion: true,
+		},
+		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
+			_, err := fmt.Fprintf(w, "usage: %s\n", spec.Usage)
+			return err
+		},
 	}
-	if len(inv.Args) == 0 {
+}
+
+func (c *PrintEnv) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCommand) error {
+	names := matches.Args("name")
+	separator := "\n"
+	if matches.Has("null") {
+		separator = "\x00"
+	}
+	if len(names) == 0 {
 		for _, line := range sortedEnvPairs(inv.Env) {
-			if _, err := fmt.Fprintln(inv.Stdout, line); err != nil {
+			if _, err := io.WriteString(inv.Stdout, line+separator); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
 		return nil
 	}
+
 	exitCode := 0
-	for _, name := range inv.Args {
+	for _, name := range names {
 		value, ok := inv.Env[name]
 		if !ok {
 			exitCode = 1
 			continue
 		}
-		if _, err := fmt.Fprintln(inv.Stdout, value); err != nil {
+		if _, err := io.WriteString(inv.Stdout, value+separator); err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
 	}
@@ -100,46 +199,80 @@ func (c *PrintEnv) Run(_ context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseEnvArgs(inv *Invocation) (replaceEnv bool, unset []string, setPairs map[string]string, argv []string, err error) {
-	args := inv.Args
+func splitEnvAssignments(args []string) (setPairs map[string]string, argv []string) {
 	setPairs = make(map[string]string)
-	optionsDone := false
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case !optionsDone && arg == "--":
-			optionsDone = true
-			args = args[1:]
-		case !optionsDone && (arg == "-i" || arg == "--ignore-environment"):
-			replaceEnv = true
-			args = args[1:]
-		case !optionsDone && arg == "-u":
-			if len(args) < 2 {
-				return false, nil, nil, nil, exitf(inv, 1, "env: option requires an argument -- 'u'")
-			}
-			unset = append(unset, args[1])
-			args = args[2:]
-		case !optionsDone && arg == "--unset":
-			if len(args) < 2 {
-				return false, nil, nil, nil, exitf(inv, 1, "env: option requires an argument -- unset")
-			}
-			unset = append(unset, args[1])
-			args = args[2:]
-		case !optionsDone && strings.HasPrefix(arg, "-u") && len(arg) > 2:
-			unset = append(unset, arg[2:])
-			args = args[1:]
-		case !optionsDone && strings.HasPrefix(arg, "--unset="):
-			unset = append(unset, strings.TrimPrefix(arg, "--unset="))
-			args = args[1:]
-		case strings.Contains(arg, "=") && !strings.HasPrefix(arg, "="):
+	for i, arg := range args {
+		if arg == "--" {
+			return setPairs, args[i+1:]
+		}
+		if strings.Contains(arg, "=") && !strings.HasPrefix(arg, "=") {
 			name, value, _ := strings.Cut(arg, "=")
 			setPairs[name] = value
-			args = args[1:]
-		default:
-			return replaceEnv, unset, setPairs, args, nil
+			continue
+		}
+		return setPairs, args[i:]
+	}
+	return setPairs, nil
+}
+
+func normalizeEnvDashAlias(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	normalized := append([]string(nil), args...)
+	for i, arg := range normalized {
+		if arg == "--" {
+			break
+		}
+		if arg == "-" {
+			normalized[i] = "-i"
+			break
+		}
+		if !strings.HasPrefix(arg, "-") || (strings.Contains(arg, "=") && !strings.HasPrefix(arg, "=")) {
+			break
 		}
 	}
-	return replaceEnv, unset, setPairs, args, nil
+	return normalized
+}
+
+func rewriteEnvParseError(err error) error {
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) && exitErr.Code == 1 {
+		return &ExitError{Code: 125, Err: exitErr.Err}
+	}
+	return err
+}
+
+func validateEnvUnsetName(inv *Invocation, name string) error {
+	if name == "" || strings.Contains(name, "=") {
+		return exitf(inv, 125, "env: cannot unset %s: Invalid argument", quoteGNUOperand(name))
+	}
+	return nil
+}
+
+func resolveEnvWorkingDir(ctx context.Context, inv *Invocation, dir string) (string, error) {
+	_, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, dir)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", exitf(inv, 125, "env: cannot change directory to %s: No such file or directory", quoteGNUOperand(dir))
+	}
+	return abs, nil
+}
+
+func writeEnvDebug(inv *Invocation, argv []string, matches *ParsedCommand) error {
+	argv0 := argv[0]
+	if matches.Has("argv0") {
+		argv0 = matches.Value("argv0")
+	}
+	lines := []string{
+		fmt.Sprintf("argv0:     %s", quoteGNUOperand(argv0)),
+		fmt.Sprintf("executing: %s", argv[0]),
+		fmt.Sprintf("   arg[0]= %s", quoteGNUOperand(argv0)),
+	}
+	_, err := io.WriteString(inv.Stderr, strings.Join(lines, "\n")+"\n")
+	return err
 }
 
 func buildEnv(base map[string]string, replaceEnv bool, unset []string, pairs map[string]string) map[string]string {
@@ -164,3 +297,7 @@ func mergeStringMap(src map[string]string) map[string]string {
 
 var _ Command = (*Env)(nil)
 var _ Command = (*PrintEnv)(nil)
+var _ SpecProvider = (*Env)(nil)
+var _ ParsedRunner = (*Env)(nil)
+var _ SpecProvider = (*PrintEnv)(nil)
+var _ ParsedRunner = (*PrintEnv)(nil)

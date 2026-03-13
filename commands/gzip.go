@@ -24,7 +24,6 @@ type gzipOptions struct {
 	keep       bool
 	test       bool
 	verbose    bool
-	help       bool
 	suffix     string
 }
 
@@ -45,14 +44,54 @@ func (c *Gzip) Name() string {
 }
 
 func (c *Gzip) Run(ctx context.Context, inv *Invocation) error {
-	opts, inputs, err := parseGzipArgs(inv, c.name)
-	if err != nil {
-		return err
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Gzip) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  c.name,
+		Usage: c.name + " [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "stdout", Short: 'c', Long: "stdout", Aliases: []string{"to-stdout"}, Help: "write on standard output, keep original files unchanged"},
+			{Name: "decompress", Short: 'd', Long: "decompress", Aliases: []string{"uncompress"}, Help: "decompress"},
+			{Name: "force", Short: 'f', Long: "force", Help: "overwrite output files"},
+			{Name: "keep", Short: 'k', Long: "keep", Help: "keep input files"},
+			{Name: "suffix", Short: 'S', Long: "suffix", ValueName: "SUF", Arity: OptionRequiredValue, Help: "use suffix SUF on compressed files"},
+			{Name: "test", Short: 't', Long: "test", Help: "test compressed file integrity"},
+			{Name: "verbose", Short: 'v', Long: "verbose", Help: "verbose output"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
+			_, err := io.WriteString(w, gzipHelpText(spec.Name))
+			return err
+		},
 	}
-	if opts.help {
-		_, _ = io.WriteString(inv.Stdout, gzipHelpText(c.name))
-		return nil
+}
+
+func (c *Gzip) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts := c.defaultOptions()
+	opts.decompress = opts.decompress || matches.Has("decompress")
+	opts.toStdout = opts.toStdout || matches.Has("stdout")
+	opts.force = matches.Has("force")
+	opts.keep = opts.keep || matches.Has("keep")
+	opts.test = matches.Has("test")
+	opts.verbose = matches.Has("verbose")
+	if matches.Has("suffix") {
+		opts.suffix = matches.Value("suffix")
 	}
+	if opts.suffix == "" {
+		return exitf(inv, 1, "%s: suffix must not be empty", c.name)
+	}
+
+	inputs := matches.Args("file")
 	if len(inputs) == 0 {
 		inputs = []string{"-"}
 	}
@@ -65,11 +104,11 @@ func (c *Gzip) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseGzipArgs(inv *Invocation, commandName string) (gzipOptions, []string, error) {
+func (c *Gzip) defaultOptions() gzipOptions {
 	opts := gzipOptions{
 		suffix: ".gz",
 	}
-	switch commandName {
+	switch c.name {
 	case "gunzip":
 		opts.decompress = true
 	case "zcat":
@@ -77,69 +116,7 @@ func parseGzipArgs(inv *Invocation, commandName string) (gzipOptions, []string, 
 		opts.toStdout = true
 		opts.keep = true
 	}
-
-	args := inv.Args
-	var inputs []string
-	endOfOptions := false
-
-	for len(args) > 0 {
-		arg := args[0]
-		args = args[1:]
-
-		if endOfOptions || arg == "-" || !strings.HasPrefix(arg, "-") {
-			inputs = append(inputs, arg)
-			continue
-		}
-
-		switch arg {
-		case "--":
-			endOfOptions = true
-			continue
-		case "--help":
-			opts.help = true
-			continue
-		}
-
-		if strings.HasPrefix(arg, "--") {
-			return gzipOptions{}, nil, exitf(inv, 1, "%s: unsupported flag %s", commandName, arg)
-		}
-
-		for idx := 1; idx < len(arg); idx++ {
-			switch arg[idx] {
-			case 'c':
-				opts.toStdout = true
-			case 'd':
-				opts.decompress = true
-			case 'f':
-				opts.force = true
-			case 'k':
-				opts.keep = true
-			case 't':
-				opts.test = true
-			case 'v':
-				opts.verbose = true
-			case 'S':
-				if idx+1 < len(arg) {
-					opts.suffix = arg[idx+1:]
-					idx = len(arg)
-					continue
-				}
-				if len(args) == 0 {
-					return gzipOptions{}, nil, exitf(inv, 1, "%s: option requires an argument -- S", commandName)
-				}
-				opts.suffix = args[0]
-				args = args[1:]
-				idx = len(arg)
-			default:
-				return gzipOptions{}, nil, exitf(inv, 1, "%s: unsupported flag -%c", commandName, arg[idx])
-			}
-		}
-	}
-
-	if opts.suffix == "" {
-		return gzipOptions{}, nil, exitf(inv, 1, "%s: suffix must not be empty", commandName)
-	}
-	return opts, inputs, nil
+	return opts
 }
 
 func runGzipItem(ctx context.Context, inv *Invocation, opts *gzipOptions, name, commandName string) error {
@@ -309,5 +286,7 @@ Notes:
 }
 
 var (
-	_ Command = (*Gzip)(nil)
+	_ Command      = (*Gzip)(nil)
+	_ SpecProvider = (*Gzip)(nil)
+	_ ParsedRunner = (*Gzip)(nil)
 )

@@ -95,3 +95,37 @@ func TestBase64DecodeRepairsShortPaddedTailBeforeFailing(t *testing.T) {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestBase64SupportsShortAliasAndInferredLongOptions(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'aGVsbG8sIHdvcmxkIQ==\\n' | base64 -D --ig\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "hello, world!"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestBase64SupportsFileInputAndInferredWrapFlag(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'hello, world!' > /tmp/input.txt\nbase64 --wr=10 /tmp/input.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "aGVsbG8sIH\ndvcmxkIQ==\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

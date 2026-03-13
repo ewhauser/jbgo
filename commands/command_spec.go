@@ -16,6 +16,10 @@ type ParsedRunner interface {
 	RunParsed(context.Context, *Invocation, *ParsedCommand) error
 }
 
+type ParseInvocationNormalizer interface {
+	NormalizeInvocation(*Invocation) *Invocation
+}
+
 type LegacySpecProvider interface {
 	LegacyReason() string
 }
@@ -54,6 +58,7 @@ const (
 type OptionSpec struct {
 	Name                    string
 	Short                   rune
+	ShortAliases            []rune
 	Long                    string
 	Aliases                 []string
 	Help                    string
@@ -145,14 +150,21 @@ func RunCommand(ctx context.Context, cmd Command, inv *Invocation) error {
 	if ok {
 		if runner, ok := cmd.(ParsedRunner); ok {
 			spec := specCmd.Spec()
-			return runCommandWithSpec(ctx, inv, &spec, runner.RunParsed)
+			parseInv := inv
+			if normalizer, ok := cmd.(ParseInvocationNormalizer); ok {
+				parseInv = normalizer.NormalizeInvocation(inv)
+			}
+			return runCommandWithSpec(ctx, inv, parseInv, &spec, runner.RunParsed)
 		}
 	}
 	return cmd.Run(ctx, inv)
 }
 
-func runCommandWithSpec(ctx context.Context, inv *Invocation, spec *CommandSpec, run func(context.Context, *Invocation, *ParsedCommand) error) error {
-	matches, action, err := ParseCommandSpec(inv, spec)
+func runCommandWithSpec(ctx context.Context, inv, parseInv *Invocation, spec *CommandSpec, run func(context.Context, *Invocation, *ParsedCommand) error) error {
+	if parseInv == nil {
+		parseInv = inv
+	}
+	matches, action, err := ParseCommandSpec(parseInv, spec)
 	if err != nil {
 		return err
 	}
@@ -421,6 +433,9 @@ func matchShortOption(spec *CommandSpec, short rune) (*OptionSpec, bool) {
 	for i := range spec.Options {
 		opt := &spec.Options[i]
 		if opt.Short == short {
+			return opt, true
+		}
+		if slices.Contains(opt.ShortAliases, short) {
 			return opt, true
 		}
 	}

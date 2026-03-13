@@ -87,6 +87,38 @@ func TestGunzipRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestGzipSupportsLongFlagsAndCustomHelp(t *testing.T) {
+	session := newSession(t, nil)
+	writeSessionFile(t, session, "/tmp/long.txt", []byte("long flag data\n"))
+
+	help := mustExecSession(t, session, "gzip --help\nzcat --help\n")
+	if help.ExitCode != 0 {
+		t.Fatalf("help ExitCode = %d, want 0 (stderr=%q)", help.ExitCode, help.Stderr)
+	}
+	if !strings.Contains(help.Stdout, "gzip - gzip-compatible compression inside the gbash sandbox") {
+		t.Fatalf("gzip help = %q, want custom help text", help.Stdout)
+	}
+	if !strings.Contains(help.Stdout, "zcat - gzip-compatible compression inside the gbash sandbox") {
+		t.Fatalf("zcat help = %q, want custom help text", help.Stdout)
+	}
+
+	compress := mustExecSession(t, session, "gzip --keep --suffix=.tgz /tmp/long.txt\n")
+	if compress.ExitCode != 0 {
+		t.Fatalf("compress ExitCode = %d, want 0 (stderr=%q)", compress.ExitCode, compress.Stderr)
+	}
+	if got, want := string(readSessionFile(t, session, "/tmp/long.txt")), "long flag data\n"; got != want {
+		t.Fatalf("source after --keep = %q, want %q", got, want)
+	}
+
+	decompress := mustExecSession(t, session, "gunzip --stdout --suffix=.tgz /tmp/long.txt.tgz > /tmp/long.out\n")
+	if decompress.ExitCode != 0 {
+		t.Fatalf("decompress ExitCode = %d, want 0 (stderr=%q)", decompress.ExitCode, decompress.Stderr)
+	}
+	if got, want := string(readSessionFile(t, session, "/tmp/long.out")), "long flag data\n"; got != want {
+		t.Fatalf("decompressed output = %q, want %q", got, want)
+	}
+}
+
 func TestTarCreateListExtractAndRoundTripSymlink(t *testing.T) {
 	session := newSession(t, nil)
 	writeSessionFile(t, session, "/tmp/src/file.txt", []byte("archive me\n"))

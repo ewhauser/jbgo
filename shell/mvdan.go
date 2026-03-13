@@ -61,6 +61,7 @@ type resolvedCommand struct {
 	name    string
 	path    string
 	source  string
+	args    []string
 }
 
 type MVdan struct {
@@ -359,8 +360,10 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			}))
 		}
 
+		invocationArgs := append([]string(nil), resolved.args...)
+		invocationArgs = append(invocationArgs, args[1:]...)
 		err = commands.RunCommand(ctx, resolved.command, commands.NewInvocation(&commands.InvocationOptions{
-			Args:       args[1:],
+			Args:       invocationArgs,
 			Env:        currentEnv,
 			Cwd:        virtualWD,
 			Stdin:      hc.Stdin,
@@ -582,15 +585,25 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 
 	resolvedName := path.Base(fullPath)
 	cmd, ok := exec.Registry.Lookup(resolvedName)
+	if ok {
+		return &resolvedCommand{
+			command: cmd,
+			name:    resolvedName,
+			path:    fullPath,
+			source:  source,
+		}, true, nil
+	}
+
+	script, ok, err := resolveShebangCommand(ctx, exec, fullPath)
+	if err != nil {
+		return nil, false, err
+	}
 	if !ok {
 		return nil, false, nil
 	}
-	return &resolvedCommand{
-		command: cmd,
-		name:    resolvedName,
-		path:    fullPath,
-		source:  source,
-	}, true, nil
+	script.path = fullPath
+	script.source = "shebang"
+	return script, true, nil
 }
 
 func pathDirs(env expand.Environ, dir string) []string {
@@ -603,11 +616,73 @@ func pathDirs(env expand.Environ, dir string) []string {
 	for entry := range strings.SplitSeq(pathValue, ":") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
-			continue
+			entry = "."
 		}
 		dirs = append(dirs, gbfs.Resolve(dir, entry))
 	}
 	return dirs
+}
+
+func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath string) (_ *resolvedCommand, ok bool, err error) {
+	file, err := exec.FS.Open(ctx, fullPath)
+	if err != nil {
+		return nil, false, nil
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	line, ok, err := readShebangLine(file)
+	if err != nil || !ok {
+		return nil, false, err
+	}
+	interpreter, argv, ok := parseShebangInterpreter(line)
+	if !ok {
+		return nil, false, nil
+	}
+	cmd, ok := exec.Registry.Lookup(interpreter)
+	if !ok {
+		return nil, false, nil
+	}
+	return &resolvedCommand{
+		command: cmd,
+		name:    interpreter,
+		args:    append(argv, fullPath),
+	}, true, nil
+}
+
+func readShebangLine(r io.Reader) (line string, ok bool, err error) {
+	var data [256]byte
+	n, err := r.Read(data[:])
+	switch {
+	case err == nil:
+	case errors.Is(err, io.EOF):
+	default:
+		return "", false, err
+	}
+	if n < 2 || string(data[:2]) != "#!" {
+		return "", false, nil
+	}
+	line = string(data[:n])
+	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+		line = line[:idx]
+	}
+	return strings.TrimSpace(line[2:]), true, nil
+}
+
+func parseShebangInterpreter(line string) (name string, args []string, ok bool) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return "", nil, false
+	}
+	name = path.Base(fields[0])
+	if name == "" || name == "." || name == "/" {
+		return "", nil, false
+	}
+	if len(fields) > 1 {
+		args = append(args, fields[1:]...)
+	}
+	return name, args, true
 }
 
 func shellFailure(ctx context.Context, code int, format string, args ...any) error {

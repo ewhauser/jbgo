@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"fmt"
-	"strings"
+	"io"
 )
 
 type Base64 struct{}
@@ -19,61 +18,50 @@ func (c *Base64) Name() string {
 }
 
 func (c *Base64) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	decode := false
-	ignoreGarbage := false
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Base64) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "base64",
+		About: "encode/decode data and print to standard output\nWith no FILE, or when FILE is -, read standard input.\n\nThe data are encoded as described for the base64 alphabet in RFC 3548.\nWhen decoding, the input may contain newlines in addition\nto the bytes of the formal base64 alphabet. Use --ignore-garbage\nto attempt to recover from any other non-alphabet bytes in the\nencoded stream.",
+		Usage: "base64 [OPTION]... [FILE]",
+		Options: []OptionSpec{
+			{Name: "decode", Short: 'd', ShortAliases: []rune{'D'}, Long: "decode", Help: "decode data"},
+			{Name: "ignore-garbage", Short: 'i', Long: "ignore-garbage", Help: "when decoding, ignore non-alphabetic characters"},
+			{Name: "wrap", Short: 'w', Long: "wrap", ValueName: "COLS", Arity: OptionRequiredValue, Help: "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE"},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
+			_, err := io.WriteString(w, spec.About+"\n\nUsage: "+spec.Usage+"\n\nOptions:\n  -d, --decode           decode data\n  -i, --ignore-garbage   when decoding, ignore non-alphabetic characters\n  -w, --wrap=COLS        wrap encoded lines after COLS character (default 76, 0 to disable wrapping)\n  -h, --help             display this help and exit\n      --version          output version information and exit\n")
+			return err
+		},
+	}
+}
+
+func (c *Base64) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	decode := matches.Has("decode")
+	ignoreGarbage := matches.Has("ignore-garbage")
 	wrap := 76
-
-optionLoop:
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			break
+	if matches.Has("wrap") {
+		value, err := parseBaseEncWrap(c.Name(), matches.Value("wrap"), inv)
+		if err != nil {
+			return err
 		}
-
-		switch {
-		case arg == "--":
-			args = args[1:]
-			break optionLoop
-		case arg == "--help":
-			_, _ = fmt.Fprintln(inv.Stdout, "usage: base64 [OPTION]... [FILE]")
-			return nil
-		case arg == "--version":
-			_, _ = fmt.Fprintln(inv.Stdout, "base64 (gbash)")
-			return nil
-		case arg == "--decode":
-			decode = true
-			args = args[1:]
-		case arg == "--ignore-garbage":
-			ignoreGarbage = true
-			args = args[1:]
-		case arg == "--wrap":
-			if len(args) < 2 {
-				return exitf(inv, 1, "base64: option requires an argument -- wrap")
-			}
-			value, err := parseBaseEncWrap(c.Name(), args[1], inv)
-			if err != nil {
-				return err
-			}
-			wrap = value
-			args = args[2:]
-		case strings.HasPrefix(arg, "--wrap="):
-			value, err := parseBaseEncWrap(c.Name(), strings.TrimPrefix(arg, "--wrap="), inv)
-			if err != nil {
-				return err
-			}
-			wrap = value
-			args = args[1:]
-		default:
-			consumed, err := parseBase64ShortOptions(arg, args, &decode, &ignoreGarbage, &wrap, inv)
-			if err != nil {
-				return err
-			}
-			args = args[consumed:]
-		}
+		wrap = value
 	}
 
-	data, err := readSingleBaseEncInput(ctx, inv, c.Name(), args)
+	data, err := readSingleBaseEncInput(ctx, inv, c.Name(), matches.Positionals())
 	if err != nil {
 		return err
 	}
@@ -96,39 +84,6 @@ optionLoop:
 		return &ExitError{Code: 1, Err: err}
 	}
 	return nil
-}
-
-func parseBase64ShortOptions(arg string, args []string, decode, ignoreGarbage *bool, wrap *int, inv *Invocation) (int, error) {
-	for i := 1; i < len(arg); i++ {
-		switch arg[i] {
-		case 'd':
-			*decode = true
-		case 'i':
-			*ignoreGarbage = true
-		case 'w':
-			value := arg[i+1:]
-			if value == "" {
-				if len(args) < 2 {
-					return 0, exitf(inv, 1, "base64: option requires an argument -- w")
-				}
-				parsed, err := parseBaseEncWrap("base64", args[1], inv)
-				if err != nil {
-					return 0, err
-				}
-				*wrap = parsed
-				return 2, nil
-			}
-			parsed, err := parseBaseEncWrap("base64", value, inv)
-			if err != nil {
-				return 0, err
-			}
-			*wrap = parsed
-			return 1, nil
-		default:
-			return 0, exitf(inv, 1, "base64: unsupported flag -%c", arg[i])
-		}
-	}
-	return 1, nil
 }
 
 func decodeBase64Data(data []byte, ignoreGarbage bool) ([]byte, bool) {
@@ -288,3 +243,5 @@ func isBase64Byte(b byte) bool {
 }
 
 var _ Command = (*Base64)(nil)
+var _ SpecProvider = (*Base64)(nil)
+var _ ParsedRunner = (*Base64)(nil)

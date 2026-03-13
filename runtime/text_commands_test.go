@@ -147,6 +147,23 @@ func TestHeadAcceptsSuffixedLineCounts(t *testing.T) {
 	}
 }
 
+func TestHeadSupportsLegacyNumericCountAndSilentAlias(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'one\\ntwo\\nthree\\n' > /tmp/a.txt\nprintf 'four\\nfive\\n' > /tmp/b.txt\nhead -2 --silent /tmp/a.txt /tmp/b.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "one\ntwo\nfour\nfive\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestTailSupportsFromLineSyntax(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
