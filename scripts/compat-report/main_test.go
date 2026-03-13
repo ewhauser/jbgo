@@ -27,7 +27,7 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 				{Path: "tests/misc/basename.pl", Category: "misc", Status: "pass", Attributions: []testAttribution{{Command: "basename", Kind: "direct"}}},
 				{Path: "tests/cat/cat-self.sh", Category: "cat", Status: "skip", Attributions: []testAttribution{{Command: "cat", Kind: "direct"}}},
 				{Path: "tests/misc/dirname.pl", Category: "misc", Status: "fail", Attributions: []testAttribution{{Command: "dirname", Kind: "direct"}}},
-				{Path: "tests/help/help-version.sh", Category: "help", Status: "filtered", Filtered: true},
+				{Path: "tests/help/help-version.sh", Category: "help", Status: "filtered", Filtered: true, FilterReason: "help/version tests are out of scope"},
 			},
 		},
 		Categories: []categoryResult{
@@ -50,7 +50,7 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 				Name:    "help",
 				Summary: coverageBucket{SelectedTotal: 1, FilteredTotal: 1, PassPctSelected: 0, PassPctRunnable: 0},
 				Tests: []suiteTest{
-					{Path: "tests/help/help-version.sh", Category: "help", Status: "filtered", Filtered: true},
+					{Path: "tests/help/help-version.sh", Category: "help", Status: "filtered", Filtered: true, FilterReason: "help/version tests are out of scope"},
 				},
 			},
 		},
@@ -104,12 +104,15 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 	index := string(indexData)
 	for _, needle := range []string{
 		"GNU Test Coverage",
-		"Selected Test Pass",
+		"In-Scope Test Pass",
 		"Coverage per category",
 		"summary.json",
 		"tests/misc/dirname.pl",
 		"1 / 0 / 1",
-		"50%",
+		"33.33%",
+		"1 out of scope",
+		"out of scope",
+		"help/version tests are out of scope",
 	} {
 		if !strings.Contains(index, needle) {
 			t.Fatalf("index.html missing %q", needle)
@@ -132,8 +135,8 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 		t.Fatalf("ReadFile(badge.svg) error = %v", err)
 	}
 	badge := string(badgeData)
-	if !strings.Contains(badge, "compat") || !strings.Contains(badge, "25%") {
-		t.Fatalf("badge.svg content = %q, want compat and 25%%", badge)
+	if !strings.Contains(badge, "compat") || !strings.Contains(badge, "33.33%") {
+		t.Fatalf("badge.svg content = %q, want compat and 33.33%%", badge)
 	}
 }
 
