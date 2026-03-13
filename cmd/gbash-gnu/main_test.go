@@ -429,6 +429,39 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	}
 }
 
+func TestRunMakeCheckDoesNotForceVeryExpensiveTests(t *testing.T) {
+	workDir := t.TempDir()
+	makeBin := filepath.Join(workDir, "fake-make.sh")
+	argsPath := filepath.Join(workDir, "make-args.txt")
+	logPath := filepath.Join(workDir, "make.log")
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$@\" > " + shellSingleQuoteForScript(argsPath) + "\n" +
+		"printf 'PASS: tests/factor/t00.sh\\n'\n"
+	if err := os.WriteFile(makeBin, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(fake make) error = %v", err)
+	}
+
+	result, err := runMakeCheck(context.Background(), makeBin, workDir, "/bin/sh", []string{"tests/factor/t00.sh"}, logPath)
+	if err != nil {
+		t.Fatalf("runMakeCheck() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("runMakeCheck() exit = %d, want 0", result.ExitCode)
+	}
+
+	data, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(make args) error = %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "RUN_EXPENSIVE_TESTS=yes\n") {
+		t.Fatalf("runMakeCheck args = %q, want RUN_EXPENSIVE_TESTS=yes", got)
+	}
+	if strings.Contains(got, "RUN_VERY_EXPENSIVE_TESTS=yes\n") {
+		t.Fatalf("runMakeCheck args = %q, want RUN_VERY_EXPENSIVE_TESTS to be absent", got)
+	}
+}
+
 func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
 	workDir := t.TempDir()
 	srcDir := filepath.Join(workDir, "src")

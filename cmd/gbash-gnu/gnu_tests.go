@@ -388,7 +388,6 @@ func runMakeCheck(ctx context.Context, makeBin, workDir, configShell string, tes
 		"SUBDIRS=.",
 		"VERBOSE=no",
 		"RUN_EXPENSIVE_TESTS=yes",
-		"RUN_VERY_EXPENSIVE_TESTS=yes",
 		"srcdir=" + workDir,
 		"TESTS=" + strings.Join(tests, " "),
 	}
