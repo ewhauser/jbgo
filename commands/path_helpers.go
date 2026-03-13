@@ -1,44 +1,10 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	stdfs "io/fs"
-	"path"
 	"strings"
 )
-
-func walkPathTree(ctx context.Context, inv *Invocation, root string, visit func(abs string, info stdfs.FileInfo, depth int) error) error {
-	info, abs, err := lstatPath(ctx, inv, root)
-	if err != nil {
-		return err
-	}
-	return walkPathTreeAbs(ctx, inv, abs, info, 0, visit)
-}
-
-func walkPathTreeAbs(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, depth int, visit func(abs string, info stdfs.FileInfo, depth int) error) error {
-	if err := visit(abs, info, depth); err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return nil
-	}
-	entries, _, err := readDir(ctx, inv, abs)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		childAbs := path.Join(abs, entry.Name())
-		childInfo, _, err := lstatPath(ctx, inv, childAbs)
-		if err != nil {
-			return err
-		}
-		if err := walkPathTreeAbs(ctx, inv, childAbs, childInfo, depth+1, visit); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func fileTypeName(info stdfs.FileInfo) string {
 	switch {

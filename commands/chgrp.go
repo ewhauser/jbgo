@@ -2,8 +2,6 @@ package commands
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"strconv"
 	"strings"
 )
@@ -31,8 +29,7 @@ func (c *Chgrp) Spec() CommandSpec {
 		Options: []OptionSpec{
 			{Name: "help", Long: "help", Help: "display this help and exit"},
 			{Name: "changes", Short: 'c', Long: "changes", Help: "like verbose but report only when a change is made"},
-			{Name: "silent", Short: 'f', Long: "silent", Help: "suppress most error messages"},
-			{Name: "quiet", Long: "quiet", Help: "suppress most error messages"},
+			{Name: "quiet", Short: 'f', Long: "quiet", Aliases: []string{"silent"}, HelpAliases: []string{"silent"}, Help: "suppress most error messages"},
 			{Name: "verbose", Short: 'v', Long: "verbose", Help: "output a diagnostic for every file processed"},
 			{Name: "preserve-root", Long: "preserve-root", Help: "fail to operate recursively on '/'"},
 			{Name: "no-preserve-root", Long: "no-preserve-root", Help: "do not treat '/' specially"},
@@ -45,14 +42,15 @@ func (c *Chgrp) Spec() CommandSpec {
 			{Name: "dereference", Long: "dereference", Help: "affect the referent of each symbolic link rather than the symbolic link itself"},
 			{Name: "no-dereference", Short: 'h', Long: "no-dereference", Help: "affect symbolic links instead of any referenced file"},
 		},
+		Args: []ArgSpec{
+			{Name: "group", ValueName: "GROUP", Help: "new group name or numeric ID"},
+			{Name: "file", ValueName: "FILE", Repeatable: true, Help: "files to change"},
+		},
 		Parse: ParseConfig{
 			InferLongOptions:      true,
 			GroupShortOptions:     true,
 			LongOptionValueEquals: true,
 			AutoVersion:           true,
-		},
-		HelpRenderer: func(w io.Writer, spec CommandSpec) error {
-			return renderChgrpHelp(w, &spec)
 		},
 	}
 }
@@ -104,7 +102,7 @@ func parseChgrpMatches(inv *Invocation, matches *ParsedCommand) (chgrpOptions, e
 		switch name {
 		case "changes":
 			opts.verbosity.level = permissionVerbosityChanges
-		case "silent", "quiet":
+		case "quiet":
 			opts.verbosity.level = permissionVerbositySilent
 		case "verbose":
 			opts.verbosity.level = permissionVerbosityVerbose
@@ -233,11 +231,6 @@ func parseChgrpGroupID(inv *Invocation, db *permissionIdentityDB, value, invalid
 		return 0, exitf(inv, 1, "chgrp: invalid %s: %s", invalidLabel, value)
 	}
 	return uint32(gid), nil
-}
-
-func renderChgrpHelp(w io.Writer, spec *CommandSpec) error {
-	_, err := fmt.Fprintf(w, "%s\n\nUsage: %s\n%s\n\nArguments:\n  GROUP                    new group name or numeric ID\n  FILE                     files to change\n\nOptions:\n  -c, --changes            like verbose but report only when a change is made\n  -f, --silent             suppress most error messages\n      --quiet              suppress most error messages\n  -v, --verbose            output a diagnostic for every file processed\n      --from=GROUP         change only if current group matches GROUP\n      --reference=RFILE    use RFILE's group rather than specifying GROUP\n  -R, --recursive          operate on files and directories recursively\n  -H                       if a command line argument is a symbolic link to a directory, traverse it\n  -L                       traverse every symbolic link to a directory encountered\n  -P                       do not traverse any symbolic links (default)\n      --dereference        affect the referent of each symbolic link rather than the symbolic link itself\n  -h, --no-dereference     affect symbolic links instead of any referenced file\n      --preserve-root      fail to operate recursively on '/'\n      --no-preserve-root   do not treat '/' specially\n      --help               display this help and exit\n      --version            output version information and exit\n", spec.About, spec.Usage, spec.AfterHelp)
-	return err
 }
 
 var _ Command = (*Chgrp)(nil)

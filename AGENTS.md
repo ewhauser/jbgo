@@ -24,17 +24,20 @@ Declarative metadata, parsing, and help/version rendering for command implementa
 - `SpecProvider` — optional interface: `Spec() CommandSpec`
 - `ParsedRunner` — optional interface: `RunParsed(ctx, inv, matches) error`
 - `CommandSpec` — command metadata: `Name`, `About`, `Usage`, `AfterHelp`, `Options`, `Args`, `Parse`, `HelpRenderer`, `VersionRenderer`
-- `OptionSpec` — option definition: short/long names, help text, arity, aliases, repeatability, and optional-value behavior
+- `OptionSpec` — option definition: short/long names, help text, parsing aliases, visible help aliases, arity, repeatability, and optional-value behavior
 - `ArgSpec` — positional argument metadata: requiredness, repeatability, help text, and defaults
 - `ParseConfig` — parser behavior toggles: long-option inference, grouped shorts, attached values, `--` handling, negative-number positional mode, and auto help/version
 - `ParsedCommand` — parsed accessors for options and positionals: `Has`, `Count`, `Value`, `Values`, `Arg`, `Args`, `Positionals`, `OptionOrder`
 - `RunCommand(ctx, cmd, inv)` — executes a command through the spec layer when it implements `SpecProvider` + `ParsedRunner`, otherwise falls back to `Run`
 - `ParseCommandSpec(inv, spec)` — parse `inv.Args` against a `CommandSpec`
-- `RenderCommandHelp` / `RenderCommandVersion` — shared default renderers for utility help/version output
+- `RenderCommandHelp` / `RenderCommandVersion` — shared default renderers for utility help/version output; prefer the shared help path over command-specific full help text
 
 Implementation rule:
 - New command implementations should prefer `Spec() CommandSpec` plus `RunParsed(...)` instead of walking `inv.Args` manually.
-- Command-specific help/version rendering should use `HelpRenderer` / `VersionRenderer` only for real uutils compatibility quirks.
+- Command help should follow the shared extended help system modeled after uutils/clap: express help through `Usage`, `AfterHelp`, `Args`, `Options`, `Parse.AutoHelp`, `Parse.AutoVersion`, and `OptionSpec.HelpAliases` before considering `HelpRenderer`.
+- Do not hand-write full help blocks for commands when the shared renderer can express the output. Use `HelpRenderer` only for real compatibility cases that cannot be represented declaratively.
+- Keep parsing aliases and visible help aliases distinct: use `Aliases` for accepted option names and `HelpAliases` for extra rows that should appear in rendered help.
+- Command-specific version rendering should use `VersionRenderer` only for real uutils compatibility quirks.
 - Legacy manual parsers should be converted to this new method
 
 ### invocation_capabilities.go
@@ -106,7 +109,6 @@ File copying, writing, and destination resolution.
 ### path_helpers.go
 Directory traversal and file metadata formatting.
 
-- `walkPathTree(ctx, inv, root, visit)` — recursive walk using `lstat` (does not follow symlinks)
 - `fileTypeName(info) string` — returns `"symbolic link"`, `"directory"`, or `"regular file"`
 - `formatModeOctal(mode) string` — e.g. `"0755"`
 - `formatModeLong(mode) string` — e.g. `"drwxr-xr-x"`

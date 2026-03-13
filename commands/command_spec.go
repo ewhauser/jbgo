@@ -61,6 +61,7 @@ type OptionSpec struct {
 	ShortAliases            []rune
 	Long                    string
 	Aliases                 []string
+	HelpAliases             []string
 	Help                    string
 	ValueName               string
 	Arity                   OptionArity
@@ -444,24 +445,40 @@ func matchShortOption(spec *CommandSpec, short rune) (*OptionSpec, bool) {
 
 func RenderCommandHelp(w io.Writer, spec *CommandSpec) error {
 	spec = normalizeCommandSpec(spec)
+	displaySpec := *spec
+	displaySpec.Options = append([]OptionSpec(nil), spec.Options...)
+	if displaySpec.Parse.AutoHelp && !hasOptionSpec(displaySpec.Options, "help") {
+		displaySpec.Options = append(displaySpec.Options, OptionSpec{
+			Name: "help",
+			Long: "help",
+			Help: "display this help and exit",
+		})
+	}
+	if displaySpec.Parse.AutoVersion && !hasOptionSpec(displaySpec.Options, "version") {
+		displaySpec.Options = append(displaySpec.Options, OptionSpec{
+			Name: "version",
+			Long: "version",
+			Help: "output version information and exit",
+		})
+	}
 	if spec.HelpRenderer != nil {
-		return spec.HelpRenderer(w, *spec)
+		return spec.HelpRenderer(w, displaySpec)
 	}
 
 	var b strings.Builder
-	if spec.About != "" {
-		b.WriteString(spec.About)
+	if displaySpec.About != "" {
+		b.WriteString(displaySpec.About)
 		b.WriteString("\n\n")
 	}
 	b.WriteString("Usage: ")
-	if spec.Usage != "" {
-		b.WriteString(spec.Usage)
+	if displaySpec.Usage != "" {
+		b.WriteString(displaySpec.Usage)
 	} else {
-		b.WriteString(defaultUsage(spec))
+		b.WriteString(defaultUsage(&displaySpec))
 	}
 	b.WriteByte('\n')
 
-	argLines := renderArgHelp(spec.Args)
+	argLines := renderArgHelp(displaySpec.Args)
 	if len(argLines) > 0 {
 		b.WriteString("\nArguments:\n")
 		for _, line := range argLines {
@@ -470,7 +487,7 @@ func RenderCommandHelp(w io.Writer, spec *CommandSpec) error {
 		}
 	}
 
-	optionLines := renderOptionHelp(spec.Options)
+	optionLines := renderOptionHelp(displaySpec.Options)
 	if len(optionLines) > 0 {
 		b.WriteString("\nOptions:\n")
 		for _, line := range optionLines {
@@ -478,10 +495,10 @@ func RenderCommandHelp(w io.Writer, spec *CommandSpec) error {
 			b.WriteByte('\n')
 		}
 	}
-	if spec.AfterHelp != "" {
+	if displaySpec.AfterHelp != "" {
 		b.WriteString("\n")
-		b.WriteString(spec.AfterHelp)
-		if !strings.HasSuffix(spec.AfterHelp, "\n") {
+		b.WriteString(displaySpec.AfterHelp)
+		if !strings.HasSuffix(displaySpec.AfterHelp, "\n") {
 			b.WriteByte('\n')
 		}
 	}
@@ -524,6 +541,9 @@ func renderOptionHelp(opts []OptionSpec) []string {
 		seen[opt.Name] = true
 		label := optionLabel(opt)
 		lines = append(lines, fmt.Sprintf("  %-24s %s", label, opt.Help))
+		for _, alias := range opt.HelpAliases {
+			lines = append(lines, fmt.Sprintf("  %-24s %s", "--"+alias, opt.Help))
+		}
 	}
 	return lines
 }
@@ -561,6 +581,15 @@ func argLabel(arg *ArgSpec) string {
 		label = "[" + label + "]"
 	}
 	return label
+}
+
+func hasOptionSpec(opts []OptionSpec, name string) bool {
+	for i := range opts {
+		if opts[i].Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultUsage(spec *CommandSpec) string {
