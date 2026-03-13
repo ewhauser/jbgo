@@ -2,9 +2,7 @@ package commands
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	stdfs "io/fs"
 	"strings"
 )
 
@@ -54,52 +52,15 @@ func (c *Chown) Run(ctx context.Context, inv *Invocation) error {
 			return err
 		}
 	}
-
-	hadError := false
-	for _, target := range opts.files {
-		err := walkPermissionTarget(ctx, inv, target, opts.walk, func(visit permissionVisit) error {
-			before := permissionLookupOwnership(db, visit.Info)
-			if !permissionMatchesFilter(opts.filter, before) {
-				if message := permissionSuccessMessage(visit.Abs, before, before, opts.verbosity); message != "" {
-					_, _ = fmt.Fprintln(inv.Stderr, message)
-				}
-				return nil
-			}
-
-			after := before
-			if opts.uid != nil {
-				after.uid = *opts.uid
-				after.user = db.usersByID[after.uid]
-			}
-			if opts.gid != nil {
-				after.gid = *opts.gid
-				after.group = db.groupsByID[after.gid]
-			}
-
-			if err := inv.FS.Chown(ctx, visit.Abs, after.uid, after.gid, visit.Follow); err != nil {
-				hadError = true
-				if message := permissionFailureMessage(visit.Abs, before, after, opts.verbosity, unwrapPermissionError(err)); message != "" {
-					_, _ = fmt.Fprintln(inv.Stderr, message)
-				}
-				return nil
-			}
-
-			if message := permissionSuccessMessage(visit.Abs, before, after, opts.verbosity); message != "" {
-				_, _ = fmt.Fprintln(inv.Stderr, message)
-			}
-			return nil
-		})
-		if err == nil {
-			continue
-		}
-		hadError = true
-		_, _ = fmt.Fprintln(inv.Stderr, chownTargetError(target, err))
-	}
-
-	if hadError {
-		return &ExitError{Code: 1}
-	}
-	return nil
+	return runPermissionApply(ctx, inv, db, &permissionApplyOptions{
+		commandName: c.Name(),
+		files:       opts.files,
+		uid:         opts.uid,
+		gid:         opts.gid,
+		filter:      opts.filter,
+		verbosity:   opts.verbosity,
+		walk:        opts.walk,
+	})
 }
 
 type chownOptions struct {
@@ -192,7 +153,7 @@ func parseChownArgs(inv *Invocation) (chownOptions, error) {
 		}
 	}
 
-	walk, err := normalizePermissionWalkOptions(inv, recursive, dereference, traverse, preserveRoot)
+	walk, err := normalizePermissionWalkOptionsForCommand(inv, "chown", recursive, dereference, traverse, preserveRoot)
 	if err != nil {
 		return chownOptions{}, err
 	}
@@ -237,35 +198,6 @@ func parseChownShortFlags(inv *Invocation, arg string, opts *chownOptions, recur
 		}
 	}
 	return nil
-}
-
-func unwrapPermissionError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var exitErr *ExitError
-	if errors.As(err, &exitErr) && exitErr.Err != nil {
-		return exitErr.Err
-	}
-	return err
-}
-
-func chownTargetError(target string, err error) string {
-	if err == nil {
-		return ""
-	}
-	err = unwrapPermissionError(err)
-	if strings.HasPrefix(err.Error(), "chown: ") {
-		return err.Error()
-	}
-	switch {
-	case errors.Is(err, stdfs.ErrNotExist):
-		return fmt.Sprintf("chown: cannot access %q: No such file or directory", target)
-	case errors.Is(err, stdfs.ErrPermission):
-		return fmt.Sprintf("chown: cannot access %q: Permission denied", target)
-	default:
-		return fmt.Sprintf("chown: cannot access %q: %v", target, err)
-	}
 }
 
 var _ Command = (*Chown)(nil)

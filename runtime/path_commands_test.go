@@ -1276,6 +1276,118 @@ func TestChownDoesNotChangeModTime(t *testing.T) {
 	}
 }
 
+func TestChgrpSupportsNamedNumericAndColonGroups(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo hi > /home/agent/file.txt\nstat -c '%g:%G' /home/agent/file.txt\nchgrp 456 /home/agent/file.txt\nstat -c '%g:%G' /home/agent/file.txt\nchgrp agent /home/agent/file.txt\nstat -c '%g:%G' /home/agent/file.txt\nchgrp :789 /home/agent/file.txt\nstat -c '%g:%G' /home/agent/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("Stdout lines = %v, want 4", lines)
+	}
+	if got, want := lines[0], "1000:agent"; got != want {
+		t.Fatalf("initial stat = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "456:456"; got != want {
+		t.Fatalf("numeric chgrp stat = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "1000:agent"; got != want {
+		t.Fatalf("named chgrp stat = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "789:789"; got != want {
+		t.Fatalf("colon chgrp stat = %q, want %q", got, want)
+	}
+}
+
+func TestChgrpSupportsReferenceFromRecursiveAndTrailingReference(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "mkdir -p /home/agent/tree/sub\necho ref > /home/agent/ref.txt\necho one > /home/agent/tree/file1.txt\necho two > /home/agent/tree/file2.txt\necho three > /home/agent/tree/sub/file3.txt\nchgrp 41 /home/agent/ref.txt\nchgrp /home/agent/tree/file1.txt /home/agent/tree/file2.txt --reference /home/agent/ref.txt\nchgrp --from=41 52 /home/agent/tree/file1.txt\nchgrp --from=:41 :53 /home/agent/tree/file2.txt\nchgrp -R 61 /home/agent/tree/sub\nstat -c '%g' /home/agent/tree/file1.txt\nstat -c '%g' /home/agent/tree/file2.txt\nstat -c '%g' /home/agent/tree/sub/file3.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("Stdout lines = %v, want 3", lines)
+	}
+	if got, want := lines[0], "52"; got != want {
+		t.Fatalf("file1 gid = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "53"; got != want {
+		t.Fatalf("file2 gid = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "61"; got != want {
+		t.Fatalf("file3 gid = %q, want %q", got, want)
+	}
+}
+
+func TestChgrpNoDereferenceTargetsTheSymlink(t *testing.T) {
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo data > /home/agent/target.txt\nln -s target.txt /home/agent/link.txt\nchgrp 61 /home/agent/link.txt\nstat -c '%g' /home/agent/target.txt\nstat -c '%g %F' /home/agent/link.txt\nchgrp -h 71 /home/agent/link.txt\nstat -c '%g' /home/agent/target.txt\nstat -c '%g %F' /home/agent/link.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("Stdout lines = %v, want 4", lines)
+	}
+	if got, want := lines[0], "61"; got != want {
+		t.Fatalf("target after dereference = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "1000 symbolic link"; got != want {
+		t.Fatalf("link before -h = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "61"; got != want {
+		t.Fatalf("target after -h = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "71 symbolic link"; got != want {
+		t.Fatalf("link after -h = %q, want %q", got, want)
+	}
+}
+
+func TestChgrpInfersLongOptionsAfterPositionals(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo ref > /home/agent/ref.txt\necho target > /home/agent/target.txt\nchgrp 41 /home/agent/ref.txt\nchgrp --verb /home/agent/target.txt --ref=/home/agent/ref.txt\nstat -c '%g' /home/agent/target.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "41"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "changed group of") {
+		t.Fatalf("Stderr = %q, want verbose group-change message", result.Stderr)
+	}
+}
+
+func TestChgrpPreserveRootUsesCommandName(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "chgrp --preserve-root -R 123 /\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "chgrp: it is dangerous to operate recursively on") {
+		t.Fatalf("Stderr = %q, want chgrp preserve-root diagnostic", result.Stderr)
+	}
+	if strings.Contains(result.Stderr, "chown:") {
+		t.Fatalf("Stderr = %q, want no chown-prefixed diagnostic", result.Stderr)
+	}
+}
+
 func TestStatFormatsMultipleFilesAndContinuesOnError(t *testing.T) {
 	session := newSession(t, &Config{})
 	writeSessionFile(t, session, "/home/agent/one.txt", []byte("hello"))

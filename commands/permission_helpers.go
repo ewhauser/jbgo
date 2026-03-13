@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	stdfs "io/fs"
@@ -35,6 +36,7 @@ const (
 )
 
 type permissionWalkOptions struct {
+	commandName      string
 	recursive        bool
 	preserveRoot     bool
 	dereference      bool
@@ -68,7 +70,7 @@ type permissionIfFrom struct {
 	gid    uint32
 }
 
-func normalizePermissionWalkOptions(inv *Invocation, recursive bool, dereference *bool, traverse permissionTraverseSymlinks, preserveRoot bool) (permissionWalkOptions, error) {
+func normalizePermissionWalkOptionsForCommand(inv *Invocation, commandName string, recursive bool, dereference *bool, traverse permissionTraverseSymlinks, preserveRoot bool) (permissionWalkOptions, error) {
 	follow := true
 	if dereference != nil {
 		follow = *dereference
@@ -78,11 +80,12 @@ func normalizePermissionWalkOptions(inv *Invocation, recursive bool, dereference
 	}
 	if recursive && traverse == permissionTraverseNone {
 		if dereference != nil && *dereference {
-			return permissionWalkOptions{}, exitf(inv, 1, "chown: -R --dereference requires -H or -L")
+			return permissionWalkOptions{}, exitf(inv, 1, "%s: -R --dereference requires -H or -L", commandName)
 		}
 		follow = false
 	}
 	return permissionWalkOptions{
+		commandName:      commandName,
 		recursive:        recursive,
 		preserveRoot:     preserveRoot,
 		dereference:      follow,
@@ -202,11 +205,19 @@ func permissionLookupOwnership(db *permissionIdentityDB, info stdfs.FileInfo) pe
 }
 
 func parsePermissionOwnerSpec(inv *Invocation, db *permissionIdentityDB, spec string) (uid, gid *uint32, err error) {
-	return parsePermissionOwnerGroupSpec(inv, db, spec, true)
+	return parsePermissionOwnerSpecForCommand(inv, db, spec, "chown")
 }
 
 func parsePermissionFilterSpec(inv *Invocation, db *permissionIdentityDB, spec string) (permissionIfFrom, error) {
-	uid, gid, err := parsePermissionOwnerGroupSpec(inv, db, spec, false)
+	return parsePermissionFilterSpecForCommand(inv, db, spec, "chown")
+}
+
+func parsePermissionOwnerSpecForCommand(inv *Invocation, db *permissionIdentityDB, spec, commandName string) (uid, gid *uint32, err error) {
+	return parsePermissionOwnerGroupSpecForCommand(inv, db, spec, true, commandName)
+}
+
+func parsePermissionFilterSpecForCommand(inv *Invocation, db *permissionIdentityDB, spec, commandName string) (permissionIfFrom, error) {
+	uid, gid, err := parsePermissionOwnerGroupSpecForCommand(inv, db, spec, false, commandName)
 	if err != nil {
 		return permissionIfFrom{}, err
 	}
@@ -222,7 +233,7 @@ func parsePermissionFilterSpec(inv *Invocation, db *permissionIdentityDB, spec s
 	return filter, nil
 }
 
-func parsePermissionOwnerGroupSpec(inv *Invocation, db *permissionIdentityDB, spec string, supportDot bool) (uid, gid *uint32, err error) {
+func parsePermissionOwnerGroupSpecForCommand(inv *Invocation, db *permissionIdentityDB, spec string, supportDot bool, commandName string) (uid, gid *uint32, err error) {
 	if spec == "" {
 		return nil, nil, nil
 	}
@@ -233,7 +244,7 @@ func parsePermissionOwnerGroupSpec(inv *Invocation, db *permissionIdentityDB, sp
 	case supportDot && strings.Contains(spec, "."):
 		sep = '.'
 	default:
-		uid, err := parsePermissionUser(inv, db, spec)
+		uid, err := parsePermissionUserForCommand(inv, db, spec, commandName)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -247,7 +258,7 @@ func parsePermissionOwnerGroupSpec(inv *Invocation, db *permissionIdentityDB, sp
 	}
 	var uidPtr *uint32
 	if userPart != "" {
-		uid, err := parsePermissionUser(inv, db, userPart)
+		uid, err := parsePermissionUserForCommand(inv, db, userPart, commandName)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -255,19 +266,19 @@ func parsePermissionOwnerGroupSpec(inv *Invocation, db *permissionIdentityDB, sp
 	}
 	var gidPtr *uint32
 	if groupPart != "" {
-		gid, err := parsePermissionGroup(inv, db, groupPart)
+		gid, err := parsePermissionGroupForCommand(inv, db, groupPart, commandName)
 		if err != nil {
 			return nil, nil, err
 		}
 		gidPtr = &gid
 	}
 	if groupPart == "" && userPart != "" && startsWithDigit(userPart) && spec != userPart {
-		return nil, nil, exitf(inv, 1, "chown: invalid spec: %s", spec)
+		return nil, nil, exitf(inv, 1, "%s: invalid spec: %s", commandName, spec)
 	}
 	return uidPtr, gidPtr, nil
 }
 
-func parsePermissionUser(inv *Invocation, db *permissionIdentityDB, value string) (uint32, error) {
+func parsePermissionUserForCommand(inv *Invocation, db *permissionIdentityDB, value, commandName string) (uint32, error) {
 	if db != nil {
 		if uid, ok := db.usersByName[value]; ok {
 			return uid, nil
@@ -275,12 +286,12 @@ func parsePermissionUser(inv *Invocation, db *permissionIdentityDB, value string
 	}
 	uid, err := strconv.ParseUint(value, 10, 32)
 	if err != nil {
-		return 0, exitf(inv, 1, "chown: invalid user: %s", value)
+		return 0, exitf(inv, 1, "%s: invalid user: %s", commandName, value)
 	}
 	return uint32(uid), nil
 }
 
-func parsePermissionGroup(inv *Invocation, db *permissionIdentityDB, value string) (uint32, error) {
+func parsePermissionGroupForCommand(inv *Invocation, db *permissionIdentityDB, value, commandName string) (uint32, error) {
 	if db != nil {
 		if gid, ok := db.groupsByName[value]; ok {
 			return gid, nil
@@ -288,7 +299,7 @@ func parsePermissionGroup(inv *Invocation, db *permissionIdentityDB, value strin
 	}
 	gid, err := strconv.ParseUint(value, 10, 32)
 	if err != nil {
-		return 0, exitf(inv, 1, "chown: invalid group: %s", value)
+		return 0, exitf(inv, 1, "%s: invalid group: %s", commandName, value)
 	}
 	return uint32(gid), nil
 }
@@ -339,7 +350,7 @@ func walkPermissionPath(ctx context.Context, inv *Invocation, abs string, opts p
 	if opts.recursive && opts.preserveRoot {
 		resolvedPath, err := inv.FS.Realpath(ctx, abs)
 		if err == nil && resolvedPath == "/" {
-			return fmt.Errorf("chown: it is dangerous to operate recursively on %q\nchown: use --no-preserve-root to override this failsafe", abs)
+			return fmt.Errorf("%s: it is dangerous to operate recursively on %q\n%s: use --no-preserve-root to override this failsafe", opts.commandName, abs, opts.commandName)
 		}
 	}
 	if err := visit(permissionVisit{Abs: abs, Info: info, Follow: follow}); err != nil {
@@ -409,6 +420,93 @@ func permissionNameOrID(name string, id uint32) string {
 		return name
 	}
 	return strconv.FormatUint(uint64(id), 10)
+}
+
+type permissionApplyOptions struct {
+	commandName string
+	files       []string
+	uid         *uint32
+	gid         *uint32
+	filter      permissionIfFrom
+	verbosity   permissionVerbosity
+	walk        permissionWalkOptions
+}
+
+func runPermissionApply(ctx context.Context, inv *Invocation, db *permissionIdentityDB, opts *permissionApplyOptions) error {
+	hadError := false
+	for _, target := range opts.files {
+		err := walkPermissionTarget(ctx, inv, target, opts.walk, func(visit permissionVisit) error {
+			before := permissionLookupOwnership(db, visit.Info)
+			if !permissionMatchesFilter(opts.filter, before) {
+				if message := permissionSuccessMessage(visit.Abs, before, before, opts.verbosity); message != "" {
+					_, _ = fmt.Fprintln(inv.Stderr, message)
+				}
+				return nil
+			}
+
+			after := before
+			if opts.uid != nil {
+				after.uid = *opts.uid
+				after.user = db.usersByID[after.uid]
+			}
+			if opts.gid != nil {
+				after.gid = *opts.gid
+				after.group = db.groupsByID[after.gid]
+			}
+
+			if err := inv.FS.Chown(ctx, visit.Abs, after.uid, after.gid, visit.Follow); err != nil {
+				hadError = true
+				if message := permissionFailureMessage(visit.Abs, before, after, opts.verbosity, unwrapPermissionError(err)); message != "" {
+					_, _ = fmt.Fprintln(inv.Stderr, message)
+				}
+				return nil
+			}
+
+			if message := permissionSuccessMessage(visit.Abs, before, after, opts.verbosity); message != "" {
+				_, _ = fmt.Fprintln(inv.Stderr, message)
+			}
+			return nil
+		})
+		if err == nil {
+			continue
+		}
+		hadError = true
+		_, _ = fmt.Fprintln(inv.Stderr, permissionTargetError(opts.commandName, target, err))
+	}
+
+	if hadError {
+		return &ExitError{Code: 1}
+	}
+	return nil
+}
+
+func unwrapPermissionError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) && exitErr.Err != nil {
+		return exitErr.Err
+	}
+	return err
+}
+
+func permissionTargetError(commandName, target string, err error) string {
+	if err == nil {
+		return ""
+	}
+	err = unwrapPermissionError(err)
+	if strings.HasPrefix(err.Error(), commandName+": ") {
+		return err.Error()
+	}
+	switch {
+	case errors.Is(err, stdfs.ErrNotExist):
+		return fmt.Sprintf("%s: cannot access %q: No such file or directory", commandName, target)
+	case errors.Is(err, stdfs.ErrPermission):
+		return fmt.Sprintf("%s: cannot access %q: Permission denied", commandName, target)
+	default:
+		return fmt.Sprintf("%s: cannot access %q: %v", commandName, target, err)
+	}
 }
 
 func startsWithDigit(value string) bool {
