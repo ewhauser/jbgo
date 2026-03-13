@@ -32,6 +32,8 @@ type options struct {
 type runSummary struct {
 	GNUVersion     string          `json:"gnu_version"`
 	GeneratedAt    string          `json:"generated_at"`
+	WorkDir        string          `json:"work_dir,omitempty"`
+	ResultsDir     string          `json:"results_dir,omitempty"`
 	Overall        testSummary     `json:"overall"`
 	UtilitySummary utilityTotals   `json:"utility_summary"`
 	Utilities      []utilityResult `json:"utilities"`
@@ -63,10 +65,23 @@ type utilityTotals struct {
 }
 
 type utilityResult struct {
-	Name    string      `json:"name"`
-	Skipped []string    `json:"skipped,omitempty"`
-	Summary testSummary `json:"summary"`
-	LogFile string      `json:"log_file,omitempty"`
+	Name         string       `json:"name"`
+	Tests        []string     `json:"tests,omitempty"`
+	Skipped      []string     `json:"skipped,omitempty"`
+	TestResults  []testResult `json:"test_results,omitempty"`
+	ExtraResults []testResult `json:"extra_results,omitempty"`
+	Summary      testSummary  `json:"summary"`
+	ExitCode     int          `json:"exit_code"`
+	Passed       bool         `json:"passed"`
+	LogFile      string       `json:"log_file,omitempty"`
+	LogPath      string       `json:"log_path,omitempty"`
+	Reason       string       `json:"reason,omitempty"`
+}
+
+type testResult struct {
+	Name       string   `json:"name"`
+	Status     string   `json:"status"`
+	ReportedAs []string `json:"reported_as,omitempty"`
 }
 
 type indexView struct {
