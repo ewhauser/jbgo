@@ -617,14 +617,62 @@ func (f *memoryFile) Write(p []byte) (int, error) {
 
 	end := int(f.offset) + len(p)
 	if end > len(node.data) {
-		grown := make([]byte, end)
-		copy(grown, node.data)
-		node.data = grown
+		node.data = growBytes(node.data, end)
 	}
 	copy(node.data[int(f.offset):], p)
 	f.offset += int64(len(p))
 	node.modTime = time.Now().UTC()
 	return len(p), nil
+}
+
+func (f *memoryFile) ReadFrom(r io.Reader) (int64, error) {
+	var buf [32 * 1024]byte
+	var total int64
+	for {
+		n, err := r.Read(buf[:])
+		if n > 0 {
+			written, writeErr := f.Write(buf[:n])
+			total += int64(written)
+			if writeErr != nil {
+				return total, writeErr
+			}
+			if written != n {
+				return total, io.ErrShortWrite
+			}
+		}
+		if err == nil {
+			continue
+		}
+		if err == io.EOF {
+			return total, nil
+		}
+		return total, err
+	}
+}
+
+func (f *memoryFile) WriteTo(w io.Writer) (int64, error) {
+	var buf [32 * 1024]byte
+	var total int64
+	for {
+		n, err := f.Read(buf[:])
+		if n > 0 {
+			written, writeErr := w.Write(buf[:n])
+			total += int64(written)
+			if writeErr != nil {
+				return total, writeErr
+			}
+			if written != n {
+				return total, io.ErrShortWrite
+			}
+		}
+		if err == nil {
+			continue
+		}
+		if err == io.EOF {
+			return total, nil
+		}
+		return total, err
+	}
 }
 
 func (f *memoryFile) Close() error {
@@ -637,6 +685,31 @@ func (f *memoryFile) Stat() (stdfs.FileInfo, error) {
 		return nil, stdfs.ErrClosed
 	}
 	return f.fs.Stat(context.Background(), f.path)
+}
+
+func growBytes(data []byte, size int) []byte {
+	if size <= len(data) {
+		return data
+	}
+	if size <= cap(data) {
+		return data[:size]
+	}
+
+	newCap := cap(data)
+	if newCap == 0 {
+		newCap = size
+	}
+	for newCap < size {
+		if newCap < 1<<20 {
+			newCap *= 2
+			continue
+		}
+		newCap += newCap / 2
+	}
+
+	grown := make([]byte, size, newCap)
+	copy(grown, data)
+	return grown
 }
 
 type fileInfo struct {

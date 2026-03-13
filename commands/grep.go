@@ -283,24 +283,22 @@ func grepContent(inv *Invocation, re *regexp.Regexp, data []byte, name string, s
 }
 
 func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions) (grepSearchResult, error) {
-	lines := textLines(data)
-
 	if opts.count {
 		matchCount := 0
 		countMatches := opts.onlyMatching && !opts.invert
-		for _, line := range lines {
+		visitTextLines(data, func(line []byte, _ int) bool {
 			if countMatches {
-				matchCount += len(re.FindAllStringIndex(line, -1))
-				continue
+				matchCount += len(re.FindAllIndex(line, -1))
+				return true
 			}
-			matches := re.FindAllStringIndex(line, -1)
-			if (len(matches) > 0) != opts.invert {
+			if re.Match(line) != opts.invert {
 				matchCount++
 				if opts.maxCount > 0 && matchCount >= opts.maxCount {
-					break
+					return false
 				}
 			}
-		}
+			return true
+		})
 
 		prefix := ""
 		if showName {
@@ -312,6 +310,8 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 			matchCount: matchCount,
 		}, nil
 	}
+
+	lines := textLines(data)
 
 	if opts.beforeContext == 0 && opts.afterContext == 0 {
 		outputLines := make([]string, 0)

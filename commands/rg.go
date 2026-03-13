@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/ewhauser/gbash/policy"
@@ -71,6 +73,21 @@ func (c *RG) Run(ctx context.Context, inv *Invocation) error {
 	matchedAny := false
 	showNames := len(files) > 1 || anyDir || len(roots) > 1
 	for _, file := range files {
+		if opts.listFiles {
+			matched, err := rgFileHasMatch(ctx, inv, re, file)
+			if err != nil {
+				return err
+			}
+			if !matched {
+				continue
+			}
+			matchedAny = true
+			if _, err := fmt.Fprintln(inv.Stdout, file); err != nil {
+				return &ExitError{Code: 1, Err: err}
+			}
+			continue
+		}
+
 		data, _, err := readAllFile(ctx, inv, file)
 		if err != nil {
 			return err
@@ -185,7 +202,7 @@ func (c *RG) walkRoot(ctx context.Context, inv *Invocation, rootAbs, currentAbs 
 		if !opts.hidden && strings.HasPrefix(name, ".") {
 			continue
 		}
-		child := path.Join(currentAbs, name)
+		child := joinChildPath(currentAbs, name)
 		info, err := entry.Info()
 		if err != nil {
 			info, _, err = statPath(ctx, inv, child)
@@ -223,6 +240,27 @@ func (c *RG) includeFile(name, abs, rootAbs string, opts rgOptions) bool {
 		}
 	}
 	return false
+}
+
+func rgFileHasMatch(ctx context.Context, inv *Invocation, re *regexp.Regexp, name string) (bool, error) {
+	file, _, err := openRead(ctx, inv, name)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = file.Close() }()
+
+	scanner := bufio.NewScanner(file)
+	var buf [4 * 1024]byte
+	scanner.Buffer(buf[:], ScannerTokenLimit(inv))
+	for scanner.Scan() {
+		if re.Match(scanner.Bytes()) {
+			return true, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return false, &ExitError{Code: 1, Err: err}
+	}
+	return false, nil
 }
 
 var _ Command = (*RG)(nil)

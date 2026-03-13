@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -38,43 +40,98 @@ func (c *Uniq) Run(ctx context.Context, inv *Invocation) error {
 		return err
 	}
 
-	lines := make([]string, 0)
+	streamer := &uniqStreamer{
+		inv:  inv,
+		opts: opts,
+	}
 	exitCode := 0
 	if len(files) == 0 {
-		data, err := readAllStdin(inv)
-		if err != nil {
+		if err := streamer.consumeReader(stdinReader(inv)); err != nil {
 			return err
 		}
-		lines = append(lines, textLines(data)...)
 	} else {
 		for _, file := range files {
-			data, _, err := readAllFile(ctx, inv, file)
+			reader, _, err := openRead(ctx, inv, file)
 			if err != nil {
 				_, _ = fmt.Fprintf(inv.Stderr, "uniq: %s: No such file or directory\n", file)
 				exitCode = 1
 				continue
 			}
-			lines = append(lines, textLines(data)...)
+			if err := streamer.consumeReader(reader); err != nil {
+				_ = reader.Close()
+				return err
+			}
+			_ = reader.Close()
 		}
 	}
 
-	for _, group := range uniqGroups(lines, opts) {
-		if !shouldPrintUniqGroup(group, opts) {
-			continue
-		}
-		if opts.countOnly {
-			if _, err := fmt.Fprintf(inv.Stdout, "%4d %s\n", group.count, group.line); err != nil {
-				return &ExitError{Code: 1, Err: err}
-			}
-			continue
-		}
-		if _, err := fmt.Fprintln(inv.Stdout, group.line); err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
+	if err := streamer.flush(); err != nil {
+		return err
 	}
 
 	if exitCode != 0 {
 		return &ExitError{Code: exitCode}
+	}
+	return nil
+}
+
+type uniqStreamer struct {
+	inv   *Invocation
+	opts  uniqOptions
+	line  string
+	count int
+	have  bool
+}
+
+func (s *uniqStreamer) consumeReader(r io.Reader) error {
+	scanner := bufio.NewScanner(r)
+	var buf [4 * 1024]byte
+	scanner.Buffer(buf[:], ScannerTokenLimit(s.inv))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !s.have {
+			s.line = line
+			s.count = 1
+			s.have = true
+			continue
+		}
+		if equalUniqLine(line, s.line, s.opts) {
+			s.count++
+			continue
+		}
+		if err := s.flush(); err != nil {
+			return err
+		}
+		s.line = line
+		s.count = 1
+		s.have = true
+	}
+	if err := scanner.Err(); err != nil {
+		return &ExitError{Code: 1, Err: err}
+	}
+	return nil
+}
+
+func (s *uniqStreamer) flush() error {
+	if !s.have {
+		return nil
+	}
+	group := uniqGroup{line: s.line, count: s.count}
+	s.have = false
+	s.line = ""
+	s.count = 0
+
+	if !shouldPrintUniqGroup(group, s.opts) {
+		return nil
+	}
+	if s.opts.countOnly {
+		if _, err := fmt.Fprintf(s.inv.Stdout, "%4d %s\n", group.count, group.line); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+		return nil
+	}
+	if _, err := fmt.Fprintln(s.inv.Stdout, group.line); err != nil {
+		return &ExitError{Code: 1, Err: err}
 	}
 	return nil
 }

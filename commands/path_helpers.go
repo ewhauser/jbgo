@@ -84,3 +84,14 @@ func humanizeBytes(size int64) string {
 	}
 	return fmt.Sprintf("%.1fP", value/unit)
 }
+
+func joinChildPath(parent, child string) string {
+	switch parent {
+	case "", ".":
+		return child
+	case "/":
+		return "/" + child
+	default:
+		return parent + "/" + child
+	}
+}
