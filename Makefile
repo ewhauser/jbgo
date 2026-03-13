@@ -29,7 +29,8 @@ FUZZ_SMOKE_SHARD_PATHS := \
 	FuzzTruncateCommand \
 	FuzzCompatPredicateCommands \
 	FuzzDirectoryTraversalCommands \
-	FuzzTextSearchCommands
+	FuzzTextSearchCommands \
+	FuzzTSortCommand
 
 FUZZ_SMOKE_SHARD_DATA := \
 	FuzzArchiveCommands \
@@ -91,6 +92,7 @@ FUZZ_FULL_SHARD_3 := \
 FUZZ_FULL_SHARD_4 := \
 	FuzzLSFlagsCommand \
 	FuzzSortFlagsCommand \
+	FuzzTSortCommand \
 	FuzzCurlFlagsCommand \
 	FuzzTimeoutCommand \
 	FuzzExprCommand \
