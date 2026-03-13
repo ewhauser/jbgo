@@ -34,8 +34,6 @@ type cutOptions struct {
 	onlyDelimited       bool
 	zeroTerminated      bool
 	complement          bool
-	showHelp            bool
-	showVersion         bool
 }
 
 type cutRange struct {
@@ -52,17 +50,45 @@ func (c *Cut) Name() string {
 }
 
 func (c *Cut) Run(ctx context.Context, inv *Invocation) error {
-	opts, files, ranges, err := parseCutArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Cut) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "cut",
+		About: "Print selected parts of lines from each FILE to standard output.",
+		Usage: "cut OPTION... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "bytes", Short: 'b', Long: "bytes", Arity: OptionRequiredValue, ValueName: "LIST", Help: "select only these bytes"},
+			{Name: "characters", Short: 'c', Long: "characters", Arity: OptionRequiredValue, ValueName: "LIST", Help: "select only these characters"},
+			{Name: "delimiter", Short: 'd', Long: "delimiter", Arity: OptionRequiredValue, ValueName: "DELIM", Help: "use DELIM instead of TAB for field delimiter"},
+			{Name: "fields", Short: 'f', Long: "fields", Arity: OptionRequiredValue, ValueName: "LIST", Help: "select only these fields"},
+			{Name: "only-delimited", Short: 's', Long: "only-delimited", Help: "do not print lines not containing delimiters"},
+			{Name: "zero-terminated", Short: 'z', Long: "zero-terminated", Help: "line delimiter is NUL, not newline"},
+			{Name: "complement", Long: "complement", Help: "complement the set of selected bytes, characters or fields"},
+			{Name: "output-delimiter", Long: "output-delimiter", Arity: OptionRequiredValue, ValueName: "STR", Help: "use STR as the output delimiter"},
+			{Name: "whitespace-delimited", Short: 'w', Help: "use whitespace rather than a literal delimiter for field splitting"},
+			{Name: "no-split", Short: 'n', Help: "(ignored)"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true, Help: "input files"},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+		VersionRenderer: renderStaticVersion(cutVersionText),
+	}
+}
+
+func (c *Cut) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, files, ranges, err := parseCutMatches(inv, matches)
 	if err != nil {
 		return err
-	}
-	if opts.showHelp {
-		_, _ = fmt.Fprint(inv.Stdout, cutHelpText)
-		return nil
-	}
-	if opts.showVersion {
-		_, _ = fmt.Fprint(inv.Stdout, cutVersionText)
-		return nil
 	}
 
 	lineEnding := byte('\n')
@@ -117,38 +143,52 @@ func (c *Cut) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseCutArgs(inv *Invocation) (cutOptions, []string, []cutRange, error) {
+func parseCutMatches(inv *Invocation, matches *ParsedCommand) (cutOptions, []string, []cutRange, error) {
 	opts := cutOptions{
 		delimiter: []byte{'\t'},
 	}
-	args := append([]string(nil), inv.Args...)
-
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
+	values := map[string][]string{
+		"bytes":            matches.Values("bytes"),
+		"characters":       matches.Values("characters"),
+		"delimiter":        matches.Values("delimiter"),
+		"fields":           matches.Values("fields"),
+		"output-delimiter": matches.Values("output-delimiter"),
+	}
+	indexes := make(map[string]int, len(values))
+	for _, name := range matches.OptionOrder() {
+		value := cutNextMatchValue(values, indexes, name)
+		switch name {
+		case "bytes":
+			if err := setCutMode(inv, &opts, cutModeBytes, value); err != nil {
+				return cutOptions{}, nil, nil, err
+			}
+		case "characters":
+			if err := setCutMode(inv, &opts, cutModeCharacters, value); err != nil {
+				return cutOptions{}, nil, nil, err
+			}
+		case "fields":
+			if err := setCutMode(inv, &opts, cutModeFields, value); err != nil {
+				return cutOptions{}, nil, nil, err
+			}
+		case "delimiter":
+			opts.delimiter = []byte(value)
+			opts.delimiterSpecified = true
+		case "only-delimited":
+			opts.onlyDelimited = true
+		case "zero-terminated":
+			opts.zeroTerminated = true
+		case "complement":
+			opts.complement = true
+		case "output-delimiter":
+			opts.outputDelimiter = []byte(value)
+			opts.outputDelimiterSet = true
+		case "whitespace-delimited":
+			opts.whitespaceDelimited = true
+		case "no-split":
+			// GNU compatibility no-op.
 		}
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			break
-		}
-
-		var consumed int
-		var err error
-		if strings.HasPrefix(arg, "--") {
-			consumed, err = parseCutLongOption(inv, args, &opts)
-		} else {
-			consumed, err = parseCutShortOptions(inv, args, &opts)
-		}
-		if err != nil {
-			return cutOptions{}, nil, nil, err
-		}
-		args = args[consumed:]
 	}
 
-	if opts.showHelp || opts.showVersion {
-		return opts, args, nil, nil
-	}
 	if opts.modeCount == 0 {
 		return cutOptions{}, nil, nil, cutUsageError(inv, "cut: you must specify a list of bytes, characters, or fields")
 	}
@@ -178,197 +218,16 @@ func parseCutArgs(inv *Invocation) (cutOptions, []string, []cutRange, error) {
 	opts.delimiter = delimiter
 	opts.outputDelimiter = parseCutOutputDelimiter(opts.outputDelimiter, opts.outputDelimiterSet)
 
-	return opts, args, ranges, nil
+	return opts, matches.Args("file"), ranges, nil
 }
 
-func parseCutLongOption(inv *Invocation, args []string, opts *cutOptions) (int, error) {
-	arg := args[0]
-	name := strings.TrimPrefix(arg, "--")
-	value := ""
-	hasValue := false
-	if before, after, ok := strings.Cut(name, "="); ok {
-		name = before
-		value = after
-		hasValue = true
+func cutNextMatchValue(values map[string][]string, indexes map[string]int, name string) string {
+	valueIndex := indexes[name]
+	indexes[name] = valueIndex + 1
+	if valueIndex >= len(values[name]) {
+		return ""
 	}
-
-	match, err := matchCutLongOption(inv, name)
-	if err != nil {
-		return 0, err
-	}
-
-	switch match {
-	case "help":
-		opts.showHelp = true
-		return 1, nil
-	case "version":
-		opts.showVersion = true
-		return 1, nil
-	case "complement":
-		opts.complement = true
-		return 1, nil
-	case "only-delimited":
-		opts.onlyDelimited = true
-		return 1, nil
-	case "zero-terminated":
-		opts.zeroTerminated = true
-		return 1, nil
-	case "bytes":
-		list, consumed, err := cutOptionValue(inv, args, hasValue, value, "bytes")
-		if err != nil {
-			return 0, err
-		}
-		if err := setCutMode(inv, opts, cutModeBytes, list); err != nil {
-			return 0, err
-		}
-		return consumed, nil
-	case "characters":
-		list, consumed, err := cutOptionValue(inv, args, hasValue, value, "characters")
-		if err != nil {
-			return 0, err
-		}
-		if err := setCutMode(inv, opts, cutModeCharacters, list); err != nil {
-			return 0, err
-		}
-		return consumed, nil
-	case "fields":
-		list, consumed, err := cutOptionValue(inv, args, hasValue, value, "fields")
-		if err != nil {
-			return 0, err
-		}
-		if err := setCutMode(inv, opts, cutModeFields, list); err != nil {
-			return 0, err
-		}
-		return consumed, nil
-	case "delimiter":
-		delim, consumed, err := cutOptionValue(inv, args, hasValue, value, "delimiter")
-		if err != nil {
-			return 0, err
-		}
-		opts.delimiter = []byte(delim)
-		opts.delimiterSpecified = true
-		return consumed, nil
-	case "output-delimiter":
-		delim, consumed, err := cutOptionValue(inv, args, hasValue, value, "output-delimiter")
-		if err != nil {
-			return 0, err
-		}
-		opts.outputDelimiter = []byte(delim)
-		opts.outputDelimiterSet = true
-		return consumed, nil
-	default:
-		return 0, cutUsageError(inv, fmt.Sprintf("cut: unrecognized option '%s'", arg))
-	}
-}
-
-func parseCutShortOptions(inv *Invocation, args []string, opts *cutOptions) (int, error) {
-	arg := args[0]
-	for i := 1; i < len(arg); i++ {
-		switch arg[i] {
-		case 'b':
-			list, consumed, err := cutShortOptionValue(inv, args, arg, i, "b")
-			if err != nil {
-				return 0, err
-			}
-			if err := setCutMode(inv, opts, cutModeBytes, list); err != nil {
-				return 0, err
-			}
-			return consumed, nil
-		case 'c':
-			list, consumed, err := cutShortOptionValue(inv, args, arg, i, "c")
-			if err != nil {
-				return 0, err
-			}
-			if err := setCutMode(inv, opts, cutModeCharacters, list); err != nil {
-				return 0, err
-			}
-			return consumed, nil
-		case 'f':
-			list, consumed, err := cutShortOptionValue(inv, args, arg, i, "f")
-			if err != nil {
-				return 0, err
-			}
-			if err := setCutMode(inv, opts, cutModeFields, list); err != nil {
-				return 0, err
-			}
-			return consumed, nil
-		case 'd':
-			delim, consumed, err := cutShortOptionValue(inv, args, arg, i, "d")
-			if err != nil {
-				return 0, err
-			}
-			opts.delimiter = []byte(delim)
-			opts.delimiterSpecified = true
-			return consumed, nil
-		case 's':
-			opts.onlyDelimited = true
-		case 'z':
-			opts.zeroTerminated = true
-		case 'n':
-			// GNU compatibility no-op.
-		case 'w':
-			opts.whitespaceDelimited = true
-		default:
-			return 0, cutUsageError(inv, fmt.Sprintf("cut: invalid option -- '%c'", arg[i]))
-		}
-	}
-	return 1, nil
-}
-
-func matchCutLongOption(inv *Invocation, name string) (string, error) {
-	candidates := []string{
-		"bytes",
-		"characters",
-		"complement",
-		"delimiter",
-		"fields",
-		"help",
-		"only-delimited",
-		"output-delimiter",
-		"version",
-		"zero-terminated",
-	}
-
-	for _, candidate := range candidates {
-		if candidate == name {
-			return candidate, nil
-		}
-	}
-
-	var matches []string
-	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, name) {
-			matches = append(matches, candidate)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", cutUsageError(inv, fmt.Sprintf("cut: unrecognized option '%s'", "--"+name))
-	case 1:
-		return matches[0], nil
-	default:
-		return "", cutUsageError(inv, fmt.Sprintf("cut: option '%s' is ambiguous", "--"+name))
-	}
-}
-
-func cutOptionValue(inv *Invocation, args []string, hasValue bool, value, name string) (optionValue string, consumed int, err error) {
-	if hasValue {
-		return value, 1, nil
-	}
-	if len(args) < 2 {
-		return "", 0, cutUsageError(inv, fmt.Sprintf("cut: option '--%s' requires an argument", name))
-	}
-	return args[1], 2, nil
-}
-
-func cutShortOptionValue(inv *Invocation, args []string, arg string, index int, name string) (optionValue string, consumed int, err error) {
-	if rest := arg[index+1:]; rest != "" {
-		return rest, 1, nil
-	}
-	if len(args) < 2 {
-		return "", 0, cutUsageError(inv, fmt.Sprintf("cut: option requires an argument -- '%s'", name))
-	}
-	return args[1], 2, nil
+	return values[name][valueIndex]
 }
 
 func setCutMode(inv *Invocation, opts *cutOptions, mode cutMode, list string) error {
@@ -826,21 +685,8 @@ func cutUsageError(inv *Invocation, message string) error {
 	return exitf(inv, 1, "%s\nTry 'cut --help' for more information.", message)
 }
 
-const cutHelpText = `Usage: cut OPTION... [FILE]...
-Print selected parts of lines from each FILE to standard output.
-
-  -b, --bytes=LIST              select only these bytes
-  -c, --characters=LIST         select only these characters
-  -d, --delimiter=DELIM         use DELIM instead of TAB for field delimiter
-  -f, --fields=LIST             select only these fields
-  -s, --only-delimited          do not print lines not containing delimiters
-  -z, --zero-terminated         line delimiter is NUL, not newline
-      --complement              complement the set of selected bytes, characters or fields
-      --output-delimiter=STR    use STR as the output delimiter
-      --help                    display this help and exit
-      --version                 output version information and exit
-`
-
 const cutVersionText = "cut (gbash) dev\n"
 
 var _ Command = (*Cut)(nil)
+var _ SpecProvider = (*Cut)(nil)
+var _ ParsedRunner = (*Cut)(nil)
