@@ -680,7 +680,7 @@ func (c *checksumSum) parseDigestLength(sum string) (int, bool) {
 		return 0, false
 	}
 	if c.supportsLength {
-		if len(sum)%2 != 0 || len(sum) == 0 || len(sum) > c.digestLen*2 {
+		if len(sum)%2 != 0 || sum == "" || len(sum) > c.digestLen*2 {
 			return 0, false
 		}
 		return len(sum) / 2, true
