@@ -1429,6 +1429,19 @@ func TestStatFormatsDeviceAndInodePlaceholders(t *testing.T) {
 	}
 }
 
+func TestStatSupportsPrintfFormat(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
+
+	result := mustExecSession(t, session, "stat --printf='[%n]\\n' /home/agent/target.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "[/home/agent/target.txt]\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestBasenameAndDirnameHandleSuffixesAndMultipleOperands(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
