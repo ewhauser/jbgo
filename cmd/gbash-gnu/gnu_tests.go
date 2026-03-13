@@ -391,11 +391,12 @@ func runMakeCheck(ctx context.Context, makeBin, workDir, configShell string, tes
 		"srcdir=" + workDir,
 		"TESTS=" + strings.Join(tests, " "),
 	}
-	cmd := exec.CommandContext(ctx, makeBin, args...)
+	cmd := exec.Command(makeBin, args...)
 	cmd.Dir = workDir
 	cmd.Env = append(os.Environ(),
 		"CONFIG_SHELL="+configShell,
 	)
+	configureIsolatedProcessGroup(cmd)
 
 	logFile, err := os.Create(logPath)
 	if err != nil {
@@ -437,6 +438,10 @@ func runMakeCheck(ctx context.Context, makeBin, workDir, configShell string, tes
 				return makeCheckResult{ExitCode: exitErr.ExitCode(), Output: output}, nil
 			}
 			return makeCheckResult{}, err
+		case <-ctx.Done():
+			_ = terminateIsolatedProcessGroup(cmd)
+			<-done
+			return makeCheckResult{}, ctx.Err()
 		case <-ticker.C:
 			fmt.Printf("gbash-gnu: still running make check after %s (%d test(s))\n", time.Since(startedAt).Round(time.Second), len(tests))
 		}
