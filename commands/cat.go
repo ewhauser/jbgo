@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/policy"
-	"golang.org/x/sys/unix"
 )
 
 type Cat struct{}
@@ -249,14 +248,6 @@ func catHostOffset(file catHostHandle) int64 {
 		return 0
 	}
 	return offset
-}
-
-func catHostAppendMode(file catHostHandle) bool {
-	flags, err := unix.FcntlInt(file.Fd(), unix.F_GETFL, 0)
-	if err != nil {
-		return false
-	}
-	return flags&unix.O_APPEND != 0
 }
 
 func readCatInput(ctx context.Context, inv *Invocation, name string) (data []byte, label string, err error) {

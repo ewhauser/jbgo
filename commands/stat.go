@@ -6,7 +6,6 @@ import (
 	"fmt"
 	stdfs "io/fs"
 	"strings"
-	"syscall"
 )
 
 type Stat struct{}
@@ -138,19 +137,19 @@ func renderStatFormat(ctx context.Context, inv *Invocation, abs string, info std
 }
 
 func statDevice(info stdfs.FileInfo) uint64 {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat == nil {
+	dev, _, ok := testDeviceAndInode(info)
+	if !ok {
 		return 0
 	}
-	return uint64(stat.Dev)
+	return dev
 }
 
 func statInode(info stdfs.FileInfo) uint64 {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat == nil {
+	_, ino, ok := testDeviceAndInode(info)
+	if !ok {
 		return 0
 	}
-	return uint64(stat.Ino)
+	return ino
 }
 
 var _ Command = (*Stat)(nil)
