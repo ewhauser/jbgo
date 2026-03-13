@@ -20,7 +20,7 @@ behavior, no shortcuts.
 
 ### 1. Pick the command
 
-Read `TODO.md` and present the **Command Parity** section to the user. Many missing commands
+Run the upstream-diff skill to identify missing commands and missing flags. Many missing commands
 are standard Unix utilities that have canonical behavior defined by uutils. Ask the user
 which command they want to implement. If they already told you, skip the asking and proceed.
 
@@ -160,15 +160,7 @@ Key points:
 - Test the command with various flag combinations and malformed input
 - Add the fuzz target to the Makefile
 
-### 8. Update SPEC.md
-
-Add the new command to the appropriate section in `SPEC.md`.
-
-### 9. Update TODO.md
-
-Check off the command in the `## Command Parity` section of `TODO.md` if it appears there.
-
-### 10. Verify everything builds and passes
+### 8. Verify everything builds and passes
 
 ```bash
 go build ./...

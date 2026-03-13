@@ -2,7 +2,7 @@
 `gbash` is a deterministic shell runtime intended to execute untrusted or semi-trusted shell text inside a sandbox, but its effective security boundary depends heavily on embedder configuration. The strongest risk themes are boundary misconfiguration around filesystem and network access, availability exhaustion from large-input and nested-execution paths, a concrete symlink-policy gap in `OverlayFS`, and trace leakage of sensitive command arguments. Evidence anchors: `runtime/runtime.go` / `New`, `runtime/session.go` / `Session.exec`, `shell/mvdan.go` / `Run` and `execHandler`, `fs/overlay.go` / `Realpath`, `commands/io_helpers.go` / `readAllFile`, `network/network.go` / `HTTPClient.Do`, `trace/trace.go` / `CommandEvent`.
 
 ## Scope and assumptions
-- In scope: `cmd/gbash/`, `runtime/`, `shell/`, `commands/`, `fs/`, `policy/`, `network/`, `trace/`, `SPEC.md`, `README.md`.
+- In scope: `cmd/gbash/`, `runtime/`, `shell/`, `commands/`, `fs/`, `policy/`, `network/`, `trace/`, `README.md`.
 - Out of scope: tests, fuzz fixtures, and local development tooling except where they provide evidence about intended runtime behavior.
 - Confirmed context: untrusted scripts are expected; a session is intended to be single-tenant; network egress and non-memory filesystem backends may be enabled by operator/user configuration.
 - Assumption: the repository is primarily a library/runtime plus a local CLI, not a standalone network service with built-in authentication or tenancy controls. Evidence anchors: `cmd/gbash/cli.go` / `runCLI`, `runtime/runtime.go` / `Runtime`, `README.md`.

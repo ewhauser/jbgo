@@ -492,8 +492,6 @@ The stock `gbash` CLI and zero-config `runtime.New()` only include core commands
 - `Config.Policy` controls command allowlists, path allowlists, symlink behavior, and execution limits.
 - Unknown commands never fall through to the host OS; they fail with a shell-style command-not-found error instead.
 
-If you are changing runtime boundaries, command ownership, or sandbox behavior, keep [`SPEC.md`](./SPEC.md) in sync.
-
 ## Security Model
 
 - The shell only sees the filesystem and runtime configuration you provide.
@@ -565,8 +563,6 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 The repo is a Go workspace. The root module has the runtime, CLI, and core commands. [`contrib/`](./contrib/) and [`examples/`](./examples/) are separate modules to keep optional dependencies out of the core import graph.
 
 `make build`, `make test`, and `make lint` cover all modules. See the [`Makefile`](./Makefile) for fuzz, bench, GNU coreutils compat, and release targets.
-
-For architecture and product-boundary work, read [`SPEC.md`](./SPEC.md) before making changes.
 
 ### coreutils compatibility
 
