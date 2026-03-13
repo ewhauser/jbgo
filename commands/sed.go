@@ -56,7 +56,36 @@ func (c *Sed) Name() string {
 }
 
 func (c *Sed) Run(ctx context.Context, inv *Invocation) error {
-	opts, files, err := parseSedArgs(ctx, inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Sed) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "sed",
+		About: "Stream editor",
+		Usage: "sed [OPTION]... {script-only-if-no-other-script} [input-file]...\n\n  -n, --quiet, --silent\n                 suppress automatic printing of pattern space\n      --debug\n                 annotate program execution\n  -e script, --expression=script\n                 add the script to the commands to be executed\n  -f script-file, --file=script-file\n                 add the contents of script-file to the commands to be executed\n  -i[SUFFIX], --in-place[=SUFFIX]\n                 edit files in place (makes backup if SUFFIX supplied)\n  -E, -r, --regexp-extended\n                 use extended regular expressions in the script",
+		Options: []OptionSpec{
+			{Name: "quiet", Short: 'n', Long: "quiet", Aliases: []string{"silent"}, Help: "suppress automatic printing of pattern space"},
+			{Name: "expression", Short: 'e', Long: "expression", Arity: OptionRequiredValue, ValueName: "script", Repeatable: true, Help: "add the script to the commands to be executed"},
+			{Name: "file", Short: 'f', Long: "file", Arity: OptionRequiredValue, ValueName: "script-file", Repeatable: true, Help: "add the contents of script-file to the commands to be executed"},
+			{Name: "in-place", Short: 'i', Long: "in-place", Help: "edit files in place"},
+			{Name: "regexp-extended", Short: 'E', ShortAliases: []rune{'r'}, Long: "regexp-extended", Help: "use extended regular expressions in the script"},
+		},
+		Args: []ArgSpec{
+			{Name: "arg", ValueName: "ARG", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			StopAtFirstPositional:    true,
+		},
+	}
+}
+
+func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, files, err := parseSedMatches(ctx, inv, matches)
 	if err != nil {
 		return err
 	}
@@ -112,53 +141,21 @@ func (c *Sed) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseSedArgs(ctx context.Context, inv *Invocation) (sedOptions, []string, error) {
-	args := inv.Args
-	var opts sedOptions
-
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
+func parseSedMatches(ctx context.Context, inv *Invocation, matches *ParsedCommand) (sedOptions, []string, error) {
+	opts := sedOptions{
+		quiet:   matches.Has("quiet"),
+		inPlace: matches.Has("in-place"),
+	}
+	for _, source := range matches.Values("expression") {
+		appendSedScriptSource(&opts.scripts, source)
+	}
+	for _, name := range matches.Values("file") {
+		if err := appendSedScriptFile(ctx, inv, &opts.scripts, name); err != nil {
+			return sedOptions{}, nil, err
 		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			break
-		}
-		switch {
-		case arg == "-n" || arg == "--quiet" || arg == "--silent":
-			opts.quiet = true
-		case arg == "-E" || arg == "-r":
-		case arg == "-i" || arg == "--in-place":
-			opts.inPlace = true
-		case arg == "-e":
-			if len(args) < 2 {
-				return sedOptions{}, nil, exitf(inv, 1, "sed: option requires an argument -- 'e'")
-			}
-			appendSedScriptSource(&opts.scripts, args[1])
-			args = args[2:]
-			continue
-		case arg == "-f":
-			if len(args) < 2 {
-				return sedOptions{}, nil, exitf(inv, 1, "sed: option requires an argument -- 'f'")
-			}
-			if err := appendSedScriptFile(ctx, inv, &opts.scripts, args[1]); err != nil {
-				return sedOptions{}, nil, err
-			}
-			args = args[2:]
-			continue
-		case strings.HasPrefix(arg, "-e") && len(arg) > 2:
-			appendSedScriptSource(&opts.scripts, arg[2:])
-		case strings.HasPrefix(arg, "-f") && len(arg) > 2:
-			if err := appendSedScriptFile(ctx, inv, &opts.scripts, arg[2:]); err != nil {
-				return sedOptions{}, nil, err
-			}
-		default:
-			return sedOptions{}, nil, exitf(inv, 1, "sed: unsupported flag %s", arg)
-		}
-		args = args[1:]
 	}
 
+	args := matches.Args("arg")
 	if len(opts.scripts) == 0 {
 		if len(args) == 0 {
 			return sedOptions{}, nil, exitf(inv, 1, "sed: missing script")
