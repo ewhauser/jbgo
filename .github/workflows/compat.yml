@@ -17,6 +17,9 @@ concurrency:
 jobs:
   compat:
     runs-on: ubuntu-24.04
+    env:
+      GNU_BUILD_CACHE_VERSION: v2
+      GNU_BUILD_CACHE_TAG: gnu-build-cache-v2
     outputs:
       exit_code: ${{ steps.run-compat.outputs.exit_code }}
       publishable: ${{ steps.publish-state.outputs.publishable }}
@@ -27,6 +30,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install compat test dependencies
+        run: |
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            acl \
+            libacl1-dev \
+            libexpect-perl \
+            libselinux1-dev \
+            locales-all \
+            valgrind
+          python -m pip install --disable-pip-version-check pyinotify
 
       - name: Compute GNU build cache key
         id: gnu-build-cache-key
