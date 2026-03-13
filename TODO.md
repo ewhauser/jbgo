@@ -161,6 +161,7 @@ Auto-generated — re-run the upstream-diff skill to refresh.
 - [ ] `alias`
 - [ ] `clear`
 - [x] `column` (upstream flags: `-t`, `-s`, `-o`, `-c`, `-n`)
+- [x] `dircolors`
 - [ ] `egrep`
 - [ ] `expand` (upstream flags: `-t`, `-i`)
 - [ ] `fgrep`

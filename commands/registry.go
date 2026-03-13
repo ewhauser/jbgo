@@ -130,6 +130,7 @@ func DefaultRegistry() *Registry {
 		NewLink(),
 		NewLS(),
 		NewDir(),
+		NewDircolors(),
 		NewRmdir(),
 		NewReadlink(),
 		NewStat(),

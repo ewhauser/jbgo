@@ -69,6 +69,7 @@ jobs:
         env:
           PAGES_ROOT: ${{ runner.temp }}/compat-pages
           GNU_RESULTS_DIR: ${{ runner.temp }}/compat-pages/compat/latest
+          COMPAT_EXIT_CODE: ${{ steps.run-compat.outputs.exit_code }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -80,13 +81,13 @@ jobs:
             set -e
           fi
 
-          if [ -f "$GNU_RESULTS_DIR/summary.json" ] && [ -f "$GNU_RESULTS_DIR/index.html" ] && [ -f "$GNU_RESULTS_DIR/badge.svg" ]; then
+          if [ "$COMPAT_EXIT_CODE" = "0" ] && [ -f "$GNU_RESULTS_DIR/summary.json" ] && [ -f "$GNU_RESULTS_DIR/index.html" ] && [ -f "$GNU_RESULTS_DIR/badge.svg" ]; then
             echo "publishable=true" >> "$GITHUB_OUTPUT"
           else
             echo "publishable=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ -f "$GNU_RESULTS_DIR/summary.json" ] && [ -f "$GNU_RESULTS_DIR/index.html" ] && [ -f "$GNU_RESULTS_DIR/badge.svg" ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
+          if [ "$COMPAT_EXIT_CODE" = "0" ] && [ -f "$GNU_RESULTS_DIR/summary.json" ] && [ -f "$GNU_RESULTS_DIR/index.html" ] && [ -f "$GNU_RESULTS_DIR/badge.svg" ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
             mkdir -p "$PAGES_ROOT"
             cat > "$PAGES_ROOT/index.html" <<'EOF'
           <!DOCTYPE html>
@@ -137,6 +138,12 @@ jobs:
           name: compat-results-${{ github.run_id }}
           path: ${{ runner.temp }}/compat-pages/compat/latest
           retention-days: 30
+
+      - name: Fail job when GNU compatibility harness fails
+        if: always() && steps.run-compat.outputs.exit_code != '0'
+        run: |
+          echo "GNU compatibility harness failed with exit code ${{ steps.run-compat.outputs.exit_code }}" >&2
+          exit 1
 
       - name: Upload Pages artifact
         if: always() && steps.publish-state.outputs.deployable == 'true'
