@@ -12,6 +12,8 @@ func TestWriteReportWritesIndexAndBadge(t *testing.T) {
 	summary := runSummary{
 		GNUVersion:  "9.10",
 		GeneratedAt: "2026-03-11T18:30:00Z",
+		WorkDir:     "/tmp/coreutils-work",
+		ResultsDir:  "/tmp/compat-results",
 		Overall: testSummary{
 			SelectedTotal:   3,
 			Pass:            1,
@@ -96,10 +98,12 @@ func TestLoadSummaryReadsHarnessJSON(t *testing.T) {
 	if err := os.WriteFile(summaryPath, []byte(`{
   "gnu_version": "9.10",
   "generated_at": "2026-03-11T18:30:00Z",
+  "work_dir": "/tmp/coreutils-work",
+  "results_dir": "/tmp/compat-results",
   "overall": { "selected_total": 1, "pass": 1, "fail": 0, "skip": 0, "xfail": 0, "xpass": 0, "error": 0, "unreported": 0, "runnable_total": 1, "pass_pct_selected": 100, "pass_pct_runnable": 100 },
   "utility_summary": { "total": 1, "passed": 1, "failed": 0, "no_runnable_tests": 0, "pass_pct_total": 100, "pass_pct_runnable": 100 },
   "utilities": [
-    { "name": "basename", "log_file": "basename.log", "summary": { "selected_total": 1, "pass": 1, "fail": 0, "skip": 0, "xfail": 0, "xpass": 0, "error": 0, "unreported": 0, "runnable_total": 1, "pass_pct_selected": 100, "pass_pct_runnable": 100 } }
+    { "name": "basename", "tests": ["tests/misc/basename.pl"], "test_results": [{ "name": "tests/misc/basename.pl", "status": "pass", "reported_as": ["tests/misc/basename.pl"] }], "summary": { "selected_total": 1, "pass": 1, "fail": 0, "skip": 0, "xfail": 0, "xpass": 0, "error": 0, "unreported": 0, "runnable_total": 1, "pass_pct_selected": 100, "pass_pct_runnable": 100 }, "exit_code": 0, "passed": true, "log_file": "basename.log", "log_path": "/tmp/compat-results/basename.log" }
   ]
 }`), 0o644); err != nil {
 		t.Fatalf("WriteFile(summary.json) error = %v", err)
@@ -112,20 +116,25 @@ func TestLoadSummaryReadsHarnessJSON(t *testing.T) {
 	if summary.GNUVersion != "9.10" {
 		t.Fatalf("GNUVersion = %q, want 9.10", summary.GNUVersion)
 	}
+	if summary.WorkDir != "/tmp/coreutils-work" || summary.ResultsDir != "/tmp/compat-results" {
+		t.Fatalf("work/results dirs = (%q, %q), want current harness paths", summary.WorkDir, summary.ResultsDir)
+	}
 	if len(summary.Utilities) != 1 || summary.Utilities[0].Name != "basename" {
 		t.Fatalf("utilities = %#v, want one basename utility", summary.Utilities)
 	}
 }
 
-func TestLoadSummaryRejectsRemovedInactiveFields(t *testing.T) {
+func TestLoadSummaryRejectsUnknownFields(t *testing.T) {
 	summaryPath := filepath.Join(t.TempDir(), "summary.json")
 	if err := os.WriteFile(summaryPath, []byte(`{
   "gnu_version": "9.10",
   "generated_at": "2026-03-11T18:30:00Z",
+  "work_dir": "/tmp/coreutils-work",
+  "results_dir": "/tmp/compat-results",
   "overall": { "selected_total": 0, "pass": 0, "fail": 0, "skip": 0, "xfail": 0, "xpass": 0, "error": 0, "unreported": 0, "runnable_total": 0, "pass_pct_selected": 0, "pass_pct_runnable": 0 },
   "utility_summary": { "total": 0, "passed": 0, "failed": 0, "no_runnable_tests": 0, "pass_pct_total": 0, "pass_pct_runnable": 0 },
   "utilities": [
-    { "name": "basename", "inactive": true, "summary": { "selected_total": 0, "pass": 0, "fail": 0, "skip": 0, "xfail": 0, "xpass": 0, "error": 0, "unreported": 0, "runnable_total": 0, "pass_pct_selected": 0, "pass_pct_runnable": 0 } }
+    { "name": "basename", "summary": { "selected_total": 0, "pass": 0, "fail": 0, "skip": 0, "xfail": 0, "xpass": 0, "error": 0, "unreported": 0, "runnable_total": 0, "pass_pct_selected": 0, "pass_pct_runnable": 0 }, "exit_code": 0, "passed": false, "unexpected": true }
   ]
 }`), 0o644); err != nil {
 		t.Fatalf("WriteFile(summary.json) error = %v", err)
