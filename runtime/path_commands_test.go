@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -409,6 +410,242 @@ func TestReadlinkPosixAndVerboseErrors(t *testing.T) {
 	if !strings.Contains(loop.Stderr, "Too many levels of symbolic links") {
 		t.Fatalf("loop stderr = %q, want symlink loop diagnostic", loop.Stderr)
 	}
+}
+
+func TestMktempCreatesFilesAndDirectories(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	setup := mustExecSession(t, session, "mkdir -p nested\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	result := mustExecSession(t, session, "mktemp nested/file.XXXX\nmktemp XXX_XXX\nmktemp -d /tmp/dir.XXXX\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("Stdout lines = %d, want 3; stdout=%q", len(lines), result.Stdout)
+	}
+	if !strings.HasPrefix(lines[0], "nested/file.") {
+		t.Fatalf("first output = %q, want nested/file.*", lines[0])
+	}
+	if got, want := lines[1][:4], "XXX_"; got != want {
+		t.Fatalf("second output prefix = %q, want %q", got, want)
+	}
+	if !strings.HasPrefix(lines[2], "/tmp/dir.") {
+		t.Fatalf("third output = %q, want /tmp/dir.*", lines[2])
+	}
+
+	fileInfo, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(lines[0]))
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", lines[0], err)
+	}
+	if fileInfo.IsDir() {
+		t.Fatalf("Stat(%q) reported directory, want file", lines[0])
+	}
+	if got, want := fileInfo.Mode().Perm(), os.FileMode(0o600); got != want {
+		t.Fatalf("file perm = %#o, want %#o", got, want)
+	}
+
+	dirInfo, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(lines[2]))
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", lines[2], err)
+	}
+	if !dirInfo.IsDir() {
+		t.Fatalf("Stat(%q) reported non-directory, want directory", lines[2])
+	}
+	if got, want := dirInfo.Mode().Perm(), os.FileMode(0o700); got != want {
+		t.Fatalf("dir perm = %#o, want %#o", got, want)
+	}
+}
+
+func TestMktempSupportsDryRunSuffixAndQuiet(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "mktemp -u --suffix=.txt dry.XXXX\nmktemp --suffix=.log keep.XXXX\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout lines = %d, want 2; stdout=%q", len(lines), result.Stdout)
+	}
+	if !strings.HasSuffix(lines[0], ".txt") {
+		t.Fatalf("dry-run output = %q, want .txt suffix", lines[0])
+	}
+	if !strings.HasSuffix(lines[1], ".log") {
+		t.Fatalf("created output = %q, want .log suffix", lines[1])
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(lines[0])); !os.IsNotExist(err) {
+		t.Fatalf("Stat(%q) error = %v, want not exist for dry run", lines[0], err)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(lines[1])); err != nil {
+		t.Fatalf("Stat(%q) error = %v, want created file", lines[1], err)
+	}
+
+	quiet := mustExecSession(t, newSession(t, &Config{}), "mktemp -q -p /definitely/not/exist/I/promise\n")
+	if quiet.ExitCode != 1 {
+		t.Fatalf("quiet ExitCode = %d, want 1", quiet.ExitCode)
+	}
+	if quiet.Stdout != "" || quiet.Stderr != "" {
+		t.Fatalf("quiet output = (%q, %q), want empty output", quiet.Stdout, quiet.Stderr)
+	}
+}
+
+func TestMktempTmpdirAndDeprecatedTHandling(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	setup := mustExecSession(t, session, "mkdir -p a\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	script := strings.Join([]string{
+		"TMPDIR=. mktemp",
+		"TMPDIR=. mktemp XXX",
+		"TMPDIR=. mktemp -t foo.XXXX",
+		"TMPDIR=. mktemp -t -p should_not_exist foo.XXXX",
+		"mktemp --tmpdir foo.XXXX",
+		"mktemp --directory --tmpdir apt-key-gpghome.XXXX",
+		"mktemp --tmpdir=. a/bXXXX",
+		"",
+	}, "\n")
+	result := mustExecSession(t, session, script)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 7 {
+		t.Fatalf("Stdout lines = %d, want 7; stdout=%q", len(lines), result.Stdout)
+	}
+	if !strings.HasPrefix(lines[0], "./tmp.") {
+		t.Fatalf("mktemp output = %q, want ./tmp.*", lines[0])
+	}
+	if strings.HasPrefix(lines[1], "./") || strings.Contains(lines[1], "/") {
+		t.Fatalf("mktemp XXX output = %q, want plain relative name", lines[1])
+	}
+	if !strings.HasPrefix(lines[2], "./foo.") {
+		t.Fatalf("mktemp -t output = %q, want TMPDIR-based relative path", lines[2])
+	}
+	if !strings.HasPrefix(lines[3], "./foo.") {
+		t.Fatalf("mktemp -t -p output = %q, want TMPDIR to override -p", lines[3])
+	}
+	if !strings.HasPrefix(lines[4], "/tmp/foo.") {
+		t.Fatalf("mktemp --tmpdir output = %q, want /tmp/foo.*", lines[4])
+	}
+	if !strings.HasPrefix(lines[5], "/tmp/apt-key-gpghome.") {
+		t.Fatalf("mktemp --directory --tmpdir output = %q, want /tmp/apt-key-gpghome.*", lines[5])
+	}
+	if !strings.HasPrefix(lines[6], "./a/b") {
+		t.Fatalf("mktemp --tmpdir=. a/bXXXX output = %q, want ./a/b*", lines[6])
+	}
+
+	for i, name := range lines {
+		info, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(name))
+		if err != nil {
+			t.Fatalf("Stat(%q) error = %v", name, err)
+		}
+		if i == 5 {
+			if !info.IsDir() {
+				t.Fatalf("Stat(%q) reported non-directory, want directory", name)
+			}
+			continue
+		}
+		if info.IsDir() {
+			t.Fatalf("Stat(%q) reported directory, want file", name)
+		}
+	}
+}
+
+func TestMktempTreatsEmptyTmpdirValuesAsFallback(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "TMPDIR=. mktemp -p ''\nTMPDIR=. mktemp --tmpdir=\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout lines = %d, want 2; stdout=%q", len(lines), result.Stdout)
+	}
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "./tmp.") {
+			t.Fatalf("output = %q, want TMPDIR-based ./tmp.* path", line)
+		}
+		if _, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(line)); err != nil {
+			t.Fatalf("Stat(%q) error = %v, want created file", line, err)
+		}
+	}
+}
+
+func TestMktempRejectsInvalidTemplates(t *testing.T) {
+	tests := []struct {
+		name       string
+		script     string
+		wantStderr string
+	}{
+		{
+			name:       "too few Xs",
+			script:     "mktemp aXX\n",
+			wantStderr: "mktemp: too few X's in template 'aXX'\n",
+		},
+		{
+			name:       "suffix requires trailing X",
+			script:     "mktemp --suffix=.txt aXXXb\n",
+			wantStderr: "mktemp: with --suffix, template 'aXXXb' must end in X\n",
+		},
+		{
+			name:       "deprecated template separator",
+			script:     "mktemp -t a/bXXX\n",
+			wantStderr: "mktemp: invalid template, 'a/bXXX', contains directory separator\n",
+		},
+		{
+			name:       "tmpdir forbids absolute template",
+			script:     "mktemp --tmpdir=. /XXX\n",
+			wantStderr: "mktemp: invalid template, '/XXX'; with --tmpdir, it may not be absolute\n",
+		},
+		{
+			name:       "too many templates",
+			script:     "mktemp a b\n",
+			wantStderr: "mktemp: too many templates\nTry 'mktemp --help' for more information.\n",
+		},
+		{
+			name:       "posixly correct requires template last",
+			script:     "POSIXLY_CORRECT=1 mktemp aXXXX --suffix=b\n",
+			wantStderr: "mktemp: too many templates\nTry 'mktemp --help' for more information.\n",
+		},
+		{
+			name:       "missing short tmpdir argument",
+			script:     "mktemp -p\n",
+			wantStderr: "mktemp: option requires an argument -- 'p'\nTry 'mktemp --help' for more information.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			session := newSession(t, &Config{})
+			result := mustExecSession(t, session, tt.script)
+			if result.ExitCode == 0 {
+				t.Fatalf("ExitCode = 0, want non-zero; stdout=%q", result.Stdout)
+			}
+			if got := result.Stderr; got != tt.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tt.wantStderr)
+			}
+		})
+	}
+}
+
+func mktempRuntimePath(name string) string {
+	if strings.HasPrefix(name, "/") {
+		return path.Clean(name)
+	}
+	return path.Clean(path.Join(defaultHomeDir, name))
 }
 
 func TestReadlinkExistingFailsForRemovedWorkingDirectory(t *testing.T) {
