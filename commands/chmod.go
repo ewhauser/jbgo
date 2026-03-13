@@ -7,11 +7,14 @@ import (
 	stdfs "io/fs"
 	"strconv"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 type Chmod struct{}
+
+const (
+	chmodUmaskEnvKey  = "GBASH_UMASK"
+	chmodDefaultUmask = 0o022
+)
 
 type chmodOptions struct {
 	modeSpec        string
@@ -214,7 +217,7 @@ func runChmod(ctx context.Context, inv *Invocation, opts *chmodOptions) error {
 			}
 
 			before := visit.Info.Mode()
-			after, naive, err := chmodDesiredMode(before, opts, visit.Info.IsDir())
+			after, naive, err := chmodDesiredMode(inv, before, opts, visit.Info.IsDir())
 			if err != nil {
 				return err
 			}
@@ -251,11 +254,11 @@ func runChmod(ctx context.Context, inv *Invocation, opts *chmodOptions) error {
 	return nil
 }
 
-func chmodDesiredMode(current stdfs.FileMode, opts *chmodOptions, isDir bool) (mode, naive stdfs.FileMode, err error) {
+func chmodDesiredMode(inv *Invocation, current stdfs.FileMode, opts *chmodOptions, isDir bool) (mode, naive stdfs.FileMode, err error) {
 	if opts.referenceLoaded {
 		return opts.referenceMode, opts.referenceMode, nil
 	}
-	mode, err = computeChmodModeWithUmask(current, opts.modeSpec, chmodCurrentUmask(), isDir)
+	mode, err = computeChmodModeWithUmask(current, opts.modeSpec, chmodCurrentUmask(inv), isDir)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -266,8 +269,8 @@ func chmodDesiredMode(current stdfs.FileMode, opts *chmodOptions, isDir bool) (m
 	return mode, naive, nil
 }
 
-func computeChmodMode(current stdfs.FileMode, modeSpec string) (stdfs.FileMode, error) {
-	return computeChmodModeWithUmask(current, modeSpec, chmodCurrentUmask(), current.IsDir())
+func computeChmodMode(inv *Invocation, current stdfs.FileMode, modeSpec string) (stdfs.FileMode, error) {
+	return computeChmodModeWithUmask(current, modeSpec, chmodCurrentUmask(inv), current.IsDir())
 }
 
 func computeChmodModeWithUmask(current stdfs.FileMode, modeSpec string, umask stdfs.FileMode, isDir bool) (stdfs.FileMode, error) {
@@ -484,10 +487,23 @@ func chmodCopyMask(current stdfs.FileMode, source rune, whoMask stdfs.FileMode) 
 	return out
 }
 
-func chmodCurrentUmask() stdfs.FileMode {
-	mask := unix.Umask(0)
-	unix.Umask(mask)
-	return stdfs.FileMode(mask)
+func chmodCurrentUmask(inv *Invocation) stdfs.FileMode {
+	env := map[string]string(nil)
+	if inv != nil {
+		env = inv.Env
+	}
+	raw := ""
+	if env != nil {
+		raw = strings.TrimSpace(env[chmodUmaskEnvKey])
+	}
+	if raw == "" {
+		return chmodDefaultUmask
+	}
+	value, err := strconv.ParseUint(raw, 8, 32)
+	if err != nil {
+		return chmodDefaultUmask
+	}
+	return stdfs.FileMode(value) & 0o777
 }
 
 func chmodDisplayPath(original, abs string) string {

@@ -23,18 +23,19 @@ const (
 
 func defaultBaseEnv() map[string]string {
 	return map[string]string{
-		"HOME":       defaultHomeDir,
-		"PATH":       defaultPath,
-		"USER":       defaultUser,
-		"LOGNAME":    defaultUser,
-		"GROUP":      defaultUser,
-		"GROUPS":     defaultGID,
-		"UID":        defaultUID,
-		"EUID":       defaultUID,
-		"GID":        defaultGID,
-		"EGID":       defaultGID,
-		"SHELL":      "/bin/sh",
-		"GBASH_ARCH": defaultArchMachine(),
+		"HOME":        defaultHomeDir,
+		"PATH":        defaultPath,
+		"USER":        defaultUser,
+		"LOGNAME":     defaultUser,
+		"GROUP":       defaultUser,
+		"GROUPS":      defaultGID,
+		"UID":         defaultUID,
+		"EUID":        defaultUID,
+		"GID":         defaultGID,
+		"EGID":        defaultGID,
+		"SHELL":       "/bin/sh",
+		"GBASH_ARCH":  defaultArchMachine(),
+		"GBASH_UMASK": "0022",
 	}
 }
 

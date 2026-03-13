@@ -78,7 +78,7 @@ func parseMkdirArgs(inv *Invocation) (mkdirOptions, []string, error) {
 			if len(args) < 2 {
 				return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: option requires an argument -- 'm'")
 			}
-			mode, err := parseMkdirMode(args[1])
+			mode, err := parseMkdirMode(inv, args[1])
 			if err != nil {
 				return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", args[1])
 			}
@@ -86,7 +86,7 @@ func parseMkdirArgs(inv *Invocation) (mkdirOptions, []string, error) {
 			opts.modeSet = true
 			args = args[1:]
 		case strings.HasPrefix(arg, "--mode="):
-			mode, err := parseMkdirMode(strings.TrimPrefix(arg, "--mode="))
+			mode, err := parseMkdirMode(inv, strings.TrimPrefix(arg, "--mode="))
 			if err != nil {
 				return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", strings.TrimPrefix(arg, "--mode="))
 			}
@@ -98,7 +98,7 @@ func parseMkdirArgs(inv *Invocation) (mkdirOptions, []string, error) {
 				return mkdirOptions{}, nil, err
 			}
 			if remaining != "" {
-				mode, err := parseMkdirMode(remaining)
+				mode, err := parseMkdirMode(inv, remaining)
 				if err != nil {
 					return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", remaining)
 				}
@@ -126,8 +126,8 @@ func parseMkdirShortOptions(inv *Invocation, opts *mkdirOptions, arg string) (st
 	return "", nil
 }
 
-func parseMkdirMode(spec string) (stdfs.FileMode, error) {
-	mode, err := computeChmodMode(stdfs.ModeDir|0o777, spec)
+func parseMkdirMode(inv *Invocation, spec string) (stdfs.FileMode, error) {
+	mode, err := computeChmodMode(inv, stdfs.ModeDir|0o777, spec)
 	if err != nil {
 		return 0, err
 	}

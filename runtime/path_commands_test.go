@@ -1153,6 +1153,18 @@ func TestChmodSupportsOctalAndSymbolicModes(t *testing.T) {
 	}
 }
 
+func TestChmodSymbolicModeUsesSandboxUmask(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo hi > /home/agent/file.txt\nchmod 444 /home/agent/file.txt\nchmod +w /home/agent/file.txt\nstat -c '%a %A' /home/agent/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "0644 -rw-r--r--"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestChmodSupportsRecursiveMode(t *testing.T) {
 	session := newSession(t, &Config{})
 
