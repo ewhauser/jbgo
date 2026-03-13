@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -19,16 +18,28 @@ func (c *Sleep) Name() string {
 }
 
 func (c *Sleep) Run(ctx context.Context, inv *Invocation) error {
-	if len(inv.Args) > 0 && inv.Args[0] == "--help" {
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: sleep NUMBER[SUFFIX]...")
-		_, _ = fmt.Fprintln(inv.Stdout, "delay for the combined duration")
-		return nil
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Sleep) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "sleep",
+		About: "delay for the combined duration of one or more NUMBER[SUFFIX] values",
+		Usage: "sleep NUMBER[SUFFIX]...",
+		Args: []ArgSpec{
+			{Name: "number", ValueName: "NUMBER[SUFFIX]", Repeatable: true, Required: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions: true,
+			AutoHelp:         true,
+			AutoVersion:      true,
+		},
 	}
-	if len(inv.Args) == 0 {
-		return exitf(inv, 1, "sleep: missing operand")
-	}
+}
+
+func (c *Sleep) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	var total time.Duration
-	for _, value := range inv.Args {
+	for _, value := range matches.Args("number") {
 		current, err := parseFlexibleDuration(value)
 		if err != nil {
 			return exitf(inv, 1, "sleep: invalid time interval %q", value)
