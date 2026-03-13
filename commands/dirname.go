@@ -3,8 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"io"
-	"strings"
 )
 
 type Dirname struct{}
@@ -17,48 +15,39 @@ func (c *Dirname) Name() string {
 	return "dirname"
 }
 
-func (c *Dirname) Run(_ context.Context, inv *Invocation) error {
-	args := append([]string(nil), inv.Args...)
-	terminator := "\n"
+func (c *Dirname) Run(ctx context.Context, inv *Invocation) error {
+	return RunCommand(ctx, c, inv)
+}
 
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case arg == "--":
-			args = args[1:]
-			goto operands
-		case arg == "--zero":
-			terminator = "\x00"
-			args = args[1:]
-		case arg == "--help":
-			_, _ = io.WriteString(inv.Stdout, dirnameHelpText)
-			return nil
-		case arg == "--version":
-			_, _ = io.WriteString(inv.Stdout, dirnameVersionText)
-			return nil
-		case arg == "-":
-			goto operands
-		case strings.HasPrefix(arg, "-"):
-			rest := arg[1:]
-			if rest == "" {
-				goto operands
-			}
-			args = args[1:]
-			for rest != "" {
-				switch rest[0] {
-				case 'z':
-					terminator = "\x00"
-					rest = rest[1:]
-				default:
-					return exitf(inv, 1, "dirname: unsupported flag -%c", rest[0])
-				}
-			}
-		default:
-			goto operands
-		}
+func (c *Dirname) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "dirname",
+		About: "Output each NAME with its last non-slash component and trailing slashes removed.",
+		Usage: "dirname NAME...\n  or:  dirname OPTION NAME...",
+		Options: []OptionSpec{
+			{Name: "zero", Short: 'z', Long: "zero", Help: "end each output line with NUL, not newline"},
+		},
+		Args: []ArgSpec{
+			{Name: "dir", ValueName: "NAME", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:      true,
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+			AutoHelp:              true,
+			AutoVersion:           true,
+		},
+		AfterHelp: "Examples:\n  dirname /usr/bin/\n  dirname dir1/str dir2/str",
+	}
+}
+
+func (c *Dirname) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCommand) error {
+	terminator := "\n"
+	if matches.Has("zero") {
+		terminator = "\x00"
 	}
 
-operands:
+	args := matches.Args("dir")
 	if len(args) == 0 {
 		return exitf(inv, 1, "dirname: missing operand\nTry 'dirname --help' for more information.")
 	}
@@ -127,12 +116,6 @@ func dirnameString(name string) string {
 	return result
 }
 
-const dirnameHelpText = `Usage: dirname NAME...
-  or:  dirname OPTION NAME...
-Output each NAME with its last non-slash component and trailing slashes removed.
-`
-
-const dirnameVersionText = `dirname (gbash)
-`
-
 var _ Command = (*Dirname)(nil)
+var _ SpecProvider = (*Dirname)(nil)
+var _ ParsedRunner = (*Dirname)(nil)
