@@ -1,10 +1,8 @@
 # gbash
 
-`gbash` is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
+`gbash` is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go. It originally was inspired by [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash).
 
-It ports the core product idea behind [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash) to a Go-native runtime built on [`mvdan/sh/v3`](https://pkg.go.dev/mvdan.cc/sh/v3).
-
-> **Note:** This is beta software. It has not been hardened or security tested and is less mature than the upstream TypeScript implementation. Use it with care.
+> **Note:** This is beta software. It is likely that additional security hardening is needed. Use with care.
 
 Requires Go 1.26+
 
@@ -17,7 +15,7 @@ Install the module with `go get github.com/ewhauser/gbash` and import packages f
   - [Network-Enabled API](#network-enabled-api)
   - [Persistent Sessions](#persistent-sessions)
   - [CLI](#cli)
-  - [Workspace Example](#workspace-example)
+  - [Workspace Examples](#workspace-examples)
 - [Configuration](#configuration)
   - [Filesystem Backends](#filesystem-backends)
   - [Network Access](#network-access)
@@ -73,8 +71,6 @@ hello
 ```
 
 `Runtime.Run` creates a fresh sandbox session for that call. If you want shared filesystem state across multiple executions, use `Runtime.NewSession`.
-
-Per-execution controls live on `ExecutionRequest`, including `Env`, `WorkDir`, `Timeout`, `ReplaceEnv`, and `Stdin`. Results include `ExitCode`, `Stdout`, `Stderr`, `FinalEnv`, and trace `Events`.
 
 ### Network-Enabled API
 
@@ -168,14 +164,6 @@ hello
 /home/agent
 ```
 
-Session behavior is intentional:
-
-- filesystem state persists across `Session.Exec` calls
-- shell-local variables and working directory do not persist across `Session.Exec` calls
-- each execution starts from the session's configured base environment and default workdir unless you override them in the request
-
-That differs from the interactive CLI, which carries shell-visible env and cwd forward between entries.
-
 ### CLI
 
 The CLI reads a script from stdin and executes it inside the sandbox runtime.
@@ -224,65 +212,16 @@ The interactive shell is intentionally minimal:
 - it supports multiline input through `mvdan/sh/v3`'s interactive parser
 - it does not provide history, line editing, job control, or host TTY emulation
 
-The CLI can also report embedded release metadata:
-
-```bash
-gbash --version
-```
-
-For developer-only utility execution, the CLI also exposes an opt-in compatibility path:
-
-```bash
-gbash compat exec printf '%s\n' hello
-```
-
-That path is intentionally separate from the default sandbox script and REPL modes. It exists so external compatibility harnesses can invoke one registered utility at a time against the host filesystem and host environment.
-It does not fall back to host utilities outside the registered `gbash` command set.
-
-### Workspace Example
+### Workspace Examples
 
 The repository uses a committed Go workspace. `examples/` is a separate Go module for demos, and `contrib/` contains separate opt-in modules for commands that should not bloat the core library dependency graph.
 
-`openai-tool-call` uses the OpenAI Go SDK Responses API with a function tool named `bash`. The tool implementation calls `runtime.Run`, so the model sees a normal `bash` tool while execution still happens inside the `gbash` sandbox.
-
-```bash
-export OPENAI_API_KEY=your-api-key
-go run ./examples/openai-tool-call
-```
-
-The example hardcodes `gpt-4.1-mini` and asks the model to run a simple `printf` command through the `bash` tool, then print only the tool's stdout.
-
-`adk-bash-chat` uses [`adk-go`](https://github.com/google/adk-go) to build a local CLI chatbot around a persistent `gbash` bash tool session. It seeds an ops analytics lab under `/home/agent/lab`, prints each bash tool call and result inline, and carries forward filesystem changes, `PWD`, and exported environment variables across turns.
-
-Gemini API:
-
-```bash
-export GOOGLE_API_KEY=your-api-key
-go run ./examples/adk-bash-chat
-```
-
-Vertex AI:
-
-```bash
-export GOOGLE_CLOUD_PROJECT=your-project
-export GOOGLE_CLOUD_LOCATION=us-central1
-go run ./examples/adk-bash-chat --backend=vertex
-```
-
-Use `/reset` inside the chat to recreate the ADK conversation and reseed the sandboxed lab.
-
-`sqlite-backed-fs` shows how to implement a custom `gbfs.FileSystem` on top of a host SQLite database file and pass it into `gbruntime.CustomFileSystem(...)`. Each run starts a fresh sandbox session, but the sandbox filesystem contents persist in the SQLite backing store when you reuse the same `--db` path.
-
-```bash
-go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --script "printf 'hello\\n' > /tmp/hello.txt"
-go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --script "cat /tmp/hello.txt"
-```
-
-It also supports a persistent in-process REPL:
-
-```bash
-go run ./examples/sqlite-backed-fs --db /tmp/gbash-sandbox.db --repl
-```
+| Example | Description |
+|---|---|
+| [`adk-bash-chat`](./examples/adk-bash-chat/) | Local CLI chatbot using [`adk-go`](https://github.com/google/adk-go) with a persistent `gbash` bash tool session and a seeded ops analytics lab |
+| [`custom-zstd`](./examples/custom-zstd/) | Demonstrates custom command registration by adding a `zstd` compression/decompression command |
+| [`openai-tool-call`](./examples/openai-tool-call/) | Uses the OpenAI Go SDK Responses API with `gbash` as a `bash` function tool |
+| [`sqlite-backed-fs`](./examples/sqlite-backed-fs/) | Custom `gbfs.FileSystem` backed by a SQLite database for persistent sandbox filesystem state |
 
 ## Configuration
 
@@ -315,37 +254,6 @@ rt, err := gbruntime.New(
 
 That mounts the host directory read-only at `/home/agent/project`, starts the session there, and keeps all writes, deletes, and command stubs in the in-memory upper layer. `VirtualRoot` defaults to `gbfs.DefaultHostVirtualRoot`. `MaxFileReadBytes` defaults to `gbfs.DefaultHostMaxFileReadBytes`. If you want the host tree mounted at `/`, set `VirtualRoot: "/"`.
 
-For seeded or custom backends, implement `gbfs.Factory` and hand it to `CustomFileSystem`:
-
-```go
-type myFactory struct {
-	base any
-}
-
-func (f myFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
-	return newMyJBFSAdapter(f.base), nil
-}
-
-rt, err := gbruntime.New(
-	gbruntime.WithFileSystem(gbruntime.CustomFileSystem(
-		myFactory{base: os.DirFS("/path/to/workspace")},
-		"/home/agent",
-	)),
-)
-```
-
-If you want copy-on-write behavior over another backend, wrap it with `gbfs.Overlay(...)` before passing it to `CustomFileSystem`.
-
-Low-level `fs` helpers are available when you need to compose backends directly:
-
-- `gbfs.Memory()` returns a factory for fresh in-memory filesystems
-- `gbfs.Overlay(lower)` returns a copy-on-write factory over another `gbfs.Factory`
-- `gbfs.Host(opts)` returns a factory for a read-only host-backed directory view
-- `gbfs.Snapshot(fsys)` returns a factory that clones an existing filesystem into a read-only snapshot
-- `gbfs.NewMemory`, `gbfs.NewOverlay`, `gbfs.NewHost`, and `gbfs.NewSnapshot` create concrete filesystem instances directly
-
-The runtime integration point is still `gbfs.FileSystem`, so plain `io/fs.FS` is not enough by itself. If you already have a Go filesystem implementation, wrap it behind `gbfs.Factory` and adapt the richer contract: mutation, metadata, directory listing, symlinks, and cwd handling. A direct host read-write backend and a general mount router are still out of scope for the default runtime path.
-
 ### Network Access
 
 Network access is disabled by default. When you set `Config.Network` or provide `Config.NetworkClient`, the runtime registers `curl` automatically. Otherwise `curl` is not present in the sandbox at all.
@@ -366,139 +274,12 @@ rt, err := gbruntime.New(
 )
 ```
 
-At runtime, network access works like this:
-
-- `curl` is unavailable unless you explicitly opt in
-- URL access is controlled by prefix allowlists
-- allowed HTTP methods default to `GET` and `HEAD`
-- redirects are revalidated before they are followed
-- response bodies are capped
-- private-range blocking is optional
-
-The sandboxed network client enforces:
-
-- URL-prefix allowlists
-- HTTP-method allowlists
-- redirect revalidation
-- response-size limits
-- optional private-range blocking
-
-The current `curl` subset supports `-L`, `-I`, `-i`, `-X`, `-H`, `-d`, `-o`, `-f`, `-s`, and `-S`.
-
-Typical uses:
-
-```bash
-# GET an allowlisted endpoint
-curl https://api.example.com/v1/status
-
-# Save a response body into the sandbox filesystem
-curl -o /tmp/response.json https://api.example.com/v1/items
-cat /tmp/response.json
-
-# Opt in to POST by allowing the method in Config.Network
-curl -X POST -H 'content-type: application/json' -d '{"name":"demo"}' \
-  https://api.example.com/v1/items
-```
-
 If you want full control over the transport in tests or embedding code, inject your own `Config.NetworkClient` instead of using `Config.Network`.
-
-### Custom Commands
-
-Use `commands.DefineCommand` with a custom `Config.Registry` when you want to add a command or override one of the defaults. Contrib commands use this same registry hook and live in separate Go modules so optional heavy dependencies stay out of the core `github.com/ewhauser/gbash` module.
-
-```go
-registry := commands.DefaultRegistry()
-registry.Register(commands.DefineCommand("zstd", func(ctx context.Context, inv *commands.Invocation) error {
-    // ... Implementation here ...
-	return nil
-}))
-
-registry.RegisterLazy("echo", func() (commands.Command, error) {
-	return commands.DefineCommand("echo", func(ctx context.Context, inv *commands.Invocation) error {
-		_, err := fmt.Fprintf(inv.Stdout, "custom:%s\n", strings.Join(inv.Args, ","))
-		return err
-	}), nil
-})
-
-rt, err := runtime.New(runtime.WithRegistry(registry))
-```
-
-See [`examples/custom-zstd/main.go`](./examples/custom-zstd/main.go) for a runnable example that adds a `zstd` command. Run it with `cd examples && make run-custom-zstd`.
-
-To opt into contrib commands such as `sqlite3`, `jq`, and `yq`:
-
-```go
-package main
-
-import (
-	"github.com/ewhauser/gbash/contrib/extras"
-	gbruntime "github.com/ewhauser/gbash/runtime"
-)
-
-func main() {
-	rt, err := gbruntime.New(gbruntime.WithRegistry(extras.FullRegistry()))
-	if err != nil {
-		panic(err)
-	}
-
-	_ = rt
-}
-```
-
-If you only want a subset, register the contrib modules individually:
-
-```go
-package main
-
-import (
-	"context"
-
-	"github.com/ewhauser/gbash/commands"
-	contribjq "github.com/ewhauser/gbash/contrib/jq"
-	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
-	contribyq "github.com/ewhauser/gbash/contrib/yq"
-	gbruntime "github.com/ewhauser/gbash/runtime"
-)
-
-func main() {
-	registry := commands.DefaultRegistry()
-	if err := contribjq.Register(registry); err != nil {
-		panic(err)
-	}
-	if err := contribsqlite3.Register(registry); err != nil {
-		panic(err)
-	}
-	if err := contribyq.Register(registry); err != nil {
-		panic(err)
-	}
-
-	rt, err := gbruntime.New(gbruntime.WithRegistry(registry))
-	if err != nil {
-		panic(err)
-	}
-
-	_, _ = rt.Run(context.Background(), &gbruntime.ExecutionRequest{
-		Script: "printf '{\"name\":\"alice\"}\\n' | jq -r '.name'\n" +
-			"printf 'name: alice\\n' | yq '.name'\n" +
-			`sqlite3 :memory: "select 1;"`,
-	})
-}
-```
-
-The stock `gbash` CLI and zero-config `runtime.New()` only include core commands. Contrib commands are opt-in by design.
-
-### Registry and Policy
-
-- `Config.Registry` lets you replace or extend the command set.
-- `Config.Policy` controls command allowlists, path allowlists, symlink behavior, and execution limits.
-- Unknown commands never fall through to the host OS; they fail with a shell-style command-not-found error instead.
 
 ## Security Model
 
 - The shell only sees the filesystem and runtime configuration you provide.
 - Command execution is registry-backed. Unknown commands never execute host binaries.
-- There is no host shell fallback.
-- There is no default runtime compatibility mode. The CLI-only `compat exec` path is a developer tool for external test harnesses and is not the default execution contract.
 - Network access is off by default. When enabled, requests are constrained by allowlists and runtime limits.
 - The default static policy applies execution budgets such as command-count, loop-iteration, glob-expansion, substitution-depth, and stdout/stderr capture limits.
 - Trace events capture command execution, file access and mutation, and policy denials for debugging and agent orchestration.
@@ -533,6 +314,7 @@ Optional commands live in [`contrib/`](./contrib/) as separate Go modules so the
 Use `github.com/ewhauser/gbash/contrib/extras` when you want to build a full registry for the contrib command set in one call.
 
 See [Custom Commands](#custom-commands) for how to register them.
+
 ## Shell Features
 
 Shell parsing and execution are delegated to `mvdan/sh/v3`, with project-owned filesystem, command, policy, and trace layers around it.
