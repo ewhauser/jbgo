@@ -74,7 +74,8 @@ FUZZ_FULL_SHARD_2 := \
 	FuzzEnvCommandFlags \
 	FuzzCommCommand \
 	FuzzBase32Command \
-	FuzzBase64Command
+	FuzzBase64Command \
+	FuzzBasencCommand
 
 FUZZ_FULL_SHARD_3 := \
 	FuzzDirectoryTraversalCommands \
