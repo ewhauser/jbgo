@@ -97,12 +97,88 @@ func (c *Curl) Name() string {
 }
 
 func (c *Curl) Run(ctx context.Context, inv *Invocation) error {
-	opts, err := parseCurlArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Curl) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "curl",
+		Usage: "curl [OPTIONS] URL",
+		Options: []OptionSpec{
+			{Name: "request", Short: 'X', Long: "request", Arity: OptionRequiredValue, ValueName: "METHOD", Help: "HTTP method (GET, POST, PUT, DELETE, etc.)"},
+			{Name: "header", Short: 'H', Long: "header", Arity: OptionRequiredValue, ValueName: "HEADER", Repeatable: true, Help: "add header (can be used multiple times)"},
+			{Name: "data", Short: 'd', Long: "data", Arity: OptionRequiredValue, ValueName: "DATA", Help: "HTTP POST data"},
+			{Name: "data-raw", Long: "data-raw", Arity: OptionRequiredValue, ValueName: "DATA", Help: "HTTP POST data (no @ interpretation)"},
+			{Name: "data-binary", Long: "data-binary", Arity: OptionRequiredValue, ValueName: "DATA", Help: "HTTP POST binary data"},
+			{Name: "data-urlencode", Long: "data-urlencode", Arity: OptionRequiredValue, ValueName: "DATA", Repeatable: true, Help: "URL-encode and POST data"},
+			{Name: "form", Short: 'F', Long: "form", Arity: OptionRequiredValue, ValueName: "NAME=VALUE", Repeatable: true, Help: "multipart form data"},
+			{Name: "user", Short: 'u', Long: "user", Arity: OptionRequiredValue, ValueName: "USER:PASS", Help: "HTTP authentication"},
+			{Name: "user-agent", Short: 'A', Long: "user-agent", Arity: OptionRequiredValue, ValueName: "STR", Help: "set User-Agent header"},
+			{Name: "referer", Short: 'e', Long: "referer", Arity: OptionRequiredValue, ValueName: "URL", Help: "set Referer header"},
+			{Name: "cookie", Short: 'b', Long: "cookie", Arity: OptionRequiredValue, ValueName: "DATA", Help: "send cookies"},
+			{Name: "cookie-jar", Short: 'c', Long: "cookie-jar", Arity: OptionRequiredValue, ValueName: "FILE", Help: "save cookies to file"},
+			{Name: "upload-file", Short: 'T', Long: "upload-file", Arity: OptionRequiredValue, ValueName: "FILE", Help: "upload file (defaults method to PUT)"},
+			{Name: "output", Short: 'o', Long: "output", Arity: OptionRequiredValue, ValueName: "FILE", Help: "write output to file"},
+			{Name: "remote-name", Short: 'O', Long: "remote-name", Help: "write to a file named from the URL"},
+			{Name: "head", Short: 'I', Long: "head", Help: "show headers only (HEAD request)"},
+			{Name: "include", Short: 'i', Long: "include", Help: "include response headers in output"},
+			{Name: "silent", Short: 's', Long: "silent", Help: "silent mode (no progress)"},
+			{Name: "show-error", Short: 'S', Long: "show-error", Help: "show errors even when silent"},
+			{Name: "fail", Short: 'f', Long: "fail", Help: "fail on HTTP status >= 400"},
+			{Name: "location", Short: 'L', Long: "location", Help: "follow redirects (default)"},
+			{Name: "max-redirs", Long: "max-redirs", Arity: OptionOptionalValue, ValueName: "NUM", Help: "accepted for compatibility"},
+			{Name: "max-time", Short: 'm', Long: "max-time", Arity: OptionRequiredValue, ValueName: "SECS", Help: "maximum request time"},
+			{Name: "connect-timeout", Long: "connect-timeout", Arity: OptionRequiredValue, ValueName: "SECS", Help: "accepted as an overall timeout fallback"},
+			{Name: "write-out", Short: 'w', Long: "write-out", Arity: OptionRequiredValue, ValueName: "FMT", Help: "output format after completion"},
+			{Name: "verbose", Short: 'v', Long: "verbose", Help: "verbose output"},
+			{Name: "help", Long: "help", Help: "show this help"},
+		},
+		Args: []ArgSpec{
+			{Name: "args", ValueName: "ARG", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+		},
+		HelpRenderer: renderStaticHelp(curlHelpText),
+	}
+}
+
+func (c *Curl) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil {
+		return nil
+	}
+	normalized := make([]string, 0, len(inv.Args)+4)
+	args := inv.Args
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			normalized = append(normalized, arg)
+			normalized = append(normalized, args[i+1:]...)
+			break
+		}
+		if option, value, ok := splitCurlAttachedShort(arg); ok {
+			normalized = append(normalized, option, value)
+			continue
+		}
+		normalized = append(normalized, arg)
+		if fallback, ok := curlMissingValueFallback(arg); ok && i == len(args)-1 {
+			normalized = append(normalized, fallback)
+		}
+	}
+	clone := *inv
+	clone.Args = normalized
+	return &clone
+}
+
+func (c *Curl) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return renderStaticHelp(curlHelpText)(inv.Stdout, c.Spec())
+	}
+
+	opts, err := parseCurlMatches(matches)
 	if err != nil {
 		return err
-	}
-	if opts == nil {
-		return nil
 	}
 	if inv.Fetch == nil {
 		return exitf(inv, 1, "curl: internal error: network client not available")
@@ -166,226 +242,150 @@ func (c *Curl) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseCurlArgs(inv *Invocation) (*curlOptions, error) {
+func parseCurlMatches(matches *ParsedCommand) (*curlOptions, error) {
 	opts := &curlOptions{
 		method:          "GET",
 		headers:         make(map[string]string),
 		followRedirects: true,
 	}
 	impliesPost := false
-	args := inv.Args
+	values := map[string][]string{
+		"request":         matches.Values("request"),
+		"header":          matches.Values("header"),
+		"data":            matches.Values("data"),
+		"data-raw":        matches.Values("data-raw"),
+		"data-binary":     matches.Values("data-binary"),
+		"data-urlencode":  matches.Values("data-urlencode"),
+		"form":            matches.Values("form"),
+		"user":            matches.Values("user"),
+		"user-agent":      matches.Values("user-agent"),
+		"referer":         matches.Values("referer"),
+		"cookie":          matches.Values("cookie"),
+		"cookie-jar":      matches.Values("cookie-jar"),
+		"upload-file":     matches.Values("upload-file"),
+		"max-time":        matches.Values("max-time"),
+		"connect-timeout": matches.Values("connect-timeout"),
+		"output":          matches.Values("output"),
+		"write-out":       matches.Values("write-out"),
+	}
+	indexes := make(map[string]int, len(values))
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--help" {
-			_, _ = inv.Stdout.Write([]byte(curlHelpText))
-			return nil, nil
-		}
-		if arg == "--" {
-			if i+1 < len(args) {
-				opts.url = args[i+1]
-			}
-			break
-		}
-
-		switch {
-		case arg == "-X" || arg == "--request":
-			opts.method = curlNextArg(args, &i, "GET")
-		case strings.HasPrefix(arg, "-X"):
-			opts.method = arg[2:]
-		case strings.HasPrefix(arg, "--request="):
-			opts.method = arg[len("--request="):]
-
-		case arg == "-H" || arg == "--header":
-			parseCurlHeader(opts.headers, curlNextArg(args, &i, ""))
-		case strings.HasPrefix(arg, "--header="):
-			parseCurlHeader(opts.headers, arg[len("--header="):])
-
-		case arg == "-d" || arg == "--data" || arg == "--data-raw":
-			opts.data = curlNextArg(args, &i, "")
+	for _, name := range matches.OptionOrder() {
+		value := curlNextMatchValue(values, indexes, name)
+		switch name {
+		case "request":
+			opts.method = value
+		case "header":
+			parseCurlHeader(opts.headers, value)
+		case "data", "data-raw":
+			opts.data = value
 			opts.hasData = true
 			impliesPost = true
-		case strings.HasPrefix(arg, "-d"):
-			opts.data = arg[2:]
-			opts.hasData = true
-			impliesPost = true
-		case strings.HasPrefix(arg, "--data="):
-			opts.data = arg[len("--data="):]
-			opts.hasData = true
-			impliesPost = true
-		case strings.HasPrefix(arg, "--data-raw="):
-			opts.data = arg[len("--data-raw="):]
-			opts.hasData = true
-			impliesPost = true
-
-		case arg == "--data-binary":
-			opts.data = curlNextArg(args, &i, "")
+		case "data-binary":
+			opts.data = value
 			opts.hasData = true
 			opts.dataBinary = true
 			impliesPost = true
-		case strings.HasPrefix(arg, "--data-binary="):
-			opts.data = arg[len("--data-binary="):]
-			opts.hasData = true
-			opts.dataBinary = true
+		case "data-urlencode":
+			curlAppendURLEncodedData(opts, value)
 			impliesPost = true
-
-		case arg == "--data-urlencode":
-			curlAppendURLEncodedData(opts, curlNextArg(args, &i, ""))
-			impliesPost = true
-		case strings.HasPrefix(arg, "--data-urlencode="):
-			curlAppendURLEncodedData(opts, arg[len("--data-urlencode="):])
-			impliesPost = true
-
-		case arg == "-F" || arg == "--form":
-			if field, ok := parseCurlFormField(curlNextArg(args, &i, "")); ok {
+		case "form":
+			if field, ok := parseCurlFormField(value); ok {
 				opts.formFields = append(opts.formFields, field)
 			}
 			impliesPost = true
-		case strings.HasPrefix(arg, "--form="):
-			if field, ok := parseCurlFormField(arg[len("--form="):]); ok {
-				opts.formFields = append(opts.formFields, field)
-			}
-			impliesPost = true
-
-		case arg == "-u" || arg == "--user":
-			opts.user = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "-u"):
-			opts.user = arg[2:]
-		case strings.HasPrefix(arg, "--user="):
-			opts.user = arg[len("--user="):]
-
-		case arg == "-A" || arg == "--user-agent":
-			opts.headers["User-Agent"] = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "-A"):
-			opts.headers["User-Agent"] = arg[2:]
-		case strings.HasPrefix(arg, "--user-agent="):
-			opts.headers["User-Agent"] = arg[len("--user-agent="):]
-
-		case arg == "-e" || arg == "--referer":
-			opts.headers["Referer"] = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "-e"):
-			opts.headers["Referer"] = arg[2:]
-		case strings.HasPrefix(arg, "--referer="):
-			opts.headers["Referer"] = arg[len("--referer="):]
-
-		case arg == "-b" || arg == "--cookie":
-			opts.headers["Cookie"] = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "-b"):
-			opts.headers["Cookie"] = arg[2:]
-		case strings.HasPrefix(arg, "--cookie="):
-			opts.headers["Cookie"] = arg[len("--cookie="):]
-
-		case arg == "-c" || arg == "--cookie-jar":
-			opts.cookieJar = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "--cookie-jar="):
-			opts.cookieJar = arg[len("--cookie-jar="):]
-
-		case arg == "-T" || arg == "--upload-file":
-			opts.uploadFile = curlNextArg(args, &i, "")
+		case "user":
+			opts.user = value
+		case "user-agent":
+			opts.headers["User-Agent"] = value
+		case "referer":
+			opts.headers["Referer"] = value
+		case "cookie":
+			opts.headers["Cookie"] = value
+		case "cookie-jar":
+			opts.cookieJar = value
+		case "upload-file":
+			opts.uploadFile = value
 			if opts.method == "GET" {
 				opts.method = "PUT"
 			}
-		case strings.HasPrefix(arg, "--upload-file="):
-			opts.uploadFile = arg[len("--upload-file="):]
-			if opts.method == "GET" {
-				opts.method = "PUT"
-			}
-
-		case arg == "-m" || arg == "--max-time":
-			opts.timeout = parseCurlTimeout(curlNextArg(args, &i, ""))
-		case strings.HasPrefix(arg, "--max-time="):
-			opts.timeout = parseCurlTimeout(arg[len("--max-time="):])
-
-		case arg == "--connect-timeout":
+		case "max-time":
+			opts.timeout = parseCurlTimeout(value)
+		case "connect-timeout":
 			if opts.timeout <= 0 {
-				opts.timeout = parseCurlTimeout(curlNextArg(args, &i, ""))
-			} else {
-				i++
+				opts.timeout = parseCurlTimeout(value)
 			}
-		case strings.HasPrefix(arg, "--connect-timeout="):
-			if opts.timeout <= 0 {
-				opts.timeout = parseCurlTimeout(arg[len("--connect-timeout="):])
-			}
-
-		case arg == "-o" || arg == "--output":
-			opts.outputFile = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "--output="):
-			opts.outputFile = arg[len("--output="):]
-		case arg == "-O" || arg == "--remote-name":
+		case "output":
+			opts.outputFile = value
+		case "remote-name":
 			opts.useRemoteName = true
-
-		case arg == "-I" || arg == "--head":
+		case "head":
 			opts.headOnly = true
 			opts.method = "HEAD"
-		case arg == "-i" || arg == "--include":
+		case "include":
 			opts.includeHeaders = true
-		case arg == "-s" || arg == "--silent":
+		case "silent":
 			opts.silent = true
-		case arg == "-S" || arg == "--show-error":
+		case "show-error":
 			opts.showError = true
-		case arg == "-f" || arg == "--fail":
+		case "fail":
 			opts.failSilently = true
-		case arg == "-L" || arg == "--location":
+		case "location":
 			opts.followRedirects = true
-		case arg == "--max-redirs":
-			i++
-		case strings.HasPrefix(arg, "--max-redirs="):
+		case "max-redirs":
 			// Accepted for compatibility. Redirect depth is enforced by network.Config.
-
-		case arg == "-w" || arg == "--write-out":
-			opts.writeOut = curlNextArg(args, &i, "")
-		case strings.HasPrefix(arg, "--write-out="):
-			opts.writeOut = arg[len("--write-out="):]
-		case arg == "-v" || arg == "--verbose":
+		case "write-out":
+			opts.writeOut = value
+		case "verbose":
 			opts.verbose = true
-
-		case strings.HasPrefix(arg, "--"):
-			return nil, exitf(inv, 1, "curl: unrecognized option '%s'", arg)
-		case strings.HasPrefix(arg, "-") && arg != "-":
-			for _, ch := range arg[1:] {
-				switch ch {
-				case 's':
-					opts.silent = true
-				case 'S':
-					opts.showError = true
-				case 'f':
-					opts.failSilently = true
-				case 'L':
-					opts.followRedirects = true
-				case 'I':
-					opts.headOnly = true
-					opts.method = "HEAD"
-				case 'i':
-					opts.includeHeaders = true
-				case 'O':
-					opts.useRemoteName = true
-				case 'v':
-					opts.verbose = true
-				default:
-					return nil, exitf(inv, 1, "curl: invalid option -- '%c'", ch)
-				}
-			}
-		default:
-			opts.url = arg
 		}
 	}
 
 	if impliesPost && opts.method == "GET" {
 		opts.method = "POST"
 	}
+	args := matches.Positionals()
+	if len(args) > 0 {
+		opts.url = args[len(args)-1]
+	}
 	if opts.url == "" {
-		return nil, exitf(inv, 2, "curl: no URL specified")
+		return nil, &ExitError{Code: 2, Err: errors.New("curl: no URL specified")}
 	}
 	return opts, nil
 }
 
-func curlNextArg(args []string, i *int, fallback string) string {
-	next := *i + 1
-	if next >= len(args) {
-		return fallback
+func curlNextMatchValue(values map[string][]string, indexes map[string]int, name string) string {
+	valueIndex := indexes[name]
+	indexes[name] = valueIndex + 1
+	if valueIndex >= len(values[name]) {
+		return ""
 	}
-	*i = next
-	return args[next]
+	return values[name][valueIndex]
+}
+
+func splitCurlAttachedShort(arg string) (string, string, bool) {
+	if len(arg) <= 2 || !strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") {
+		return "", "", false
+	}
+	switch arg[:2] {
+	case "-X", "-d", "-u", "-A", "-e", "-b":
+		return arg[:2], arg[2:], true
+	default:
+		return "", "", false
+	}
+}
+
+func curlMissingValueFallback(arg string) (string, bool) {
+	switch arg {
+	case "-X", "--request":
+		return "GET", true
+	case "-H", "--header", "-d", "--data", "--data-raw", "--data-binary", "--data-urlencode", "-F", "--form",
+		"-u", "--user", "-A", "--user-agent", "-e", "--referer", "-b", "--cookie", "-c", "--cookie-jar",
+		"-T", "--upload-file", "-m", "--max-time", "--connect-timeout", "-o", "--output", "-w", "--write-out":
+		return "", true
+	default:
+		return "", false
+	}
 }
 
 func curlAppendURLEncodedData(opts *curlOptions, value string) {
@@ -717,3 +717,6 @@ func curlErrorMessage(err error) string {
 }
 
 var _ Command = (*Curl)(nil)
+var _ SpecProvider = (*Curl)(nil)
+var _ ParsedRunner = (*Curl)(nil)
+var _ ParseInvocationNormalizer = (*Curl)(nil)

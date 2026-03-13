@@ -126,6 +126,51 @@ func TestCurlSupportsAuthCookiesRemoteNameAndWriteOut(t *testing.T) {
 	}
 }
 
+func TestCurlSupportsHelpWithoutNetworkClient(t *testing.T) {
+	session := newSession(t, &Config{NetworkClient: &curlStubClient{}})
+
+	result := mustExecSession(t, session, "curl --help\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "usage: curl [OPTIONS] URL") {
+		t.Fatalf("Stdout = %q, want curl help text", result.Stdout)
+	}
+}
+
+func TestCurlSupportsLegacyAttachedShortValues(t *testing.T) {
+	client := &curlStubClient{}
+	session := newSession(t, &Config{NetworkClient: client})
+
+	result := mustExecSession(t, session,
+		"curl -s -XPOST -dbody -uuser:pass -Aagent/1.0 -ehttps://ref.example -ba=1 https://api.example.com/post\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	req := client.LastRequest()
+	if req == nil {
+		t.Fatal("LastRequest = nil, want captured request")
+	}
+	if got, want := req.Method, "POST"; got != want {
+		t.Fatalf("Method = %q, want %q", got, want)
+	}
+	if got, want := string(req.Body), "body"; got != want {
+		t.Fatalf("Body = %q, want %q", got, want)
+	}
+	for key, want := range map[string]string{
+		"Authorization": "Basic dXNlcjpwYXNz",
+		"User-Agent":    "agent/1.0",
+		"Referer":       "https://ref.example",
+		"Cookie":        "a=1",
+	} {
+		if got := req.Headers[key]; got != want {
+			t.Fatalf("%s = %q, want %q", key, got, want)
+		}
+	}
+}
+
 func TestCurlSupportsURLEncodedDataAndForgivingHeaders(t *testing.T) {
 	client := &curlStubClient{}
 	session := newSession(t, &Config{NetworkClient: client})
