@@ -75,3 +75,20 @@ func TestCatRejectsShellAppendToSelf(t *testing.T) {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestCatParsesFlagsAfterOperandsLikeGNU(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a\\n\\n' > /tmp/one.txt\nprintf 'b\\n' > /tmp/two.txt\ncat /tmp/one.txt /tmp/two.txt -s -n\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "     1\ta\n     2\t\n     3\tb\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

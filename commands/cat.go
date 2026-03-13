@@ -29,8 +29,6 @@ type catOptions struct {
 	showTabs     bool
 	showEnds     bool
 	showNonprint bool
-	showHelp     bool
-	showVersion  bool
 }
 
 type catOutputState struct {
@@ -60,18 +58,49 @@ func (c *Cat) Name() string {
 }
 
 func (c *Cat) Run(ctx context.Context, inv *Invocation) error {
-	opts, names, err := parseCatArgs(inv)
-	if err != nil {
-		return err
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Cat) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "cat",
+		Usage: "cat [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "show-all", Short: 'A', Long: "show-all", Help: "equivalent to -vET"},
+			{Name: "number-nonblank", Short: 'b', Long: "number-nonblank", Help: "number nonempty output lines"},
+			{Name: "show-nonprinting-ends", Short: 'e', Help: "equivalent to -vE"},
+			{Name: "show-ends", Short: 'E', Long: "show-ends", Help: "display $ at end of each line"},
+			{Name: "number", Short: 'n', Long: "number", Help: "number all output lines"},
+			{Name: "squeeze-blank", Short: 's', Long: "squeeze-blank", Help: "suppress repeated empty output lines"},
+			{Name: "show-nonprinting-tabs", Short: 't', Help: "equivalent to -vT"},
+			{Name: "show-tabs", Short: 'T', Long: "show-tabs", Help: "display TAB characters as ^I"},
+			{Name: "ignored-u", Short: 'u', Help: "ignored"},
+			{Name: "show-nonprinting", Short: 'v', Long: "show-nonprinting", Help: "use ^ and M- notation, except for LFD and TAB"},
+			{Name: "help", Long: "help", Help: "display this help and exit"},
+			{Name: "version", Long: "version", Help: "output version information and exit"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:      true,
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+		},
+		HelpRenderer:    renderStaticHelp(catHelpText),
+		VersionRenderer: renderStaticVersion(catVersionText),
 	}
-	if opts.showHelp {
-		_, _ = io.WriteString(inv.Stdout, catHelpText)
-		return nil
+}
+
+func (c *Cat) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return renderStaticHelp(catHelpText)(inv.Stdout, c.Spec())
 	}
-	if opts.showVersion {
-		_, _ = io.WriteString(inv.Stdout, catVersionText)
-		return nil
+	if matches.Has("version") {
+		return renderStaticVersion(catVersionText)(inv.Stdout, c.Spec())
 	}
+	opts := catOptionsFromParsed(matches)
+	names := matches.Args("file")
 	if len(names) == 0 {
 		names = []string{"-"}
 	}
@@ -125,157 +154,19 @@ func (c *Cat) Run(ctx context.Context, inv *Invocation) error {
 	return &ExitError{Code: len(failures), Err: errors.New("cat: " + failures[0])}
 }
 
-func parseCatArgs(inv *Invocation) (opts catOptions, names []string, err error) {
-	args := append([]string(nil), inv.Args...)
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			return opts, args[1:], nil
-		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			break
-		}
-		if strings.HasPrefix(arg, "--") {
-			mode, matched, parseErr := parseCatLongOption(inv, arg, &opts)
-			if parseErr != nil {
-				return opts, nil, parseErr
-			}
-			if mode != "" {
-				if mode == "help" {
-					opts.showHelp = true
-				} else {
-					opts.showVersion = true
-				}
-				return opts, nil, nil
-			}
-			if !matched {
-				break
-			}
-			args = args[1:]
-			continue
-		}
-
-		matched, mode, parseErr := parseCatShortOptionGroup(inv, arg, &opts)
-		if parseErr != nil {
-			return opts, nil, parseErr
-		}
-		if mode != "" {
-			if mode == "help" {
-				opts.showHelp = true
-			} else {
-				opts.showVersion = true
-			}
-			return opts, nil, nil
-		}
-		if !matched {
-			break
-		}
-		args = args[1:]
+func catOptionsFromParsed(matches *ParsedCommand) catOptions {
+	opts := catOptions{
+		squeezeBlank: matches.Has("squeeze-blank"),
+		showTabs:     matches.Has("show-all") || matches.Has("show-tabs") || matches.Has("show-nonprinting-tabs"),
+		showEnds:     matches.Has("show-all") || matches.Has("show-ends") || matches.Has("show-nonprinting-ends"),
+		showNonprint: matches.Has("show-all") || matches.Has("show-nonprinting") || matches.Has("show-nonprinting-ends") || matches.Has("show-nonprinting-tabs"),
 	}
-	return opts, args, nil
-}
-
-func parseCatLongOption(inv *Invocation, arg string, opts *catOptions) (mode string, matched bool, err error) {
-	name := strings.TrimPrefix(arg, "--")
-	match, ok, err := matchCatLongOption(inv, name)
-	if err != nil || !ok {
-		return "", ok, err
-	}
-	switch match {
-	case "help":
-		return "help", true, nil
-	case "version":
-		return "version", true, nil
-	case "number":
-		if opts.number != catNumberNonBlank {
-			opts.number = catNumberAll
-		}
-	case "number-nonblank":
+	if matches.Has("number-nonblank") {
 		opts.number = catNumberNonBlank
-	case "show-all":
-		opts.showTabs = true
-		opts.showEnds = true
-		opts.showNonprint = true
-	case "show-ends":
-		opts.showEnds = true
-	case "show-tabs":
-		opts.showTabs = true
-	case "show-nonprinting":
-		opts.showNonprint = true
-	case "squeeze-blank":
-		opts.squeezeBlank = true
-	default:
-		return "", false, exitf(inv, 1, "cat: unrecognized option '%s'", arg)
+	} else if matches.Has("number") {
+		opts.number = catNumberAll
 	}
-	return "", true, nil
-}
-
-func matchCatLongOption(inv *Invocation, name string) (match string, matched bool, err error) {
-	candidates := []string{
-		"help",
-		"number",
-		"number-nonblank",
-		"show-all",
-		"show-ends",
-		"show-nonprinting",
-		"show-tabs",
-		"squeeze-blank",
-		"version",
-	}
-	for _, candidate := range candidates {
-		if candidate == name {
-			return candidate, true, nil
-		}
-	}
-	var matches []string
-	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, name) {
-			matches = append(matches, candidate)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", false, catOptionf(inv, "cat: unrecognized option '%s'", "--"+name)
-	case 1:
-		return matches[0], true, nil
-	default:
-		return "", false, catOptionf(inv, "cat: option '%s' is ambiguous", "--"+name)
-	}
-}
-
-func parseCatShortOptionGroup(inv *Invocation, arg string, opts *catOptions) (matched bool, mode string, err error) {
-	for i := 1; i < len(arg); i++ {
-		switch arg[i] {
-		case 'A':
-			opts.showTabs = true
-			opts.showEnds = true
-			opts.showNonprint = true
-		case 'b':
-			opts.number = catNumberNonBlank
-		case 'e':
-			opts.showEnds = true
-			opts.showNonprint = true
-		case 'E':
-			opts.showEnds = true
-		case 'n':
-			if opts.number != catNumberNonBlank {
-				opts.number = catNumberAll
-			}
-		case 's':
-			opts.squeezeBlank = true
-		case 't':
-			opts.showTabs = true
-			opts.showNonprint = true
-		case 'T':
-			opts.showTabs = true
-		case 'u':
-		case 'v':
-			opts.showNonprint = true
-		default:
-			return false, "", catOptionf(inv, "cat: invalid option -- '%c'", arg[i])
-		}
-	}
-	return true, "", nil
+	return opts
 }
 
 func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) (bool, error) {
@@ -485,22 +376,27 @@ func writeCatNewLine(w io.Writer, opts catOptions, state *catOutputState) error 
 	if state == nil {
 		return nil
 	}
-	if !state.atLineStart || !opts.squeezeBlank || !state.oneBlankKept {
-		state.oneBlankKept = true
-		if state.atLineStart && opts.number == catNumberAll {
+	if state.atLineStart {
+		if opts.squeezeBlank && state.oneBlankKept {
+			return nil
+		}
+		if opts.number == catNumberAll {
 			if err := writeCatLineNumber(w, state.lineNumber); err != nil {
 				return err
 			}
 			state.lineNumber++
 		}
-		if opts.showEnds {
-			if _, err := io.WriteString(w, "$\n"); err != nil {
-				return err
-			}
-		} else {
-			if _, err := w.Write([]byte{'\n'}); err != nil {
-				return err
-			}
+		state.oneBlankKept = true
+	} else {
+		state.oneBlankKept = false
+	}
+	if opts.showEnds {
+		if _, err := io.WriteString(w, "$\n"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := w.Write([]byte{'\n'}); err != nil {
+			return err
 		}
 	}
 	state.atLineStart = true
@@ -569,8 +465,6 @@ Concatenate FILE(s) to standard output.
 
 const catVersionText = "cat (gbash) dev\n"
 
-func catOptionf(inv *Invocation, format string, args ...any) error {
-	return exitf(inv, 1, format+"\nTry 'cat --help' for more information.", args...)
-}
-
 var _ Command = (*Cat)(nil)
+var _ SpecProvider = (*Cat)(nil)
+var _ ParsedRunner = (*Cat)(nil)

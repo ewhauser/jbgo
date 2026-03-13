@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"io"
 	stdfs "io/fs"
 	"path"
 	"strconv"
@@ -23,26 +22,45 @@ func (c *Dir) Name() string {
 }
 
 func (c *Dir) Run(ctx context.Context, inv *Invocation) error {
-	for _, arg := range inv.Args {
-		switch arg {
-		case "--help":
-			_, _ = io.WriteString(inv.Stdout, dirHelpText)
-			return nil
-		case "--version":
-			_, _ = io.WriteString(inv.Stdout, dirVersionText)
-			return nil
-		}
-	}
+	return RunCommand(ctx, c, inv)
+}
 
-	opts, targets, err := parseLSArgs(inv)
+func (c *Dir) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "dir",
+		Usage: "dir [OPTION]... [FILE]...",
+		Options: append(lsOptionSpecs(),
+			OptionSpec{Name: "version", Long: "version", Help: "show version information"},
+		),
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions:     true,
+			LongOptionValueEquals: true,
+		},
+		HelpRenderer:    renderStaticHelp(dirHelpText),
+		VersionRenderer: renderStaticVersion(dirVersionText),
+	}
+}
+
+func (c *Dir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return renderStaticHelp(dirHelpText)(inv.Stdout, c.Spec())
+	}
+	if matches.Has("version") {
+		return renderStaticVersion(dirVersionText)(inv.Stdout, c.Spec())
+	}
+	opts, err := lsOptionsFromParsed(inv, matches)
 	if err != nil {
 		return err
 	}
+	targets := matches.Args("file")
 	if len(targets) == 0 {
 		targets = []string{"."}
 	}
 
-	defaultColumns := !dirHasExplicitFormat(inv.Args)
+	defaultColumns := !opts.longFormat && !opts.zero && !lsHasExplicitFormat(matches)
 	var stdout strings.Builder
 	exitCode := 0
 	for i, target := range targets {
@@ -50,7 +68,7 @@ func (c *Dir) Run(ctx context.Context, inv *Invocation) error {
 			stdout.WriteByte('\n')
 		}
 
-		output, status, err := c.listPath(ctx, inv, target, opts, len(targets) > 1, defaultColumns)
+		output, status, _, err := c.listPath(ctx, inv, target, &opts, len(targets) > 1, defaultColumns)
 		if err != nil {
 			return err
 		}
@@ -69,34 +87,14 @@ func (c *Dir) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func dirHasExplicitFormat(args []string) bool {
-	for _, arg := range args {
-		if arg == "--" || !strings.HasPrefix(arg, "-") || arg == "-" {
-			return false
-		}
-		if arg == "-1" || arg == "-l" {
-			return true
-		}
-		if strings.HasPrefix(arg, "--") {
-			continue
-		}
-		for _, flag := range arg[1:] {
-			if flag == '1' || flag == 'l' {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (c *Dir) listPath(ctx context.Context, inv *Invocation, target string, opts lsOptions, showHeader, defaultColumns bool) (output string, status int, err error) {
+func (c *Dir) listPath(ctx context.Context, inv *Invocation, target string, opts *lsOptions, showHeader, defaultColumns bool) (output string, status int, rendered lsRenderResult, err error) {
 	info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, target)
 	if err != nil {
-		return "", 0, err
+		return "", 0, lsRenderResult{}, err
 	}
 	if !exists {
 		_, _ = fmt.Fprintf(inv.Stderr, "dir: %s: No such file or directory\n", target)
-		return "", 2, nil
+		return "", 2, lsRenderResult{}, nil
 	}
 
 	if opts.directoryOnly || !info.IsDir() {
@@ -105,13 +103,13 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, target string, opts
 
 	entries, _, err := readDir(ctx, inv, target)
 	if err != nil {
-		return "", 0, err
+		return "", 0, lsRenderResult{}, err
 	}
 
 	filtered := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		if !opts.showAll && !opts.showAlmostAll && strings.HasPrefix(name, ".") {
+		if !lsShouldIncludeEntry(name, opts) {
 			continue
 		}
 		filtered = append(filtered, name)
@@ -121,9 +119,9 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, target string, opts
 	}
 
 	ls := &LS{}
-	entryInfos, err := ls.loadLSEntries(ctx, inv, abs, filtered)
+	entryInfos, err := ls.loadLSEntries(ctx, inv, abs, filtered, opts)
 	if err != nil {
-		return "", 0, err
+		return "", 0, lsRenderResult{}, err
 	}
 	sortLSEntries(entryInfos, opts)
 
@@ -137,28 +135,11 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, target string, opts
 		out.WriteString(strconv.Itoa(len(entryInfos)))
 		out.WriteByte('\n')
 	}
-	if defaultColumns && !opts.longFormat && !opts.onePerLine {
-		items := make([]string, 0, len(entryInfos))
-		for _, entry := range entryInfos {
-			name, err := c.renderEntryName(ctx, inv, abs, entry, opts)
-			if err != nil {
-				return "", 0, err
-			}
-			items = append(items, name)
-		}
-		if len(items) > 0 {
-			out.WriteString(strings.Join(items, "  "))
-			out.WriteByte('\n')
-		}
-	} else {
-		for _, entry := range entryInfos {
-			line, err := c.renderDirectoryEntry(ctx, inv, abs, entry, opts)
-			if err != nil {
-				return "", 0, err
-			}
-			out.WriteString(line)
-		}
+	rendered, err = lsRenderEntries(ctx, inv, abs, entryInfos, opts, dirQuoteName, defaultColumns)
+	if err != nil {
+		return "", 0, lsRenderResult{}, err
 	}
+	out.WriteString(rendered.text)
 
 	if opts.recursive {
 		subdirs := make([]lsEntry, 0)
@@ -179,69 +160,45 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, target string, opts
 			default:
 				subTarget = path.Join(subTarget, dir.name)
 			}
-			subOutput, status, err := c.listPath(ctx, inv, subTarget, opts, false, defaultColumns)
+			subOutput, status, _, err := c.listPath(ctx, inv, subTarget, opts, false, defaultColumns)
 			if err != nil {
-				return "", 0, err
+				return "", 0, lsRenderResult{}, err
 			}
 			out.WriteString(subOutput)
 			if status != 0 {
-				return out.String(), status, nil
+				return out.String(), status, lsRenderResult{}, nil
 			}
 		}
 	}
 
-	return out.String(), 0, nil
+	return out.String(), 0, lsRenderResult{text: out.String()}, nil
 }
 
-func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs string, info stdfs.FileInfo, opts lsOptions, defaultColumns bool) (output string, status int, err error) {
-	name := dirQuoteName(target)
-	switch {
-	case opts.classify:
-		linfo, _, err := lstatPath(ctx, inv, abs)
-		if err != nil {
-			return "", 0, err
-		}
-		name += classifyLSSuffix(linfo)
-	case opts.longFormat && info.IsDir():
-		name += "/"
-	}
-	if opts.longFormat {
-		return formatLSLongLine(name, info, opts.humanReadable), 0, nil
-	}
-	if defaultColumns && !opts.onePerLine {
-		return name + "\n", 0, nil
-	}
-	return name + "\n", 0, nil
-}
-
-func (c *Dir) renderDirectoryEntry(ctx context.Context, inv *Invocation, dirAbs string, entry lsEntry, opts lsOptions) (string, error) {
-	name, err := c.renderEntryName(ctx, inv, dirAbs, entry, opts)
+func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs string, info stdfs.FileInfo, opts *lsOptions, defaultColumns bool) (output string, status int, rendered lsRenderResult, err error) {
+	name, _, err := lsDecoratedName(ctx, inv, target, abs, info, opts, dirQuoteName)
 	if err != nil {
-		return "", err
+		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		return formatLSLongLine(name, entry.info, opts.humanReadable), nil
+		line, _ := formatLSLongLine(name, info, opts, nil)
+		return line, 0, lsRenderResult{text: line}, nil
 	}
-	return name + "\n", nil
+	if defaultColumns {
+		line := name + lsTerminator(opts)
+		return line, 0, lsRenderResult{text: line}, nil
+	}
+	line := name + lsTerminator(opts)
+	return line, 0, lsRenderResult{text: line}, nil
 }
 
-func (c *Dir) renderEntryName(ctx context.Context, inv *Invocation, dirAbs string, entry lsEntry, opts lsOptions) (string, error) {
-	name := dirQuoteName(entry.name)
-	if opts.classify {
-		switch entry.name {
-		case ".", "..":
-			name += "/"
-		default:
-			linfo, _, err := lstatPath(ctx, inv, path.Join(dirAbs, entry.name))
-			if err != nil {
-				return "", err
-			}
-			name += classifyLSSuffix(linfo)
+func lsHasExplicitFormat(matches *ParsedCommand) bool {
+	for _, option := range matches.OptionOrder() {
+		switch option {
+		case "one-per-line", "columns", "across", "commas", "format":
+			return true
 		}
-	} else if opts.longFormat && entry.info.IsDir() {
-		name += "/"
 	}
-	return name, nil
+	return false
 }
 
 func dirQuoteName(name string) string {
@@ -293,6 +250,7 @@ Supported options:
   -R, --recursive     list subdirectories recursively
   -S                  sort by file size, largest first
   -t                  sort by time, newest first
+  --color[=WHEN]      colorize the output; WHEN can be 'always', 'auto', or 'never'
   --help              show this help text
   --version           show version information
 `
@@ -300,3 +258,5 @@ Supported options:
 const dirVersionText = "dir (gbash) dev\n"
 
 var _ Command = (*Dir)(nil)
+var _ SpecProvider = (*Dir)(nil)
+var _ ParsedRunner = (*Dir)(nil)

@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"io"
 	"path"
 	"strings"
 )
@@ -18,93 +17,70 @@ func (c *Basename) Name() string {
 	return "basename"
 }
 
-func (c *Basename) Run(_ context.Context, inv *Invocation) error {
-	args := append([]string(nil), inv.Args...)
-	multiple := false
-	suffix := ""
-	terminator := "\n"
+func (c *Basename) Run(ctx context.Context, inv *Invocation) error {
+	return RunCommand(ctx, c, inv)
+}
 
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case arg == "--":
-			args = args[1:]
-			goto operands
-		case arg == "--multiple":
-			multiple = true
-			args = args[1:]
-		case arg == "--zero":
-			terminator = "\x00"
-			args = args[1:]
-		case arg == "--help":
-			_, _ = io.WriteString(inv.Stdout, basenameHelpText)
-			return nil
-		case arg == "--version":
-			_, _ = io.WriteString(inv.Stdout, basenameVersionText)
-			return nil
-		case arg == "--suffix":
-			if len(args) < 2 {
-				return exitf(inv, 1, "basename: option requires an argument -- suffix")
-			}
-			suffix = args[1]
-			multiple = true
-			args = args[2:]
-		case strings.HasPrefix(arg, "--suffix="):
-			suffix = strings.TrimPrefix(arg, "--suffix=")
-			multiple = true
-			args = args[1:]
-		case arg == "-":
-			goto operands
-		case strings.HasPrefix(arg, "-"):
-			rest := arg[1:]
-			if rest == "" {
-				goto operands
-			}
-			args = args[1:]
-			for rest != "" {
-				switch rest[0] {
-				case 'a':
-					multiple = true
-					rest = rest[1:]
-				case 'z':
-					terminator = "\x00"
-					rest = rest[1:]
-				case 's':
-					multiple = true
-					if len(rest) > 1 {
-						suffix = rest[1:]
-						rest = ""
-						break
-					}
-					if len(args) == 0 {
-						return exitf(inv, 1, "basename: option requires an argument -- s")
-					}
-					suffix = args[0]
-					args = args[1:]
-					rest = ""
-				default:
-					return exitf(inv, 1, "basename: unsupported flag -%c", rest[0])
-				}
-			}
+func (c *Basename) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "basename",
+		About: "Print NAME with any leading directory components removed.",
+		Usage: "basename NAME [SUFFIX]\n  or:  basename OPTION... NAME...",
+		Options: []OptionSpec{
+			{Name: "multiple", Short: 'a', Long: "multiple", Help: "support multiple arguments and treat each as a NAME"},
+			{Name: "suffix", Short: 's', Long: "suffix", ValueName: "SUFFIX", Arity: OptionRequiredValue, Help: "remove a trailing SUFFIX"},
+			{Name: "zero", Short: 'z', Long: "zero", Help: "end each output line with NUL, not newline"},
+			{Name: "help", Short: 'h', Long: "help", Help: "display this help and exit"},
+			{Name: "version", Short: 'V', Long: "version", Help: "output version information and exit"},
+		},
+		Args: []ArgSpec{
+			{Name: "name", ValueName: "NAME", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			StopAtFirstPositional:    true,
+		},
+		HelpRenderer:    renderStaticHelp(basenameHelpText),
+		VersionRenderer: renderStaticVersion(basenameVersionText),
+	}
+}
+
+func (c *Basename) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return renderStaticHelp(basenameHelpText)(inv.Stdout, c.Spec())
+	}
+	if matches.Has("version") {
+		return renderStaticVersion(basenameVersionText)(inv.Stdout, c.Spec())
+	}
+
+	names := matches.Args("name")
+	if len(names) == 0 {
+		return exitf(inv, 1, "basename: missing operand\nTry 'basename --help' for more information.")
+	}
+
+	multiple := matches.Has("multiple") || matches.Has("suffix")
+	suffix := matches.Value("suffix")
+	if !multiple {
+		switch len(names) {
+		case 1:
+		case 2:
+			suffix = names[1]
+			names = names[:1]
 		default:
-			goto operands
+			return exitf(inv, 1, "basename: extra operand %s\nTry 'basename --help' for more information.", quoteGNUOperand(names[2]))
 		}
 	}
 
-operands:
-	if len(args) == 0 {
-		return exitf(inv, 1, "basename: missing operand\nTry 'basename --help' for more information.")
-	}
-	if !multiple && len(args) > 2 {
-		return exitf(inv, 1, "basename: extra operand %s\nTry 'basename --help' for more information.", quoteGNUOperand(args[2]))
-	}
-	if !multiple && len(args) == 2 && suffix == "" {
-		suffix = args[1]
-		args = args[:1]
+	terminator := "\n"
+	if matches.Has("zero") {
+		terminator = "\x00"
 	}
 
-	for _, operand := range args {
-		base := basename(operand)
+	for _, operand := range names {
+		base := basenameValue(operand)
 		if shouldStripBasenameSuffix(base, suffix) {
 			base = strings.TrimSuffix(base, suffix)
 		}
@@ -115,7 +91,7 @@ operands:
 	return nil
 }
 
-func basename(name string) string {
+func basenameValue(name string) string {
 	if name == "" {
 		return ""
 	}
@@ -142,3 +118,5 @@ Print NAME with any leading directory components removed.
 const basenameVersionText = "basename (gbash) dev\n"
 
 var _ Command = (*Basename)(nil)
+var _ SpecProvider = (*Basename)(nil)
+var _ ParsedRunner = (*Basename)(nil)

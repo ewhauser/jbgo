@@ -68,7 +68,51 @@ func (c *Tail) Name() string {
 }
 
 func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
-	opts, err := parseTailArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Tail) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil {
+		return nil
+	}
+	parseInv := *inv
+	parseInv.Args = normalizeTailInvocation(inv.Args)
+	return &parseInv
+}
+
+func (c *Tail) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "tail",
+		Usage: "tail [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "lines", Short: 'n', Long: "lines", ValueName: "K", Arity: OptionRequiredValue, Help: "output the last K lines, instead of the last 10; or use +K to output starting with the Kth"},
+			{Name: "bytes", Short: 'c', Long: "bytes", ValueName: "K", Arity: OptionRequiredValue, Help: "output the last K bytes; or use +K to output starting with the Kth"},
+			{Name: "quiet", Short: 'q', Long: "quiet", Aliases: []string{"silent"}, Help: "never output headers giving file names"},
+			{Name: "verbose", Short: 'v', Long: "verbose", Help: "always output headers giving file names"},
+			{Name: "follow", Short: 'f', Long: "follow", ValueName: "HOW", Arity: OptionOptionalValue, OptionalValueEqualsOnly: true, Help: "output appended data as the file grows; an absent HOW defaults to 'descriptor'"},
+			{Name: "follow-name-retry", Short: 'F', Help: "same as --follow=name --retry"},
+			{Name: "retry", Long: "retry", Help: "keep trying to open a file if it is inaccessible"},
+			{Name: "pid", Long: "pid", ValueName: "PID", Arity: OptionRequiredValue, Repeatable: true, Help: "with -f, terminate after process ID, PID dies"},
+			{Name: "disable-inotify", Long: "disable-inotify", Help: "accepted for compatibility; polling mode is already used"},
+			{Name: "debug", Long: "debug", Help: "print diagnostic information to standard error"},
+			{Name: "sleep-interval", Short: 's', Long: "sleep-interval", ValueName: "N", Arity: OptionRequiredValue, Help: "with -f, sleep for approximately N seconds between iterations"},
+			{Name: "max-unchanged-stats", Long: "max-unchanged-stats", ValueName: "N", Arity: OptionRequiredValue, Help: "with --follow=name, reopen a FILE which has not changed size after N iterations"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+	}
+}
+
+func (c *Tail) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := tailOptionsFromParsed(inv, matches)
 	if err != nil {
 		return err
 	}
@@ -236,6 +280,24 @@ func (c *Tail) Run(ctx context.Context, inv *Invocation) error {
 			}
 		}
 	}
+}
+
+func normalizeTailInvocation(args []string) []string {
+	normalized := append([]string(nil), args...)
+	for i, arg := range normalized {
+		if arg == "--" {
+			break
+		}
+		switch {
+		case arg == "---disable-inotify":
+			normalized[i] = "--disable-inotify"
+		case strings.HasPrefix(arg, "--lines=+"):
+			normalized[i] = "--lines=" + strings.TrimPrefix(arg, "--lines=+")
+		case len(arg) > 1 && arg[0] == '-' && isDecimalDigits(arg[1:]):
+			normalized[i] = "-n" + arg[1:]
+		}
+	}
+	return normalized
 }
 
 func readTailInitialFile(ctx context.Context, inv *Invocation, name string, follow tailFollowMode) ([]byte, gbfs.File, stdfs.FileInfo, error) {
@@ -440,215 +502,78 @@ func seekTailFileStart(file gbfs.File) error {
 	return err
 }
 
-func parseTailArgs(inv *Invocation) (tailOptions, error) {
-	args := inv.Args
-	opts := tailOptions{
-		lines:             10,
-		sleepInterval:     time.Second,
-		maxUnchangedStats: 5,
-	}
-
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case arg == "--":
-			args = args[1:]
-			opts.files = append(opts.files, args...)
-			return opts, nil
-		case arg == "-":
-			opts.files = append(opts.files, arg)
-			args = args[1:]
-		case arg == "-n" || arg == "--lines":
-			if len(args) < 2 {
-				return tailOptions{}, exitf(inv, 1, "tail: missing argument to -n")
-			}
-			count, fromLine, err := parseHeadTailCount(args[1], true)
-			if err != nil {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of lines")
-			}
-			opts.lines = count
-			opts.fromLine = fromLine
-			args = args[2:]
-		case strings.HasPrefix(arg, "--lines="):
-			count, err := strconv.Atoi(strings.TrimPrefix(arg, "--lines="))
-			if err != nil || count < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of lines")
-			}
-			opts.lines = count
-			opts.fromLine = false
-			args = args[1:]
-		case arg == "-c" || arg == "--bytes":
-			if len(args) < 2 {
-				return tailOptions{}, exitf(inv, 1, "tail: missing argument to -c")
-			}
-			count, err := strconv.Atoi(args[1])
-			if err != nil || count < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of bytes")
-			}
-			opts.bytes = count
-			opts.hasBytes = true
-			args = args[2:]
-		case strings.HasPrefix(arg, "--bytes="):
-			count, err := strconv.Atoi(strings.TrimPrefix(arg, "--bytes="))
-			if err != nil || count < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of bytes")
-			}
-			opts.bytes = count
-			opts.hasBytes = true
-			args = args[1:]
-		case strings.HasPrefix(arg, "-n"):
-			count, fromLine, err := parseHeadTailCount(strings.TrimPrefix(arg, "-n"), true)
-			if err != nil {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of lines")
-			}
-			opts.lines = count
-			opts.fromLine = fromLine
-			args = args[1:]
-		case strings.HasPrefix(arg, "-c"):
-			count, err := strconv.Atoi(strings.TrimPrefix(arg, "-c"))
-			if err != nil || count < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of bytes")
-			}
-			opts.bytes = count
-			opts.hasBytes = true
-			args = args[1:]
-		case arg == "-q" || arg == "--quiet" || arg == "--silent":
-			opts.quiet = true
-			args = args[1:]
-		case arg == "-v" || arg == "--verbose":
-			opts.verbose = true
-			args = args[1:]
-		case arg == "-f" || arg == "--follow":
-			opts.follow = tailFollowDescriptor
-			args = args[1:]
-		case strings.HasPrefix(arg, "--follow="):
-			switch strings.TrimPrefix(arg, "--follow=") {
-			case "descriptor":
-				opts.follow = tailFollowDescriptor
-			case "name":
-				opts.follow = tailFollowName
-			default:
-				return tailOptions{}, exitf(inv, 1, "tail: unsupported follow mode %s", arg)
-			}
-			args = args[1:]
-		case arg == "-F":
-			opts.follow = tailFollowName
-			opts.retry = true
-			args = args[1:]
-		case arg == "--retry":
-			opts.retry = true
-			args = args[1:]
-		case arg == "--pid":
-			if len(args) < 2 {
-				return tailOptions{}, exitf(inv, 1, "tail: missing argument to --pid")
-			}
-			pid, err := strconv.Atoi(args[1])
-			if err != nil || pid < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid PID %q", args[1])
-			}
-			opts.pid = pid
-			args = args[2:]
-		case strings.HasPrefix(arg, "--pid="):
-			pid, err := strconv.Atoi(strings.TrimPrefix(arg, "--pid="))
-			if err != nil || pid < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid PID %q", strings.TrimPrefix(arg, "--pid="))
-			}
-			opts.pid = pid
-			args = args[1:]
-		case arg == "---disable-inotify":
-			opts.disableInotifyHint = true
-			args = args[1:]
-		case arg == "--debug":
-			opts.debug = true
-			args = args[1:]
-		case arg == "-s" || arg == "--sleep-interval":
-			if len(args) < 2 {
-				return tailOptions{}, exitf(inv, 1, "tail: missing argument to -s")
-			}
-			interval, err := parseTailSleepInterval(args[1])
-			if err != nil {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of seconds")
-			}
-			opts.sleepInterval = interval
-			args = args[2:]
-		case strings.HasPrefix(arg, "--sleep-interval="):
-			interval, err := parseTailSleepInterval(strings.TrimPrefix(arg, "--sleep-interval="))
-			if err != nil {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of seconds")
-			}
-			opts.sleepInterval = interval
-			args = args[1:]
-		case strings.HasPrefix(arg, "-s"):
-			interval, err := parseTailSleepInterval(strings.TrimPrefix(arg, "-s"))
-			if err != nil {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of seconds")
-			}
-			opts.sleepInterval = interval
-			args = args[1:]
-		case arg == "--max-unchanged-stats":
-			if len(args) < 2 {
-				return tailOptions{}, exitf(inv, 1, "tail: missing argument to --max-unchanged-stats")
-			}
-			value, err := strconv.Atoi(args[1])
-			if err != nil || value < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid maximum number of unchanged stats between opens")
-			}
-			opts.maxUnchangedStats = value
-			args = args[2:]
-		case strings.HasPrefix(arg, "--max-unchanged-stats="):
-			value, err := strconv.Atoi(strings.TrimPrefix(arg, "--max-unchanged-stats="))
-			if err != nil || value < 0 {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid maximum number of unchanged stats between opens")
-			}
-			opts.maxUnchangedStats = value
-			args = args[1:]
-		case len(arg) > 1 && arg[0] == '-' && arg[1] >= '0' && arg[1] <= '9':
-			count, err := strconv.Atoi(arg[1:])
-			if err != nil {
-				return tailOptions{}, exitf(inv, 1, "tail: invalid number of lines")
-			}
-			opts.lines = count
-			args = args[1:]
-		case strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--"):
-			expanded, ok := expandTailGroupedShortFlags(arg)
-			if !ok {
-				return tailOptions{}, exitf(inv, 1, "tail: unsupported flag %s", arg)
-			}
-			args = append(expanded, args[1:]...)
-		case strings.HasPrefix(arg, "-"):
-			return tailOptions{}, exitf(inv, 1, "tail: unsupported flag %s", arg)
-		default:
-			opts.files = append(opts.files, arg)
-			args = args[1:]
-		}
-	}
-
-	return opts, nil
-}
-
-func expandTailGroupedShortFlags(arg string) ([]string, bool) {
-	if len(arg) < 3 || strings.HasPrefix(arg, "--") {
-		return nil, false
-	}
-
-	expanded := make([]string, 0, len(arg)-1)
-	for _, ch := range arg[1:] {
-		switch ch {
-		case 'q', 'v', 'f', 'F':
-			expanded = append(expanded, "-"+string(ch))
-		default:
-			return nil, false
-		}
-	}
-	return expanded, true
-}
-
 func parseTailSleepInterval(raw string) (time.Duration, error) {
 	value, err := strconv.ParseFloat(raw, 64)
 	if err != nil || value < 0 {
 		return 0, fmt.Errorf("invalid interval")
 	}
 	return time.Duration(value * float64(time.Second)), nil
+}
+
+func tailOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (tailOptions, error) {
+	opts := tailOptions{
+		lines:              10,
+		quiet:              matches.Has("quiet"),
+		verbose:            matches.Has("verbose"),
+		files:              matches.Args("file"),
+		sleepInterval:      time.Second,
+		maxUnchangedStats:  5,
+		retry:              matches.Has("retry"),
+		debug:              matches.Has("debug"),
+		disableInotifyHint: matches.Has("disable-inotify"),
+	}
+	if matches.Has("lines") {
+		count, fromLine, err := parseHeadTailCount(matches.Value("lines"), true)
+		if err != nil {
+			return tailOptions{}, exitf(inv, 1, "tail: invalid number of lines")
+		}
+		opts.lines = count
+		opts.fromLine = fromLine
+	}
+	if matches.Has("bytes") {
+		count, err := strconv.Atoi(matches.Value("bytes"))
+		if err != nil || count < 0 {
+			return tailOptions{}, exitf(inv, 1, "tail: invalid number of bytes")
+		}
+		opts.bytes = count
+		opts.hasBytes = true
+	}
+	if matches.Has("follow") {
+		switch follow := matches.Value("follow"); follow {
+		case "", "descriptor":
+			opts.follow = tailFollowDescriptor
+		case "name":
+			opts.follow = tailFollowName
+		default:
+			return tailOptions{}, exitf(inv, 1, "tail: unsupported follow mode --follow=%s", follow)
+		}
+	}
+	if matches.Has("follow-name-retry") {
+		opts.follow = tailFollowName
+		opts.retry = true
+	}
+	if matches.Has("pid") {
+		pid, err := strconv.Atoi(matches.Value("pid"))
+		if err != nil || pid < 0 {
+			return tailOptions{}, exitf(inv, 1, "tail: invalid PID %q", matches.Value("pid"))
+		}
+		opts.pid = pid
+	}
+	if matches.Has("sleep-interval") {
+		interval, err := parseTailSleepInterval(matches.Value("sleep-interval"))
+		if err != nil {
+			return tailOptions{}, exitf(inv, 1, "tail: invalid number of seconds")
+		}
+		opts.sleepInterval = interval
+	}
+	if matches.Has("max-unchanged-stats") {
+		value, err := strconv.Atoi(matches.Value("max-unchanged-stats"))
+		if err != nil || value < 0 {
+			return tailOptions{}, exitf(inv, 1, "tail: invalid maximum number of unchanged stats between opens")
+		}
+		opts.maxUnchangedStats = value
+	}
+	return opts, nil
 }
 
 func tailPathIsUntailable(ctx context.Context, inv *Invocation, name string) bool {
@@ -835,3 +760,6 @@ func tailDisplayName(name string) string {
 }
 
 var _ Command = (*Tail)(nil)
+var _ SpecProvider = (*Tail)(nil)
+var _ ParsedRunner = (*Tail)(nil)
+var _ ParseInvocationNormalizer = (*Tail)(nil)
