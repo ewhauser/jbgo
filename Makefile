@@ -43,6 +43,7 @@ FUZZ_SMOKE_SHARD_SECURITY := \
 	FuzzGeneratedPrograms \
 	FuzzAttackMutations \
 	FuzzEchoCommand \
+	FuzzWhoCommand \
 	FuzzShellProcessCommands \
 	FuzzDircolorsCommand
 
@@ -100,6 +101,7 @@ FUZZ_FULL_SHARD_4 := \
 	FuzzTimeoutCommand \
 	FuzzExprCommand \
 	FuzzEchoCommand \
+	FuzzWhoCommand \
 	FuzzDircolorsCommand \
 	FuzzShellProcessCommands \
 	FuzzNestedShellCommands \

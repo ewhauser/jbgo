@@ -340,6 +340,41 @@ func FuzzShellProcessCommands(f *testing.F) {
 	})
 }
 
+func FuzzWhoCommand(f *testing.F) {
+	rt := newFuzzRuntime(f)
+
+	seeds := [][]byte{
+		[]byte(""),
+		[]byte("short"),
+		append(make([]byte, 384), []byte("user-process")...),
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, rawData []byte) {
+		session := newFuzzSession(t, rt)
+		data := clampFuzzData(rawData)
+		utmpPath := "/tmp/who.utmp"
+
+		writeSessionFile(t, session, utmpPath, data)
+		writeSessionFile(t, session, "/var/run/utmp", data)
+		writeSessionFile(t, session, "/dev/pts/0", []byte("tty\n"))
+
+		script := fmt.Appendf(nil,
+			"who %s >/tmp/who-default.out || true\nwho -q %s >/tmp/who-count.out || true\nwho -uT %s >/tmp/who-users.out || true\nwho --lookup -a %s >/tmp/who-all.out || true\nwho -m %s </dev/pts/0 >/tmp/who-m.out || true\nwho am i </dev/pts/0 >/tmp/who-am-i.out || true\n",
+			shellQuote(utmpPath),
+			shellQuote(utmpPath),
+			shellQuote(utmpPath),
+			shellQuote(utmpPath),
+			shellQuote(utmpPath),
+		)
+
+		result, err := runFuzzSessionScript(t, session, script)
+		assertSecureFuzzOutcome(t, script, result, err)
+	})
+}
+
 func FuzzEchoCommand(f *testing.F) {
 	rt := newFuzzRuntime(f)
 

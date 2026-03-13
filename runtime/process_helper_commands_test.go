@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"regexp"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -378,6 +379,307 @@ func TestWhoamiHelpVersionAndErrors(t *testing.T) {
 	}
 }
 
+func TestWhoHelpVersionAndErrors(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "help",
+			script:   "who --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print information about users who are currently logged in.",
+				"Usage: who [OPTION]... [ FILE | ARG1 ARG2 ]",
+				"-a, --all",
+				"-T, --mesg",
+				"If FILE is not specified, use",
+			},
+		},
+		{
+			name:     "version",
+			script:   "who --version\n",
+			wantCode: 0,
+			wantOut:  "who (gbash)\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "who --definitely-invalid\n",
+			wantCode:   1,
+			wantStderr: "who: unrecognized option '--definitely-invalid'\nTry 'who --help' for more information.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "who -x\n",
+			wantCode:   1,
+			wantStderr: "who: invalid option -- 'x'\nTry 'who --help' for more information.\n",
+		},
+		{
+			name:       "extra operand",
+			script:     "who a b c\n",
+			wantCode:   1,
+			wantStderr: "who: extra operand 'c'\nTry 'who --help' for more information.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(result.Stdout, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", result.Stdout, want)
+					}
+				}
+			} else if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
+func TestWhoSupportsSelectionFlagsAgainstFixture(t *testing.T) {
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantPattern     *regexp.Regexp
+	}{
+		{
+			name:     "default short output",
+			script:   "who /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"alice",
+				"bob",
+			},
+		},
+		{
+			name:     "short flag matches default",
+			script:   "who -s /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"alice",
+				"bob",
+			},
+		},
+		{
+			name:     "heading",
+			script:   "who -H /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"NAME",
+				"LINE",
+				"alice",
+			},
+		},
+		{
+			name:     "boot",
+			script:   "who -b /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"system boot",
+				whoFixtureTimeString(1716371201, false),
+			},
+		},
+		{
+			name:     "dead",
+			script:   "who -d /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"tty2",
+				"term=15 exit=2",
+			},
+		},
+		{
+			name:     "login",
+			script:   "who -l /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"LOGIN",
+				"id=l1",
+			},
+		},
+		{
+			name:     "process",
+			script:   "who -p /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"ttyS0",
+				"id=si",
+			},
+		},
+		{
+			name:     "runlevel",
+			script:   "who -r /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOut:  "",
+			wantOutContains: func() []string {
+				if goruntime.GOOS == "linux" {
+					return []string{"run-level 3"}
+				}
+				return nil
+			}(),
+		},
+		{
+			name:     "clock change",
+			script:   "who -t /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"clock change",
+				whoFixtureTimeString(1716371800, false),
+			},
+		},
+		{
+			name:     "users",
+			script:   "who -u /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"alice",
+				"bob",
+				"old",
+			},
+			wantPattern: regexp.MustCompile(`bob.+\.`),
+		},
+		{
+			name:     "count",
+			script:   "who -q /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOut:  "alice bob\n# users=2\n",
+		},
+		{
+			name:     "lookup",
+			script:   "who --lookup -u /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"(example.invalid:0)",
+			},
+		},
+		{
+			name:     "inferred long option",
+			script:   "who --head /tmp/who.utmp\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"NAME",
+				"alice",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newWhoFixtureSession(t)
+			result := mustExecSession(t, session, tc.script)
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(result.Stdout, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", result.Stdout, want)
+					}
+				}
+			} else if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if tc.wantPattern != nil && !tc.wantPattern.MatchString(result.Stdout) {
+				t.Fatalf("Stdout = %q, want to match %q", result.Stdout, tc.wantPattern.String())
+			}
+		})
+	}
+
+	defaultResult := mustExecSession(t, newWhoFixtureSession(t), "who /tmp/who.utmp\n")
+	shortResult := mustExecSession(t, newWhoFixtureSession(t), "who -s /tmp/who.utmp\n")
+	if got, want := shortResult.Stdout, defaultResult.Stdout; got != want {
+		t.Fatalf("-s stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWhoMesgAliasesAndMyLineOnly(t *testing.T) {
+	base := mustExecSession(t, newWhoFixtureSession(t), "who -T /tmp/who.utmp\n")
+	if base.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", base.ExitCode, base.Stderr)
+	}
+	if !strings.Contains(base.Stdout, "alice    - tty1") {
+		t.Fatalf("Stdout = %q, want alice mesg marker", base.Stdout)
+	}
+	if !strings.Contains(base.Stdout, "bob      + pts/0") {
+		t.Fatalf("Stdout = %q, want bob mesg marker", base.Stdout)
+	}
+
+	for _, script := range []string{
+		"who -w /tmp/who.utmp\n",
+		"who --message /tmp/who.utmp\n",
+		"who --writable /tmp/who.utmp\n",
+	} {
+		result := mustExecSession(t, newWhoFixtureSession(t), script)
+		if result.ExitCode != 0 {
+			t.Fatalf("%q ExitCode = %d, want 0; stderr=%q", script, result.ExitCode, result.Stderr)
+		}
+		if got, want := result.Stdout, base.Stdout; got != want {
+			t.Fatalf("%q stdout = %q, want %q", script, got, want)
+		}
+	}
+
+	mResult := mustExecSession(t, newWhoFixtureSession(t), "TTY=/dev/pts/0 who -m /tmp/who.utmp </dev/pts/0\n")
+	if mResult.ExitCode != 0 {
+		t.Fatalf("-m ExitCode = %d, want 0; stderr=%q", mResult.ExitCode, mResult.Stderr)
+	}
+	if strings.Contains(mResult.Stdout, "alice") || !strings.Contains(mResult.Stdout, "bob") {
+		t.Fatalf("-m stdout = %q, want only bob entry", mResult.Stdout)
+	}
+
+	argResult := mustExecSession(t, newWhoFixtureSession(t), "TTY=/dev/pts/0 who am i </dev/pts/0\n")
+	if argResult.ExitCode != 0 {
+		t.Fatalf("am i ExitCode = %d, want 0; stderr=%q", argResult.ExitCode, argResult.Stderr)
+	}
+	if got, want := argResult.Stdout, mResult.Stdout; got != want {
+		t.Fatalf("am i stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWhoAllMatchesExpandedFlagsAndMissingFilesAreSilent(t *testing.T) {
+	allResult := mustExecSession(t, newWhoFixtureSession(t), "who -a /tmp/who.utmp\n")
+	if allResult.ExitCode != 0 {
+		t.Fatalf("-a ExitCode = %d, want 0; stderr=%q", allResult.ExitCode, allResult.Stderr)
+	}
+
+	expandedResult := mustExecSession(t, newWhoFixtureSession(t), "who -bdlprtuT /tmp/who.utmp\n")
+	if expandedResult.ExitCode != 0 {
+		t.Fatalf("expanded ExitCode = %d, want 0; stderr=%q", expandedResult.ExitCode, expandedResult.Stderr)
+	}
+	if got, want := allResult.Stdout, expandedResult.Stdout; got != want {
+		t.Fatalf("-a stdout = %q, want %q", got, want)
+	}
+
+	missingResult := mustExecSession(t, newWhoFixtureSession(t), "who /tmp/missing\n")
+	if missingResult.ExitCode != 0 {
+		t.Fatalf("missing ExitCode = %d, want 0; stderr=%q", missingResult.ExitCode, missingResult.Stderr)
+	}
+	if missingResult.Stdout != "" || missingResult.Stderr != "" {
+		t.Fatalf("missing result = stdout %q stderr %q, want both empty", missingResult.Stdout, missingResult.Stderr)
+	}
+}
+
 func TestArchReportsMachineArchitecture(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -651,6 +953,86 @@ func uptimeTestUtmpFixture(bootSeconds int32, users int) []byte {
 		out = append(out, record(7, 0)...)
 	}
 	return out
+}
+
+func newWhoFixtureSession(t *testing.T) *Session {
+	t.Helper()
+
+	session := newSession(t, &Config{})
+	fixture := whoTestUtmpFixture()
+	writeSessionFile(t, session, "/tmp/who.utmp", fixture)
+	writeSessionFile(t, session, "/var/run/utmp", fixture)
+	writeSessionFile(t, session, "/var/run/utmpx", fixture)
+	writeSessionFile(t, session, "/dev/tty1", []byte("tty1\n"))
+	writeSessionFile(t, session, "/dev/pts/0", []byte("pts0\n"))
+
+	ctx := context.Background()
+	if err := session.FileSystem().Chmod(ctx, "/dev/tty1", 0o600); err != nil {
+		t.Fatalf("Chmod(/dev/tty1) error = %v", err)
+	}
+	if err := session.FileSystem().Chmod(ctx, "/dev/pts/0", 0o620); err != nil {
+		t.Fatalf("Chmod(/dev/pts/0) error = %v", err)
+	}
+
+	old := time.Unix(1716360000, 0)
+	recent := time.Now().Add(-30 * time.Second)
+	if err := session.FileSystem().Chtimes(ctx, "/dev/tty1", old, old); err != nil {
+		t.Fatalf("Chtimes(/dev/tty1) error = %v", err)
+	}
+	if err := session.FileSystem().Chtimes(ctx, "/dev/pts/0", recent, recent); err != nil {
+		t.Fatalf("Chtimes(/dev/pts/0) error = %v", err)
+	}
+
+	return session
+}
+
+func whoTestUtmpFixture() []byte {
+	type whoFixtureRecord struct {
+		recordType int16
+		pid        int32
+		line       string
+		id         string
+		user       string
+		host       string
+		timestamp  int32
+		exitTerm   int16
+		exitStatus int16
+	}
+
+	records := []whoFixtureRecord{
+		{recordType: 2, timestamp: 1716371201},
+		{recordType: 3, timestamp: 1716371800},
+		{recordType: 5, pid: 111, line: "ttyS0", id: "si", timestamp: 1716372000},
+		{recordType: 6, pid: 222, line: "tty1", id: "l1", timestamp: 1716372200},
+		{recordType: 8, pid: 333, line: "tty2", id: "d2", timestamp: 1716372400, exitTerm: 15, exitStatus: 2},
+		{recordType: 1, pid: int32('N')*256 + int32('3'), timestamp: 1716372600},
+		{recordType: 7, pid: 444, line: "tty1", id: "u1", user: "alice", host: "remote.example", timestamp: 1716372800},
+		{recordType: 7, pid: 555, line: "pts/0", id: "p0", user: "bob", host: "example.invalid:0", timestamp: 1716373000},
+	}
+
+	out := make([]byte, 0, 384*len(records))
+	for _, record := range records {
+		buf := make([]byte, 384)
+		binary.NativeEndian.PutUint16(buf[0:2], uint16(record.recordType))
+		binary.NativeEndian.PutUint32(buf[4:8], uint32(record.pid))
+		copy(buf[8:40], record.line)
+		copy(buf[40:44], record.id)
+		copy(buf[44:76], record.user)
+		copy(buf[76:332], record.host)
+		binary.NativeEndian.PutUint16(buf[332:334], uint16(record.exitTerm))
+		binary.NativeEndian.PutUint16(buf[334:336], uint16(record.exitStatus))
+		binary.NativeEndian.PutUint32(buf[340:344], uint32(record.timestamp))
+		out = append(out, buf...)
+	}
+	return out
+}
+
+func whoFixtureTimeString(seconds int64, cLocale bool) string {
+	when := time.Unix(seconds, 0).Local()
+	if cLocale {
+		return when.Format("Jan _2 15:04")
+	}
+	return when.Format("2006-01-02 15:04")
 }
 
 func TestSleepHonorsShortDuration(t *testing.T) {
