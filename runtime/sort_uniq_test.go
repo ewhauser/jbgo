@@ -242,7 +242,7 @@ func TestUniqSupportsCountsAndAdjacentRuns(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "   2 apple\n   3 banana\n   1 cherry\n"; got != want {
+	if got, want := result.Stdout, "      2 apple\n      3 banana\n      1 cherry\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -293,7 +293,7 @@ func TestUniqSupportsIgnoreCase(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "   2 Apple\n   1 Banana\n"; got != want {
+	if got, want := result.Stdout, "      2 Apple\n      1 Banana\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
