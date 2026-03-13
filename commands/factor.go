@@ -203,7 +203,7 @@ func factorWarnInvalid(inv *Invocation, token []byte) {
 	if inv == nil || inv.Stderr == nil {
 		return
 	}
-	_, _ = fmt.Fprintf(inv.Stderr, "factor: warning: %s: invalid digit found in string\n", factorQuoteBytes(token))
+	_, _ = fmt.Fprintf(inv.Stderr, "factor: %s is not a valid positive integer\n", factorQuoteBytes(token))
 }
 
 func factorParseNumber(token []byte) (*big.Int, error) {
@@ -381,7 +381,7 @@ func factorWriteResult(writer *bufio.Writer, number *big.Int, factors []*big.Int
 	if err := writer.WriteByte('\n'); err != nil {
 		return err
 	}
-	return writer.Flush()
+	return nil
 }
 
 func factorWriteError(inv *Invocation, err error) error {

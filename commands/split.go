@@ -798,15 +798,14 @@ func runSplitFilter(ctx context.Context, inv *Invocation, filter, fileName strin
 		Env:     env,
 		WorkDir: inv.Cwd,
 		Stdin:   bytes.NewReader(data),
+		Stdout:  inv.Stdout,
+		Stderr:  inv.Stderr,
 	})
 	if err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
 	if result == nil || result.ExitCode == 0 {
 		return nil
-	}
-	if err := writeExecutionOutputs(inv, result); err != nil {
-		return err
 	}
 	return exitForExecutionResult(result)
 }
