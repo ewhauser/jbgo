@@ -26,19 +26,75 @@ func (c *OD) Name() string {
 }
 
 func (c *OD) Run(ctx context.Context, inv *Invocation) error {
-	opts, err := parseODOptions(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *OD) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "od",
+		About: "Write an unambiguous representation of FILE to standard output.",
+		Usage: "od [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "address-radix", Short: 'A', Long: "address-radix", Arity: OptionRequiredValue, ValueName: "RADIX", Help: "output format for file offsets; RADIX is one of [doxn], for Decimal, Octal, Hex or None"},
+			{Name: "skip-bytes", Short: 'j', Long: "skip-bytes", Arity: OptionRequiredValue, ValueName: "BYTES", Help: "skip BYTES input bytes first"},
+			{Name: "read-bytes", Short: 'N', Long: "read-bytes", Arity: OptionRequiredValue, ValueName: "BYTES", Help: "limit dump to BYTES input bytes"},
+			{Name: "endian", Long: "endian", Arity: OptionRequiredValue, ValueName: "big|little", Help: "swap input bytes according to the specified order"},
+			{Name: "strings", Short: 'S', Long: "strings", Arity: OptionOptionalValue, ValueName: "BYTES", Help: "output strings of at least BYTES graphic chars; 3 is implied when BYTES is not specified"},
+			{Name: "a", Short: 'a', Help: "same as -t a, select named characters, ignoring high-order bit"},
+			{Name: "b", Short: 'b', Help: "same as -t o1, select octal bytes"},
+			{Name: "c", Short: 'c', Help: "same as -t c, select printable characters or backslash escapes"},
+			{Name: "d", Short: 'd', Help: "same as -t u2, select unsigned decimal 2-byte units"},
+			{Name: "D", Short: 'D', Help: "same as -t u4, select unsigned decimal 4-byte units"},
+			{Name: "o", Short: 'o', Help: "same as -t o2, select octal 2-byte units"},
+			{Name: "I", Short: 'I', Help: "same as -t d8, select decimal 8-byte units"},
+			{Name: "L", Short: 'L', Help: "same as -t d8, select decimal 8-byte units"},
+			{Name: "i", Short: 'i', Help: "same as -t d4, select decimal 4-byte units"},
+			{Name: "l", Short: 'l', Help: "same as -t d8, select decimal 8-byte units"},
+			{Name: "x", Short: 'x', Help: "same as -t x2, select hexadecimal 2-byte units"},
+			{Name: "h", Short: 'h', Help: "same as -t x2, select hexadecimal 2-byte units"},
+			{Name: "O", Short: 'O', Help: "same as -t o4, select octal 4-byte units"},
+			{Name: "s", Short: 's', Help: "same as -t d2, select decimal 2-byte units"},
+			{Name: "X", Short: 'X', Help: "same as -t x4, select hexadecimal 4-byte units"},
+			{Name: "H", Short: 'H', Help: "same as -t x4, select hexadecimal 4-byte units"},
+			{Name: "e", Short: 'e', Help: "same as -t fD, select doubles"},
+			{Name: "f", Short: 'f', Help: "same as -t fF, select floats"},
+			{Name: "F", Short: 'F', Help: "same as -t fD, select doubles"},
+			{Name: "format", Short: 't', Long: "format", Arity: OptionRequiredValue, ValueName: "TYPE", Repeatable: true, Help: "select output format or formats"},
+			{Name: "output-duplicates", Short: 'v', Long: "output-duplicates", Help: "do not use * to mark line suppression"},
+			{Name: "width", Short: 'w', Long: "width", Arity: OptionOptionalValue, ValueName: "BYTES", Help: "output BYTES bytes per output line; 32 is implied when BYTES is not specified"},
+			{Name: "traditional", Long: "traditional", Help: "accept arguments in the traditional format"},
+			{Name: "help", Long: "help", Help: "display this help and exit"},
+			{Name: "version", Long: "version", Help: "output version information and exit"},
+		},
+		Args: []ArgSpec{
+			{Name: "operand", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			StopAtFirstPositional:    true,
+		},
+		VersionRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, odVersionText)
+			return err
+		},
+	}
+}
+
+func (c *OD) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return RenderCommandHelp(inv.Stdout, &matches.Spec)
+	}
+	if matches.Has("version") {
+		return RenderCommandVersion(inv.Stdout, &matches.Spec)
+	}
+
+	opts, err := parseODMatches(inv, matches)
 	if err != nil {
 		return err
 	}
-	if opts.help {
-		_, _ = io.WriteString(inv.Stdout, odHelpText)
-		return nil
-	}
-	if opts.version {
-		_, _ = io.WriteString(inv.Stdout, odVersionText)
-		return nil
-	}
-
 	data, err := readODInputs(ctx, inv, &opts)
 	if err != nil {
 		return err
@@ -51,8 +107,6 @@ func (c *OD) Run(ctx context.Context, inv *Invocation) error {
 }
 
 type odOptions struct {
-	help             bool
-	version          bool
 	byteOrder        binary.ByteOrder
 	skipBytes        uint64
 	readBytes        *uint64
@@ -106,262 +160,90 @@ type odFormat struct {
 	addASCIIDump bool
 }
 
-func parseODOptions(inv *Invocation) (odOptions, error) {
+func parseODMatches(inv *Invocation, matches *ParsedCommand) (odOptions, error) {
 	opts := odOptions{
-		byteOrder:        nativeByteOrder(),
-		lineBytes:        16,
-		outputDuplicates: false,
-		radix:            odRadixOctal,
+		byteOrder: nativeByteOrder(),
+		lineBytes: 16,
+		radix:     odRadixOctal,
 	}
 
-	args := append([]string(nil), inv.Args...)
-	operands := make([]string, 0, len(args))
-
-	for len(args) > 0 {
-		arg := odNormalizeLongArg(args[0])
-		if arg == "--" {
-			operands = append(operands, args[1:]...)
-			break
-		}
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			operands = append(operands, args...)
-			break
-		}
-
-		switch {
-		case arg == "--help":
-			opts.help = true
-			return opts, nil
-		case arg == "--version":
-			opts.version = true
-			return opts, nil
-		case strings.HasPrefix(arg, "--address-radix="):
-			if err := applyODAddressRadix(&opts, strings.TrimPrefix(arg, "--address-radix=")); err != nil {
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "address-radix":
+			if err := applyODAddressRadix(&opts, matches.Value(name)); err != nil {
 				return odOptions{}, err
 			}
 			opts.offsetParsingOff = true
-			args = args[1:]
-		case arg == "--address-radix":
-			if len(args) < 2 {
-				return odOptions{}, exitf(inv, 1, "od: option requires an argument -- 'A'")
-			}
-			if err := applyODAddressRadix(&opts, args[1]); err != nil {
-				return odOptions{}, err
-			}
-			opts.offsetParsingOff = true
-			args = args[2:]
-		case strings.HasPrefix(arg, "--skip-bytes="):
-			value := strings.TrimPrefix(arg, "--skip-bytes=")
+		case "skip-bytes":
+			value := matches.Value(name)
 			n, err := parseODByteCount(value)
 			if err != nil {
-				return odOptions{}, exitf(inv, 1, "od: invalid --skip-bytes argument %q", value)
+				return odOptions{}, exitf(inv, 1, "od: invalid -j argument %q", value)
 			}
 			opts.skipBytes = n
 			opts.offsetParsingOff = true
-			args = args[1:]
-		case arg == "--skip-bytes":
-			if len(args) < 2 {
-				return odOptions{}, exitf(inv, 1, "od: option requires an argument -- 'j'")
-			}
-			n, err := parseODByteCount(args[1])
-			if err != nil {
-				return odOptions{}, exitf(inv, 1, "od: invalid --skip-bytes argument %q", args[1])
-			}
-			opts.skipBytes = n
-			opts.offsetParsingOff = true
-			args = args[2:]
-		case strings.HasPrefix(arg, "--read-bytes="):
-			value := strings.TrimPrefix(arg, "--read-bytes=")
+		case "read-bytes":
+			value := matches.Value(name)
 			n, err := parseODByteCount(value)
 			if err != nil {
-				return odOptions{}, exitf(inv, 1, "od: invalid --read-bytes argument %q", value)
+				return odOptions{}, exitf(inv, 1, "od: invalid -N argument %q", value)
 			}
 			opts.readBytes = &n
 			opts.offsetParsingOff = true
-			args = args[1:]
-		case arg == "--read-bytes":
-			if len(args) < 2 {
-				return odOptions{}, exitf(inv, 1, "od: option requires an argument -- 'N'")
-			}
-			n, err := parseODByteCount(args[1])
-			if err != nil {
-				return odOptions{}, exitf(inv, 1, "od: invalid --read-bytes argument %q", args[1])
-			}
-			opts.readBytes = &n
-			opts.offsetParsingOff = true
-			args = args[2:]
-		case strings.HasPrefix(arg, "--endian="):
-			if err := applyODEndian(&opts, strings.TrimPrefix(arg, "--endian="), inv); err != nil {
+		case "endian":
+			if err := applyODEndian(&opts, matches.Value(name), inv); err != nil {
 				return odOptions{}, err
 			}
-			args = args[1:]
-		case arg == "--endian":
-			if len(args) < 2 {
-				return odOptions{}, exitf(inv, 1, "od: option requires an argument -- endian")
-			}
-			if err := applyODEndian(&opts, args[1], inv); err != nil {
-				return odOptions{}, err
-			}
-			args = args[2:]
-		case strings.HasPrefix(arg, "--strings="):
-			n, err := parseODStringLength(strings.TrimPrefix(arg, "--strings="))
-			if err != nil {
-				return odOptions{}, err
-			}
-			opts.stringMinLength = &n
-			args = args[1:]
-		case arg == "--strings":
-			n := 3
-			opts.stringMinLength = &n
-			args = args[1:]
-		case strings.HasPrefix(arg, "--format="):
-			formats, err := parseODTypeString(strings.TrimPrefix(arg, "--format="))
-			if err != nil {
-				return odOptions{}, exitf(inv, 1, "od: %v", err)
-			}
-			opts.formats = append(opts.formats, formats...)
-			opts.offsetParsingOff = true
-			args = args[1:]
-		case arg == "--format":
-			if len(args) < 2 {
-				return odOptions{}, exitf(inv, 1, "od: missing format specification after '--format'")
-			}
-			formats, err := parseODTypeString(args[1])
-			if err != nil {
-				return odOptions{}, exitf(inv, 1, "od: %v", err)
-			}
-			opts.formats = append(opts.formats, formats...)
-			opts.offsetParsingOff = true
-			args = args[2:]
-		case arg == "--output-duplicates":
-			opts.outputDuplicates = true
-			opts.offsetParsingOff = true
-			args = args[1:]
-		case strings.HasPrefix(arg, "--width="):
-			if err := applyODWidth(&opts, strings.TrimPrefix(arg, "--width="), inv); err != nil {
-				return odOptions{}, err
-			}
-			opts.offsetParsingOff = true
-			args = args[1:]
-		case arg == "--width":
-			opts.widthSpecified = true
-			opts.offsetParsingOff = true
-			if len(args) >= 2 && !strings.HasPrefix(args[1], "-") {
-				if err := applyODWidth(&opts, args[1], inv); err != nil {
+		case "strings":
+			value := matches.Value(name)
+			if value == "" {
+				n := 3
+				opts.stringMinLength = &n
+			} else {
+				n, err := parseODStringLength(value)
+				if err != nil {
 					return odOptions{}, err
 				}
-				args = args[2:]
-			} else {
-				opts.lineBytes = 32
-				args = args[1:]
+				opts.stringMinLength = &n
 			}
-		case arg == "--traditional":
-			opts.traditional = true
-			args = args[1:]
-		default:
-			rest := arg[1:]
-			args = args[1:]
-			for rest != "" {
-				switch rest[0] {
-				case 'A':
-					value, remaining, err := consumeODShortValue(rest[1:], args)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: option requires an argument -- 'A'")
-					}
-					if err := applyODAddressRadix(&opts, value); err != nil {
-						return odOptions{}, err
-					}
-					opts.offsetParsingOff = true
-					rest = ""
-					args = remaining
-				case 'j':
-					value, remaining, err := consumeODShortValue(rest[1:], args)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: option requires an argument -- 'j'")
-					}
-					n, err := parseODByteCount(value)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: invalid -j argument %q", value)
-					}
-					opts.skipBytes = n
-					opts.offsetParsingOff = true
-					rest = ""
-					args = remaining
-				case 'N':
-					value, remaining, err := consumeODShortValue(rest[1:], args)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: option requires an argument -- 'N'")
-					}
-					n, err := parseODByteCount(value)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: invalid -N argument %q", value)
-					}
-					opts.readBytes = &n
-					opts.offsetParsingOff = true
-					rest = ""
-					args = remaining
-				case 'S':
-					value := rest[1:]
-					if value == "" {
-						n := 3
-						opts.stringMinLength = &n
-					} else {
-						n, err := parseODStringLength(value)
-						if err != nil {
-							return odOptions{}, err
-						}
-						opts.stringMinLength = &n
-					}
-					rest = ""
-				case 't':
-					value, remaining, err := consumeODShortValue(rest[1:], args)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: missing format specification after '-t'")
-					}
-					formats, err := parseODTypeString(value)
-					if err != nil {
-						return odOptions{}, exitf(inv, 1, "od: %v", err)
-					}
-					opts.formats = append(opts.formats, formats...)
-					opts.offsetParsingOff = true
-					rest = ""
-					args = remaining
-				case 'v':
-					opts.outputDuplicates = true
-					opts.offsetParsingOff = true
-					rest = rest[1:]
-				case 'w':
-					opts.widthSpecified = true
-					opts.offsetParsingOff = true
-					if rest[1:] == "" {
-						opts.lineBytes = 32
-					} else {
-						if err := applyODWidth(&opts, rest[1:], inv); err != nil {
-							return odOptions{}, err
-						}
-					}
-					rest = ""
-				default:
-					if format, ok := odTraditionalFormat(rest[0]); ok {
-						opts.formats = append(opts.formats, format)
-						rest = rest[1:]
-						continue
-					}
-					return odOptions{}, exitf(inv, 1, "od: unsupported flag -%c", rest[0])
+		case "format":
+			formats, err := parseODTypeString(matches.Value(name))
+			if err != nil {
+				return odOptions{}, exitf(inv, 1, "od: %v", err)
+			}
+			opts.formats = append(opts.formats, formats...)
+			opts.offsetParsingOff = true
+		case "output-duplicates":
+			opts.outputDuplicates = true
+			opts.offsetParsingOff = true
+		case "width":
+			value := matches.Value(name)
+			if value == "" {
+				opts.widthSpecified = true
+				opts.lineBytes = 32
+			} else {
+				if err := applyODWidth(&opts, value, inv); err != nil {
+					return odOptions{}, err
 				}
 			}
+			opts.offsetParsingOff = true
+		case "traditional":
+			opts.traditional = true
+		default:
+			format, ok := odTraditionalFormat(name[0])
+			if !ok {
+				continue
+			}
+			opts.formats = append(opts.formats, format)
 		}
 	}
 
-	inputNames, skip, label, err := parseODInputs(operands, opts.traditional, opts.offsetParsingOff)
+	inputNames, skip, label, err := parseODInputs(matches.Args("operand"), opts.traditional, opts.offsetParsingOff)
 	if err != nil {
 		return odOptions{}, exitf(inv, 1, "od: %s", err)
 	}
 	opts.inputNames = inputNames
-	if skip != nil && opts.traditional {
-		opts.skipBytes = *skip
-		opts.label = label
-	} else if skip != nil && !opts.offsetParsingOff {
+	if skip != nil && (opts.traditional || !opts.offsetParsingOff) {
 		opts.skipBytes = *skip
 		opts.label = label
 	}
@@ -429,16 +311,6 @@ func applyODWidth(opts *odOptions, value string, inv *Invocation) error {
 	}
 	opts.lineBytes = int(n)
 	return nil
-}
-
-func consumeODShortValue(attached string, args []string) (value string, remaining []string, err error) {
-	if attached != "" {
-		return attached, args, nil
-	}
-	if len(args) == 0 {
-		return "", args, fmt.Errorf("missing argument")
-	}
-	return args[0], args[1:], nil
 }
 
 func parseODStringLength(value string) (int, error) {
@@ -1358,55 +1230,6 @@ func odKeywordPrefix(value, keyword string) bool {
 	return value != "" && strings.HasPrefix(keyword, value)
 }
 
-func odNormalizeLongArg(arg string) string {
-	if !strings.HasPrefix(arg, "--") || arg == "--" {
-		return arg
-	}
-	name := strings.TrimPrefix(arg, "--")
-	value := ""
-	hasValue := false
-	if before, after, ok := strings.Cut(name, "="); ok {
-		name, value, hasValue = before, after, true
-	}
-	match := odMatchLongOption(name)
-	if match == "" {
-		return arg
-	}
-	if hasValue {
-		return "--" + match + "=" + value
-	}
-	return "--" + match
-}
-
-func odMatchLongOption(prefix string) string {
-	options := []string{
-		"help",
-		"version",
-		"address-radix",
-		"skip-bytes",
-		"read-bytes",
-		"endian",
-		"strings",
-		"format",
-		"output-duplicates",
-		"width",
-		"traditional",
-	}
-	match := ""
-	for _, option := range options {
-		if option == prefix {
-			return option
-		}
-		if strings.HasPrefix(option, prefix) {
-			if match != "" {
-				return ""
-			}
-			match = option
-		}
-	}
-	return match
-}
-
 func odReadAll(r io.Reader, limited bool, remaining uint64) ([]byte, error) {
 	if !limited {
 		return io.ReadAll(r)
@@ -1538,10 +1361,6 @@ func minUint64(a, b uint64) uint64 {
 func utf8RuneCountString(s string) int {
 	return len([]rune(s))
 }
-
-const odHelpText = `Usage: od [OPTION]... [FILE]...
-Write an unambiguous representation of FILE to standard output.
-`
 
 const odVersionText = `od (gbash)
 `
