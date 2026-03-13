@@ -25,8 +25,6 @@ type nlOptions struct {
 	numberFormat     nlNumberFormat
 	renumber         bool
 	numberSeparator  []byte
-	showHelp         bool
-	showVersion      bool
 }
 
 type nlStats struct {
@@ -74,19 +72,54 @@ func (c *NL) Name() string {
 }
 
 func (c *NL) Run(ctx context.Context, inv *Invocation) error {
-	opts, names, err := parseNLArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *NL) Spec() CommandSpec {
+	return CommandSpec{
+		Name:      "nl",
+		About:     "Number lines of files",
+		Usage:     "nl [OPTION]... [FILE]...",
+		AfterHelp: "STYLE is one of:\n\n  - a number all lines\n  - t number only nonempty lines\n  - n number no lines\n  - pBRE number only lines that contain a match for the basic regular\n          expression, BRE\n\n  FORMAT is one of:\n\n  - ln left justified, no leading zeros\n  - rn right justified, no leading zeros\n  - rz right justified, leading zeros",
+		Options: []OptionSpec{
+			{Name: "body-numbering", Short: 'b', Long: "body-numbering", Arity: OptionRequiredValue, ValueName: "STYLE", Help: "use STYLE for numbering body lines"},
+			{Name: "section-delimiter", Short: 'd', Long: "section-delimiter", Arity: OptionRequiredValue, ValueName: "CC", Help: "use CC for separating logical pages"},
+			{Name: "footer-numbering", Short: 'f', Long: "footer-numbering", Arity: OptionRequiredValue, ValueName: "STYLE", Help: "use STYLE for numbering footer lines"},
+			{Name: "header-numbering", Short: 'h', Long: "header-numbering", Arity: OptionRequiredValue, ValueName: "STYLE", Help: "use STYLE for numbering header lines"},
+			{Name: "line-increment", Short: 'i', Long: "line-increment", Arity: OptionRequiredValue, ValueName: "NUMBER", Help: "line number increment at each line"},
+			{Name: "join-blank-lines", Short: 'l', Long: "join-blank-lines", Arity: OptionRequiredValue, ValueName: "NUMBER", Help: "group of NUMBER empty lines counted as one"},
+			{Name: "number-format", Short: 'n', Long: "number-format", Arity: OptionRequiredValue, ValueName: "FORMAT", Help: "insert line numbers according to FORMAT"},
+			{Name: "no-renumber", Short: 'p', Long: "no-renumber", Help: "do not reset line numbers at logical pages"},
+			{Name: "number-separator", Short: 's', Long: "number-separator", Arity: OptionRequiredValue, ValueName: "STRING", Help: "add STRING after (possible) line number"},
+			{Name: "starting-line-number", Short: 'v', Long: "starting-line-number", Arity: OptionRequiredValue, ValueName: "NUMBER", Help: "first line number on each logical page"},
+			{Name: "number-width", Short: 'w', Long: "number-width", Arity: OptionRequiredValue, ValueName: "NUMBER", Help: "use NUMBER columns for line numbers"},
+			{Name: "help", Long: "help", Help: "Print help information."},
+			{Name: "version", Long: "version", Help: "Print version information."},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+		},
+		HelpRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, nlHelpText)
+			return err
+		},
+		VersionRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, nlVersionText)
+			return err
+		},
+	}
+}
+
+func (c *NL) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, names, err := parseNLMatches(inv, matches)
 	if err != nil {
 		return err
-	}
-	if opts.showHelp {
-		return writeNLHelp(inv)
-	}
-	if opts.showVersion {
-		_, err := io.WriteString(inv.Stdout, nlVersionText)
-		if err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
-		return nil
 	}
 	if len(names) == 0 {
 		names = []string{"-"}
@@ -125,7 +158,7 @@ func (c *NL) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseNLArgs(inv *Invocation) (nlOptions, []string, error) {
+func parseNLMatches(inv *Invocation, matches *ParsedCommand) (nlOptions, []string, error) {
 	opts := nlOptions{
 		headerStyle:      nlNumberingStyle{mode: nlNumberingNone},
 		bodyStyle:        nlNumberingStyle{mode: nlNumberingNonEmpty},
@@ -139,271 +172,73 @@ func parseNLArgs(inv *Invocation) (nlOptions, []string, error) {
 		renumber:         true,
 		numberSeparator:  []byte("\t"),
 	}
-
-	args := inv.Args
-	for len(args) > 0 {
-		arg := args[0]
-		switch {
-		case arg == "--":
-			return opts, args[1:], nil
-		case arg == "-" || !strings.HasPrefix(arg, "-"):
-			return opts, args, nil
-		case strings.HasPrefix(arg, "--"):
-			consumed, err := parseNLLongOption(inv, args, &opts)
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "body-numbering":
+			value := matches.Value("body-numbering")
+			style, err := parseNLNumberingStyle(inv, value)
 			if err != nil {
 				return nlOptions{}, nil, err
-			}
-			args = args[consumed:]
-		default:
-			consumed, err := parseNLShortOptions(inv, args, &opts)
-			if err != nil {
-				return nlOptions{}, nil, err
-			}
-			args = args[consumed:]
-		}
-	}
-
-	return opts, nil, nil
-}
-
-func parseNLLongOption(inv *Invocation, args []string, opts *nlOptions) (int, error) {
-	nameValue := args[0][2:]
-	name, value, hasValue := strings.Cut(nameValue, "=")
-
-	match, err := matchNLLongOption(inv, name)
-	if err != nil {
-		return 0, err
-	}
-
-	switch match {
-	case "help":
-		opts.showHelp = true
-		return 1, nil
-	case "version":
-		opts.showVersion = true
-		return 1, nil
-	case "no-renumber":
-		opts.renumber = false
-		return 1, nil
-	case "body-numbering":
-		return parseNLLongStringValue(inv, args, hasValue, value, "body-numbering", func(v string) error {
-			style, err := parseNLNumberingStyle(inv, v)
-			if err != nil {
-				return err
 			}
 			opts.bodyStyle = style
-			return nil
-		})
-	case "section-delimiter":
-		return parseNLLongStringValue(inv, args, hasValue, value, "section-delimiter", func(v string) error {
-			opts.sectionDelimiter = normalizeNLSectionDelimiter(v)
-			return nil
-		})
-	case "footer-numbering":
-		return parseNLLongStringValue(inv, args, hasValue, value, "footer-numbering", func(v string) error {
-			style, err := parseNLNumberingStyle(inv, v)
+		case "section-delimiter":
+			opts.sectionDelimiter = normalizeNLSectionDelimiter(matches.Value("section-delimiter"))
+		case "footer-numbering":
+			value := matches.Value("footer-numbering")
+			style, err := parseNLNumberingStyle(inv, value)
 			if err != nil {
-				return err
+				return nlOptions{}, nil, err
 			}
 			opts.footerStyle = style
-			return nil
-		})
-	case "header-numbering":
-		return parseNLLongStringValue(inv, args, hasValue, value, "header-numbering", func(v string) error {
-			style, err := parseNLNumberingStyle(inv, v)
+		case "header-numbering":
+			value := matches.Value("header-numbering")
+			style, err := parseNLNumberingStyle(inv, value)
 			if err != nil {
-				return err
+				return nlOptions{}, nil, err
 			}
 			opts.headerStyle = style
-			return nil
-		})
-	case "line-increment":
-		return parseNLLongStringValue(inv, args, hasValue, value, "line-increment", func(v string) error {
-			parsed, err := strconv.ParseInt(v, 10, 64)
+		case "line-increment":
+			value := matches.Value("line-increment")
+			parsed, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				return nlInvalidValue(inv, "line increment", v)
+				return nlOptions{}, nil, nlInvalidValue(inv, "line increment", value)
 			}
 			opts.lineIncrement = parsed
-			return nil
-		})
-	case "join-blank-lines":
-		return parseNLLongStringValue(inv, args, hasValue, value, "join-blank-lines", func(v string) error {
-			parsed, err := strconv.ParseUint(v, 10, 64)
+		case "join-blank-lines":
+			value := matches.Value("join-blank-lines")
+			parsed, err := strconv.ParseUint(value, 10, 64)
 			if err != nil {
-				return nlInvalidValue(inv, "join blank lines", v)
+				return nlOptions{}, nil, nlInvalidValue(inv, "join blank lines", value)
 			}
 			opts.joinBlankLines = parsed
-			return nil
-		})
-	case "number-format":
-		return parseNLLongStringValue(inv, args, hasValue, value, "number-format", func(v string) error {
-			format, err := parseNLNumberFormat(inv, v)
+		case "number-format":
+			value := matches.Value("number-format")
+			format, err := parseNLNumberFormat(inv, value)
 			if err != nil {
-				return err
+				return nlOptions{}, nil, err
 			}
 			opts.numberFormat = format
-			return nil
-		})
-	case "number-separator":
-		return parseNLLongStringValue(inv, args, hasValue, value, "number-separator", func(v string) error {
-			opts.numberSeparator = []byte(v)
-			return nil
-		})
-	case "starting-line-number":
-		return parseNLLongStringValue(inv, args, hasValue, value, "starting-line-number", func(v string) error {
-			parsed, err := strconv.ParseInt(v, 10, 64)
+		case "number-separator":
+			opts.numberSeparator = []byte(matches.Value("number-separator"))
+		case "starting-line-number":
+			value := matches.Value("starting-line-number")
+			parsed, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				return nlInvalidValue(inv, "starting line number", v)
+				return nlOptions{}, nil, nlInvalidValue(inv, "starting line number", value)
 			}
 			opts.startLineNumber = parsed
-			return nil
-		})
-	case "number-width":
-		return parseNLLongStringValue(inv, args, hasValue, value, "number-width", func(v string) error {
-			width, err := parseNLWidth(inv, v)
+		case "number-width":
+			value := matches.Value("number-width")
+			width, err := parseNLWidth(inv, value)
 			if err != nil {
-				return err
+				return nlOptions{}, nil, err
 			}
 			opts.numberWidth = width
-			return nil
-		})
-	default:
-		return 0, nlOptionf(inv, "nl: unrecognized option '%s'", args[0])
-	}
-}
-
-func parseNLLongStringValue(inv *Invocation, args []string, hasValue bool, value, name string, set func(string) error) (int, error) {
-	if hasValue {
-		return 1, set(value)
-	}
-	if len(args) < 2 {
-		return 0, nlUsageError(inv, "nl: option '--%s' requires an argument", name)
-	}
-	return 2, set(args[1])
-}
-
-func parseNLShortOptions(inv *Invocation, args []string, opts *nlOptions) (int, error) {
-	arg := args[0]
-	for i := 1; i < len(arg); i++ {
-		switch arg[i] {
-		case 'p':
+		case "no-renumber":
 			opts.renumber = false
-		case 'b', 'd', 'f', 'h', 'i', 'l', 'n', 's', 'v', 'w':
-			value := arg[i+1:]
-			consumed := 1
-			if value == "" {
-				if len(args) < 2 {
-					return 0, nlUsageError(inv, "nl: option requires an argument -- '%c'", arg[i])
-				}
-				value = args[1]
-				consumed = 2
-			}
-			if err := applyNLShortOption(inv, opts, rune(arg[i]), value); err != nil {
-				return 0, err
-			}
-			return consumed, nil
-		default:
-			return 0, nlOptionf(inv, "nl: invalid option -- '%c'", arg[i])
 		}
 	}
-	return 1, nil
-}
-
-func applyNLShortOption(inv *Invocation, opts *nlOptions, flag rune, value string) error {
-	switch flag {
-	case 'b':
-		style, err := parseNLNumberingStyle(inv, value)
-		if err != nil {
-			return err
-		}
-		opts.bodyStyle = style
-	case 'd':
-		opts.sectionDelimiter = normalizeNLSectionDelimiter(value)
-	case 'f':
-		style, err := parseNLNumberingStyle(inv, value)
-		if err != nil {
-			return err
-		}
-		opts.footerStyle = style
-	case 'h':
-		style, err := parseNLNumberingStyle(inv, value)
-		if err != nil {
-			return err
-		}
-		opts.headerStyle = style
-	case 'i':
-		parsed, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return nlInvalidValue(inv, "line increment", value)
-		}
-		opts.lineIncrement = parsed
-	case 'l':
-		parsed, err := strconv.ParseUint(value, 10, 64)
-		if err != nil {
-			return nlInvalidValue(inv, "join blank lines", value)
-		}
-		opts.joinBlankLines = parsed
-	case 'n':
-		format, err := parseNLNumberFormat(inv, value)
-		if err != nil {
-			return err
-		}
-		opts.numberFormat = format
-	case 's':
-		opts.numberSeparator = []byte(value)
-	case 'v':
-		parsed, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return nlInvalidValue(inv, "starting line number", value)
-		}
-		opts.startLineNumber = parsed
-	case 'w':
-		width, err := parseNLWidth(inv, value)
-		if err != nil {
-			return err
-		}
-		opts.numberWidth = width
-	default:
-		return nlOptionf(inv, "nl: invalid option -- '%c'", flag)
-	}
-	return nil
-}
-
-func matchNLLongOption(inv *Invocation, name string) (string, error) {
-	candidates := []string{
-		"body-numbering",
-		"footer-numbering",
-		"header-numbering",
-		"help",
-		"join-blank-lines",
-		"line-increment",
-		"no-renumber",
-		"number-format",
-		"number-separator",
-		"number-width",
-		"section-delimiter",
-		"starting-line-number",
-		"version",
-	}
-	for _, candidate := range candidates {
-		if candidate == name {
-			return candidate, nil
-		}
-	}
-	var matches []string
-	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, name) {
-			matches = append(matches, candidate)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", nlOptionf(inv, "nl: unrecognized option '%s'", "--"+name)
-	case 1:
-		return matches[0], nil
-	default:
-		return "", nlOptionf(inv, "nl: option '%s' is ambiguous", "--"+name)
-	}
+	return opts, matches.Args("file"), nil
 }
 
 func parseNLNumberingStyle(inv *Invocation, value string) (nlNumberingStyle, error) {
@@ -679,18 +514,8 @@ func nlInvalidValue(inv *Invocation, label, value string) error {
 	return exitf(inv, 1, "nl: invalid value '%s' for %s", value, label)
 }
 
-func nlOptionf(inv *Invocation, format string, args ...any) error {
-	return exitf(inv, 1, format+"\nTry 'nl --help' for more information.", args...)
-}
-
-func nlUsageError(inv *Invocation, format string, args ...any) error {
-	return exitf(inv, 1, format+"\nTry 'nl --help' for more information.", args...)
-}
-
 const nlVersionText = "nl (gbash) dev\n"
-
-func writeNLHelp(inv *Invocation) error {
-	help := `Usage: nl [OPTION]... [FILE]...
+const nlHelpText = `Usage: nl [OPTION]... [FILE]...
 Write each FILE to standard output, with line numbers added.
 
   -b, --body-numbering=STYLE     select body numbering style
@@ -707,11 +532,7 @@ Write each FILE to standard output, with line numbers added.
       --help                     display this help and exit
       --version                  output version information and exit
 `
-	_, err := io.WriteString(inv.Stdout, help)
-	if err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-	return nil
-}
 
 var _ Command = (*NL)(nil)
+var _ SpecProvider = (*NL)(nil)
+var _ ParsedRunner = (*NL)(nil)
