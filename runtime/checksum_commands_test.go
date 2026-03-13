@@ -5,9 +5,12 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"fmt"
 	"strings"
 	"testing"
+
+	"golang.org/x/crypto/blake2b"
 )
 
 func TestChecksumSumHashesFilesAndStdin(t *testing.T) {
@@ -15,9 +18,13 @@ func TestChecksumSumHashesFilesAndStdin(t *testing.T) {
 		cmd string
 		sum func([]byte) string
 	}{
+		{cmd: "b2sum", sum: b2Hex},
 		{cmd: "md5sum", sum: md5Hex},
 		{cmd: "sha1sum", sum: sha1Hex},
+		{cmd: "sha224sum", sum: sha224Hex},
 		{cmd: "sha256sum", sum: sha256Hex},
+		{cmd: "sha384sum", sum: sha384Hex},
+		{cmd: "sha512sum", sum: sha512Hex},
 	}
 
 	alpha := []byte("alpha\n")
@@ -117,6 +124,54 @@ func TestChecksumSumOutputModes(t *testing.T) {
 	}
 }
 
+func TestB2SumLengthModes(t *testing.T) {
+	session := newSession(t, &Config{})
+	data := []byte("foobar\n")
+	writeSessionFile(t, session, "/tmp/input.txt", data)
+
+	tests := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name:   "default-length",
+			script: "b2sum /tmp/input.txt\n",
+			want:   fmt.Sprintf("%s  /tmp/input.txt\n", b2Hex(data)),
+		},
+		{
+			name:   "explicit-128",
+			script: "b2sum --length=128 /tmp/input.txt\n",
+			want:   fmt.Sprintf("%s  /tmp/input.txt\n", b2HexSized(data, 16)),
+		},
+		{
+			name:   "attached-short-length-tagged",
+			script: "b2sum -l128 --tag /tmp/input.txt\n",
+			want:   fmt.Sprintf("BLAKE2b-128 (/tmp/input.txt) = %s\n", b2HexSized(data, 16)),
+		},
+		{
+			name:   "zero-means-default",
+			script: "b2sum --length=0 --tag /tmp/input.txt\n",
+			want:   fmt.Sprintf("BLAKE2b (/tmp/input.txt) = %s\n", b2Hex(data)),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := mustExecSession(t, session, tc.script)
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.want {
+				t.Fatalf("Stdout = %q, want %q", got, tc.want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
+	}
+}
+
 func TestChecksumSumCheckModeSupportsShortAndLongFlags(t *testing.T) {
 	data := []byte("verify-me")
 	sum := strings.ToUpper(md5Hex(data))
@@ -165,6 +220,46 @@ func TestChecksumSumCheckModeParsesTaggedAndSingleSpaceFormats(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			writeSessionFile(t, session, "/tmp/checksums.txt", []byte(tc.content))
 			result := mustExecSession(t, session, "md5sum --check /tmp/checksums.txt\n")
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got, want := result.Stdout, "/tmp/file.txt: OK\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
+	}
+}
+
+func TestB2SumCheckModeSupportsVariableLengths(t *testing.T) {
+	session := newSession(t, &Config{})
+	data := []byte("format-data")
+	writeSessionFile(t, session, "/tmp/file.txt", data)
+
+	checks := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "single-space-8-bit",
+			content: fmt.Sprintf("%s /tmp/file.txt\n", b2HexSized(data, 1)),
+		},
+		{
+			name:    "untagged-128-bit",
+			content: fmt.Sprintf("%s  /tmp/file.txt\n", b2HexSized(data, 16)),
+		},
+		{
+			name:    "tagged-128-bit",
+			content: fmt.Sprintf("BLAKE2b-128 (/tmp/file.txt) = %s\n", b2HexSized(data, 16)),
+		},
+	}
+
+	for _, tc := range checks {
+		t.Run(tc.name, func(t *testing.T) {
+			writeSessionFile(t, session, "/tmp/checksums.txt", []byte(tc.content))
+			result := mustExecSession(t, session, "b2sum --check /tmp/checksums.txt\n")
 			if result.ExitCode != 0 {
 				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 			}
@@ -374,6 +469,43 @@ func TestChecksumSumRejectsMeaninglessAndUnknownOptions(t *testing.T) {
 	}
 }
 
+func TestB2SumRejectsInvalidLengths(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/file.txt", []byte("foobar\n"))
+
+	tests := []struct {
+		name   string
+		script string
+		stderr string
+	}{
+		{
+			name:   "not-multiple-of-8",
+			script: "b2sum --length=9 /tmp/file.txt\n",
+			stderr: "b2sum: invalid length: '9'\nb2sum: length is not a multiple of 8\n",
+		},
+		{
+			name:   "too-large",
+			script: "b2sum --length=513 /tmp/file.txt\n",
+			stderr: "b2sum: invalid length: '513'\nb2sum: maximum digest length for 'BLAKE2b' is 512 bits\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := mustExecSession(t, session, tc.script)
+			if result.ExitCode != 1 {
+				t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+			}
+			if result.Stdout != "" {
+				t.Fatalf("Stdout = %q, want empty", result.Stdout)
+			}
+			if got := result.Stderr; got != tc.stderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.stderr)
+			}
+		})
+	}
+}
+
 func TestChecksumSumHelpAndVersion(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -400,6 +532,19 @@ func TestChecksumSumHelpAndVersion(t *testing.T) {
 	}
 }
 
+func b2Hex(data []byte) string {
+	return b2HexSized(data, blake2b.Size)
+}
+
+func b2HexSized(data []byte, size int) string {
+	h, err := blake2b.New(size, nil)
+	if err != nil {
+		panic(err)
+	}
+	_, _ = h.Write(data)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 func md5Hex(data []byte) string {
 	sum := md5.Sum(data)
 	return fmt.Sprintf("%x", sum)
@@ -412,5 +557,20 @@ func sha1Hex(data []byte) string {
 
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum)
+}
+
+func sha224Hex(data []byte) string {
+	sum := sha256.Sum224(data)
+	return fmt.Sprintf("%x", sum)
+}
+
+func sha384Hex(data []byte) string {
+	sum := sha512.Sum384(data)
+	return fmt.Sprintf("%x", sum)
+}
+
+func sha512Hex(data []byte) string {
+	sum := sha512.Sum512(data)
 	return fmt.Sprintf("%x", sum)
 }

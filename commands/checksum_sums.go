@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,16 +13,20 @@ import (
 	"io"
 	stdfs "io/fs"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ewhauser/gbash/policy"
+	"golang.org/x/crypto/blake2b"
 )
 
 type checksumSum struct {
-	name      string
-	tagName   string
-	digestLen int
-	newHash   func() hash.Hash
+	name             string
+	tagName          string
+	digestLen        int
+	newHash          func() hash.Hash
+	supportsLength   bool
+	defaultLengthLen int
 }
 
 type checksumVerbosity int
@@ -51,6 +56,7 @@ type checksumOptions struct {
 	warnFlagSet   bool
 	strictFlagSet bool
 	ignoreFlagSet bool
+	lengthBytes   int
 }
 
 type checksumLineFormat int
@@ -62,9 +68,10 @@ const (
 )
 
 type checksumLine struct {
-	sum      string
-	filename string
-	format   checksumLineFormat
+	sum         string
+	filename    string
+	format      checksumLineFormat
+	lengthBytes int
 }
 
 type checksumStats struct {
@@ -93,6 +100,7 @@ Usage: %s [OPTION]... [FILE]...
 Options:
   -b, --binary          read in binary mode
   -c, --check           read %s sums from the FILEs and check them
+%s
       --tag             create a BSD-style checksum
   -t, --text            read in text mode (default)
   -z, --zero            end each output line with NUL, not newline
@@ -123,12 +131,49 @@ func NewSHA1Sum() *checksumSum {
 	}
 }
 
+func NewSHA224Sum() *checksumSum {
+	return &checksumSum{
+		name:      "sha224sum",
+		tagName:   "SHA224",
+		digestLen: sha256.Size224,
+		newHash:   sha256.New224,
+	}
+}
+
 func NewSHA256Sum() *checksumSum {
 	return &checksumSum{
 		name:      "sha256sum",
 		tagName:   "SHA256",
 		digestLen: sha256.Size,
 		newHash:   sha256.New,
+	}
+}
+
+func NewSHA384Sum() *checksumSum {
+	return &checksumSum{
+		name:      "sha384sum",
+		tagName:   "SHA384",
+		digestLen: sha512.Size384,
+		newHash:   sha512.New384,
+	}
+}
+
+func NewSHA512Sum() *checksumSum {
+	return &checksumSum{
+		name:      "sha512sum",
+		tagName:   "SHA512",
+		digestLen: sha512.Size,
+		newHash:   sha512.New,
+	}
+}
+
+func NewB2Sum() *checksumSum {
+	return &checksumSum{
+		name:             "b2sum",
+		tagName:          "BLAKE2b",
+		digestLen:        blake2b.Size,
+		supportsLength:   true,
+		defaultLengthLen: blake2b.Size,
 	}
 }
 
@@ -141,34 +186,45 @@ func (c *checksumSum) Run(ctx context.Context, inv *Invocation) error {
 }
 
 func (c *checksumSum) Spec() CommandSpec {
+	options := []OptionSpec{
+		{Name: "binary", Short: 'b', Long: "binary", Help: "read in binary mode"},
+		{Name: "check", Short: 'c', Long: "check", Help: fmt.Sprintf("read %s sums from the FILEs and check them", c.tagName)},
+		{Name: "tag", Long: "tag", Help: "create a BSD-style checksum"},
+		{Name: "text", Short: 't', Long: "text", Help: "read in text mode (default)"},
+		{Name: "zero", Short: 'z', Long: "zero", Help: "end each output line with NUL, not newline"},
+		{Name: "ignore-missing", Long: "ignore-missing", Help: "don't fail or report status for missing files"},
+		{Name: "quiet", Long: "quiet", Help: "don't print OK for each successfully verified file"},
+		{Name: "status", Long: "status", Help: "don't output anything, status code shows success"},
+		{Name: "strict", Long: "strict", Help: "exit non-zero for improperly formatted checksum lines"},
+		{Name: "warn", Short: 'w', Long: "warn", Help: "warn about improperly formatted checksum lines"},
+	}
+	if c.supportsLength {
+		options = append(options[:2], append([]OptionSpec{
+			{Name: "length", Short: 'l', Long: "length", ValueName: "BITS", Arity: OptionRequiredValue, Help: "digest length in bits"},
+		}, options[2:]...)...)
+	}
+
 	return CommandSpec{
-		Name:  c.name,
-		About: fmt.Sprintf("%s - compute or check %s message digests", c.name, c.tagName),
-		Usage: fmt.Sprintf("%s [OPTION]... [FILE]...", c.name),
-		Options: []OptionSpec{
-			{Name: "binary", Short: 'b', Long: "binary", Help: "read in binary mode"},
-			{Name: "check", Short: 'c', Long: "check", Help: fmt.Sprintf("read %s sums from the FILEs and check them", c.tagName)},
-			{Name: "tag", Long: "tag", Help: "create a BSD-style checksum"},
-			{Name: "text", Short: 't', Long: "text", Help: "read in text mode (default)"},
-			{Name: "zero", Short: 'z', Long: "zero", Help: "end each output line with NUL, not newline"},
-			{Name: "ignore-missing", Long: "ignore-missing", Help: "don't fail or report status for missing files"},
-			{Name: "quiet", Long: "quiet", Help: "don't print OK for each successfully verified file"},
-			{Name: "status", Long: "status", Help: "don't output anything, status code shows success"},
-			{Name: "strict", Long: "strict", Help: "exit non-zero for improperly formatted checksum lines"},
-			{Name: "warn", Short: 'w', Long: "warn", Help: "warn about improperly formatted checksum lines"},
-		},
+		Name:    c.name,
+		About:   fmt.Sprintf("%s - compute or check %s message digests", c.name, c.tagName),
+		Usage:   fmt.Sprintf("%s [OPTION]... [FILE]...", c.name),
+		Options: options,
 		Args: []ArgSpec{
 			{Name: "file", ValueName: "FILE", Repeatable: true},
 		},
 		Parse: ParseConfig{
 			GroupShortOptions:        true,
-			ShortOptionValueAttached: false,
+			ShortOptionValueAttached: true,
 			LongOptionValueEquals:    true,
 			AutoHelp:                 true,
 			AutoVersion:              true,
 		},
 		HelpRenderer: func(w io.Writer, _ CommandSpec) error {
-			_, err := fmt.Fprintf(w, checksumSumsHelpText, c.name, c.tagName, c.name, c.tagName)
+			lengthLine := ""
+			if c.supportsLength {
+				lengthLine = "  -l, --length=BITS     digest length in bits\n"
+			}
+			_, err := fmt.Fprintf(w, checksumSumsHelpText, c.name, c.tagName, c.name, c.tagName, lengthLine)
 			return err
 		},
 	}
@@ -190,8 +246,9 @@ func (c *checksumSum) RunParsed(ctx context.Context, inv *Invocation, matches *P
 
 func (c *checksumSum) optionsFromMatches(inv *Invocation, matches *ParsedCommand) (checksumOptions, error) {
 	opts := checksumOptions{
-		text:      true,
-		verbosity: checksumVerbosityNormal,
+		text:        true,
+		verbosity:   checksumVerbosityNormal,
+		lengthBytes: c.digestLen,
 	}
 
 	for _, name := range matches.OptionOrder() {
@@ -226,6 +283,12 @@ func (c *checksumSum) optionsFromMatches(inv *Invocation, matches *ParsedCommand
 		case "warn":
 			opts.verbosity = checksumVerbosityWarn
 			opts.warnFlagSet = true
+		case "length":
+			lengthBytes, err := parseChecksumLengthBits(matches.Value("length"))
+			if err != nil {
+				return checksumOptions{}, writeChecksumLengthError(inv, c.name, matches.Value("length"), err)
+			}
+			opts.lengthBytes = lengthBytes
 		}
 	}
 	opts.files = matches.Args("file")
@@ -255,7 +318,7 @@ func (c *checksumSum) optionsFromMatches(inv *Invocation, matches *ParsedCommand
 			return checksumOptions{}, exitf(inv, 1, "%s: the --binary and --text options are meaningless when verifying checksums", c.name)
 		}
 	}
-	if opts.text && opts.tag {
+	if opts.textFlagSet && opts.tag {
 		return checksumOptions{}, exitf(inv, 1, "%s: --tag does not support --text mode", c.name)
 	}
 
@@ -345,7 +408,10 @@ func (c *checksumSum) readChecksumList(ctx context.Context, inv *Invocation, nam
 }
 
 func (c *checksumSum) renderDigestLine(data []byte, name string, opts checksumOptions) ([]byte, error) {
-	sum := c.digestHex(data)
+	sum, err := c.digestHex(data, opts.lengthBytes)
+	if err != nil {
+		return nil, err
+	}
 	escaped, prefix := checksumEscapeFilename(name, opts.zero)
 	terminator := byte('\n')
 	if opts.zero {
@@ -353,7 +419,7 @@ func (c *checksumSum) renderDigestLine(data []byte, name string, opts checksumOp
 	}
 
 	if opts.tag {
-		line := prefix + c.tagName + " (" + escaped + ") = " + sum
+		line := prefix + c.tagLabel(opts.lengthBytes) + " (" + escaped + ") = " + sum
 		return append([]byte(line), terminator), nil
 	}
 
@@ -365,10 +431,13 @@ func (c *checksumSum) renderDigestLine(data []byte, name string, opts checksumOp
 	return append([]byte(line), terminator), nil
 }
 
-func (c *checksumSum) digestHex(data []byte) string {
-	h := c.newHash()
+func (c *checksumSum) digestHex(data []byte, lengthBytes int) (string, error) {
+	h, err := c.newDigest(lengthBytes)
+	if err != nil {
+		return "", err
+	}
 	_, _ = h.Write(data)
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func (c *checksumSum) verifyChecksumList(ctx context.Context, inv *Invocation, opts checksumOptions, listName string, data []byte) error {
@@ -460,7 +529,13 @@ func (c *checksumSum) processChecksumLine(ctx context.Context, inv *Invocation, 
 
 	status := "OK"
 	lineSum := strings.ToLower(line.sum)
-	if c.digestHex(data) != lineSum {
+	digest, err := c.digestHex(data, line.lengthBytes)
+	if err != nil {
+		c.reportOpenError(inv.Stderr, name, err)
+		c.writeVerifyResult(inv, name, "FAILED open or read", opts.verbosity)
+		return checksumLineFailedOpen
+	}
+	if digest != lineSum {
 		status = "FAILED"
 		c.writeVerifyResult(inv, name, status, opts.verbosity)
 		return checksumLineFailedChecksum
@@ -492,18 +567,18 @@ func (c *checksumSum) parseChecksumLine(line string, cachedFormat **checksumLine
 	if *cachedFormat != nil {
 		switch **cachedFormat {
 		case checksumLineFormatUntagged:
-			return parseChecksumUntaggedLine(line)
+			return c.parseChecksumUntaggedLine(line)
 		case checksumLineFormatSingleSpace:
-			return parseChecksumSingleSpaceLine(line)
+			return c.parseChecksumSingleSpaceLine(line)
 		}
 	}
 
-	if parsed, ok := parseChecksumUntaggedLine(line); ok {
+	if parsed, ok := c.parseChecksumUntaggedLine(line); ok {
 		mode := checksumLineFormatUntagged
 		*cachedFormat = &mode
 		return parsed, true
 	}
-	if parsed, ok := parseChecksumSingleSpaceLine(line); ok {
+	if parsed, ok := c.parseChecksumSingleSpaceLine(line); ok {
 		mode := checksumLineFormatSingleSpace
 		*cachedFormat = &mode
 		return parsed, true
@@ -515,13 +590,29 @@ func (c *checksumSum) parseTaggedChecksumLine(line string) (checksumLine, bool) 
 	trimmed := strings.TrimPrefix(strings.TrimLeft(line, " \t"), "\\")
 
 	var sep string
+	var lengthBytes int
 	switch {
 	case strings.HasPrefix(trimmed, c.tagName+" ("):
 		sep = ") = "
 		trimmed = trimmed[len(c.tagName)+2:]
+		lengthBytes = c.digestLen
+	case c.supportsLength && strings.HasPrefix(trimmed, c.tagName+"-"):
+		closeIdx := strings.Index(trimmed, " (")
+		if closeIdx < 0 {
+			return checksumLine{}, false
+		}
+		lengthLabel := trimmed[len(c.tagName)+1 : closeIdx]
+		parsedLength, ok := parseTaggedLengthBits(lengthLabel)
+		if !ok {
+			return checksumLine{}, false
+		}
+		lengthBytes = parsedLength
+		sep = ") = "
+		trimmed = trimmed[closeIdx+2:]
 	case strings.HasPrefix(trimmed, c.tagName+"("):
 		sep = ")= "
 		trimmed = trimmed[len(c.tagName)+1:]
+		lengthBytes = c.digestLen
 	default:
 		return checksumLine{}, false
 	}
@@ -532,13 +623,16 @@ func (c *checksumSum) parseTaggedChecksumLine(line string) (checksumLine, bool) 
 	}
 	filename := trimmed[:idx]
 	sum := trimmed[idx+len(sep):]
-	if !checksumLooksValid(sum, c.digestLen) {
+	if lengthBytes == 0 {
+		lengthBytes = c.digestLen
+	}
+	if !checksumLooksValid(sum, lengthBytes) {
 		return checksumLine{}, false
 	}
-	return checksumLine{sum: sum, filename: filename, format: checksumLineFormatAlgo}, true
+	return checksumLine{sum: sum, filename: filename, format: checksumLineFormatAlgo, lengthBytes: lengthBytes}, true
 }
 
-func parseChecksumUntaggedLine(line string) (checksumLine, bool) {
+func (c *checksumSum) parseChecksumUntaggedLine(line string) (checksumLine, bool) {
 	line = strings.TrimPrefix(line, "\\")
 	if len(line) < 4 {
 		return checksumLine{}, false
@@ -548,35 +642,110 @@ func parseChecksumUntaggedLine(line string) (checksumLine, bool) {
 		return checksumLine{}, false
 	}
 	sum := line[:space]
-	if !checksumLooksHex(sum) {
+	lengthBytes, ok := c.parseDigestLength(sum)
+	if !ok {
 		return checksumLine{}, false
 	}
 	rest := line[space:]
 	switch {
 	case strings.HasPrefix(rest, "  "):
-		return checksumLine{sum: sum, filename: rest[2:], format: checksumLineFormatUntagged}, true
+		return checksumLine{sum: sum, filename: rest[2:], format: checksumLineFormatUntagged, lengthBytes: lengthBytes}, true
 	case strings.HasPrefix(rest, " *"):
-		return checksumLine{sum: sum, filename: rest[2:], format: checksumLineFormatUntagged}, true
+		return checksumLine{sum: sum, filename: rest[2:], format: checksumLineFormatUntagged, lengthBytes: lengthBytes}, true
 	default:
 		return checksumLine{}, false
 	}
 }
 
-func parseChecksumSingleSpaceLine(line string) (checksumLine, bool) {
+func (c *checksumSum) parseChecksumSingleSpaceLine(line string) (checksumLine, bool) {
 	line = strings.TrimPrefix(line, "\\")
 	space := strings.IndexByte(line, ' ')
 	if space <= 0 || space+1 > len(line) {
 		return checksumLine{}, false
 	}
 	sum := line[:space]
-	if !checksumLooksHex(sum) {
+	lengthBytes, ok := c.parseDigestLength(sum)
+	if !ok {
 		return checksumLine{}, false
 	}
-	return checksumLine{sum: sum, filename: line[space+1:], format: checksumLineFormatSingleSpace}, true
+	return checksumLine{sum: sum, filename: line[space+1:], format: checksumLineFormatSingleSpace, lengthBytes: lengthBytes}, true
 }
 
 func checksumLooksValid(sum string, digestLen int) bool {
 	return checksumLooksHex(sum) && len(sum) == digestLen*2
+}
+
+func (c *checksumSum) parseDigestLength(sum string) (int, bool) {
+	if !checksumLooksHex(sum) {
+		return 0, false
+	}
+	if c.supportsLength {
+		if len(sum)%2 != 0 || sum == "" || len(sum) > c.digestLen*2 {
+			return 0, false
+		}
+		return len(sum) / 2, true
+	}
+	if len(sum) != c.digestLen*2 {
+		return 0, false
+	}
+	return c.digestLen, true
+}
+
+func (c *checksumSum) tagLabel(lengthBytes int) string {
+	if !c.supportsLength || lengthBytes == c.defaultLengthLen {
+		return c.tagName
+	}
+	return fmt.Sprintf("%s-%d", c.tagName, lengthBytes*8)
+}
+
+func (c *checksumSum) newDigest(lengthBytes int) (hash.Hash, error) {
+	if c.supportsLength {
+		return blake2b.New(lengthBytes, nil)
+	}
+	return c.newHash(), nil
+}
+
+func parseTaggedLengthBits(value string) (int, bool) {
+	lengthBytes, err := parseChecksumLengthBits(value)
+	if err != nil {
+		return 0, false
+	}
+	return lengthBytes, true
+}
+
+func parseChecksumLengthBits(value string) (int, error) {
+	bits, err := strconv.Atoi(value)
+	if err != nil {
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) && numErr.Err == strconv.ErrRange {
+			return 0, fmt.Errorf("too_large")
+		}
+		return 0, fmt.Errorf("invalid")
+	}
+	switch {
+	case bits == 0 || bits == 512:
+		return blake2b.Size, nil
+	case bits < 0:
+		return 0, fmt.Errorf("invalid")
+	case bits > 512:
+		return 0, fmt.Errorf("too_large")
+	case bits%8 != 0:
+		return 0, fmt.Errorf("not_multiple_of_8")
+	default:
+		return bits / 8, nil
+	}
+}
+
+func writeChecksumLengthError(inv *Invocation, cmdName, value string, err error) error {
+	_ = exitf(inv, 1, "%s: invalid length: '%s'", cmdName, value)
+	switch err.Error() {
+	case "too_large":
+		return exitf(inv, 1, "%s: maximum digest length for 'BLAKE2b' is 512 bits", cmdName)
+	case "not_multiple_of_8":
+		return exitf(inv, 1, "%s: length is not a multiple of 8", cmdName)
+	default:
+		return &ExitError{Code: 1}
+	}
 }
 
 func checksumLooksHex(sum string) bool {
