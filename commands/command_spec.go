@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -18,6 +19,10 @@ type ParsedRunner interface {
 
 type ParseInvocationNormalizer interface {
 	NormalizeInvocation(*Invocation) *Invocation
+}
+
+type ParseErrorNormalizer interface {
+	NormalizeParseError(*Invocation, error) error
 }
 
 type LegacySpecProvider interface {
@@ -155,15 +160,33 @@ func RunCommand(ctx context.Context, cmd Command, inv *Invocation) error {
 			if normalizer, ok := cmd.(ParseInvocationNormalizer); ok {
 				parseInv = normalizer.NormalizeInvocation(inv)
 			}
-			return runCommandWithSpec(ctx, inv, parseInv, &spec, runner.RunParsed)
+			return runCommandWithSpec(ctx, cmd, inv, parseInv, &spec, runner.RunParsed)
 		}
 	}
 	return cmd.Run(ctx, inv)
 }
 
-func runCommandWithSpec(ctx context.Context, inv, parseInv *Invocation, spec *CommandSpec, run func(context.Context, *Invocation, *ParsedCommand) error) error {
+func runCommandWithSpec(ctx context.Context, cmd Command, inv, parseInv *Invocation, spec *CommandSpec, run func(context.Context, *Invocation, *ParsedCommand) error) error {
 	if parseInv == nil {
 		parseInv = inv
+	}
+	if normalizer, ok := cmd.(ParseErrorNormalizer); ok && parseInv != nil {
+		clone := *parseInv
+		var stderr bytes.Buffer
+		clone.Stderr = &stderr
+		parseInv = &clone
+		matches, action, err := ParseCommandSpec(parseInv, spec)
+		if err != nil {
+			return normalizer.NormalizeParseError(inv, err)
+		}
+		switch action {
+		case "help":
+			return RenderCommandHelp(inv.Stdout, spec)
+		case "version":
+			return RenderCommandVersion(inv.Stdout, spec)
+		default:
+			return run(ctx, inv, matches)
+		}
 	}
 	matches, action, err := ParseCommandSpec(parseInv, spec)
 	if err != nil {

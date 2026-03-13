@@ -30,3 +30,4 @@ dist/
 runtime/testdata/fuzz/Fuzz*/
 
 gbash-gnu
+CONTINUITY.md

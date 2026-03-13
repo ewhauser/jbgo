@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	stdfs "io/fs"
 	"slices"
@@ -26,27 +25,6 @@ type columnOptions struct {
 	noMerge      bool
 }
 
-const columnHelpText = `column - columnate lists
-
-Usage: column [OPTION]... [FILE]...
-
-Description:
-  Format input into multiple columns. By default, fills rows first. Use -t to create a table based on whitespace-delimited input.
-
-Options:
-  -t           Create a table (determine columns from input)
-  -s SEP       Input field delimiter (default: whitespace)
-  -o SEP       Output field delimiter (default: two spaces)
-  -c WIDTH     Output width for fill mode (default: 80)
-  -n           Don't merge multiple adjacent delimiters
-
-Examples:
-  ls | column              # Fill columns with ls output
-  cat data | column -t     # Format as table
-  column -t -s ',' file    # Format CSV as table
-  column -c 40 file        # Fill 40-char wide columns
-`
-
 func NewColumn() *Column {
 	return &Column{}
 }
@@ -56,19 +34,55 @@ func (c *Column) Name() string {
 }
 
 func (c *Column) Run(ctx context.Context, inv *Invocation) error {
-	if hasColumnHelpFlag(inv.Args) {
-		if _, err := io.WriteString(inv.Stdout, columnHelpText); err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
-		return nil
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Column) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "column",
+		About: "column - columnate lists",
+		Usage: "column [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "help", Long: "help", Help: "display this help and exit"},
+			{Name: "table", Short: 't', Long: "table", Help: "create a table based on whitespace-delimited input"},
+			{Name: "separator", Short: 's', ValueName: "SEP", Arity: OptionRequiredValue, Help: "input field delimiter (default: whitespace)"},
+			{Name: "output-separator", Short: 'o', ValueName: "SEP", Arity: OptionRequiredValue, Help: "output field delimiter (default: two spaces)"},
+			{Name: "width", Short: 'c', ValueName: "WIDTH", Arity: OptionRequiredValue, Help: "output width for fill mode (default: 80)"},
+			{Name: "no-merge", Short: 'n', Help: "don't merge multiple adjacent delimiters"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true, Help: "input files"},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			StopAtFirstPositional:    true,
+		},
+	}
+}
+
+func (c *Column) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil || !hasColumnHelpFlag(inv.Args) {
+		return inv
+	}
+	clone := *inv
+	clone.Args = []string{"--help"}
+	return &clone
+}
+
+func (c *Column) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	spec := c.Spec()
+	if matches.Has("help") {
+		return RenderCommandHelp(inv.Stdout, &spec)
 	}
 
-	opts, files, err := parseColumnArgs(inv)
+	opts, err := parseColumnMatches(matches)
 	if err != nil {
 		return err
 	}
 
-	content, err := readColumnContent(ctx, inv, files)
+	content, err := readColumnContent(ctx, inv, matches.Positionals())
 	if err != nil {
 		return err
 	}
@@ -117,96 +131,53 @@ func (c *Column) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func hasColumnHelpFlag(args []string) bool {
-	return slices.Contains(args, "--help")
-}
-
-func parseColumnArgs(inv *Invocation) (columnOptions, []string, error) {
+func parseColumnMatches(matches *ParsedCommand) (columnOptions, error) {
 	opts := columnOptions{
 		width:      80,
 		widthValid: true,
 	}
-
-	args := inv.Args
-	positionals := make([]string, 0, len(args))
-	stopParsing := false
-
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if stopParsing || !strings.HasPrefix(arg, "-") || arg == "-" {
-			positionals = append(positionals, arg)
-			continue
-		}
-		if arg == "--" {
-			stopParsing = true
-			continue
-		}
-
-		if strings.HasPrefix(arg, "--") {
-			switch {
-			case arg == "--table":
-				opts.table = true
-			case strings.HasPrefix(arg, "--table="):
-				opts.table = true
-			default:
-				return columnOptions{}, nil, writeColumnUnknownOption(inv, arg)
-			}
-			continue
-		}
-
-		chars := arg[1:]
-		for j := 0; j < len(chars); j++ {
-			switch chars[j] {
-			case 't':
-				opts.table = true
-			case 'n':
-				opts.noMerge = true
-			case 's', 'o', 'c':
-				value, nextIndex, err := readColumnShortValue(inv, args, i, chars, j)
-				if err != nil {
-					return columnOptions{}, nil, err
-				}
-				switch chars[j] {
-				case 's':
-					opts.separator = value
-				case 'o':
-					opts.outputSep = value
-					opts.outputSepSet = true
-				case 'c':
-					opts.width, opts.widthValid = parseColumnNumber(value)
-				}
-				i = nextIndex
-				j = len(chars)
-			default:
-				return columnOptions{}, nil, writeColumnUnknownOption(inv, "-"+string(chars[j]))
-			}
-		}
+	if matches == nil {
+		return opts, nil
 	}
-
-	return opts, positionals, nil
+	if matches.Has("table") {
+		opts.table = true
+	}
+	if matches.Has("separator") {
+		opts.separator = matches.Value("separator")
+	}
+	if matches.Has("output-separator") {
+		opts.outputSep = matches.Value("output-separator")
+		opts.outputSepSet = true
+	}
+	if matches.Has("width") {
+		opts.width, opts.widthValid = parseColumnNumber(matches.Value("width"))
+	}
+	if matches.Has("no-merge") {
+		opts.noMerge = true
+	}
+	return opts, nil
 }
 
-func readColumnShortValue(inv *Invocation, args []string, argIndex int, chars string, charIndex int) (value string, nextArgIndex int, err error) {
-	if charIndex+1 < len(chars) {
-		return chars[charIndex+1:], argIndex, nil
-	}
-	if argIndex+1 >= len(args) {
-		return "", argIndex, exitf(inv, 1, "column: option requires an argument -- '%c'", chars[charIndex])
-	}
-	return args[argIndex+1], argIndex + 1, nil
+func hasColumnHelpFlag(args []string) bool {
+	return slices.Contains(args, "--help")
 }
 
-func writeColumnUnknownOption(inv *Invocation, option string) error {
-	var msg string
-	if strings.HasPrefix(option, "--") {
-		msg = fmt.Sprintf("column: unrecognized option '%s'\n", option)
-	} else {
-		msg = fmt.Sprintf("column: invalid option -- '%s'\n", strings.TrimPrefix(option, "-"))
+func (c *Column) NormalizeParseError(inv *Invocation, err error) error {
+	if err == nil {
+		return nil
 	}
-	if _, err := io.WriteString(inv.Stderr, msg); err != nil {
-		return &ExitError{Code: 1, Err: err}
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) {
+		message := strings.TrimSuffix(err.Error(), "\nTry 'column --help' for more information.")
+		if message != err.Error() {
+			trimmed := strings.TrimSuffix(message, "\n")
+			if inv != nil && inv.Stderr != nil {
+				_, _ = io.WriteString(inv.Stderr, trimmed+"\n")
+			}
+			return &ExitError{Code: exitErr.Code}
+		}
 	}
-	return &ExitError{Code: 1}
+	return err
 }
 
 func parseColumnNumber(value string) (int, bool) {
@@ -437,3 +408,7 @@ func utf16Len(value string) int {
 }
 
 var _ Command = (*Column)(nil)
+var _ SpecProvider = (*Column)(nil)
+var _ ParsedRunner = (*Column)(nil)
+var _ ParseInvocationNormalizer = (*Column)(nil)
+var _ ParseErrorNormalizer = (*Column)(nil)
