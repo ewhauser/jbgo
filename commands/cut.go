@@ -464,14 +464,6 @@ func parseCutRangeNumberAllowZero(value string) (uint64, error) {
 	return n, nil
 }
 
-func parsePositiveInt(value string) (int, error) {
-	index, err := strconv.Atoi(value)
-	if err != nil || index <= 0 {
-		return 0, fmt.Errorf("invalid number")
-	}
-	return index, nil
-}
-
 var (
 	errCutRangeStartsAtOne = errors.New("starts-at-one")
 	errCutRangeInvalid     = errors.New("invalid")

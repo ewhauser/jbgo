@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -32,32 +31,4 @@ func parseFlexibleDuration(value string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid time interval %q", value)
 	}
 	return time.Duration(number * float64(multiplier)), nil
-}
-
-func decodeDelimiterValue(value string) (string, error) {
-	var b strings.Builder
-	for i := 0; i < len(value); i++ {
-		if value[i] != '\\' {
-			b.WriteByte(value[i])
-			continue
-		}
-		if i+1 >= len(value) {
-			b.WriteByte('\\')
-			continue
-		}
-		switch value[i+1] {
-		case 'n':
-			b.WriteByte('\n')
-		case 't':
-			b.WriteByte('\t')
-		case '0':
-			b.WriteByte(0)
-		case '\\':
-			b.WriteByte('\\')
-		default:
-			return "", fmt.Errorf("unsupported escape %q", value[i:i+2])
-		}
-		i++
-	}
-	return b.String(), nil
 }
