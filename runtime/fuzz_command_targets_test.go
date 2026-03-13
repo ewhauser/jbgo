@@ -429,7 +429,13 @@ func FuzzDataCommands(f *testing.F) {
 				"b2sum /tmp/input.json >/tmp/b2-file.txt\n" +
 				"b2sum --length=128 /tmp/input.json >/tmp/b2-128-file.txt\n" +
 				"b2sum /tmp/input.json >/tmp/b2-checksums.txt\n" +
-				"b2sum -c /tmp/b2-checksums.txt >/tmp/b2-check.txt || true\n",
+				"b2sum -c /tmp/b2-checksums.txt >/tmp/b2-check.txt || true\n" +
+				"cksum /tmp/input.json >/tmp/cksum-crc.txt\n" +
+				"cksum -a md5 /tmp/input.json >/tmp/cksum-md5.txt\n" +
+				"cksum -a sha2 -l 256 /tmp/input.json >/tmp/cksum-sha256.txt\n" +
+				"cksum -a blake2b -l 128 /tmp/input.json >/tmp/cksum-b2-128.txt\n" +
+				"cksum -a md5 /tmp/input.json >/tmp/cksum-md5-checksums.txt\n" +
+				"cksum -c /tmp/cksum-md5-checksums.txt >/tmp/cksum-md5-check.txt || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
