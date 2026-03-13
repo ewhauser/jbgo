@@ -15,7 +15,7 @@ func newSeededRuntime(tb testing.TB, files map[string]string) *Runtime {
 
 	return newRuntime(tb, &Config{
 		FileSystem: CustomFileSystem(
-			gbfs.Overlay(gbfs.Snapshot(base.FileSystem())),
+			gbfs.Reusable(gbfs.Snapshot(base.FileSystem())),
 			defaultHomeDir,
 		),
 	})

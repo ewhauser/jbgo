@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -248,6 +249,61 @@ func TestSnapshotFSPreservesSourceViewAndRejectsWrites(t *testing.T) {
 	}
 	if realpath, err := snapshot.Realpath(context.Background(), "/data.txt"); err != nil || realpath != "/data.txt" {
 		t.Fatalf("Realpath() = %q, %v; want /data.txt, nil", realpath, err)
+	}
+}
+
+func TestReusableFactoryReusesBaseAndKeepsSessionsIsolated(t *testing.T) {
+	var created atomic.Int32
+	factory := Reusable(FactoryFunc(func(context.Context) (FileSystem, error) {
+		created.Add(1)
+		return seededMemory(t, map[string]string{
+			"/seed.txt": "seed\n",
+		}), nil
+	}))
+
+	first, err := factory.New(context.Background())
+	if err != nil {
+		t.Fatalf("New(first) error = %v", err)
+	}
+	second, err := factory.New(context.Background())
+	if err != nil {
+		t.Fatalf("New(second) error = %v", err)
+	}
+
+	writeTestFile(t, first, "/seed.txt", "first-session\n")
+	writeTestFile(t, first, "/only-first.txt", "first\n")
+
+	if got, want := readTestFile(t, first, "/seed.txt"), "first-session\n"; got != want {
+		t.Fatalf("first /seed.txt = %q, want %q", got, want)
+	}
+	if got, want := readTestFile(t, second, "/seed.txt"), "seed\n"; got != want {
+		t.Fatalf("second /seed.txt = %q, want %q", got, want)
+	}
+	if _, err := second.Stat(context.Background(), "/only-first.txt"); !errors.Is(err, stdfs.ErrNotExist) {
+		t.Fatalf("second Stat(/only-first.txt) error = %v, want not exist", err)
+	}
+	if got, want := created.Load(), int32(1); got != want {
+		t.Fatalf("base factory created %d instances, want %d", got, want)
+	}
+}
+
+func TestMemoryFSCloneIsolated(t *testing.T) {
+	base := seededMemory(t, map[string]string{
+		"/data.txt": "base\n",
+	})
+	clone := base.Clone()
+
+	writeTestFile(t, clone, "/data.txt", "clone\n")
+	writeTestFile(t, clone, "/new.txt", "new\n")
+
+	if got, want := readTestFile(t, clone, "/data.txt"), "clone\n"; got != want {
+		t.Fatalf("clone /data.txt = %q, want %q", got, want)
+	}
+	if got, want := readTestFile(t, base, "/data.txt"), "base\n"; got != want {
+		t.Fatalf("base /data.txt = %q, want %q", got, want)
+	}
+	if _, err := base.Stat(context.Background(), "/new.txt"); !errors.Is(err, stdfs.ErrNotExist) {
+		t.Fatalf("base Stat(/new.txt) error = %v, want not exist", err)
 	}
 }
 

@@ -2,9 +2,13 @@ package runtime
 
 import (
 	"context"
+	"io"
+	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -44,6 +48,21 @@ func TestDefaultSandboxLayout(t *testing.T) {
 	}
 	if containsLine(lines, "__jb_cd_resolve") {
 		t.Fatalf("Stdout should not expose internal command stubs: %q", result.Stdout)
+	}
+}
+
+func TestNewSessionHasPreparedDefaultLayout(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	session, err := rt.NewSession(context.Background())
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/bin/echo"); err != nil {
+		t.Fatalf("Stat(/bin/echo) error = %v", err)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), defaultHomeDir); err != nil {
+		t.Fatalf("Stat(%q) error = %v", defaultHomeDir, err)
 	}
 }
 
@@ -141,4 +160,69 @@ func TestPwdHonorsLogicalAndPhysicalModes(t *testing.T) {
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
+}
+
+func TestEnsureCommandStubDoesNotCloneExistingLowerStub(t *testing.T) {
+	ctx := context.Background()
+	lower := gbfs.NewMemory()
+	file, err := lower.OpenFile(ctx, "/bin/echo", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		t.Fatalf("OpenFile(/bin/echo) error = %v", err)
+	}
+	if _, err := file.Write([]byte("lower-v1\n")); err != nil {
+		t.Fatalf("Write(/bin/echo) error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close(/bin/echo) error = %v", err)
+	}
+
+	countingLower := &openCountingFS{FileSystem: lower}
+	overlay := gbfs.NewOverlay(countingLower)
+	if err := ensureCommandStub(ctx, overlay, "/bin", "echo"); err != nil {
+		t.Fatalf("ensureCommandStub() error = %v", err)
+	}
+
+	file, err = lower.OpenFile(ctx, "/bin/echo", os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		t.Fatalf("OpenFile(/bin/echo rewrite) error = %v", err)
+	}
+	if _, err := file.Write([]byte("lower-v2\n")); err != nil {
+		t.Fatalf("Write(/bin/echo rewrite) error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close(/bin/echo rewrite) error = %v", err)
+	}
+
+	if got, want := readLayoutTestFile(t, overlay, "/bin/echo"), "lower-v2\n"; got != want {
+		t.Fatalf("overlay /bin/echo = %q, want %q", got, want)
+	}
+	if got := countingLower.opens.Load(); got != 0 {
+		t.Fatalf("lower Open() count = %d, want 0", got)
+	}
+}
+
+type openCountingFS struct {
+	gbfs.FileSystem
+	opens atomic.Int32
+}
+
+func (fs *openCountingFS) Open(ctx context.Context, name string) (gbfs.File, error) {
+	fs.opens.Add(1)
+	return fs.FileSystem.Open(ctx, name)
+}
+
+func readLayoutTestFile(t *testing.T, fsys gbfs.FileSystem, name string) string {
+	t.Helper()
+
+	file, err := fsys.Open(context.Background(), name)
+	if err != nil {
+		t.Fatalf("Open(%q) error = %v", name, err)
+	}
+	defer func() { _ = file.Close() }()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("ReadAll(%q) error = %v", name, err)
+	}
+	return string(data)
 }

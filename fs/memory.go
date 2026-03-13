@@ -51,6 +51,38 @@ func NewMemory() *MemoryFS {
 	}
 }
 
+// Clone returns an isolated copy of the in-memory filesystem state.
+func (m *MemoryFS) Clone() *MemoryFS {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	nodes := make(map[string]*memoryNode, len(m.nodes))
+	for name, node := range m.nodes {
+		cloned := &memoryNode{
+			mode:    node.mode,
+			target:  node.target,
+			modTime: node.modTime,
+			uid:     node.uid,
+			gid:     node.gid,
+		}
+		if len(node.data) > 0 {
+			cloned.data = append([]byte(nil), node.data...)
+		}
+		if node.children != nil {
+			cloned.children = make(map[string]struct{}, len(node.children))
+			for child := range node.children {
+				cloned.children[child] = struct{}{}
+			}
+		}
+		nodes[name] = cloned
+	}
+
+	return &MemoryFS{
+		cwd:   m.cwd,
+		nodes: nodes,
+	}
+}
+
 func (m *MemoryFS) Symlink(_ context.Context, target, linkName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

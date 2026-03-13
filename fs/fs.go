@@ -47,11 +47,15 @@ func (f FactoryFunc) New(ctx context.Context) (FileSystem, error) {
 	return f(ctx)
 }
 
+type memoryFactory struct{}
+
+func (memoryFactory) New(context.Context) (FileSystem, error) {
+	return NewMemory(), nil
+}
+
 // Memory returns a factory that creates a fresh in-memory filesystem per session.
 func Memory() Factory {
-	return FactoryFunc(func(context.Context) (FileSystem, error) {
-		return NewMemory(), nil
-	})
+	return memoryFactory{}
 }
 
 // Overlay returns a copy-on-write filesystem factory over lower.
@@ -73,6 +77,12 @@ func Snapshot(source FileSystem) Factory {
 	return FactoryFunc(func(ctx context.Context) (FileSystem, error) {
 		return NewSnapshot(ctx, source)
 	})
+}
+
+// Reusable returns a factory that materializes source once and gives each
+// caller a fresh writable overlay above that shared base.
+func Reusable(source Factory) Factory {
+	return &reusableFactory{source: source}
 }
 
 func Clean(name string) string {

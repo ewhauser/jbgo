@@ -26,7 +26,8 @@ type Config struct {
 }
 
 type Runtime struct {
-	cfg Config
+	cfg            Config
+	sessionFactory sessionFactory
 }
 
 type Session struct {
@@ -45,6 +46,7 @@ func New(opts ...Option) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	defaultSessionFS := resolved.FileSystem.Factory == nil
 	resolved.FileSystem = resolved.FileSystem.resolved()
 	if resolved.Registry == nil {
 		resolved.Registry = commands.DefaultRegistry()
@@ -86,17 +88,32 @@ func New(opts ...Option) (*Runtime, error) {
 	}
 	resolved.BaseEnv = mergeEnv(defaultBaseEnv(), resolved.BaseEnv)
 
-	return &Runtime{cfg: resolved}, nil
+	factory := sessionFactory(plainSessionFactory{base: resolved.FileSystem.Factory})
+	if defaultSessionFS {
+		factory = &preparedMemorySessionFactory{
+			base:     resolved.FileSystem.Factory,
+			env:      resolved.BaseEnv,
+			workDir:  resolved.FileSystem.WorkingDir,
+			commands: resolved.Registry.Names(),
+		}
+	}
+
+	return &Runtime{
+		cfg:            resolved,
+		sessionFactory: factory,
+	}, nil
 }
 
 func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
-	fsys, err := r.cfg.FileSystem.Factory.New(ctx)
+	fsys, err := r.sessionFactory.New(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := initializeSandboxLayout(ctx, fsys, r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir, r.cfg.Registry.Names()); err != nil {
-		return nil, err
+	if !r.sessionFactory.layoutReady() {
+		if err := initializeSandboxLayout(ctx, fsys, r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir, r.cfg.Registry.Names()); err != nil {
+			return nil, err
+		}
 	}
 
 	return &Session{
