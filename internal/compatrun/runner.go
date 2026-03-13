@@ -176,6 +176,8 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveS
 			Name:              defaultName(req.Name),
 			Script:            req.Script,
 			Args:              req.Args,
+			StartupOptions:    req.StartupOptions,
+			Interactive:       req.Interactive,
 			Env:               execEnv,
 			Dir:               workDir,
 			VisiblePWD:        visiblePWD,
@@ -190,6 +192,7 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveS
 			Trace:             recorder,
 			ProcessAlive:      r.cfg.ProcessAlive,
 			Exec:              r.subexecCallback,
+			Interact:          r.interactCallback,
 		})
 	}
 	finished := time.Now().UTC()
@@ -223,6 +226,70 @@ func (r *Runner) subexecCallback(ctx context.Context, req *commands.ExecutionReq
 		return r.exec(ctx, req, nil, nil)
 	}
 	return r.exec(ctx, req, req.Stdout, req.Stderr)
+}
+
+func (r *Runner) interactCallback(ctx context.Context, req *commands.InteractiveRequest) (*commands.InteractiveResult, error) {
+	if isReentrantExec(ctx, r) {
+		return r.interact(ctx, req)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.interact(withExecContext(ctx, r), req)
+}
+
+func (r *Runner) interact(ctx context.Context, req *commands.InteractiveRequest) (*commands.InteractiveResult, error) {
+	if req == nil {
+		req = &commands.InteractiveRequest{}
+	}
+
+	workDir := resolveWorkDir(r.cfg.DefaultDir, req.WorkDir)
+	execReq := &commands.ExecutionRequest{
+		Env:        req.Env,
+		WorkDir:    req.WorkDir,
+		ReplaceEnv: req.ReplaceEnv,
+	}
+	execEnv := executionEnv(r.cfg.BaseEnv, execReq)
+	visiblePWD, hasVisiblePWD := execEnv["PWD"]
+	execEnv["PWD"] = workDir
+	if _, ok := execEnv["TTY"]; !ok {
+		execEnv["TTY"] = "/dev/tty"
+	}
+
+	if err := r.cfg.FS.Chdir(workDir); err != nil {
+		return nil, err
+	}
+
+	engine, ok := r.cfg.Engine.(shell.InteractiveEngine)
+	if !ok {
+		return nil, fmt.Errorf("shell engine does not support interactive execution")
+	}
+
+	result, err := engine.Interact(ctx, &shell.Execution{
+		Name:              defaultName(req.Name),
+		Args:              req.Args,
+		StartupOptions:    req.StartupOptions,
+		Interactive:       true,
+		Env:               execEnv,
+		Dir:               workDir,
+		VisiblePWD:        visiblePWD,
+		HasVisiblePWD:     hasVisiblePWD,
+		BuiltinCommandDir: r.cfg.BuiltinCommandDir,
+		Stdin:             stdinOrEmpty(req.Stdin),
+		Stdout:            writerOrDiscard(req.Stdout),
+		Stderr:            writerOrDiscard(req.Stderr),
+		FS:                r.cfg.FS,
+		Registry:          r.cfg.Registry,
+		Policy:            r.cfg.Policy,
+		Trace:             trace.NewBuffer(),
+		ProcessAlive:      r.cfg.ProcessAlive,
+		Exec:              r.subexecCallback,
+		Interact:          r.interactCallback,
+	})
+	if err != nil {
+		return normalizeInteractiveResult(result), err
+	}
+	return normalizeInteractiveResult(result), nil
 }
 
 func validateUtilityName(name string) error {
@@ -266,6 +333,20 @@ func executionEnv(baseEnv map[string]string, req *commands.ExecutionRequest) map
 		return env
 	}
 	return mergeEnv(baseEnv, req.Env)
+}
+
+func writerOrDiscard(w io.Writer) io.Writer {
+	if w == nil {
+		return io.Discard
+	}
+	return w
+}
+
+func normalizeInteractiveResult(result *shell.InteractiveResult) *commands.InteractiveResult {
+	if result == nil {
+		return &commands.InteractiveResult{}
+	}
+	return &commands.InteractiveResult{ExitCode: result.ExitCode}
 }
 
 func executionContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

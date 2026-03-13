@@ -34,6 +34,7 @@ type InvocationOptions struct {
 	LookupCNAME           LookupCNAMEFunc
 	ProcessAlive          ProcessAliveFunc
 	Exec                  func(context.Context, *ExecutionRequest) (*ExecutionResult, error)
+	Interact              func(context.Context, *InteractiveRequest) (*InteractiveResult, error)
 	GetRegisteredCommands func() []string
 }
 
@@ -64,6 +65,7 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 		LookupCNAME:           opts.LookupCNAME,
 		ProcessAlive:          opts.ProcessAlive,
 		Exec:                  opts.Exec,
+		Interact:              opts.Interact,
 		GetRegisteredCommands: getCommands,
 		trace:                 opts.Trace,
 	}

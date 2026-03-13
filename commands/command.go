@@ -36,6 +36,7 @@ type Invocation struct {
 	LookupCNAME           LookupCNAMEFunc
 	ProcessAlive          ProcessAliveFunc
 	Exec                  func(context.Context, *ExecutionRequest) (*ExecutionResult, error)
+	Interact              func(context.Context, *InteractiveRequest) (*InteractiveResult, error)
 	Limits                policy.Limits
 	GetRegisteredCommands func() []string
 

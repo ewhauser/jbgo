@@ -42,6 +42,12 @@ type ExecutionRequest = runtime.ExecutionRequest
 // produced by a shell execution.
 type ExecutionResult = runtime.ExecutionResult
 
+// InteractiveRequest describes an interactive shell session.
+type InteractiveRequest = runtime.InteractiveRequest
+
+// InteractiveResult captures the final exit status from an interactive shell session.
+type InteractiveResult = runtime.InteractiveResult
+
 // Method identifies an HTTP method that is allowed by the sandbox network
 // policy.
 type Method = network.Method
@@ -342,6 +348,14 @@ func (s *Session) Exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		return nil, fmt.Errorf("gbash: session is nil")
 	}
 	return s.inner.Exec(ctx, req)
+}
+
+// Interact runs an interactive shell session inside the existing session.
+func (s *Session) Interact(ctx context.Context, req *InteractiveRequest) (*InteractiveResult, error) {
+	if s == nil || s.inner == nil {
+		return nil, fmt.Errorf("gbash: session is nil")
+	}
+	return s.inner.Interact(ctx, req)
 }
 
 // FileSystem returns the live sandbox filesystem for the session.

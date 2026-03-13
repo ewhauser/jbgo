@@ -30,11 +30,17 @@ type Engine interface {
 	Run(ctx context.Context, exec *Execution) (*RunResult, error)
 }
 
+type InteractiveEngine interface {
+	Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error)
+}
+
 type Execution struct {
 	Name              string
 	Script            string
 	Program           *syntax.File
 	Args              []string
+	StartupOptions    []string
+	Interactive       bool
 	Env               map[string]string
 	Dir               string
 	VisiblePWD        string
@@ -51,11 +57,16 @@ type Execution struct {
 	LookupCNAME       commands.LookupCNAMEFunc
 	ProcessAlive      commands.ProcessAliveFunc
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
+	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
 }
 
 type RunResult struct {
 	FinalEnv    map[string]string
 	ShellExited bool
+}
+
+type InteractiveResult struct {
+	ExitCode int
 }
 
 type resolvedCommand struct {
@@ -82,6 +93,10 @@ func (m *MVdan) Parse(name, script string) (*syntax.File, error) {
 	return m.parser.Parse(strings.NewReader(script), name)
 }
 
+func (m *MVdan) parseUserProgram(name, script string) (*syntax.File, error) {
+	return m.Parse(name, prependRuntimePreludeLines(script))
+}
+
 func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
 	if exec == nil {
 		exec = &Execution{}
@@ -101,7 +116,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 
 	validationProgram := exec.Program
 	if validationProgram == nil {
-		parsed, err := m.Parse(exec.Name, exec.Script)
+		parsed, err := m.parseUserProgram(exec.Name, exec.Script)
 		if err != nil {
 			return nil, err
 		}
@@ -119,19 +134,13 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		}
 		return &RunResult{FinalEnv: envMapFromVars(nil)}, interp.ExitStatus(2)
 	}
-
-	preludeLines := uint(0)
 	program := exec.Program
 	if program == nil {
-		parsed, err := m.Parse(exec.Name, withRuntimePrelude(exec.Dir, exec.VisiblePWD, exec.HasVisiblePWD, exec.Script))
+		parsed, err := m.parseUserProgram(exec.Name, exec.Script)
 		if err != nil {
 			return nil, err
 		}
 		program = parsed
-		preludeLines = runtimePreludeLineCount()
-	}
-	if err := instrumentLoopBudgets(program, exec.Policy); err != nil {
-		return nil, err
 	}
 
 	if exec.Stdin == nil {
@@ -146,8 +155,29 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 	if exec.Trace == nil {
 		exec.Trace = trace.NopRecorder{}
 	}
-	budget := newExecutionBudget(exec.Policy, preludeLines)
+	budget := newExecutionBudget(exec.Policy, runtimePreludeLineCount())
+	if err := instrumentLoopBudgets(program, exec.Policy); err != nil {
+		return nil, err
+	}
 
+	runner, err := interp.New(m.runnerOptions(exec, budget)...)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.bootstrapRunner(ctx, runner, exec); err != nil {
+		return &RunResult{FinalEnv: envMapFromVars(runner.Vars), ShellExited: runner.Exited()}, err
+	}
+	if err := applyRunnerParams(runner, exec.StartupOptions, exec.Args); err != nil {
+		return &RunResult{FinalEnv: envMapFromVars(runner.Vars), ShellExited: runner.Exited()}, err
+	}
+	runErr = runner.Run(ctx, program)
+	return &RunResult{
+		FinalEnv:    envMapFromVars(runner.Vars),
+		ShellExited: runner.Exited(),
+	}, runErr
+}
+
+func (m *MVdan) runnerOptions(exec *Execution, budget *executionBudget) []interp.RunnerOption {
 	options := []interp.RunnerOption{
 		interp.Env(expand.ListEnviron(envPairs(exec.Env)...)),
 		interp.Dir(hostRunnerDir),
@@ -160,19 +190,29 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 			return m.execHandler(exec, budget)
 		}),
 	}
-	if len(exec.Args) > 0 {
-		options = append(options, interp.Params(append([]string{"--"}, exec.Args...)...))
+	if exec.Interactive {
+		options = append(options, interp.Interactive(true))
 	}
+	return options
+}
 
-	runner, err := interp.New(options...)
-	if err != nil {
-		return nil, err
+func runnerParamArgs(startupOptions, args []string) []string {
+	out := make([]string, 0, len(startupOptions)+len(args)+1)
+	for _, option := range startupOptions {
+		if strings.TrimSpace(option) == "" {
+			continue
+		}
+		out = append(out, "-o", option)
 	}
-	runErr = runner.Run(ctx, program)
-	return &RunResult{
-		FinalEnv:    envMapFromVars(runner.Vars),
-		ShellExited: runner.Exited(),
-	}, runErr
+	if len(args) == 0 {
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	out = append(out, "--")
+	out = append(out, args...)
+	return out
 }
 
 func sanitizeRunnerPanic(recovered any) string {
@@ -378,6 +418,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			LookupCNAME:  exec.LookupCNAME,
 			ProcessAlive: exec.ProcessAlive,
 			Exec:         subexecInvoker(exec.Exec, currentEnv, virtualWD),
+			Interact:     interactiveInvoker(exec.Interact, currentEnv, virtualWD),
 			GetRegisteredCommands: func() []string {
 				if exec.Registry == nil {
 					return nil
@@ -441,22 +482,36 @@ func subexecInvoker(execFn func(context.Context, *commands.ExecutionRequest) (*c
 	}
 }
 
+func interactiveInvoker(interactFn func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error), currentEnv map[string]string, currentDir string) func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error) {
+	if interactFn == nil {
+		return nil
+	}
+	return func(ctx context.Context, req *commands.InteractiveRequest) (*commands.InteractiveResult, error) {
+		normalized := normalizeInteractiveRequest(req, currentEnv, currentDir)
+		return interactFn(ctx, normalized)
+	}
+}
+
 func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[string]string, currentDir string) *commands.ExecutionRequest {
 	if req == nil {
 		req = &commands.ExecutionRequest{}
 	}
 
 	out := &commands.ExecutionRequest{
-		Name:       req.Name,
-		Script:     req.Script,
-		Args:       append([]string(nil), req.Args...),
-		Env:        mergeEnv(currentEnv, req.Env),
-		WorkDir:    req.WorkDir,
-		Timeout:    req.Timeout,
-		ReplaceEnv: true,
-		Stdin:      req.Stdin,
-		Stdout:     req.Stdout,
-		Stderr:     req.Stderr,
+		Name:            req.Name,
+		Interpreter:     req.Interpreter,
+		PassthroughArgs: append([]string(nil), req.PassthroughArgs...),
+		Script:          req.Script,
+		Args:            append([]string(nil), req.Args...),
+		StartupOptions:  append([]string(nil), req.StartupOptions...),
+		Env:             mergeEnv(currentEnv, req.Env),
+		WorkDir:         req.WorkDir,
+		Timeout:         req.Timeout,
+		ReplaceEnv:      true,
+		Interactive:     req.Interactive,
+		Stdin:           req.Stdin,
+		Stdout:          req.Stdout,
+		Stderr:          req.Stderr,
 	}
 	if req.ReplaceEnv {
 		out.Env = mergeEnv(nil, req.Env)
@@ -465,6 +520,64 @@ func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[stri
 		out.WorkDir = currentDir
 	}
 	return out
+}
+
+func normalizeInteractiveRequest(req *commands.InteractiveRequest, currentEnv map[string]string, currentDir string) *commands.InteractiveRequest {
+	if req == nil {
+		req = &commands.InteractiveRequest{}
+	}
+	out := &commands.InteractiveRequest{
+		Name:           req.Name,
+		Args:           append([]string(nil), req.Args...),
+		StartupOptions: append([]string(nil), req.StartupOptions...),
+		Env:            mergeEnv(currentEnv, req.Env),
+		WorkDir:        req.WorkDir,
+		ReplaceEnv:     true,
+		Stdin:          req.Stdin,
+		Stdout:         req.Stdout,
+		Stderr:         req.Stderr,
+	}
+	if req.ReplaceEnv {
+		out.Env = mergeEnv(nil, req.Env)
+	}
+	if out.WorkDir == "" {
+		out.WorkDir = currentDir
+	}
+	return out
+}
+
+func applyRunnerParams(runner *interp.Runner, startupOptions, args []string) error {
+	params := runnerParamArgs(startupOptions, args)
+	if len(params) == 0 {
+		return nil
+	}
+	return interp.Params(params...)(runner)
+}
+
+func (m *MVdan) bootstrapRunner(ctx context.Context, runner *interp.Runner, exec *Execution) error {
+	if runner == nil {
+		return nil
+	}
+	bootstrap, err := m.Parse(exec.Name, withRuntimePrelude(exec.Dir, exec.VisiblePWD, exec.HasVisiblePWD, ""))
+	if err != nil {
+		return err
+	}
+	if violation := validateExecutionBudgets(bootstrap, exec.Policy); violation != nil {
+		if exec.Stderr != nil {
+			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
+		}
+		return interp.ExitStatus(126)
+	}
+	if invalid := validateSupportedRedirections(bootstrap); invalid != nil {
+		if exec.Stderr != nil {
+			_, _ = fmt.Fprintln(exec.Stderr, invalid.Error())
+		}
+		return interp.ExitStatus(2)
+	}
+	if err := instrumentLoopBudgets(bootstrap, exec.Policy); err != nil {
+		return err
+	}
+	return runner.Run(ctx, bootstrap)
 }
 
 func mergeEnv(base, override map[string]string) map[string]string {
@@ -964,6 +1077,14 @@ func (b *executionBudget) beforeLoopIteration(ctx context.Context, args []string
 
 func runtimePreludeLineCount() uint {
 	return uint(strings.Count(withRuntimePrelude("/", "", false, ""), "\n"))
+}
+
+func prependRuntimePreludeLines(script string) string {
+	count := runtimePreludeLineCount()
+	if count == 0 || script == "" {
+		return script
+	}
+	return strings.Repeat("\n", int(count)) + script
 }
 
 func isInternalHelperCommand(name string) bool {

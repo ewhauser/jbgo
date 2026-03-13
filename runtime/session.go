@@ -14,14 +14,25 @@ import (
 )
 
 func (s *Session) Exec(ctx context.Context, req *ExecutionRequest) (*ExecutionResult, error) {
-	if isReentrantSessionExec(ctx, s) {
+	if isReentrantSessionCall(ctx, s) {
 		return s.exec(ctx, req)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.exec(withSessionExecContext(ctx, s), req)
+	return s.exec(withSessionCallContext(ctx, s), req)
+}
+
+func (s *Session) Interact(ctx context.Context, req *InteractiveRequest) (*InteractiveResult, error) {
+	if isReentrantSessionCall(ctx, s) {
+		return s.interact(ctx, req)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.interact(withSessionCallContext(ctx, s), req)
 }
 
 func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionResult, error) {
@@ -65,22 +76,25 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 
 	started := time.Now().UTC()
 	runResult, runErr := s.cfg.Engine.Run(ctx, &shell.Execution{
-		Name:          defaultName(req.Name),
-		Script:        req.Script,
-		Args:          req.Args,
-		Env:           execEnv,
-		Dir:           workDir,
-		VisiblePWD:    visiblePWD,
-		HasVisiblePWD: hasVisiblePWD,
-		Stdin:         stdinOrEmpty(req.Stdin),
-		Stdout:        stdoutWriter,
-		Stderr:        stderrWriter,
-		FS:            s.fs,
-		Network:       s.cfg.NetworkClient,
-		Registry:      s.cfg.Registry,
-		Policy:        s.cfg.Policy,
-		Trace:         recorder,
-		Exec:          s.subexecCallback,
+		Name:           defaultName(req.Name),
+		Script:         req.Script,
+		Args:           req.Args,
+		StartupOptions: req.StartupOptions,
+		Interactive:    req.Interactive,
+		Env:            execEnv,
+		Dir:            workDir,
+		VisiblePWD:     visiblePWD,
+		HasVisiblePWD:  hasVisiblePWD,
+		Stdin:          stdinOrEmpty(req.Stdin),
+		Stdout:         stdoutWriter,
+		Stderr:         stderrWriter,
+		FS:             s.fs,
+		Network:        s.cfg.NetworkClient,
+		Registry:       s.cfg.Registry,
+		Policy:         s.cfg.Policy,
+		Trace:          recorder,
+		Exec:           s.subexecCallback,
+		Interact:       s.interactCallback,
 	})
 	finished := time.Now().UTC()
 
@@ -109,8 +123,75 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	return result, nil
 }
 
+func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*InteractiveResult, error) {
+	if req == nil {
+		req = &InteractiveRequest{}
+	}
+
+	workDir := resolveWorkDir(s.cfg.FileSystem.WorkingDir, req.WorkDir)
+	execReq := &ExecutionRequest{
+		Env:        req.Env,
+		WorkDir:    req.WorkDir,
+		ReplaceEnv: req.ReplaceEnv,
+	}
+	execEnv := executionEnv(s.cfg.BaseEnv, execReq)
+	visiblePWD, hasVisiblePWD := execEnv["PWD"]
+	execEnv["PWD"] = workDir
+	if _, ok := execEnv["TTY"]; !ok {
+		execEnv["TTY"] = "/dev/tty"
+	}
+	if !s.bootAt.IsZero() {
+		execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
+	}
+
+	if err := initializeSandboxLayout(ctx, s.fs, execEnv, workDir, s.cfg.Registry.Names()); err != nil {
+		return nil, err
+	}
+	if err := s.fs.Chdir(workDir); err != nil {
+		return nil, err
+	}
+
+	engine, ok := s.cfg.Engine.(shell.InteractiveEngine)
+	if !ok {
+		return nil, fmt.Errorf("shell engine does not support interactive execution")
+	}
+
+	recorder := trace.NewBuffer(
+		trace.WithSessionID(s.id),
+		trace.WithExecutionID(nextTraceID("exec")),
+	)
+	result, err := engine.Interact(ctx, &shell.Execution{
+		Name:           defaultName(req.Name),
+		Args:           req.Args,
+		StartupOptions: req.StartupOptions,
+		Interactive:    true,
+		Env:            execEnv,
+		Dir:            workDir,
+		VisiblePWD:     visiblePWD,
+		HasVisiblePWD:  hasVisiblePWD,
+		Stdin:          stdinOrEmpty(req.Stdin),
+		Stdout:         writerOrDiscard(req.Stdout),
+		Stderr:         writerOrDiscard(req.Stderr),
+		FS:             s.fs,
+		Network:        s.cfg.NetworkClient,
+		Registry:       s.cfg.Registry,
+		Policy:         s.cfg.Policy,
+		Trace:          recorder,
+		Exec:           s.subexecCallback,
+		Interact:       s.interactCallback,
+	})
+	if err != nil {
+		return normalizeInteractiveResult(result), err
+	}
+	return normalizeInteractiveResult(result), nil
+}
+
 func (s *Session) subexecCallback(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
 	return s.exec(ctx, req)
+}
+
+func (s *Session) interactCallback(ctx context.Context, req *commands.InteractiveRequest) (*commands.InteractiveResult, error) {
+	return s.interact(ctx, req)
 }
 
 func (s *Session) FileSystem() gbfs.FileSystem {
@@ -189,14 +270,28 @@ func timeoutMessage(timeout time.Duration) string {
 
 type sessionExecContextKey struct{}
 
-func withSessionExecContext(ctx context.Context, session *Session) context.Context {
+func withSessionCallContext(ctx context.Context, session *Session) context.Context {
 	return context.WithValue(ctx, sessionExecContextKey{}, session)
 }
 
-func isReentrantSessionExec(ctx context.Context, session *Session) bool {
+func isReentrantSessionCall(ctx context.Context, session *Session) bool {
 	if ctx == nil {
 		return false
 	}
 	current, ok := ctx.Value(sessionExecContextKey{}).(*Session)
 	return ok && current == session
+}
+
+func writerOrDiscard(w io.Writer) io.Writer {
+	if w == nil {
+		return io.Discard
+	}
+	return w
+}
+
+func normalizeInteractiveResult(result *shell.InteractiveResult) *InteractiveResult {
+	if result == nil {
+		return &InteractiveResult{}
+	}
+	return &InteractiveResult{ExitCode: result.ExitCode}
 }

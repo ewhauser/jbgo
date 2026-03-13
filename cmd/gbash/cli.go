@@ -59,7 +59,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 	}
 
 	if parsed.Source == commands.BashSourceStdin && (parsed.Interactive || stdinTTY) {
-		return runInteractiveShell(ctx, rt, stdin, stdout, stderr, parsed.Prelude())
+		return runInteractiveShell(ctx, rt, parsed, stdin, stdout, stderr)
 	}
 	return runBashInvocation(ctx, rt, parsed, stdin, stdout, stderr)
 }
@@ -130,7 +130,7 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *commands.
 
 	var (
 		script      string
-		execStdin   io.Reader = stdin
+		execStdin   = stdin
 		readErr     error
 		missingPath string
 	)

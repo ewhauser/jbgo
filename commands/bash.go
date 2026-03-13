@@ -27,7 +27,10 @@ func (c *Bash) Run(ctx context.Context, inv *Invocation) error {
 }
 
 func (c *Bash) Spec() CommandSpec {
-	spec := BashInvocationSpec(BashInvocationConfig{Name: c.name})
+	spec := BashInvocationSpec(BashInvocationConfig{
+		Name:             c.name,
+		AllowInteractive: true,
+	})
 	spec.HelpRenderer = func(w io.Writer, spec CommandSpec) error {
 		_, err := fmt.Fprintf(w, "usage: %s\n", spec.Usage)
 		return err
@@ -43,15 +46,44 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return fmt.Errorf("%s: subexec callback missing", c.name)
 	}
 
-	parsed, err := bashInvocationFromParsed(BashInvocationConfig{Name: c.name}, matches, inv.Args)
+	parsed, err := bashInvocationFromParsed(BashInvocationConfig{
+		Name:             c.name,
+		AllowInteractive: true,
+	}, matches, inv.Args)
 	if err != nil {
 		return exitf(inv, 2, "%v", err)
 	}
 	switch parsed.Action {
 	case "help":
-		return RenderBashInvocationUsage(inv.Stdout, BashInvocationConfig{Name: c.name})
+		return RenderBashInvocationUsage(inv.Stdout, BashInvocationConfig{
+			Name:             c.name,
+			AllowInteractive: true,
+		})
 	case "version":
 		return RenderSimpleVersion(inv.Stdout, c.name)
+	}
+	if parsed.Interactive && parsed.Source == BashSourceStdin {
+		if inv.Interact == nil {
+			return fmt.Errorf("%s: interactive callback missing", c.name)
+		}
+		result, err := inv.Interact(ctx, &InteractiveRequest{
+			Name:           parsed.ExecutionName,
+			Args:           append([]string(nil), parsed.Args...),
+			StartupOptions: append([]string(nil), parsed.StartupOptions...),
+			Env:            inv.Env,
+			WorkDir:        inv.Cwd,
+			ReplaceEnv:     true,
+			Stdin:          inv.Stdin,
+			Stdout:         inv.Stdout,
+			Stderr:         inv.Stderr,
+		})
+		if err != nil {
+			return err
+		}
+		if result == nil {
+			return nil
+		}
+		return exitForExecutionResult(&ExecutionResult{ExitCode: result.ExitCode})
 	}
 	switch parsed.Source {
 	case BashSourceCommandString:

@@ -26,6 +26,7 @@ type BashInvocation struct {
 	Action         string
 	Interactive    bool
 	Source         BashSourceMode
+	ExecutionName  string
 	CommandString  string
 	ScriptPath     string
 	Args           []string
@@ -82,67 +83,31 @@ func BashInvocationSpec(cfg BashInvocationConfig) CommandSpec {
 	}
 }
 
-func RenderBashInvocationUsage(w io.Writer, cfg BashInvocationConfig) error {
-	_, err := fmt.Fprintf(w, "usage: %s\n", bashInvocationUsage(normalizeBashInvocationConfig(cfg)))
-	return err
-}
-
-func (inv *BashInvocation) Prelude() string {
-	if inv == nil || len(inv.StartupOptions) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for _, name := range inv.StartupOptions {
-		if name == "" {
-			continue
-		}
-		_, _ = fmt.Fprintf(&b, "set -o %s\n", name)
-	}
-	return b.String()
-}
-
-func (inv *BashInvocation) ApplyPrelude(script string) string {
-	if inv == nil || len(inv.StartupOptions) == 0 {
-		return script
-	}
-	return inv.Prelude() + script
-}
-
-func (inv *BashInvocation) ExecutionName() string {
-	if inv == nil {
-		return "stdin"
-	}
-	switch inv.Source {
-	case BashSourceCommandString:
-		return inv.Name
-	case BashSourceFile:
-		if strings.TrimSpace(inv.ScriptPath) != "" {
-			return inv.ScriptPath
-		}
-		return inv.Name
-	default:
-		return "stdin"
-	}
-}
-
 func (inv *BashInvocation) BuildExecutionRequest(env map[string]string, cwd string, stdin io.Reader, script string) *ExecutionRequest {
 	if inv == nil {
 		return &ExecutionRequest{Script: script, Stdin: stdin}
 	}
 	req := &ExecutionRequest{
-		Name:            inv.ExecutionName(),
+		Name:            inv.ExecutionName,
 		Interpreter:     inv.Name,
 		PassthroughArgs: append([]string(nil), inv.RawArgs...),
-		Script:          inv.ApplyPrelude(script),
+		Script:          script,
 		Args:            append([]string(nil), inv.Args...),
+		StartupOptions:  append([]string(nil), inv.StartupOptions...),
 		Env:             env,
 		WorkDir:         cwd,
+		Interactive:     inv.Interactive,
 		Stdin:           stdin,
 	}
 	if len(req.PassthroughArgs) == 0 {
 		req.PassthroughArgs = []string{"-s"}
 	}
 	return req
+}
+
+func RenderBashInvocationUsage(w io.Writer, cfg BashInvocationConfig) error {
+	_, err := fmt.Fprintf(w, "usage: %s\n", bashInvocationUsage(normalizeBashInvocationConfig(cfg)))
+	return err
 }
 
 func normalizeBashInvocationConfig(cfg BashInvocationConfig) BashInvocationConfig {
@@ -203,15 +168,19 @@ func bashInvocationFromParsed(cfg BashInvocationConfig, matches *ParsedCommand, 
 	case matches.Has("command"):
 		out.Source = BashSourceCommandString
 		out.CommandString = matches.Value("command")
+		out.ExecutionName = out.Name
 		if len(positionals) > 0 {
+			out.ExecutionName = positionals[0]
 			out.Args = append(out.Args, positionals[1:]...)
 		}
 	case matches.Has("stdin") || len(positionals) == 0:
 		out.Source = BashSourceStdin
+		out.ExecutionName = out.Name
 		out.Args = append(out.Args, positionals...)
 	default:
 		out.Source = BashSourceFile
 		out.ScriptPath = positionals[0]
+		out.ExecutionName = out.ScriptPath
 		out.Args = append(out.Args, positionals[1:]...)
 	}
 	return out, nil

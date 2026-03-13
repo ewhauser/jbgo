@@ -81,10 +81,53 @@ func TestRunCLICommandStringSupportsGroupedShortFlags(t *testing.T) {
 	}
 }
 
+func TestRunCLICommandStringUsesBashArg0Semantics(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantOut  string
+		wantCode int
+	}{
+		{
+			name:     "default argv0 is invocation name",
+			args:     []string{"-c", `printf '%s|%s\n' "$0" "$1"`},
+			wantOut:  "gbash|\n",
+			wantCode: 0,
+		},
+		{
+			name:     "explicit argv0 shifts remaining args",
+			args:     []string{"-c", `printf '%s|%s\n' "$0" "$1"`, "name", "value"},
+			wantOut:  "name|value\n",
+			wantCode: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout strings.Builder
+			var stderr strings.Builder
+
+			exitCode, err := runCLI(context.Background(), "gbash", tc.args, strings.NewReader(""), &stdout, &stderr, false)
+			if err != nil {
+				t.Fatalf("runCLI() error = %v", err)
+			}
+			if exitCode != tc.wantCode {
+				t.Fatalf("exitCode = %d, want %d; stderr=%q", exitCode, tc.wantCode, stderr.String())
+			}
+			if got := stdout.String(); got != tc.wantOut {
+				t.Fatalf("stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := stderr.String(); got != "" {
+				t.Fatalf("stderr = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestRunCLISupportsScriptFileArgs(t *testing.T) {
 	tmp := t.TempDir()
 	scriptPath := filepath.Join(tmp, "script.sh")
-	if err := os.WriteFile(scriptPath, []byte("echo \"$1:$2\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(scriptPath, []byte("printf '%s|%s|%s\\n' \"$0\" \"$1\" \"$2\"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
 	}
 
@@ -98,7 +141,7 @@ func TestRunCLISupportsScriptFileArgs(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
 	}
-	if got, want := stdout.String(), "left:right\n"; got != want {
+	if got, want := stdout.String(), scriptPath+"|left|right\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {
@@ -110,14 +153,33 @@ func TestRunCLIDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-s", "value"}, strings.NewReader("echo \"$1\"\n"), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"-s", "value"}, strings.NewReader("printf '%s|%s\\n' \"$0\" \"$1\"\n"), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
 	}
-	if got, want := stdout.String(), "value\n"; got != want {
+	if got, want := stdout.String(), "gbash|value\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLIImplicitStdinUsesInvocationNameAsArg0(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", nil, strings.NewReader("printf '%s\\n' \"$0\"\n"), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	}
+	if got, want := stdout.String(), "gbash\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {
@@ -138,6 +200,105 @@ func TestRunCLISupportsDashOPipefail(t *testing.T) {
 	}
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout = %q, want empty", got)
+	}
+}
+
+func TestRunCLIStartupOptionsAffectExecution(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	tests := []struct {
+		name      string
+		args      []string
+		wantOut   string
+		stderrSub string
+	}{
+		{
+			name:    "noexec",
+			args:    []string{"-n", "-c", "echo should-not-run"},
+			wantOut: "",
+		},
+		{
+			name:    "allexport",
+			args:    []string{"-a", "-c", "FOO=bar env | grep '^FOO=bar$'"},
+			wantOut: "FOO=bar\n",
+		},
+		{
+			name:    "noglob",
+			args:    []string{"-f", "-c", "printf '%s\\n' /tmp/*"},
+			wantOut: "/tmp/*\n",
+		},
+		{
+			name:      "xtrace",
+			args:      []string{"-x", "-c", "echo traced"},
+			wantOut:   "traced\n",
+			stderrSub: "+ echo traced",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout strings.Builder
+			var stderr strings.Builder
+
+			exitCode, err := runCLI(context.Background(), "gbash", tc.args, strings.NewReader(""), &stdout, &stderr, false)
+			if err != nil {
+				t.Fatalf("runCLI() error = %v", err)
+			}
+			if exitCode != 0 {
+				t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+			}
+			if got := stdout.String(); got != tc.wantOut {
+				t.Fatalf("stdout = %q, want %q", got, tc.wantOut)
+			}
+			if tc.stderrSub != "" && !strings.Contains(stderr.String(), tc.stderrSub) {
+				t.Fatalf("stderr = %q, want substring %q", stderr.String(), tc.stderrSub)
+			}
+		})
+	}
+}
+
+func TestRunCLIInteractiveCommandStringUsesInteractiveShellSemantics(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"-ic", "alias hi='echo alias-ok'\nhi"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "alias-ok\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLIInteractiveScriptUsesInteractiveShellSemantics(t *testing.T) {
+	tmp := t.TempDir()
+	scriptPath := filepath.Join(tmp, "script.sh")
+	if err := os.WriteFile(scriptPath, []byte("alias hi='echo alias-ok'\nhi\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"-i", scriptPath}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "alias-ok\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
 

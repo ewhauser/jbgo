@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -138,5 +139,36 @@ func TestReplaceEnvDoesNotUseSessionBaseEnv(t *testing.T) {
 	}
 	if _, ok := result.FinalEnv["FOO"]; ok {
 		t.Fatalf("FinalEnv should not contain FOO when ReplaceEnv is true: %#v", result.FinalEnv)
+	}
+}
+
+func TestSessionInteractPersistsStateAcrossEntries(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	result, err := session.Interact(context.Background(), &InteractiveRequest{
+		StartupOptions: []string{"nounset"},
+		Stdin:          strings.NewReader("set +o nounset\ncd /tmp\npwd\necho X${MISSING}Y\nexit 7\n"),
+		Stdout:         &stdout,
+		Stderr:         &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Interact() error = %v", err)
+	}
+	if result == nil {
+		t.Fatalf("Interact() result = nil")
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7; stdout=%q stderr=%q", result.ExitCode, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	for _, want := range []string{"/tmp\n", "XY\n"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
+		}
 	}
 }

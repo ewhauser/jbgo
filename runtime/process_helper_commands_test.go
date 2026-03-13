@@ -1269,7 +1269,7 @@ func TestBashRunsNestedCommandString(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "bash -c 'echo \"$1\"' ignored value\n",
+		Script: "bash -c 'printf \"%s|%s\\n\" \"$0\" \"$1\"' ignored value\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -1277,7 +1277,24 @@ func TestBashRunsNestedCommandString(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "value\n"; got != want {
+	if got, want := result.Stdout, "ignored|value\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestBashCommandStringDefaultsArg0ToInvocationName(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -c 'printf \"%s|%s\\n\" \"$0\" \"$1\"'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "bash|\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1286,7 +1303,7 @@ func TestShRunsScriptFromStdin(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf 'echo from-stdin\\n' | sh\n",
+		Script: "cat <<'EOF' | sh\nprintf \"%s\\n\" \"$0\"\nEOF\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -1294,7 +1311,7 @@ func TestShRunsScriptFromStdin(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "from-stdin\n"; got != want {
+	if got, want := result.Stdout, "sh\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1311,9 +1328,12 @@ func TestBashHelpUsesSpecParser(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := "usage: bash [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
+	want := "usage: bash [-i] [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-i] [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if strings.Contains(result.Stdout, "--interactive") {
+		t.Fatalf("Stdout = %q, did not expect long interactive flag", result.Stdout)
 	}
 }
 
@@ -1321,7 +1341,7 @@ func TestBashRunsScriptFileAndPassesArgs(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf 'echo \"$1:$2\"\\n' > /tmp/script.sh\nbash /tmp/script.sh left right\n",
+		Script: "cat > /tmp/script.sh <<'EOF'\nprintf \"%s|%s|%s\\n\" \"$0\" \"$1\" \"$2\"\nEOF\nbash /tmp/script.sh left right\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -1329,7 +1349,7 @@ func TestBashRunsScriptFileAndPassesArgs(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "left:right\n"; got != want {
+	if got, want := result.Stdout, "/tmp/script.sh|left|right\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1355,7 +1375,7 @@ func TestShDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf 'echo \"$1\"\\n' | sh -s value\n",
+		Script: "cat <<'EOF' | sh -s value\nprintf \"%s|%s\\n\" \"$0\" \"$1\"\nEOF\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -1363,7 +1383,7 @@ func TestShDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "value\n"; got != want {
+	if got, want := result.Stdout, "sh|value\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1402,6 +1422,144 @@ func TestBashDashOpipefailAffectsCommandString(t *testing.T) {
 	}
 	if got := result.Stdout; got != "" {
 		t.Fatalf("Stdout = %q, want empty", got)
+	}
+}
+
+func TestBashStartupOptionsAffectExecution(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name      string
+		script    string
+		wantOut   string
+		stderrSub string
+	}{
+		{
+			name:    "noexec",
+			script:  "bash -n -c 'echo should-not-run'\n",
+			wantOut: "",
+		},
+		{
+			name:    "allexport",
+			script:  "bash -a -c 'FOO=bar env | grep \"^FOO=bar$\"'\n",
+			wantOut: "FOO=bar\n",
+		},
+		{
+			name:    "noglob",
+			script:  "bash -f -c 'printf \"%s\\n\" /tmp/*'\n",
+			wantOut: "/tmp/*\n",
+		},
+		{
+			name:      "xtrace",
+			script:    "bash -x -c 'echo traced'\n",
+			wantOut:   "traced\n",
+			stderrSub: "+ echo traced",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := rt.Run(context.Background(), &ExecutionRequest{Script: tc.script})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if tc.stderrSub != "" && !strings.Contains(result.Stderr, tc.stderrSub) {
+				t.Fatalf("Stderr = %q, want substring %q", result.Stderr, tc.stderrSub)
+			}
+		})
+	}
+}
+
+func TestBashInteractiveStdinPersistsStateAndStartupOptions(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cat <<'EOF' | bash -iu\npwd\ncd /tmp\npwd\nalias hi=\"echo alias-ok\"\nhi\nset +o nounset\necho X${MISSING}Y\nexit 7\nEOF\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	for _, want := range []string{
+		"~$ /home/agent\n",
+		"/tmp$ /tmp\n",
+		"alias-ok\n",
+		"XY\n",
+	} {
+		if !strings.Contains(result.Stdout, want) {
+			t.Fatalf("Stdout = %q, want substring %q", result.Stdout, want)
+		}
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestBashInteractiveCommandStringUsesInteractiveSemantics(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -ic 'alias hi=\"echo alias-ok\"\nhi'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "alias-ok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestBashInteractiveScriptUsesInteractiveSemantics(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'alias hi=\"echo alias-ok\"\\nhi\\n' > /tmp/script.sh\nbash -i /tmp/script.sh\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "alias-ok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestShInteractiveCommandStringUsesInteractiveSemantics(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "sh -ic 'alias hi=\"echo alias-ok\"\nhi'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "alias-ok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
 	}
 }
 

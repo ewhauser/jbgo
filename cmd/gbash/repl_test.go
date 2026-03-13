@@ -120,6 +120,28 @@ func TestRunCLIInteractiveProvidesVirtualTTY(t *testing.T) {
 	}
 }
 
+func TestRunCLIInteractiveStartupOptionsPersistAcrossEntries(t *testing.T) {
+	t.Parallel()
+
+	input := strings.NewReader("set +o nounset\necho X${MISSING}Y\nexit\n")
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"-iu"}, input, &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "XY\n~$ ") {
+		t.Fatalf("stdout = %q, want nounset change to persist", got)
+	}
+}
+
 type chunkReader struct {
 	chunks []string
 	index  int
