@@ -302,6 +302,54 @@ func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
 	}
 }
 
+func TestRunnerHostFallbackAllowsRegistryCommandNamesOutsideShimDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	fsys, err := compatfs.New()
+	if err != nil {
+		t.Fatalf("compatfs.New() error = %v", err)
+	}
+	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
+	hostDir := filepath.Join(tmp, "host-bin")
+	hostPath := commandDir + string(os.PathListSeparator) + hostDir
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(hostDir) error = %v", err)
+	}
+	writeExecutableFile(t, filepath.Join(hostDir, "sed"), "#!/bin/sh\nprintf 'host-sed\\n'\n")
+
+	runner, err := New(&Config{
+		FS:                fsys,
+		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
+		DefaultDir:        tmp,
+		BuiltinCommandDir: commandDir,
+		ResolverMode:      shell.ResolverRegistryThenHostFallback,
+		HostExecutor:      shell.NewOSHostExecutor(),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := runner.Exec(context.Background(), &commands.ExecutionRequest{
+		Script: "sed\n",
+		Env: map[string]string{
+			"HOME": tmp,
+			"PATH": hostPath,
+		},
+		ReplaceEnv: true,
+		WorkDir:    tmp,
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "host-sed\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestRunnerHostFallbackDeniesReservedGNUCommands(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

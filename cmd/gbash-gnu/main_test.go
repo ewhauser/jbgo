@@ -392,16 +392,10 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	makeBin := filepath.Join(workDir, "fake-make.sh")
 	envPath := filepath.Join(workDir, "config-shell.txt")
 	resolverModePath := filepath.Join(workDir, "resolver-mode.txt")
-	reservedPath := filepath.Join(workDir, "reserved-path.txt")
 	logPath := filepath.Join(workDir, "make.log")
-	hookDir := filepath.Join(workDir, "build-aux", "gbash-harness")
-	if err := os.MkdirAll(hookDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(hookDir) error = %v", err)
-	}
 	script := "#!/bin/sh\n" +
 		"printf '%s\\n' \"$CONFIG_SHELL\" > " + shellSingleQuoteForScript(envPath) + "\n" +
 		"printf '%s\\n' \"$GBASH_COMPAT_RESOLVER_MODE\" > " + shellSingleQuoteForScript(resolverModePath) + "\n" +
-		"printf '%s\\n' \"$GBASH_COMPAT_RESERVED_COMMANDS_FILE\" > " + shellSingleQuoteForScript(reservedPath) + "\n" +
 		"printf 'PASS: tests/misc/example.sh\\n'\n"
 	if err := os.WriteFile(makeBin, []byte(script), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake make) error = %v", err)
@@ -427,11 +421,6 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	} else if got := string(data); got != "registry-then-host-fallback\n" {
 		t.Fatalf("GBASH_COMPAT_RESOLVER_MODE = %q, want %q", got, "registry-then-host-fallback\\n")
 	}
-	if data, err := os.ReadFile(reservedPath); err != nil {
-		t.Fatalf("ReadFile(reserved path) error = %v", err)
-	} else if got := string(data); got != filepath.Join(workDir, "build-aux", "gbash-harness", "gnu-programs.txt")+"\n" {
-		t.Fatalf("GBASH_COMPAT_RESERVED_COMMANDS_FILE = %q", got)
-	}
 }
 
 func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
@@ -445,7 +434,10 @@ func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
 		t.Fatalf("WriteFile(gbashBin) error = %v", err)
 	}
 
-	err := prepareProgramDir(workDir, gbashBin, []string{"sort", "futuregnu"})
+	err := prepareProgramDir(workDir, gbashBin, utilityShimNames([]utilityManifest{
+		{Name: "sort"},
+		{Name: "futuregnu"},
+	}))
 	if err != nil {
 		t.Fatalf("prepareProgramDir() error = %v", err)
 	}
@@ -460,12 +452,17 @@ func TestPrepareProgramDirAddsCompatShellHelpers(t *testing.T) {
 			t.Fatalf("%q is not a symlink", path)
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(workDir, "build-aux", "gbash-harness", "gnu-programs.txt"))
-	if err != nil {
-		t.Fatalf("ReadFile(gnu-programs.txt) error = %v", err)
-	}
-	if got := string(data); got != "futuregnu\nsort\n" {
-		t.Fatalf("gnu-programs.txt = %q, want sorted reserved program list", got)
+}
+
+func TestUtilityShimNamesIncludesHelpersAndDeduplicates(t *testing.T) {
+	got := utilityShimNames([]utilityManifest{
+		{Name: "sort"},
+		{Name: "ginstall"},
+		{Name: "sort"},
+	})
+	want := []string{"bash", "ginstall", "sh", "sort"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("utilityShimNames() = %#v, want %#v", got, want)
 	}
 }
 func TestPrepareWorkDirPreservesFileTimes(t *testing.T) {

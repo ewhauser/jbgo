@@ -1,28 +1,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/compatshims"
 )
-
-func listGNUPrograms(ctx context.Context, workDir string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, filepath.Join(workDir, "build-aux", "gen-lists-of-programs.sh"), "--list-progs")
-	cmd.Dir = workDir
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("list GNU programs: %w", err)
-	}
-	lines := strings.Fields(string(out))
-	sort.Strings(lines)
-	return lines, nil
-}
 
 func prepareProgramDir(workDir, gbashBin string, programs []string) error {
 	srcDir := filepath.Join(workDir, "src")
@@ -34,14 +20,7 @@ func prepareProgramDir(workDir, gbashBin string, programs []string) error {
 	if err := compatshims.SymlinkCommands(srcDir, gbashBin, programs); err != nil {
 		return err
 	}
-	helperShells := compatHelperShells()
-	if err := compatshims.SymlinkCommands(srcDir, gbashBin, helperShells); err != nil {
-		return err
-	}
-	if err := compatshims.SymlinkCommands(srcDir, gbashBin, []string{"ginstall"}); err != nil {
-		return err
-	}
-	return writeGNUProgramList(workDir, programs)
+	return nil
 }
 
 func compatHelperShells() []string {
@@ -54,14 +33,6 @@ func compatConfigShellPath(workDir string) (string, error) {
 		return "", fmt.Errorf("prepare compat config shell: %w", err)
 	}
 	return path, nil
-}
-
-func writeGNUProgramList(workDir string, programs []string) error {
-	hookDir := filepath.Join(workDir, "build-aux", "gbash-harness")
-	if err := os.MkdirAll(hookDir, 0o755); err != nil {
-		return err
-	}
-	return writeLines(filepath.Join(hookDir, "gnu-programs.txt"), programs)
 }
 
 func disableCheckRebuild(workDir string) error {
@@ -77,14 +48,30 @@ func disableCheckRebuild(workDir string) error {
 	return os.WriteFile(makefilePath, []byte(updated), 0o644)
 }
 
-func writeLines(path string, lines []string) error {
-	sorted := append([]string(nil), lines...)
-	sort.Strings(sorted)
-	data := strings.Join(sorted, "\n")
-	if data != "" {
-		data += "\n"
+func utilityShimNames(utilities []utilityManifest) []string {
+	seen := make(map[string]struct{}, len(utilities)+3)
+	out := make([]string, 0, len(utilities)+3)
+
+	for _, name := range append(compatHelperShells(), "ginstall") {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
 	}
-	return os.WriteFile(path, []byte(data), 0o644)
+	for _, utility := range utilities {
+		name := strings.TrimSpace(utility.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func shellSingleQuoteForScript(value string) string {

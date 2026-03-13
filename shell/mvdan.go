@@ -494,11 +494,6 @@ func hostFallbackDenied(exec *Execution, name string) bool {
 	if interp.IsBuiltin(base) && shouldRewriteBuiltin(base) {
 		return true
 	}
-	if exec.Registry != nil {
-		if _, ok := exec.Registry.Lookup(base); ok {
-			return true
-		}
-	}
 	_, reserved := exec.ReservedCommands[base]
 	return reserved
 }
@@ -665,6 +660,9 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 	if err != nil || info.IsDir() {
 		return nil, false, nil
 	}
+	if !registryPathAllowed(exec, fullPath) {
+		return nil, false, nil
+	}
 
 	resolvedName := path.Base(fullPath)
 	cmd, ok := exec.Registry.Lookup(resolvedName)
@@ -737,6 +735,18 @@ func handlerState(ctx context.Context, exec *Execution) resolvedHandlerState {
 		Dir:    exec.Dir,
 		Stderr: exec.Stderr,
 	}
+}
+
+func registryPathAllowed(exec *Execution, fullPath string) bool {
+	if exec == nil {
+		return true
+	}
+	builtinDir := builtinCommandDir(exec)
+	if builtinDir == "/" {
+		return true
+	}
+	fullPath = gbfs.Clean(fullPath)
+	return strings.HasPrefix(fullPath, builtinDir+"/")
 }
 
 func optionalHandlerCtx(ctx context.Context) (_ interp.HandlerContext, ok bool) {

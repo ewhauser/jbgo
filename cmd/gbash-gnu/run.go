@@ -171,11 +171,7 @@ func prepareExecutionWorkDir(ctx context.Context, mf *manifest, makeBin, cacheDi
 	return workDir, nil
 }
 
-func prepareExecutionPlan(ctx context.Context, mf *manifest, env *executionEnv, opts *options) (*executionPlan, error) {
-	programs, err := listGNUPrograms(ctx, env.workDir)
-	if err != nil {
-		return nil, err
-	}
+func prepareExecutionPlan(_ context.Context, mf *manifest, env *executionEnv, opts *options) (*executionPlan, error) {
 	selectedUtilities, err := selectUtilities(mf, opts.utils)
 	if err != nil {
 		return nil, err
@@ -185,7 +181,7 @@ func prepareExecutionPlan(ctx context.Context, mf *manifest, env *executionEnv, 
 	if len(explicitTests) != 0 {
 		runTargets = []utilityManifest{{Name: "explicit-tests"}}
 	}
-	if err := prepareProgramDir(env.workDir, env.gbashBin, programs); err != nil {
+	if err := prepareProgramDir(env.workDir, env.gbashBin, utilityShimNames(selectedUtilities)); err != nil {
 		return nil, err
 	}
 	configShell, err := compatConfigShellPath(env.workDir)

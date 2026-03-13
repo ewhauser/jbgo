@@ -206,6 +206,7 @@ func DefaultRegistry() *Registry {
 		NewChmod(),
 		NewChown(),
 		NewInstall(),
+		NewGInstall(),
 		NewKill(),
 		NewMkdir(),
 		NewLogname(),
