@@ -78,11 +78,14 @@ func copyTree(ctx context.Context, inv *Invocation, srcAbs, dstAbs string) error
 		return err
 	}
 	for _, entry := range entries {
-		childSrc := path.Join(srcAbs, entry.Name())
-		childDst := path.Join(dstAbs, entry.Name())
-		childInfo, _, err := statPath(ctx, inv, childSrc)
-		if err != nil {
-			return err
+		childSrc := joinChildPath(srcAbs, entry.Name())
+		childDst := joinChildPath(dstAbs, entry.Name())
+		childInfo, infoErr := entry.Info()
+		if entry.Type()&stdfs.ModeSymlink != 0 || infoErr != nil {
+			childInfo, _, err = statPath(ctx, inv, childSrc)
+			if err != nil {
+				return err
+			}
 		}
 		if childInfo.IsDir() {
 			if err := copyTree(ctx, inv, childSrc, childDst); err != nil {

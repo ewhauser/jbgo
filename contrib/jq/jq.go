@@ -98,6 +98,10 @@ func (c *JQ) Run(ctx context.Context, inv *commands.Invocation) error {
 		return exitf(inv, 3, "jq: compile error: %v", err)
 	}
 
+	if canStreamJQInputs(&opts) {
+		return runJQInputStream(ctx, inv, code, &opts, inputs, variableValues)
+	}
+
 	values, err := collectJQInputs(ctx, inv, &opts, inputs)
 	if err != nil {
 		return err
@@ -124,6 +128,10 @@ func (c *JQ) Run(ctx context.Context, inv *commands.Invocation) error {
 		}
 	}
 	return nil
+}
+
+func canStreamJQInputs(opts *jqOptions) bool {
+	return opts != nil && !opts.nullInput && !opts.rawInput && !opts.slurp
 }
 
 func parseJQArgs(inv *commands.Invocation) (opts jqOptions, filter string, inputs []string, err error) {
@@ -503,6 +511,89 @@ func readJQInputSources(ctx context.Context, inv *commands.Invocation, inputs []
 	return sources, nil
 }
 
+func runJQInputStream(ctx context.Context, inv *commands.Invocation, code *gojq.Code, opts *jqOptions, inputs []string, variableValues []any) error {
+	hadOutput := false
+	var lastValue any
+
+	stopped, err := streamJQJSONInputs(ctx, inv, inputs, func(value any) (bool, error) {
+		return runJQQuery(ctx, inv, code, value, variableValues, opts, &hadOutput, &lastValue)
+	})
+	if err != nil {
+		return err
+	}
+	if stopped {
+		return nil
+	}
+
+	if opts.exitStatus {
+		switch {
+		case !hadOutput:
+			return &commands.ExitError{Code: 4}
+		case lastValue == nil || lastValue == false:
+			return &commands.ExitError{Code: 1}
+		}
+	}
+	return nil
+}
+
+func streamJQJSONInputs(ctx context.Context, inv *commands.Invocation, inputs []string, visit func(value any) (bool, error)) (bool, error) {
+	if len(inputs) == 0 {
+		return decodeJQStream(inv, "<stdin>", jqStdinReader(inv), visit)
+	}
+
+	stdinUsed := false
+	for _, input := range inputs {
+		switch input {
+		case "-":
+			if stdinUsed {
+				continue
+			}
+			stdinUsed = true
+			stopped, err := decodeJQStream(inv, "<stdin>", jqStdinReader(inv), visit)
+			if stopped || err != nil {
+				return stopped, err
+			}
+		default:
+			file, err := openJQRead(ctx, inv, input)
+			if err != nil {
+				return false, err
+			}
+			stopped, decodeErr := decodeJQStream(inv, input, file, visit)
+			closeErr := file.Close()
+			if decodeErr != nil {
+				return false, decodeErr
+			}
+			if closeErr != nil {
+				return false, &commands.ExitError{Code: 1, Err: closeErr}
+			}
+			if stopped {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func decodeJQStream(inv *commands.Invocation, name string, reader io.Reader, visit func(value any) (bool, error)) (bool, error) {
+	decoder := json.NewDecoder(reader)
+	decoder.UseNumber()
+
+	for {
+		var value any
+		err := decoder.Decode(&value)
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		if err != nil {
+			return false, exitf(inv, 5, "jq: parse error in %s: %v", name, err)
+		}
+		stopped, visitErr := visit(value)
+		if stopped || visitErr != nil {
+			return stopped, visitErr
+		}
+	}
+}
+
 func collectRawJQInputs(sources *jqSources, opts *jqOptions) []any {
 	if sources == nil {
 		if opts.slurp {
@@ -569,6 +660,26 @@ func readJQFile(ctx context.Context, inv *commands.Invocation, name string) ([]b
 	data, _, err := readAllFile(ctx, inv, name)
 	if err == nil {
 		return data, nil
+	}
+
+	var pathErr *stdfs.PathError
+	switch {
+	case errors.Is(err, stdfs.ErrNotExist), errors.As(err, &pathErr) && errors.Is(pathErr.Err, stdfs.ErrNotExist):
+		return nil, exitf(inv, 2, "jq: %s: No such file or directory", name)
+	default:
+		return nil, exitf(inv, 2, "jq: %s: %v", name, err)
+	}
+}
+
+func openJQRead(ctx context.Context, inv *commands.Invocation, name string) (stdfs.File, error) {
+	abs := name
+	if inv != nil && inv.FS != nil {
+		abs = inv.FS.Resolve(name)
+	}
+
+	file, err := inv.FS.Open(ctx, abs)
+	if err == nil {
+		return file, nil
 	}
 
 	var pathErr *stdfs.PathError
@@ -767,6 +878,13 @@ func readAllStdin(inv *commands.Invocation) ([]byte, error) {
 		return nil, &commands.ExitError{Code: 1, Err: err}
 	}
 	return data, nil
+}
+
+func jqStdinReader(inv *commands.Invocation) io.Reader {
+	if inv == nil || inv.Stdin == nil {
+		return strings.NewReader("")
+	}
+	return inv.Stdin
 }
 
 func readAllFile(ctx context.Context, inv *commands.Invocation, name string) (data []byte, abs string, err error) {

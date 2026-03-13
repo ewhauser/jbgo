@@ -5,13 +5,19 @@ import (
 	"io"
 	stdfs "io/fs"
 	"os"
-	"path"
 )
 
 func clonePath(ctx context.Context, src FileSystem, srcName string, dst *MemoryFS, dstName string) error {
-	info, err := src.Lstat(ctx, srcName)
-	if err != nil {
-		return err
+	return clonePathWithInfo(ctx, src, srcName, nil, dst, dstName)
+}
+
+func clonePathWithInfo(ctx context.Context, src FileSystem, srcName string, info stdfs.FileInfo, dst *MemoryFS, dstName string) error {
+	var err error
+	if info == nil {
+		info, err = src.Lstat(ctx, srcName)
+		if err != nil {
+			return err
+		}
 	}
 	ownership, hasOwnership := OwnershipFromFileInfo(info)
 	absDst := Clean(dstName)
@@ -42,15 +48,26 @@ func clonePath(ctx context.Context, src FileSystem, srcName string, dst *MemoryF
 			return err
 		}
 		for _, entry := range entries {
-			childSrc := path.Join(Clean(srcName), entry.Name())
-			childDst := path.Join(absDst, entry.Name())
-			if err := clonePath(ctx, src, childSrc, dst, childDst); err != nil {
+			childSrc := joinChildPath(Clean(srcName), entry.Name())
+			childDst := joinChildPath(absDst, entry.Name())
+			var childInfo stdfs.FileInfo
+			if entry.Type()&stdfs.ModeSymlink == 0 {
+				childInfo, _ = entry.Info()
+			}
+			if err := clonePathWithInfo(ctx, src, childSrc, childInfo, dst, childDst); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 	return cloneFile(ctx, src, srcName, dst, absDst, info.Mode().Perm())
+}
+
+func joinChildPath(parent, child string) string {
+	if parent == "/" {
+		return "/" + child
+	}
+	return parent + "/" + child
 }
 
 func cloneFile(ctx context.Context, src FileSystem, srcName string, dst *MemoryFS, dstName string, perm stdfs.FileMode) error {

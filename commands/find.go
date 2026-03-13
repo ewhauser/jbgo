@@ -121,7 +121,7 @@ func (c *Find) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 			exitCode = 1
 			continue
 		}
-		if err := c.walk(ctx, inv, root, rootAbs, rootAbs, 0, opts, expr, state, hasExplicitPrint, hasPrintfAction); err != nil {
+		if err := c.walk(ctx, inv, root, rootAbs, rootAbs, nil, 0, opts, expr, state, hasExplicitPrint, hasPrintfAction); err != nil {
 			return err
 		}
 	}
@@ -150,15 +150,20 @@ func (c *Find) walk(
 	ctx context.Context,
 	inv *Invocation,
 	rootArg, rootAbs, currentAbs string,
+	currentInfo stdfs.FileInfo,
 	depth int,
 	opts findCommandOptions,
 	expr findExpr,
 	state *findTraversalState,
 	hasExplicitPrint, hasPrintfAction bool,
 ) error {
-	info, _, err := statPath(ctx, inv, currentAbs)
-	if err != nil {
-		return err
+	info := currentInfo
+	var err error
+	if info == nil {
+		info, _, err = statPath(ctx, inv, currentAbs)
+		if err != nil {
+			return err
+		}
 	}
 
 	displayPath := walkDisplayPath(rootArg, rootAbs, currentAbs)
@@ -207,8 +212,12 @@ func (c *Find) walk(
 			}
 		}
 		for _, entry := range entries {
-			childAbs := path.Join(currentAbs, entry.Name())
-			if err := c.walk(ctx, inv, rootArg, rootAbs, childAbs, depth+1, opts, expr, state, hasExplicitPrint, hasPrintfAction); err != nil {
+			childAbs := joinChildPath(currentAbs, entry.Name())
+			var childInfo stdfs.FileInfo
+			if entry.Type()&stdfs.ModeSymlink == 0 {
+				childInfo, _ = entry.Info()
+			}
+			if err := c.walk(ctx, inv, rootArg, rootAbs, childAbs, childInfo, depth+1, opts, expr, state, hasExplicitPrint, hasPrintfAction); err != nil {
 				return err
 			}
 		}
