@@ -23,7 +23,6 @@ func (c *NotImplemented) Run(_ context.Context, inv *Invocation) error {
 
 var gnuCoreutilsNotImplementedNames = []string{
 	"arch",
-	"b2sum",
 	"basenc",
 	"chcon",
 	"chgrp",
@@ -56,9 +55,6 @@ var gnuCoreutilsNotImplementedNames = []string{
 	"ptx",
 	"realpath",
 	"runcon",
-	"sha224sum",
-	"sha384sum",
-	"sha512sum",
 	"shred",
 	"shuf",
 	"stdbuf",

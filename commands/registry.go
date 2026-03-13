@@ -190,10 +190,14 @@ func DefaultRegistry() *Registry {
 		NewChown(),
 		NewMkdir(),
 		NewRM(),
+		NewB2Sum(),
 		NewExpr(),
 		NewMD5Sum(),
 		NewSHA1Sum(),
+		NewSHA224Sum(),
 		NewSHA256Sum(),
+		NewSHA384Sum(),
+		NewSHA512Sum(),
 	}
 	cmds = append(cmds, gnuCoreutilsNotImplementedCommands()...)
 	return NewRegistry(cmds...)

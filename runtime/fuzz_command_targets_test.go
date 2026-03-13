@@ -377,7 +377,14 @@ func FuzzDataCommands(f *testing.F) {
 				"sha256sum /tmp/input.json >/tmp/sha256-file.txt\n" +
 				"cat /tmp/input.json | sha256sum >/tmp/sha256-stdin.txt\n" +
 				"sha256sum /tmp/input.json >/tmp/sha256-checksums.txt\n" +
-				"sha256sum -c /tmp/sha256-checksums.txt >/tmp/sha256-check.txt || true\n",
+				"sha256sum -c /tmp/sha256-checksums.txt >/tmp/sha256-check.txt || true\n" +
+				"sha224sum /tmp/input.json >/tmp/sha224-file.txt\n" +
+				"sha384sum /tmp/input.json >/tmp/sha384-file.txt\n" +
+				"sha512sum /tmp/input.json >/tmp/sha512-file.txt\n" +
+				"b2sum /tmp/input.json >/tmp/b2-file.txt\n" +
+				"b2sum --length=128 /tmp/input.json >/tmp/b2-128-file.txt\n" +
+				"b2sum /tmp/input.json >/tmp/b2-checksums.txt\n" +
+				"b2sum -c /tmp/b2-checksums.txt >/tmp/b2-check.txt || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
