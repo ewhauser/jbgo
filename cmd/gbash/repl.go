@@ -8,7 +8,7 @@ import (
 	"maps"
 	"strings"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	"github.com/ewhauser/gbash"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -22,7 +22,7 @@ type interactiveState struct {
 	env     map[string]string
 }
 
-func runInteractiveShell(ctx context.Context, rt *gbruntime.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	session, err := rt.NewSession(ctx)
 	if err != nil {
 		return 1, fmt.Errorf("init session: %w", err)
@@ -57,7 +57,7 @@ func runInteractiveShell(ctx context.Context, rt *gbruntime.Runtime, stdin io.Re
 			return 1, fmt.Errorf("render interactive statements: %w", err)
 		}
 
-		result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
+		result, err := session.Exec(ctx, &gbash.ExecutionRequest{
 			Name:       "interactive",
 			Script:     script,
 			Env:        cloneEnv(state.env),
@@ -124,7 +124,7 @@ func displayDir(home, workDir string) string {
 	}
 }
 
-func nextInteractiveState(current interactiveState, result *gbruntime.ExecutionResult) interactiveState {
+func nextInteractiveState(current interactiveState, result *gbash.ExecutionResult) interactiveState {
 	if result == nil {
 		return current
 	}

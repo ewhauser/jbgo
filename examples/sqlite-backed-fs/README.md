@@ -1,6 +1,6 @@
 # SQLite-Backed Filesystem
 
-This example implements a custom `gbfs.FileSystem` on top of a host SQLite database file and wires it into `gbruntime.CustomFileSystem(...)`.
+This example implements a custom `gbfs.FileSystem` on top of a host SQLite database file and wires it into `gbash.CustomFileSystem(...)`.
 
 Each invocation creates a fresh sandbox session, but the sandbox filesystem state is stored in the SQLite database passed with `--db`, so files created in one run are visible in later runs.
 

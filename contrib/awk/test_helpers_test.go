@@ -22,7 +22,7 @@ func newAWKRegistry(tb testing.TB) *commands.Registry {
 func newAWKRuntime(tb testing.TB) *gbruntime.Runtime {
 	tb.Helper()
 
-	rt, err := gbruntime.New(&gbruntime.Config{Registry: newAWKRegistry(tb)})
+	rt, err := gbruntime.New(gbruntime.WithConfig(&gbruntime.Config{Registry: newAWKRegistry(tb)}))
 	if err != nil {
 		tb.Fatalf("runtime.New() error = %v", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	"github.com/ewhauser/gbash"
 	"golang.org/x/term"
 )
 
@@ -43,7 +43,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return 0, nil
 	}
 
-	rt, err := gbruntime.New()
+	rt, err := gbash.New()
 	if err != nil {
 		return 1, fmt.Errorf("init runtime: %w", err)
 	}
@@ -131,13 +131,13 @@ func resolveCompatCommandDir(argv0 string) (string, error) {
 	return resolveCommandDir(filepath.Dir(resolved))
 }
 
-func runScript(ctx context.Context, rt *gbruntime.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runScript(ctx context.Context, rt *gbash.Runtime, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	src, err := io.ReadAll(stdin)
 	if err != nil {
 		return 1, fmt.Errorf("read stdin: %w", err)
 	}
 
-	result, err := rt.Run(ctx, &gbruntime.ExecutionRequest{
+	result, err := rt.Run(ctx, &gbash.ExecutionRequest{
 		Name:   "stdin",
 		Script: string(src),
 	})

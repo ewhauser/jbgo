@@ -15,7 +15,7 @@ import (
 func newRuntime(t testing.TB, cfg *Config) *Runtime {
 	t.Helper()
 
-	rt, err := New(cfg)
+	rt, err := New(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

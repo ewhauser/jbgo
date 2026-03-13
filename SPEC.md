@@ -358,7 +358,7 @@ Registry semantics are override-friendly: later registrations replace earlier on
 Key design decisions:
 
 - `Runtime` is a concrete type. Callers should not need to mock it.
-- `New` should accept composable runtime options, with helpers such as `WithRegistry`, `WithFileSystem`, `WithNetworkConfig`, and `WithConfig` for callers that prefer either direct options or an existing `Config` value.
+- `New` should accept composable runtime options, with helpers such as `WithRegistry`, `WithFileSystem`, `WithWorkspace`, `WithNetwork`, `WithHTTPAccess`, and `WithConfig` for callers that prefer either direct options or an existing `Config` value.
 - `Session` is the primary unit of agent interaction.
 - `FileSystem` is narrow and POSIX-shaped.
 - filesystem state persists at the session level; shell-local state does not persist across executions by default
@@ -519,7 +519,7 @@ Current and planned backends:
 
 Backend boundary for the current implementation:
 
-- `runtime.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
+- `gbash.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
 - `HostFS` is an opt-in lower-layer backend exposed through `gbfs.Host(...)`; it is intended to sit underneath `gbfs.Overlay(...)`, not to replace the default in-memory runtime path
 - `OverlayFS` is intended for runtime/session use and is exposed through `gbfs.Overlay(...)`
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests

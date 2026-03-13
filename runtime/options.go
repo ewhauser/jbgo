@@ -1,8 +1,6 @@
 package runtime
 
 import (
-	"fmt"
-
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
@@ -92,22 +90,14 @@ func WithNetworkClient(client network.Client) Option {
 	}
 }
 
-func resolveConfig(args []any) (Config, error) {
+func resolveConfig(opts []Option) (Config, error) {
 	var cfg Config
-	for _, arg := range args {
-		switch value := arg.(type) {
-		case nil:
+	for _, opt := range opts {
+		if opt == nil {
 			continue
-		case Option:
-			if err := value(&cfg); err != nil {
-				return Config{}, err
-			}
-		case *Config:
-			if err := WithConfig(value)(&cfg); err != nil {
-				return Config{}, err
-			}
-		default:
-			return Config{}, fmt.Errorf("runtime: unsupported New option %T", arg)
+		}
+		if err := opt(&cfg); err != nil {
+			return Config{}, err
 		}
 	}
 	return cfg, nil

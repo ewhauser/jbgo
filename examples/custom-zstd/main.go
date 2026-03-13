@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/commands"
-	gbruntime "github.com/ewhauser/gbash/runtime"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -32,12 +32,12 @@ func main() {
 		os.Exit(2)
 	}
 
-	rt, err := gbruntime.New(gbruntime.WithRegistry(registry))
+	rt, err := gbash.New(gbash.WithRegistry(registry))
 	if err != nil {
 		fail(fmt.Errorf("create runtime: %w", err))
 	}
 
-	result, err := rt.Run(ctx, &gbruntime.ExecutionRequest{
+	result, err := rt.Run(ctx, &gbash.ExecutionRequest{
 		Name:   "custom-zstd",
 		Script: string(script),
 	})

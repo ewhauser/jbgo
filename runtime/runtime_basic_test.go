@@ -76,10 +76,10 @@ func TestNewAcceptsOptions(t *testing.T) {
 	}
 }
 
-func TestNewAcceptsLegacyConfig(t *testing.T) {
+func TestNewAcceptsWithConfig(t *testing.T) {
 	registry := commands.NewRegistry(commands.NewEcho())
 
-	rt, err := New(&Config{Registry: registry})
+	rt, err := New(WithConfig(&Config{Registry: registry}))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

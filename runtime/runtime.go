@@ -40,8 +40,8 @@ type Session struct {
 type ExecutionRequest = commands.ExecutionRequest
 type ExecutionResult = commands.ExecutionResult
 
-func New(args ...any) (*Runtime, error) {
-	resolved, err := resolveConfig(args)
+func New(opts ...Option) (*Runtime, error) {
+	resolved, err := resolveConfig(opts)
 	if err != nil {
 		return nil, err
 	}
