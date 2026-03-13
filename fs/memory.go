@@ -25,6 +25,7 @@ type memoryNode struct {
 	data     []byte
 	target   string
 	children map[string]struct{}
+	atime    time.Time
 	modTime  time.Time
 	uid      uint32
 	gid      uint32
@@ -43,6 +44,7 @@ func NewMemory() *MemoryFS {
 			"/": {
 				mode:     stdfs.ModeDir | 0o755,
 				children: make(map[string]struct{}),
+				atime:    now,
 				modTime:  now,
 				uid:      DefaultOwnerUID,
 				gid:      DefaultOwnerGID,
@@ -97,6 +99,7 @@ func (m *MemoryFS) Symlink(_ context.Context, target, linkName string) error {
 	m.nodes[abs] = &memoryNode{
 		mode:    stdfs.ModeSymlink | 0o777,
 		target:  target,
+		atime:   time.Now().UTC(),
 		modTime: time.Now().UTC(),
 		uid:     DefaultOwnerUID,
 		gid:     DefaultOwnerGID,
@@ -170,6 +173,7 @@ func (m *MemoryFS) OpenFile(_ context.Context, name string, flag int, perm stdfs
 		}
 		node = &memoryNode{
 			mode:    perm,
+			atime:   time.Now().UTC(),
 			modTime: time.Now().UTC(),
 			uid:     DefaultOwnerUID,
 			gid:     DefaultOwnerGID,
@@ -306,7 +310,7 @@ func (m *MemoryFS) Chown(_ context.Context, name string, uid, gid uint32, follow
 	return nil
 }
 
-func (m *MemoryFS) Chtimes(_ context.Context, name string, _, mtime time.Time) error {
+func (m *MemoryFS) Chtimes(_ context.Context, name string, atime, mtime time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -314,9 +318,14 @@ func (m *MemoryFS) Chtimes(_ context.Context, name string, _, mtime time.Time) e
 	if err != nil {
 		return &os.PathError{Op: "chtimes", Path: Resolve(m.cwd, name), Err: err}
 	}
-	if mtime.IsZero() {
-		mtime = time.Now().UTC()
+	now := time.Now().UTC()
+	if atime.IsZero() {
+		atime = now
 	}
+	if mtime.IsZero() {
+		mtime = now
+	}
+	node.atime = atime.UTC()
 	node.modTime = mtime.UTC()
 	return nil
 }
@@ -453,6 +462,7 @@ func (m *MemoryFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
 		m.nodes[next] = &memoryNode{
 			mode:     stdfs.ModeDir | perm,
 			children: make(map[string]struct{}),
+			atime:    time.Now().UTC(),
 			modTime:  time.Now().UTC(),
 			uid:      DefaultOwnerUID,
 			gid:      DefaultOwnerGID,
@@ -748,40 +758,58 @@ type fileInfo struct {
 	name    string
 	size    int64
 	mode    stdfs.FileMode
+	atime   time.Time
 	modTime time.Time
 	uid     uint32
 	gid     uint32
 }
 
-func newFileInfo(name string, node *memoryNode) fileInfo {
+func newFileInfo(name string, node *memoryNode) *fileInfo {
 	size := int64(len(node.data))
 	if node.mode.IsDir() {
 		size = 0
 	} else if node.mode&stdfs.ModeSymlink != 0 {
 		size = int64(len(node.target))
 	}
-	return fileInfo{
+	return &fileInfo{
 		name:    name,
 		size:    size,
 		mode:    node.mode,
+		atime:   firstNonZeroTime(node.atime, node.modTime),
 		modTime: node.modTime,
 		uid:     node.uid,
 		gid:     node.gid,
 	}
 }
 
-func (fi fileInfo) Name() string         { return fi.name }
-func (fi fileInfo) Size() int64          { return fi.size }
-func (fi fileInfo) Mode() stdfs.FileMode { return fi.mode }
-func (fi fileInfo) ModTime() time.Time   { return fi.modTime }
-func (fi fileInfo) IsDir() bool          { return fi.mode.IsDir() }
-func (fi fileInfo) Sys() any             { return nil }
-func (fi fileInfo) Ownership() (FileOwnership, bool) {
+func (fi *fileInfo) Name() string         { return fi.name }
+func (fi *fileInfo) Size() int64          { return fi.size }
+func (fi *fileInfo) Mode() stdfs.FileMode { return fi.mode }
+func (fi *fileInfo) ModTime() time.Time   { return fi.modTime }
+func (fi *fileInfo) IsDir() bool          { return fi.mode.IsDir() }
+func (fi *fileInfo) Sys() any {
+	return memoryStat{Atime: fi.atime.Unix(), AtimeNsec: int64(fi.atime.Nanosecond())}
+}
+func (fi *fileInfo) Ownership() (FileOwnership, bool) {
 	return FileOwnership{UID: fi.uid, GID: fi.gid}, true
+}
+
+type memoryStat struct {
+	Atime     int64
+	AtimeNsec int64
+}
+
+func firstNonZeroTime(values ...time.Time) time.Time {
+	for _, value := range values {
+		if !value.IsZero() {
+			return value.UTC()
+		}
+	}
+	return time.Time{}
 }
 
 var _ FileSystem = (*MemoryFS)(nil)
 var _ File = (*memoryFile)(nil)
-var _ stdfs.FileInfo = fileInfo{}
+var _ stdfs.FileInfo = (*fileInfo)(nil)
 
 var _ = errors.New
