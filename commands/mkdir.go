@@ -3,9 +3,9 @@ package commands
 import (
 	"context"
 	"errors"
+	"fmt"
 	stdfs "io/fs"
 	"path"
-	"strings"
 
 	"github.com/ewhauser/gbash/policy"
 )
@@ -16,6 +16,7 @@ type mkdirOptions struct {
 	parents bool
 	mode    stdfs.FileMode
 	modeSet bool
+	verbose bool
 }
 
 func NewMkdir() *Mkdir {
@@ -27,7 +28,38 @@ func (c *Mkdir) Name() string {
 }
 
 func (c *Mkdir) Run(ctx context.Context, inv *Invocation) error {
-	opts, args, err := parseMkdirArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Mkdir) Spec() CommandSpec {
+	return CommandSpec{
+		Name:      "mkdir",
+		About:     "Create the given DIRECTORY(ies) if they do not exist",
+		Usage:     "mkdir [OPTION]... DIRECTORY...",
+		AfterHelp: "Each MODE is of the form [ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+.",
+		Options: []OptionSpec{
+			{Name: "mode", Short: 'm', Long: "mode", Arity: OptionRequiredValue, ValueName: "MODE", Help: "set file mode (not implemented on windows)"},
+			{Name: "parents", Short: 'p', Long: "parents", Help: "make parent directories as needed"},
+			{Name: "verbose", Short: 'v', Long: "verbose", Help: "print a message for each printed directory"},
+			{Name: "selinux", Short: 'Z', Help: "set SELinux security context of each created directory to the default type"},
+			{Name: "context", Long: "context", Arity: OptionRequiredValue, ValueName: "CTX", Help: "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX"},
+		},
+		Args: []ArgSpec{
+			{Name: "directory", ValueName: "DIRECTORY", Repeatable: true, Required: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+	}
+}
+
+func (c *Mkdir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, args, err := parseMkdirMatches(inv, matches)
 	if err != nil {
 		return err
 	}
@@ -55,75 +87,30 @@ func (c *Mkdir) Run(ctx context.Context, inv *Invocation) error {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
+		if opts.verbose && created {
+			if _, err := fmt.Fprintf(inv.Stdout, "mkdir: created directory %s\n", quoteGNUOperand(name)); err != nil {
+				return &ExitError{Code: 1, Err: err}
+			}
+		}
 	}
 
 	return nil
 }
 
-func parseMkdirArgs(inv *Invocation) (mkdirOptions, []string, error) {
-	opts := mkdirOptions{}
-	args := append([]string(nil), inv.Args...)
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			return opts, args[1:], nil
-		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			break
-		}
-		switch {
-		case arg == "-p" || arg == "--parents":
-			opts.parents = true
-		case arg == "-m" || arg == "--mode":
-			if len(args) < 2 {
-				return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: option requires an argument -- 'm'")
-			}
-			mode, err := parseMkdirMode(inv, args[1])
-			if err != nil {
-				return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", args[1])
-			}
-			opts.mode = mode
-			opts.modeSet = true
-			args = args[1:]
-		case strings.HasPrefix(arg, "--mode="):
-			mode, err := parseMkdirMode(inv, strings.TrimPrefix(arg, "--mode="))
-			if err != nil {
-				return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", strings.TrimPrefix(arg, "--mode="))
-			}
-			opts.mode = mode
-			opts.modeSet = true
-		default:
-			remaining, err := parseMkdirShortOptions(inv, &opts, arg)
-			if err != nil {
-				return mkdirOptions{}, nil, err
-			}
-			if remaining != "" {
-				mode, err := parseMkdirMode(inv, remaining)
-				if err != nil {
-					return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", remaining)
-				}
-				opts.mode = mode
-				opts.modeSet = true
-			}
-		}
-		args = args[1:]
+func parseMkdirMatches(inv *Invocation, matches *ParsedCommand) (mkdirOptions, []string, error) {
+	opts := mkdirOptions{
+		parents: matches.Has("parents"),
+		verbose: matches.Has("verbose"),
 	}
-	return opts, args, nil
-}
-
-func parseMkdirShortOptions(inv *Invocation, opts *mkdirOptions, arg string) (string, error) {
-	short := strings.TrimPrefix(arg, "-")
-	for i := 0; i < len(short); i++ {
-		switch short[i] {
-		case 'p':
-			opts.parents = true
-		case 'm':
-			return short[i+1:], nil
-		default:
-			return "", exitf(inv, 1, "mkdir: unsupported flag -%c", short[i])
+	if matches.Has("mode") {
+		mode, err := parseMkdirMode(inv, matches.Value("mode"))
+		if err != nil {
+			return mkdirOptions{}, nil, exitf(inv, 1, "mkdir: invalid mode %q", matches.Value("mode"))
 		}
+		opts.mode = mode
+		opts.modeSet = true
 	}
-	return "", nil
+	return opts, matches.Args("directory"), nil
 }
 
 func parseMkdirMode(inv *Invocation, spec string) (stdfs.FileMode, error) {
@@ -165,3 +152,5 @@ func mkdirPath(ctx context.Context, inv *Invocation, abs string, perm stdfs.File
 }
 
 var _ Command = (*Mkdir)(nil)
+var _ SpecProvider = (*Mkdir)(nil)
+var _ ParsedRunner = (*Mkdir)(nil)
