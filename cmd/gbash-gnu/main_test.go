@@ -391,17 +391,9 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	workDir := t.TempDir()
 	makeBin := filepath.Join(workDir, "fake-make.sh")
 	envPath := filepath.Join(workDir, "config-shell.txt")
-	resolverModePath := filepath.Join(workDir, "resolver-mode.txt")
-	reservedPath := filepath.Join(workDir, "reserved-path.txt")
 	logPath := filepath.Join(workDir, "make.log")
-	hookDir := filepath.Join(workDir, "build-aux", "gbash-harness")
-	if err := os.MkdirAll(hookDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(hookDir) error = %v", err)
-	}
 	script := "#!/bin/sh\n" +
 		"printf '%s\\n' \"$CONFIG_SHELL\" > " + shellSingleQuoteForScript(envPath) + "\n" +
-		"printf '%s\\n' \"$GBASH_COMPAT_RESOLVER_MODE\" > " + shellSingleQuoteForScript(resolverModePath) + "\n" +
-		"printf '%s\\n' \"$GBASH_COMPAT_RESERVED_COMMANDS_FILE\" > " + shellSingleQuoteForScript(reservedPath) + "\n" +
 		"printf 'PASS: tests/misc/example.sh\\n'\n"
 	if err := os.WriteFile(makeBin, []byte(script), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake make) error = %v", err)
@@ -421,16 +413,6 @@ func TestRunMakeCheckExportsConfigShell(t *testing.T) {
 	}
 	if got := string(data); got != configShell+"\n" {
 		t.Fatalf("CONFIG_SHELL = %q, want %q", got, configShell+"\\n")
-	}
-	if data, err := os.ReadFile(resolverModePath); err != nil {
-		t.Fatalf("ReadFile(resolver mode) error = %v", err)
-	} else if got := string(data); got != "registry-then-host-fallback\n" {
-		t.Fatalf("GBASH_COMPAT_RESOLVER_MODE = %q, want %q", got, "registry-then-host-fallback\\n")
-	}
-	if data, err := os.ReadFile(reservedPath); err != nil {
-		t.Fatalf("ReadFile(reserved path) error = %v", err)
-	} else if got := string(data); got != filepath.Join(workDir, "build-aux", "gbash-harness", "gnu-programs.txt")+"\n" {
-		t.Fatalf("GBASH_COMPAT_RESERVED_COMMANDS_FILE = %q", got)
 	}
 }
 

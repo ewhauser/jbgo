@@ -12,7 +12,6 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/internal/compatfs"
-	"github.com/ewhauser/gbash/shell"
 )
 
 func TestRunnerExecSupportsNestedSubexecAndHostWorkdir(t *testing.T) {
@@ -196,7 +195,7 @@ func TestRunnerRunUtilityStreamingPreservesNestedStderr(t *testing.T) {
 	}
 }
 
-func TestRunnerHostFallbackKeepsBuiltinAndRegistryPrecedence(t *testing.T) {
+func TestRunnerExecKeepsBuiltinAndRegistryPrecedenceOverPATHShadow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
@@ -218,8 +217,6 @@ func TestRunnerHostFallbackKeepsBuiltinAndRegistryPrecedence(t *testing.T) {
 		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
 		DefaultDir:        tmp,
 		BuiltinCommandDir: commandDir,
-		ResolverMode:      shell.ResolverRegistryThenHostFallback,
-		HostExecutor:      shell.NewOSHostExecutor(),
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -252,7 +249,7 @@ func TestRunnerHostFallbackKeepsBuiltinAndRegistryPrecedence(t *testing.T) {
 	}
 }
 
-func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
+func TestRunnerExecRejectsUnregisteredPATHExecutable(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
@@ -273,8 +270,6 @@ func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
 		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
 		DefaultDir:        tmp,
 		BuiltinCommandDir: commandDir,
-		ResolverMode:      shell.ResolverRegistryThenHostFallback,
-		HostExecutor:      shell.NewOSHostExecutor(),
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -293,64 +288,14 @@ func TestRunnerHostFallbackInheritsCWDAndStreamingIO(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Exec() error = %v", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
-	}
-	want := "helper:" + filepath.ToSlash(tmp) + "\nstreamed\n"
-	if got := result.Stdout; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
-	}
-}
-
-func TestRunnerHostFallbackDeniesReservedGNUCommands(t *testing.T) {
-	tmp := t.TempDir()
-	t.Chdir(tmp)
-
-	fsys, err := compatfs.New()
-	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
-	}
-	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
-	hostDir := filepath.Join(tmp, "host-bin")
-	hostPath := commandDir + string(os.PathListSeparator) + hostDir
-	if err := os.MkdirAll(hostDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(hostDir) error = %v", err)
-	}
-	writeExecutableFile(t, filepath.Join(hostDir, "futuregnu"), "#!/bin/sh\nprintf 'unexpected host fallback\\n'\n")
-
-	runner, err := New(&Config{
-		FS:                fsys,
-		BaseEnv:           map[string]string{"HOME": tmp, "PATH": hostPath},
-		DefaultDir:        tmp,
-		BuiltinCommandDir: commandDir,
-		ResolverMode:      shell.ResolverRegistryThenHostFallback,
-		ReservedCommands:  map[string]struct{}{"futuregnu": {}},
-		HostExecutor:      shell.NewOSHostExecutor(),
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	result, err := runner.Exec(context.Background(), &commands.ExecutionRequest{
-		Script: "futuregnu\n",
-		Env: map[string]string{
-			"HOME": tmp,
-			"PATH": hostPath,
-		},
-		ReplaceEnv: true,
-		WorkDir:    tmp,
-	})
-	if err != nil {
-		t.Fatalf("Exec() error = %v", err)
-	}
 	if result.ExitCode != 127 {
-		t.Fatalf("ExitCode = %d, want 127", result.ExitCode)
+		t.Fatalf("ExitCode = %d, want 127; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "futuregnu: command not found") {
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
+	}
+	if !strings.Contains(result.Stderr, "helpercmd: command not found") {
 		t.Fatalf("Stderr = %q, want command-not-found message", result.Stderr)
-	}
-	if strings.Contains(result.Stdout, "unexpected host fallback") {
-		t.Fatalf("reserved GNU command used host fallback: %q", result.Stdout)
 	}
 }
 

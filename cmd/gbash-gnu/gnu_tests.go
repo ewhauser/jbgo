@@ -142,8 +142,6 @@ func runMakeCheck(ctx context.Context, makeBin, workDir, configShell string, tes
 	cmd.Dir = workDir
 	cmd.Env = append(os.Environ(),
 		"CONFIG_SHELL="+configShell,
-		"GBASH_COMPAT_RESOLVER_MODE=registry-then-host-fallback",
-		"GBASH_COMPAT_RESERVED_COMMANDS_FILE="+filepath.Join(workDir, "build-aux", "gbash-harness", "gnu-programs.txt"),
 	)
 	output, err := cmd.CombinedOutput()
 	if writeErr := os.WriteFile(logPath, output, 0o644); writeErr != nil {

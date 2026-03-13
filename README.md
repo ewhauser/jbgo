@@ -237,6 +237,7 @@ gbash compat exec printf '%s\n' hello
 ```
 
 That path is intentionally separate from the default sandbox script and REPL modes. It exists so external compatibility harnesses can invoke one registered utility at a time against the host filesystem and host environment.
+It does not fall back to host utilities outside the registered `gbash` command set.
 
 ### Workspace Example
 

@@ -21,9 +21,6 @@ type Config struct {
 	Policy        policy.Policy
 	Engine        shell.Engine
 	BaseEnv       map[string]string
-	ResolverMode  shell.ResolverMode
-	ReservedNames map[string]struct{}
-	HostExecutor  shell.HostExecutor
 	Network       *network.Config
 	NetworkClient network.Client
 }
@@ -55,10 +52,6 @@ func New(args ...any) (*Runtime, error) {
 	if resolved.Engine == nil {
 		resolved.Engine = shell.New()
 	}
-	if resolved.ResolverMode == "" {
-		resolved.ResolverMode = shell.ResolverRegistryOnly
-	}
-	resolved.ReservedNames = shell.CloneReservedNames(resolved.ReservedNames)
 	if resolved.NetworkClient == nil && resolved.Network != nil {
 		client, err := network.New(resolved.Network)
 		if err != nil {
