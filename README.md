@@ -312,6 +312,12 @@ Optional commands live in [`contrib/`](./contrib/) as separate Go modules so the
 
 Use `github.com/ewhauser/gbash/contrib/extras` when you want to build a full registry for the contrib command set in one call.
 
+```go
+import "github.com/ewhauser/gbash/contrib/extras"
+
+gb, err := gbash.New(gbash.WithRegistry(extras.FullRegistry()))
+```
+
 See [Custom Commands](#custom-commands) for how to register them.
 
 ## Shell Features
