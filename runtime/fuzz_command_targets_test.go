@@ -501,6 +501,9 @@ func FuzzDataCommands(f *testing.F) {
 			"base64 /tmp/input.json | base64 -d >/tmp/base64-json.txt || true\n" +
 				"od -An -tx1 /tmp/input.json >/tmp/od-hex.txt || true\n" +
 				"od -An -c /tmp/input.json >/tmp/od-char.txt || true\n" +
+				"factor 12 99991 >/tmp/factor-args.txt\n" +
+				"factor -h 16 81 >/tmp/factor-exp.txt\n" +
+				"cat /tmp/input.json | factor >/tmp/factor-stdin.txt || true\n" +
 				"md5sum /tmp/input.json >/tmp/md5-file.txt\n" +
 				"cat /tmp/input.json | md5sum >/tmp/md5-stdin.txt\n" +
 				"md5sum /tmp/input.json >/tmp/md5-checksums.txt\n" +
