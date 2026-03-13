@@ -378,6 +378,123 @@ func TestWhoamiHelpVersionAndErrors(t *testing.T) {
 	}
 }
 
+func TestArchReportsMachineArchitecture(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "arch\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, expectedArchMachine(t)+"\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestArchHelpVersionAndErrors(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "short help",
+			script:   "arch -h\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Display machine architecture",
+				"Usage: arch",
+				"-V, --version",
+				"-h, --help",
+				"Determine architecture name for current machine.",
+			},
+		},
+		{
+			name:     "long help",
+			script:   "arch --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Display machine architecture",
+				"Usage: arch",
+				"-V, --version",
+				"-h, --help",
+				"Determine architecture name for current machine.",
+			},
+		},
+		{
+			name:     "short version",
+			script:   "arch -V\n",
+			wantCode: 0,
+			wantOut:  "arch (gbash)\n",
+		},
+		{
+			name:     "long version",
+			script:   "arch --version\n",
+			wantCode: 0,
+			wantOut:  "arch (gbash)\n",
+		},
+		{
+			name:     "inferred long version",
+			script:   "arch --ver\n",
+			wantCode: 0,
+			wantOut:  "arch (gbash)\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "arch --definitely-invalid\n",
+			wantCode:   1,
+			wantStderr: "arch: unrecognized option '--definitely-invalid'\nTry 'arch --help' for more information.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "arch -x\n",
+			wantCode:   1,
+			wantStderr: "arch: invalid option -- 'x'\nTry 'arch --help' for more information.\n",
+		},
+		{
+			name:       "extra operand",
+			script:     "arch extra\n",
+			wantCode:   1,
+			wantStderr: "arch: extra operand 'extra'\nTry 'arch --help' for more information.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(got, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", got, want)
+					}
+				}
+			} else if got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestUptimeDefaultSincePrettyAndVersion(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
