@@ -16,8 +16,8 @@ GNU_GBASH_BIN ?= $(GNU_CACHE_DIR)/bin/gbash
 GNU_RESULTS_DIR ?=
 GNU_FORCE_REBUILD ?=
 GNU_BUILD_CACHE_REPO ?= ewhauser/gbash
-GNU_BUILD_CACHE_TAG ?= gnu-build-cache-v1
-GNU_BUILD_CACHE_VERSION ?= v1
+GNU_BUILD_CACHE_TAG ?= gnu-build-cache-v3
+GNU_BUILD_CACHE_VERSION ?= v3
 
 FUZZ_SMOKE_SHARD_CORE := \
 	FuzzRuntimeScript \

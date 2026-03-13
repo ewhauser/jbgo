@@ -18,8 +18,8 @@ jobs:
   compat:
     runs-on: ubuntu-24.04
     env:
-      GNU_BUILD_CACHE_VERSION: v2
-      GNU_BUILD_CACHE_TAG: gnu-build-cache-v2
+      GNU_BUILD_CACHE_VERSION: v3
+      GNU_BUILD_CACHE_TAG: gnu-build-cache-v3
     outputs:
       exit_code: ${{ steps.run-compat.outputs.exit_code }}
       publishable: ${{ steps.publish-state.outputs.publishable }}
@@ -51,8 +51,34 @@ jobs:
         id: gnu-build-cache-key
         run: echo "key=$(./scripts/gnu-build-cache.sh cache-key)" >> "$GITHUB_OUTPUT"
 
+      - name: Compute prepared GNU build archive path
+        id: gnu-build-cache-path
+        run: echo "path=$(./scripts/gnu-build-cache.sh archive-path)" >> "$GITHUB_OUTPUT"
+
       - name: Restore prepared GNU build archive cache
-        uses: actions/cache@v4
+        id: restore-gnu-build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/gnu/prebuilt
+          key: ${{ steps.gnu-build-cache-key.outputs.key }}
+
+      - name: Ensure prepared GNU build archive exists
+        env:
+          GNU_ARCHIVE_PATH: ${{ steps.gnu-build-cache-path.outputs.path }}
+        run: |
+          set -euo pipefail
+
+          if [ -s "$GNU_ARCHIVE_PATH" ]; then
+            echo "Using cached prepared GNU build archive at $GNU_ARCHIVE_PATH"
+            exit 0
+          fi
+
+          mkdir -p "$(dirname "$GNU_ARCHIVE_PATH")"
+          go run ./cmd/gbash-gnu --cache-dir .cache/gnu --write-prepared-build-archive "$GNU_ARCHIVE_PATH"
+
+      - name: Save prepared GNU build archive cache
+        if: steps.restore-gnu-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
         with:
           path: .cache/gnu/prebuilt
           key: ${{ steps.gnu-build-cache-key.outputs.key }}
