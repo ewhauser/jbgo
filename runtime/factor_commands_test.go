@@ -100,7 +100,7 @@ func TestFactorKeepsGoingAfterInvalidNumbers(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 
-	wantErr := "factor: warning: 'not-a-valid-number': invalid digit found in string\n"
+	wantErr := "factor: 'not-a-valid-number' is not a valid positive integer\n"
 	if got := result.Stderr; got != wantErr {
 		t.Fatalf("Stderr = %q, want %q", got, wantErr)
 	}
@@ -126,10 +126,10 @@ func TestFactorMatchesUpstreamStdinTokenizationForBinaryInput(t *testing.T) {
 	}
 
 	wantErr := "" +
-		"factor: warning: '': invalid digit found in string\n" +
-		"factor: warning: '\\377': invalid digit found in string\n" +
-		"factor: warning: 'a&#2': invalid digit found in string\n" +
-		"factor: warning: '\\367\\301': invalid digit found in string\n"
+		"factor: '' is not a valid positive integer\n" +
+		"factor: '\\377' is not a valid positive integer\n" +
+		"factor: 'a&#2' is not a valid positive integer\n" +
+		"factor: '\\367\\301' is not a valid positive integer\n"
 	if got := result.Stderr; got != wantErr {
 		t.Fatalf("Stderr = %q, want %q", got, wantErr)
 	}
