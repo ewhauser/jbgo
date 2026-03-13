@@ -12,8 +12,6 @@ type pasteOptions struct {
 	serial         bool
 	zeroTerminated bool
 	delimiters     [][]byte
-	showHelp       bool
-	showVersion    bool
 }
 
 type pasteInput struct {
@@ -46,19 +44,50 @@ func (c *Paste) Name() string {
 }
 
 func (c *Paste) Run(ctx context.Context, inv *Invocation) error {
-	opts, names, err := parsePasteArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Paste) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "paste",
+		About: "Write lines consisting of the sequentially corresponding lines from each FILE.",
+		Usage: "paste [OPTION]... [FILE]...",
+		Options: []OptionSpec{
+			{Name: "delimiters", Short: 'd', Long: "delimiters", Arity: OptionRequiredValue, ValueName: "LIST", Help: "reuse characters from LIST instead of TABs"},
+			{Name: "serial", Short: 's', Long: "serial", Help: "paste one file at a time instead of in parallel"},
+			{Name: "zero-terminated", Short: 'z', Long: "zero-terminated", Help: "line delimiter is NUL, not newline"},
+			{Name: "help", Long: "help", Help: "display this help and exit"},
+			{Name: "version", Long: "version", Help: "output version information and exit"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true, Default: []string{"-"}},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			StopAtFirstPositional:    true,
+		},
+		VersionRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, pasteVersionText)
+			return err
+		},
+	}
+}
+
+func (c *Paste) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("help") {
+		return RenderCommandHelp(inv.Stdout, &matches.Spec)
+	}
+	if matches.Has("version") {
+		return RenderCommandVersion(inv.Stdout, &matches.Spec)
+	}
+
+	opts, names, err := parsePasteMatches(inv, matches)
 	if err != nil {
 		return err
 	}
-	if opts.showHelp {
-		_, _ = io.WriteString(inv.Stdout, pasteHelpText)
-		return nil
-	}
-	if opts.showVersion {
-		_, _ = io.WriteString(inv.Stdout, pasteVersionText)
-		return nil
-	}
-
 	lineEnding := byte('\n')
 	if opts.zeroTerminated {
 		lineEnding = 0
@@ -74,150 +103,24 @@ func (c *Paste) Run(ctx context.Context, inv *Invocation) error {
 	return writePasteParallel(inv, inputs, opts.delimiters, lineEnding)
 }
 
-func parsePasteArgs(inv *Invocation) (pasteOptions, []string, error) {
+func parsePasteMatches(inv *Invocation, matches *ParsedCommand) (pasteOptions, []string, error) {
 	opts := pasteOptions{
 		delimiters: [][]byte{{'\t'}},
 	}
-	args := append([]string(nil), inv.Args...)
-
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
-		}
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			break
-		}
-		if strings.HasPrefix(arg, "--") {
-			consumed, err := parsePasteLongOption(inv, args, &opts)
-			if err != nil {
-				return pasteOptions{}, nil, err
-			}
-			args = args[consumed:]
-			continue
-		}
-		consumed, err := parsePasteShortOptions(inv, args, &opts)
+	if matches.Has("serial") {
+		opts.serial = true
+	}
+	if matches.Has("zero-terminated") {
+		opts.zeroTerminated = true
+	}
+	if matches.Has("delimiters") {
+		delimiters, err := parsePasteDelimiters(inv, matches.Value("delimiters"))
 		if err != nil {
 			return pasteOptions{}, nil, err
 		}
-		args = args[consumed:]
-	}
-
-	if len(args) == 0 {
-		args = []string{"-"}
-	}
-	return opts, args, nil
-}
-
-func parsePasteLongOption(inv *Invocation, args []string, opts *pasteOptions) (int, error) {
-	arg := args[0]
-	name := strings.TrimPrefix(arg, "--")
-	value := ""
-	hasValue := false
-	if before, after, ok := strings.Cut(name, "="); ok {
-		name = before
-		value = after
-		hasValue = true
-	}
-
-	match, err := matchPasteLongOption(inv, name)
-	if err != nil {
-		return 0, err
-	}
-	switch match {
-	case "help":
-		opts.showHelp = true
-		return 1, nil
-	case "version":
-		opts.showVersion = true
-		return 1, nil
-	case "serial":
-		opts.serial = true
-		return 1, nil
-	case "zero-terminated":
-		opts.zeroTerminated = true
-		return 1, nil
-	case "delimiters":
-		if !hasValue {
-			if len(args) < 2 {
-				return 0, pasteUsageError(inv, "paste: option '--delimiters' requires an argument")
-			}
-			value = args[1]
-			hasValue = true
-		}
-		delimiters, err := parsePasteDelimiters(inv, value)
-		if err != nil {
-			return 0, err
-		}
 		opts.delimiters = delimiters
-		if hasValue && strings.Contains(arg, "=") {
-			return 1, nil
-		}
-		return 2, nil
-	default:
-		return 0, pasteOptionf(inv, "paste: unrecognized option '%s'", arg)
 	}
-}
-
-func parsePasteShortOptions(inv *Invocation, args []string, opts *pasteOptions) (int, error) {
-	arg := args[0]
-	for i := 1; i < len(arg); i++ {
-		switch arg[i] {
-		case 's':
-			opts.serial = true
-		case 'z':
-			opts.zeroTerminated = true
-		case 'd':
-			value := arg[i+1:]
-			consumed := 1
-			if value == "" {
-				if len(args) < 2 {
-					return 0, pasteUsageError(inv, "paste: option requires an argument -- 'd'")
-				}
-				value = args[1]
-				consumed = 2
-			}
-			delimiters, err := parsePasteDelimiters(inv, value)
-			if err != nil {
-				return 0, err
-			}
-			opts.delimiters = delimiters
-			return consumed, nil
-		default:
-			return 0, pasteOptionf(inv, "paste: invalid option -- '%c'", arg[i])
-		}
-	}
-	return 1, nil
-}
-
-func matchPasteLongOption(inv *Invocation, name string) (string, error) {
-	candidates := []string{
-		"delimiters",
-		"help",
-		"serial",
-		"version",
-		"zero-terminated",
-	}
-	for _, candidate := range candidates {
-		if candidate == name {
-			return candidate, nil
-		}
-	}
-	var matches []string
-	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, name) {
-			matches = append(matches, candidate)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", pasteOptionf(inv, "paste: unrecognized option '%s'", "--"+name)
-	case 1:
-		return matches[0], nil
-	default:
-		return "", pasteOptionf(inv, "paste: option '%s' is ambiguous", "--"+name)
-	}
+	return opts, matches.Args("file"), nil
 }
 
 func parsePasteDelimiters(inv *Invocation, value string) ([][]byte, error) {
@@ -550,24 +453,6 @@ func (s *pasteDelimiterState) reset() {
 	}
 	s.lastLen = 0
 }
-
-func pasteOptionf(inv *Invocation, format string, args ...any) error {
-	return exitf(inv, 1, format+"\nTry 'paste --help' for more information.", args...)
-}
-
-func pasteUsageError(inv *Invocation, format string, args ...any) error {
-	return exitf(inv, 1, format+"\nTry 'paste --help' for more information.", args...)
-}
-
-const pasteHelpText = `Usage: paste [OPTION]... [FILE]...
-Write lines consisting of the sequentially corresponding lines from each FILE.
-
-  -d, --delimiters=LIST      reuse characters from LIST instead of TABs
-  -s, --serial               paste one file at a time instead of in parallel
-  -z, --zero-terminated      line delimiter is NUL, not newline
-      --help                 display this help and exit
-      --version              output version information and exit
-`
 
 const pasteVersionText = "paste (gbash) dev\n"
 
