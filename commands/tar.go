@@ -34,7 +34,6 @@ type tarOptions struct {
 	verbose  bool
 	toStdout bool
 	keepOld  bool
-	help     bool
 }
 
 func NewTar() *Tar {
@@ -46,14 +45,45 @@ func (c *Tar) Name() string {
 }
 
 func (c *Tar) Run(ctx context.Context, inv *Invocation) error {
-	opts, operands, err := parseTarArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Tar) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "tar",
+		About: "Archive helper inside the gbash sandbox.",
+		Usage: "tar -c[f] ARCHIVE [PATH...]\n  tar -x[f] ARCHIVE\n  tar -t[f] ARCHIVE",
+		Options: []OptionSpec{
+			{Name: "create", Short: 'c', Long: "create", Help: "create archive"},
+			{Name: "extract", Short: 'x', Long: "extract", Help: "extract archive"},
+			{Name: "list", Short: 't', Long: "list", Help: "list archive contents"},
+			{Name: "file", Short: 'f', Long: "file", Arity: OptionRequiredValue, ValueName: "ARCHIVE", Help: "read/write ARCHIVE instead of stdin/stdout"},
+			{Name: "directory", Short: 'C', Arity: OptionRequiredValue, ValueName: "DIR", Help: "use DIR as create base or extract destination"},
+			{Name: "gzip", Short: 'z', Long: "gzip", Help: "gzip-compress or gzip-decompress the archive stream"},
+			{Name: "verbose", Short: 'v', Long: "verbose", Help: "verbose entry listing to stderr"},
+			{Name: "to-stdout", Short: 'O', Long: "to-stdout", Help: "write extracted file contents to stdout"},
+			{Name: "keep-old", Short: 'k', Long: "keep-old-files", Help: "keep existing files on extract"},
+		},
+		Args: []ArgSpec{
+			{Name: "path", ValueName: "PATH", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+		},
+		HelpRenderer: renderStaticHelp(tarHelpText),
+	}
+}
+
+func (c *Tar) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := parseTarMatches(inv, matches)
 	if err != nil {
 		return err
 	}
-	if opts.help {
-		_, _ = io.WriteString(inv.Stdout, tarHelpText)
-		return nil
-	}
+	operands := matches.Args("path")
 
 	switch opts.mode {
 	case tarModeCreate:
@@ -70,94 +100,42 @@ func (c *Tar) Run(ctx context.Context, inv *Invocation) error {
 	}
 }
 
-func parseTarArgs(inv *Invocation) (tarOptions, []string, error) {
+func parseTarMatches(inv *Invocation, matches *ParsedCommand) (tarOptions, error) {
 	opts := tarOptions{
 		archive: "-",
 	}
-	args := inv.Args
-	var operands []string
-	endOfOptions := false
-
-	for len(args) > 0 {
-		arg := args[0]
-		args = args[1:]
-
-		if endOfOptions || arg == "-" || !strings.HasPrefix(arg, "-") {
-			operands = append(operands, arg)
-			continue
-		}
-		if arg == "--" {
-			endOfOptions = true
-			continue
-		}
-		if arg == "--help" {
-			opts.help = true
-			continue
-		}
-		switch arg {
-		case "--gzip":
-			opts.gzip = true
-			continue
-		case "--zstd", "--xz", "--bzip2":
-			return tarOptions{}, nil, exitf(inv, 1, "tar: unsupported compression flag %s", arg)
-		}
-		if strings.HasPrefix(arg, "--") {
-			return tarOptions{}, nil, exitf(inv, 1, "tar: unsupported flag %s", arg)
-		}
-
-		for idx := 1; idx < len(arg); idx++ {
-			switch arg[idx] {
-			case 'c':
-				if err := tarSetMode(&opts, tarModeCreate, inv); err != nil {
-					return tarOptions{}, nil, err
-				}
-			case 'x':
-				if err := tarSetMode(&opts, tarModeExtract, inv); err != nil {
-					return tarOptions{}, nil, err
-				}
-			case 't':
-				if err := tarSetMode(&opts, tarModeList, inv); err != nil {
-					return tarOptions{}, nil, err
-				}
-			case 'f':
-				value, rest, err := tarConsumeValue(inv, arg, idx, args)
-				if err != nil {
-					return tarOptions{}, nil, err
-				}
-				opts.archive = value
-				args = rest
-				idx = len(arg)
-			case 'C':
-				value, rest, err := tarConsumeValue(inv, arg, idx, args)
-				if err != nil {
-					return tarOptions{}, nil, err
-				}
-				opts.chdir = value
-				args = rest
-				idx = len(arg)
-			case 'z':
-				opts.gzip = true
-			case 'v':
-				opts.verbose = true
-			case 'O':
-				opts.toStdout = true
-			case 'k':
-				opts.keepOld = true
-			case 'j', 'J':
-				return tarOptions{}, nil, exitf(inv, 1, "tar: unsupported compression flag -%c", arg[idx])
-			default:
-				return tarOptions{}, nil, exitf(inv, 1, "tar: unsupported flag -%c", arg[idx])
-			}
+	if matches.Has("create") {
+		if err := tarSetMode(&opts, tarModeCreate, inv); err != nil {
+			return tarOptions{}, err
 		}
 	}
-
-	if opts.mode == "" && !opts.help {
-		return tarOptions{}, nil, exitf(inv, 1, "tar: you must specify one of -c, -x, or -t")
+	if matches.Has("extract") {
+		if err := tarSetMode(&opts, tarModeExtract, inv); err != nil {
+			return tarOptions{}, err
+		}
 	}
+	if matches.Has("list") {
+		if err := tarSetMode(&opts, tarModeList, inv); err != nil {
+			return tarOptions{}, err
+		}
+	}
+	if opts.mode == "" {
+		return tarOptions{}, exitf(inv, 1, "tar: you must specify one of -c, -x, or -t")
+	}
+	if matches.Has("file") {
+		opts.archive = matches.Value("file")
+	}
+	if matches.Has("directory") {
+		opts.chdir = matches.Value("directory")
+	}
+	opts.gzip = matches.Has("gzip")
+	opts.verbose = matches.Has("verbose")
+	opts.toStdout = matches.Has("to-stdout")
+	opts.keepOld = matches.Has("keep-old")
 	if opts.toStdout && opts.mode != tarModeExtract {
-		return tarOptions{}, nil, exitf(inv, 1, "tar: -O is only supported with -x")
+		return tarOptions{}, exitf(inv, 1, "tar: -O is only supported with -x")
 	}
-	return opts, operands, nil
+	return opts, nil
 }
 
 func tarSetMode(opts *tarOptions, mode tarMode, inv *Invocation) error {
@@ -166,16 +144,6 @@ func tarSetMode(opts *tarOptions, mode tarMode, inv *Invocation) error {
 	}
 	opts.mode = mode
 	return nil
-}
-
-func tarConsumeValue(inv *Invocation, arg string, idx int, rest []string) (value string, remaining []string, err error) {
-	if idx+1 < len(arg) {
-		return arg[idx+1:], rest, nil
-	}
-	if len(rest) == 0 {
-		return "", nil, exitf(inv, 1, "tar: option requires an argument -- %c", arg[idx])
-	}
-	return rest[0], rest[1:], nil
 }
 
 func runTarCreate(ctx context.Context, inv *Invocation, opts *tarOptions, operands []string) error {
@@ -668,3 +636,5 @@ Notes:
 `
 
 var _ Command = (*Tar)(nil)
+var _ SpecProvider = (*Tar)(nil)
+var _ ParsedRunner = (*Tar)(nil)
