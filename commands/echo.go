@@ -21,15 +21,56 @@ func (c *Echo) Name() string {
 	return "echo"
 }
 
-func (c *Echo) Run(_ context.Context, inv *Invocation) error {
-	args, opts, mode := parseEchoArgs(inv)
-	switch mode {
-	case "help":
-		_, _ = io.WriteString(inv.Stdout, echoHelpText)
+func (c *Echo) Run(ctx context.Context, inv *Invocation) error {
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Echo) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "echo",
+		About: "Echo the STRING(s) to standard output.",
+		Usage: "echo [SHORT-OPTION]... [STRING]...\n  or:  echo LONG-OPTION",
+		Options: []OptionSpec{
+			{Name: "no-newline", Short: 'n', Help: "do not output the trailing newline"},
+			{Name: "enable-backslash-escape", Short: 'e', Help: "enable interpretation of backslash escapes"},
+			{Name: "disable-backslash-escape", Short: 'E', Help: "disable interpretation of backslash escapes (default)"},
+			{Name: "help", Long: "help", Help: "display this help and exit"},
+			{Name: "version", Long: "version", Help: "output version information and exit"},
+		},
+		Args: []ArgSpec{
+			{Name: "string", ValueName: "STRING", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions: true,
+		},
+		HelpRenderer:    renderStaticHelp(echoHelpText),
+		VersionRenderer: renderStaticVersion(echoVersionText),
+	}
+}
+
+func (c *Echo) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil {
 		return nil
-	case "version":
-		_, _ = io.WriteString(inv.Stdout, echoVersionText)
-		return nil
+	}
+	args, mode := normalizeEchoArgs(inv)
+	clone := *inv
+	clone.Args = args
+	if mode == "help" {
+		clone.Args = []string{"--help"}
+	}
+	if mode == "version" {
+		clone.Args = []string{"--version"}
+	}
+	return &clone
+}
+
+func (c *Echo) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCommand) error {
+	args, opts := parseEchoMatches(inv, matches)
+	if matches.Has("help") {
+		return renderStaticHelp(echoHelpText)(inv.Stdout, c.Spec())
+	}
+	if matches.Has("version") {
+		return renderStaticVersion(echoVersionText)(inv.Stdout, c.Spec())
 	}
 
 	stopped, err := writeEchoOutput(inv.Stdout, args, opts)
@@ -45,43 +86,76 @@ func (c *Echo) Run(_ context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseEchoArgs(inv *Invocation) (args []string, opts echoOptions, mode string) {
-	if inv != nil {
-		args = append([]string(nil), inv.Args...)
+func normalizeEchoArgs(inv *Invocation) (args []string, mode string) {
+	if inv == nil {
+		return nil, ""
+	}
+	args = append([]string(nil), inv.Args...)
+	posixlyCorrect := false
+	if inv.Env != nil {
+		_, posixlyCorrect = inv.Env["POSIXLY_CORRECT"]
+	}
+	if !posixlyCorrect && len(args) == 1 {
+		switch args[0] {
+		case "--help":
+			return nil, "help"
+		case "--version":
+			return nil, "version"
+		}
+	}
+
+	allowOptions := !posixlyCorrect || (len(args) > 0 && args[0] == "-n")
+	if !allowOptions {
+		return append([]string{"--"}, args...), ""
+	}
+
+	normalized := make([]string, 0, len(args)+1)
+	index := 0
+	for index < len(args) && echoIsOption(args[index]) {
+		for i := 1; i < len(args[index]); i++ {
+			switch args[index][i] {
+			case 'e':
+				normalized = append(normalized, "-e")
+			case 'E':
+				normalized = append(normalized, "-E")
+			case 'n':
+				normalized = append(normalized, "-n")
+			}
+		}
+		index++
+	}
+	normalized = append(normalized, "--")
+	normalized = append(normalized, args[index:]...)
+	return normalized, ""
+}
+
+func parseEchoMatches(inv *Invocation, matches *ParsedCommand) (args []string, opts echoOptions) {
+	if matches != nil {
+		args = matches.Args("string")
 	}
 	if inv != nil && inv.Env != nil {
 		_, opts.posixlyCorrect = inv.Env["POSIXLY_CORRECT"]
 	}
 	opts.trailingNewline = true
-
-	allowOptions := !opts.posixlyCorrect || (len(args) > 0 && args[0] == "-n")
-	if allowOptions && len(args) == 1 {
-		switch args[0] {
-		case "--help":
-			return nil, opts, "help"
-		case "--version":
-			return nil, opts, "version"
-		}
+	if opts.posixlyCorrect {
+		opts.escape = true
 	}
-	if !allowOptions {
-		return args, opts, ""
+	if matches == nil {
+		return args, opts
 	}
-
-	for len(args) > 0 && echoIsOption(args[0]) {
-		for i := 1; i < len(args[0]); i++ {
-			switch args[0][i] {
-			case 'e':
-				opts.escape = true
-			case 'E':
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "no-newline":
+			opts.trailingNewline = false
+		case "enable-backslash-escape":
+			opts.escape = true
+		case "disable-backslash-escape":
+			if !opts.posixlyCorrect {
 				opts.escape = false
-			case 'n':
-				opts.trailingNewline = false
 			}
 		}
-		args = args[1:]
 	}
-
-	return args, opts, ""
+	return args, opts
 }
 
 func echoIsOption(arg string) bool {
@@ -244,3 +318,6 @@ If -e is in effect, the following sequences are recognized:
 const echoVersionText = "echo (gbash) dev\n"
 
 var _ Command = (*Echo)(nil)
+var _ SpecProvider = (*Echo)(nil)
+var _ ParsedRunner = (*Echo)(nil)
+var _ ParseInvocationNormalizer = (*Echo)(nil)
