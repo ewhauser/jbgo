@@ -142,7 +142,6 @@ func DefaultRegistry() *Registry {
 		NewFind(),
 		NewGrep(),
 		NewRG(),
-		NewAWK(),
 		NewHead(),
 		NewTail(),
 		NewWC(),

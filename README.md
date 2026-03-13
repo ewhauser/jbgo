@@ -513,7 +513,7 @@ The default registry includes commands for file ops, text processing, archival, 
 | Category | Commands |
 |---|---|
 | File and path | `basename` `cat` `chmod` `chown` `cp` `dirname` `du` `file` `find` `ln` `link` `ls` `dir` `mkdir` `mv` `readlink` `rm` `rmdir` `stat` `touch` `tree` |
-| Search and text | `awk` `base32` `base64` `column` `comm` `cut` `diff` `grep` `head` `join` `nl` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `tac` `tail` `tee` `tr` `uniq` `wc` |
+| Search and text | `base32` `base64` `column` `comm` `cut` `diff` `grep` `head` `join` `nl` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `tac` `tail` `tee` `tr` `uniq` `wc` |
 | Archive | `gzip` `gunzip` `tar` `zcat` |
 | Environment and execution | `bash` `date` `echo` `env` `expr` `false` `help` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha256sum` `sleep` `timeout` `true` `uptime` `which` `xargs` `yes` |
 | Network (when configured) | `curl` |
@@ -526,6 +526,7 @@ Optional commands live in [`contrib/`](./contrib/) as separate Go modules so the
 
 | Command | Module | Backed by |
 |---|---|---|
+| [`awk`](./contrib/awk/) | `github.com/ewhauser/gbash/contrib/awk` | [`benhoyt/goawk`](https://github.com/benhoyt/goawk) |
 | [`jq`](./contrib/jq/) | `github.com/ewhauser/gbash/contrib/jq` | [`itchyny/gojq`](https://github.com/itchyny/gojq) |
 | [`sqlite3`](./contrib/sqlite3/) | `github.com/ewhauser/gbash/contrib/sqlite3` | [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) |
 | [`yq`](./contrib/yq/) | `github.com/ewhauser/gbash/contrib/yq` | [`mikefarah/yq`](https://github.com/mikefarah/yq) |

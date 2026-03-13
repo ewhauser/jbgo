@@ -93,7 +93,7 @@ flowchart TD
 
 ### Non-capabilities
 - Cannot cause unknown commands to fall through to the host OS; unresolved commands return `127`. Evidence anchors: `shell/mvdan.go` / `execHandler`, `commands/registry.go` / `DefaultRegistry`.
-- Cannot use `awk` as a subprocess/file I/O escape hatch because `goawk` is configured with `NoExec`, `NoFileWrites`, and `NoFileReads`. Evidence anchor: `commands/awk.go` / `Run`.
+- Cannot use contrib `awk` as a subprocess/file I/O escape hatch because `goawk` is configured with `NoExec`, `NoFileWrites`, and `NoFileReads`. Evidence anchor: `contrib/awk/awk.go` / `Run`.
 - Cannot use network egress unless the embedder injects a network client; `curl` fails closed if `inv.Net` is nil. Evidence anchors: `runtime/runtime.go` / `New`, `commands/curl.go` / `Run`.
 - Is not assumed to share a session with another tenant based on provided context, so cross-tenant persistence through session reuse is out of scope for this report.
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ewhauser/gbash/commands"
+	contribawk "github.com/ewhauser/gbash/contrib/awk"
 	contribjq "github.com/ewhauser/gbash/contrib/jq"
 	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
 	contribyq "github.com/ewhauser/gbash/contrib/yq"
@@ -23,6 +24,9 @@ func FullRegistry() *commands.Registry {
 func Register(registry commands.CommandRegistry) error {
 	if registry == nil {
 		return nil
+	}
+	if err := contribawk.Register(registry); err != nil {
+		return err
 	}
 	if err := contribjq.Register(registry); err != nil {
 		return err

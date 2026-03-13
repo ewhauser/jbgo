@@ -565,7 +565,6 @@ Initial MVP command set:
 - `find`
 - `grep`
 - `rg`
-- `awk`
 - `head`
 - `tail`
 - `wc`
@@ -621,6 +620,8 @@ Contrib commands are registry-backed like core commands, but they are not part o
 
 For contrib `jq`, the `github.com/ewhauser/gbash/contrib/jq` module should support a practical CLI-compatible subset for agent workflows, including raw-input mode, file-backed filters, variable injection flags, positional argument injection, and basic output-formatting flags. Module loading and stream-mode parity can follow later.
 
+For contrib `awk`, the `github.com/ewhauser/gbash/contrib/awk` module should wrap `benhoyt/goawk` for sandboxed AWK execution. The supported subset should cover inline programs plus `-F`, `-v`, and `-f`, while keeping `system()`, shell pipes, file writes, and extra file reads disabled inside the interpreter so AWK cannot bypass the sandbox filesystem or spawn host processes.
+
 For contrib `sqlite3`, the `github.com/ewhauser/gbash/contrib/sqlite3` module should wrap `ncruces/go-sqlite3` directly rather than embedding the upstream CLI. The implementation should open an in-memory SQLite connection, deserialize database bytes from the sandbox filesystem when a file path is requested, execute SQL inside that in-memory connection, and serialize the database back to the sandbox filesystem only after successful writes. The supported subset should cover `:memory:` and file-backed databases, list / CSV / JSON / line / column / table output, `-header`, `-readonly`, `-bail`, `-cmd`, `-echo`, help, and version output. `ATTACH`, `DETACH`, `VACUUM`, virtual-table creation, and `load_extension()` must stay disabled so SQL cannot escape the sandbox filesystem or reach host file APIs.
 
 For contrib `yq`, the `github.com/ewhauser/gbash/contrib/yq` module should wrap `mikefarah/yq`'s `yqlib` evaluator rather than embedding the upstream Cobra CLI. The supported subset should cover agent-oriented `eval` / `eval-all` flows, input and output format selection, null-input document creation, pretty-print rewriting, exit-status handling, scalar-unwrapping controls, NUL-separated output, expression files, and in-place file updates. All input and output must continue to route through the sandbox filesystem, and `yqlib` file/env operators such as `load()` and `env()` must stay disabled so expressions cannot bypass policy.
@@ -659,7 +660,6 @@ For the text/search batch, the runtime should expose useful, explicitly document
 
 - `printf` supports the core shell format verbs used by automation scripts, including `%b` escape decoding and `\c` early termination
 - `rg` supports recursive regex search with `-n`, `-i`, `-l`, `-c`, `-g`, `--hidden`, and `--files`
-- `awk` is backed by `goawk` and supports `-F`, `-v`, and `-f`, but keeps `system()`, shell pipes, file writes, and extra file reads disabled inside the sandbox
 - `cut` supports byte, character, and field selection via `-b`, `-c`, and `-f`, plus `-d`, `-s/--only-delimited`, `-z/--zero-terminated`, `--output-delimiter`, `--complement`, newline-delimited field selection, and GNU-compatible range diagnostics for focused helper/coreutils flows
 - `comm` supports two-input comparisons from files or one stdin operand, column suppression via `-1`, `-2`, and `-3`, `--output-delimiter`, `-z/--zero-terminated`, `--total`, and GNU-style sorted-input diagnostics via `--check-order` / `--nocheck-order`
 - `column` supports fill-mode output plus table formatting via `-t/--table`, `-s`, `-o`, `-c`, and `-n`

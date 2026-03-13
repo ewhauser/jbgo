@@ -80,6 +80,12 @@ func TestDefaultRegistryDoesNotIncludeSQLite3(t *testing.T) {
 	}
 }
 
+func TestDefaultRegistryDoesNotIncludeAWK(t *testing.T) {
+	if slices.Contains(DefaultRegistry().Names(), "awk") {
+		t.Fatalf("DefaultRegistry() unexpectedly includes awk")
+	}
+}
+
 func TestDefaultRegistryMetadataAudit(t *testing.T) {
 	registry := DefaultRegistry()
 	var metadataBacked []string
