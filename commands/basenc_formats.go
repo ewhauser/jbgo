@@ -95,13 +95,13 @@ func (e basencEncoding) encode(data []byte) (string, error) {
 func (e basencEncoding) decode(data []byte, ignoreGarbage bool) ([]byte, bool) {
 	switch e {
 	case basencEncodingBase64:
-		return decodeBase64Like(data, ignoreGarbage, base64.StdEncoding, base64.RawStdEncoding, basencBase64Lookup)
+		return decodeBase64Like(data, ignoreGarbage, base64.StdEncoding, base64.RawStdEncoding, &basencBase64Lookup)
 	case basencEncodingBase64URL:
-		return decodeBase64Like(data, ignoreGarbage, base64.URLEncoding, base64.RawURLEncoding, basencBase64URLLookup)
+		return decodeBase64Like(data, ignoreGarbage, base64.URLEncoding, base64.RawURLEncoding, &basencBase64URLLookup)
 	case basencEncodingBase32:
-		return decodeBase32Like(data, ignoreGarbage, base32.StdEncoding, basencBase32Lookup)
+		return decodeBase32Like(data, ignoreGarbage, base32.StdEncoding, &basencBase32Lookup)
 	case basencEncodingBase32Hex:
-		return decodeBase32Like(data, ignoreGarbage, base32.HexEncoding, basencBase32HexLookup)
+		return decodeBase32Like(data, ignoreGarbage, base32.HexEncoding, &basencBase32HexLookup)
 	case basencEncodingBase16:
 		return decodeBase16(data, ignoreGarbage)
 	case basencEncodingBase2LSBF:
@@ -117,7 +117,7 @@ func (e basencEncoding) decode(data []byte, ignoreGarbage bool) ([]byte, bool) {
 	}
 }
 
-func decodeBase64Like(data []byte, ignoreGarbage bool, stdEnc, rawEnc *base64.Encoding, lookup [256]bool) ([]byte, bool) {
+func decodeBase64Like(data []byte, ignoreGarbage bool, stdEnc, rawEnc *base64.Encoding, lookup *[256]bool) ([]byte, bool) {
 	filtered, ok := filterWholeEncodedInput(data, lookup, ignoreGarbage)
 	if !ok {
 		return nil, true
@@ -177,7 +177,7 @@ func decodeBase64Segments(filtered []byte, stdEnc, rawEnc *base64.Encoding) ([]b
 	return decoded, nil
 }
 
-func decodeBase32Like(data []byte, ignoreGarbage bool, enc *base32.Encoding, lookup [256]bool) ([]byte, bool) {
+func decodeBase32Like(data []byte, ignoreGarbage bool, enc *base32.Encoding, lookup *[256]bool) ([]byte, bool) {
 	var (
 		buffer  []byte
 		decoded []byte
@@ -265,7 +265,7 @@ func isValidBase32RemainderLength(length int) bool {
 }
 
 func decodeBase16(data []byte, ignoreGarbage bool) ([]byte, bool) {
-	filtered, ok := filterWholeEncodedInput(data, basencBase16Lookup, ignoreGarbage)
+	filtered, ok := filterWholeEncodedInput(data, &basencBase16Lookup, ignoreGarbage)
 	if !ok {
 		return nil, true
 	}
@@ -284,7 +284,7 @@ func encodeBase2(data []byte, lsbf bool) string {
 	b.Grow(len(data) * 8)
 	for _, value := range data {
 		if lsbf {
-			for bit := 0; bit < 8; bit++ {
+			for bit := range 8 {
 				if value&(1<<bit) != 0 {
 					b.WriteByte('1')
 				} else {
@@ -304,8 +304,8 @@ func encodeBase2(data []byte, lsbf bool) string {
 	return b.String()
 }
 
-func decodeBase2(data []byte, ignoreGarbage bool, lsbf bool) ([]byte, bool) {
-	filtered, ok := filterWholeEncodedInput(data, basencBase2Lookup, ignoreGarbage)
+func decodeBase2(data []byte, ignoreGarbage, lsbf bool) ([]byte, bool) {
+	filtered, ok := filterWholeEncodedInput(data, &basencBase2Lookup, ignoreGarbage)
 	if !ok {
 		return nil, true
 	}
@@ -316,7 +316,7 @@ func decodeBase2(data []byte, ignoreGarbage bool, lsbf bool) ([]byte, bool) {
 	decoded := make([]byte, 0, len(filtered)/8)
 	for i := 0; i < len(filtered); i += 8 {
 		var value byte
-		for j := 0; j < 8; j++ {
+		for j := range 8 {
 			if filtered[i+j] == '0' {
 				continue
 			}
@@ -356,7 +356,7 @@ func encodeZ85(data []byte) (string, error) {
 }
 
 func decodeZ85(data []byte, ignoreGarbage bool) ([]byte, bool) {
-	filtered, ok := filterWholeEncodedInput(data, basencZ85Lookup, ignoreGarbage)
+	filtered, ok := filterWholeEncodedInput(data, &basencZ85Lookup, ignoreGarbage)
 	if !ok {
 		return nil, true
 	}
@@ -415,7 +415,7 @@ func encodeBase58(data []byte) string {
 }
 
 func decodeBase58(data []byte, ignoreGarbage bool) ([]byte, bool) {
-	filtered, ok := filterWholeEncodedInput(data, basencBase58Lookup, ignoreGarbage)
+	filtered, ok := filterWholeEncodedInput(data, &basencBase58Lookup, ignoreGarbage)
 	if !ok {
 		return nil, true
 	}
@@ -451,7 +451,7 @@ func decodeBase58(data []byte, ignoreGarbage bool) ([]byte, bool) {
 	return result, false
 }
 
-func filterWholeEncodedInput(data []byte, lookup [256]bool, ignoreGarbage bool) ([]byte, bool) {
+func filterWholeEncodedInput(data []byte, lookup *[256]bool, ignoreGarbage bool) ([]byte, bool) {
 	filtered := make([]byte, 0, len(data))
 	for _, b := range data {
 		switch {
