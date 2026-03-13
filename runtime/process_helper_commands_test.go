@@ -797,6 +797,174 @@ func TestArchHelpVersionAndErrors(t *testing.T) {
 	}
 }
 
+func TestTtyReportsNotATTYAndSupportsQuietAliases(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name       string
+		script     string
+		wantCode   int
+		wantOut    string
+		wantStderr string
+	}{
+		{
+			name:     "default",
+			script:   "tty\n",
+			wantCode: 1,
+			wantOut:  "not a tty\n",
+		},
+		{
+			name:     "short silent",
+			script:   "tty -s\n",
+			wantCode: 1,
+		},
+		{
+			name:     "long silent",
+			script:   "tty --silent\n",
+			wantCode: 1,
+		},
+		{
+			name:     "quiet alias",
+			script:   "tty --quiet\n",
+			wantCode: 1,
+		},
+		{
+			name:     "inferred quiet alias",
+			script:   "tty --qui\n",
+			wantCode: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
+func TestTtyUsesSandboxTTYEnvironment(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "TTY=/dev/pts/0 tty\nTTY=tty1 tty -s\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/dev/pts/0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestTtyHelpVersionAndErrors(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	const wantHelp = "Print the file name of the terminal connected to standard input.\n\nUsage: tty [OPTION]...\n\nOptions:\n  -s, --silent   print nothing, only return an exit status [aliases: --quiet]\n  -h, --help     Print help\n  -V, --version  Print version\n"
+
+	tests := []struct {
+		name       string
+		script     string
+		wantCode   int
+		wantOut    string
+		wantStderr string
+	}{
+		{
+			name:     "short help",
+			script:   "tty -h\n",
+			wantCode: 0,
+			wantOut:  wantHelp,
+		},
+		{
+			name:     "long help",
+			script:   "tty --help\n",
+			wantCode: 0,
+			wantOut:  wantHelp,
+		},
+		{
+			name:     "short version",
+			script:   "tty -V\n",
+			wantCode: 0,
+			wantOut:  "tty (uutils coreutils) 0.7.0\n",
+		},
+		{
+			name:     "long version",
+			script:   "tty --version\n",
+			wantCode: 0,
+			wantOut:  "tty (uutils coreutils) 0.7.0\n",
+		},
+		{
+			name:     "inferred version",
+			script:   "tty --ver\n",
+			wantCode: 0,
+			wantOut:  "tty (uutils coreutils) 0.7.0\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "tty --bogus\n",
+			wantCode:   2,
+			wantStderr: "error: unexpected argument '--bogus' found\n\nUsage: tty [OPTION]...\n\nFor more information, try '--help'.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "tty -x\n",
+			wantCode:   2,
+			wantStderr: "error: unexpected argument '-x' found\n\nUsage: tty [OPTION]...\n\nFor more information, try '--help'.\n",
+		},
+		{
+			name:       "extra operand",
+			script:     "tty extra\n",
+			wantCode:   2,
+			wantStderr: "error: unexpected argument 'extra' found\n\nUsage: tty [OPTION]...\n\nFor more information, try '--help'.\n",
+		},
+		{
+			name:       "value on no-value option",
+			script:     "tty --silent=value\n",
+			wantCode:   2,
+			wantStderr: "error: unexpected argument '--silent=value' found\n\nUsage: tty [OPTION]...\n\nFor more information, try '--help'.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestUptimeDefaultSincePrettyAndVersion(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
