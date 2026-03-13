@@ -9,27 +9,55 @@ import (
 
 type Join struct{}
 
+type joinDelimiterMode int
+
+const (
+	joinDelimiterWhitespace joinDelimiterMode = iota
+	joinDelimiterLiteral
+	joinDelimiterWholeLine
+)
+
+type joinCheckOrder int
+
+const (
+	joinCheckOrderDefault joinCheckOrder = iota
+	joinCheckOrderDisabled
+	joinCheckOrderEnabled
+)
+
 type joinOptions struct {
-	field1       int
-	field2       int
-	delimiter    string
-	include      [3]bool
-	onlyUnpaired [3]bool
-	empty        string
-	output       []joinOutputField
-	ignoreCase   bool
+	field1         int
+	field2         int
+	delimiter      string
+	delimiterMode  joinDelimiterMode
+	include        [3]bool
+	onlyUnpaired   [3]bool
+	empty          string
+	output         []joinOutputField
+	autoOutput     bool
+	ignoreCase     bool
+	checkOrder     joinCheckOrder
+	header         bool
+	zeroTerminated bool
 }
 
 type joinRecord struct {
-	line   string
-	fields []string
-	key    string
+	line       string
+	fields     []string
+	key        string
+	lineNumber int
 }
 
 type joinOutputField struct {
 	file  int
 	field int
 	join  bool
+}
+
+type joinDisorder struct {
+	fileName   string
+	lineNumber int
+	content    string
 }
 
 func NewJoin() *Join {
@@ -41,7 +69,46 @@ func (c *Join) Name() string {
 }
 
 func (c *Join) Run(ctx context.Context, inv *Invocation) error {
-	opts, leftName, rightName, err := parseJoinArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Join) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "join",
+		About: "For each pair of input lines with identical join fields, write a line to\n  standard output. The default join field is the first, delimited by blanks.\n\n  When FILE1 or FILE2 (not both) is -, read standard input.",
+		Usage: "join [OPTION]... FILE1 FILE2",
+		Options: []OptionSpec{
+			{Name: "a", Short: 'a', Arity: OptionRequiredValue, ValueName: "FILENUM", Repeatable: true, Help: "also print unpairable lines from file FILENUM, where\n  FILENUM is 1 or 2, corresponding to FILE1 or FILE2"},
+			{Name: "v", Short: 'v', Arity: OptionRequiredValue, ValueName: "FILENUM", Repeatable: true, Help: "like -a FILENUM, but suppress joined output lines"},
+			{Name: "e", Short: 'e', Arity: OptionRequiredValue, ValueName: "EMPTY", Help: "replace missing input fields with EMPTY"},
+			{Name: "ignore-case", Short: 'i', Long: "ignore-case", Help: "ignore differences in case when comparing fields"},
+			{Name: "j", Short: 'j', Arity: OptionRequiredValue, ValueName: "FIELD", Help: "equivalent to '-1 FIELD -2 FIELD'"},
+			{Name: "o", Short: 'o', Arity: OptionRequiredValue, ValueName: "FORMAT", Help: "obey FORMAT while constructing output line"},
+			{Name: "t", Short: 't', Arity: OptionRequiredValue, ValueName: "CHAR", Help: "use CHAR as input and output field separator"},
+			{Name: "1", Short: '1', Arity: OptionRequiredValue, ValueName: "FIELD", Help: "join on this FIELD of file 1"},
+			{Name: "2", Short: '2', Arity: OptionRequiredValue, ValueName: "FIELD", Help: "join on this FIELD of file 2"},
+			{Name: "check-order", Long: "check-order", Help: "check that the input is correctly sorted, even if all input lines are pairable"},
+			{Name: "nocheck-order", Long: "nocheck-order", Help: "do not check that the input is correctly sorted"},
+			{Name: "header", Long: "header", Help: "treat the first line in each file as field headers, print them without trying to pair them"},
+			{Name: "zero-terminated", Short: 'z', Long: "zero-terminated", Help: "line delimiter is NUL, not newline"},
+		},
+		Args: []ArgSpec{
+			{Name: "file1", ValueName: "FILE1", Required: true},
+			{Name: "file2", ValueName: "FILE2", Required: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
+	}
+}
+
+func (c *Join) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, leftName, rightName, err := parseJoinMatches(inv, matches)
 	if err != nil {
 		return err
 	}
@@ -50,18 +117,50 @@ func (c *Join) Run(ctx context.Context, inv *Invocation) error {
 	if err != nil {
 		return err
 	}
-	leftRecords := parseJoinRecords(textLines(leftData), opts.field1, opts.delimiter, opts.ignoreCase)
-	rightRecords := parseJoinRecords(textLines(rightData), opts.field2, opts.delimiter, opts.ignoreCase)
+
+	leftLines := joinSplitLines(leftData, opts.zeroTerminated)
+	rightLines := joinSplitLines(rightData, opts.zeroTerminated)
+
+	var leftHeader *joinRecord
+	var rightHeader *joinRecord
+	if opts.header {
+		leftHeader, leftLines = joinTakeHeader(leftLines, opts.field1, &opts)
+		rightHeader, rightLines = joinTakeHeader(rightLines, opts.field2, &opts)
+	}
+
+	leftRecords := parseJoinRecords(leftLines, opts.field1, &opts)
+	rightRecords := parseJoinRecords(rightLines, opts.field2, &opts)
+	if opts.autoOutput {
+		opts.output = joinAutoOutput(leftRecords, rightRecords, leftHeader, rightHeader)
+	}
+
+	leftDisorder := joinDetectDisorder(leftRecords, leftName, &opts)
+	rightDisorder := joinDetectDisorder(rightRecords, rightName, &opts)
+
+	if opts.header {
+		if err := writeJoinLine(inv, &opts, leftHeader, rightHeader); err != nil {
+			return err
+		}
+	}
+	if opts.checkOrder == joinCheckOrderEnabled {
+		if disorder := joinFirstDisorder(leftDisorder, rightDisorder); disorder != nil {
+			return joinWriteDisorder(inv, disorder)
+		}
+	}
 
 	rightByKey := make(map[string][]int)
 	for i, record := range rightRecords {
 		rightByKey[record.key] = append(rightByKey[record.key], i)
 	}
 	rightMatched := make([]bool, len(rightRecords))
+	leftUnpaired := false
+	rightUnpaired := false
+	printJoined := !opts.onlyUnpaired[1] && !opts.onlyUnpaired[2]
 
 	for _, left := range leftRecords {
 		matches := rightByKey[left.key]
 		if len(matches) == 0 {
+			leftUnpaired = true
 			if opts.include[1] || opts.onlyUnpaired[1] {
 				if err := writeJoinLine(inv, &opts, &left, nil); err != nil {
 					return err
@@ -71,7 +170,7 @@ func (c *Join) Run(ctx context.Context, inv *Invocation) error {
 		}
 		for _, index := range matches {
 			rightMatched[index] = true
-			if opts.onlyUnpaired[1] || opts.onlyUnpaired[2] {
+			if !printJoined {
 				continue
 			}
 			current := rightRecords[index]
@@ -86,153 +185,177 @@ func (c *Join) Run(ctx context.Context, inv *Invocation) error {
 			if matched {
 				continue
 			}
+			rightUnpaired = true
 			current := rightRecords[index]
 			if err := writeJoinLine(inv, &opts, nil, &current); err != nil {
 				return err
 			}
 		}
+	} else {
+		for _, matched := range rightMatched {
+			if !matched {
+				rightUnpaired = true
+				break
+			}
+		}
 	}
+
+	if opts.checkOrder == joinCheckOrderDefault && (leftUnpaired || rightUnpaired) {
+		wroteAny := false
+		if leftDisorder != nil {
+			if err := joinWriteDisorder(inv, leftDisorder); err != nil {
+				return err
+			}
+			wroteAny = true
+		}
+		if rightDisorder != nil {
+			if err := joinWriteDisorder(inv, rightDisorder); err != nil {
+				return err
+			}
+			wroteAny = true
+		}
+		if wroteAny {
+			_, _ = fmt.Fprintln(inv.Stderr, "join: input is not in sorted order")
+			return &ExitError{Code: 1}
+		}
+	}
+
 	return nil
 }
 
-func parseJoinArgs(inv *Invocation) (opts joinOptions, leftName, rightName string, err error) {
-	args := inv.Args
+func parseJoinMatches(inv *Invocation, matches *ParsedCommand) (opts joinOptions, leftName, rightName string, err error) {
 	opts = joinOptions{
-		field1:    1,
-		field2:    1,
-		delimiter: "",
+		field1:        1,
+		field2:        1,
+		delimiterMode: joinDelimiterWhitespace,
 	}
 
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
+	for _, value := range matches.Values("a") {
+		fileNum, err := parseJoinFileNumber(value)
+		if err != nil {
+			return joinOptions{}, "", "", exitf(inv, 1, "join: invalid file number: '%s'", value)
 		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			break
+		opts.include[fileNum] = true
+	}
+	for _, value := range matches.Values("v") {
+		fileNum, err := parseJoinFileNumber(value)
+		if err != nil {
+			return joinOptions{}, "", "", exitf(inv, 1, "join: invalid file number: '%s'", value)
 		}
-		switch {
-		case arg == "-1":
-			value, rest, err := parseJoinInt(inv, "1", args[1:])
+		opts.onlyUnpaired[fileNum] = true
+	}
+	if matches.Has("e") {
+		opts.empty = matches.Value("e")
+	}
+	if matches.Has("ignore-case") {
+		opts.ignoreCase = true
+	}
+	if matches.Has("j") {
+		field, err := parseJoinFieldNumber(matches.Value("j"))
+		if err != nil {
+			return joinOptions{}, "", "", exitf(inv, 1, "join: invalid field number: '%s'", matches.Value("j"))
+		}
+		opts.field1 = field
+		opts.field2 = field
+	}
+	if matches.Has("1") {
+		field, err := parseJoinFieldNumber(matches.Value("1"))
+		if err != nil {
+			return joinOptions{}, "", "", exitf(inv, 1, "join: invalid field number: '%s'", matches.Value("1"))
+		}
+		opts.field1 = field
+	}
+	if matches.Has("2") {
+		field, err := parseJoinFieldNumber(matches.Value("2"))
+		if err != nil {
+			return joinOptions{}, "", "", exitf(inv, 1, "join: invalid field number: '%s'", matches.Value("2"))
+		}
+		opts.field2 = field
+	}
+	if matches.Has("o") {
+		outputValue := matches.Value("o")
+		if outputValue == "auto" {
+			opts.autoOutput = true
+		} else {
+			output, err := parseJoinOutput(outputValue)
 			if err != nil {
-				return joinOptions{}, "", "", err
-			}
-			opts.field1 = value
-			args = rest
-			continue
-		case strings.HasPrefix(arg, "-1") && len(arg) > 2:
-			value, err := strconv.Atoi(arg[2:])
-			if err != nil || value <= 0 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: invalid field %q", arg[2:])
-			}
-			opts.field1 = value
-		case arg == "-2":
-			value, rest, err := parseJoinInt(inv, "2", args[1:])
-			if err != nil {
-				return joinOptions{}, "", "", err
-			}
-			opts.field2 = value
-			args = rest
-			continue
-		case strings.HasPrefix(arg, "-2") && len(arg) > 2:
-			value, err := strconv.Atoi(arg[2:])
-			if err != nil || value <= 0 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: invalid field %q", arg[2:])
-			}
-			opts.field2 = value
-		case arg == "-t":
-			if len(args) < 2 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: option requires an argument -- 't'")
-			}
-			opts.delimiter = args[1]
-			args = args[2:]
-			continue
-		case strings.HasPrefix(arg, "-t") && len(arg) > 2:
-			opts.delimiter = arg[2:]
-		case arg == "-e":
-			if len(args) < 2 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: option requires an argument -- 'e'")
-			}
-			opts.empty = args[1]
-			args = args[2:]
-			continue
-		case strings.HasPrefix(arg, "-e") && len(arg) > 2:
-			opts.empty = arg[2:]
-		case arg == "-o":
-			if len(args) < 2 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: option requires an argument -- 'o'")
-			}
-			output, err := parseJoinOutput(args[1])
-			if err != nil {
-				return joinOptions{}, "", "", err
+				return joinOptions{}, "", "", exitf(inv, 1, "%v", err)
 			}
 			opts.output = output
-			args = args[2:]
-			continue
-		case strings.HasPrefix(arg, "-o") && len(arg) > 2:
-			output, err := parseJoinOutput(arg[2:])
-			if err != nil {
-				return joinOptions{}, "", "", err
-			}
-			opts.output = output
-		case arg == "-i":
-			opts.ignoreCase = true
-		case arg == "-a":
-			value, rest, err := parseJoinInt(inv, "a", args[1:])
-			if err != nil {
-				return joinOptions{}, "", "", err
-			}
-			if value != 1 && value != 2 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: invalid file number %d", value)
-			}
-			opts.include[value] = true
-			args = rest
-			continue
-		case strings.HasPrefix(arg, "-a") && len(arg) > 2:
-			value, err := strconv.Atoi(arg[2:])
-			if err != nil || (value != 1 && value != 2) {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: invalid file number %q", arg[2:])
-			}
-			opts.include[value] = true
-		case arg == "-v":
-			value, rest, err := parseJoinInt(inv, "v", args[1:])
-			if err != nil {
-				return joinOptions{}, "", "", err
-			}
-			if value != 1 && value != 2 {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: invalid file number %d", value)
-			}
-			opts.onlyUnpaired[value] = true
-			args = rest
-			continue
-		case strings.HasPrefix(arg, "-v") && len(arg) > 2:
-			value, err := strconv.Atoi(arg[2:])
-			if err != nil || (value != 1 && value != 2) {
-				return joinOptions{}, "", "", exitf(inv, 1, "join: invalid file number %q", arg[2:])
-			}
-			opts.onlyUnpaired[value] = true
-		default:
-			return joinOptions{}, "", "", exitf(inv, 1, "join: unsupported flag %s", arg)
 		}
-		args = args[1:]
+	}
+	if matches.Has("t") {
+		delimiter, mode, err := parseJoinDelimiter(matches.Value("t"))
+		if err != nil {
+			return joinOptions{}, "", "", exitf(inv, 1, "%v", err)
+		}
+		opts.delimiter = delimiter
+		opts.delimiterMode = mode
+	}
+	if matches.Has("check-order") {
+		opts.checkOrder = joinCheckOrderEnabled
+	}
+	if matches.Has("nocheck-order") {
+		opts.checkOrder = joinCheckOrderDisabled
+	}
+	if matches.Has("header") {
+		opts.header = true
+	}
+	if matches.Has("zero-terminated") {
+		opts.zeroTerminated = true
 	}
 
-	if len(args) != 2 {
-		return joinOptions{}, "", "", exitf(inv, 1, "join: expected exactly two input files")
-	}
-	return opts, args[0], args[1], nil
+	leftName = matches.Arg("file1")
+	rightName = matches.Arg("file2")
+	return opts, leftName, rightName, nil
 }
 
-func parseJoinInt(inv *Invocation, flag string, args []string) (value int, rest []string, err error) {
-	if len(args) == 0 {
-		return 0, nil, exitf(inv, 1, "join: option requires an argument -- '%s'", flag)
+func parseJoinFieldNumber(value string) (int, error) {
+	field, err := strconv.Atoi(value)
+	if err != nil || field <= 0 {
+		return 0, fmt.Errorf("invalid")
 	}
-	value, err = strconv.Atoi(args[0])
+	return field, nil
+}
+
+func parseJoinFileNumber(value string) (int, error) {
+	fileNum, err := strconv.Atoi(value)
+	if err != nil || (fileNum != 1 && fileNum != 2) {
+		return 0, fmt.Errorf("invalid")
+	}
+	return fileNum, nil
+}
+
+func parseJoinDelimiter(value string) (string, joinDelimiterMode, error) {
+	if value == "" {
+		return "", joinDelimiterWholeLine, nil
+	}
+	decoded, err := joinDecodeDelimiter(value)
 	if err != nil {
-		return 0, nil, exitf(inv, 1, "join: invalid numeric value %q", args[0])
+		return "", joinDelimiterWhitespace, err
 	}
-	return value, args[1:], nil
+	if len([]rune(decoded)) != 1 {
+		return "", joinDelimiterWhitespace, fmt.Errorf("join: multi-character tab %s", value)
+	}
+	return decoded, joinDelimiterLiteral, nil
+}
+
+func joinDecodeDelimiter(value string) (string, error) {
+	if !strings.HasPrefix(value, "\\") {
+		return value, nil
+	}
+	switch value {
+	case "\\0":
+		return "\x00", nil
+	case "\\n":
+		return "\n", nil
+	case "\\t":
+		return "\t", nil
+	case "\\\\":
+		return "\\", nil
+	default:
+		return "", fmt.Errorf("join: invalid field separator %q", value)
+	}
 }
 
 func parseJoinOutput(value string) ([]joinOutputField, error) {
@@ -247,39 +370,76 @@ func parseJoinOutput(value string) ([]joinOutputField, error) {
 		}
 		fileText, fieldText, ok := strings.Cut(part, ".")
 		if !ok {
-			return nil, fmt.Errorf("join: invalid output spec %q", part)
+			return nil, fmt.Errorf("join: invalid field specifier: %s", part)
 		}
 		file, err := strconv.Atoi(fileText)
 		if err != nil || (file != 1 && file != 2) {
-			return nil, fmt.Errorf("join: invalid output spec %q", part)
+			return nil, fmt.Errorf("join: invalid file number in field spec: %s", part)
 		}
 		field, err := strconv.Atoi(fieldText)
 		if err != nil || field <= 0 {
-			return nil, fmt.Errorf("join: invalid output spec %q", part)
+			return nil, fmt.Errorf("join: invalid field specifier: %s", part)
 		}
 		fields = append(fields, joinOutputField{file: file, field: field})
 	}
 	return fields, nil
 }
 
-func parseJoinRecords(lines []string, fieldIndex int, delimiter string, ignoreCase bool) []joinRecord {
+func joinSplitLines(data []byte, zeroTerminated bool) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	sep := byte('\n')
+	if zeroTerminated {
+		sep = 0
+	}
+
+	parts := strings.Split(string(data), string([]byte{sep}))
+	if parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
+
+func joinTakeHeader(lines []string, fieldIndex int, opts *joinOptions) (header *joinRecord, remaining []string) {
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	record := parseJoinRecord(lines[0], fieldIndex, opts, 1)
+	return &record, lines[1:]
+}
+
+func parseJoinRecords(lines []string, fieldIndex int, opts *joinOptions) []joinRecord {
 	records := make([]joinRecord, 0, len(lines))
-	for _, line := range lines {
-		fields := joinSplitFields(line, delimiter)
-		key := joinFieldValue(fields, fieldIndex)
-		if ignoreCase {
-			key = strings.ToLower(key)
-		}
-		records = append(records, joinRecord{line: line, fields: fields, key: key})
+	for i, line := range lines {
+		records = append(records, parseJoinRecord(line, fieldIndex, opts, i+1))
 	}
 	return records
 }
 
-func joinSplitFields(line, delimiter string) []string {
-	if delimiter == "" {
+func parseJoinRecord(line string, fieldIndex int, opts *joinOptions, lineNumber int) joinRecord {
+	fields := joinSplitFields(line, opts)
+	key := joinFieldValue(fields, fieldIndex)
+	if opts.ignoreCase {
+		key = strings.ToLower(key)
+	}
+	return joinRecord{
+		line:       line,
+		fields:     fields,
+		key:        key,
+		lineNumber: lineNumber,
+	}
+}
+
+func joinSplitFields(line string, opts *joinOptions) []string {
+	switch opts.delimiterMode {
+	case joinDelimiterWholeLine:
+		return []string{line}
+	case joinDelimiterLiteral:
+		return strings.Split(line, opts.delimiter)
+	default:
 		return strings.Fields(line)
 	}
-	return strings.Split(line, delimiter)
 }
 
 func joinFieldValue(fields []string, index int) string {
@@ -289,16 +449,94 @@ func joinFieldValue(fields []string, index int) string {
 	return fields[index-1]
 }
 
-func writeJoinLine(inv *Invocation, opts *joinOptions, left, right *joinRecord) error {
-	fields := formatJoinFields(opts, left, right)
-	sep := opts.delimiter
-	if sep == "" {
-		sep = " "
+func joinAutoOutput(left, right []joinRecord, leftHeader, rightHeader *joinRecord) []joinOutputField {
+	leftFields := joinAutoWidth(left, leftHeader)
+	rightFields := joinAutoWidth(right, rightHeader)
+
+	output := make([]joinOutputField, 0, leftFields+rightFields-1)
+	output = append(output, joinOutputField{join: true})
+	for field := 2; field <= leftFields; field++ {
+		output = append(output, joinOutputField{file: 1, field: field})
 	}
-	if _, err := fmt.Fprintln(inv.Stdout, strings.Join(fields, sep)); err != nil {
+	for field := 2; field <= rightFields; field++ {
+		output = append(output, joinOutputField{file: 2, field: field})
+	}
+	return output
+}
+
+func joinAutoWidth(records []joinRecord, header *joinRecord) int {
+	if header != nil && len(records) == 0 {
+		return len(header.fields)
+	}
+	if len(records) == 0 {
+		return 1
+	}
+	return len(records[0].fields)
+}
+
+func joinDetectDisorder(records []joinRecord, fileName string, opts *joinOptions) *joinDisorder {
+	for i := 1; i < len(records); i++ {
+		if joinCompareKeys(records[i-1].key, records[i].key) > 0 {
+			return &joinDisorder{
+				fileName:   fileName,
+				lineNumber: records[i].lineNumber + 1,
+				content:    records[i].line,
+			}
+		}
+	}
+	return nil
+}
+
+func joinCompareKeys(left, right string) int {
+	switch {
+	case left < right:
+		return -1
+	case left > right:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func joinFirstDisorder(left, right *joinDisorder) *joinDisorder {
+	if left != nil {
+		return left
+	}
+	return right
+}
+
+func joinWriteDisorder(inv *Invocation, disorder *joinDisorder) error {
+	if disorder == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintf(inv.Stderr, "join: %s:%d: is not sorted: %s\n", disorder.fileName, disorder.lineNumber, disorder.content); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
 	return nil
+}
+
+func writeJoinLine(inv *Invocation, opts *joinOptions, left, right *joinRecord) error {
+	fields := formatJoinFields(opts, left, right)
+	sep := joinOutputSeparator(opts)
+	lineEnding := "\n"
+	if opts.zeroTerminated {
+		lineEnding = "\x00"
+	}
+	if _, err := fmt.Fprint(inv.Stdout, strings.Join(fields, sep), lineEnding); err != nil {
+		return &ExitError{Code: 1, Err: err}
+	}
+	return nil
+}
+
+func joinOutputSeparator(opts *joinOptions) string {
+	switch opts.delimiterMode {
+	case joinDelimiterWholeLine:
+		return ""
+	case joinDelimiterLiteral:
+		return opts.delimiter
+	default:
+		return " "
+	}
 }
 
 func formatJoinFields(opts *joinOptions, left, right *joinRecord) []string {
@@ -379,3 +617,5 @@ func unicodeSpace(r rune) bool {
 }
 
 var _ Command = (*Join)(nil)
+var _ SpecProvider = (*Join)(nil)
+var _ ParsedRunner = (*Join)(nil)
