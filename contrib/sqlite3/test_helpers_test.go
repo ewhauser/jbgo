@@ -22,7 +22,7 @@ func newSQLiteRegistry(tb testing.TB) *commands.Registry {
 func newSQLiteSession(tb testing.TB) *gbruntime.Session {
 	tb.Helper()
 
-	rt, err := gbruntime.New(&gbruntime.Config{Registry: newSQLiteRegistry(tb)})
+	rt, err := gbruntime.New(gbruntime.WithConfig(&gbruntime.Config{Registry: newSQLiteRegistry(tb)}))
 	if err != nil {
 		tb.Fatalf("runtime.New() error = %v", err)
 	}

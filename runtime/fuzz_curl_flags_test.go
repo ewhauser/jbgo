@@ -61,7 +61,7 @@ func newCurlFuzzRuntime(tb testing.TB) *Runtime {
 		},
 	}
 
-	rt, err := New(&Config{
+	rt, err := New(WithConfig(&Config{
 		NetworkClient: client,
 		Policy: policy.NewStatic(&policy.Config{
 			ReadRoots:  []string{"/"},
@@ -76,7 +76,7 @@ func newCurlFuzzRuntime(tb testing.TB) *Runtime {
 				MaxFileBytes:         128 << 10,
 			},
 		}),
-	})
+	}))
 	if err != nil {
 		tb.Fatalf("New() error = %v", err)
 	}

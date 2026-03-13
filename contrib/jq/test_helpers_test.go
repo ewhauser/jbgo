@@ -23,7 +23,7 @@ func newJQRegistry(tb testing.TB) *commands.Registry {
 func newJQRuntime(tb testing.TB) *gbruntime.Runtime {
 	tb.Helper()
 
-	rt, err := gbruntime.New(&gbruntime.Config{Registry: newJQRegistry(tb)})
+	rt, err := gbruntime.New(gbruntime.WithConfig(&gbruntime.Config{Registry: newJQRegistry(tb)}))
 	if err != nil {
 		tb.Fatalf("runtime.New() error = %v", err)
 	}

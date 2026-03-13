@@ -6,7 +6,7 @@
 
 Requires Go 1.26+
 
-Install the module with `go get github.com/ewhauser/gbash` and import packages from `github.com/ewhauser/gbash/...`.
+Install the module with `go get github.com/ewhauser/gbash` and import `github.com/ewhauser/gbash` for the main embedding API. Advanced escape hatches remain available under `github.com/ewhauser/gbash/...`.
 
 ## Table of Contents
 
@@ -32,7 +32,7 @@ Install the module with `go get github.com/ewhauser/gbash` and import packages f
 
 ### Basic API
 
-Use `runtime.New` to configure a runtime and `Runtime.Run` for one-shot execution.
+Use `gbash.New` to configure a runtime and `Runtime.Run` for one-shot execution.
 
 ```go
 package main
@@ -41,16 +41,16 @@ import (
 	"context"
 	"fmt"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	"github.com/ewhauser/gbash"
 )
 
 func main() {
-	rt, err := gbruntime.New()
+	rt, err := gbash.New()
 	if err != nil {
 		panic(err)
 	}
 
-	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+	result, err := rt.Run(context.Background(), &gbash.ExecutionRequest{
 		Script: "echo hello\npwd\n",
 	})
 	if err != nil {
@@ -83,24 +83,18 @@ import (
 	"context"
 	"fmt"
 
-	gbnetwork "github.com/ewhauser/gbash/network"
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	"github.com/ewhauser/gbash"
 )
 
 func main() {
-	rt, err := gbruntime.New(
-		gbruntime.WithNetworkConfig(&gbnetwork.Config{
-			AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
-			AllowedMethods:     []gbnetwork.Method{gbnetwork.MethodGet, gbnetwork.MethodHead},
-			MaxResponseBytes:   10 << 20,
-			DenyPrivateRanges:  true,
-		}),
+	rt, err := gbash.New(
+		gbash.WithHTTPAccess("https://api.example.com/v1/"),
 	)
 	if err != nil {
 		panic(err)
 	}
 
-	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+	result, err := rt.Run(context.Background(), &gbash.ExecutionRequest{
 		Script: "curl -o /tmp/status.json https://api.example.com/v1/status\ncat /tmp/status.json\n",
 	})
 	if err != nil {
@@ -111,7 +105,7 @@ func main() {
 }
 ```
 
-Without `Config.Network` or `Config.NetworkClient`, `curl` is not registered in the sandbox at all. For more detail on allowed methods, redirects, and custom clients, see [Network Access](#network-access).
+Without `Config.Network` or `Config.NetworkClient`, `curl` is not registered in the sandbox at all. For more detail on methods, redirects, and custom clients, see [Network Access](#network-access).
 
 ### Persistent Sessions
 
@@ -124,13 +118,13 @@ import (
 	"context"
 	"fmt"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	"github.com/ewhauser/gbash"
 )
 
 func main() {
 	ctx := context.Background()
 
-	rt, err := gbruntime.New()
+	rt, err := gbash.New()
 	if err != nil {
 		panic(err)
 	}
@@ -140,13 +134,13 @@ func main() {
 		panic(err)
 	}
 
-	if _, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
+	if _, err := session.Exec(ctx, &gbash.ExecutionRequest{
 		Script: "echo hello > /shared.txt\n",
 	}); err != nil {
 		panic(err)
 	}
 
-	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
+	result, err := session.Exec(ctx, &gbash.ExecutionRequest{
 		Script: "cat /shared.txt\npwd\n",
 	})
 	if err != nil {
@@ -225,7 +219,7 @@ The repository uses a committed Go workspace. `examples/` is a separate Go modul
 
 ## Configuration
 
-The main configuration surface is `runtime.Config`.
+The main configuration surface is `gbash.Config`, but most callers should prefer `gbash.New(...)` with option helpers.
 
 ### Filesystem Setup
 
@@ -234,47 +228,52 @@ Filesystem setup is controlled through `Config.FileSystem`. It carries both:
 - the factory that creates a fresh sandbox filesystem for each session
 - the working directory that sessions start in
 
-Most callers should use one of these runtime helpers:
+Most callers should use one of these entry points:
 
-- `gbruntime.InMemoryFileSystem()` for the default mutable sandbox
-- `gbruntime.HostProjectFileSystem(root, opts)` for a real host project mounted read-only under an in-memory overlay
-- `gbruntime.CustomFileSystem(factory, workingDir)` for seeded or otherwise custom backends
+- `gbash.New()` for the default mutable in-memory sandbox
+- `gbash.WithWorkspace(root)` for a real host directory mounted read-only under an in-memory overlay
+- `gbash.WithFileSystem(gbash.CustomFileSystem(...))` for seeded or otherwise custom backends
 
-The zero value of `runtime.Config` still gives you an in-memory sandbox rooted at `/home/agent`.
+The zero value of `gbash.Config` still gives you an in-memory sandbox rooted at `/home/agent`.
 
 For the closest parity with `just-bash`'s real-directory overlay:
 
 ```go
-rt, err := gbruntime.New(
-	gbruntime.WithFileSystem(gbruntime.HostProjectFileSystem("/path/to/project", gbruntime.HostProjectOptions{
-		VirtualRoot: "/home/agent/project",
+rt, err := gbash.New(
+	gbash.WithWorkspace("/path/to/project"),
+)
+```
+
+That mounts the host directory read-only at `/home/agent/project`, starts the session there, and keeps all writes, deletes, and command stubs in the in-memory upper layer.
+
+If you need to change the mount point or host-file read cap, drop down to the explicit filesystem helper:
+
+```go
+rt, err := gbash.New(
+	gbash.WithFileSystem(gbash.HostDirectoryFileSystem("/path/to/project", gbash.HostDirectoryOptions{
+		MountPoint: "/home/agent/project",
 	})),
 )
 ```
 
-That mounts the host directory read-only at `/home/agent/project`, starts the session there, and keeps all writes, deletes, and command stubs in the in-memory upper layer. `VirtualRoot` defaults to `gbfs.DefaultHostVirtualRoot`. `MaxFileReadBytes` defaults to `gbfs.DefaultHostMaxFileReadBytes`. If you want the host tree mounted at `/`, set `VirtualRoot: "/"`.
+`MountPoint` defaults to `gbash.DefaultWorkspaceMountPoint`. `MaxFileReadBytes` defaults to `gbash.DefaultHostFileReadBytes`. If you want the host tree mounted at `/`, set `MountPoint: "/"`.
 
 ### Network Access
 
 Network access is disabled by default. When you set `Config.Network` or provide `Config.NetworkClient`, the runtime registers `curl` automatically. Otherwise `curl` is not present in the sandbox at all.
 
 ```go
-import (
-	gbnetwork "github.com/ewhauser/gbash/network"
-	gbruntime "github.com/ewhauser/gbash/runtime"
-)
-
-rt, err := gbruntime.New(
-	gbruntime.WithNetworkConfig(&gbnetwork.Config{
+rt, err := gbash.New(
+	gbash.WithNetwork(gbash.NetworkConfig{
 		AllowedURLPrefixes: []string{"https://api.example.com/v1/"},
-		AllowedMethods:     []gbnetwork.Method{gbnetwork.MethodGet, gbnetwork.MethodHead},
+		AllowedMethods:     []gbash.Method{gbash.MethodGet, gbash.MethodHead},
 		MaxResponseBytes:   10 << 20,
 		DenyPrivateRanges:  true,
 	}),
 )
 ```
 
-If you want full control over the transport in tests or embedding code, inject your own `Config.NetworkClient` instead of using `Config.Network`.
+If you want the simplest allowlist-only setup, use `gbash.WithHTTPAccess(...)` instead of `gbash.WithNetwork(...)`. If you want full control over the transport in tests or embedding code, inject your own `Config.NetworkClient` instead of using `Config.Network`.
 
 ## Security Model
 

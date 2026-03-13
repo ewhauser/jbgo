@@ -24,7 +24,7 @@ func newYQRegistry(tb testing.TB) *commands.Registry {
 func newYQRuntime(tb testing.TB) *gbruntime.Runtime {
 	tb.Helper()
 
-	rt, err := gbruntime.New(&gbruntime.Config{Registry: newYQRegistry(tb)})
+	rt, err := gbruntime.New(gbruntime.WithConfig(&gbruntime.Config{Registry: newYQRegistry(tb)}))
 	if err != nil {
 		tb.Fatalf("runtime.New() error = %v", err)
 	}

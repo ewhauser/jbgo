@@ -25,7 +25,7 @@ const (
 func newFuzzRuntime(tb testing.TB) *Runtime {
 	tb.Helper()
 
-	rt, err := New(&Config{
+	rt, err := New(WithConfig(&Config{
 		Policy: policy.NewStatic(&policy.Config{
 			ReadRoots:  []string{"/"},
 			WriteRoots: []string{"/"},
@@ -39,7 +39,7 @@ func newFuzzRuntime(tb testing.TB) *Runtime {
 				MaxFileBytes:         128 << 10,
 			},
 		}),
-	})
+	}))
 	if err != nil {
 		tb.Fatalf("New() error = %v", err)
 	}

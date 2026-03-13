@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/commands"
 	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
 	gbfs "github.com/ewhauser/gbash/fs"
-	gbruntime "github.com/ewhauser/gbash/runtime"
 	"google.golang.org/adk/tool"
 )
 
@@ -40,11 +40,11 @@ type bashToolResult struct {
 }
 
 type persistentBashTool struct {
-	rt         *gbruntime.Runtime
+	rt         *gbash.Runtime
 	fixtureDir string
 
 	mu      sync.Mutex
-	session *gbruntime.Session
+	session *gbash.Session
 	state   bashState
 }
 
@@ -73,7 +73,7 @@ func newPersistentBashTool(ctx context.Context) (*persistentBashTool, error) {
 		return nil, fmt.Errorf("register sqlite3 command: %w", err)
 	}
 
-	rt, err := gbruntime.New(gbruntime.WithRegistry(registry))
+	rt, err := gbash.New(gbash.WithRegistry(registry))
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}
@@ -100,7 +100,7 @@ func (t *persistentBashTool) runScript(ctx context.Context, input bashToolInput)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	result, err := t.session.Exec(ctx, &gbruntime.ExecutionRequest{
+	result, err := t.session.Exec(ctx, &gbash.ExecutionRequest{
 		Name:       "adk-bash",
 		Script:     input.Script,
 		Env:        cloneMap(t.state.env),
@@ -143,7 +143,7 @@ func (t *persistentBashTool) resetLocked(ctx context.Context) error {
 	return nil
 }
 
-func nextBashState(current bashState, result *gbruntime.ExecutionResult) bashState {
+func nextBashState(current bashState, result *gbash.ExecutionResult) bashState {
 	next := current
 	if result == nil || result.FinalEnv == nil {
 		if next.workDir == "" {
@@ -162,7 +162,7 @@ func nextBashState(current bashState, result *gbruntime.ExecutionResult) bashSta
 	return next
 }
 
-func seedLab(ctx context.Context, session *gbruntime.Session, fixtureDir string) error {
+func seedLab(ctx context.Context, session *gbash.Session, fixtureDir string) error {
 	if session == nil {
 		return errors.New("session is nil")
 	}
@@ -186,7 +186,7 @@ func seedLab(ctx context.Context, session *gbruntime.Session, fixtureDir string)
 		}
 	}
 
-	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
+	result, err := session.Exec(ctx, &gbash.ExecutionRequest{
 		Name:    "seed-lab",
 		WorkDir: labDir,
 		Script:  "sqlite3 incidents.db < incidents.sql" + "\n" + "mkdir -p " + workDir + "\n",
