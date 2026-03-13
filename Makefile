@@ -26,6 +26,7 @@ FUZZ_SMOKE_SHARD_CORE := \
 
 FUZZ_SMOKE_SHARD_PATHS := \
 	FuzzFilePathCommands \
+	FuzzRealpathCommand \
 	FuzzTruncateCommand \
 	FuzzCompatPredicateCommands \
 	FuzzDirectoryTraversalCommands \
@@ -66,6 +67,7 @@ FUZZ_FULL_SHARD_1 := \
 FUZZ_FULL_SHARD_2 := \
 	FuzzMalformedScript \
 	FuzzFilePathCommands \
+	FuzzRealpathCommand \
 	FuzzTruncateCommand \
 	FuzzCompatPredicateCommands \
 	FuzzMVFlagsCommand \

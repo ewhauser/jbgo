@@ -412,6 +412,245 @@ func TestReadlinkPosixAndVerboseErrors(t *testing.T) {
 	}
 }
 
+func TestRealpathModesAndFormatting(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	script := strings.Join([]string{
+		"echo hi > file",
+		"mkdir -p dir1 dir2/bar",
+		"ln -s file link-file",
+		"ln -s ../dir2/bar dir1/phys",
+		"ln -s ../dir2 dir1/log",
+		"realpath file",
+		"realpath link-file",
+		"realpath -z file link-file",
+		"realpath -s link-file",
+		"realpath --strip link-file",
+		"realpath --no-symlinks link-file",
+		"realpath -P dir1/phys/..",
+		"realpath -L dir1/log/..",
+		"",
+	}, "\n")
+
+	result := mustExecSession(t, session, script)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := "/home/agent/file\n" +
+		"/home/agent/file\n" +
+		"/home/agent/file\x00/home/agent/file\x00" +
+		"/home/agent/link-file\n" +
+		"/home/agent/link-file\n" +
+		"/home/agent/link-file\n" +
+		"/home/agent/dir2\n" +
+		"/home/agent/dir1\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestRealpathCanonicalizeAndRelativeOptions(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	script := strings.Join([]string{
+		"mkdir -p root/sub existing_dir",
+		"touch root/file other",
+		"realpath existing_dir/missing",
+		"realpath -E existing_dir/missing",
+		"realpath --canonicalize existing_dir/missing",
+		"realpath -e existing_dir",
+		"realpath --canonicalize-existing existing_dir",
+		"realpath -m missing/path",
+		"realpath --canonicalize-missing missing/other",
+		"realpath -e -E existing_dir/missing",
+		"realpath -sm --relative-base=/home/agent/root --relative-to=/home/agent/root /home/agent/other /home/agent/root",
+		"realpath -sm --relative-base=/home/agent/root/sub --relative-to=/home/agent/root /home/agent/root/file",
+		"realpath -sm --relative-base=/home/agent/root /home/agent/root/file",
+		"realpath -m --relative-to=prefix prefixed/1",
+		"",
+	}, "\n")
+
+	result := mustExecSession(t, session, script)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := strings.Join([]string{
+		"/home/agent/existing_dir/missing",
+		"/home/agent/existing_dir/missing",
+		"/home/agent/existing_dir/missing",
+		"/home/agent/existing_dir",
+		"/home/agent/existing_dir",
+		"/home/agent/missing/path",
+		"/home/agent/missing/other",
+		"/home/agent/existing_dir/missing",
+		"/home/agent/other",
+		".",
+		"/home/agent/root/file",
+		"file",
+		"../prefixed/1",
+		"",
+	}, "\n")
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestRealpathErrorsContinueAndQuiet(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	setup := mustExecSession(t, session, strings.Join([]string{
+		"mkdir -p dir1 dir2",
+		"touch dir2/bar",
+		"ln -s ../dir2/bar dir1/foo1",
+		"ln -s /dir2/bar dir1/foo2",
+		"ln -s ../dir2/baz dir1/foo3",
+		"",
+	}, "\n"))
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	result := mustExecSession(t, session, "realpath dir1/foo1 dir1/foo2 dir1/foo3\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "/home/agent/dir2/bar\n/home/agent/dir2/baz\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "realpath: dir1/foo2: No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+
+	quiet := mustExecSession(t, session, "realpath -q dir1/foo1 dir1/foo2\n")
+	if quiet.ExitCode != 1 {
+		t.Fatalf("quiet ExitCode = %d, want 1; stdout=%q stderr=%q", quiet.ExitCode, quiet.Stdout, quiet.Stderr)
+	}
+	if got, want := quiet.Stdout, "/home/agent/dir2/bar\n"; got != want {
+		t.Fatalf("quiet stdout = %q, want %q", got, want)
+	}
+	if quiet.Stderr != "" {
+		t.Fatalf("quiet stderr = %q, want empty", quiet.Stderr)
+	}
+}
+
+func TestRealpathTrailingSlashAndRelativeDirectoryChecks(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	setup := mustExecSession(t, session, strings.Join([]string{
+		"mkdir -p dir dir1",
+		"touch file dir1/f",
+		"ln -s file link_file",
+		"ln -s dir link_dir",
+		"ln -s no_dir link_no_dir",
+		"",
+	}, "\n"))
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	fileLink := mustExecSession(t, session, "realpath link_file/\n")
+	if fileLink.ExitCode != 1 {
+		t.Fatalf("fileLink ExitCode = %d, want 1; stdout=%q stderr=%q", fileLink.ExitCode, fileLink.Stdout, fileLink.Stderr)
+	}
+	if got, want := fileLink.Stderr, "realpath: link_file/: Not a directory\n"; got != want {
+		t.Fatalf("fileLink stderr = %q, want %q", got, want)
+	}
+
+	dirLink := mustExecSession(t, session, "realpath link_dir/\n")
+	if dirLink.ExitCode != 0 {
+		t.Fatalf("dirLink ExitCode = %d, want 0; stderr=%q", dirLink.ExitCode, dirLink.Stderr)
+	}
+	if got, want := dirLink.Stdout, "/home/agent/dir\n"; got != want {
+		t.Fatalf("dirLink stdout = %q, want %q", got, want)
+	}
+
+	missingLink := mustExecSession(t, session, "realpath link_no_dir/\n")
+	if missingLink.ExitCode != 0 {
+		t.Fatalf("missingLink ExitCode = %d, want 0; stderr=%q", missingLink.ExitCode, missingLink.Stderr)
+	}
+	if got, want := missingLink.Stdout, "/home/agent/no_dir\n"; got != want {
+		t.Fatalf("missingLink stdout = %q, want %q", got, want)
+	}
+
+	missingMode := mustExecSession(t, session, "realpath -m link_file/\n")
+	if missingMode.ExitCode != 0 {
+		t.Fatalf("missingMode ExitCode = %d, want 0; stderr=%q", missingMode.ExitCode, missingMode.Stderr)
+	}
+	if got, want := missingMode.Stdout, "/home/agent/file\n"; got != want {
+		t.Fatalf("missingMode stdout = %q, want %q", got, want)
+	}
+
+	relativeDir := mustExecSession(t, session, "realpath -e --relative-base=. --relative-to=dir1/f .\n")
+	if relativeDir.ExitCode != 1 {
+		t.Fatalf("relativeDir ExitCode = %d, want 1; stdout=%q stderr=%q", relativeDir.ExitCode, relativeDir.Stdout, relativeDir.Stderr)
+	}
+	if !strings.Contains(relativeDir.Stderr, "Not a directory") {
+		t.Fatalf("relativeDir stderr = %q, want directory diagnostic", relativeDir.Stderr)
+	}
+
+	relativeDirOK := mustExecSession(t, session, "realpath -e --relative-base=. --relative-to=dir1 .\n")
+	if relativeDirOK.ExitCode != 0 {
+		t.Fatalf("relativeDirOK ExitCode = %d, want 0; stderr=%q", relativeDirOK.ExitCode, relativeDirOK.Stderr)
+	}
+	if got, want := relativeDirOK.Stdout, "..\n"; got != want {
+		t.Fatalf("relativeDirOK stdout = %q, want %q", got, want)
+	}
+}
+
+func TestRealpathRejectsEmptyOperandsAndSupportsVersion(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	emptyOperand := mustExecSession(t, session, "realpath ''\n")
+	if emptyOperand.ExitCode != 1 {
+		t.Fatalf("emptyOperand ExitCode = %d, want 1; stdout=%q stderr=%q", emptyOperand.ExitCode, emptyOperand.Stdout, emptyOperand.Stderr)
+	}
+	if got, want := emptyOperand.Stderr, "realpath: invalid operand: empty string\n"; got != want {
+		t.Fatalf("emptyOperand stderr = %q, want %q", got, want)
+	}
+
+	emptyRelative := mustExecSession(t, session, "realpath --relative-base='' .\n")
+	if emptyRelative.ExitCode != 1 {
+		t.Fatalf("emptyRelative ExitCode = %d, want 1; stdout=%q stderr=%q", emptyRelative.ExitCode, emptyRelative.Stdout, emptyRelative.Stderr)
+	}
+	if got, want := emptyRelative.Stderr, "realpath: invalid operand: empty string\n"; got != want {
+		t.Fatalf("emptyRelative stderr = %q, want %q", got, want)
+	}
+
+	version := mustExecSession(t, session, "realpath -V ignored\n")
+	if version.ExitCode != 0 {
+		t.Fatalf("version ExitCode = %d, want 0; stderr=%q", version.ExitCode, version.Stderr)
+	}
+	if got, want := version.Stdout, "realpath (gbash)\n"; got != want {
+		t.Fatalf("version stdout = %q, want %q", got, want)
+	}
+}
+
 func TestMktempCreatesFilesAndDirectories(t *testing.T) {
 	session := newSession(t, &Config{})
 

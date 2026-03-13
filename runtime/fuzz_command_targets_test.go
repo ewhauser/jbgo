@@ -65,6 +65,57 @@ func FuzzFilePathCommands(f *testing.F) {
 	})
 }
 
+func FuzzRealpathCommand(f *testing.F) {
+	rt := newFuzzRuntime(f)
+
+	seeds := []struct {
+		name string
+		data []byte
+	}{
+		{"alpha", []byte("hello\n")},
+		{"notes-1", []byte("# title\nbody\n")},
+		{"data.bin", []byte{0x00, 0x01, 0x02, 0x03, 0xff}},
+	}
+	for _, seed := range seeds {
+		f.Add(seed.name, seed.data)
+	}
+
+	f.Fuzz(func(t *testing.T, rawName string, rawData []byte) {
+		session := newFuzzSession(t, rt)
+		inputPath := fuzzPath(rawName) + ".txt"
+		linkPath := fuzzPath(rawName) + ".ln"
+		missingPath := fuzzPath(rawName) + ".missing"
+		dirPath := path.Dir(inputPath)
+		data := clampFuzzData(rawData)
+
+		writeSessionFile(t, session, inputPath, data)
+
+		script := fmt.Appendf(nil,
+			"mkdir -p %s\nln -s -f %s %s\nrealpath %s >/tmp/realpath-basic.out\nrealpath -z %s %s >/tmp/realpath-zero.out\nrealpath -s %s >/tmp/realpath-strip.out\nrealpath -E %s.leaf >/tmp/realpath-canonical.out\nrealpath -e %s >/tmp/realpath-existing.out\nrealpath -m %s >/tmp/realpath-missing.out\nrealpath -L %s/.. >/tmp/realpath-logical.out || true\nrealpath -P %s/.. >/tmp/realpath-physical.out || true\nrealpath --relative-to=%s %s >/tmp/realpath-relative.out\nrealpath --relative-base=%s %s >/tmp/realpath-relative-base.out\nrealpath -q %s >/tmp/realpath-quiet.out || true\n",
+			shellQuote(dirPath),
+			shellQuote(inputPath),
+			shellQuote(linkPath),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(linkPath),
+			shellQuote(linkPath),
+			shellQuote(inputPath),
+			shellQuote(inputPath),
+			shellQuote(missingPath),
+			shellQuote(linkPath),
+			shellQuote(linkPath),
+			shellQuote(dirPath),
+			shellQuote(inputPath),
+			shellQuote(dirPath),
+			shellQuote(inputPath),
+			shellQuote(missingPath),
+		)
+
+		result, err := runFuzzSessionScript(t, session, script)
+		assertSecureFuzzOutcome(t, script, result, err)
+	})
+}
+
 func FuzzTruncateCommand(f *testing.F) {
 	rt := newFuzzRuntime(f)
 
