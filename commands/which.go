@@ -3,7 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
-	"strings"
+	"io"
 )
 
 type Which struct{}
@@ -17,24 +17,46 @@ func (c *Which) Name() string {
 }
 
 func (c *Which) Run(ctx context.Context, inv *Invocation) error {
-	if len(inv.Args) > 0 && inv.Args[0] == "--help" {
-		_, _ = fmt.Fprintln(inv.Stdout, "usage: which [-as] NAME...")
-		return nil
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Which) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "which",
+		Usage: "which [-as] NAME...",
+		HelpRenderer: func(w io.Writer, _ CommandSpec) error {
+			_, err := io.WriteString(w, "usage: which [-as] NAME...\n")
+			return err
+		},
+		Options: []OptionSpec{
+			{Name: "all", Short: 'a', Help: "print all matching PATH entries"},
+			{Name: "silent", Short: 's', Help: "print nothing, only return status"},
+		},
+		Args: []ArgSpec{
+			{Name: "name", ValueName: "NAME", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions: true,
+			AutoHelp:          true,
+		},
 	}
-	all, silent, names, err := parseWhichArgs(inv)
-	if err != nil {
-		return err
-	}
+}
+
+func (c *Which) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	all := matches.Has("all")
+	silent := matches.Has("silent")
+	names := matches.Args("name")
 	if len(names) == 0 {
 		return &ExitError{Code: 1}
 	}
+
 	exitCode := 0
 	for _, name := range names {
-		matches, err := resolveAllCommands(ctx, inv, inv.Env, inv.Cwd, name)
+		paths, err := resolveAllCommands(ctx, inv, inv.Env, inv.Cwd, name)
 		if err != nil {
 			return err
 		}
-		if len(matches) == 0 {
+		if len(paths) == 0 {
 			exitCode = 1
 			continue
 		}
@@ -42,10 +64,10 @@ func (c *Which) Run(ctx context.Context, inv *Invocation) error {
 			continue
 		}
 		if !all {
-			matches = matches[:1]
+			paths = paths[:1]
 		}
-		for _, match := range matches {
-			if _, err := fmt.Fprintln(inv.Stdout, match); err != nil {
+		for _, path := range paths {
+			if _, err := fmt.Fprintln(inv.Stdout, path); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
@@ -56,41 +78,6 @@ func (c *Which) Run(ctx context.Context, inv *Invocation) error {
 	return nil
 }
 
-func parseWhichArgs(inv *Invocation) (all, silent bool, names []string, err error) {
-	args := inv.Args
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			args = args[1:]
-			break
-		}
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			break
-		}
-		switch arg {
-		case "-a":
-			all = true
-		case "-s":
-			silent = true
-		default:
-			if len(arg) > 2 && arg[0] == '-' && arg[1] != '-' {
-				for _, flag := range arg[1:] {
-					switch flag {
-					case 'a':
-						all = true
-					case 's':
-						silent = true
-					default:
-						return false, false, nil, exitf(inv, 1, "which: unsupported flag -%c", flag)
-					}
-				}
-			} else {
-				return false, false, nil, exitf(inv, 1, "which: unsupported flag %s", arg)
-			}
-		}
-		args = args[1:]
-	}
-	return all, silent, args, nil
-}
-
 var _ Command = (*Which)(nil)
+var _ SpecProvider = (*Which)(nil)
+var _ ParsedRunner = (*Which)(nil)
