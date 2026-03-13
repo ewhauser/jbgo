@@ -63,11 +63,7 @@ Read `references/fuzz-patterns.md` for the full guide on writing fuzz targets, c
 - Add the fuzz target to the `fuzz:` Makefile target
 - Run `make fuzz FUZZTIME=30s` to verify it passes
 
-### 5. Update SPEC.md
-
-Per the repository's spec sync rules, adding or removing commands requires a SPEC.md update. Find the command list section and add the new command in the appropriate category. If the command introduces new capabilities (e.g., network access, new file formats), document those too.
-
-### 6. Verify
+### 5. Verify
 
 ```bash
 go build ./...        # Compiles
