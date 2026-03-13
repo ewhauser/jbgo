@@ -28,7 +28,7 @@ State:
 - Ledger initialized: yes
 - Active task: TODO migration pass
 - TODO scope at start: 59 command files / 63 command entrypoints
-- Current verification gate: `base32` / `base64` complete; preparing commit and moving to `bash`
+- Current verification gate: `bash` / `sh` complete; preparing commit and moving to `env`
 
 Done:
 - Confirmed `CONTINUITY.md` was missing at start of turn.
@@ -47,20 +47,28 @@ Done:
 - Verified `go test ./...` passed.
 - Verified `make lint` passed.
 - Verified explicit GNU compatibility test `tests/basenc/base64.pl` passed via `go run ./cmd/gbash-gnu --cache-dir .cache/gnu --gbash-bin .cache/gnu/bin/gbash --tests 'tests/basenc/base64.pl'`.
+- Committed `base32` / `base64` migration as `1931e84`.
 - Explored next-item risks:
 - `bash` / `sh`: manual parser today; main migration risk is preserving `-c` semantics and first-positional stop behavior.
 - `env` / `printenv`: manual parser today; main migration risk is preserving mixed option / assignment / command grammar, especially after bare `--`.
+- Rewrote `bash` / `sh` onto `CommandSpec` / `RunParsed(...)`.
+- Added deterministic tests for `bash` / `sh` help, script-file execution, missing-script handling, and `sh -s`.
+- Verified `go test ./runtime -run 'TestBash|TestSh'` passed.
+- Verified `go test ./cmd/gbash -run 'TestRunCLIMulticallShRunsCommandStringWithArgs'` passed.
+- Verified `go test ./...` passed after the `bash` / `sh` migration.
+- Verified `make lint` passed after the `bash` / `sh` migration.
 
 Now:
-- Commit the completed `base32` / `base64` migration.
-- Move to `bash`, then `sh`, using the already-collected exploration notes.
+- Commit the completed `bash` / `sh` migration.
+- Move to `env`, then `printenv`, using the already-collected exploration notes.
 
 Next:
-- Migrate `bash` / `sh` next.
 - Migrate `env` / `printenv` after that.
+- Migrate `gzip` / `gunzip` / `zcat` after `env` / `printenv`.
 
 Open questions (UNCONFIRMED if needed):
 - UNCONFIRMED: No dedicated GNU test file for `base32` alone was found; `tests/basenc/base64.pl` appears to be the shared GNU compatibility test covering both `base32` and `base64`.
+- UNCONFIRMED: No GNU coreutils compatibility harness target exists for `bash` / `sh`; verification for those commands relies on repo runtime/CLI coverage instead.
 
 Working set (files/ids/commands):
 - File: `CONTINUITY.md`
@@ -72,6 +80,7 @@ Working set (files/ids/commands):
 - File: `commands/command_spec.go`
 - File: `commands/bash.go`
 - File: `commands/env.go`
+- File: `runtime/process_helper_commands_test.go`
 - File: `runtime/base32_commands_test.go`
 - File: `runtime/base64_commands_test.go`
 - Command: `ls -la`
@@ -83,12 +92,14 @@ Working set (files/ids/commands):
 - Command: `make lint`
 - Command: `go run ./cmd/gbash-gnu --cache-dir .cache/gnu --setup`
 - Command: `go run ./cmd/gbash-gnu --cache-dir .cache/gnu --gbash-bin .cache/gnu/bin/gbash --tests 'tests/basenc/base64.pl'`
+- Command: `go test ./runtime -run 'TestBash|TestSh'`
+- Command: `go test ./cmd/gbash -run 'TestRunCLIMulticallShRunsCommandStringWithArgs'`
 
 Migration checklist:
 - [x] `base32`
 - [x] `base64`
-- [ ] `bash`
-- [ ] `sh`
+- [x] `bash`
+- [x] `sh`
 - [ ] `env`
 - [ ] `printenv`
 - [ ] `gzip`
