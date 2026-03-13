@@ -57,10 +57,16 @@ func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, stdin io.Reader
 			return 1, fmt.Errorf("render interactive statements: %w", err)
 		}
 
+		env := cloneEnv(state.env)
+		if env == nil {
+			env = make(map[string]string, 1)
+		}
+		env["TTY"] = "/dev/tty"
+
 		result, err := session.Exec(ctx, &gbash.ExecutionRequest{
 			Name:       "interactive",
 			Script:     script,
-			Env:        cloneEnv(state.env),
+			Env:        env,
 			WorkDir:    state.workDir,
 			ReplaceEnv: state.env != nil,
 		})

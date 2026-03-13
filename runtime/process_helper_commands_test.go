@@ -856,6 +856,26 @@ func TestTtyReportsNotATTYAndSupportsQuietAliases(t *testing.T) {
 	}
 }
 
+func TestTtyUsesSandboxTTYEnvironment(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "TTY=/dev/pts/0 tty\nTTY=tty1 tty -s\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/dev/pts/0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestTtyHelpVersionAndErrors(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strings"
 )
@@ -158,7 +157,7 @@ func ttyQuote(value string) string {
 
 func ttyTerminalPath(inv *Invocation) (string, bool) {
 	if inv == nil || inv.Stdin == nil {
-		return "", false
+		return ttyEnvPath(inv)
 	}
 
 	if meta, ok := inv.Stdin.(RedirectMetadata); ok {
@@ -166,12 +165,22 @@ func ttyTerminalPath(inv *Invocation) (string, bool) {
 			return ttyPath, true
 		}
 	}
+	return ttyEnvPath(inv)
+}
 
-	file, ok := inv.Stdin.(*os.File)
-	if !ok {
+func ttyEnvPath(inv *Invocation) (string, bool) {
+	if inv == nil || inv.Env == nil {
 		return "", false
 	}
-	return ttyHostPath(file)
+
+	ttyValue := strings.TrimSpace(inv.Env["TTY"])
+	if ttyValue == "" {
+		return "", false
+	}
+	if !strings.HasPrefix(ttyValue, "/") {
+		ttyValue = "/dev/" + strings.TrimLeft(ttyValue, "/")
+	}
+	return ttyRecognizedPath(ttyValue)
 }
 
 // The sandbox filesystem does not model character-device metadata, so virtual
