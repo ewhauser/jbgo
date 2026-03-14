@@ -3,7 +3,7 @@ module github.com/ewhauser/gbash/contrib/yq
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.0
+	github.com/ewhauser/gbash v0.0.7
 	github.com/mikefarah/yq/v4 v4.52.4
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 )
@@ -13,7 +13,6 @@ require (
 	github.com/agext/levenshtein v1.2.1 // indirect
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
-	github.com/benhoyt/goawk v1.31.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
@@ -31,6 +30,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect

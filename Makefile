@@ -1,11 +1,18 @@
-.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish compat-docker-build compat-docker-run release-check release-snapshot
+.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish compat-docker-build compat-docker-run release release-check release-snapshot fix-modules tag-release
 
-GO_PACKAGES := ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
+GO_PACKAGES := ./... ./contrib/awk/... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 BENCH_PACKAGES := ./internal/runtime ./cmd/gbash ./contrib/jq
 
 FUZZTIME ?= 10s
 FUZZ_SMOKE_TIME ?= 3s
 GORELEASER_VERSION ?= v2.14.3
+GH ?= gh
+MODULE_VERSION ?=
+RELEASE_VERSION ?=
+RELEASE_REF ?= main
+RELEASE_WORKFLOW ?= prepare-release.yml
+TAG_REMOTE ?= origin
+PUSH_TAGS ?= 0
 BENCH_SMOKE_COUNT ?= 8
 BENCH_SMOKE_TIME ?= 100ms
 BENCH_FULL_COUNT ?= 10
@@ -130,6 +137,7 @@ lint:
 	@which golangci-lint > /dev/null || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	golangci-lint run ./...
 	cd examples && golangci-lint run ./...
+	cd contrib/awk && golangci-lint run ./...
 	cd contrib/extras && golangci-lint run ./...
 	cd contrib/sqlite3 && golangci-lint run ./...
 	cd contrib/yq && golangci-lint run ./...
@@ -202,8 +210,18 @@ compat-docker-build:
 compat-docker-run:
 	./scripts/compat-docker-run.sh
 
+release:
+	@command -v $(GH) > /dev/null || { echo "$(GH) CLI is required"; exit 1; }
+	$(GH) workflow run $(RELEASE_WORKFLOW) --ref $(RELEASE_REF)
+
 release-check:
 	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) check
 
 release-snapshot:
 	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) release --snapshot --clean
+
+fix-modules:
+	./scripts/fix_modules.sh $(MODULE_VERSION)
+
+tag-release:
+	PUSH='$(PUSH_TAGS)' REMOTE='$(TAG_REMOTE)' ./scripts/tag_release.sh $(RELEASE_VERSION)

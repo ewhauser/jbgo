@@ -1,32 +1,179 @@
-name: Release
+name: Publish Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  pull_request_target:
+    types:
+      - closed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version in vX.Y.Z form
+        required: true
+        type: string
+      ref:
+        description: Commit SHA or ref to publish from
+        required: false
+        default: main
+        type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: publish-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.event.pull_request.head.ref }}
+  cancel-in-progress: false
+
 jobs:
-  goreleaser:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.context.outputs.should_publish }}
+      version: ${{ steps.context.outputs.version }}
+      ref: ${{ steps.context.outputs.ref }}
+    steps:
+      - id: context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_REF: ${{ inputs.ref }}
+          REPOSITORY: ${{ github.repository }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          should_publish=false
+          version=""
+          ref=""
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            should_publish=true
+            version="${INPUT_VERSION}"
+            ref="${INPUT_REF:-main}"
+          elif [[ "${PR_MERGED}" == "true" ]] \
+            && [[ "${PR_BASE_REF}" == "main" ]] \
+            && [[ "${PR_HEAD_REPO}" == "${REPOSITORY}" ]] \
+            && [[ "${PR_HEAD_REF}" == release/v* ]] \
+            && [[ ",${PR_LABELS}," == *",release,"* ]] \
+            && [[ "${PR_AUTHOR}" == "github-actions[bot]" ]] \
+            && [[ -n "${PR_MERGE_SHA}" ]]; then
+            should_publish=true
+            version="${PR_HEAD_REF#release/}"
+            ref="${PR_MERGE_SHA}"
+          fi
+
+          if [[ "${should_publish}" == "true" ]] && [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid release version: ${version}" >&2
+            exit 1
+          fi
+
+          {
+            echo "should_publish=${should_publish}"
+            echo "version=${version}"
+            echo "ref=${ref}"
+          } >> "${GITHUB_OUTPUT}"
+
+  publish:
+    needs: resolve
+    if: needs.resolve.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.resolve.outputs.ref }}
+
+      - name: Fetch tags
+        run: git fetch --force --tags origin
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
+      - name: Verify release tree
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          make fix-modules MODULE_VERSION="${VERSION}"
+          if ! git diff --quiet --exit-code; then
+            echo "release commit is not synchronized for ${VERSION}" >&2
+            git status --short
+            git diff --stat
+            exit 1
+          fi
+
       - run: make build
 
       - run: make test
 
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Detect previous root tag
+        id: previous
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          previous="$(git tag --list 'v*' --sort=-version:refname | grep -Fxv "${VERSION}" | head -n 1 || true)"
+          echo "tag=${previous}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create and push coordinated tags
+        env:
+          ALLOW_NON_MAIN: "1"
+          PUSH: "1"
+          REMOTE: origin
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: ./scripts/tag_release.sh
+
+      - name: Check out root release tag
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: git checkout --force "${VERSION}"
+
+      - name: Detect existing GitHub release
+        id: github_release
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        with:
+          script: |
+            try {
+              await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: process.env.VERSION,
+              });
+              core.setOutput("exists", "true");
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput("exists", "false");
+                return;
+              }
+              throw error;
+            }
+
       - uses: goreleaser/goreleaser-action@v6
+        if: steps.github_release.outputs.exists != 'true'
         with:
           version: v2.14.3
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.resolve.outputs.version }}
+          GORELEASER_PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+
+      - name: Skip Goreleaser when release already exists
+        if: steps.github_release.outputs.exists == 'true'
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: echo "GitHub release already exists for ${VERSION}; skipping goreleaser."

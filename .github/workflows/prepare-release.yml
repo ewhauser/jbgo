@@ -1,0 +1,94 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Fetch tags
+        run: git fetch --force --tags origin
+
+      - name: Determine next release version
+        id: version
+        run: |
+          set -euo pipefail
+          latest="$(git tag --list 'v*' --sort=-version:refname | head -n 1 || true)"
+          if [[ -z "${latest}" ]]; then
+            version="v0.0.1"
+          elif [[ "${latest}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            version="v${major}.${minor}.$((patch + 1))"
+          else
+            echo "latest root tag is not in vX.Y.Z form: ${latest}" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure release label exists
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: "release",
+                color: "0e8a16",
+                description: "Automated release preparation PR",
+              });
+            } catch (error) {
+              if (error.status !== 422) {
+                throw error;
+              }
+            }
+
+      - name: Sync module versions
+        run: make fix-modules MODULE_VERSION='${{ steps.version.outputs.version }}'
+
+      - name: Run tests
+        run: make test
+
+      - name: Run lint
+        run: make lint
+
+      - name: Check release config
+        run: make release-check
+
+      - name: Create or update release PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: release/${{ steps.version.outputs.version }}
+          base: main
+          title: "release: ${{ steps.version.outputs.version }}"
+          commit-message: prepare release ${{ steps.version.outputs.version }}
+          body: |
+            Automated release preparation for `${{ steps.version.outputs.version }}`.
+
+            This PR:
+            - syncs nested module requirements and local replaces via `make fix-modules`
+            - validates the release candidate with `make test`, `make lint`, and `make release-check`
+          labels: release
+          delete-branch: false

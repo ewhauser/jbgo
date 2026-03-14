@@ -3,11 +3,11 @@ module github.com/ewhauser/gbash/contrib/extras
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.0
-	github.com/ewhauser/gbash/contrib/awk v0.0.0
-	github.com/ewhauser/gbash/contrib/jq v0.0.0
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.0
-	github.com/ewhauser/gbash/contrib/yq v0.0.0
+	github.com/ewhauser/gbash v0.0.7
+	github.com/ewhauser/gbash/contrib/awk v0.0.7
+	github.com/ewhauser/gbash/contrib/jq v0.0.7
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.7
+	github.com/ewhauser/gbash/contrib/yq v0.0.7
 )
 
 require (
@@ -39,6 +39,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
