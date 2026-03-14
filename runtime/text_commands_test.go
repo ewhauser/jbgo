@@ -298,6 +298,70 @@ func TestWCCountsLinesFromExplicitStdinWithoutPadding(t *testing.T) {
 	}
 }
 
+func TestWCSupportsMaxLineLengthAndTotalModes(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a\\n123\\n' > /tmp/a.txt\nprintf 'xx\\n' > /tmp/b.txt\nwc -L /tmp/a.txt\nwc --total=only -c /tmp/a.txt /tmp/b.txt\nwc --total=always -c /tmp/b.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "3 /tmp/a.txt\n9 total\n3 /tmp/b.txt\n3 total\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCSupportsFiles0From(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/a.txt", []byte("a\n"))
+	writeSessionFile(t, session, "/tmp/b.txt", []byte("bb\n"))
+	writeSessionFile(t, session, "/tmp/names", []byte("/tmp/a.txt\x00/tmp/b.txt\x00"))
+
+	result := mustExecSession(t, session, "wc --files0-from=/tmp/names\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	for _, want := range []string{"/tmp/a.txt", "/tmp/b.txt", "total"} {
+		if !strings.Contains(result.Stdout, want) {
+			t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+		}
+	}
+}
+
+func TestWCRejectsFiles0FromConflictsAndBadNames(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	conflict, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "wc --files0-from=- file\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(conflict) error = %v", err)
+	}
+	if conflict.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", conflict.ExitCode, conflict.Stderr)
+	}
+	if !strings.Contains(conflict.Stderr, "file operands cannot be combined with --files0-from") {
+		t.Fatalf("Stderr = %q, want files0-from conflict", conflict.Stderr)
+	}
+
+	invalid, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '\\0/tmp/a.txt\\0' | wc --files0-from=-\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(invalid) error = %v", err)
+	}
+	if invalid.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", invalid.ExitCode, invalid.Stderr)
+	}
+	if !strings.Contains(invalid.Stderr, "invalid zero-length file name") {
+		t.Fatalf("Stderr = %q, want zero-length filename error", invalid.Stderr)
+	}
+}
+
 func TestCatSupportsNumberFlag(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 

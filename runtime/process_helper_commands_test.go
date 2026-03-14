@@ -200,6 +200,29 @@ func TestWhichFindsRegisteredCommandsOnPath(t *testing.T) {
 	}
 }
 
+func TestWhichSupportsAllSilentAndHelp(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "PATH=/bin:/usr/bin which -a true\nwhich -s missing || echo silent-miss\nwhich --help\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "/bin/true") || !strings.Contains(result.Stdout, "/usr/bin/true") {
+		t.Fatalf("Stdout = %q, want all PATH matches", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "silent-miss\n") {
+		t.Fatalf("Stdout = %q, want silent miss marker", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "usage: which [-as] NAME...\n") {
+		t.Fatalf("Stdout = %q, want help output", result.Stdout)
+	}
+}
+
 func TestHelpShowsBuiltinSynopsis(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -1019,6 +1042,25 @@ func TestUptimeDefaultSincePrettyAndVersion(t *testing.T) {
 	}
 	if got, want := versionResult.Stdout, "uptime (gbash)\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+
+	helpResult, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "uptime --help\nuptime --ver\nuptime --sin\n",
+	})
+	if err != nil {
+		t.Fatalf("Run(help) error = %v", err)
+	}
+	if helpResult.ExitCode != 0 {
+		t.Fatalf("help ExitCode = %d, want 0; stderr=%q", helpResult.ExitCode, helpResult.Stderr)
+	}
+	if !strings.Contains(helpResult.Stdout, "Usage: uptime [OPTION]... [FILE]") {
+		t.Fatalf("Stdout = %q, want help usage", helpResult.Stdout)
+	}
+	if !strings.Contains(helpResult.Stdout, "uptime (gbash)\n") {
+		t.Fatalf("Stdout = %q, want inferred version output", helpResult.Stdout)
+	}
+	if !regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\n$`).MatchString(helpResult.Stdout) {
+		t.Fatalf("Stdout = %q, want inferred --since output", helpResult.Stdout)
 	}
 }
 

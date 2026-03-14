@@ -33,26 +33,34 @@ func (c *Uptime) Name() string {
 }
 
 func (c *Uptime) Run(ctx context.Context, inv *Invocation) error {
-	opts, err := parseUptimeArgs(inv)
+	return RunCommand(ctx, c, inv)
+}
+
+func (c *Uptime) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "uptime",
+		About: "Tell how long the system has been running.",
+		Usage: "uptime [OPTION]... [FILE]",
+		Options: []OptionSpec{
+			{Name: "since", Short: 's', Long: "since", Help: "system up since, in yyyy-mm-dd HH:MM:SS format"},
+			{Name: "pretty", Short: 'p', Long: "pretty", Help: "show uptime in pretty format"},
+		},
+		Args: []ArgSpec{
+			{Name: "file", ValueName: "FILE", Repeatable: true},
+		},
+		Parse: ParseConfig{
+			InferLongOptions: true,
+			AutoHelp:         true,
+			AutoVersion:      true,
+		},
+	}
+}
+
+func (c *Uptime) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := parseUptimeMatches(inv, matches)
 	if err != nil {
 		return err
 	}
-
-	switch opts.mode {
-	case "help":
-		_, err := fmt.Fprintln(inv.Stdout, "usage: uptime [-p|--pretty] [-s|--since] [FILE]")
-		if err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
-		return nil
-	case "version":
-		_, err := fmt.Fprintln(inv.Stdout, "uptime (gbash)")
-		if err != nil {
-			return &ExitError{Code: 1, Err: err}
-		}
-		return nil
-	}
-
 	now := time.Now()
 	bootAt := uptimeBootTimeFromEnv(inv.Env)
 
@@ -129,49 +137,23 @@ func (c *Uptime) writeFallback(inv *Invocation, stderrLine string) error {
 }
 
 type uptimeOptions struct {
-	mode   string
 	pretty bool
 	since  bool
 	path   string
 }
 
-func parseUptimeArgs(inv *Invocation) (uptimeOptions, error) {
-	args := append([]string(nil), inv.Args...)
-	opts := uptimeOptions{}
-
-	for len(args) > 0 {
-		arg := args[0]
-		args = args[1:]
-		switch {
-		case arg == "--help":
-			opts.mode = "help"
-			return opts, nil
-		case arg == "--version":
-			opts.mode = "version"
-			return opts, nil
-		case arg == "-p" || arg == "--pretty":
-			opts.pretty = true
-		case arg == "-s" || arg == "--since":
-			opts.since = true
-		case arg == "--":
-			if len(args) > 1 {
-				return uptimeOptions{}, exitf(inv, 1, "uptime: unexpected value '%s'", args[1])
-			}
-			if len(args) == 1 {
-				opts.path = args[0]
-			}
-			return opts, nil
-		case strings.HasPrefix(arg, "--"):
-			return uptimeOptions{}, exitf(inv, 1, "uptime: unrecognized option '%s'", arg)
-		case strings.HasPrefix(arg, "-") && arg != "-":
-			return uptimeOptions{}, exitf(inv, 1, "uptime: invalid option -- '%s'", strings.TrimPrefix(arg, "-"))
-		case opts.path == "":
-			opts.path = arg
-		default:
-			return uptimeOptions{}, exitf(inv, 1, "uptime: unexpected value '%s'", arg)
-		}
+func parseUptimeMatches(inv *Invocation, matches *ParsedCommand) (uptimeOptions, error) {
+	files := matches.Args("file")
+	if len(files) > 1 {
+		return uptimeOptions{}, exitf(inv, 1, "uptime: unexpected value '%s'", files[1])
 	}
-
+	opts := uptimeOptions{
+		pretty: matches.Has("pretty"),
+		since:  matches.Has("since"),
+	}
+	if len(files) == 1 {
+		opts.path = files[0]
+	}
 	return opts, nil
 }
 
@@ -278,3 +260,5 @@ func uptimeParseUtmp(data []byte) (time.Time, int, error) {
 }
 
 var _ Command = (*Uptime)(nil)
+var _ SpecProvider = (*Uptime)(nil)
+var _ ParsedRunner = (*Uptime)(nil)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	stdfs "io/fs"
-	"strings"
 
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/policy"
@@ -100,13 +99,6 @@ func Exitf(inv *Invocation, code int, format string, args ...any) error {
 
 func exitf(inv *Invocation, code int, format string, args ...any) error {
 	return Exitf(inv, code, format, args...)
-}
-
-func stdinReader(inv *Invocation) io.Reader {
-	if inv == nil || inv.Stdin == nil {
-		return strings.NewReader("")
-	}
-	return inv.Stdin
 }
 
 func exitCodeForError(err error) int {

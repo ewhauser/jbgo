@@ -141,18 +141,9 @@ func (c *XArgs) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 		return RenderCommandVersion(inv.Stdout, &spec)
 	}
 
-	opts, command, action, err := parseXArgsOptions(inv)
+	opts, command, err := parseXArgsMatches(inv, matches)
 	if err != nil {
 		return err
-	}
-
-	switch action {
-	case "help":
-		spec := c.Spec()
-		return RenderCommandHelp(inv.Stdout, &spec)
-	case "version":
-		spec := c.Spec()
-		return RenderCommandVersion(inv.Stdout, &spec)
 	}
 
 	maxSupported := xargsMaxCharsLimit(inv.Env)
@@ -210,354 +201,128 @@ func (c *XArgs) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 var _ SpecProvider = (*XArgs)(nil)
 var _ ParsedRunner = (*XArgs)(nil)
 
-func parseXArgsOptions(inv *Invocation) (opts xargsOptions, command []string, action string, err error) {
+func parseXArgsMatches(inv *Invocation, matches *ParsedCommand) (opts xargsOptions, command []string, err error) {
 	opts = xargsOptions{
 		inputFile: "-",
 		readMode:  xargsReadShell,
 		maxProcs:  1,
 	}
 
-	args := inv.Args
-	for len(args) > 0 {
-		arg := args[0]
-		if arg == "--" {
-			return opts, args[1:], "", nil
+	valueIndex := make(map[string]int)
+	nextValue := func(name string) string {
+		values := matches.Values(name)
+		idx := valueIndex[name]
+		if idx >= len(values) {
+			valueIndex[name] = idx + 1
+			return ""
 		}
-		if arg == "-" || !strings.HasPrefix(arg, "-") {
-			return opts, args, "", nil
-		}
-		if strings.HasPrefix(arg, "--") {
-			args = args[1:]
-			action, err = parseXArgsLongOption(inv, &opts, arg, &args)
-			if err != nil || action != "" {
-				return opts, nil, action, err
-			}
-			continue
-		}
-
-		args = args[1:]
-		action, err = parseXArgsShortOptions(inv, &opts, arg, &args)
-		if err != nil || action != "" {
-			return opts, nil, action, err
-		}
+		valueIndex[name] = idx + 1
+		return values[idx]
 	}
 
-	return opts, nil, "", nil
-}
-
-func parseXArgsLongOption(inv *Invocation, opts *xargsOptions, raw string, rest *[]string) (string, error) {
-	name := strings.TrimPrefix(raw, "--")
-	value, hasValue := "", false
-	if before, after, found := strings.Cut(name, "="); found {
-		name, value, hasValue = before, after, true
-	}
-
-	switch name {
-	case "help":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--help' doesn't allow an argument")
-		}
-		return "help", nil
-	case "version":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--version' doesn't allow an argument")
-		}
-		return "version", nil
-	case "null":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--null' doesn't allow an argument")
-		}
-		opts.readMode = xargsReadDelimited
-		opts.delimiter = 0
-		return "", nil
-	case "arg-file":
-		value, err := requireLongOptionValue(inv, "xargs", "arg-file", value, hasValue, rest)
-		if err != nil {
-			return "", err
-		}
-		opts.inputFile = value
-		opts.keepStdin = value != "-"
-		return "", nil
-	case "delimiter":
-		value, err := requireLongOptionValue(inv, "xargs", "delimiter", value, hasValue, rest)
-		if err != nil {
-			return "", err
-		}
-		delim, err := parseXArgsDelimiter(value)
-		if err != nil {
-			return "", exitf(inv, 1, "xargs: %v", err)
-		}
-		opts.readMode = xargsReadDelimited
-		opts.delimiter = delim
-		return "", nil
-	case "eof":
-		if !hasValue || value == "" {
-			opts.eofStr = nil
-			return "", nil
-		}
-		opts.eofStr = &value
-		return "", nil
-	case "replace":
-		if !hasValue {
-			value = "{}"
-		}
-		xargsApplyReplace(inv, opts, value)
-		return "", nil
-	case "max-lines":
-		count := 1
-		if hasValue {
-			parsed, err := parseXArgsNumber(inv, value, 'L', 1, math.MaxInt, true)
-			if err != nil {
-				return "", err
-			}
-			count = parsed
-		}
-		xargsApplyLines(inv, opts, count, "--max-lines/-l")
-		return "", nil
-	case "max-args":
-		value, err := requireLongOptionValue(inv, "xargs", "max-args", value, hasValue, rest)
-		if err != nil {
-			return "", err
-		}
-		count, err := parseXArgsNumber(inv, value, 'n', 1, math.MaxInt, true)
-		if err != nil {
-			return "", err
-		}
-		xargsApplyArgs(inv, opts, count)
-		return "", nil
-	case "open-tty":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--open-tty' doesn't allow an argument")
-		}
-		opts.openTTY = true
-		return "", nil
-	case "interactive":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--interactive' doesn't allow an argument")
-		}
-		opts.interactive = true
-		opts.verbose = true
-		return "", nil
-	case "no-run-if-empty":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--no-run-if-empty' doesn't allow an argument")
-		}
-		opts.noRunIfEmpty = true
-		return "", nil
-	case "max-chars":
-		value, err := requireLongOptionValue(inv, "xargs", "max-chars", value, hasValue, rest)
-		if err != nil {
-			return "", err
-		}
-		count, err := parseXArgsNumber(inv, value, 's', 1, math.MaxInt, true)
-		if err != nil {
-			return "", err
-		}
-		opts.maxChars = count
-		opts.maxCharsSet = true
-		return "", nil
-	case "verbose":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--verbose' doesn't allow an argument")
-		}
-		opts.verbose = true
-		return "", nil
-	case "show-limits":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--show-limits' doesn't allow an argument")
-		}
-		opts.showLimits = true
-		return "", nil
-	case "exit":
-		if hasValue {
-			return "", commandUsageError(inv, "xargs", "option '--exit' doesn't allow an argument")
-		}
-		opts.exitIfTooLarge = true
-		return "", nil
-	case "max-procs":
-		value, err := requireLongOptionValue(inv, "xargs", "max-procs", value, hasValue, rest)
-		if err != nil {
-			return "", err
-		}
-		count, err := parseXArgsNumber(inv, value, 'P', 0, math.MaxInt, true)
-		if err != nil {
-			return "", err
-		}
-		opts.maxProcs = count
-		return "", nil
-	case "process-slot-var":
-		value, err := requireLongOptionValue(inv, "xargs", "process-slot-var", value, hasValue, rest)
-		if err != nil {
-			return "", err
-		}
-		if strings.Contains(value, "=") {
-			return "", exitf(inv, 1, "xargs: option --process-slot-var may not be set to a value which includes '='")
-		}
-		opts.slotVar = value
-		return "", nil
-	default:
-		return "", commandUsageError(inv, "xargs", "unrecognized option '%s'", raw)
-	}
-}
-
-func parseXArgsShortOptions(inv *Invocation, opts *xargsOptions, raw string, rest *[]string) (string, error) {
-	shorts := strings.TrimPrefix(raw, "-")
-	for i := 0; i < len(shorts); i++ {
-		ch := shorts[i]
-		attached := shorts[i+1:]
-		switch ch {
-		case '0':
+	for _, name := range matches.OptionOrder() {
+		switch name {
+		case "null":
 			opts.readMode = xargsReadDelimited
 			opts.delimiter = 0
-		case 'a':
-			value, err := optionValueFromShort(inv, "xargs", 'a', attached, rest)
-			if err != nil {
-				return "", err
-			}
+		case "arg-file":
+			value := nextValue(name)
 			opts.inputFile = value
 			opts.keepStdin = value != "-"
-			return "", nil
-		case 'd':
-			value, err := optionValueFromShort(inv, "xargs", 'd', attached, rest)
-			if err != nil {
-				return "", err
-			}
-			delim, err := parseXArgsDelimiter(value)
-			if err != nil {
-				return "", exitf(inv, 1, "xargs: %v", err)
+		case "delimiter":
+			value := nextValue(name)
+			delim, parseErr := parseXArgsDelimiter(value)
+			if parseErr != nil {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: %v", parseErr)
 			}
 			opts.readMode = xargsReadDelimited
 			opts.delimiter = delim
-			return "", nil
-		case 'E':
-			value, err := optionValueFromShort(inv, "xargs", 'E', attached, rest)
-			if err != nil {
-				return "", err
-			}
+		case "eof":
+			value := nextValue(name)
 			if value == "" {
 				opts.eofStr = nil
 			} else {
 				opts.eofStr = &value
 			}
-			return "", nil
-		case 'e':
-			if attached == "" {
+		case "eof-posix":
+			value := nextValue(name)
+			if value == "" {
 				opts.eofStr = nil
 			} else {
-				value := attached
 				opts.eofStr = &value
 			}
-			return "", nil
-		case 'I':
-			value, err := optionValueFromShort(inv, "xargs", 'I', attached, rest)
-			if err != nil {
-				return "", err
-			}
-			xargsApplyReplace(inv, opts, value)
-			return "", nil
-		case 'i':
-			value := attached
+		case "replace":
+			value := nextValue(name)
 			if value == "" {
 				value = "{}"
 			}
-			xargsApplyReplace(inv, opts, value)
-			return "", nil
-		case 'L':
-			value, err := optionValueFromShort(inv, "xargs", 'L', attached, rest)
-			if err != nil {
-				return "", err
-			}
-			count, err := parseXArgsNumber(inv, value, 'L', 1, math.MaxInt, true)
-			if err != nil {
-				return "", err
-			}
-			xargsApplyLines(inv, opts, count, "-L")
-			return "", nil
-		case 'l':
+			xargsApplyReplace(inv, &opts, value)
+		case "replace-posix":
+			value := nextValue(name)
+			xargsApplyReplace(inv, &opts, value)
+		case "max-lines":
+			value := nextValue(name)
 			count := 1
-			if attached != "" {
-				parsed, err := parseXArgsNumber(inv, attached, 'l', 1, math.MaxInt, true)
-				if err != nil {
-					return "", err
+			if value != "" {
+				parsed, parseErr := parseXArgsNumber(inv, value, 'L', 1, math.MaxInt, true)
+				if parseErr != nil {
+					return xargsOptions{}, nil, parseErr
 				}
 				count = parsed
 			}
-			xargsApplyLines(inv, opts, count, "--max-lines/-l")
-			return "", nil
-		case 'n':
-			value, err := optionValueFromShort(inv, "xargs", 'n', attached, rest)
-			if err != nil {
-				return "", err
+			xargsApplyLines(inv, &opts, count, "--max-lines/-l")
+		case "max-lines-posix":
+			value := nextValue(name)
+			count, parseErr := parseXArgsNumber(inv, value, 'L', 1, math.MaxInt, true)
+			if parseErr != nil {
+				return xargsOptions{}, nil, parseErr
 			}
-			count, err := parseXArgsNumber(inv, value, 'n', 1, math.MaxInt, true)
-			if err != nil {
-				return "", err
+			xargsApplyLines(inv, &opts, count, "-L")
+		case "max-args":
+			value := nextValue(name)
+			count, parseErr := parseXArgsNumber(inv, value, 'n', 1, math.MaxInt, true)
+			if parseErr != nil {
+				return xargsOptions{}, nil, parseErr
 			}
-			xargsApplyArgs(inv, opts, count)
-			return "", nil
-		case 'o':
+			xargsApplyArgs(inv, &opts, count)
+		case "open-tty":
 			opts.openTTY = true
-		case 'p':
+		case "interactive":
 			opts.interactive = true
 			opts.verbose = true
-		case 'r':
+		case "no-run-if-empty":
 			opts.noRunIfEmpty = true
-		case 's':
-			value, err := optionValueFromShort(inv, "xargs", 's', attached, rest)
-			if err != nil {
-				return "", err
-			}
-			count, err := parseXArgsNumber(inv, value, 's', 1, math.MaxInt, true)
-			if err != nil {
-				return "", err
+		case "max-chars":
+			value := nextValue(name)
+			count, parseErr := parseXArgsNumber(inv, value, 's', 1, math.MaxInt, true)
+			if parseErr != nil {
+				return xargsOptions{}, nil, parseErr
 			}
 			opts.maxChars = count
 			opts.maxCharsSet = true
-			return "", nil
-		case 't':
+		case "show-limits":
+			opts.showLimits = true
+		case "verbose":
 			opts.verbose = true
-		case 'x':
+		case "exit":
 			opts.exitIfTooLarge = true
-		case 'P':
-			value, err := optionValueFromShort(inv, "xargs", 'P', attached, rest)
-			if err != nil {
-				return "", err
-			}
-			count, err := parseXArgsNumber(inv, value, 'P', 0, math.MaxInt, true)
-			if err != nil {
-				return "", err
+		case "max-procs":
+			value := nextValue(name)
+			count, parseErr := parseXArgsNumber(inv, value, 'P', 0, math.MaxInt, true)
+			if parseErr != nil {
+				return xargsOptions{}, nil, parseErr
 			}
 			opts.maxProcs = count
-			return "", nil
-		default:
-			return "", commandUsageError(inv, "xargs", "invalid option -- '%c'", ch)
+		case "process-slot-var":
+			value := nextValue(name)
+			if strings.Contains(value, "=") {
+				return xargsOptions{}, nil, exitf(inv, 1, "xargs: option --process-slot-var may not be set to a value which includes '='")
+			}
+			opts.slotVar = value
 		}
 	}
-	return "", nil
-}
 
-func requireLongOptionValue(inv *Invocation, name, longName, value string, hasValue bool, rest *[]string) (string, error) {
-	if hasValue {
-		return value, nil
-	}
-	if len(*rest) == 0 {
-		return "", commandUsageError(inv, name, "option '--%s' requires an argument", longName)
-	}
-	value = (*rest)[0]
-	*rest = (*rest)[1:]
-	return value, nil
-}
-
-func optionValueFromShort(inv *Invocation, name string, short byte, attached string, rest *[]string) (string, error) {
-	if attached != "" {
-		return attached, nil
-	}
-	if len(*rest) == 0 {
-		return "", commandUsageError(inv, name, "option requires an argument -- '%c'", short)
-	}
-	value := (*rest)[0]
-	*rest = (*rest)[1:]
-	return value, nil
+	return opts, matches.Args("operand"), nil
 }
 
 func parseXArgsNumber(inv *Invocation, raw string, option byte, minValue, maxValue int, fatal bool) (int, error) {

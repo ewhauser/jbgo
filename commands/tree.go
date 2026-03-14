@@ -28,39 +28,41 @@ func (c *Tree) Name() string {
 }
 
 func (c *Tree) Run(ctx context.Context, inv *Invocation) error {
-	args := inv.Args
-	var opts treeOptions
+	return RunCommand(ctx, c, inv)
+}
 
-	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		switch args[0] {
-		case "-a":
-			opts.showHidden = true
-			args = args[1:]
-		case "-d":
-			opts.dirsOnly = true
-			args = args[1:]
-		case "-f":
-			opts.fullPath = true
-			args = args[1:]
-		case "-L":
-			if len(args) < 2 {
-				return exitf(inv, 1, "tree: option requires an argument -- L")
-			}
-			maxDepth, err := strconv.Atoi(args[1])
-			if err != nil || maxDepth < 0 {
-				return exitf(inv, 1, "tree: invalid level %q", args[1])
-			}
-			opts.maxDepth = maxDepth
-			opts.hasMaxDepth = true
-			args = args[2:]
-		default:
-			return exitf(inv, 1, "tree: unsupported flag %s", args[0])
-		}
+func (c *Tree) Spec() CommandSpec {
+	return CommandSpec{
+		Name:  "tree",
+		About: "List contents of directories in a tree-like format.",
+		Usage: "tree [OPTION]... [DIRECTORY]",
+		Options: []OptionSpec{
+			{Name: "all", Short: 'a', Help: "all files are listed"},
+			{Name: "dirs-only", Short: 'd', Help: "list directories only"},
+			{Name: "full-path", Short: 'f', Help: "print the full path prefix for each file"},
+			{Name: "level", Short: 'L', Arity: OptionRequiredValue, ValueName: "LEVEL", Help: "descend only LEVEL directories deep"},
+		},
+		Args: []ArgSpec{
+			{Name: "target", ValueName: "DIRECTORY"},
+		},
+		Parse: ParseConfig{
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
+			AutoHelp:                 true,
+			AutoVersion:              true,
+		},
 	}
+}
 
+func (c *Tree) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	opts, err := parseTreeMatches(inv, matches)
+	if err != nil {
+		return err
+	}
 	target := "."
-	if len(args) > 0 {
-		target = args[0]
+	if matches.Arg("target") != "" {
+		target = matches.Arg("target")
 	}
 
 	info, abs, err := lstatPath(ctx, inv, target)
@@ -82,6 +84,23 @@ func (c *Tree) Run(ctx context.Context, inv *Invocation) error {
 		return &ExitError{Code: 1, Err: err}
 	}
 	return nil
+}
+
+func parseTreeMatches(inv *Invocation, matches *ParsedCommand) (treeOptions, error) {
+	opts := treeOptions{
+		showHidden: matches.Has("all"),
+		dirsOnly:   matches.Has("dirs-only"),
+		fullPath:   matches.Has("full-path"),
+	}
+	if matches.Has("level") {
+		maxDepth, err := strconv.Atoi(matches.Value("level"))
+		if err != nil || maxDepth < 0 {
+			return treeOptions{}, exitf(inv, 1, "tree: invalid level %q", matches.Value("level"))
+		}
+		opts.maxDepth = maxDepth
+		opts.hasMaxDepth = true
+	}
+	return opts, nil
 }
 
 func (c *Tree) renderChildren(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, prefix string, depth int, opts treeOptions) (dirs, files int, err error) {
@@ -158,3 +177,5 @@ func treeLabel(target, abs string, fullPath bool) string {
 }
 
 var _ Command = (*Tree)(nil)
+var _ SpecProvider = (*Tree)(nil)
+var _ ParsedRunner = (*Tree)(nil)
