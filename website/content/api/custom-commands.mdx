@@ -1,0 +1,147 @@
+# Custom Commands
+
+gbash ships with 60+ built-in commands. You can extend the registry with your own commands to expose application-specific functionality to scripts running inside the sandbox.
+
+## The Command Interface
+
+Every command implements the `commands.Command` interface:
+
+```go
+type Command interface {
+	Name() string
+	Run(ctx context.Context, inv *Invocation) error
+}
+```
+
+The `Invocation` struct provides everything a command needs at runtime: `Args`, `Env`, `Cwd`, `Stdin`, `Stdout`, `Stderr`, `FS` (the sandbox filesystem), and `Limits`.
+
+## Defining a Command
+
+The simplest way to create a command is `commands.DefineCommand`:
+
+```go
+import "github.com/ewhauser/gbash/commands"
+
+cmd := commands.DefineCommand("greet", func(ctx context.Context, inv *commands.Invocation) error {
+	name := "world"
+	if len(inv.Args) > 0 {
+		name = inv.Args[0]
+	}
+	_, err := fmt.Fprintf(inv.Stdout, "hello, %s\n", name)
+	return err
+})
+```
+
+## Registering Commands
+
+Start with the default registry and add your commands to it:
+
+```go
+registry := gbash.DefaultRegistry()
+registry.Register(cmd)
+```
+
+Then pass the registry to the runtime:
+
+```go
+gb, err := gbash.New(gbash.WithRegistry(registry))
+```
+
+Scripts can now call `greet`:
+
+```go
+result, _ := gb.Run(ctx, &gbash.ExecutionRequest{
+	Script: "greet Alice",
+})
+// result.Stdout => "hello, Alice\n"
+```
+
+## Lazy Registration
+
+For commands that are expensive to initialize, use `RegisterLazy` to defer construction until first use:
+
+```go
+registry.RegisterLazy("expensive-cmd", func() (commands.Command, error) {
+	return commands.DefineCommand("expensive-cmd", handler), nil
+})
+```
+
+## Exit Codes
+
+Return a `commands.ExitError` to set a non-zero exit code:
+
+```go
+return &commands.ExitError{Code: 1, Err: fmt.Errorf("something went wrong")}
+```
+
+Or use the helper to write to stderr and exit in one call:
+
+```go
+return commands.Exitf(inv, 1, "file not found: %s", path)
+```
+
+## Full Example
+
+The `examples/custom-zstd` directory shows a complete custom command that adds zstd compression and decompression to gbash. The key pattern:
+
+```go
+package main
+
+import (
+	"context"
+	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/commands"
+)
+
+func main() {
+	registry := gbash.DefaultRegistry()
+	registry.Register(commands.DefineCommand("zstd", func(ctx context.Context, inv *commands.Invocation) error {
+		// compress/decompress logic using inv.Stdin, inv.Stdout, inv.FS
+		return nil
+	}))
+
+	gb, err := gbash.New(gbash.WithRegistry(registry))
+	if err != nil {
+		panic(err)
+	}
+
+	result, _ := gb.Run(ctx, &gbash.ExecutionRequest{
+		Script: "echo data | zstd -o /tmp/data.zst && zstd -d /tmp/data.zst",
+	})
+	fmt.Print(result.Stdout)
+}
+```
+
+See `examples/custom-zstd/main.go` for the full implementation.
+
+## Building a CLI Wrapper
+
+The `cli` package provides a shared frontend for building custom gbash binaries with your commands baked in:
+
+```go
+package main
+
+import (
+	"context"
+	"os"
+
+	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/cli"
+)
+
+func main() {
+	cfg := cli.Config{
+		Name: "myshell",
+		BaseOptions: []gbash.Option{
+			gbash.WithRegistry(buildRegistry()),
+		},
+	}
+	code, err := cli.Run(context.Background(), cfg, os.Args[0], os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	if err != nil {
+		os.Stderr.WriteString(err.Error() + "\n")
+	}
+	os.Exit(code)
+}
+```
+
+This gives you a fully functional CLI with `-c` command strings, file execution, stdin piping, and interactive mode -- all backed by your custom command registry.

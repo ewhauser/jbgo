@@ -1,0 +1,198 @@
+# Environment and System Commands
+
+Commands for shell control, environment inspection, hashing, and process management.
+
+## bash
+
+Execute a command in a bash sub-shell.
+
+```bash
+bash -c 'echo "hello from subshell"'
+```
+
+## sh
+
+Execute a command in a shell sub-shell. Behaves the same as `bash` within the sandbox.
+
+```bash
+sh -c 'echo "hello"'
+```
+
+## curl
+
+Transfer data from URLs. Only available when network access is configured via `WithHTTPAccess`.
+
+```bash
+curl https://api.example.com/data
+curl -s -o output.json https://api.example.com/data
+curl -X POST -d '{"key":"value"}' https://api.example.com/submit
+```
+
+> `curl` is automatically registered when the runtime has a network policy. It is not part of the default registry.
+
+## date
+
+Display the date and time.
+
+```bash
+date
+date +%Y-%m-%d
+date -u                                     # UTC
+```
+
+## echo
+
+Display a line of text.
+
+```bash
+echo "hello world"
+echo -n "no newline"
+echo -e "line1\nline2"                      # interpret escapes
+```
+
+## env
+
+Run a command in a modified environment or print environment variables.
+
+```bash
+env
+env FOO=bar command
+```
+
+## expr
+
+Evaluate expressions.
+
+```bash
+expr 2 + 3                                  # 5
+expr length "hello"                         # 5
+```
+
+## false
+
+Exit with a failure (non-zero) status.
+
+```bash
+false || echo "failed"
+```
+
+## help
+
+Display help for built-in commands.
+
+```bash
+help
+help grep
+```
+
+## id
+
+Print real and effective user and group IDs.
+
+```bash
+id
+```
+
+## md5sum
+
+Compute and check MD5 message digests.
+
+```bash
+md5sum file.txt
+echo -n "hello" | md5sum
+```
+
+## printenv
+
+Print all or part of the environment.
+
+```bash
+printenv
+printenv HOME
+```
+
+## pwd
+
+Print the current working directory.
+
+```bash
+pwd
+```
+
+## sha1sum
+
+Compute SHA-1 message digests.
+
+```bash
+sha1sum file.txt
+echo -n "hello" | sha1sum
+```
+
+## sha256sum
+
+Compute SHA-256 message digests.
+
+```bash
+sha256sum file.txt
+echo -n "hello" | sha256sum
+```
+
+## sleep
+
+Delay for a specified amount of time.
+
+```bash
+sleep 1
+sleep 0.5
+```
+
+## timeout
+
+Run a command with a time limit.
+
+```bash
+timeout 5 long-running-command
+```
+
+## true
+
+Exit with a success (zero) status.
+
+```bash
+true && echo "ok"
+```
+
+## uptime
+
+Show how long the system has been running.
+
+```bash
+uptime
+```
+
+## which
+
+Locate a command in the registry. Returns success if the command is registered, failure otherwise.
+
+```bash
+which grep
+which nonexistent || echo "not found"
+```
+
+## xargs
+
+Build and execute command lines from standard input.
+
+```bash
+find . -name "*.txt" | xargs wc -l
+echo "a b c" | xargs -n1 echo
+```
+
+## yes
+
+Repeatedly output a string until killed or piped.
+
+```bash
+yes | head -n 5
+yes "agree" | head -n 3
+```

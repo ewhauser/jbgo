@@ -1,0 +1,106 @@
+# Agent Integration
+
+gbash is designed to be used as a tool for AI agents. It provides a sandboxed shell runtime that agents can call repeatedly within a persistent session, with execution budgets and trace events for safety and observability.
+
+## Go API integration
+
+Create a runtime, open a session, and execute scripts:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/ewhauser/gbash"
+)
+
+func main() {
+    rt := gbash.New()
+    session, _ := rt.NewSession()
+
+    result, _ := session.Execute(context.Background(), &gbash.ExecutionRequest{
+        Script: "echo hello world",
+    })
+    fmt.Println(result.Stdout) // "hello world\n"
+}
+```
+
+## Exposing gbash as a tool
+
+Wrap the session's `Execute` method as a tool callable by your agent framework. The input is the shell command string; the output is stdout, stderr, and the exit code.
+
+```go
+func bashTool(ctx context.Context, session *gbash.Session, command string) (string, error) {
+    result, err := session.Execute(ctx, &gbash.ExecutionRequest{
+        Script: command,
+    })
+    if err != nil {
+        return "", err
+    }
+    return result.Stdout, nil
+}
+```
+
+## Persistent sessions
+
+A single session preserves the filesystem, working directory, and exported environment variables across multiple `Execute` calls. This allows multi-turn agent conversations where each step builds on previous work:
+
+```go
+session, _ := rt.NewSession()
+
+// Turn 1: create a file
+session.Execute(ctx, &gbash.ExecutionRequest{Script: `echo "data" > /tmp/output.txt`})
+
+// Turn 2: read the file back
+result, _ := session.Execute(ctx, &gbash.ExecutionRequest{Script: "cat /tmp/output.txt"})
+// result.Stdout == "data\n"
+```
+
+This is critical for agent workflows where the model explores a workspace, runs analysis, and iterates on results.
+
+## Execution budgets prevent runaway agents
+
+LLM-generated scripts can be unpredictable. Execution budgets ensure that no single call can exhaust resources:
+
+- **Command count**: caps total commands per execution (default 10,000)
+- **Loop iterations**: caps iterations per loop (default 10,000)
+- **Substitution depth**: caps nested `$(...)` expansion (default 50)
+- **Output size**: truncates stdout/stderr beyond 1 MB each
+
+When a budget is exceeded, execution stops with an error. The session remains usable for subsequent calls.
+
+## Trace events for observability
+
+Every execution returns structured trace events in `result.Events`. Use these to observe what the agent did without parsing stdout:
+
+```go
+result, _ := session.Execute(ctx, &gbash.ExecutionRequest{
+    Script: "ls /workspace && cat /workspace/data.csv",
+})
+
+for _, event := range result.Events {
+    switch event.Kind {
+    case "command.start":
+        fmt.Printf("ran: %s %v\n", event.Command.Name, event.Command.Argv)
+    case "file.access":
+        fmt.Printf("read: %s\n", event.File.Path)
+    case "policy.denied":
+        fmt.Printf("blocked: %s\n", event.Policy.Subject)
+    }
+}
+```
+
+Trace events are particularly useful for:
+
+- Logging agent actions for audit trails
+- Detecting when an agent attempts blocked operations
+- Tracking file modifications between turns
+- Measuring execution cost
+
+## Examples
+
+See these working examples in the repository:
+
+- [openai-tool-call](https://github.com/ewhauser/gbash/tree/main/examples/openai-tool-call) -- uses the OpenAI Responses API with gbash as a bash tool
+- [adk-bash-chat](https://github.com/ewhauser/gbash/tree/main/examples/adk-bash-chat) -- CLI chatbot using Google ADK with a persistent gbash session

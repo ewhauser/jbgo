@@ -1,0 +1,33 @@
+# Examples
+
+The repository includes six examples demonstrating different gbash capabilities. Each is a standalone project under [`examples/`](https://github.com/ewhauser/gbash/tree/main/examples).
+
+## adk-bash-chat
+
+A CLI chatbot built with Google ADK (`adk-go`) and a persistent gbash session. The chat starts with a seeded ops analytics lab containing CSV, JSONL, Markdown, and SQLite data. The agent uses multiple bash tool calls that share the same sandbox session, working directory, and exported environment.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/adk-bash-chat)
+
+## custom-zstd
+
+Demonstrates custom command registration. Shows how to extend the gbash command registry with your own Go functions, using a zstd compression command as the example.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/custom-zstd)
+
+## openai-tool-call
+
+Uses the OpenAI Responses API with gbash registered as a bash tool. Shows how to wire gbash into an LLM tool-calling loop where the model generates shell commands and gbash executes them in a sandbox.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/openai-tool-call)
+
+## sqlite-backed-fs
+
+Implements a custom `gbfs.FileSystem` backed by a host SQLite database. Files created in one gbash invocation persist in the database and are visible in later runs. Demonstrates how to swap the default in-memory filesystem for durable storage.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/sqlite-backed-fs)
+
+## transactional-workspaces
+
+A narrated demo of snapshot, rollback, branching, diff, and trace-driven review using the gbash session and filesystem APIs. Seeds a `/workspace` with raw CSVs and a buggy cleanup script, then walks through transactional operations.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/transactional-workspaces)

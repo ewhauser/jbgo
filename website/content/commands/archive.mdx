@@ -1,0 +1,55 @@
+# Archive and Compression Commands
+
+Commands for creating, extracting, and inspecting compressed archives.
+
+## gzip
+
+Compress files using the gzip algorithm.
+
+```bash
+gzip file.txt                               # produces file.txt.gz
+gzip -k file.txt                            # keep original
+gzip -9 file.txt                            # best compression
+```
+
+## gunzip
+
+Decompress gzip-compressed files.
+
+```bash
+gunzip file.txt.gz
+gunzip -k file.txt.gz                       # keep compressed file
+```
+
+## tar
+
+Create and extract tape archives.
+
+```bash
+# Create a tar archive
+tar cf archive.tar dir/
+
+# Create a gzip-compressed tar archive
+tar czf archive.tar.gz dir/
+
+# Extract an archive
+tar xf archive.tar
+
+# Extract a gzip-compressed archive
+tar xzf archive.tar.gz
+
+# List contents without extracting
+tar tf archive.tar
+
+# Extract to a specific directory
+tar xf archive.tar -C /home/agent/output/
+```
+
+## zcat
+
+View the contents of gzip-compressed files without decompressing.
+
+```bash
+zcat file.txt.gz
+zcat file.txt.gz | grep "pattern"
+```

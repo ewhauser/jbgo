@@ -1,0 +1,37 @@
+# Security Model
+
+gbash is a deterministic, sandbox-only bash runtime. Every session runs inside a constrained environment where the shell can only see what you explicitly provide.
+
+## Isolation by default
+
+When you create a gbash runtime, the shell operates against a **virtual filesystem** -- by default an in-memory filesystem with no access to the host. Commands resolve through a **registry**, not the host `PATH`. If a command is not registered, it fails with exit code 127. Host binaries never execute.
+
+```go
+rt := gbash.New() // memory FS, no network, no host commands
+```
+
+## Network
+
+Network access is **off by default**. When you supply a network client, gbash registers `curl` and constrains requests through URL-prefix allowlists, method allowlists, redirect revalidation, optional private-range blocking, and response-size caps. Without a client, `curl` is not available and all egress is denied.
+
+## Execution budgets
+
+Every execution is bounded by configurable limits that prevent runaway scripts:
+
+| Budget | Default | What it limits |
+|---|---|---|
+| `MaxCommandCount` | 10,000 | Total commands per execution |
+| `MaxLoopIterations` | 10,000 | Iterations in any single loop |
+| `MaxGlobOperations` | 100,000 | Glob expansion operations |
+| `MaxSubstitutionDepth` | 50 | Nested command/arithmetic substitution depth |
+| `MaxStdoutBytes` | 1 MB | Stdout before truncation |
+| `MaxStderrBytes` | 1 MB | Stderr before truncation |
+| `MaxFileBytes` | 8 MB | Maximum file size |
+
+## Trace events
+
+gbash emits structured trace events for every execution, covering command starts and exits, file access and mutation, and policy denials. These events are returned in `ExecutionResult.Events` and are useful for debugging, auditing, and agent orchestration. See the [policy page](/docs/security/policy) for details.
+
+## What gbash is not
+
+gbash provides application-level sandboxing. It is **not a hardened OS-level sandbox**. For stronger containment guarantees, run gbash inside a container, VM, or other OS-level isolation mechanism. See the [threat model](/docs/security/threat-model) for a full discussion of risks and mitigations.

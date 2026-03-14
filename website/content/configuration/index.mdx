@@ -1,0 +1,18 @@
+# Configuration
+
+gbash works out of the box with zero configuration: `gbash.New()` returns a fully sandboxed runtime with an in-memory filesystem, built-in commands, and no network access.
+
+Most applications only need one or two options to customize the sandbox for their use case.
+
+```go
+rt, err := gbash.New(
+    gbash.WithWorkspace("/path/to/project"),
+    gbash.WithHTTPAccess("https://api.example.com"),
+)
+```
+
+## Configuration Areas
+
+- [Filesystem](/configuration/filesystem) — control how the sandbox provisions its filesystem, from the default in-memory layout to mounting real host directories
+- [Network](/configuration/network) — enable and restrict HTTP access for `curl` inside the sandbox
+- [Environment](/configuration/environment) — understand the default sandbox layout, PATH, and supported shell features

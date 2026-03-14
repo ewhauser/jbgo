@@ -1,0 +1,195 @@
+# File and Path Commands
+
+Commands for creating, copying, moving, inspecting, and removing files and directories within the sandbox filesystem.
+
+## basename
+
+Strip directory and suffix from a filename.
+
+```bash
+basename /home/agent/project/main.go        # main.go
+basename /home/agent/project/main.go .go    # main
+```
+
+## cat
+
+Concatenate and print files.
+
+```bash
+cat file.txt
+cat header.txt body.txt footer.txt > combined.txt
+cat -n file.txt                             # number all lines
+```
+
+## chmod
+
+Change file mode bits.
+
+```bash
+chmod 755 script.sh
+chmod u+x script.sh
+chmod -R 644 src/
+```
+
+## chown
+
+Change file owner and group.
+
+```bash
+chown agent file.txt
+chown agent:staff file.txt
+```
+
+## cp
+
+Copy files and directories.
+
+```bash
+cp source.txt dest.txt
+cp -r src/ backup/
+cp -p original.txt copy.txt                 # preserve attributes
+```
+
+## dirname
+
+Strip the last component from a path.
+
+```bash
+dirname /home/agent/project/main.go         # /home/agent/project
+```
+
+## du
+
+Estimate file space usage.
+
+```bash
+du -sh /home/agent/project
+du -a src/
+```
+
+## file
+
+Determine file type.
+
+```bash
+file image.png
+file script.sh
+```
+
+## find
+
+Search for files in a directory hierarchy.
+
+```bash
+find . -name "*.go"
+find /home/agent -type f -name "*.txt"
+find . -name "*.log" -size +1k
+```
+
+## ln
+
+Create symbolic links.
+
+```bash
+ln -s /home/agent/project/config.yaml config
+ln -sf target.txt link.txt                  # force overwrite
+```
+
+## link
+
+Create a hard link.
+
+```bash
+link original.txt hardcopy.txt
+```
+
+## ls
+
+List directory contents.
+
+```bash
+ls
+ls -la /home/agent
+ls -lh --sort=size src/
+```
+
+## dir
+
+List directory contents. Behaves like `ls`.
+
+```bash
+dir /home/agent/project
+```
+
+## mkdir
+
+Create directories.
+
+```bash
+mkdir newdir
+mkdir -p path/to/nested/dir
+```
+
+## mv
+
+Move or rename files and directories.
+
+```bash
+mv old.txt new.txt
+mv file.txt /home/agent/archive/
+```
+
+## readlink
+
+Print the target of a symbolic link.
+
+```bash
+readlink symlink.txt
+readlink -f relative/symlink                # canonicalize
+```
+
+## rm
+
+Remove files or directories.
+
+```bash
+rm file.txt
+rm -r directory/
+rm -rf build/
+```
+
+## rmdir
+
+Remove empty directories.
+
+```bash
+rmdir emptydir
+rmdir -p a/b/c                              # remove parents too
+```
+
+## stat
+
+Display file status.
+
+```bash
+stat file.txt
+```
+
+## touch
+
+Change file timestamps or create empty files.
+
+```bash
+touch newfile.txt
+touch -m existing.txt                       # update modification time
+```
+
+## tree
+
+List directory contents in a tree format.
+
+```bash
+tree
+tree -L 2 src/
+tree -d                                     # directories only
+```

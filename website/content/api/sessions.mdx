@@ -1,0 +1,89 @@
+# Sessions
+
+A `Session` is a persistent sandbox that shares filesystem state across multiple script executions. Use sessions when you need writes from one execution to be visible in the next.
+
+## Creating a Session
+
+```go
+gb, err := gbash.New()
+if err != nil {
+	log.Fatal(err)
+}
+
+session, err := gb.NewSession(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+Each call to `NewSession` creates an independent sandbox. Sessions from the same runtime do not share state with each other.
+
+## Executing Scripts
+
+Call `session.Exec` to run a script inside the session:
+
+```go
+result, err := session.Exec(ctx, &gbash.ExecutionRequest{
+	Script: "echo hello",
+})
+```
+
+`Exec` returns the same `ExecutionResult` as `Runtime.Run`. The difference is that filesystem changes persist in the session between calls.
+
+## State Persistence
+
+Filesystem state carries forward across `Exec` calls on the same session. This means files written by one execution are readable in the next.
+
+```go
+// First execution: write a file
+_, err = session.Exec(ctx, &gbash.ExecutionRequest{
+	Script: "echo 'important data' > /home/agent/state.txt",
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+// Second execution: read it back
+result, err := session.Exec(ctx, &gbash.ExecutionRequest{
+	Script: "cat /home/agent/state.txt",
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Print(result.Stdout)
+// Output: important data
+```
+
+Environment variables and the working directory from shell execution are available in the `ExecutionResult.FinalEnv` field. To carry them forward, pass them into the next request:
+
+```go
+first, _ := session.Exec(ctx, &gbash.ExecutionRequest{
+	Script: "cd /tmp && export MY_VAR=hello",
+})
+
+second, _ := session.Exec(ctx, &gbash.ExecutionRequest{
+	Script: "pwd && echo $MY_VAR",
+	Env:    first.FinalEnv,
+})
+```
+
+## Sessions vs Run
+
+| | `Runtime.Run` | `Session.Exec` |
+|---|---|---|
+| Filesystem | Fresh each call | Shared across calls |
+| Use case | Independent one-shot scripts | Multi-step workflows |
+| Isolation | Complete | Filesystem shared, shell state per-call |
+
+Use `Run` when each script is self-contained. Use sessions when scripts build on each other -- for example, an AI agent that installs a package, writes config, then runs a test across separate tool calls.
+
+## Direct Filesystem Access
+
+For advanced use cases, `Session.FileSystem()` returns the live sandbox filesystem:
+
+```go
+fs := session.FileSystem()
+```
+
+This is an escape hatch for tests and bootstrapping. Most callers should interact with the session through `Exec`.

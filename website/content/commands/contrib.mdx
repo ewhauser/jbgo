@@ -1,0 +1,102 @@
+# Contrib Commands
+
+Contrib commands are optional, community-backed implementations shipped as separate Go modules under `github.com/ewhauser/gbash/contrib/`. They are not included in the default registry.
+
+## Available Commands
+
+### awk
+
+Pattern scanning and text processing language, backed by [benhoyt/goawk](https://github.com/benhoyt/goawk).
+
+```go
+import contribawk "github.com/ewhauser/gbash/contrib/awk"
+```
+
+```bash
+echo "alice 30\nbob 25" | awk '{print $1}'
+awk -F',' '{sum += $2} END {print sum}' data.csv
+```
+
+### jq
+
+Lightweight JSON processor, backed by [itchyny/gojq](https://github.com/itchyny/gojq).
+
+```go
+import contribjq "github.com/ewhauser/gbash/contrib/jq"
+```
+
+```bash
+echo '{"name":"alice","age":30}' | jq '.name'
+cat data.json | jq '.items[] | select(.active == true)'
+```
+
+### sqlite3
+
+SQLite database shell, backed by [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3).
+
+```go
+import contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
+```
+
+```bash
+sqlite3 :memory: "CREATE TABLE t(x); INSERT INTO t VALUES(1),(2),(3); SELECT sum(x) FROM t;"
+```
+
+### yq
+
+YAML, JSON, and XML processor, backed by [mikefarah/yq](https://github.com/mikefarah/yq).
+
+```go
+import contribyq "github.com/ewhauser/gbash/contrib/yq"
+```
+
+```bash
+echo "name: alice" | yq '.name'
+yq -i '.version = "2.0"' config.yaml
+```
+
+## Registering Contrib Commands
+
+### Register All at Once
+
+Use `extras.FullRegistry()` to get the default registry plus all contrib commands in a single call:
+
+```go
+import "github.com/ewhauser/gbash/contrib/extras"
+
+registry := extras.FullRegistry()
+gb, err := gbash.New(gbash.WithRegistry(registry))
+```
+
+### Register Individually
+
+Add specific contrib modules to an existing registry:
+
+```go
+import (
+    "github.com/ewhauser/gbash"
+    contribjq "github.com/ewhauser/gbash/contrib/jq"
+)
+
+registry := gbash.DefaultRegistry()
+if err := contribjq.Register(registry); err != nil {
+    log.Fatal(err)
+}
+gb, err := gbash.New(gbash.WithRegistry(registry))
+```
+
+## gbash-extras CLI
+
+The `gbash-extras` CLI is a drop-in replacement for the `gbash` CLI with all contrib commands pre-registered:
+
+```bash
+go install github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras@latest
+```
+
+```bash
+echo '{"a":1}' | gbash-extras -c 'jq .a'
+```
+
+## Custom Command Registration
+
+You can register your own commands using the same mechanism the contrib modules use. See the [custom-zstd example](https://github.com/ewhauser/gbash/tree/main/examples/custom-zstd) for a complete walkthrough that implements a `zstd` compression command using `commands.DefineCommand` and `registry.Register`.

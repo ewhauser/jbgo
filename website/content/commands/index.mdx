@@ -1,0 +1,129 @@
+# Commands
+
+gbash ships with 60+ built-in commands. Every command is backed by a **command registry** -- if a command is not registered, it cannot execute. Unknown commands never fall through to host binaries.
+
+The built-in set targets GNU coreutils flag parity. See the [compatibility matrix](https://ewhauser.github.io/gbash/compat/latest/) for per-flag coverage.
+
+## Default Registry
+
+Call `DefaultRegistry()` to get the stock command set:
+
+```go
+registry := gbash.DefaultRegistry()
+
+gb, err := gbash.New(gbash.WithRegistry(registry))
+```
+
+You can also register additional commands on top of the default set (see [Contrib Commands](/commands/contrib) and the [custom-zstd example](https://github.com/ewhauser/gbash/tree/main/examples/custom-zstd)).
+
+## Command Reference
+
+### File and Path
+
+| Command | Description |
+|---|---|
+| `basename` | Strip directory and suffix from a filename |
+| `cat` | Concatenate and print files |
+| `chmod` | Change file mode bits |
+| `chown` | Change file owner and group |
+| `cp` | Copy files and directories |
+| `dirname` | Strip the last component from a path |
+| `du` | Estimate file space usage |
+| `file` | Determine file type |
+| `find` | Search for files in a directory hierarchy |
+| `ln` | Create symbolic links |
+| `link` | Create a hard link |
+| `ls` | List directory contents |
+| `dir` | List directory contents (ls-style) |
+| `mkdir` | Create directories |
+| `mv` | Move or rename files |
+| `readlink` | Print the target of a symbolic link |
+| `rm` | Remove files or directories |
+| `rmdir` | Remove empty directories |
+| `stat` | Display file status |
+| `touch` | Change file timestamps or create empty files |
+| `tree` | List directory contents in a tree format |
+
+See [File and Path](/commands/file-and-path) for details.
+
+### Search and Text Processing
+
+| Command | Description |
+|---|---|
+| `base32` | Base32 encode/decode |
+| `base64` | Base64 encode/decode |
+| `column` | Format input into columns |
+| `comm` | Compare two sorted files line by line |
+| `cut` | Remove sections from each line |
+| `diff` | Compare files line by line |
+| `grep` | Search for patterns in files |
+| `head` | Output the first part of files |
+| `join` | Join lines of two files on a common field |
+| `nl` | Number lines of files |
+| `paste` | Merge lines of files |
+| `printf` | Format and print data |
+| `rev` | Reverse lines character-wise |
+| `rg` | ripgrep-style recursive search |
+| `sed` | Stream editor for filtering and transforming text |
+| `seq` | Print a sequence of numbers |
+| `sort` | Sort lines of text files |
+| `split` | Split a file into pieces |
+| `tac` | Concatenate and print files in reverse |
+| `tail` | Output the last part of files |
+| `tee` | Read from stdin and write to stdout and files |
+| `tr` | Translate or delete characters |
+| `uniq` | Report or omit repeated lines |
+| `wc` | Print newline, word, and byte counts |
+
+See [Search and Text Processing](/commands/search-and-text) for details.
+
+### Archive and Compression
+
+| Command | Description |
+|---|---|
+| `gzip` | Compress files |
+| `gunzip` | Decompress gzip files |
+| `tar` | Archive files |
+| `zcat` | View compressed files |
+
+See [Archive and Compression](/commands/archive) for details.
+
+### Environment and System
+
+| Command | Description |
+|---|---|
+| `bash` | Execute a bash sub-shell |
+| `curl` | Transfer data from URLs (when network is configured) |
+| `date` | Display or set the date and time |
+| `echo` | Display a line of text |
+| `env` | Run a command in a modified environment |
+| `expr` | Evaluate expressions |
+| `false` | Exit with failure status |
+| `help` | Display help for built-in commands |
+| `id` | Print user identity |
+| `md5sum` | Compute MD5 message digest |
+| `printenv` | Print environment variables |
+| `pwd` | Print working directory |
+| `sh` | Execute a shell sub-shell |
+| `sha1sum` | Compute SHA-1 digest |
+| `sha256sum` | Compute SHA-256 digest |
+| `sleep` | Delay for a specified time |
+| `timeout` | Run a command with a time limit |
+| `true` | Exit with success status |
+| `uptime` | Show how long the system has been running |
+| `which` | Locate a command in the registry |
+| `xargs` | Build and execute command lines from stdin |
+| `yes` | Repeatedly output a string |
+
+See [Environment and System](/commands/environment) for details.
+
+### Contrib (Optional)
+
+| Command | Description |
+|---|---|
+| `awk` | Pattern scanning and processing (via goawk) |
+| `jq` | JSON processor (via gojq) |
+| `sqlite3` | SQLite database shell (via go-sqlite3) |
+| `yq` | YAML/JSON/XML processor (via yq) |
+
+See [Contrib Commands](/commands/contrib) for details.

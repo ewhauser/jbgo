@@ -1,0 +1,62 @@
+# Environment
+
+## Default Sandbox Layout
+
+Every gbash session starts with a minimal virtual filesystem:
+
+| Path | Purpose |
+|---|---|
+| `/home/agent` | Home directory and default working directory |
+| `/tmp` | Scratch space for temporary files |
+| `/usr/bin` | Command directory (virtual stubs) |
+| `/bin` | Command directory (virtual stubs) |
+
+The default `PATH` is `/usr/bin:/bin`.
+
+## Command Directories
+
+`/usr/bin` and `/bin` contain virtual stubs that allow the shell to resolve command names during parsing. These are not real executables. When a command runs, gbash dispatches it through the command registry, not through the filesystem.
+
+This means `ls /usr/bin` lists the available commands, but the files themselves are zero-byte stubs used only for shell resolution (e.g., `which`, `type`, `command -v`).
+
+## Shell Features
+
+gbash supports a broad subset of bash syntax and behavior:
+
+- **Pipelines** — `cmd1 | cmd2 | cmd3`
+- **Redirections** — `>`, `>>`, `<`, `2>&1`, `&>`
+- **Variable expansion** — `$VAR`, `${VAR:-default}`, `${#VAR}`
+- **Command substitution** — `$(cmd)`, `` `cmd` ``
+- **Arithmetic** — `$((x + 1))`, `$(( 2 ** 10 ))`
+- **Conditionals** — `if/elif/else/fi`, `[[ ... ]]`, `test`
+- **Loops** — `for`, `while`, `until`
+- **Shell functions** — `fn() { ...; }`
+- **Logical operators** — `&&`, `||`
+- **Here documents** — `<<EOF`
+- **Virtual cd/pwd** — directory changes are tracked in-memory
+- **Nested bash/sh** — `bash -c "..."` and `sh -c "..."` re-enter the runtime
+
+## Limitations
+
+gbash is not a full bash reimplementation. Notable differences:
+
+- No process management (`bg`, `fg`, `jobs`, `&` for backgrounding)
+- No signal handling (`trap`)
+- No `source`/`.` for external scripts (inline functions work)
+- No `eval` (use `bash -c` instead)
+- Some advanced parameter expansion forms may not be supported
+
+## Base Environment
+
+Override the default environment variables with `WithBaseEnv`:
+
+```go
+rt, err := gbash.New(
+    gbash.WithBaseEnv(map[string]string{
+        "LANG":  "en_US.UTF-8",
+        "EDITOR": "vim",
+    }),
+)
+```
+
+Per-execution environment overrides can also be passed through `ExecutionRequest`.

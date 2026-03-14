@@ -1,0 +1,76 @@
+# Policy and Execution Budgets
+
+gbash uses a static policy to control what scripts can do. The policy covers filesystem access, command allowlists, execution budgets, and symlink behavior.
+
+## Default policy
+
+When no custom policy is provided, the defaults are:
+
+- **Read roots**: `/` (entire virtual filesystem)
+- **Write roots**: `/` (entire virtual filesystem)
+- **Allowed commands**: all registered commands
+- **Symlink mode**: `deny` -- symlink traversal is rejected by default
+
+These defaults are permissive within the virtual filesystem. To restrict access, configure explicit read/write roots and command allowlists through `policy.Config`.
+
+## Execution budgets
+
+Budgets prevent scripts from consuming unbounded resources. When a limit is reached, execution stops with an error.
+
+| Budget | Default | Purpose |
+|---|---|---|
+| `MaxCommandCount` | 10,000 | Caps total command invocations per execution |
+| `MaxLoopIterations` | 10,000 | Caps iterations per `for`/`while`/`until` loop |
+| `MaxGlobOperations` | 100,000 | Caps glob pattern expansion steps |
+| `MaxSubstitutionDepth` | 50 | Caps nested `$(...)` and arithmetic expansion depth |
+| `MaxStdoutBytes` | 1 MB | Truncates stdout beyond this size |
+| `MaxStderrBytes` | 1 MB | Truncates stderr beyond this size |
+| `MaxFileBytes` | 8 MB | Limits individual file size |
+
+Override any limit through `policy.Config.Limits` when creating the runtime.
+
+## Path enforcement
+
+Every file operation passes through `policy.CheckPath`, which verifies the resolved path falls under an allowed root. Write operations (write, mkdir, remove, rename) check against write roots; all other operations check against read roots.
+
+```go
+cfg := &policy.Config{
+    ReadRoots:  []string{"/workspace", "/data"},
+    WriteRoots: []string{"/workspace"},
+}
+```
+
+## Trace events
+
+Each execution produces a sequence of structured `trace.Event` records returned in `ExecutionResult.Events`. Events use the `gbash.trace.v1` schema and include session and execution IDs for correlation.
+
+### Event kinds
+
+| Kind | When emitted |
+|---|---|
+| `command.start` | A command begins execution |
+| `command.exit` | A command completes (includes exit code and duration) |
+| `file.access` | A file is read, stat'd, or listed |
+| `file.mutation` | A file is written, created, removed, or renamed |
+| `policy.denied` | A policy check rejects an operation |
+| `call.expanded` | A shell call expression is expanded |
+
+### Event structure
+
+Every event carries:
+
+- `Schema`, `SessionID`, `ExecutionID` -- identifiers for correlation
+- `Kind` -- one of the kinds above
+- `At` -- timestamp
+- `Command` -- command name, argv, working directory, exit code, duration (for command events)
+- `File` -- action, path, from/to paths (for file events)
+- `Policy` -- subject, reason, action (for denial events)
+
+### Using trace events for agent orchestration
+
+Trace events let an orchestrator observe exactly what a script did without parsing stdout. Common patterns:
+
+- **Audit logging**: persist all events for post-hoc review
+- **Policy violation alerts**: filter for `policy.denied` events to detect blocked operations
+- **Cost tracking**: count `command.start` events to measure execution complexity
+- **File change detection**: use `file.mutation` events to track workspace modifications between agent turns

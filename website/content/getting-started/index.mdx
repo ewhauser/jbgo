@@ -1,0 +1,24 @@
+# Getting Started
+
+gbash is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go. Shell parsing is delegated to [mvdan/sh](https://github.com/mvdan/sh), with a project-owned virtual filesystem, registry-backed command execution, policy enforcement, and structured tracing layers around it.
+
+Commands never fall through to host binaries, and network access is off by default.
+
+> gbash is beta software (v0.0.10). Additional security hardening is likely needed. Use with care.
+
+## Key Features
+
+- **Virtual in-memory filesystem** — no host access by default
+- **Registry-backed command execution** — unknown commands never run host binaries
+- **60+ built-in commands** with GNU coreutils flag parity ([compatibility matrix](https://ewhauser.github.io/gbash/compat/latest/))
+- **Optional network access** via allowlisted `curl`
+- **Persistent sessions** with shared filesystem state across executions
+- **Host directory mounting** with read-only overlay for real project workspaces
+- **Execution budgets** — command count, loop iterations, glob expansion, stdout/stderr limits
+- **Structured trace events** for debugging and agent orchestration
+- **WebAssembly support** — runs in the browser
+
+## Next Steps
+
+- [Installation](/getting-started/installation) — install the Go library, CLI, or prebuilt binaries
+- [Quick Start](/getting-started/quick-start) — run your first sandboxed shell command in under a minute

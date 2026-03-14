@@ -1,0 +1,91 @@
+# Contributing
+
+This page covers the repository structure, build process, and release workflow. For the full contributing guide, see [CONTRIBUTING.md on GitHub](https://github.com/ewhauser/gbash/blob/main/CONTRIBUTING.md).
+
+## Repository structure
+
+The repo is a committed Go workspace plus a pnpm workspace.
+
+- **Root module** (`./`) -- public `gbash` package, CLI (`cmd/gbash/`), internal runtime, and core commands
+- **`contrib/`** -- optional modules (`awk`, `jq`, `sqlite3`, `yq`, `extras`, `nodejs`) kept separate to avoid pulling optional dependencies into the core import graph
+- **`examples/`** -- standalone example projects (separate Go module)
+- **`packages/`** -- publishable JavaScript packages, including `@ewhauser/gbash-wasm`
+- **`website/`** -- documentation site
+
+Key internal packages:
+
+| Package | Purpose |
+|---|---|
+| `internal/runtime` | Session lifecycle, execution, budget enforcement |
+| `shell` | Shell AST parsing and execution via `mvdan/sh` |
+| `commands` | Built-in command implementations |
+| `fs` | Filesystem interface and backends (memory, overlay) |
+| `policy` | Path checks, command allowlists, limits |
+| `network` | HTTP client with allowlist enforcement |
+| `trace` | Structured execution event recording |
+
+## Building and testing
+
+```bash
+make build    # build all Go modules
+make test     # run tests across all modules
+make lint     # run linters
+```
+
+For JavaScript workspace dependencies:
+
+```bash
+npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile
+```
+
+## Module versioning
+
+The repo uses `go.work` for local development with 8 modules (root + 7 children):
+
+```
+.                  contrib/awk     contrib/extras
+contrib/jq         contrib/nodejs  contrib/sqlite3
+contrib/yq         examples
+```
+
+Published versions are coordinated. The root module uses plain tags (`v0.0.10`); contrib modules use nested-module tags (`contrib/jq/v0.0.10`). Child modules maintain real version requirements in `go.mod` plus local `replace` directives for development.
+
+To prepare a coordinated release across all modules:
+
+```bash
+make fix-modules MODULE_VERSION=vX.Y.Z
+```
+
+This updates nested module requirements, refreshes local replaces, updates the npm package version, and runs `go mod tidy` in each child module.
+
+## Release process
+
+Releases are driven by GitHub Actions:
+
+1. Run `make release` or dispatch the **Prepare Release** workflow
+2. Review and merge the generated `release/vX.Y.Z` PR into `main`
+3. The **Publish Release** workflow creates root and contrib tags, publishes the GitHub release with `gbash` and `gbash-extras` archives plus a shared checksum file
+
+The prepare step derives the next version by incrementing the patch number of the latest root `v*` tag.
+
+## Benchmarks
+
+Run comparison benchmarks locally:
+
+```bash
+make bench-compare
+make bench-compare JSON_OUT=bench-compare.json  # JSON output
+```
+
+The benchmark compares five runtimes: native `gbash`, GNU bash, `gbash-extras`, `gbash-node-wasm` (WASM in Node.js), and `just-bash` (npm).
+
+## GNU compatibility testing
+
+Evaluate skew between gbash commands and GNU coreutils using the compatibility harness:
+
+```bash
+make gnu-test
+make gnu-test GNU_UTILS="printf pwd"  # test specific utilities
+```
+
+The harness runs inside a Docker container. By default it pulls a published compat image from GitHub Container Registry, falling back to a local build if unavailable.

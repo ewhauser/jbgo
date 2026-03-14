@@ -1,0 +1,83 @@
+# Quick Start
+
+## Try It Without Installing
+
+Run gbash directly with `go run` — no install required:
+
+```bash
+go run github.com/ewhauser/gbash/cmd/gbash@latest -c 'echo hello; pwd; ls /tmp'
+```
+
+```text
+hello
+/home/agent
+```
+
+Everything runs inside a virtual filesystem — nothing touches your host.
+
+## Go API
+
+Use `gbash.New` to create a runtime and `Run` for one-shot execution:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ewhauser/gbash"
+)
+
+func main() {
+	gb, err := gbash.New()
+	if err != nil {
+		panic(err)
+	}
+
+	result, err := gb.Run(context.Background(), &gbash.ExecutionRequest{
+		Script: "echo hello\npwd\n",
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("exit=%d\n", result.ExitCode)
+	fmt.Print(result.Stdout)
+}
+```
+
+```text
+exit=0
+hello
+/home/agent
+```
+
+## CLI Piping
+
+Pipe a script into the `gbash` CLI:
+
+```bash
+printf 'echo hi\npwd\n' | gbash
+```
+
+```text
+hi
+/home/agent
+```
+
+## Interactive Mode
+
+When stdin is a terminal, `gbash` starts an interactive shell automatically:
+
+```bash
+gbash
+```
+
+You can also force interactive mode explicitly:
+
+```bash
+printf 'pwd\ncd /tmp\npwd\nexit\n' | gbash -i
+```
+
+The interactive shell reuses one sandbox session and carries forward filesystem and environment state across commands. It does not provide history, line editing, or job control.

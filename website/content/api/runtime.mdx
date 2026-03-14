@@ -1,0 +1,86 @@
+# Runtime
+
+The `Runtime` is the top-level entry point for executing bash scripts inside a sandbox. Create one with `gbash.New`, configure it with option functions, and call `Run` for one-shot execution.
+
+## Creating a Runtime
+
+```go
+gb, err := gbash.New()
+```
+
+With no options, `New` returns a runtime with:
+
+- An isolated in-memory filesystem rooted at `/home/agent`
+- The built-in command registry
+- The default mvdan/sh shell engine
+- No network access
+
+## Option Functions
+
+Pass options to `New` to customize the runtime:
+
+```go
+gb, err := gbash.New(
+	gbash.WithWorkspace("/path/to/project"),
+	gbash.WithHTTPAccess("https://api.example.com/"),
+	gbash.WithBaseEnv(map[string]string{"APP_ENV": "test"}),
+)
+```
+
+| Option | Description |
+|--------|-------------|
+| `WithWorkspace(dir)` | Mount a host directory into the sandbox under a writable in-memory overlay. Sessions start in that directory. |
+| `WithFileSystem(cfg)` | Replace the session filesystem configuration with a custom `FileSystemConfig`. |
+| `WithHTTPAccess(prefixes...)` | Enable `curl` with a URL allowlist. Only the listed prefixes are reachable. |
+| `WithNetwork(cfg)` | Full control over HTTP methods, timeouts, response size limits, and private-range blocking. |
+| `WithRegistry(registry)` | Replace the command registry visible inside the sandbox. |
+| `WithWorkingDir(dir)` | Override the initial working directory for new sessions. |
+| `WithBaseEnv(env)` | Replace the base environment inherited by each execution. |
+| `WithPolicy(p)` | Replace the sandbox policy (path access, execution limits). |
+| `WithEngine(engine)` | Replace the shell engine implementation. |
+| `WithConfig(cfg)` | Apply a pre-assembled `Config` struct as a single option. |
+
+## One-Shot Execution
+
+`Runtime.Run` creates a fresh session, executes the script, and returns the result:
+
+```go
+result, err := gb.Run(ctx, &gbash.ExecutionRequest{
+	Script: "ls -la /home/agent\necho done",
+})
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(result.Stdout)
+```
+
+Each call to `Run` starts with a clean filesystem. Use [sessions](/api/sessions) when you need state to persist across executions.
+
+## ExecutionRequest
+
+The `Script` field is the primary input. Additional fields are available for advanced use:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Script` | `string` | The bash script to execute. |
+| `Name` | `string` | Optional name for the execution (appears in traces). |
+| `Args` | `[]string` | Positional arguments (`$1`, `$2`, ...). |
+| `Env` | `map[string]string` | Per-execution environment overrides. |
+| `WorkDir` | `string` | Override the working directory for this execution. |
+| `Timeout` | `time.Duration` | Execution timeout. |
+| `Stdin` | `io.Reader` | Standard input for the script. |
+| `Stdout` | `io.Writer` | Direct stdout to a writer instead of capturing it. |
+| `Stderr` | `io.Writer` | Direct stderr to a writer instead of capturing it. |
+
+## ExecutionResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ExitCode` | `int` | The exit code of the script. |
+| `Stdout` | `string` | Captured standard output (empty when `Stdout` writer is set on the request). |
+| `Stderr` | `string` | Captured standard error (empty when `Stderr` writer is set on the request). |
+| `Duration` | `time.Duration` | Wall-clock execution time. |
+| `Events` | `[]trace.Event` | Structured trace events emitted during execution. |
+| `FinalEnv` | `map[string]string` | The environment after execution completes. |
+| `StdoutTruncated` | `bool` | True if stdout exceeded the capture limit. |
+| `StderrTruncated` | `bool` | True if stderr exceeded the capture limit. |

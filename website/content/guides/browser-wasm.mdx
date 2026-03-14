@@ -1,0 +1,104 @@
+# Running gbash in the Browser
+
+gbash compiles to WebAssembly, letting you run a full shell runtime in the browser with no server-side execution.
+
+## Build pipeline
+
+The WASM artifact is built from the Go source using the `js/wasm` target. The build produces two files:
+
+- **`gbash.wasm`** -- the compiled runtime
+- **`wasm_exec.js`** -- the Go WASM support script (from the Go toolchain)
+
+The `@ewhauser/gbash-wasm` package handles building and bundling these artifacts. In the `examples/website` project, `pnpm build` compiles the WASM from source and copies both files into `public/`.
+
+## Loading in a web app
+
+Import the `Bash` class from `@ewhauser/gbash-wasm/browser`:
+
+```typescript
+import { Bash } from "@ewhauser/gbash-wasm/browser";
+
+const bash = new Bash({
+  cwd: "/home/user",
+  env: { TERM: "xterm-256color" },
+  files: {
+    "/home/user/hello.txt": "Hello from gbash!",
+  },
+});
+
+const result = await bash.exec("cat /home/user/hello.txt");
+console.log(result.output); // "Hello from gbash!"
+```
+
+The runtime loads lazily on first use. It fetches `wasm_exec.js` and `gbash.wasm`, boots the Go runtime, and waits for `window.GBashWasm` to register. Subsequent `Bash` instances reuse the same loaded runtime.
+
+You can override asset URLs if you host the files elsewhere:
+
+```typescript
+const bash = new Bash({
+  wasmUrl: "/assets/gbash.wasm",
+  wasmExecUrl: "/assets/wasm_exec.js",
+});
+```
+
+## Pre-seeding files
+
+Pass a `files` map in the constructor to populate the in-memory filesystem before execution:
+
+```typescript
+const bash = new Bash({
+  files: {
+    "/data/config.json": '{"key": "value"}',
+    "/scripts/setup.sh": "echo ready",
+  },
+});
+```
+
+You can also write files after initialization:
+
+```typescript
+bash.writeFile("/data/input.csv", csvContent);
+```
+
+## Custom commands in JavaScript
+
+Register custom commands that execute as JavaScript functions:
+
+```typescript
+import { Bash, defineCommand } from "@ewhauser/gbash-wasm/browser";
+
+const bash = new Bash({
+  customCommands: [
+    defineCommand("now", async () => ({
+      output: new Date().toISOString(),
+      exitCode: 0,
+    })),
+  ],
+});
+
+const result = await bash.exec("now");
+```
+
+Custom commands are matched before the WASM runtime, so they can override or extend built-in commands.
+
+## CSP headers
+
+WebAssembly compilation requires the `wasm-unsafe-eval` CSP directive. Add it to your Content-Security-Policy header:
+
+```
+Content-Security-Policy: script-src 'self' 'wasm-unsafe-eval';
+```
+
+Without this directive, browsers will block WASM instantiation.
+
+## Cleanup
+
+Dispose of the shell when you are done to release WASM resources:
+
+```typescript
+await bash.dispose();
+```
+
+## Reference
+
+The [examples/website](https://github.com/ewhauser/gbash/tree/main/examples/website) directory contains a full Next.js app running gbash in the browser via WASM, including terminal UI integration.

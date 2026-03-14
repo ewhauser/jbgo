@@ -1,0 +1,64 @@
+# Network
+
+Network access is disabled by default. When no network option is provided, `curl` is not registered in the sandbox and all HTTP requests are blocked.
+
+## Simple URL Allowlisting
+
+`WithHTTPAccess` is the quickest way to enable network access. Pass one or more URL prefixes and gbash registers `curl` with an allowlist restricted to those prefixes.
+
+```go
+rt, err := gbash.New(
+    gbash.WithHTTPAccess(
+        "https://api.example.com",
+        "https://cdn.example.com/assets/",
+    ),
+)
+```
+
+Requests to any URL not matching a prefix are denied. Only GET and HEAD methods are allowed by default.
+
+## Fine-Grained Control
+
+`WithNetwork` accepts a `NetworkConfig` struct for full control over methods, limits, and private-range blocking.
+
+```go
+rt, err := gbash.New(
+    gbash.WithNetwork(&gbash.NetworkConfig{
+        AllowedURLPrefixes: []string{
+            "https://api.example.com",
+        },
+        AllowedMethods:    []gbash.Method{gbash.MethodGet, gbash.MethodPost},
+        MaxResponseBytes:  5 << 20, // 5 MB
+        DenyPrivateRanges: true,
+    }),
+)
+```
+
+### NetworkConfig Fields
+
+| Field | Default | Description |
+|---|---|---|
+| `AllowedURLPrefixes` | *(required)* | URL prefixes the sandbox may access |
+| `AllowedMethods` | GET, HEAD | HTTP methods allowed |
+| `MaxRedirects` | 20 | Maximum redirect hops per request |
+| `Timeout` | 30s | Per-request timeout |
+| `MaxResponseBytes` | 10 MB | Maximum response body size |
+| `DenyPrivateRanges` | false | Block requests to private, loopback, and link-local addresses |
+
+## Custom HTTP Client
+
+For full transport control, `WithNetworkClient` injects a custom implementation of the `network.Client` interface:
+
+```go
+type Client interface {
+    Do(context.Context, *network.Request) (*network.Response, error)
+}
+```
+
+```go
+rt, err := gbash.New(
+    gbash.WithNetworkClient(myCustomClient),
+)
+```
+
+This bypasses the built-in allowlist enforcement entirely. Use it for test doubles, corporate proxies, or logging wrappers where the built-in client is not sufficient.

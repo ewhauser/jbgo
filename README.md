@@ -39,7 +39,7 @@ Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with pr
 - Host directory mounting with read-only overlay for real project workspaces
 - Execution budgets — command count, loop iterations, glob expansion, stdout/stderr limits
 - Structured trace events for debugging and agent orchestration
-- WebAssembly support — runs in the browser ([demo](./examples/website/))
+- WebAssembly support
 
 ## Public Packages
 
@@ -391,7 +391,6 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 | [`openai-tool-call`](./examples/openai-tool-call/) | Uses the OpenAI Go SDK Responses API with `gbash` as a `bash` function tool |
 | [`sqlite-backed-fs`](./examples/sqlite-backed-fs/) | Custom `gbfs.FileSystem` backed by a SQLite database for persistent sandbox filesystem state |
 | [`transactional-workspaces`](./examples/transactional-workspaces/) | Narrated snapshot/rollback/branch demo showing how `gbash` sessions become reversible, inspectable shell workspaces |
-| [`website`](./examples/website/) | Vendored Next.js terminal website that runs `gbash` in the browser via WebAssembly |
 
 ## Development
 

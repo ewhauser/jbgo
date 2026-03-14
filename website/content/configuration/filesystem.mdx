@@ -1,0 +1,85 @@
+# Filesystem
+
+gbash provisions a fresh virtual filesystem for each session. Four entry points cover the spectrum from fully isolated to fully mutable host access.
+
+## Default: In-Memory Filesystem
+
+With no options, `gbash.New()` creates an isolated in-memory filesystem. Sessions start in `/home/agent` and all file operations stay in memory.
+
+```go
+rt, err := gbash.New()
+```
+
+This is equivalent to:
+
+```go
+rt, err := gbash.New(
+    gbash.WithFileSystem(gbash.InMemoryFileSystem()),
+)
+```
+
+## Host Directory (Read-Only Overlay)
+
+`WithWorkspace` mounts a real host directory into the sandbox at `/home/agent/project`. The host tree is read-only; all writes go to an in-memory overlay so the shell never mutates the host filesystem.
+
+```go
+rt, err := gbash.New(
+    gbash.WithWorkspace("/path/to/project"),
+)
+```
+
+This is the recommended option for embedding gbash against a real codebase. The agent can read project files and create or modify files without affecting the host.
+
+For more control over the mount point or file-read size limits, use `HostDirectoryFileSystem` directly:
+
+```go
+rt, err := gbash.New(
+    gbash.WithFileSystem(gbash.HostDirectoryFileSystem("/path/to/project", gbash.HostDirectoryOptions{
+        MountPoint:       "/workspace",
+        MaxFileReadBytes: 5 << 20, // 5 MB per file
+    })),
+)
+```
+
+## Mutable Host Directory
+
+`ReadWriteDirectoryFileSystem` maps the sandbox root directly onto a host directory. Writes persist to disk. Sessions start at `/`.
+
+```go
+rt, err := gbash.New(
+    gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem("/path/to/dir", gbash.ReadWriteDirectoryOptions{
+        MaxFileReadBytes: 10 << 20,
+    })),
+)
+```
+
+Use this when you intentionally want shell commands to modify the host filesystem, for example in compatibility test harnesses or controlled build pipelines.
+
+## Custom Filesystem
+
+`CustomFileSystem` accepts any implementation of `fs.Factory` and a working directory. This is the low-level escape hatch for custom backends such as database-backed storage.
+
+```go
+rt, err := gbash.New(
+    gbash.WithFileSystem(gbash.CustomFileSystem(myFactory, "/data")),
+)
+```
+
+The `fs.Factory` interface creates a new `fs.FileSystem` for each session:
+
+```go
+type Factory interface {
+    New(ctx context.Context) (FileSystem, error)
+}
+```
+
+## Overriding the Working Directory
+
+`WithWorkingDir` changes the initial working directory independently of the filesystem option:
+
+```go
+rt, err := gbash.New(
+    gbash.WithWorkspace("/path/to/project"),
+    gbash.WithWorkingDir("/home/agent/project/src"),
+)
+```

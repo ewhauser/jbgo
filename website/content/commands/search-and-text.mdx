@@ -1,0 +1,235 @@
+# Search and Text Processing Commands
+
+Commands for searching, filtering, transforming, and formatting text.
+
+## base32
+
+Base32 encode or decode data.
+
+```bash
+echo "hello" | base32
+echo "NBSWY3DP" | base32 -d
+```
+
+## base64
+
+Base64 encode or decode data.
+
+```bash
+echo "hello" | base64
+echo "aGVsbG8K" | base64 -d
+```
+
+## column
+
+Format input into columns.
+
+```bash
+echo -e "name age\nalice 30\nbob 25" | column -t
+```
+
+## comm
+
+Compare two sorted files line by line.
+
+```bash
+comm file1.txt file2.txt
+comm -12 file1.txt file2.txt                # lines common to both
+comm -23 file1.txt file2.txt                # lines only in file1
+```
+
+## cut
+
+Remove sections from each line.
+
+```bash
+echo "a:b:c" | cut -d: -f2                 # b
+cut -f1,3 -d',' data.csv
+cut -c1-10 file.txt                         # first 10 characters
+```
+
+## diff
+
+Compare files line by line.
+
+```bash
+diff file1.txt file2.txt
+diff -u old.txt new.txt                     # unified format
+```
+
+## grep
+
+Search for patterns in files.
+
+```bash
+grep "error" log.txt
+grep -r "TODO" src/
+grep -n -i "warning" *.log                  # line numbers, case-insensitive
+grep -c "pattern" file.txt                  # count matches
+grep -v "debug" log.txt                     # invert match
+```
+
+## head
+
+Output the first part of files.
+
+```bash
+head file.txt                               # first 10 lines
+head -n 5 file.txt
+head -c 100 file.txt                        # first 100 bytes
+```
+
+## join
+
+Join lines of two files on a common field.
+
+```bash
+join file1.txt file2.txt
+join -t',' -1 2 -2 1 a.csv b.csv
+```
+
+## nl
+
+Number lines of files.
+
+```bash
+nl file.txt
+nl -ba file.txt                             # number all lines including blanks
+```
+
+## paste
+
+Merge lines of files side by side.
+
+```bash
+paste names.txt scores.txt
+paste -d',' col1.txt col2.txt               # comma delimiter
+paste -s file.txt                           # serial mode
+```
+
+## printf
+
+Format and print data.
+
+```bash
+printf "%s is %d years old\n" "Alice" 30
+printf "%05d\n" 42                          # 00042
+```
+
+## rev
+
+Reverse lines character-wise.
+
+```bash
+echo "hello" | rev                          # olleh
+```
+
+## rg
+
+ripgrep-style recursive search.
+
+```bash
+rg "pattern" src/
+rg -i "todo" --glob "*.go"
+rg -l "import" .                            # list files only
+```
+
+## sed
+
+Stream editor for filtering and transforming text.
+
+```bash
+sed 's/old/new/' file.txt
+sed -i 's/foo/bar/g' file.txt               # in-place
+sed -n '5,10p' file.txt                     # print lines 5-10
+sed '/^#/d' config.txt                      # delete comment lines
+```
+
+## seq
+
+Print a sequence of numbers.
+
+```bash
+seq 5                                       # 1 2 3 4 5
+seq 2 10                                    # 2 through 10
+seq 0 2 10                                  # 0 2 4 6 8 10
+```
+
+## sort
+
+Sort lines of text files.
+
+```bash
+sort file.txt
+sort -n numbers.txt                         # numeric sort
+sort -r file.txt                            # reverse
+sort -u file.txt                            # unique lines only
+sort -t',' -k2 data.csv                     # sort by second field
+```
+
+## split
+
+Split a file into pieces.
+
+```bash
+split -l 100 big.txt chunk_                 # 100 lines per file
+split -b 1m big.bin part_                   # 1 MB per file
+```
+
+## tac
+
+Concatenate and print files in reverse line order.
+
+```bash
+tac file.txt
+```
+
+## tail
+
+Output the last part of files.
+
+```bash
+tail file.txt                               # last 10 lines
+tail -n 20 file.txt
+tail -c 100 file.txt                        # last 100 bytes
+```
+
+## tee
+
+Read from stdin and write to both stdout and files.
+
+```bash
+echo "hello" | tee output.txt
+echo "hello" | tee -a output.txt            # append
+echo "hello" | tee a.txt b.txt              # write to multiple files
+```
+
+## tr
+
+Translate or delete characters.
+
+```bash
+echo "hello" | tr a-z A-Z                   # HELLO
+echo "hello  world" | tr -s ' '            # squeeze spaces
+echo "hello123" | tr -d '0-9'              # delete digits
+```
+
+## uniq
+
+Report or omit repeated lines (input must be sorted).
+
+```bash
+sort file.txt | uniq
+sort file.txt | uniq -c                     # count occurrences
+sort file.txt | uniq -d                     # only duplicates
+```
+
+## wc
+
+Print newline, word, and byte counts.
+
+```bash
+wc file.txt
+wc -l file.txt                              # line count only
+wc -w file.txt                              # word count only
+```

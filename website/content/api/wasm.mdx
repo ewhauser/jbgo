@@ -1,0 +1,119 @@
+# WebAssembly
+
+gbash compiles to WebAssembly and runs in the browser or Node.js. The `@ewhauser/gbash-wasm` package provides TypeScript bindings for both environments.
+
+> npm publishing is not yet enabled. Use a workspace reference or local path to depend on this package.
+
+## Browser
+
+Import from the `browser` entry point:
+
+```typescript
+import { Bash, defineCommand } from "@ewhauser/gbash-wasm/browser";
+```
+
+### Creating an Instance
+
+```typescript
+const bash = new Bash({
+  cwd: "/home/agent",
+  env: { MY_VAR: "hello" },
+  files: {
+    "/home/agent/greeting.txt": "hello world\n",
+  },
+});
+```
+
+### BashOptions
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `cwd` | `string` | Initial working directory. Defaults to `/home/agent`. |
+| `env` | `Record<string, string>` | Environment variables. |
+| `files` | `Record<string, string>` | Files to pre-populate in the virtual filesystem. |
+| `customCommands` | `CustomCommand[]` | Custom commands implemented in JavaScript. |
+| `wasmUrl` | `string` | Override URL for `gbash.wasm`. |
+| `wasmExecUrl` | `string` | Override URL for `wasm_exec.js`. |
+
+### Executing Commands
+
+```typescript
+const result = await bash.exec("echo $MY_VAR && cat /home/agent/greeting.txt");
+console.log(result.stdout);
+// hello
+// hello world
+console.log(result.exitCode); // 0
+```
+
+The return type is `CommandResult`:
+
+```typescript
+type CommandResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+```
+
+### Writing Files
+
+```typescript
+bash.writeFile("/home/agent/data.json", '{"key": "value"}');
+const result = await bash.exec("cat /home/agent/data.json");
+```
+
+### Custom Commands
+
+Define commands in JavaScript that are callable from bash scripts:
+
+```typescript
+const upper = defineCommand("upper", (args) => {
+  return {
+    stdout: args.join(" ").toUpperCase() + "\n",
+    stderr: "",
+    exitCode: 0,
+  };
+});
+
+const bash = new Bash({
+  customCommands: [upper],
+});
+
+const result = await bash.exec("upper hello world");
+// result.stdout => "HELLO WORLD\n"
+```
+
+The `defineCommand` helper takes a name and a handler function. The handler receives the argument list and returns a `CommandResult` (or a `Promise<CommandResult>` for async commands).
+
+```typescript
+function defineCommand(
+  name: string,
+  run: (args: string[]) => CommandResult | Promise<CommandResult>,
+): CustomCommand;
+```
+
+### Cleanup
+
+```typescript
+await bash.dispose();
+```
+
+## Node.js
+
+Import from the `node` entry point for server-side use:
+
+```typescript
+import { Bash, defineCommand } from "@ewhauser/gbash-wasm/node";
+```
+
+The API is identical to the browser version. The Node.js entry point handles loading `wasm_exec.js` via `import()` and reads the `.wasm` binary from the filesystem or a URL.
+
+```typescript
+const bash = new Bash({ cwd: "/home/agent" });
+const result = await bash.exec("echo hello from node");
+console.log(result.stdout); // "hello from node\n"
+```
+
+## Asset Resolution
+
+Both browser and node entry points co-locate `gbash.wasm` and `wasm_exec.js` alongside the package. You can override these paths via `wasmUrl` and `wasmExecUrl` in `BashOptions` if you need to serve the assets from a CDN or different location.

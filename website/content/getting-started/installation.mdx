@@ -1,0 +1,38 @@
+# Installation
+
+## Go Library
+
+Add gbash to your Go module:
+
+```bash
+go get github.com/ewhauser/gbash
+```
+
+## CLI
+
+Install the `gbash` command-line tool:
+
+```bash
+go install github.com/ewhauser/gbash/cmd/gbash@latest
+```
+
+## Extras CLI
+
+Install `gbash-extras` for the same CLI surface with contrib commands (`awk`, `jq`, `sqlite3`, `yq`) pre-registered:
+
+```bash
+go install github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras@latest
+```
+
+## Prebuilt Binaries
+
+Prebuilt `gbash` and `gbash-extras` archives for multiple platforms are available on the [GitHub Releases page](https://github.com/ewhauser/gbash/releases).
+
+## Public Packages
+
+| Package | Description |
+|---|---|
+| `github.com/ewhauser/gbash` | Core Go runtime and embedding API |
+| `github.com/ewhauser/gbash/contrib/...` | Optional Go command modules (awk, jq, sqlite3, yq) |
+| `@ewhauser/gbash-wasm/browser` | Browser entrypoint for the js/wasm build |
+| `@ewhauser/gbash-wasm/node` | Node.js entrypoint for the js/wasm build |
