@@ -38,6 +38,7 @@ FUZZ_SMOKE_SHARD_PATHS := \
 
 FUZZ_SMOKE_SHARD_DATA := \
 	FuzzArchiveCommands \
+	FuzzNumfmtCommand \
 	./contrib/sqlite3:FuzzSQLiteCommands \
 	./contrib/yq:FuzzYQCommands \
 	./contrib/jq:FuzzJQCommands
@@ -86,6 +87,7 @@ FUZZ_FULL_SHARD_2 := \
 FUZZ_FULL_SHARD_3 := \
 	FuzzDirectoryTraversalCommands \
 	FuzzTextSearchCommands \
+	FuzzNumfmtCommand \
 	FuzzColumnCommand \
 	FuzzSedFlagsCommand \
 	FuzzXArgsFlagsCommand \
