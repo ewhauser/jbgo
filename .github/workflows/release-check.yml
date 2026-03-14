@@ -27,6 +27,7 @@ jobs:
           go-version-file: go.mod
 
       - run: go build -trimpath ./cmd/gbash
+      - run: go build -trimpath ./contrib/extras/cmd/gbash-extras
 
   gbash-wasm:
     runs-on: ubuntu-latest

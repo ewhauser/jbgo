@@ -19,6 +19,22 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }} -X main.builtBy=goreleaser
+  - id: gbash-extras
+    main: ./contrib/extras/cmd/gbash-extras
+    binary: gbash-extras
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }} -X main.builtBy=goreleaser
 
 archives:
   - id: gbash
@@ -30,7 +46,17 @@ archives:
       - goos: windows
         formats:
           - zip
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "gbash_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: gbash-extras
+    ids:
+      - gbash-extras
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "gbash-extras_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt

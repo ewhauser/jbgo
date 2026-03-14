@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-12
+Last updated: 2026-03-14
 
 ## 1. Purpose
 
@@ -136,6 +136,11 @@ The normal CLI entrypoint also accepts filesystem selection flags before the she
 
 External test harnesses should use the normal CLI entrypoint together with the filesystem selection flags above. In particular, GNU-style wrapper scripts may invoke `gbash --readwrite-root <tempdir> --cwd <dir> -c 'exec "$@"' _ <utility> ...` so the harness exercises the same shell and runtime path as normal `gbash` execution.
 
+That frontend is also exposed as a public `cli` package so shipped binaries can reuse the same flag parsing, version rendering, interactive behavior, and runtime setup:
+
+- `cmd/gbash` is a thin wrapper over `github.com/ewhauser/gbash/cli`
+- `contrib/extras/cmd/gbash-extras` is a thin wrapper over the same package with `contrib/extras` pre-registered into the runtime
+
 ### 6.1 Session model
 
 `gbash` should expose a long-lived session abstraction.
@@ -166,6 +171,7 @@ Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesy
 ## 7. Proposed Package Layout
 
 ```text
+cli/                   reusable CLI frontend shared by shipped binaries
 cmd/gbash/             CLI entrypoint for local execution
 internal/runtime/      internal runtime implementation and execution orchestration
 shell/                mvdan/sh integration and handler wiring
@@ -182,12 +188,13 @@ tests/                integration fixtures and compatibility-style harnesses
 
 Package responsibilities:
 
+- `cli/`: reusable CLI frontend that parses shell flags, renders help/version output, handles interactive mode, and provisions runtimes for thin wrapper binaries
 - `internal/runtime/`: internal runtime/session creation, run configuration, result collection, output capture
 - `shell/`: parser and runner adapter; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `echo`, `cat`, `ls`, and `pwd`
-- `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface. Current examples include `awk`, `jq`, `nodejs`, `sqlite3`, and `yq`.
+- `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface, and may ship official opt-in binaries such as `contrib/extras/cmd/gbash-extras` from the corresponding contrib module. Current examples include `awk`, `jq`, `nodejs`, `sqlite3`, and `yq`.
 - `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the `js/wasm` assets plus explicit host entrypoints such as `@ewhauser/gbash-wasm/browser` and `@ewhauser/gbash-wasm/node`.
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
 - `trace/`: event schema, recorder interfaces, and in-memory buffering

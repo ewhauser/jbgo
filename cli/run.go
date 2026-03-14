@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -11,14 +11,26 @@ import (
 	"golang.org/x/term"
 )
 
-func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
-	runtimeOpts, args, err := parseCLIRuntimeOptions(args)
+// Run executes the shared gbash CLI frontend with the supplied configuration.
+func Run(ctx context.Context, cfg Config, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	cfg = normalizeConfig(cfg)
+	ttyDetector := cfg.TTYDetector
+	if ttyDetector == nil {
+		ttyDetector = stdinIsTTY
+	}
+	return run(ctx, cfg, argv0, args, stdin, stdout, stderr, ttyDetector(stdin))
+}
+
+func run(ctx context.Context, cfg Config, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
+	cfg = normalizeConfig(cfg)
+
+	runtimeOpts, args, err := parseRuntimeOptions(args)
 	if err != nil {
 		return 2, err
 	}
 
 	parsed, err := builtins.ParseBashInvocation(args, builtins.BashInvocationConfig{
-		Name:             "gbash",
+		Name:             cfg.Name,
 		AllowInteractive: true,
 		LongInteractive:  true,
 	})
@@ -27,16 +39,16 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 	}
 	switch parsed.Action {
 	case "help":
-		if err := renderCLIHelp(stdout); err != nil {
+		if err := renderHelp(stdout, cfg.Name); err != nil {
 			return 1, err
 		}
 		return 0, nil
 	case "version":
-		_, _ = io.WriteString(stdout, versionText())
+		_, _ = io.WriteString(stdout, versionText(cfg))
 		return 0, nil
 	}
 
-	rt, err := newCLIRuntime(runtimeOpts)
+	rt, err := newRuntime(cfg, runtimeOpts)
 	if err != nil {
 		return 1, fmt.Errorf("init runtime: %w", err)
 	}

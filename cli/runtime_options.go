@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -12,21 +12,21 @@ import (
 	"github.com/ewhauser/gbash/internal/builtins"
 )
 
-type cliRuntimeOptions struct {
+type runtimeOptions struct {
 	root          string
 	readWriteRoot string
 	cwd           string
 }
 
-func parseCLIRuntimeOptions(args []string) (cliRuntimeOptions, []string, error) {
-	var opts cliRuntimeOptions
+func parseRuntimeOptions(args []string) (runtimeOptions, []string, error) {
+	var opts runtimeOptions
 	rest := append([]string(nil), args...)
 	for len(rest) > 0 {
 		arg := rest[0]
 		switch {
 		case arg == "--root":
 			if len(rest) < 2 {
-				return cliRuntimeOptions{}, nil, fmt.Errorf("--root requires a path")
+				return runtimeOptions{}, nil, fmt.Errorf("--root requires a path")
 			}
 			opts.root = rest[1]
 			rest = rest[2:]
@@ -35,7 +35,7 @@ func parseCLIRuntimeOptions(args []string) (cliRuntimeOptions, []string, error) 
 			rest = rest[1:]
 		case arg == "--readwrite-root":
 			if len(rest) < 2 {
-				return cliRuntimeOptions{}, nil, fmt.Errorf("--readwrite-root requires a path")
+				return runtimeOptions{}, nil, fmt.Errorf("--readwrite-root requires a path")
 			}
 			opts.readWriteRoot = rest[1]
 			rest = rest[2:]
@@ -44,7 +44,7 @@ func parseCLIRuntimeOptions(args []string) (cliRuntimeOptions, []string, error) 
 			rest = rest[1:]
 		case arg == "--cwd":
 			if len(rest) < 2 {
-				return cliRuntimeOptions{}, nil, fmt.Errorf("--cwd requires a path")
+				return runtimeOptions{}, nil, fmt.Errorf("--cwd requires a path")
 			}
 			opts.cwd = rest[1]
 			rest = rest[2:]
@@ -60,7 +60,7 @@ func parseCLIRuntimeOptions(args []string) (cliRuntimeOptions, []string, error) 
 	return opts, nil, nil
 }
 
-func (opts cliRuntimeOptions) runtimeOptions() ([]gbash.Option, error) {
+func (opts runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 	rootValue := strings.TrimSpace(opts.root)
 	readWriteRoot := strings.TrimSpace(opts.readWriteRoot)
 	cwdValue := strings.TrimSpace(opts.cwd)
@@ -143,17 +143,19 @@ func normalizeSandboxPath(value string) string {
 	return path.Clean(value)
 }
 
-func newCLIRuntime(opts cliRuntimeOptions) (*gbash.Runtime, error) {
-	runtimeOpts, err := opts.runtimeOptions()
+func newRuntime(cfg Config, opts runtimeOptions) (*gbash.Runtime, error) {
+	runtimeOpts, err := opts.gbashOptions()
 	if err != nil {
 		return nil, err
 	}
-	return gbash.New(runtimeOpts...)
+	allOpts := append([]gbash.Option(nil), cfg.BaseOptions...)
+	allOpts = append(allOpts, runtimeOpts...)
+	return gbash.New(allOpts...)
 }
 
-func renderCLIHelp(w io.Writer) error {
+func renderHelp(w io.Writer, name string) error {
 	spec := builtins.BashInvocationSpec(builtins.BashInvocationConfig{
-		Name:             "gbash",
+		Name:             name,
 		AllowInteractive: true,
 		LongInteractive:  true,
 	})

@@ -62,7 +62,13 @@ CLI:
 go install github.com/ewhauser/gbash/cmd/gbash@latest
 ```
 
-Prebuilt archives are also available on the [GitHub Releases page](https://github.com/ewhauser/gbash/releases).
+Extras CLI:
+
+```bash
+go install github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras@latest
+```
+
+Prebuilt `gbash` and `gbash-extras` archives are also available on the [GitHub Releases page](https://github.com/ewhauser/gbash/releases).
 
 ## Quick Start
 
@@ -202,6 +208,14 @@ gbash --root /path/to/project --cwd /home/agent/project -c 'pwd; ls'
 ```
 
 `--root` mounts a host directory read-only at `/home/agent/project` under an in-memory writable overlay. `--cwd` sets the initial sandbox working directory.
+
+Install `gbash-extras` when you want the same CLI surface with the stable official contrib commands (`awk`, `jq`, `sqlite3`, and `yq`) pre-registered:
+
+```bash
+gbash-extras -c 'jq -r .name data.json'
+```
+
+The shared frontend is also exposed as the public `github.com/ewhauser/gbash/cli` package. Call `cli.Run` with a `cli.Config` to reuse the stock flag parsing, interactive mode, and runtime setup from your own wrapper binary.
 ## Configuration
 
 ### Filesystem
@@ -337,6 +351,8 @@ import "github.com/ewhauser/gbash/contrib/extras"
 
 gb, err := gbash.New(gbash.WithRegistry(extras.FullRegistry()))
 ```
+
+The same stable set is bundled in the `gbash-extras` CLI at `github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras`.
 
 See the [`custom-zstd`](./examples/custom-zstd/) example for how to register custom commands.
 

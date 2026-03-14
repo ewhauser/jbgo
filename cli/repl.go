@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/internal/builtins"
 )
-
-const continuationPrompt = "> "
 
 func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, parsed *builtins.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	session, err := rt.NewSession(ctx)

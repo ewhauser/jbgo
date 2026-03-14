@@ -1,7 +1,9 @@
 package main
 
 import (
+	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/cli"
+	"github.com/ewhauser/gbash/contrib/extras"
 )
 
 var (
@@ -13,12 +15,15 @@ var (
 
 func newCLIConfig() cli.Config {
 	return cli.Config{
-		Name: "gbash",
+		Name: "gbash-extras",
 		Build: &cli.BuildInfo{
 			Version: version,
 			Commit:  commit,
 			Date:    date,
 			BuiltBy: builtBy,
+		},
+		BaseOptions: []gbash.Option{
+			gbash.WithRegistry(extras.FullRegistry()),
 		},
 	}
 }

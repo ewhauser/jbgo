@@ -14,7 +14,7 @@ Use `npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile` at the repo root 
 
 ## Module Versioning
 
-Published versions are coordinated with the root module release line. The root module uses plain tags like `v0.0.7`; contrib modules use nested-module tags like `contrib/jq/v0.0.7` and `contrib/sqlite3/v0.0.7`. The child modules keep real version requirements in `go.mod`, plus committed local `replace` directives so the repo still builds against the local checkout during development.
+Published versions are coordinated with the root module release line. The root module uses plain tags like `v0.0.7`; contrib modules use nested-module tags like `contrib/jq/v0.0.7` and `contrib/sqlite3/v0.0.7`. The child modules keep real version requirements in `go.mod`, plus committed local `replace` directives so the repo still builds against the local checkout during development. The shipped `gbash-extras` binary lives under the `contrib/extras` module and follows that coordinated version line.
 
 Use `make fix-modules MODULE_VERSION=vX.Y.Z` when preparing the next coordinated root, contrib, and `@ewhauser/gbash-wasm` release line. That updates the nested module requirements, refreshes the local replaces, updates the npm package version, and runs `go mod tidy` in each child Go module.
 
@@ -24,7 +24,7 @@ The supported release path is GitHub Actions driven:
 
 1. Run `make release` or dispatch the `Prepare Release` workflow manually.
 2. Review and merge the generated `release/vX.Y.Z` PR into `main`.
-3. Let the `Publish Release` workflow create the root plus contrib tags and publish the root GitHub release automatically.
+3. Let the `Publish Release` workflow create the root plus contrib tags and publish the root GitHub release automatically, including both `gbash` and `gbash-extras` archives plus a shared checksum file.
 
 `Prepare Release` derives the next release line by taking the latest root `v*` tag and incrementing the patch number.
 
