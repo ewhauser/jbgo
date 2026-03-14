@@ -6,19 +6,19 @@ import (
 	"io"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 )
 
 const continuationPrompt = "> "
 
-func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, parsed *commands.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runInteractiveShell(ctx context.Context, rt *gbash.Runtime, parsed *builtins.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	session, err := rt.NewSession(ctx)
 	if err != nil {
 		return 1, fmt.Errorf("init session: %w", err)
 	}
 
 	if parsed == nil {
-		parsed = &commands.BashInvocation{
+		parsed = &builtins.BashInvocation{
 			Name:          "gbash",
 			ExecutionName: "gbash",
 		}

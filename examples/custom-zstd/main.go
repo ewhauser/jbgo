@@ -17,7 +17,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	registry := commands.DefaultRegistry()
+	registry := gbash.DefaultRegistry()
 	must(registry.Register(newZstdCommand("zstd")))
 	must(registry.RegisterLazy("zstd-lazy", func() (commands.Command, error) {
 		return newZstdCommand("zstd-lazy"), nil

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/builtins"
 	internalruntime "github.com/ewhauser/gbash/internal/runtime"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
@@ -248,6 +249,14 @@ func copyStringMap(src map[string]string) map[string]string {
 	out := make(map[string]string, len(src))
 	maps.Copy(out, src)
 	return out
+}
+
+// DefaultRegistry returns a registry populated with gbash's built-in commands.
+//
+// Callers can register additional custom commands onto the returned registry
+// before passing it to [WithRegistry].
+func DefaultRegistry() *commands.Registry {
+	return builtins.DefaultRegistry()
 }
 
 // InMemoryFileSystem returns the default mutable sandbox filesystem

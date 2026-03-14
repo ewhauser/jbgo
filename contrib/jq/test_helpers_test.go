@@ -13,7 +13,7 @@ import (
 func newJQRegistry(tb testing.TB) *commands.Registry {
 	tb.Helper()
 
-	registry := commands.DefaultRegistry()
+	registry := gbruntime.DefaultRegistry()
 	if err := Register(registry); err != nil {
 		tb.Fatalf("Register(jq) error = %v", err)
 	}

@@ -288,7 +288,7 @@ This is not a hardened sandbox. If you need stronger containment against denial-
 
 ## Supported Commands
 
-The default registry includes commands for file ops, text processing, archival, and execution. See [`commands/registry.go`](./commands/registry.go) for the full list.
+The default registry includes commands for file ops, text processing, archival, and execution. Use `gbash.DefaultRegistry()` when you want to start from the stock builtin command set and register custom commands on top.
 
 | Category | Commands |
 |---|---|

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/shell"
@@ -47,7 +48,7 @@ func New(opts ...Option) (*Runtime, error) {
 	defaultSessionFS := resolved.FileSystem.Factory == nil
 	resolved.FileSystem = resolved.FileSystem.resolved()
 	if resolved.Registry == nil {
-		resolved.Registry = commands.DefaultRegistry()
+		resolved.Registry = builtins.DefaultRegistry()
 	}
 	if resolved.Engine == nil {
 		resolved.Engine = shell.New()
@@ -60,10 +61,8 @@ func New(opts ...Option) (*Runtime, error) {
 		resolved.NetworkClient = client
 	}
 	if resolved.NetworkClient != nil {
-		if _, ok := resolved.Registry.Lookup("curl"); !ok {
-			if err := resolved.Registry.Register(commands.NewCurl()); err != nil {
-				return nil, err
-			}
+		if err := builtins.EnsureNetworkCommands(resolved.Registry); err != nil {
+			return nil, err
 		}
 	}
 	if resolved.Policy == nil {

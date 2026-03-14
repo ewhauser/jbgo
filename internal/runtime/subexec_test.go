@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -71,7 +72,7 @@ func (c *subexecProbe) Run(ctx context.Context, inv *commands.Invocation) error 
 func registryWithSubexecProbe(t *testing.T) *commands.Registry {
 	t.Helper()
 
-	registry := commands.DefaultRegistry()
+	registry := builtins.DefaultRegistry()
 	if err := registry.Register(&subexecProbe{}); err != nil {
 		t.Fatalf("Register(subexecprobe) error = %v", err)
 	}

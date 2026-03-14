@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/commands"
 	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"google.golang.org/adk/tool"
@@ -68,7 +67,7 @@ var labFixtures = []fixtureSpec{
 }
 
 func newPersistentBashTool(ctx context.Context) (*persistentBashTool, error) {
-	registry := commands.DefaultRegistry()
+	registry := gbash.DefaultRegistry()
 	if err := contribsqlite3.Register(registry); err != nil {
 		return nil, fmt.Errorf("register sqlite3 command: %w", err)
 	}

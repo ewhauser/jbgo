@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/network"
 )
 
@@ -24,7 +25,7 @@ func (stubNetworkClient) Do(_ context.Context, req *network.Request) (*network.R
 }
 
 func TestCustomCommandInvocationCapabilities(t *testing.T) {
-	registry := commands.DefaultRegistry()
+	registry := builtins.DefaultRegistry()
 	if err := registry.Register(commands.DefineCommand("capsprobe", func(ctx context.Context, inv *commands.Invocation) error {
 		if inv.Cwd == "" {
 			return fmt.Errorf("missing cwd")

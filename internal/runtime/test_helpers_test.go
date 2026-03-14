@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -47,7 +48,7 @@ func newRuntimeWithLimits(t testing.TB, limits policy.Limits) *Runtime {
 func registryWithCommands(t testing.TB, extras ...commands.Command) *commands.Registry {
 	t.Helper()
 
-	registry := commands.DefaultRegistry()
+	registry := builtins.DefaultRegistry()
 	for _, cmd := range extras {
 		if err := registry.Register(cmd); err != nil {
 			t.Fatalf("Register(%s) error = %v", cmd.Name(), err)

@@ -4,6 +4,7 @@ package extras
 import (
 	"fmt"
 
+	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/commands"
 	contribawk "github.com/ewhauser/gbash/contrib/awk"
 	contribjq "github.com/ewhauser/gbash/contrib/jq"
@@ -13,7 +14,7 @@ import (
 
 // FullRegistry returns the default registry plus all official contrib commands.
 func FullRegistry() *commands.Registry {
-	registry := commands.DefaultRegistry()
+	registry := gbash.DefaultRegistry()
 	if err := Register(registry); err != nil {
 		panic(fmt.Sprintf("extras: register full registry: %v", err))
 	}

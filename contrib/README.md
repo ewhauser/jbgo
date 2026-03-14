@@ -5,7 +5,7 @@
 Rules for this directory:
 
 - each direct child under `contrib/` is its own Go module
-- contrib commands are opt-in and are not registered by `commands.DefaultRegistry()`
+- contrib commands are opt-in and are not registered by `gbash.DefaultRegistry()`
 - contrib is where heavyweight or niche commands live so the main `github.com/ewhauser/gbash` module stays small
 
 Today that includes:

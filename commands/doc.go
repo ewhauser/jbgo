@@ -9,7 +9,6 @@
 //   - customize a command registry
 //   - reuse gbash's command-spec parsing and invocation helpers
 //
-// The package currently also contains builtin command implementations, but the
-// long-term extension contract is the command API itself rather than this being
-// the permanent home of every builtin implementation.
+// gbash's shipped command implementations live under internal/ and are not part
+// of this package's public API.
 package commands

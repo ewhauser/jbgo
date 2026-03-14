@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 )
 
 var compatNotImplementedCommands = []string{
@@ -20,7 +21,7 @@ var compatNotImplementedCommands = []string{
 }
 
 func DefaultRegistry() *commands.Registry {
-	registry := commands.DefaultRegistry()
+	registry := builtins.DefaultRegistry()
 	for _, name := range compatNotImplementedCommands {
 		commandName := name
 		_ = registry.Register(commands.DefineCommand(commandName, func(_ context.Context, inv *commands.Invocation) error {

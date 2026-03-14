@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 )
 
 func TestRunSimpleScript(t *testing.T) {
@@ -60,7 +61,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestNewAcceptsOptions(t *testing.T) {
-	registry := commands.NewRegistry(commands.NewEcho())
+	registry := commands.NewRegistry(builtins.NewEcho())
 
 	rt, err := New(WithRegistry(registry))
 	if err != nil {
@@ -77,7 +78,7 @@ func TestNewAcceptsOptions(t *testing.T) {
 }
 
 func TestNewAcceptsWithConfig(t *testing.T) {
-	registry := commands.NewRegistry(commands.NewEcho())
+	registry := commands.NewRegistry(builtins.NewEcho())
 
 	rt, err := New(WithConfig(&Config{Registry: registry}))
 	if err != nil {

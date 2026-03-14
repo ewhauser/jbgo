@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 	"golang.org/x/term"
 )
 
@@ -29,7 +29,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return runCompatInvocation(ctx, argv0, *compat, stdin, stdout, stderr)
 	}
 
-	parsed, err := commands.ParseBashInvocation(args, commands.BashInvocationConfig{
+	parsed, err := builtins.ParseBashInvocation(args, builtins.BashInvocationConfig{
 		Name:             "gbash",
 		AllowInteractive: true,
 		LongInteractive:  true,
@@ -39,12 +39,12 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 	}
 	switch parsed.Action {
 	case "help":
-		spec := commands.BashInvocationSpec(commands.BashInvocationConfig{
+		spec := builtins.BashInvocationSpec(builtins.BashInvocationConfig{
 			Name:             "gbash",
 			AllowInteractive: true,
 			LongInteractive:  true,
 		})
-		if err := commands.RenderCommandHelp(stdout, &spec); err != nil {
+		if err := builtins.RenderCommandHelp(stdout, &spec); err != nil {
 			return 1, err
 		}
 		return 0, nil
@@ -58,7 +58,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return 1, fmt.Errorf("init runtime: %w", err)
 	}
 
-	if parsed.Source == commands.BashSourceStdin && (parsed.Interactive || stdinTTY) {
+	if parsed.Source == builtins.BashSourceStdin && (parsed.Interactive || stdinTTY) {
 		return runInteractiveShell(ctx, rt, parsed, stdin, stdout, stderr)
 	}
 	return runBashInvocation(ctx, rt, parsed, stdin, stdout, stderr)
@@ -123,9 +123,9 @@ func resolveCompatCommandDir(argv0 string) (string, error) {
 	return resolveCommandDir(filepath.Dir(resolved))
 }
 
-func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *commands.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if parsed == nil {
-		parsed = &commands.BashInvocation{Name: "gbash", Source: commands.BashSourceStdin}
+		parsed = &builtins.BashInvocation{Name: "gbash", Source: builtins.BashSourceStdin}
 	}
 
 	var (
@@ -135,9 +135,9 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *commands.
 		missingPath string
 	)
 	switch parsed.Source {
-	case commands.BashSourceCommandString:
+	case builtins.BashSourceCommandString:
 		script = parsed.CommandString
-	case commands.BashSourceFile:
+	case builtins.BashSourceFile:
 		data, err := os.ReadFile(parsed.ScriptPath)
 		if err != nil {
 			readErr = err
