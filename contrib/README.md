@@ -12,6 +12,7 @@ Today that includes:
 
 - `contrib/awk` for the optional sandboxed `awk` command
 - `contrib/extras` for a convenience helper that builds a registry with the stable contrib commands enabled
+- `contrib/htmltomarkdown` for the optional sandboxed `html-to-markdown` command
 - `contrib/jq` for the optional sandboxed `jq` command and its JSON/query stack
 - `contrib/nodejs` for the optional experimental sandboxed `nodejs` command backed by `goja` and a curated `goja_nodejs` allowlist; it is intentionally not included in `contrib/extras` yet, and its module-level design notes live in `contrib/nodejs/README.md`
 - `contrib/sqlite3` for the optional sandboxed `sqlite3` command

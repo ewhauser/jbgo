@@ -17,6 +17,19 @@ echo "alice 30\nbob 25" | awk '{print $1}'
 awk -F',' '{sum += $2} END {print sum}' data.csv
 ```
 
+### html-to-markdown
+
+HTML to Markdown converter, backed by [JohannesKaufmann/html-to-markdown](https://github.com/JohannesKaufmann/html-to-markdown).
+
+```go
+import contribhtmltomarkdown "github.com/ewhauser/gbash/contrib/htmltomarkdown"
+```
+
+```bash
+echo '<h1>Hello</h1><p>World</p>' | html-to-markdown
+html-to-markdown page.html
+```
+
 ### jq
 
 Lightweight JSON processor, backed by [itchyny/gojq](https://github.com/itchyny/gojq).
@@ -59,7 +72,7 @@ yq -i '.version = "2.0"' config.yaml
 
 ### Register All at Once
 
-Use `extras.FullRegistry()` to get the default registry plus all contrib commands in a single call:
+Use `extras.FullRegistry()` to get the default registry plus the stable contrib commands in a single call:
 
 ```go
 import "github.com/ewhauser/gbash/contrib/extras"
@@ -87,7 +100,7 @@ gb, err := gbash.New(gbash.WithRegistry(registry))
 
 ## gbash-extras CLI
 
-The `gbash-extras` CLI is a drop-in replacement for the `gbash` CLI with all contrib commands pre-registered:
+The `gbash-extras` CLI is a drop-in replacement for the `gbash` CLI with the stable contrib commands pre-registered:
 
 ```bash
 go install github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras@latest

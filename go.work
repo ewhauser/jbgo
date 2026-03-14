@@ -4,6 +4,7 @@ use (
 	.
 	./contrib/awk
 	./contrib/extras
+	./contrib/htmltomarkdown
 	./contrib/jq
 	./contrib/nodejs
 	./contrib/sqlite3

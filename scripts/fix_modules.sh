@@ -44,6 +44,7 @@ edit_module() {
 }
 
 edit_module contrib/awk github.com/ewhauser/gbash ../..
+edit_module contrib/htmltomarkdown github.com/ewhauser/gbash ../..
 edit_module contrib/jq github.com/ewhauser/gbash ../..
 edit_module contrib/sqlite3 github.com/ewhauser/gbash ../..
 edit_module contrib/yq github.com/ewhauser/gbash ../..
@@ -51,6 +52,7 @@ edit_module \
 	contrib/extras \
 	github.com/ewhauser/gbash ../.. \
 	github.com/ewhauser/gbash/contrib/awk ../awk \
+	github.com/ewhauser/gbash/contrib/htmltomarkdown ../htmltomarkdown \
 	github.com/ewhauser/gbash/contrib/jq ../jq \
 	github.com/ewhauser/gbash/contrib/sqlite3 ../sqlite3 \
 	github.com/ewhauser/gbash/contrib/yq ../yq
