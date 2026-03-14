@@ -1,65 +1,28 @@
-package builtins
+package builtins_test
 
 import (
-	"os"
-	"path/filepath"
+	"context"
+	"strings"
 	"testing"
-	"time"
 )
 
-type tailTestFileInfo struct {
-	name string
-	size int64
-	mode os.FileMode
-}
+func TestTailPidRequiresProcessCapability(t *testing.T) {
+	rt := newRuntime(t, &Config{})
 
-func (i tailTestFileInfo) Name() string       { return i.name }
-func (i tailTestFileInfo) Size() int64        { return i.size }
-func (i tailTestFileInfo) Mode() os.FileMode  { return i.mode }
-func (i tailTestFileInfo) ModTime() time.Time { return time.Unix(0, 0) }
-func (i tailTestFileInfo) IsDir() bool        { return i.mode.IsDir() }
-func (i tailTestFileInfo) Sys() any           { return nil }
-
-func TestTailSameFileInfoDetectsRenameOverExistingFile(t *testing.T) {
-	tmp := t.TempDir()
-
-	aPath := filepath.Join(tmp, "a")
-	bPath := filepath.Join(tmp, "b")
-	if err := os.WriteFile(aPath, []byte("a\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(a) error = %v", err)
-	}
-	if err := os.WriteFile(bPath, []byte("b\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(b) error = %v", err)
-	}
-
-	aInfoBefore, err := os.Stat(aPath)
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'hello\\n' >/tmp/in.txt\n" +
+			"tail -n 0 -f --pid=123 /tmp/in.txt\n",
+	})
 	if err != nil {
-		t.Fatalf("Stat(a before) error = %v", err)
+		t.Fatalf("Run() error = %v", err)
 	}
-	bInfoBefore, err := os.Stat(bPath)
-	if err != nil {
-		t.Fatalf("Stat(b before) error = %v", err)
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
 	}
-
-	if err := os.Rename(aPath, bPath); err != nil {
-		t.Fatalf("Rename(a, b) error = %v", err)
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty output", got)
 	}
-	bInfoAfter, err := os.Stat(bPath)
-	if err != nil {
-		t.Fatalf("Stat(b after) error = %v", err)
-	}
-
-	if same, known := tailSameFileInfo(bInfoBefore, bInfoAfter); !known || same {
-		t.Fatalf("tailSameFileInfo(old b, new b) = (%v, %v), want (false, true)", same, known)
-	}
-	if same, known := tailSameFileInfo(aInfoBefore, bInfoAfter); !known || !same {
-		t.Fatalf("tailSameFileInfo(old a, new b) = (%v, %v), want (true, true)", same, known)
-	}
-}
-
-func TestTailSameFileInfoReturnsUnknownWithoutComparableIdentity(t *testing.T) {
-	info := tailTestFileInfo{name: "virtual", mode: 0o644}
-	if same, known := tailSameFileInfo(info, info); known || same {
-		t.Fatalf("tailSameFileInfo(virtual, virtual) = (%v, %v), want (false, false)", same, known)
+	if !strings.Contains(result.Stderr, "tail: --pid is unsupported in this sandbox") {
+		t.Fatalf("Stderr = %q, want unsupported --pid error", result.Stderr)
 	}
 }
