@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ewhauser/gbash"
 )
 
 func TestRunCLIPrintsVersion(t *testing.T) {
@@ -59,6 +61,136 @@ func TestRunCLIHelpRendersBashInvocationFlags(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Fatalf("stdout = %q, want help to contain %q", help, want)
 		}
+	}
+}
+
+func TestRunCLIHelpRendersFilesystemFlags(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want help to contain %q", stdout.String(), want)
+		}
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLIReadWriteRootPersistsHostWritesAcrossExecutions(t *testing.T) {
+	tmp := t.TempDir()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"--readwrite-root", tmp, "--cwd", "/", "-c", "printf host-data > shared.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI(write) error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("write exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("write stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("write stderr = %q, want empty", got)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, "shared.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(shared.txt) error = %v", err)
+	}
+	if got, want := string(data), "host-data"; got != want {
+		t.Fatalf("host file contents = %q, want %q", got, want)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode, err = runCLI(context.Background(), "gbash", []string{"--readwrite-root=" + tmp, "--cwd=/", "-c", "pwd; cat shared.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI(read) error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("read exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "/\nhost-data"; got != want {
+		t.Fatalf("read stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("read stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLIRootMountReadsHostFilesWithoutPersistingWrites(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(subdir) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "host.txt"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(host.txt) error = %v", err)
+	}
+	t.Chdir(subdir)
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"--root", root, "--cwd", gbash.DefaultWorkspaceMountPoint + "/subdir", "-c", "pwd; cat host.txt; printf overlay > overlay.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), gbash.DefaultWorkspaceMountPoint+"/subdir\nseed\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "overlay.txt")); !os.IsNotExist(err) {
+		t.Fatalf("overlay.txt exists on host, want overlay-only write; err=%v", err)
+	}
+}
+
+func TestRunCLIFilesystemFlagsRejectConflictingModes(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"--root", "/", "--readwrite-root", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err == nil {
+		t.Fatalf("runCLI() error = nil, want conflict error")
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("error = %v, want mutually exclusive diagnostic", err)
+	}
+}
+
+func TestRunCLIReadWriteRootRejectsNonTempDirectories(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	nonTempRoot := filepath.Dir(filepath.Clean(os.TempDir()))
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"--readwrite-root", nonTempRoot, "--cwd", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err == nil {
+		t.Fatalf("runCLI() error = nil, want temp-directory restriction")
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if !strings.Contains(err.Error(), "system temp directory") {
+		t.Fatalf("error = %v, want temp-directory diagnostic", err)
 	}
 }
 

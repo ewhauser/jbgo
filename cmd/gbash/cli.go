@@ -21,11 +21,19 @@ type compatInvocation struct {
 }
 
 func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
+	runtimeOpts, args, err := parseCLIRuntimeOptions(args)
+	if err != nil {
+		return 2, err
+	}
+
 	compat, err := parseCompatInvocation(argv0, args)
 	if err != nil {
 		return 2, err
 	}
 	if compat != nil {
+		if runtimeOpts.hasRuntimeConfiguration() {
+			return 2, fmt.Errorf("filesystem flags are unsupported with gbash compat exec")
+		}
 		return runCompatInvocation(ctx, argv0, *compat, stdin, stdout, stderr)
 	}
 
@@ -39,12 +47,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 	}
 	switch parsed.Action {
 	case "help":
-		spec := builtins.BashInvocationSpec(builtins.BashInvocationConfig{
-			Name:             "gbash",
-			AllowInteractive: true,
-			LongInteractive:  true,
-		})
-		if err := builtins.RenderCommandHelp(stdout, &spec); err != nil {
+		if err := renderCLIHelp(stdout); err != nil {
 			return 1, err
 		}
 		return 0, nil
@@ -53,7 +56,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 		return 0, nil
 	}
 
-	rt, err := gbash.New()
+	rt, err := newCLIRuntime(runtimeOpts)
 	if err != nil {
 		return 1, fmt.Errorf("init runtime: %w", err)
 	}
