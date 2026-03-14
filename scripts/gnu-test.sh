@@ -421,6 +421,16 @@ else
   : > "$log_path"
 fi
 
+for test_path in "${selected_tests[@]}"; do
+  test_base=$(test_base_from_path "$test_path")
+  test_log="$workdir/$test_base.log"
+  if [[ -f "$test_log" ]]; then
+    dest_dir="$GNU_RESULTS_DIR/${test_base%/*}"
+    mkdir -p "$dest_dir"
+    cp "$test_log" "$dest_dir/"
+  fi
+done
+
 if [[ "${GNU_KEEP_WORKDIR:-0}" == "1" ]]; then
   workdir=$(preserve_workdir "$workdir")
 fi
@@ -442,9 +452,25 @@ if [[ -f "$GNU_RESULTS_DIR/summary.json" ]]; then
   go run ./scripts/compat-report --summary "$GNU_RESULTS_DIR/summary.json" --output "$GNU_RESULTS_DIR"
 fi
 
+echo ""
 echo "results: $GNU_RESULTS_DIR"
+if [[ -f "$GNU_RESULTS_DIR/index.html" ]]; then
+  echo "report:  $GNU_RESULTS_DIR/index.html"
+fi
 if [[ "${GNU_KEEP_WORKDIR:-0}" == "1" ]]; then
   echo "workdir: $workdir"
+fi
+
+if [[ $summary_status -ne 0 ]]; then
+  echo ""
+  echo "failed tests:"
+  for test_path in "${selected_tests[@]}"; do
+    test_base=$(test_base_from_path "$test_path")
+    test_log="$GNU_RESULTS_DIR/$test_base.log"
+    if [[ -f "$test_log" ]] && grep -q "^FAIL: $test_path\$" "$log_path"; then
+      echo "  $test_path -> $test_log"
+    fi
+  done
 fi
 
 exit "$summary_status"
