@@ -20,7 +20,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.3
 
   golangci-lint-examples:
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.3
           working-directory: examples
 
   golangci-lint-contrib-sqlite3:
@@ -47,7 +47,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.3
           working-directory: contrib/sqlite3
 
   golangci-lint-contrib-extras:
@@ -61,7 +61,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.3
           working-directory: contrib/extras
 
   golangci-lint-contrib-yq:
@@ -75,7 +75,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.3
           working-directory: contrib/yq
 
   golangci-lint-contrib-jq:
@@ -89,5 +89,5 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.3
           working-directory: contrib/jq
