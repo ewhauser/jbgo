@@ -6,8 +6,8 @@ import (
 	"path"
 	"testing"
 
+	gbruntime "github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/commands"
-	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func newJQRegistry(tb testing.TB) *commands.Registry {

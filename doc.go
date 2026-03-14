@@ -11,8 +11,8 @@
 //   - customize the registry, policy, engine, or filesystem with explicit
 //     options when you need lower-level control
 //
-// More specialized packages such as commands, fs, network, policy, and shell
-// remain available for advanced integrations and extension points, but most
-// applications should not need to import them just to construct and run a
-// sandbox.
+// The root package is the only stable embedding API. More specialized packages
+// such as commands, fs, network, policy, shell, and trace remain available for
+// advanced integrations and extension points, but they are low-level hooks and
+// are not covered by the root package's compatibility promise.
 package gbash

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
+	gbruntime "github.com/ewhauser/gbash"
 	gbfs "github.com/ewhauser/gbash/fs"
-	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func TestSQLiteFSFileLifecycle(t *testing.T) {

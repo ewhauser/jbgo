@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	gbruntime "github.com/ewhauser/gbash"
 )
 
 func TestRegisterNilRegistry(t *testing.T) {

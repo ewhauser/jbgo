@@ -5,8 +5,8 @@ import (
 
 	"testing"
 
+	gbruntime "github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/commands"
-	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 func newAWKRegistry(tb testing.TB) *commands.Registry {

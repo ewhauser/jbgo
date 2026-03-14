@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	gbruntime "github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/policy"
-	gbruntime "github.com/ewhauser/gbash/runtime"
 )
 
 const (

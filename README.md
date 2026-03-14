@@ -6,7 +6,9 @@
 
 Requires Go 1.26+
 
-Install the module with `go get github.com/ewhauser/gbash` and import `github.com/ewhauser/gbash` for the main embedding API. Advanced escape hatches remain available under `github.com/ewhauser/gbash/...`.
+Install the module with `go get github.com/ewhauser/gbash` and import `github.com/ewhauser/gbash` for the embedding API.
+
+Only `github.com/ewhauser/gbash` is considered stable. Lower-level packages under `github.com/ewhauser/gbash/...` exist for advanced integrations and repository internals, but they may change without notice.
 
 ## Table of Contents
 
@@ -350,7 +352,7 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 
 ## Development
 
-The repo is a Go workspace. The root module has the runtime, CLI, and core commands. [`contrib/`](./contrib/) and [`examples/`](./examples/) are separate modules to keep optional dependencies out of the core import graph.
+The repo is a Go workspace. The root module has the public `gbash` package, CLI, internal runtime implementation, and core commands. [`contrib/`](./contrib/) and [`examples/`](./examples/) are separate modules to keep optional dependencies out of the core import graph.
 
 `make build`, `make test`, and `make lint` cover all modules. See the [`Makefile`](./Makefile) for fuzz, bench, GNU coreutils compat, and release targets.
 

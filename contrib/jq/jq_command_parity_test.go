@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	gbruntime "github.com/ewhauser/gbash"
 )
 
 func TestJQSupportsCompatibilityAliasesIsolated(t *testing.T) {

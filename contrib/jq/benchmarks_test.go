@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	gbruntime "github.com/ewhauser/gbash/runtime"
+	gbruntime "github.com/ewhauser/gbash"
 )
 
 func BenchmarkCommandJQTransform(b *testing.B) {

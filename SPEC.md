@@ -165,7 +165,7 @@ Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesy
 
 ```text
 cmd/gbash/             CLI entrypoint for local execution
-runtime/              top-level runtime API and execution orchestration
+internal/runtime/      internal runtime implementation and execution orchestration
 shell/                mvdan/sh integration and handler wiring
 fs/                   project-owned filesystem interfaces and virtual backends
 network/              sandboxed HTTP client, allowlist matching, redirect checks
@@ -179,7 +179,7 @@ tests/                integration fixtures and compatibility-style harnesses
 
 Package responsibilities:
 
-- `runtime/`: public API, runtime/session creation, run configuration, result collection, output capture
+- `internal/runtime/`: internal runtime/session creation, run configuration, result collection, output capture
 - `shell/`: parser and runner adapter; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
@@ -413,7 +413,7 @@ Implementation detail for MVP:
 
 ### 9.3 Stdio
 
-`StdIO` is wired to bounded buffers owned by `runtime/`. This gives us:
+`StdIO` is wired to bounded buffers owned by `internal/runtime/`. This gives us:
 
 - deterministic capture for agent frameworks
 - policy-controlled output limits
@@ -521,7 +521,7 @@ Backend boundary for the current implementation:
 
 - `gbash.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
 - `HostFS` is an opt-in lower-layer backend exposed through `gbfs.Host(...)`; it is intended to sit underneath `gbfs.Overlay(...)`, not to replace the default in-memory runtime path
-- `OverlayFS` is intended for runtime/session use and is exposed through `gbfs.Overlay(...)`
+- `OverlayFS` is intended for internal session use and is exposed through `gbfs.Overlay(...)`
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests
 - `SnapshotFS` is not the default `runtime` session backend because session bootstrap still creates the sandbox layout and command stubs
 - the common host-project workflow should be represented as a high-level runtime helper that mounts a read-only host tree under an in-memory overlay and starts the session in that mounted directory
@@ -610,4 +610,4 @@ Errors fall into four categories:
 1. parse errors
 2. policy denials
 3. command-level execution failures
-4. runtime/internal errors
+4. internal runtime errors

@@ -9,9 +9,9 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	internalruntime "github.com/ewhauser/gbash/internal/runtime"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/runtime"
 	"github.com/ewhauser/gbash/shell"
 )
 
@@ -21,7 +21,7 @@ import (
 // [Runtime.NewSession] when you want multiple executions to share the same
 // sandbox filesystem state.
 type Runtime struct {
-	inner *runtime.Runtime
+	inner *internalruntime.Runtime
 }
 
 // Session is a persistent sandbox that can execute multiple scripts against the
@@ -29,24 +29,24 @@ type Runtime struct {
 //
 // Sessions are created by calling [Runtime.NewSession].
 type Session struct {
-	inner *runtime.Session
+	inner *internalruntime.Session
 }
 
 // ExecutionRequest describes a single shell execution.
 //
 // Callers usually populate [ExecutionRequest.Script] and optionally provide
 // stdin, environment overrides, or a working directory override.
-type ExecutionRequest = runtime.ExecutionRequest
+type ExecutionRequest = internalruntime.ExecutionRequest
 
 // ExecutionResult captures the output, exit status, timing, and trace events
 // produced by a shell execution.
-type ExecutionResult = runtime.ExecutionResult
+type ExecutionResult = internalruntime.ExecutionResult
 
 // InteractiveRequest describes an interactive shell session.
-type InteractiveRequest = runtime.InteractiveRequest
+type InteractiveRequest = internalruntime.InteractiveRequest
 
 // InteractiveResult captures the final exit status from an interactive shell session.
-type InteractiveResult = runtime.InteractiveResult
+type InteractiveResult = internalruntime.InteractiveResult
 
 // Method identifies an HTTP method that is allowed by the sandbox network
 // policy.
@@ -201,7 +201,7 @@ func New(opts ...Option) (*Runtime, error) {
 		return nil, err
 	}
 
-	rt, err := runtime.New(runtime.WithConfig(cfg.runtimeConfig()))
+	rt, err := internalruntime.New(internalruntime.WithConfig(cfg.runtimeConfig()))
 	if err != nil {
 		return nil, err
 	}
@@ -221,11 +221,11 @@ func resolveConfig(opts []Option) (Config, error) {
 	return cfg, nil
 }
 
-func (cfg *Config) runtimeConfig() *runtime.Config {
+func (cfg *Config) runtimeConfig() *internalruntime.Config {
 	if cfg == nil {
-		return &runtime.Config{}
+		return &internalruntime.Config{}
 	}
-	return &runtime.Config{
+	return &internalruntime.Config{
 		FileSystem:    cfg.FileSystem.runtimeConfig(),
 		Registry:      cfg.Registry,
 		Policy:        cfg.Policy,
@@ -250,8 +250,8 @@ func (cfg *Config) networkConfig() *network.Config {
 	}
 }
 
-func (cfg FileSystemConfig) runtimeConfig() runtime.FileSystemConfig {
-	return runtime.FileSystemConfig{
+func (cfg FileSystemConfig) runtimeConfig() internalruntime.FileSystemConfig {
+	return internalruntime.FileSystemConfig{
 		Factory:    cfg.Factory,
 		WorkingDir: cfg.WorkingDir,
 	}

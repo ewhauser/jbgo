@@ -45,16 +45,33 @@ jobs:
         run: |
           set -euo pipefail
 
+          resolve_runtime_pkg() {
+            local dir=$1
+            if [ -d "$dir/internal/runtime" ]; then
+              printf '%s\n' ./internal/runtime
+              return 0
+            fi
+            if [ -d "$dir/runtime" ]; then
+              printf '%s\n' ./runtime
+              return 0
+            fi
+            echo "unable to locate runtime benchmark package under $dir" >&2
+            return 1
+          }
+
           rm -rf "$ARTIFACT_DIR" "$BASE_DIR"
           mkdir -p "$ARTIFACT_DIR"
 
           git worktree add "$BASE_DIR" "$BASE_SHA"
 
+          BASE_RUNTIME_PKG=$(resolve_runtime_pkg "$BASE_DIR")
+          HEAD_RUNTIME_PKG=$(resolve_runtime_pkg ".")
+
           (
             cd "$BASE_DIR"
-            go test ./runtime -run=^$ -bench "$BENCH_SMOKE_REGEX" -benchmem -count="$BENCH_SMOKE_COUNT" -benchtime="$BENCH_SMOKE_TIME" > "$ARTIFACT_DIR/base.txt"
+            go test "$BASE_RUNTIME_PKG" -run=^$ -bench "$BENCH_SMOKE_REGEX" -benchmem -count="$BENCH_SMOKE_COUNT" -benchtime="$BENCH_SMOKE_TIME" > "$ARTIFACT_DIR/base.txt"
           )
-          go test ./runtime -run=^$ -bench "$BENCH_SMOKE_REGEX" -benchmem -count="$BENCH_SMOKE_COUNT" -benchtime="$BENCH_SMOKE_TIME" > "$ARTIFACT_DIR/head.txt"
+          go test "$HEAD_RUNTIME_PKG" -run=^$ -bench "$BENCH_SMOKE_REGEX" -benchmem -count="$BENCH_SMOKE_COUNT" -benchtime="$BENCH_SMOKE_TIME" > "$ARTIFACT_DIR/head.txt"
           benchstat "$ARTIFACT_DIR/base.txt" "$ARTIFACT_DIR/head.txt" | tee "$ARTIFACT_DIR/benchstat.txt"
 
           {
