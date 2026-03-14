@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -212,18 +211,6 @@ func writeJSON(path string, value any) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func formatPercent(value float64) string {
-	if value == 0 {
-		return "0%"
-	}
-	if value == math.Trunc(value) {
-		return fmt.Sprintf("%.0f%%", value)
-	}
-	formatted := fmt.Sprintf("%.2f", value)
-	formatted = strings.TrimRight(strings.TrimRight(formatted, "0"), ".")
-	return formatted + "%"
-}
-
 func percentage(numerator, denominator int) float64 {
 	if denominator == 0 {
 		return 0
@@ -323,43 +310,6 @@ func splitSkippedEntry(entry string) (name, reason string) {
 func cloneTestResult(in testResult) testResult {
 	out := in
 	out.ReportedAs = append([]string(nil), in.ReportedAs...)
-	return out
-}
-
-func mergeTestResult(existing, incoming testResult) testResult {
-	if testStatusPrecedence(incoming.Status) > testStatusPrecedence(existing.Status) {
-		existing.Status = incoming.Status
-	}
-	for _, reportedAs := range incoming.ReportedAs {
-		if !containsString(existing.ReportedAs, reportedAs) {
-			existing.ReportedAs = append(existing.ReportedAs, reportedAs)
-		}
-	}
-	sort.Strings(existing.ReportedAs)
-	return existing
-}
-
-func mergeNamedResults(dst map[string]testResult, results []testResult) {
-	for _, result := range results {
-		existing, ok := dst[result.Name]
-		if !ok {
-			dst[result.Name] = cloneTestResult(result)
-			continue
-		}
-		dst[result.Name] = mergeTestResult(existing, result)
-	}
-}
-
-func sortedNamedResults(results map[string]testResult) []testResult {
-	names := make([]string, 0, len(results))
-	for name := range results {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	out := make([]testResult, 0, len(names))
-	for _, name := range names {
-		out = append(out, results[name])
-	}
 	return out
 }
 
