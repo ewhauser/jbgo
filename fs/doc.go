@@ -1,7 +1,8 @@
 // Package fs provides the filesystem contracts and virtual filesystem backends
 // used by gbash.
 //
-// This package is a low-level extension surface for custom filesystem
-// integrations. It is not the stable embedding API; most callers should prefer
-// the root `github.com/ewhauser/gbash` package.
+// This is a supported public extension package for callers that need to supply
+// custom filesystem implementations or factories. Most embedders should still
+// prefer the root `github.com/ewhauser/gbash` package and its higher-level
+// filesystem helpers.
 package fs

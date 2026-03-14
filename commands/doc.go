@@ -1,8 +1,15 @@
-// Package commands provides low-level command registration and implementation
-// hooks for gbash.
+// Package commands provides the stable command authoring and registry API for
+// gbash.
 //
-// This package is available for advanced integrations such as custom commands
-// and contrib modules, but it is not the stable embedding API. Most callers
-// should construct and run sandboxes through the root
-// `github.com/ewhauser/gbash` package instead.
+// Most embedders should construct and run sandboxes through the root
+// `github.com/ewhauser/gbash` package and only import commands when they need
+// to:
+//
+//   - implement custom commands
+//   - customize a command registry
+//   - reuse gbash's command-spec parsing and invocation helpers
+//
+// The package currently also contains builtin command implementations, but the
+// long-term extension contract is the command API itself rather than this being
+// the permanent home of every builtin implementation.
 package commands

@@ -8,10 +8,9 @@ Requires Go 1.26+
 
 Install the module with `go get github.com/ewhauser/gbash` and import `github.com/ewhauser/gbash` for the embedding API.
 
-Only `github.com/ewhauser/gbash` is considered stable. Lower-level packages under `github.com/ewhauser/gbash/...` exist for advanced integrations and repository internals, but they may change without notice.
-
 ## Table of Contents
 
+- [Public Packages](#public-packages)
 - [Usage](#usage)
   - [Basic API](#basic-api)
   - [Network-Enabled API](#network-enabled-api)
@@ -29,8 +28,6 @@ Only `github.com/ewhauser/gbash` is considered stable. Lower-level packages unde
 - [Default Sandbox Layout](#default-sandbox-layout)
 - [Development](#development)
 - [License](#license)
-
-## Usage
 
 ### Basic API
 
