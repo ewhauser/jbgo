@@ -96,6 +96,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Verify release tree
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
@@ -140,6 +144,9 @@ jobs:
           VERSION: ${{ needs.resolve.outputs.version }}
         run: git checkout --force "${VERSION}"
 
+      - name: Install workspace dependencies
+        run: npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile
+
       - name: Detect existing GitHub release
         id: github_release
         uses: actions/github-script@v8
@@ -177,3 +184,41 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
         run: echo "GitHub release already exists for ${VERSION}; skipping goreleaser."
+
+      # npm publish for @ewhauser/gbash-wasm is intentionally disabled for now.
+      # Keep the package build in release-check and prepare-release so the package
+      # stays releasable, but do not publish from the coordinated release workflow
+      # until the npm distribution contract is finalized.
+      #
+      # - name: Detect existing npm package version
+      #   id: npm_package
+      #   env:
+      #     VERSION: ${{ needs.resolve.outputs.version }}
+      #   run: |
+      #     set -euo pipefail
+      #     package_version="${VERSION#v}"
+      #     if npm view "@ewhauser/gbash-wasm@${package_version}" version >/dev/null 2>&1; then
+      #       echo "exists=true" >> "${GITHUB_OUTPUT}"
+      #     else
+      #       echo "exists=false" >> "${GITHUB_OUTPUT}"
+      #     fi
+      #
+      # - name: Publish @ewhauser/gbash-wasm
+      #   if: secrets.NPM_TOKEN != '' && steps.npm_package.outputs.exists != 'true'
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #   run: |
+      #     set -euo pipefail
+      #     npm exec --yes pnpm@10.10.0 -- --filter @ewhauser/gbash-wasm build
+      #     cd packages/gbash-wasm
+      #     npm publish --access public
+      #
+      # - name: Skip npm publish when token is missing
+      #   if: secrets.NPM_TOKEN == ''
+      #   run: echo "NPM_TOKEN is not configured; skipping npm publish."
+      #
+      # - name: Skip npm publish when version already exists
+      #   if: secrets.NPM_TOKEN != '' && steps.npm_package.outputs.exists == 'true'
+      #   env:
+      #     VERSION: ${{ needs.resolve.outputs.version }}
+      #   run: echo "@ewhauser/gbash-wasm ${VERSION#v} is already published; skipping npm publish."

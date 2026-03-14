@@ -27,3 +27,22 @@ jobs:
           go-version-file: go.mod
 
       - run: go build -trimpath ./cmd/gbash
+
+  gbash-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install workspace dependencies
+        run: npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile
+
+      - name: Build @ewhauser/gbash-wasm
+        run: npm exec --yes pnpm@10.10.0 -- --filter @ewhauser/gbash-wasm build

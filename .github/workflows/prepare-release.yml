@@ -25,6 +25,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Fetch tags
         run: git fetch --force --tags origin
 
@@ -67,6 +71,9 @@ jobs:
       - name: Sync module versions
         run: make fix-modules MODULE_VERSION='${{ steps.version.outputs.version }}'
 
+      - name: Install workspace dependencies
+        run: npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile
+
       - name: Run tests
         run: make test
 
@@ -75,6 +82,9 @@ jobs:
 
       - name: Check release config
         run: make release-check
+
+      - name: Build @ewhauser/gbash-wasm
+        run: npm exec --yes pnpm@10.10.0 -- --filter @ewhauser/gbash-wasm build
 
       - name: Create or update release PR
         uses: peter-evans/create-pull-request@v8
@@ -89,6 +99,6 @@ jobs:
 
             This PR:
             - syncs nested module requirements and local replaces via `make fix-modules`
-            - validates the release candidate with `make test`, `make lint`, and `make release-check`
+            - validates the release candidate with `make test`, `make lint`, `make release-check`, and `@ewhauser/gbash-wasm` package builds
           labels: release
           delete-branch: false

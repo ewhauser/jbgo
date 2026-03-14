@@ -173,6 +173,7 @@ fs/                   project-owned filesystem interfaces and virtual backends
 network/              sandboxed HTTP client, allowlist matching, redirect checks
 commands/             command registry, invocation context, core Go commands
 contrib/<name>/       separate Go modules for optional heavyweight commands
+packages/<name>/      publishable JavaScript/TypeScript packages
 policy/               sandbox policy types and enforcement decisions
 trace/                structured event model and recorder implementations
 examples/             separate Go module for SDK demos and integration examples
@@ -187,6 +188,7 @@ Package responsibilities:
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `echo`, `cat`, `ls`, and `pwd`
 - `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface. Current examples include `awk`, `jq`, `nodejs`, `sqlite3`, and `yq`.
+- `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the `js/wasm` assets plus explicit host entrypoints such as `@ewhauser/gbash-wasm/browser` and `@ewhauser/gbash-wasm/node`.
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
 - `trace/`: event schema, recorder interfaces, and in-memory buffering
 - `examples/`: runnable demos that can depend on external SDKs without affecting the root module build list
@@ -194,7 +196,7 @@ Package responsibilities:
 
 We intentionally do not create a `compat/` package because external harness support should ride on the normal CLI and runtime surfaces, not a second execution API.
 
-The repository itself should be maintained as a committed Go workspace. The root module stays focused on the runtime, CLI, and core commands, while direct children under `contrib/` are separate modules for optional heavyweight commands and `examples/` is a separate module used for demos that may need external SDK dependencies or looser version pinning.
+The repository itself should be maintained as a committed Go workspace plus a pnpm workspace. The root module stays focused on the runtime, CLI, and core commands, while direct children under `contrib/` are separate modules for optional heavyweight commands, `packages/` contains publishable JavaScript packages, and `examples/` is a separate module used for demos that may need external SDK dependencies or looser version pinning.
 
 Optional language runtimes in `contrib/` must preserve the same sandbox contract as core commands. The current `contrib/nodejs` design is experimental and intentionally excluded from `contrib/extras` until its surface stabilizes. It uses `goja` plus a curated `goja_nodejs` allowlist, with gbash-owned replacements for host-sensitive modules such as `process`, `console`, `fs`, and `path`. It does not expose host subprocesses, host filesystem access, or unrestricted network APIs, and any supported file access must flow through `Invocation.FS`.
 

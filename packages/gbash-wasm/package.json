@@ -1,0 +1,28 @@
+{
+  "name": "@ewhauser/gbash-wasm",
+  "version": "0.0.7",
+  "description": "JavaScript-hosted WebAssembly bridge for gbash",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && bash scripts/build-wasm.sh",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "build:wasm": "bash scripts/build-wasm.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

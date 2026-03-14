@@ -10,6 +10,7 @@ Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with pr
 ## Table of Contents
 
 - [Features](#features)
+- [Public Packages](#public-packages)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
@@ -39,6 +40,13 @@ Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with pr
 - Execution budgets — command count, loop iterations, glob expansion, stdout/stderr limits
 - Structured trace events for debugging and agent orchestration
 - WebAssembly support — runs in the browser ([demo](./examples/website/))
+
+## Public Packages
+
+- `github.com/ewhauser/gbash`: the core Go runtime and embedding API
+- `github.com/ewhauser/gbash/contrib/...`: optional Go command modules
+- `@ewhauser/gbash-wasm/browser`: the explicit browser entrypoint for the `js/wasm` package. It is versioned in-repo today; npm publishing remains disabled in the release workflow for now.
+- `@ewhauser/gbash-wasm/node`: the explicit Node entrypoint for the same `js/wasm` package.
 
 ## Installation
 
@@ -371,7 +379,15 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 
 ## Development
 
-The repo is a Go workspace. `make build`, `make test`, and `make lint` cover all modules. See the [`Makefile`](./Makefile) for additional targets.
+The repo is a committed Go workspace plus a pnpm workspace. The root module has the public `gbash` package, CLI, internal runtime implementation, and core commands. [`contrib/`](./contrib/) and [`examples/`](./examples/) remain separate Go modules to keep optional dependencies out of the core import graph, while [`packages/`](./packages/) contains publishable JavaScript packages such as [`@ewhauser/gbash-wasm`](./packages/gbash-wasm/).
+
+`make build`, `make test`, and `make lint` cover the Go modules. See the [`Makefile`](./Makefile) for additional targets.
+
+Use `npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile` at the repo root when you need the JavaScript workspace dependencies, or `pnpm install` if you already manage pnpm locally.
+
+The repo uses both [`go.work`](./go.work) and committed child-module `replace` directives. `go.work` keeps the workspace coherent at the repo root, and the child-module replaces make each nested module buildable on its own while still declaring real tagged dependencies for published consumption.
+
+Use `make fix-modules MODULE_VERSION=vX.Y.Z` when preparing the next coordinated root, contrib, and `@ewhauser/gbash-wasm` release line. That updates the nested module requirements, refreshes the local replaces, updates the npm package version, and runs `go mod tidy` in each child Go module.
 
 For release process, module versioning, benchmarks, and GNU coreutils compatibility testing, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 

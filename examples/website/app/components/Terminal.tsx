@@ -63,6 +63,8 @@ export default function TerminalComponent() {
       customCommands: [aboutCmd, installCmd, githubCmd, agentCmd],
       files,
       cwd: "/home/user",
+      wasmUrl: "/gbash.wasm",
+      wasmExecUrl: "/wasm_exec.js",
     });
 
     // Set up input handling

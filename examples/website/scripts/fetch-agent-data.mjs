@@ -29,10 +29,11 @@ const includedPaths = [
   "network",
   "policy",
   "fs",
-  "runtime",
+  "internal/runtime",
   "shell",
   "commands",
   "cmd/gbash",
+  "packages/gbash-wasm",
   "examples/website",
 ];
 
@@ -44,6 +45,7 @@ function shouldCopy(src) {
   const blockedFragments = [
     "/.git/",
     "/node_modules/",
+    "/dist/",
     "/.next/",
     "/app/api/agent/_agent-data/",
   ];

@@ -19,6 +19,7 @@ bin/
 dist/
 .cache
 .gocache
+node_modules/
 
 # Editor and OS files
 .DS_Store

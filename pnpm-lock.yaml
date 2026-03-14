@@ -6,8 +6,13 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  examples/website:
     dependencies:
+      '@ewhauser/gbash-wasm':
+        specifier: workspace:*
+        version: link:../../packages/gbash-wasm
       ai:
         specifier: ^6.0.66
         version: 6.0.116(zod@4.3.6)
@@ -56,6 +61,12 @@ importers:
         version: 4.2.1
       typescript:
         specifier: ^5
+        version: 5.9.3
+
+  packages/gbash-wasm:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
         version: 5.9.3
 
 packages:

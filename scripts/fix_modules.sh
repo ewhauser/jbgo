@@ -10,6 +10,21 @@ if [[ -n "${VERSION}" && "${VERSION}" != v* ]]; then
 	exit 1
 fi
 
+sync_package_json_version() {
+	local file="$1"
+	if [[ -z "${VERSION}" || ! -f "${ROOT_DIR}/${file}" ]]; then
+		return
+	fi
+	node - "${ROOT_DIR}/${file}" "${VERSION#v}" <<'EOF'
+const fs = require("node:fs");
+
+const [, , file, version] = process.argv;
+const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+pkg.version = version;
+fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+EOF
+}
+
 edit_module() {
 	local dir="$1"
 	shift
@@ -43,6 +58,8 @@ edit_module \
 	examples \
 	github.com/ewhauser/gbash ../ \
 	github.com/ewhauser/gbash/contrib/sqlite3 ../contrib/sqlite3
+
+sync_package_json_version packages/gbash-wasm/package.json
 
 (
 	cd "${ROOT_DIR}"
