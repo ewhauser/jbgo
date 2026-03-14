@@ -37,7 +37,7 @@ func TestCustomCommandInvocationCapabilities(t *testing.T) {
 			return fmt.Errorf("missing limits")
 		}
 
-		resp, err := inv.Fetch(ctx, &commands.FetchRequest{
+		resp, err := inv.Fetch(ctx, &network.Request{
 			Method: "GET",
 			URL:    "https://example.test/status",
 		})

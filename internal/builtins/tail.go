@@ -591,14 +591,7 @@ func tailPathIsUntailable(ctx context.Context, inv *Invocation, name string) boo
 }
 
 func tailPIDIsAlive(ctx context.Context, inv *Invocation, pid int) (bool, error) {
-	if inv == nil || inv.ProcessAlive == nil {
-		return false, exitf(inv, 1, "tail: --pid is unsupported in this sandbox")
-	}
-	alive, err := inv.ProcessAlive(ctx, pid)
-	if err != nil {
-		return false, exitf(inv, 1, "tail: failed to check pid %d: %v", pid, err)
-	}
-	return alive, nil
+	return false, exitf(inv, 1, "tail: --pid is unsupported in this sandbox")
 }
 
 func writeTailWarnings(inv *Invocation, opts *tailOptions) error {

@@ -194,7 +194,7 @@ func (c *Curl) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	}
 	headers := prepareCurlHeaders(opts, contentType)
 
-	resp, err := inv.Fetch(ctx, &FetchRequest{
+	resp, err := inv.Fetch(ctx, &network.Request{
 		Method:          opts.method,
 		URL:             requestURL,
 		Headers:         headers,

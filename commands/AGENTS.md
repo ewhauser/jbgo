@@ -43,7 +43,7 @@ Creates `Invocation` instances and exposes the policy-enforced filesystem wrappe
 - `NewInvocation(opts)` — builds an `Invocation` from `InvocationOptions`
 - `InvocationOptions` — inputs for constructing an invocation
 - `CommandFS` — wraps `gbfs.FileSystem` with policy-aware filesystem operations
-- `FetchRequest` / `FetchResponse` / `FetchFunc` — network callback types
+- `FetchFunc` — network callback type using `network.Request` / `network.Response`
 
 ### execution.go
 Data types for subprocess and interactive shell execution.
@@ -64,16 +64,6 @@ The stock builtin registry is now exposed via `gbash.DefaultRegistry()`, not
 through `commands`.
 
 ## Public Utilities
-
-### redirected_io.go
-- `RedirectMetadata`
-- `WrapRedirectedFile(...)`
-
-### scanner_helpers.go
-- `ScannerTokenLimit(inv)` — scanner token limit derived from invocation limits
-
-### stdin_context.go
-- `ReaderWithContext(ctx, reader)` — makes stdin reads observe context cancellation
 
 ### version_rendering.go
 - `VersionInfo`

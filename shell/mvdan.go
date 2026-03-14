@@ -17,6 +17,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
@@ -54,8 +55,6 @@ type Execution struct {
 	Registry          commands.CommandRegistry
 	Policy            policy.Policy
 	Trace             trace.Recorder
-	LookupCNAME       commands.LookupCNAMEFunc
-	ProcessAlive      commands.ProcessAliveFunc
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
 	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
 }
@@ -278,7 +277,7 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 		if mutationAction := fileMutationAction(flag); mutationAction != "" {
 			recordFileMutation(exec.Trace, mutationAction, abs, "", "")
 		}
-		return commands.WrapRedirectedFile(file, abs, flag), nil
+		return commandutil.WrapRedirectedFile(file, abs, flag), nil
 	}
 }
 
@@ -405,20 +404,18 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		invocationArgs := append([]string(nil), resolved.args...)
 		invocationArgs = append(invocationArgs, args[1:]...)
 		err = commands.RunCommand(ctx, resolved.command, commands.NewInvocation(&commands.InvocationOptions{
-			Args:         invocationArgs,
-			Env:          currentEnv,
-			Cwd:          virtualWD,
-			Stdin:        hc.Stdin,
-			Stdout:       hc.Stdout,
-			Stderr:       hc.Stderr,
-			FileSystem:   exec.FS,
-			Network:      exec.Network,
-			Policy:       exec.Policy,
-			Trace:        exec.Trace,
-			LookupCNAME:  exec.LookupCNAME,
-			ProcessAlive: exec.ProcessAlive,
-			Exec:         subexecInvoker(exec.Exec, currentEnv, virtualWD),
-			Interact:     interactiveInvoker(exec.Interact, currentEnv, virtualWD),
+			Args:       invocationArgs,
+			Env:        currentEnv,
+			Cwd:        virtualWD,
+			Stdin:      hc.Stdin,
+			Stdout:     hc.Stdout,
+			Stderr:     hc.Stderr,
+			FileSystem: exec.FS,
+			Network:    exec.Network,
+			Policy:     exec.Policy,
+			Trace:      exec.Trace,
+			Exec:       subexecInvoker(exec.Exec, currentEnv, virtualWD),
+			Interact:   interactiveInvoker(exec.Interact, currentEnv, virtualWD),
 			GetRegisteredCommands: func() []string {
 				if exec.Registry == nil {
 					return nil

@@ -1,4 +1,4 @@
-package commands
+package commandutil
 
 import (
 	"context"
@@ -10,9 +10,9 @@ type contextReader struct {
 	reader io.Reader
 }
 
-// ReaderWithContext arranges for command stdin reads to observe context
-// cancellation. When the underlying reader is closable, cancellation also
-// closes it so blocked reads can unblock promptly.
+// ReaderWithContext arranges for stdin reads to observe context cancellation.
+// When the underlying reader is closable, cancellation also closes it so
+// blocked reads can unblock promptly.
 func ReaderWithContext(ctx context.Context, reader io.Reader) io.Reader {
 	if ctx == nil || reader == nil {
 		return reader

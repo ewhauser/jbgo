@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"strings"
+
+	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
 func readAllFile(ctx context.Context, inv *Invocation, name string) (data []byte, abs string, err error) {
@@ -25,7 +27,7 @@ func readAllStdin(ctx context.Context, inv *Invocation) ([]byte, error) {
 	if inv != nil && inv.Stdin != nil {
 		stdin = inv.Stdin
 	}
-	data, err := io.ReadAll(ReaderWithContext(ctx, stdin))
+	data, err := io.ReadAll(commandutil.ReaderWithContext(ctx, stdin))
 	if err != nil {
 		return nil, &ExitError{Code: 1, Err: err}
 	}

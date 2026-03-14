@@ -121,7 +121,6 @@ func TestInvocationExecStaysWithinSessionPolicyBoundary(t *testing.T) {
 				MaxStderrBytes: 1 << 20,
 				MaxFileBytes:   8 << 20,
 			},
-			NetworkMode: policy.NetworkDisabled,
 		}),
 	})
 

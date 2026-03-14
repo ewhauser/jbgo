@@ -23,12 +23,6 @@ const (
 	FileActionRename   FileAction = "rename"
 )
 
-type NetworkMode string
-
-const (
-	NetworkDisabled NetworkMode = "disabled"
-)
-
 type SymlinkMode string
 
 const (
@@ -60,7 +54,6 @@ type Config struct {
 	ReadRoots       []string
 	WriteRoots      []string
 	Limits          Limits
-	NetworkMode     NetworkMode
 	SymlinkMode     SymlinkMode
 }
 
@@ -70,7 +63,6 @@ type Static struct {
 	readRoots       []string
 	writeRoots      []string
 	limits          Limits
-	networkMode     NetworkMode
 	symlinkMode     SymlinkMode
 }
 
@@ -98,7 +90,6 @@ func NewStatic(cfg *Config) *Static {
 		readRoots:       readRoots,
 		writeRoots:      writeRoots,
 		limits:          cfg.Limits,
-		networkMode:     cfg.NetworkMode,
 		symlinkMode:     symlinkMode,
 	}
 }

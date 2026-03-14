@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -38,7 +39,7 @@ type catOutputState struct {
 }
 
 type catRedirectHandle interface {
-	RedirectMetadata
+	commandutil.RedirectMetadata
 	Stat() (stdfs.FileInfo, error)
 }
 

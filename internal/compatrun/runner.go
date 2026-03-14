@@ -37,7 +37,6 @@ type Config struct {
 	DefaultDir        string
 	BuiltinCommandDir string
 	HostBash          HostBashFunc
-	ProcessAlive      commands.ProcessAliveFunc
 }
 
 type Runner struct {
@@ -80,7 +79,6 @@ func New(cfg *Config) (*Runner, error) {
 				MaxStderrBytes:       defaultMaxStderrBytes,
 				MaxFileBytes:         defaultMaxFileBytes,
 			},
-			NetworkMode: policy.NetworkDisabled,
 			SymlinkMode: policy.SymlinkFollow,
 		})
 	}
@@ -190,7 +188,6 @@ func (r *Runner) exec(ctx context.Context, req *commands.ExecutionRequest, liveS
 			Registry:          r.cfg.Registry,
 			Policy:            r.cfg.Policy,
 			Trace:             recorder,
-			ProcessAlive:      r.cfg.ProcessAlive,
 			Exec:              r.subexecCallback,
 			Interact:          r.interactCallback,
 		})
@@ -282,7 +279,6 @@ func (r *Runner) interact(ctx context.Context, req *commands.InteractiveRequest)
 		Registry:          r.cfg.Registry,
 		Policy:            r.cfg.Policy,
 		Trace:             trace.NewBuffer(),
-		ProcessAlive:      r.cfg.ProcessAlive,
 		Exec:              r.subexecCallback,
 		Interact:          r.interactCallback,
 	})

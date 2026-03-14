@@ -1122,7 +1122,7 @@ func TestRunCLICompatExecTailFollowByNameWithoutRetryTracksReappearingFileWhileO
 	}
 }
 
-func TestRunCLICompatExecTailFollowPidKeepsRunningWhileLastPidIsAlive(t *testing.T) {
+func TestRunCLICompatExecTailFollowPidIsUnsupported(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
@@ -1130,38 +1130,33 @@ func TestRunCLICompatExecTailFollowPidKeepsRunningWhileLastPidIsAlive(t *testing
 		t.Fatalf("WriteFile(here) error = %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
-	defer cancel()
-
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(ctx, "gbash", []string{
+	exitCode, err := runCLI(context.Background(), "gbash", []string{
 		"compat", "exec", "tail", "-f", "-s0.05", "--pid=2147483647", "--pid=" + strconv.Itoa(os.Getpid()), "here",
 	}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
-	if exitCode != 124 {
-		t.Fatalf("exitCode = %d, want 124; stderr=%q", exitCode, stderr.String())
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
 	}
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout = %q, want empty", got)
 	}
-	if !strings.Contains(stderr.String(), "execution timed out") {
-		t.Fatalf("stderr = %q, want timeout marker", stderr.String())
+	if got := stderr.String(); got != "tail: --pid is unsupported in this sandbox\n" {
+		t.Fatalf("stderr = %q, want unsupported --pid error", got)
 	}
 }
 
-func TestRunCLICompatExecTailFollowPidExitsBeforeLongSleepWhenPidIsDead(t *testing.T) {
+func TestRunCLICompatExecTailFollowPidIsUnsupportedForDeadPidToo(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
 	if err := os.WriteFile(filepath.Join(tmp, "empty"), nil, 0o644); err != nil {
 		t.Fatalf("WriteFile(empty) error = %v", err)
 	}
-
-	start := time.Now()
 
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -1172,17 +1167,14 @@ func TestRunCLICompatExecTailFollowPidExitsBeforeLongSleepWhenPidIsDead(t *testi
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
-	if exitCode != 0 {
-		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
 	}
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout = %q, want empty", got)
 	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("stderr = %q, want empty", got)
-	}
-	if elapsed := time.Since(start); elapsed >= time.Second {
-		t.Fatalf("tail waited too long for a dead pid: %v", elapsed)
+	if got := stderr.String(); got != "tail: --pid is unsupported in this sandbox\n" {
+		t.Fatalf("stderr = %q, want unsupported --pid error", got)
 	}
 }
 

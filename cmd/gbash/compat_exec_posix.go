@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/internal/compatrun"
@@ -46,7 +45,6 @@ func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation
 		DefaultDir:        filepath.ToSlash(cwd),
 		BuiltinCommandDir: commandDir,
 		HostBash:          runHostBash,
-		ProcessAlive:      hostProcessAlive,
 	})
 	if err != nil {
 		return 1, err
@@ -104,11 +102,6 @@ func prependCommandDir(dir, current string) string {
 	default:
 		return dir + ":" + current
 	}
-}
-
-func hostProcessAlive(_ context.Context, pid int) (bool, error) {
-	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM, nil
 }
 
 func runHostBash(ctx context.Context, req *commands.ExecutionRequest) error {

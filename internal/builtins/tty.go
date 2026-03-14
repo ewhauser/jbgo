@@ -7,6 +7,8 @@ import (
 	"io"
 	"path"
 	"strings"
+
+	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
 type Tty struct{}
@@ -160,7 +162,7 @@ func ttyTerminalPath(inv *Invocation) (string, bool) {
 		return ttyEnvPath(inv)
 	}
 
-	if meta, ok := inv.Stdin.(RedirectMetadata); ok {
+	if meta, ok := inv.Stdin.(commandutil.RedirectMetadata); ok {
 		if ttyPath, ok := ttyRecognizedPath(meta.RedirectPath()); ok {
 			return ttyPath, true
 		}

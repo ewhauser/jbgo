@@ -485,6 +485,7 @@ func TestWhoSupportsSelectionFlagsAgainstFixture(t *testing.T) {
 		wantCode        int
 		wantOut         string
 		wantOutContains []string
+		wantStderr      string
 		wantPattern     *regexp.Regexp
 	}{
 		{
@@ -590,12 +591,10 @@ func TestWhoSupportsSelectionFlagsAgainstFixture(t *testing.T) {
 			wantOut:  "alice bob\n# users=2\n",
 		},
 		{
-			name:     "lookup",
-			script:   "who --lookup -u /tmp/who.utmp\n",
-			wantCode: 0,
-			wantOutContains: []string{
-				"(example.invalid:0)",
-			},
+			name:       "lookup",
+			script:     "who --lookup -u /tmp/who.utmp\n",
+			wantCode:   1,
+			wantStderr: "who: --lookup is unsupported in this sandbox\n",
 		},
 		{
 			name:     "inferred long option",
@@ -623,6 +622,9 @@ func TestWhoSupportsSelectionFlagsAgainstFixture(t *testing.T) {
 				}
 			} else if got := result.Stdout; got != tc.wantOut {
 				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
 			}
 			if tc.wantPattern != nil && !tc.wantPattern.MatchString(result.Stdout) {
 				t.Fatalf("Stdout = %q, want to match %q", result.Stdout, tc.wantPattern.String())

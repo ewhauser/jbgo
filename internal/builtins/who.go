@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
 const (
@@ -29,7 +31,6 @@ type Who struct{}
 
 type whoOptions struct {
 	file            string
-	lookup          bool
 	shortList       bool
 	shortOutput     bool
 	includeIdle     bool
@@ -85,7 +86,7 @@ func (c *Who) Spec() CommandSpec {
 			{Name: "dead", Short: 'd', Long: "dead", Help: "print dead processes"},
 			{Name: "heading", Short: 'H', Long: "heading", Help: "print line of column headings"},
 			{Name: "login", Short: 'l', Long: "login", Help: "print system login processes"},
-			{Name: "lookup", Long: "lookup", Help: "attempt to canonicalize hostnames via DNS"},
+			{Name: "lookup", Long: "lookup", Help: "attempt to canonicalize hostnames via DNS (unsupported in gbash)"},
 			{Name: "only-hostname-user", Short: 'm', Help: "only hostname and user associated with stdin"},
 			{Name: "process", Short: 'p', Long: "process", Help: "print active processes spawned by init"},
 			{Name: "count", Short: 'q', Long: "count", Help: "all login names and number of users logged on"},
@@ -109,6 +110,9 @@ func (c *Who) Spec() CommandSpec {
 }
 
 func (c *Who) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	if matches.Has("lookup") {
+		return exitf(inv, 1, "who: --lookup is unsupported in this sandbox")
+	}
 	opts := whoOptionsFromParsed(matches)
 	records, err := whoReadRecords(ctx, inv, opts.file)
 	if err != nil {
@@ -217,7 +221,6 @@ func whoOptionsFromParsed(matches *ParsedCommand) whoOptions {
 
 	return whoOptions{
 		file:            file,
-		lookup:          matches.Has("lookup"),
 		shortList:       matches.Has("count"),
 		shortOutput:     !includeExit && useDefaults,
 		includeIdle:     needDeadProcs || needLogin || needRunLevel || needUsers,
@@ -339,9 +342,6 @@ func whoWriteUser(ctx context.Context, inv *Invocation, opts whoOptions, record 
 	}
 
 	host := record.host
-	if opts.lookup {
-		host = whoCanonicalHost(ctx, inv, host)
-	}
 	comment := ""
 	if host != "" {
 		comment = "(" + host + ")"
@@ -421,7 +421,7 @@ func whoCurrentTTY(inv *Invocation) string {
 	if inv == nil || inv.Stdin == nil {
 		return whoEnvTTY(inv)
 	}
-	meta, ok := inv.Stdin.(RedirectMetadata)
+	meta, ok := inv.Stdin.(commandutil.RedirectMetadata)
 	if !ok {
 		return whoEnvTTY(inv)
 	}
@@ -479,28 +479,6 @@ func whoUseCLocale(env map[string]string) bool {
 		}
 	}
 	return false
-}
-
-func whoCanonicalHost(ctx context.Context, inv *Invocation, host string) string {
-	hostname, display, hasDisplay := strings.Cut(host, ":")
-	if hostname == "" {
-		return host
-	}
-	if inv == nil || inv.LookupCNAME == nil {
-		return host
-	}
-	canonical, err := inv.LookupCNAME(ctx, hostname)
-	if err != nil {
-		return host
-	}
-	canonical = strings.TrimSuffix(strings.TrimSpace(canonical), ".")
-	if canonical == "" {
-		return host
-	}
-	if !hasDisplay || display == "" {
-		return canonical
-	}
-	return canonical + ":" + display
 }
 
 func whoIdleTimestamp(info stdfs.FileInfo) (int64, bool) {

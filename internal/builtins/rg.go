@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -251,7 +252,7 @@ func rgFileHasMatch(ctx context.Context, inv *Invocation, re *regexp.Regexp, nam
 
 	scanner := bufio.NewScanner(file)
 	var buf [4 * 1024]byte
-	scanner.Buffer(buf[:], ScannerTokenLimit(inv))
+	scanner.Buffer(buf[:], commandutil.ScannerTokenLimit(inv.Limits.MaxFileBytes))
 	for scanner.Scan() {
 		if re.Match(scanner.Bytes()) {
 			return true, nil

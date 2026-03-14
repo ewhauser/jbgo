@@ -16,9 +16,7 @@ import (
 	"github.com/ewhauser/gbash/trace"
 )
 
-type FetchRequest = network.Request
-type FetchResponse = network.Response
-type FetchFunc func(context.Context, *FetchRequest) (*FetchResponse, error)
+type FetchFunc func(context.Context, *network.Request) (*network.Response, error)
 
 type InvocationOptions struct {
 	Args                  []string
@@ -31,8 +29,6 @@ type InvocationOptions struct {
 	Network               network.Client
 	Policy                policy.Policy
 	Trace                 trace.Recorder
-	LookupCNAME           LookupCNAMEFunc
-	ProcessAlive          ProcessAliveFunc
 	Exec                  func(context.Context, *ExecutionRequest) (*ExecutionResult, error)
 	Interact              func(context.Context, *InteractiveRequest) (*InteractiveResult, error)
 	GetRegisteredCommands func() []string
@@ -62,8 +58,6 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 		Stdin:                 opts.Stdin,
 		Stdout:                opts.Stdout,
 		Stderr:                opts.Stderr,
-		LookupCNAME:           opts.LookupCNAME,
-		ProcessAlive:          opts.ProcessAlive,
 		Exec:                  opts.Exec,
 		Interact:              opts.Interact,
 		GetRegisteredCommands: getCommands,
@@ -80,7 +74,7 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 		stderr: opts.Stderr,
 	}
 	if opts.Network != nil {
-		inv.Fetch = func(ctx context.Context, req *FetchRequest) (*FetchResponse, error) {
+		inv.Fetch = func(ctx context.Context, req *network.Request) (*network.Response, error) {
 			return opts.Network.Do(ctx, req)
 		}
 	}

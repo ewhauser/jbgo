@@ -66,7 +66,6 @@ func TestTraceRecordsCommandAndPathPolicyDenials(t *testing.T) {
 				MaxStderrBytes: 1 << 20,
 				MaxFileBytes:   8 << 20,
 			},
-			NetworkMode: policy.NetworkDisabled,
 			SymlinkMode: policy.SymlinkDeny,
 		}),
 	})
@@ -95,7 +94,6 @@ func TestTraceRecordsCommandAndPathPolicyDenials(t *testing.T) {
 				MaxStderrBytes: 1 << 20,
 				MaxFileBytes:   8 << 20,
 			},
-			NetworkMode: policy.NetworkDisabled,
 			SymlinkMode: policy.SymlinkDeny,
 		}),
 	})
