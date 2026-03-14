@@ -686,11 +686,12 @@ func xanRunTransform(ctx context.Context, inv *Invocation, args []string) error 
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if targetCol == "" {
+		switch {
+		case targetCol == "":
 			targetCol = arg
-		} else if transformExpr == "" {
+		case transformExpr == "":
 			transformExpr = arg
-		} else if fileArg == "" {
+		case fileArg == "":
 			fileArg = arg
 		}
 	}
@@ -796,11 +797,12 @@ func xanRunGroupby(ctx context.Context, inv *Invocation, args []string) error {
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if groupCols == "" {
+		switch {
+		case groupCols == "":
 			groupCols = arg
-		} else if aggExpr == "" {
+		case aggExpr == "":
 			aggExpr = arg
-		} else if fileArg == "" {
+		case fileArg == "":
 			fileArg = arg
 		}
 	}
@@ -817,15 +819,24 @@ func xanRunGroupby(ctx context.Context, inv *Invocation, args []string) error {
 	}
 
 	groupKeys := strings.Split(groupCols, ",")
+	groupNames := make([]string, 0, len(groupKeys))
+	groupIdxs := make([]int, 0, len(groupKeys))
+	for _, key := range groupKeys {
+		key = strings.TrimSpace(key)
+		idx := slices.Index(table.Headers, key)
+		if idx < 0 {
+			return exitf(inv, 1, "xan groupby: column '%s' not found", key)
+		}
+		groupNames = append(groupNames, key)
+		groupIdxs = append(groupIdxs, idx)
+	}
 	groupOrder := make([]string, 0)
 	groups := make(map[string][][]string)
 	for _, row := range table.Rows {
-		parts := make([]string, 0, len(groupKeys))
-		for _, key := range groupKeys {
-			key = strings.TrimSpace(key)
-			idx := slices.Index(table.Headers, key)
+		parts := make([]string, 0, len(groupIdxs))
+		for _, idx := range groupIdxs {
 			value := ""
-			if idx >= 0 && idx < len(row) {
+			if idx < len(row) {
 				value = row[idx]
 			}
 			parts = append(parts, value)
@@ -837,10 +848,8 @@ func xanRunGroupby(ctx context.Context, inv *Invocation, args []string) error {
 		groups[groupKey] = append(groups[groupKey], xanCloneRow(row))
 	}
 
-	headers := make([]string, 0, len(groupKeys)+len(specs))
-	for _, key := range groupKeys {
-		headers = append(headers, strings.TrimSpace(key))
-	}
+	headers := make([]string, 0, len(groupNames)+len(specs))
+	headers = append(headers, groupNames...)
 	for _, spec := range specs {
 		headers = append(headers, spec.Alias)
 	}
@@ -1264,11 +1273,8 @@ func xanRunExplode(ctx context.Context, inv *Invocation, args []string) error {
 		return exitf(inv, 1, "xan explode: column '%s' not found", column)
 	}
 	headers := append([]string(nil), table.Headers...)
-	targetCol := column
 	if rename != "" {
 		headers[colIdx] = rename
-		targetCol = rename
-		_ = targetCol
 	}
 	rows := make([][]string, 0)
 	for _, row := range table.Rows {
@@ -1284,8 +1290,7 @@ func xanRunExplode(ctx context.Context, inv *Invocation, args []string) error {
 			rows = append(rows, next)
 			continue
 		}
-		parts := strings.Split(value, separator)
-		for _, part := range parts {
+		for part := range strings.SplitSeq(value, separator) {
 			next := xanCloneRow(row)
 			if colIdx >= len(next) {
 				grown := make([]string, len(table.Headers))
@@ -1408,11 +1413,12 @@ func xanRunPivot(ctx context.Context, inv *Invocation, args []string) error {
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if pivotCol == "" {
+		switch {
+		case pivotCol == "":
 			pivotCol = arg
-		} else if aggExpr == "" {
+		case aggExpr == "":
 			aggExpr = arg
-		} else if fileArg == "" {
+		case fileArg == "":
 			fileArg = arg
 		}
 	}
@@ -2109,17 +2115,13 @@ func xanRunSplit(ctx context.Context, inv *Invocation, args []string) error {
 			if start >= len(table.Rows) {
 				break
 			}
-			if end > len(table.Rows) {
-				end = len(table.Rows)
-			}
+			end = min(end, len(table.Rows))
 			parts = append(parts, table.Rows[start:end])
 		}
 	} else if partSize != nil && *partSize > 0 {
 		for i := 0; i < len(table.Rows); i += *partSize {
 			end := i + *partSize
-			if end > len(table.Rows) {
-				end = len(table.Rows)
-			}
+			end = min(end, len(table.Rows))
 			parts = append(parts, table.Rows[i:end])
 		}
 	}
@@ -2205,15 +2207,24 @@ func xanRunPartition(ctx context.Context, inv *Invocation, args []string) error 
 	}
 	outputPath := inv.FS.Resolve(outputDir)
 	if err := inv.FS.MkdirAll(ctx, outputPath, 0o755); err == nil {
-		writeErr := false
+		filenames := make(map[string]string, len(groupOrder))
+		namesByValue := make(map[string]string, len(groupOrder))
 		for _, value := range groupOrder {
 			name := xanSanitizePartitionValue(value)
+			if previous, ok := filenames[name]; ok && previous != value {
+				return exitf(inv, 1, "xan partition: values %q and %q map to the same output file %q", previous, value, name+".csv")
+			}
+			filenames[name] = value
+			namesByValue[value] = name
+		}
+		writeErr := false
+		for _, value := range groupOrder {
 			part := &xanTable{Headers: table.Headers, Rows: groups[value]}
 			data, err := xanTableCSV(part)
 			if err != nil {
 				return err
 			}
-			if err := xanWriteSandboxFile(ctx, inv, path.Join(outputPath, name+".csv"), data); err != nil {
+			if err := xanWriteSandboxFile(ctx, inv, path.Join(outputPath, namesByValue[value]+".csv"), data); err != nil {
 				writeErr = true
 				break
 			}

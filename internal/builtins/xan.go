@@ -717,7 +717,7 @@ func xanParseColumnSpec(spec string, headers []string) []int {
 		result = append(result, idx)
 	}
 
-	for _, part := range strings.Split(spec, ",") {
+	for part := range strings.SplitSeq(spec, ",") {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			continue
@@ -798,7 +798,7 @@ func xanParseColumnSpec(spec string, headers []string) []int {
 	return filtered
 }
 
-func xanParseColumnRange(value string) (string, string, bool) {
+func xanParseColumnRange(value string) (startCol, endCol string, ok bool) {
 	if strings.Count(value, ":") != 1 {
 		return "", "", false
 	}
@@ -811,7 +811,7 @@ func xanParseColumnRange(value string) (string, string, bool) {
 
 var xanNumericRangePattern = regexp.MustCompile(`^(\d+)-(\d+)$`)
 
-func xanParseNumericRange(value string) (int, int, bool) {
+func xanParseNumericRange(value string) (start, end int, ok bool) {
 	match := xanNumericRangePattern.FindStringSubmatch(value)
 	if len(match) != 3 {
 		return 0, 0, false
@@ -846,9 +846,7 @@ func xanHasHelpFlag(args []string) bool {
 	return false
 }
 
-func xanSplitPrimaryOperand(args []string) (string, string) {
-	primary := ""
-	fileArg := ""
+func xanSplitPrimaryOperand(args []string) (primary, fileArg string) {
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "-") {
 			continue
@@ -981,14 +979,6 @@ func xanValueJSON(value any) any {
 	default:
 		return xanParseScalar(xanValueString(v))
 	}
-}
-
-func xanQuotedCSV(rows [][]string) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := xanWriteRows(&buf, rows); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }
 
 func xanTableCSV(table *xanTable) ([]byte, error) {

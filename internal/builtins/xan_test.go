@@ -756,60 +756,88 @@ func TestXanMapTransformAggAndGroupby(t *testing.T) {
 
 	t.Run("agg and groupby", func(t *testing.T) {
 		cases := []struct {
-			name    string
-			files   map[string]string
-			script  string
-			wantOut string
+			name     string
+			files    map[string]string
+			script   string
+			wantOut  string
+			wantErr  string
+			wantCode int
 		}{
 			{
-				name:    "agg count sum mean avg min max first last median",
-				files:   map[string]string{"/data.csv": "n\n1\n2\n3\n4\n"},
-				script:  "xan agg 'count() as count, sum(n) as sum, mean(n) as mean, avg(n) as avg, min(n) as min, max(n) as max, first(n) as first, last(n) as last, median(n) as median' /data.csv",
-				wantOut: "count,sum,mean,avg,min,max,first,last,median\n4,10,2.5,2.5,1,4,1,4,2.5\n",
+				name:     "agg count sum mean avg min max first last median",
+				files:    map[string]string{"/data.csv": "n\n1\n2\n3\n4\n"},
+				script:   "xan agg 'count() as count, sum(n) as sum, mean(n) as mean, avg(n) as avg, min(n) as min, max(n) as max, first(n) as first, last(n) as last, median(n) as median' /data.csv",
+				wantOut:  "count,sum,mean,avg,min,max,first,last,median\n4,10,2.5,2.5,1,4,1,4,2.5\n",
+				wantCode: 0,
 			},
 			{
-				name:    "agg boolean and set aggregations",
-				files:   map[string]string{"/data.csv": "color\nred\nblue\nyellow\nred\n"},
-				script:  "xan agg 'mode(color) as mode, cardinality(color) as cardinality, values(color) as values, distinct_values(color) as distinct_values' /data.csv",
-				wantOut: "mode,cardinality,values,distinct_values\nred,3,red|blue|yellow|red,blue|red|yellow\n",
+				name:     "agg boolean and set aggregations",
+				files:    map[string]string{"/data.csv": "color\nred\nblue\nyellow\nred\n"},
+				script:   "xan agg 'mode(color) as mode, cardinality(color) as cardinality, values(color) as values, distinct_values(color) as distinct_values' /data.csv",
+				wantOut:  "mode,cardinality,values,distinct_values\nred,3,red|blue|yellow|red,blue|red|yellow\n",
+				wantCode: 0,
 			},
 			{
-				name:    "agg all any and expression",
-				files:   map[string]string{"/data.csv": "a,b\n1,2\n2,0\n3,6\n4,2\n"},
-				script:  "xan agg 'count(a > 2) as count, all(a >= 1) as all, any(b >= 6) as any, sum(add(a, b + 1)) as sum' /data.csv",
-				wantOut: "count,all,any,sum\n2,true,true,24\n",
+				name:     "agg all any and expression",
+				files:    map[string]string{"/data.csv": "a,b\n1,2\n2,0\n3,6\n4,2\n"},
+				script:   "xan agg 'count(a > 2) as count, all(a >= 1) as all, any(b >= 6) as any, sum(add(a, b + 1)) as sum' /data.csv",
+				wantOut:  "count,all,any,sum\n2,true,true,24\n",
+				wantCode: 0,
 			},
 			{
-				name:    "groupby sums",
-				files:   map[string]string{"/data.csv": "id,value_A,value_B,value_C\nx,1,2,3\ny,2,3,4\nz,3,4,5\ny,1,2,3\nz,2,3,5\nz,3,6,7\n"},
-				script:  "xan groupby id 'sum(value_A) as sumA' /data.csv",
-				wantOut: "id,sumA\nx,1\ny,3\nz,8\n",
+				name:     "agg all requires expression",
+				files:    map[string]string{"/data.csv": "a\n1\n"},
+				script:   "xan agg 'all() as ok' /data.csv",
+				wantErr:  "xan agg: all() requires an expression\n",
+				wantCode: 1,
 			},
 			{
-				name:    "groupby count complex mean max",
-				files:   map[string]string{"/data.csv": "id,value_A,value_B,value_C\nx,1,2,3\ny,2,3,4\nz,3,4,5\ny,1,2,3\nz,2,3,5\nz,3,6,7\n"},
-				script:  "xan groupby id 'count() as count, sum(add(value_A, add(value_B, value_C))) as sum, mean(value_A) as meanA, max(value_A) as maxA, max(value_B) as maxB, max(value_C) as maxC' /data.csv",
-				wantOut: "id,count,sum,meanA,maxA,maxB,maxC\nx,1,6,1,1,2,3\ny,2,15,1.5,2,3,4\nz,3,38,2.6666666666666665,3,6,7\n",
+				name:     "groupby sums",
+				files:    map[string]string{"/data.csv": "id,value_A,value_B,value_C\nx,1,2,3\ny,2,3,4\nz,3,4,5\ny,1,2,3\nz,2,3,5\nz,3,6,7\n"},
+				script:   "xan groupby id 'sum(value_A) as sumA' /data.csv",
+				wantOut:  "id,sumA\nx,1\ny,3\nz,8\n",
+				wantCode: 0,
 			},
 			{
-				name:    "groupby multiple columns",
-				files:   map[string]string{"/data.csv": "name,color,count\njohn,blue,1\nmary,orange,3\nmary,orange,2\njohn,yellow,9\njohn,blue,2\n"},
-				script:  "xan groupby name,color 'sum(count) as sum' /data.csv",
-				wantOut: "name,color,sum\njohn,blue,3\nmary,orange,5\njohn,yellow,9\n",
+				name:     "groupby count complex mean max",
+				files:    map[string]string{"/data.csv": "id,value_A,value_B,value_C\nx,1,2,3\ny,2,3,4\nz,3,4,5\ny,1,2,3\nz,2,3,5\nz,3,6,7\n"},
+				script:   "xan groupby id 'count() as count, sum(add(value_A, add(value_B, value_C))) as sum, mean(value_A) as meanA, max(value_A) as maxA, max(value_B) as maxB, max(value_C) as maxC' /data.csv",
+				wantOut:  "id,count,sum,meanA,maxA,maxB,maxC\nx,1,6,1,1,2,3\ny,2,15,1.5,2,3,4\nz,3,38,2.6666666666666665,3,6,7\n",
+				wantCode: 0,
 			},
 			{
-				name:    "groupby sorted and empty",
-				files:   map[string]string{"/data.csv": "id,value_A,value_B,value_C\n"},
-				script:  "xan groupby id 'sum(value_A) as sumA' --sorted /data.csv",
-				wantOut: "id,sumA\n",
+				name:     "groupby multiple columns",
+				files:    map[string]string{"/data.csv": "name,color,count\njohn,blue,1\nmary,orange,3\nmary,orange,2\njohn,yellow,9\njohn,blue,2\n"},
+				script:   "xan groupby name,color 'sum(count) as sum' /data.csv",
+				wantOut:  "name,color,sum\njohn,blue,3\nmary,orange,5\njohn,yellow,9\n",
+				wantCode: 0,
+			},
+			{
+				name:     "groupby sorted and empty",
+				files:    map[string]string{"/data.csv": "id,value_A,value_B,value_C\n"},
+				script:   "xan groupby id 'sum(value_A) as sumA' --sorted /data.csv",
+				wantOut:  "id,sumA\n",
+				wantCode: 0,
+			},
+			{
+				name:     "groupby missing column",
+				files:    map[string]string{"/data.csv": "region,value\nnorth,1\nsouth,2\n"},
+				script:   "xan groupby regoin 'sum(value) as total' /data.csv",
+				wantErr:  "xan groupby: column 'regoin' not found\n",
+				wantCode: 1,
 			},
 		}
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
 				result := runXan(t, tc.files, "", tc.script)
-				requireExitCode(t, result, 0)
-				requireStdout(t, result, tc.wantOut)
+				requireExitCode(t, result, tc.wantCode)
+				if tc.wantOut != "" {
+					requireStdout(t, result, tc.wantOut)
+				}
+				if tc.wantErr != "" {
+					requireStderr(t, result, tc.wantErr)
+				}
 			})
 		}
 	})
@@ -1265,6 +1293,12 @@ func TestXanFrequencyReshapeMultifileAndData(t *testing.T) {
 			result = mustExecSession(t, session, "xan partition nonexistent /region.csv || true")
 			if !strings.Contains(result.Stderr, "xan partition: column 'nonexistent' not found") {
 				t.Fatalf("partition missing column stderr = %q", result.Stderr)
+			}
+
+			writeSessionFile(t, session, "/collision.csv", []byte("region,value\na/b,1\na_b,2\n"))
+			result = mustExecSession(t, session, "xan partition -o /collide region /collision.csv || true")
+			if !strings.Contains(result.Stderr, `xan partition: values "a/b" and "a_b" map to the same output file "a_b.csv"`) {
+				t.Fatalf("partition collision stderr = %q", result.Stderr)
 			}
 		})
 	})

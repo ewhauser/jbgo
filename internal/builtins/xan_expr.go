@@ -112,7 +112,7 @@ func (e xanBinaryExpr) eval(ctx *xanEvalContext) (any, error) {
 	case "/":
 		return xanNumericBinary(left, right, func(a, b float64) float64 { return a / b })
 	case "%":
-		return xanNumericBinary(left, right, func(a, b float64) float64 { return math.Mod(a, b) })
+		return xanNumericBinary(left, right, math.Mod)
 	case "==":
 		return xanCompareEq(left, right), nil
 	case "!=":
@@ -545,7 +545,7 @@ func xanParseAggSpecs(input string) ([]xanAggSpec, error) {
 	return specs, nil
 }
 
-func xanParseAggCall(input string) (string, string, error) {
+func xanParseAggCall(input string) (funcName, inner string, err error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return "", "", fmt.Errorf("empty aggregation expression")
@@ -557,7 +557,7 @@ func xanParseAggCall(input string) (string, string, error) {
 	if i == 0 || i >= len(input) || input[i] != '(' {
 		return "", "", fmt.Errorf("invalid aggregation expression %q", input)
 	}
-	funcName := input[:i]
+	funcName = input[:i]
 	depth := 0
 	for j := i; j < len(input); j++ {
 		switch input[j] {
@@ -569,7 +569,8 @@ func xanParseAggCall(input string) (string, string, error) {
 				if strings.TrimSpace(input[j+1:]) != "" {
 					return "", "", fmt.Errorf("invalid aggregation expression %q", input)
 				}
-				return funcName, input[i+1 : j], nil
+				inner = input[i+1 : j]
+				return funcName, inner, nil
 			}
 		}
 	}
@@ -625,7 +626,7 @@ func xanSplitTopLevel(input string) ([]string, error) {
 	return parts, nil
 }
 
-func xanSplitAlias(input string) (string, string) {
+func xanSplitAlias(input string) (exprText, alias string) {
 	lower := strings.ToLower(input)
 	var (
 		parenDepth int
@@ -836,6 +837,9 @@ func xanComputeAgg(headers []string, rows [][]string, spec xanAggSpec) (any, err
 		sort.Strings(out)
 		return strings.Join(out, "|"), nil
 	case "all":
+		if spec.Expr == nil {
+			return nil, fmt.Errorf("all() requires an expression")
+		}
 		if len(rows) == 0 {
 			return true, nil
 		}
@@ -850,6 +854,9 @@ func xanComputeAgg(headers []string, rows [][]string, spec xanAggSpec) (any, err
 		}
 		return true, nil
 	case "any":
+		if spec.Expr == nil {
+			return nil, fmt.Errorf("any() requires an expression")
+		}
 		for rowIndex, row := range rows {
 			value, err := xanEvalRowExpr(headers, row, rowIndex, spec.Expr, nil)
 			if err != nil {
@@ -1150,7 +1157,7 @@ func xanTokenize(input string) ([]xanToken, error) {
 	return tokens, nil
 }
 
-func xanReadQuoted(input string, start int) (string, int, error) {
+func xanReadQuoted(input string, start int) (value string, next int, err error) {
 	quote := input[start]
 	var b strings.Builder
 	for i := start + 1; i < len(input); i++ {
@@ -1171,7 +1178,7 @@ func xanReadQuoted(input string, start int) (string, int, error) {
 	return "", 0, fmt.Errorf("unterminated string")
 }
 
-func xanReadOperator(input string) (string, int) {
+func xanReadOperator(input string) (op string, width int) {
 	for _, op := range []string{"&&", "||", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "<", ">", "!"} {
 		if strings.HasPrefix(input, op) {
 			return op, len(op)
