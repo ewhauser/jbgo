@@ -162,15 +162,58 @@ func TestHTMLToMarkdownUnknownOption(t *testing.T) {
 	}
 }
 
-func TestHTMLToMarkdownExtraOperand(t *testing.T) {
+func TestHTMLToMarkdownVersionIsUnsupported(t *testing.T) {
 	t.Parallel()
 
-	result := mustExecHTMLToMarkdown(t, "html-to-markdown left right\n")
+	result := mustExecHTMLToMarkdown(t, "html-to-markdown --version\n")
 	if result.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
 	}
-	want := "html-to-markdown: extra operand 'right'\nTry 'html-to-markdown --help' for more information.\n"
+	want := "html-to-markdown: unrecognized option '--version'\nTry 'html-to-markdown --help' for more information.\n"
 	if got := result.Stderr; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownMissingOptionValuesUseDefaults(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecHTMLToMarkdown(t, "printf '<ul><li>Item</li></ul>' | html-to-markdown -b\n"+
+		"printf '<pre><code>code</code></pre>' | html-to-markdown -c\n"+
+		"printf '<hr>' | html-to-markdown -r\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	want := "- Item\n```\ncode\n```\n---\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownIgnoresInvalidHeadingStyle(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecHTMLToMarkdown(t, "printf '<h1>Title</h1>' | html-to-markdown --heading-style=invalid\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "# Title\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownIgnoresExtraOperands(t *testing.T) {
+	t.Parallel()
+
+	session := newHTMLToMarkdownSession(t)
+	writeHTMLToMarkdownSessionFile(t, session, "/tmp/left.html", []byte("<h2>Left</h2>"))
+	writeHTMLToMarkdownSessionFile(t, session, "/tmp/right.html", []byte("<h2>Right</h2>"))
+
+	result := mustExecHTMLToMarkdownSession(t, session, "html-to-markdown /tmp/left.html /tmp/right.html\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "## Left\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

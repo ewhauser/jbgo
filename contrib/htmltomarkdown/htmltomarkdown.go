@@ -23,7 +23,6 @@ type htmlToMarkdownOptions struct {
 	codeFence      string
 	horizontalRule string
 	headingStyle   string
-	file           string
 }
 
 func NewHTMLToMarkdown() *HTMLToMarkdown {
@@ -42,41 +41,17 @@ func (c *HTMLToMarkdown) Name() string {
 }
 
 func (c *HTMLToMarkdown) Run(ctx context.Context, inv *commands.Invocation) error {
-	return commands.RunCommand(ctx, c, inv)
-}
-
-func (c *HTMLToMarkdown) Spec() commands.CommandSpec {
-	return commands.CommandSpec{
-		Name:  c.Name(),
-		About: "Convert HTML to Markdown.",
-		Usage: "html-to-markdown [OPTION]... [FILE]",
-		Options: []commands.OptionSpec{
-			{Name: "bullet", Short: 'b', Long: "bullet", ValueName: "CHAR", Arity: commands.OptionRequiredValue, Help: "bullet character for unordered lists (-, +, or *)"},
-			{Name: "code", Short: 'c', Long: "code", ValueName: "FENCE", Arity: commands.OptionRequiredValue, Help: "fence style for code blocks (``` or ~~~)"},
-			{Name: "hr", Short: 'r', Long: "hr", ValueName: "STRING", Arity: commands.OptionRequiredValue, Help: "string for horizontal rules"},
-			{Name: "heading-style", Long: "heading-style", ValueName: "STYLE", Arity: commands.OptionRequiredValue, Help: "heading style: atx or setext"},
-		},
-		Args: []commands.ArgSpec{
-			{Name: "file", ValueName: "FILE", Help: "read HTML from FILE instead of standard input"},
-		},
-		Parse: commands.ParseConfig{
-			GroupShortOptions:        true,
-			ShortOptionValueAttached: true,
-			LongOptionValueEquals:    true,
-			AutoHelp:                 true,
-			AutoVersion:              true,
-		},
-		AfterHelp: "Reads HTML from FILE or standard input and writes Markdown to standard output.\n\nExamples:\n  echo '<h1>Hello</h1><p>World</p>' | html-to-markdown\n  html-to-markdown page.html",
+	if hasHTMLToMarkdownHelpFlag(inv.Args) {
+		spec := c.Spec()
+		return commands.RenderCommandHelp(inv.Stdout, &spec)
 	}
-}
 
-func (c *HTMLToMarkdown) RunParsed(ctx context.Context, inv *commands.Invocation, matches *commands.ParsedCommand) error {
-	opts, err := parseHTMLToMarkdownOptions(inv, matches)
+	opts, files, err := parseHTMLToMarkdownArgs(inv)
 	if err != nil {
 		return err
 	}
 
-	input, err := loadHTMLToMarkdownInput(ctx, inv, opts.file)
+	input, err := loadHTMLToMarkdownInput(ctx, inv, files)
 	if err != nil {
 		return err
 	}
@@ -94,86 +69,104 @@ func (c *HTMLToMarkdown) RunParsed(ctx context.Context, inv *commands.Invocation
 	return nil
 }
 
-func parseHTMLToMarkdownOptions(inv *commands.Invocation, matches *commands.ParsedCommand) (htmlToMarkdownOptions, error) {
+func (c *HTMLToMarkdown) Spec() commands.CommandSpec {
+	return commands.CommandSpec{
+		Name:  c.Name(),
+		About: "Convert HTML to Markdown.",
+		Usage: "html-to-markdown [OPTION]... [FILE]",
+		Options: []commands.OptionSpec{
+			{Name: "bullet", Short: 'b', Long: "bullet", ValueName: "CHAR", Arity: commands.OptionRequiredValue, Help: "bullet character for unordered lists (-, +, or *)"},
+			{Name: "code", Short: 'c', Long: "code", ValueName: "FENCE", Arity: commands.OptionRequiredValue, Help: "fence style for code blocks (``` or ~~~)"},
+			{Name: "hr", Short: 'r', Long: "hr", ValueName: "STRING", Arity: commands.OptionRequiredValue, Help: "string for horizontal rules"},
+			{Name: "heading-style", Long: "heading-style", ValueName: "STYLE", Arity: commands.OptionRequiredValue, Help: "heading style: atx or setext"},
+			{Name: "help", Long: "help", Help: "display this help and exit"},
+		},
+		Args: []commands.ArgSpec{
+			{Name: "file", ValueName: "FILE", Help: "read HTML from FILE instead of standard input"},
+		},
+		AfterHelp: "Reads HTML from FILE or standard input and writes Markdown to standard output.\n\nExamples:\n  echo '<h1>Hello</h1><p>World</p>' | html-to-markdown\n  html-to-markdown page.html",
+	}
+}
+
+func hasHTMLToMarkdownHelpFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, []string, error) {
 	opts := htmlToMarkdownOptions{
 		bullet:         "-",
 		codeFence:      "```",
 		horizontalRule: "---",
 		headingStyle:   "atx",
 	}
-	if matches == nil {
-		return opts, nil
-	}
-
-	if matches.Has("bullet") {
-		opts.bullet = matches.Value("bullet")
-	}
-	if matches.Has("code") {
-		opts.codeFence = matches.Value("code")
-	}
-	if matches.Has("hr") {
-		opts.horizontalRule = matches.Value("hr")
-	}
-	if matches.Has("heading-style") {
-		opts.headingStyle = matches.Value("heading-style")
-	}
-	opts.file = matches.Arg("file")
-
-	if err := validateHTMLToMarkdownOptions(inv, opts); err != nil {
-		return htmlToMarkdownOptions{}, err
-	}
-	return opts, nil
-}
-
-func validateHTMLToMarkdownOptions(inv *commands.Invocation, opts htmlToMarkdownOptions) error {
-	switch opts.bullet {
-	case "-", "+", "*":
-	default:
-		return htmlToMarkdownUsageError(inv, "invalid value %q for --bullet (expected -, +, or *)", opts.bullet)
-	}
-
-	switch opts.codeFence {
-	case "```", "~~~":
-	default:
-		return htmlToMarkdownUsageError(inv, "invalid value %q for --code (expected ``` or ~~~)", opts.codeFence)
-	}
-
-	switch opts.headingStyle {
-	case "atx", "setext":
-	default:
-		return htmlToMarkdownUsageError(inv, "invalid value %q for --heading-style (expected atx or setext)", opts.headingStyle)
-	}
-
-	if countHTMLToMarkdownRuleChars(opts.horizontalRule) < 3 {
-		return htmlToMarkdownUsageError(inv, "invalid value %q for --hr (expected at least 3 of -, _, or *)", opts.horizontalRule)
-	}
-
-	return nil
-}
-
-func countHTMLToMarkdownRuleChars(value string) int {
-	count := 0
-	for _, ch := range value {
-		switch ch {
-		case '-', '_', '*':
-			count++
+	files := make([]string, 0, len(inv.Args))
+	args := inv.Args
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-b" || arg == "--bullet":
+			if i+1 < len(args) {
+				i++
+				opts.bullet = args[i]
+			} else {
+				opts.bullet = "-"
+			}
+		case strings.HasPrefix(arg, "--bullet="):
+			opts.bullet = strings.TrimPrefix(arg, "--bullet=")
+		case arg == "-c" || arg == "--code":
+			if i+1 < len(args) {
+				i++
+				opts.codeFence = args[i]
+			} else {
+				opts.codeFence = "```"
+			}
+		case strings.HasPrefix(arg, "--code="):
+			opts.codeFence = strings.TrimPrefix(arg, "--code=")
+		case arg == "-r" || arg == "--hr":
+			if i+1 < len(args) {
+				i++
+				opts.horizontalRule = args[i]
+			} else {
+				opts.horizontalRule = "---"
+			}
+		case strings.HasPrefix(arg, "--hr="):
+			opts.horizontalRule = strings.TrimPrefix(arg, "--hr=")
+		case strings.HasPrefix(arg, "--heading-style="):
+			style := strings.TrimPrefix(arg, "--heading-style=")
+			if style == "atx" || style == "setext" {
+				opts.headingStyle = style
+			}
+		case arg == "-":
+			files = append(files, arg)
+		case strings.HasPrefix(arg, "--"):
+			return htmlToMarkdownOptions{}, nil, htmlToMarkdownUsageError(inv, "unrecognized option '%s'", arg)
+		case strings.HasPrefix(arg, "-"):
+			return htmlToMarkdownOptions{}, nil, htmlToMarkdownUsageError(inv, "unrecognized option '%s'", arg)
+		default:
+			files = append(files, arg)
 		}
 	}
-	return count
+	return opts, files, nil
 }
 
 func htmlToMarkdownUsageError(inv *commands.Invocation, format string, args ...any) error {
 	return commands.Exitf(inv, 1, "%s: %s\nTry '%s --help' for more information.", htmlToMarkdownName, fmt.Sprintf(format, args...), htmlToMarkdownName)
 }
 
-func loadHTMLToMarkdownInput(ctx context.Context, inv *commands.Invocation, file string) (string, error) {
-	if file == "" || file == "-" {
+func loadHTMLToMarkdownInput(ctx context.Context, inv *commands.Invocation, files []string) (string, error) {
+	if len(files) == 0 || (len(files) == 1 && files[0] == "-") {
 		data, err := commands.ReadAllStdin(ctx, inv)
 		if err != nil {
 			return "", err
 		}
 		return string(data), nil
 	}
+	file := files[0]
 
 	info, err := inv.FS.Stat(ctx, file)
 	if err != nil {
@@ -227,4 +220,3 @@ func convertHTMLToMarkdown(input string, opts htmlToMarkdownOptions) (string, er
 
 var _ commands.Command = (*HTMLToMarkdown)(nil)
 var _ commands.SpecProvider = (*HTMLToMarkdown)(nil)
-var _ commands.ParsedRunner = (*HTMLToMarkdown)(nil)
