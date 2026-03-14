@@ -84,7 +84,7 @@ jobs:
     if: needs.resolve.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
           ref: ${{ needs.resolve.outputs.ref }}
@@ -92,11 +92,11 @@ jobs:
       - name: Fetch tags
         run: git fetch --force --tags origin
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
 
@@ -149,7 +149,7 @@ jobs:
 
       - name: Detect existing GitHub release
         id: github_release
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
         with:
@@ -169,7 +169,7 @@ jobs:
               throw error;
             }
 
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7
         if: steps.github_release.outputs.exists != 'true'
         with:
           version: v2.14.3

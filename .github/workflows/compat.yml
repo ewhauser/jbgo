@@ -23,9 +23,9 @@ jobs:
       publishable: ${{ steps.publish-state.outputs.publishable }}
       deployable: ${{ steps.publish-state.outputs.deployable }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
       - name: Run GNU compatibility harness
         id: run-compat
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload raw compat artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: compat-results-${{ github.run_id }}
           path: .cache/gnu/results/ci-latest
@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload Pages artifact
         if: always() && steps.publish-state.outputs.deployable == 'true'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: ${{ runner.temp }}/compat-pages
 
@@ -149,4 +149,4 @@ jobs:
     steps:
       - name: Deploy GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
