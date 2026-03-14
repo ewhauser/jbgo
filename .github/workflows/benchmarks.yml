@@ -24,11 +24,11 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -85,7 +85,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload smoke benchmark artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bench-smoke-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/bench-results
@@ -105,11 +105,11 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -135,7 +135,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload full benchmark artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bench-full-${{ github.sha }}
           path: ${{ runner.temp }}/bench-results

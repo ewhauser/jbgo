@@ -25,13 +25,13 @@ jobs:
       publishable: ${{ steps.publish-state.outputs.publishable }}
       deployable: ${{ steps.publish-state.outputs.deployable }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -57,7 +57,7 @@ jobs:
 
       - name: Restore prepared GNU build archive cache
         id: restore-gnu-build-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .cache/gnu/prebuilt
           key: ${{ steps.gnu-build-cache-key.outputs.key }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Save prepared GNU build archive cache
         if: steps.restore-gnu-build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: .cache/gnu/prebuilt
           key: ${{ steps.gnu-build-cache-key.outputs.key }}
@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload raw compat artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compat-results-${{ github.run_id }}
           path: ${{ runner.temp }}/compat-pages/compat/latest
