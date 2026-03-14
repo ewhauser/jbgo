@@ -194,7 +194,6 @@ gbash --root /path/to/project --cwd /home/agent/project -c 'pwd; ls'
 ```
 
 `--root` mounts a host directory read-only at `/home/agent/project` under an in-memory writable overlay. `--cwd` sets the initial sandbox working directory.
-
 ## Configuration
 
 ### Filesystem
