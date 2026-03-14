@@ -83,8 +83,14 @@ Maintainers can refresh the published prepared build archive set with:
 make gnu-build-cache-publish
 ```
 
-The scheduled GitHub compatibility workflow runs inside the published compat image from GitHub Container Registry. Local runs still default to a locally built image, but you can reuse the published container instead:
+The scheduled GitHub compatibility workflow runs inside the published compat image from GitHub Container Registry. Local `make compat-docker-build` and `make compat-docker-run` now pull that published image by default, tag it locally as `gbash-compat-local`, and only fall back to a full local rebuild if the published image is unavailable.
 
 ```bash
-COMPAT_DOCKER_IMAGE=ghcr.io/ewhauser/gbash-compat:latest COMPAT_DOCKER_PULL=1 make compat-docker-run
+make compat-docker-run
+```
+
+Force a full local rebuild when you need to bypass the published image:
+
+```bash
+COMPAT_DOCKER_BASE_IMAGE= COMPAT_DOCKER_PULL=0 make compat-docker-build
 ```

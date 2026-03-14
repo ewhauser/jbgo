@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 IMAGE_NAME=${COMPAT_DOCKER_IMAGE:-gbash-compat-local}
+BASE_IMAGE=${COMPAT_DOCKER_BASE_IMAGE:-}
 PLATFORM=${COMPAT_DOCKER_PLATFORM:-linux/amd64}
 PULL_MODE=${COMPAT_DOCKER_PULL:-0}
 GNU_CACHE_DIR=${GNU_CACHE_DIR:-.cache/gnu}
@@ -35,9 +36,22 @@ require_repo_path() {
 }
 
 ensure_image() {
+  if [[ -n "$BASE_IMAGE" ]]; then
+    case "$PULL_MODE" in
+      1|true|TRUE|always)
+        docker pull --platform "$PLATFORM" "$BASE_IMAGE" >/dev/null 2>&1 || true
+        if docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
+          if [[ "$BASE_IMAGE" != "$IMAGE_NAME" ]]; then
+            docker tag "$BASE_IMAGE" "$IMAGE_NAME"
+          fi
+          return
+        fi
+        ;;
+    esac
+  fi
   case "$PULL_MODE" in
     1|true|TRUE|always)
-      if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+      if docker pull --platform "$PLATFORM" "$IMAGE_NAME" >/dev/null 2>&1; then
         return
       fi
       ;;
@@ -45,9 +59,24 @@ ensure_image() {
   if docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
     return
   fi
+  if [[ -n "$BASE_IMAGE" ]]; then
+    case "$PULL_MODE" in
+      1|true|TRUE|always|missing)
+        if [[ "$PULL_MODE" == "missing" ]] && ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
+          docker pull --platform "$PLATFORM" "$BASE_IMAGE" || true
+        fi
+        if docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
+          if [[ "$BASE_IMAGE" != "$IMAGE_NAME" ]]; then
+            docker tag "$BASE_IMAGE" "$IMAGE_NAME"
+          fi
+          return
+        fi
+        ;;
+    esac
+  fi
   case "$PULL_MODE" in
     1|true|TRUE|always|missing)
-      if docker pull "$IMAGE_NAME"; then
+      if docker pull --platform "$PLATFORM" "$IMAGE_NAME"; then
         return
       fi
       ;;
