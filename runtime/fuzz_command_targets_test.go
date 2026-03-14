@@ -523,6 +523,11 @@ func FuzzDataCommands(f *testing.F) {
 				"b2sum --length=128 /tmp/input.json >/tmp/b2-128-file.txt\n" +
 				"b2sum /tmp/input.json >/tmp/b2-checksums.txt\n" +
 				"b2sum -c /tmp/b2-checksums.txt >/tmp/b2-check.txt || true\n" +
+				"sum /tmp/input.json >/tmp/sum-bsd.txt\n" +
+				"sum -r /tmp/input.json >/tmp/sum-bsd-r.txt\n" +
+				"sum -s /tmp/input.json >/tmp/sum-sysv.txt\n" +
+				"cat /tmp/input.json | sum >/tmp/sum-stdin.txt\n" +
+				"cat /tmp/input.json | sum --sysv >/tmp/sum-sysv-stdin.txt\n" +
 				"cksum /tmp/input.json >/tmp/cksum-crc.txt\n" +
 				"cksum -a md5 /tmp/input.json >/tmp/cksum-md5.txt\n" +
 				"cksum -a sha2 -l 256 /tmp/input.json >/tmp/cksum-sha256.txt\n" +
