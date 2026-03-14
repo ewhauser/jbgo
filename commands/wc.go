@@ -100,7 +100,7 @@ func (c *WC) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 	}
 
 	if len(files) == 0 {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func (c *WC) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		)
 		if file == "-" {
 			hasStdinInput = true
-			data, err = readAllStdin(inv)
+			data, err = readAllStdin(ctx, inv)
 		} else {
 			data, _, err = readAllFile(ctx, inv, file)
 		}
@@ -203,7 +203,7 @@ func wcResolveInputs(ctx context.Context, inv *Invocation, opts *wcOptions, file
 	)
 	source := opts.files0From
 	if source == "-" {
-		data, readErr = readAllStdin(inv)
+		data, readErr = readAllStdin(ctx, inv)
 		if readErr != nil {
 			return nil, 0, readErr
 		}

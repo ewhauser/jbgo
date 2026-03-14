@@ -149,7 +149,7 @@ func (c *Basenc) optionsFromMatches(inv *Invocation, matches *ParsedCommand) (ba
 
 func readBasencInput(ctx context.Context, inv *Invocation, name string) ([]byte, error) {
 	if name == "" || name == "-" {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return nil, basencReadError(inv, err)
 		}

@@ -522,7 +522,7 @@ func (c *Cksum) runCheckMode(ctx context.Context, inv *Invocation, opts cksumOpt
 
 func (c *Cksum) readDigestInput(ctx context.Context, inv *Invocation, name string) ([]byte, error) {
 	if name == "-" {
-		return readAllStdin(inv)
+		return readAllStdin(ctx, inv)
 	}
 	info, _, err := statPath(ctx, inv, name)
 	if err != nil {
@@ -537,7 +537,7 @@ func (c *Cksum) readDigestInput(ctx context.Context, inv *Invocation, name strin
 
 func (c *Cksum) readChecksumList(ctx context.Context, inv *Invocation, name string) (data []byte, displayName string, err error) {
 	if name == "-" {
-		data, err = readAllStdin(inv)
+		data, err = readAllStdin(ctx, inv)
 		return data, "standard input", err
 	}
 	info, _, err := statPath(ctx, inv, name)
@@ -891,7 +891,7 @@ func ternary[T any](cond bool, yes, no T) T {
 
 func (c *Cksum) readVerifyTarget(ctx context.Context, inv *Invocation, name string) ([]byte, error) {
 	if name == "-" {
-		return readAllStdin(inv)
+		return readAllStdin(ctx, inv)
 	}
 	info, _, err := statPath(ctx, inv, name)
 	if err != nil {

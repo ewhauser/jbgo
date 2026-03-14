@@ -299,7 +299,7 @@ func normalizeNLSectionDelimiter(value string) []byte {
 func readNLInput(ctx context.Context, inv *Invocation, name string, stdinData *[]byte, stdinLoaded *bool) (data []byte, isDir bool, err error) {
 	if name == "-" {
 		if !*stdinLoaded {
-			data, err = readAllStdin(inv)
+			data, err = readAllStdin(ctx, inv)
 			if err != nil {
 				return nil, false, err
 			}

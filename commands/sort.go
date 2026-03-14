@@ -605,7 +605,7 @@ func collectSortInput(ctx context.Context, inv *Invocation, opts *sortOptions, f
 	checkFile = "-"
 
 	if len(inputFiles) == 0 && opts.files0From == "" {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return nil, "", 0, err
 		}
@@ -617,7 +617,7 @@ func collectSortInput(ctx context.Context, inv *Invocation, opts *sortOptions, f
 		switch file {
 		case "-":
 			if !stdinRead {
-				read, err := readAllStdin(inv)
+				read, err := readAllStdin(ctx, inv)
 				if err != nil {
 					return nil, "", 0, err
 				}
@@ -655,7 +655,7 @@ func sortInputFiles(ctx context.Context, inv *Invocation, opts *sortOptions, fil
 	var err error
 	source := opts.files0From
 	if source == "-" {
-		data, err = readAllStdin(inv)
+		data, err = readAllStdin(ctx, inv)
 		if err != nil {
 			return nil, err
 		}

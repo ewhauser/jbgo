@@ -100,7 +100,7 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 
 	exitCode := 0
 	if len(files) == 0 {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}

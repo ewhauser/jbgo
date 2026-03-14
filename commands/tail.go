@@ -133,7 +133,7 @@ func (c *Tail) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return err
 	}
 	if len(opts.files) == 0 {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}
@@ -158,7 +158,7 @@ func (c *Tail) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 				exitCode = 1
 				continue
 			}
-			data, err := readAllStdin(inv)
+			data, err := readAllStdin(ctx, inv)
 			if err != nil {
 				return err
 			}

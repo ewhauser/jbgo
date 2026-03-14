@@ -18,7 +18,7 @@ func readNamedInputs(ctx context.Context, inv *Invocation, names []string, defau
 		if !defaultStdin {
 			return nil, nil
 		}
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return nil, err
 		}
@@ -38,7 +38,7 @@ func readNamedInputs(ctx context.Context, inv *Invocation, names []string, defau
 	for _, name := range names {
 		if name == "-" {
 			if !stdinLoaded {
-				data, err := readAllStdin(inv)
+				data, err := readAllStdin(ctx, inv)
 				if err != nil {
 					return nil, err
 				}
@@ -82,7 +82,7 @@ func readTwoInputs(ctx context.Context, inv *Invocation, leftName, rightName str
 			return data, err
 		}
 		if !stdinLoaded {
-			data, err := readAllStdin(inv)
+			data, err := readAllStdin(ctx, inv)
 			if err != nil {
 				return nil, err
 			}

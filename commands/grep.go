@@ -112,7 +112,7 @@ func (c *Grep) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 
 	state := &grepRunState{}
 	if len(files) == 0 {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}

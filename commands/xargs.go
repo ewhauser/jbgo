@@ -450,7 +450,7 @@ func xargsWarn(inv *Invocation, format string, args ...any) {
 
 func readXArgsInput(ctx context.Context, inv *Invocation, opts *xargsOptions) ([]byte, error) {
 	if opts.inputFile == "-" {
-		return readAllStdin(inv)
+		return readAllStdin(ctx, inv)
 	}
 	data, _, err := readAllFile(ctx, inv, opts.inputFile)
 	if err != nil {

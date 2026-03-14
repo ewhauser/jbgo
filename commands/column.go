@@ -228,7 +228,7 @@ func parseColumnNumber(value string) (int, bool) {
 
 func readColumnContent(ctx context.Context, inv *Invocation, files []string) (string, error) {
 	if len(files) == 0 {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return "", err
 		}
@@ -246,7 +246,7 @@ func readColumnContent(ctx context.Context, inv *Invocation, files []string) (st
 		if name == "-" {
 			if !stdinLoaded {
 				var err error
-				stdinData, err = readAllStdin(inv)
+				stdinData, err = readAllStdin(ctx, inv)
 				if err != nil {
 					return "", err
 				}

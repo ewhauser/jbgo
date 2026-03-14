@@ -90,7 +90,7 @@ func (c *TR) Spec() CommandSpec {
 	}
 }
 
-func (c *TR) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCommand) error {
+func (c *TR) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	opts, sets, err := parseTRMatches(inv, matches)
 	if err != nil {
 		return err
@@ -106,7 +106,7 @@ func (c *TR) RunParsed(_ context.Context, inv *Invocation, matches *ParsedComman
 		return exitf(inv, 1, "tr: %s", err.Error())
 	}
 
-	data, err := readAllStdin(inv)
+	data, err := readAllStdin(ctx, inv)
 	if err != nil {
 		return err
 	}

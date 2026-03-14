@@ -107,7 +107,7 @@ func (c *Dircolors) RunParsed(ctx context.Context, inv *Invocation, matches *Par
 		fp    = files[0]
 	)
 	if fp == "-" {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}

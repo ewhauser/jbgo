@@ -329,7 +329,7 @@ func loadPasteInputs(ctx context.Context, inv *Invocation, names []string, lineE
 	for _, name := range names {
 		if name == "-" {
 			if !stdinLoaded {
-				data, err := readAllStdin(inv)
+				data, err := readAllStdin(ctx, inv)
 				if err != nil {
 					return nil, err
 				}

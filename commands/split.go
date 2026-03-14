@@ -139,7 +139,7 @@ func (c *Split) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 	var data []byte
 	var inputAbs string
 	if inputName == "-" {
-		data, err = readAllStdin(inv)
+		data, err = readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}

@@ -217,7 +217,7 @@ func setCommDelimiter(inv *Invocation, opts *commOptions, value string) error {
 
 func readCommInput(ctx context.Context, inv *Invocation, name string) (data []byte, label string, err error) {
 	if name == "-" {
-		data, err := readAllStdin(inv)
+		data, err := readAllStdin(ctx, inv)
 		return data, name, err
 	}
 	abs, err := allowPath(ctx, inv, "", name)

@@ -110,7 +110,7 @@ func (c *Cut) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 				continue
 			}
 			stdinRead = true
-			data, err = readAllStdin(inv)
+			data, err = readAllStdin(ctx, inv)
 		default:
 			data, err = readAllFileForCut(ctx, inv, name)
 		}

@@ -12,10 +12,9 @@ type endlessClosableReader struct {
 	closed atomic.Bool
 }
 
-func (r *endlessClosableReader) Read(p []byte) (int, error) {
-	if r.closed.Load() {
-		return 0, io.ErrClosedPipe
-	}
+type endlessReader struct{}
+
+func (r *endlessReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -29,17 +28,34 @@ func (r *endlessClosableReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (r *endlessClosableReader) Read(p []byte) (int, error) {
+	if r.closed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+	return (&endlessReader{}).Read(p)
+}
+
 func (r *endlessClosableReader) Close() error {
 	r.closed.Store(true)
 	return nil
 }
 
-func TestTimeoutCancelsBlockedSplitStdinRead(t *testing.T) {
+func TestTimeoutCancelsSplitStdinReadWhenReaderIsClosable(t *testing.T) {
+	assertTimedSplit(t, &endlessClosableReader{})
+}
+
+func TestTimeoutCancelsSplitStdinReadWhenReaderIsNotClosable(t *testing.T) {
+	assertTimedSplit(t, &endlessReader{})
+}
+
+func assertTimedSplit(t *testing.T, stdin io.Reader) {
+	t.Helper()
+
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
 		Script: "timeout 0.02 split --filter='head -c1 >/dev/null' -n r/1 - || echo timed\n",
-		Stdin:  &endlessClosableReader{},
+		Stdin:  stdin,
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)

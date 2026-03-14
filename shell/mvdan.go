@@ -404,7 +404,6 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 
 		invocationArgs := append([]string(nil), resolved.args...)
 		invocationArgs = append(invocationArgs, args[1:]...)
-		commands.CloseReaderOnContext(ctx, hc.Stdin)
 		err = commands.RunCommand(ctx, resolved.command, commands.NewInvocation(&commands.InvocationOptions{
 			Args:         invocationArgs,
 			Env:          currentEnv,

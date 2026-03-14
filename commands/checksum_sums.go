@@ -378,7 +378,7 @@ func (c *checksumSum) runCheckMode(ctx context.Context, inv *Invocation, opts ch
 
 func (c *checksumSum) readDigestInput(ctx context.Context, inv *Invocation, name string) ([]byte, error) {
 	if name == "-" {
-		return readAllStdin(inv)
+		return readAllStdin(ctx, inv)
 	}
 	info, _, err := statPath(ctx, inv, name)
 	if err != nil {
@@ -393,7 +393,7 @@ func (c *checksumSum) readDigestInput(ctx context.Context, inv *Invocation, name
 
 func (c *checksumSum) readChecksumList(ctx context.Context, inv *Invocation, name string) (data []byte, displayName string, err error) {
 	if name == "-" {
-		data, err = readAllStdin(inv)
+		data, err = readAllStdin(ctx, inv)
 		return data, "standard input", err
 	}
 	info, _, err := statPath(ctx, inv, name)
@@ -546,7 +546,7 @@ func (c *checksumSum) processChecksumLine(ctx context.Context, inv *Invocation, 
 
 func (c *checksumSum) readVerifyTarget(ctx context.Context, inv *Invocation, name string) ([]byte, error) {
 	if name == "-" {
-		return readAllStdin(inv)
+		return readAllStdin(ctx, inv)
 	}
 	info, _, err := statPath(ctx, inv, name)
 	if err != nil {
