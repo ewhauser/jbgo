@@ -1,4 +1,4 @@
-.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish compat-docker-build compat-docker-run release release-check release-snapshot fix-modules tag-release
+.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test compat-docker-build compat-docker-run release release-check release-snapshot fix-modules tag-release
 
 GO_PACKAGES := ./... ./contrib/awk/... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 BENCH_PACKAGES := ./internal/runtime ./cmd/gbash ./contrib/jq
@@ -24,12 +24,7 @@ BENCH_COMPARE_RUNS ?= 100
 JUST_BASH_SPEC ?= just-bash@2.13.0
 JSON_OUT ?=
 GNU_CACHE_DIR ?= .cache/gnu
-GNU_GBASH_BIN ?= $(GNU_CACHE_DIR)/bin/gbash
 GNU_RESULTS_DIR ?=
-GNU_FORCE_REBUILD ?=
-GNU_BUILD_CACHE_REPO ?= ewhauser/gbash
-GNU_BUILD_CACHE_TAG ?= gnu-build-cache-v3
-GNU_BUILD_CACHE_VERSION ?= v3
 COMPAT_DOCKER_IMAGE ?= gbash-compat-local
 COMPAT_DOCKER_BASE_IMAGE ?= ghcr.io/ewhauser/gbash-compat:latest
 COMPAT_DOCKER_PLATFORM ?= linux/amd64
@@ -196,24 +191,14 @@ bench-compare:
 		go run ./scripts/bench-compare --runs "$(BENCH_COMPARE_RUNS)" --just-bash-spec "$(JUST_BASH_SPEC)"; \
 	fi
 
-gnu-test-setup:
-	mkdir -p $(GNU_CACHE_DIR)/bin
-	go run ./cmd/gbash-gnu --cache-dir $(GNU_CACHE_DIR) --setup
-
-gnu-build-cache-fetch:
-	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_GBASH_BIN='$(GNU_GBASH_BIN)' GNU_BUILD_CACHE_REPO='$(GNU_BUILD_CACHE_REPO)' GNU_BUILD_CACHE_TAG='$(GNU_BUILD_CACHE_TAG)' GNU_BUILD_CACHE_VERSION='$(GNU_BUILD_CACHE_VERSION)' ./scripts/gnu-build-cache.sh fetch
-
-gnu-build-cache-publish:
-	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_GBASH_BIN='$(GNU_GBASH_BIN)' GNU_BUILD_CACHE_REPO='$(GNU_BUILD_CACHE_REPO)' GNU_BUILD_CACHE_TAG='$(GNU_BUILD_CACHE_TAG)' GNU_BUILD_CACHE_VERSION='$(GNU_BUILD_CACHE_VERSION)' ./scripts/gnu-build-cache.sh publish
-
 gnu-test:
-	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_GBASH_BIN='$(GNU_GBASH_BIN)' GNU_RESULTS_DIR='$(GNU_RESULTS_DIR)' GNU_UTILS='$(GNU_UTILS)' GNU_TESTS='$(GNU_TESTS)' GNU_KEEP_WORKDIR='$(GNU_KEEP_WORKDIR)' GNU_FORCE_REBUILD='$(GNU_FORCE_REBUILD)' GNU_BUILD_CACHE_REPO='$(GNU_BUILD_CACHE_REPO)' GNU_BUILD_CACHE_TAG='$(GNU_BUILD_CACHE_TAG)' GNU_BUILD_CACHE_VERSION='$(GNU_BUILD_CACHE_VERSION)' ./scripts/gnu-build-cache.sh run
+	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_RESULTS_DIR='$(GNU_RESULTS_DIR)' GNU_UTILS='$(GNU_UTILS)' GNU_TESTS='$(GNU_TESTS)' GNU_KEEP_WORKDIR='$(GNU_KEEP_WORKDIR)' COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-run.sh
 
 compat-docker-build:
 	COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-build.sh
 
 compat-docker-run:
-	COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-run.sh
+	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_RESULTS_DIR='$(GNU_RESULTS_DIR)' GNU_UTILS='$(GNU_UTILS)' GNU_TESTS='$(GNU_TESTS)' GNU_KEEP_WORKDIR='$(GNU_KEEP_WORKDIR)' COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-run.sh
 
 release:
 	@command -v $(GH) > /dev/null || { echo "$(GH) CLI is required"; exit 1; }

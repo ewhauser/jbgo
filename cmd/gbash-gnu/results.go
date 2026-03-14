@@ -235,46 +235,6 @@ func containsString(items []string, needle string) bool {
 	return slices.Contains(items, needle)
 }
 
-func prepareResultsDir(cacheDir, explicitDir string) (string, error) {
-	if strings.TrimSpace(explicitDir) == "" {
-		root := filepath.Join(cacheDir, "results")
-		if err := os.MkdirAll(root, 0o755); err != nil {
-			return "", err
-		}
-		return os.MkdirTemp(root, "run-")
-	}
-
-	resultsDir, err := filepath.Abs(explicitDir)
-	if err != nil {
-		return "", err
-	}
-	if filepath.Clean(resultsDir) == string(os.PathSeparator) {
-		return "", fmt.Errorf("refusing to use filesystem root as results dir")
-	}
-	info, err := os.Stat(resultsDir)
-	switch {
-	case err == nil && !info.IsDir():
-		return "", fmt.Errorf("results dir %s exists and is not a directory", resultsDir)
-	case err == nil:
-		entries, err := os.ReadDir(resultsDir)
-		if err != nil {
-			return "", err
-		}
-		for _, entry := range entries {
-			if err := os.RemoveAll(filepath.Join(resultsDir, entry.Name())); err != nil {
-				return "", err
-			}
-		}
-	case errorsIsNotExist(err):
-		if err := os.MkdirAll(resultsDir, 0o755); err != nil {
-			return "", err
-		}
-	default:
-		return "", err
-	}
-	return resultsDir, nil
-}
-
 func buildCoverageArtifacts(selectedTests []string, filteredByPath map[string]string, selectedResults, extraResults []testResult, runs []utilityRun, mf *manifest) (suiteSummary, []categoryResult, []commandCoverage, coverageDebtSummary, []testResult) {
 	resultByPath := make(map[string]testResult, len(selectedResults))
 	for _, result := range selectedResults {

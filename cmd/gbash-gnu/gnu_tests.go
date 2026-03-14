@@ -1,19 +1,13 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 )
 
 func selectUtilities(programs []string, mf *manifest, raw string) ([]attributedUtility, error) {
@@ -380,97 +374,6 @@ func shouldSkipTest(rel, path string, globalSkips []skipPattern, utilitySkips []
 	default:
 		return false, "", nil
 	}
-}
-
-func runMakeCheck(ctx context.Context, makeBin, workDir, configShell string, tests []string, logPath string) (makeCheckResult, error) {
-	args := []string{
-		"check",
-		"SUBDIRS=.",
-		"VERBOSE=no",
-		"RUN_EXPENSIVE_TESTS=yes",
-		"srcdir=" + workDir,
-		"TESTS=" + strings.Join(tests, " "),
-	}
-	cmd := exec.Command(makeBin, args...)
-	cmd.Dir = workDir
-	cmd.Env = append(os.Environ(),
-		"CONFIG_SHELL="+configShell,
-	)
-	configureIsolatedProcessGroup(cmd)
-
-	logFile, err := os.Create(logPath)
-	if err != nil {
-		return makeCheckResult{}, err
-	}
-	defer func() {
-		_ = logFile.Close()
-	}()
-
-	stream := &captureTeeWriter{dest: io.MultiWriter(os.Stdout, logFile)}
-	cmd.Stdout = stream
-	cmd.Stderr = stream
-
-	fmt.Printf("gbash-gnu: running make check for %d test(s)\n", len(tests))
-	startedAt := time.Now()
-	if err := cmd.Start(); err != nil {
-		return makeCheckResult{}, err
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case err := <-done:
-			output := stream.Bytes()
-			if err == nil {
-				fmt.Printf("gbash-gnu: make check finished in %s\n", time.Since(startedAt).Round(time.Second))
-				return makeCheckResult{Output: output}, nil
-			}
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				fmt.Printf("gbash-gnu: make check finished in %s with exit code %d\n", time.Since(startedAt).Round(time.Second), exitErr.ExitCode())
-				return makeCheckResult{ExitCode: exitErr.ExitCode(), Output: output}, nil
-			}
-			return makeCheckResult{}, err
-		case <-ctx.Done():
-			_ = terminateIsolatedProcessGroup(cmd)
-			<-done
-			return makeCheckResult{}, ctx.Err()
-		case <-ticker.C:
-			fmt.Printf("gbash-gnu: still running make check after %s (%d test(s))\n", time.Since(startedAt).Round(time.Second), len(tests))
-		}
-	}
-}
-
-type captureTeeWriter struct {
-	mu   sync.Mutex
-	dest io.Writer
-	buf  bytes.Buffer
-}
-
-func (w *captureTeeWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if _, err := w.buf.Write(p); err != nil {
-		return 0, err
-	}
-	if _, err := w.dest.Write(p); err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-func (w *captureTeeWriter) Bytes() []byte {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return append([]byte(nil), w.buf.Bytes()...)
 }
 
 func uniqueSortedStrings(items []string) []string {

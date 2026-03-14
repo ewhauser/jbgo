@@ -4,185 +4,56 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-type executionEnv struct {
-	cacheDir   string
-	gbashBin   string
-	resultsDir string
-	workDir    string
-}
-
-type executionPlan struct {
-	runTargets    []attributedUtility
-	explicitTests []string
-	allTests      []string
-	globalSkipped []string
-	configShell   string
-	utilsFiltered bool
-}
-
-type utilityRunExecution struct {
-	results      []utilityResult
-	overall      testSummary
-	suiteResults []testResult
-	extraResults []testResult
-	hadFailure   bool
-}
-
 func run(ctx context.Context, mf *manifest, opts *options) error {
-	makeBin, err := findMake()
+	workDir, err := filepath.Abs(opts.workDir)
 	if err != nil {
 		return err
 	}
-	if err := requireTool("perl"); err != nil {
-		return err
-	}
-	if err := requireCC(); err != nil {
-		return err
-	}
-
-	cacheDir, err := filepath.Abs(opts.cacheDir)
+	plan, err := buildRunPlan(ctx, mf, workDir, opts)
 	if err != nil {
 		return err
 	}
-	if opts.setupOnly {
-		sourceDir, err := ensureSourceCache(ctx, mf, cacheDir)
-		if err != nil {
-			return err
+	if opts.printTests {
+		for _, test := range plan.selectedTests {
+			fmt.Println(test)
 		}
-		fmt.Printf("GNU coreutils %s prepared at %s\n", mf.GNUVersion, sourceDir)
 		return nil
 	}
-	if strings.TrimSpace(opts.writePreparedBuildArchive) != "" {
-		return writePreparedBuildArchive(ctx, mf, opts, makeBin, cacheDir)
-	}
 
-	env, err := prepareExecutionEnvironment(ctx, mf, opts, makeBin, cacheDir)
+	summary, hadFailure, err := summarizeRun(mf, workDir, opts.resultsDir, opts.logPath, opts.exitCode, plan)
 	if err != nil {
 		return err
 	}
-	if !opts.keepWorkdir {
-		defer func() { _ = os.RemoveAll(env.workDir) }()
-	}
-
-	plan, err := prepareExecutionPlan(ctx, mf, env, opts)
-	if err != nil {
-		return err
-	}
-
-	summary, hadFailure, err := executeCompatibilityRun(ctx, makeBin, mf, env, plan)
-	if err != nil {
-		return err
-	}
-	summary.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
-	summary.UtilitySummary = summarizeUtilityTotals(summary.Utilities)
-
-	summaryPath := filepath.Join(env.resultsDir, "summary.json")
+	summaryPath := filepath.Join(summary.ResultsDir, "summary.json")
 	if err := writeJSON(summaryPath, summary); err != nil {
 		return err
 	}
-	fmt.Printf("results: %s\n", env.resultsDir)
+	fmt.Printf("results: %s\n", summary.ResultsDir)
 	if hadFailure {
 		return fmt.Errorf("GNU compatibility run failed")
 	}
 	return nil
 }
 
-func writePreparedBuildArchive(ctx context.Context, mf *manifest, opts *options, makeBin, cacheDir string) error {
-	archivePath, err := filepath.Abs(opts.writePreparedBuildArchive)
+func listGNUPrograms(ctx context.Context, workDir string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, filepath.Join(workDir, "build-aux", "gen-lists-of-programs.sh"), "--list-progs")
+	cmd.Dir = workDir
+	out, err := cmd.Output()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("list GNU programs: %w", err)
 	}
-	sourceDir, err := ensureSourceCache(ctx, mf, cacheDir)
-	if err != nil {
-		return err
-	}
-	if err := buildPreparedBuildArchive(ctx, makeBin, cacheDir, mf.GNUVersion, sourceDir, archivePath, opts.keepWorkdir); err != nil {
-		return err
-	}
-	fmt.Printf("prepared GNU build archive: %s\n", archivePath)
-	return nil
+	lines := strings.Fields(string(out))
+	return uniqueSortedStrings(lines), nil
 }
 
-func prepareExecutionEnvironment(ctx context.Context, mf *manifest, opts *options, makeBin, cacheDir string) (*executionEnv, error) {
-	gbashBin, err := filepath.Abs(opts.gbashBin)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureExecutable(gbashBin); err != nil {
-		return nil, err
-	}
-
-	resultsDir, err := prepareResultsDir(cacheDir, opts.resultsDir)
-	if err != nil {
-		return nil, fmt.Errorf("create results dir: %w", err)
-	}
-
-	preparedArchivePath := strings.TrimSpace(opts.preparedBuildArchive)
-	if preparedArchivePath != "" {
-		preparedArchivePath, err = filepath.Abs(preparedArchivePath)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	workDir, err := prepareExecutionWorkDir(ctx, mf, makeBin, cacheDir, preparedArchivePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &executionEnv{
-		cacheDir:   cacheDir,
-		gbashBin:   gbashBin,
-		resultsDir: resultsDir,
-		workDir:    workDir,
-	}, nil
-}
-
-func prepareExecutionWorkDir(ctx context.Context, mf *manifest, makeBin, cacheDir, preparedArchivePath string) (string, error) {
-	var workDir string
-	var err error
-	if preparedArchivePath != "" {
-		workDir, err = prepareWorkDirFromPreparedArchive(ctx, cacheDir, mf.GNUVersion, preparedArchivePath)
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "gbash-gnu: prepared build archive unavailable (%v); falling back to full build\n", err)
-		}
-	}
-	if workDir != "" {
-		return workDir, nil
-	}
-	if builtDir, err := findPreviousBuild(cacheDir, mf.GNUVersion); err == nil {
-		workDir, err = prepareWorkDir(cacheDir, mf.GNUVersion, builtDir)
-		if err != nil {
-			return "", err
-		}
-		if err := relocatePreparedBuild(ctx, workDir); err != nil {
-			return "", err
-		}
-		return workDir, nil
-	}
-
-	sourceDir, err := ensureSourceCache(ctx, mf, cacheDir)
-	if err != nil {
-		return "", err
-	}
-	workDir, err = prepareWorkDir(cacheDir, mf.GNUVersion, sourceDir)
-	if err != nil {
-		return "", err
-	}
-	if err := configureAndBuild(ctx, makeBin, workDir); err != nil {
-		_ = os.RemoveAll(workDir)
-		return "", err
-	}
-	return workDir, nil
-}
-
-func prepareExecutionPlan(ctx context.Context, mf *manifest, env *executionEnv, opts *options) (*executionPlan, error) {
-	programs, err := listGNUPrograms(ctx, env.workDir)
+func buildRunPlan(ctx context.Context, mf *manifest, workDir string, opts *options) (*runPlan, error) {
+	programs, err := listGNUPrograms(ctx, workDir)
 	if err != nil {
 		return nil, err
 	}
@@ -190,159 +61,70 @@ func prepareExecutionPlan(ctx context.Context, mf *manifest, env *executionEnv, 
 	if err != nil {
 		return nil, err
 	}
-	runTargets := append([]attributedUtility(nil), selectedUtilities...)
 	explicitTests := parseList(opts.tests)
-	if err := prepareProgramDir(env.workDir, env.gbashBin, programs); err != nil {
-		return nil, err
-	}
-	configShell, err := harnessConfigShellPath(env.workDir)
+	allTests, globalSkipped, err := discoverRunnableTests(workDir, mf.SkipPatterns, explicitTests)
 	if err != nil {
 		return nil, err
 	}
-	if err := disableCheckRebuild(env.workDir); err != nil {
-		return nil, err
-	}
-	if err := installHarnessTestHooks(env.workDir, env.gbashBin); err != nil {
-		return nil, err
-	}
-	allTests, globalSkipped, err := discoverRunnableTests(env.workDir, mf.SkipPatterns, explicitTests)
+	runs, _, err := resolveUtilityRuns(workDir, selectedUtilities, mf.SkipPatterns, explicitTests)
 	if err != nil {
 		return nil, err
 	}
-
-	return &executionPlan{
-		runTargets:    runTargets,
-		explicitTests: explicitTests,
-		allTests:      allTests,
-		globalSkipped: globalSkipped,
-		configShell:   configShell,
-		utilsFiltered: strings.TrimSpace(opts.utils) != "",
+	selectedTests := append([]string(nil), allTests...)
+	filteredEntries := parseSkippedEntries(globalSkipped)
+	if strings.TrimSpace(opts.utils) != "" || len(explicitTests) != 0 {
+		selectedTests = combinedTestsForRuns(runs)
+		filteredEntries = combinedSkippedEntriesForRuns(runs)
+	}
+	return &runPlan{
+		runs:            runs,
+		selectedTests:   selectedTests,
+		filteredEntries: filteredEntries,
 	}, nil
 }
 
-func executeCompatibilityRun(ctx context.Context, makeBin string, mf *manifest, env *executionEnv, plan *executionPlan) (runSummary, bool, error) {
-	summary := runSummary{
-		GNUVersion: mf.GNUVersion,
-		WorkDir:    env.workDir,
-		ResultsDir: env.resultsDir,
-	}
-	utilityRuns, _, err := resolveUtilityRuns(env.workDir, plan.runTargets, mf.SkipPatterns, plan.explicitTests)
+func summarizeRun(mf *manifest, workDir, resultsDirRaw, logPathRaw string, exitCode int, plan *runPlan) (runSummary, bool, error) {
+	resultsDir, err := filepath.Abs(resultsDirRaw)
 	if err != nil {
 		return runSummary{}, false, err
 	}
-	selectedTests := append([]string(nil), plan.allTests...)
-	filteredEntries := parseSkippedEntries(plan.globalSkipped)
-	filteredSkipTotal := len(filteredEntries)
-	if plan.utilsFiltered || len(plan.explicitTests) != 0 {
-		selectedTests = combinedTestsForRuns(utilityRuns)
-		filteredEntries = combinedSkippedEntriesForRuns(utilityRuns)
-		filteredSkipTotal = len(filteredEntries)
-	}
-
-	execution, err := executeUtilityRuns(ctx, makeBin, env, plan.configShell, utilityRuns, selectedTests, filteredSkipTotal)
-	if err != nil {
+	if err := os.MkdirAll(resultsDir, 0o755); err != nil {
 		return runSummary{}, false, err
 	}
-	summary.Utilities = append(summary.Utilities, execution.results...)
-	summary.Overall = execution.overall
-	summary.Suite, summary.Categories, summary.Commands, summary.Coverage, summary.ExtraResults = buildCoverageArtifacts(selectedTests, filteredEntries, execution.suiteResults, execution.extraResults, utilityRuns, mf)
-	return summary, execution.hadFailure, nil
-}
 
-func executeUtilityRuns(ctx context.Context, makeBin string, env *executionEnv, configShell string, runs []utilityRun, allTests []string, filteredSkipTotal int) (utilityRunExecution, error) {
-	if len(runs) == 1 && runs[0].Utility.Name == "explicit-tests" {
-		return executeUtilityRunsIndividually(ctx, makeBin, env, configShell, runs)
-	}
-	return executeUtilityRunsBatched(ctx, makeBin, env, configShell, runs, allTests, filteredSkipTotal)
-}
-
-func executeUtilityRunsIndividually(ctx context.Context, makeBin string, env *executionEnv, configShell string, runs []utilityRun) (utilityRunExecution, error) {
-	results := make([]utilityResult, 0, len(runs))
-	hadFailure := false
-	var overall testSummary
-	suiteByName := make(map[string]testResult)
-	extraByName := make(map[string]testResult)
-	for _, run := range runs {
-		result := utilityResult{
-			Name:    run.Utility.Name,
-			Tests:   run.Tests,
-			Skipped: run.Skipped,
-			Summary: summarizeTestResults(nil, len(run.Skipped), 0),
-		}
-		if len(run.Tests) == 0 {
-			results = append(results, result)
-			continue
-		}
-
-		logFile := run.Utility.Name + ".log"
-		logPath := filepath.Join(env.resultsDir, logFile)
-		makeCheckResult, err := runMakeCheck(ctx, makeBin, env.workDir, configShell, run.Tests, logPath)
+	logPath := strings.TrimSpace(logPathRaw)
+	logFile := ""
+	var logData []byte
+	if logPath != "" {
+		logPath, err = filepath.Abs(logPath)
 		if err != nil {
-			return utilityRunExecution{}, err
+			return runSummary{}, false, err
 		}
-		result.TestResults, result.ExtraResults = parseReportedTestResults(makeCheckResult.Output, run.Tests)
-		mergeNamedResults(suiteByName, result.TestResults)
-		mergeNamedResults(extraByName, result.ExtraResults)
-		result.Summary = summarizeTestResults(result.TestResults, len(run.Skipped), len(result.ExtraResults))
-		result.LogFile = logFile
-		result.LogPath = logPath
-		result.ExitCode = makeCheckResult.ExitCode
-		result.Passed = makeCheckResult.ExitCode == 0
-		if makeCheckResult.ExitCode != 0 {
-			hadFailure = true
+		logFile = filepath.Base(logPath)
+		logData, err = os.ReadFile(logPath)
+		if err != nil {
+			return runSummary{}, false, err
 		}
-		results = append(results, result)
-		fmt.Printf("%s: %d tests, exit=%d, pass=%s\n", run.Utility.Name, len(run.Tests), makeCheckResult.ExitCode, formatPercent(result.Summary.PassPctSelected))
-	}
-	overall = summarizeOverall(results)
-	return utilityRunExecution{
-		results:      results,
-		overall:      overall,
-		suiteResults: sortedNamedResults(suiteByName),
-		extraResults: sortedNamedResults(extraByName),
-		hadFailure:   hadFailure,
-	}, nil
-}
-
-func executeUtilityRunsBatched(ctx context.Context, makeBin string, env *executionEnv, configShell string, runs []utilityRun, allTests []string, filteredSkipTotal int) (utilityRunExecution, error) {
-	if len(allTests) == 0 {
-		results := make([]utilityResult, 0, len(runs))
-		for _, run := range runs {
-			result := utilityResult{
-				Name:    run.Utility.Name,
-				Tests:   run.Tests,
-				Skipped: run.Skipped,
-				Summary: summarizeTestResults(nil, len(run.Skipped), 0),
-			}
-			results = append(results, result)
-		}
-		return utilityRunExecution{
-			results: results,
-			overall: testSummary{FilteredSkipTotal: filteredSkipTotal},
-		}, nil
 	}
 
-	logFile := "compat.log"
-	logPath := filepath.Join(env.resultsDir, logFile)
-	makeCheckResult, err := runMakeCheck(ctx, makeBin, env.workDir, configShell, allTests, logPath)
-	if err != nil {
-		return utilityRunExecution{}, err
+	makeResult := makeCheckResult{
+		ExitCode: exitCode,
+		Output:   logData,
 	}
-	combinedResults, combinedExtras := parseReportedTestResults(makeCheckResult.Output, allTests)
+	utilityResults, overall := buildBatchedUtilityResults(plan.runs, plan.selectedTests, len(plan.filteredEntries), makeResult, logFile, logPath)
+	combinedResults, combinedExtras := parseReportedTestResults(logData, plan.selectedTests)
 
-	results, overall := buildBatchedUtilityResults(runs, allTests, filteredSkipTotal, makeCheckResult, logFile, logPath)
-	hadFailure := !utilityPassed(&overall)
-	for i := range results {
-		result := &results[i]
-		fmt.Printf("%s: %d tests, exit=%d, pass=%s\n", result.Name, len(result.Tests), result.ExitCode, formatPercent(result.Summary.PassPctSelected))
+	summary := runSummary{
+		GNUVersion:     mf.GNUVersion,
+		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
+		WorkDir:        workDir,
+		ResultsDir:     resultsDir,
+		Overall:        overall,
+		UtilitySummary: summarizeUtilityTotals(utilityResults),
+		Utilities:      utilityResults,
 	}
-	return utilityRunExecution{
-		results:      results,
-		overall:      overall,
-		suiteResults: combinedResults,
-		extraResults: combinedExtras,
-		hadFailure:   hadFailure,
-	}, nil
+	summary.Suite, summary.Categories, summary.Commands, summary.Coverage, summary.ExtraResults = buildCoverageArtifacts(plan.selectedTests, plan.filteredEntries, combinedResults, combinedExtras, plan.runs, mf)
+	return summary, !utilityPassed(&overall), nil
 }
 
 func combinedTestsForRuns(runs []utilityRun) []string {

@@ -1,2 +1,0 @@
-TESTS_ENVIRONMENT = \
-  $(SHELL) '$(abs_top_builddir)/build-aux/gbash-harness/relink.sh' '$(abs_top_builddir)/src' || exit $$?; \

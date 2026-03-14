@@ -51,43 +51,27 @@ These numbers are a local reference point, not a portability guarantee. Startup 
 
 You can evaluate the skew between implemented commands and [coreutils](https://www.gnu.org/software/coreutils/).
 
-Prepare the pinned GNU source tree:
-
-```bash
-make gnu-test-setup
-```
-
-Fetch the prepared GNU build cache for your platform:
-
-```bash
-make gnu-build-cache-fetch
-```
-
-Run the full configured harness or limit it to selected utilities. `make gnu-test` prefers a prepared GNU build archive from the local cache, then the dedicated GitHub Release cache, and only falls back to a local `configure && make` when no prepared archive is available:
+The compatibility harness now runs inside the compat Docker image. The scheduled GitHub workflow uses the published image from GitHub Container Registry, and local `make gnu-test` / `make compat-docker-run` pull that published image by default, tagging it locally as `gbash-compat-local`. If the published image is unavailable, the helper falls back to a local build.
 
 ```bash
 make gnu-test
 make gnu-test GNU_UTILS="printf pwd"
 ```
 
+If you want to prefetch or refresh the local compat image explicitly:
+
+```bash
+make compat-docker-build
+make compat-docker-run
+```
+
 Useful overrides:
 
 - `GNU_UTILS` limits the utility list.
 - `GNU_TESTS` runs exact GNU test files instead of the manifest-selected utility suites.
-- `GNU_KEEP_WORKDIR=1` preserves the temporary patched/build workdir.
-- `GNU_FORCE_REBUILD=1` bypasses any prepared archive and forces a fresh local GNU build.
-
-Maintainers can refresh the published prepared build archive set with:
-
-```bash
-make gnu-build-cache-publish
-```
-
-The scheduled GitHub compatibility workflow runs inside the published compat image from GitHub Container Registry. Local `make compat-docker-build` and `make compat-docker-run` now pull that published image by default, tag it locally as `gbash-compat-local`, and only fall back to a full local rebuild if the published image is unavailable.
-
-```bash
-make compat-docker-run
-```
+- `GNU_KEEP_WORKDIR=1` preserves the patched GNU workdir under the results directory for inspection.
+- `COMPAT_DOCKER_BASE_IMAGE` overrides the published image reference.
+- `COMPAT_DOCKER_PULL` controls whether Docker should refresh the published image before running.
 
 Force a full local rebuild when you need to bypass the published image:
 

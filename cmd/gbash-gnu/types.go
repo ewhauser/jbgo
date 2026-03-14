@@ -33,15 +33,13 @@ type skipPattern struct {
 }
 
 type options struct {
-	cacheDir                  string
-	gbashBin                  string
-	utils                     string
-	tests                     string
-	resultsDir                string
-	preparedBuildArchive      string
-	writePreparedBuildArchive string
-	setupOnly                 bool
-	keepWorkdir               bool
+	workDir    string
+	utils      string
+	tests      string
+	resultsDir string
+	logPath    string
+	printTests bool
+	exitCode   int
 }
 
 type testResult struct {
@@ -201,4 +199,8 @@ type attributedUtility struct {
 	Skips    []string
 }
 
-const sourceCacheVersion = "2"
+type runPlan struct {
+	runs            []utilityRun
+	selectedTests   []string
+	filteredEntries map[string]string
+}

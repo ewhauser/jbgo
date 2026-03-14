@@ -10,10 +10,6 @@ PLATFORM=${COMPAT_DOCKER_PLATFORM:-linux/amd64}
 PULL_MODE=${COMPAT_DOCKER_PULL:-0}
 GNU_CACHE_DIR=${GNU_CACHE_DIR:-.cache/gnu}
 GNU_RESULTS_DIR=${GNU_RESULTS_DIR:-.cache/gnu/results/docker-latest}
-GNU_FORCE_REBUILD=${GNU_FORCE_REBUILD:-0}
-GNU_BUILD_CACHE_VERSION=${GNU_BUILD_CACHE_VERSION:-v3}
-GNU_BUILD_CACHE_TAG=${GNU_BUILD_CACHE_TAG:-gnu-build-cache-v3}
-GNU_BUILD_CACHE_REPO=${GNU_BUILD_CACHE_REPO:-ewhauser/gbash}
 
 abs_repo_path() {
   local path=$1
@@ -96,8 +92,7 @@ mkdir -p \
   "$CACHE_DIR_HOST" \
   "$RESULTS_DIR_HOST" \
   "$REPO_ROOT/.cache/go-build" \
-  "$REPO_ROOT/.cache/go-mod" \
-  "$REPO_ROOT/.cache/pip"
+  "$REPO_ROOT/.cache/go-mod"
 
 ensure_image
 
@@ -106,27 +101,18 @@ docker run --rm --platform "$PLATFORM" \
   -e HOME=/tmp/gbash-home \
   -e GOCACHE=/workspace/.cache/go-build \
   -e GOMODCACHE=/workspace/.cache/go-mod \
-  -e PIP_CACHE_DIR=/workspace/.cache/pip \
   -e GNU_CACHE_DIR="/workspace/$CACHE_DIR_REL" \
-  -e GNU_GBASH_BIN="/workspace/$CACHE_DIR_REL/bin/gbash" \
   -e GNU_RESULTS_DIR="/workspace/$RESULTS_DIR_REL" \
   -e GNU_UTILS="${GNU_UTILS:-}" \
   -e GNU_TESTS="${GNU_TESTS:-}" \
   -e GNU_KEEP_WORKDIR="${GNU_KEEP_WORKDIR:-}" \
-  -e GNU_FORCE_REBUILD="$GNU_FORCE_REBUILD" \
-  -e GNU_BUILD_CACHE_VERSION="$GNU_BUILD_CACHE_VERSION" \
-  -e GNU_BUILD_CACHE_TAG="$GNU_BUILD_CACHE_TAG" \
-  -e GNU_BUILD_CACHE_REPO="$GNU_BUILD_CACHE_REPO" \
   -v "$REPO_ROOT:/workspace" \
   -w /workspace \
   "$IMAGE_NAME" \
   bash -lc '
     set -euo pipefail
-    mkdir -p "$HOME" "$GOCACHE" "$GOMODCACHE" "$PIP_CACHE_DIR" "$GNU_RESULTS_DIR"
-    make gnu-test
-    if [ -f "$GNU_RESULTS_DIR/summary.json" ]; then
-      go run ./scripts/compat-report --summary "$GNU_RESULTS_DIR/summary.json" --output "$GNU_RESULTS_DIR"
-    fi
+    mkdir -p "$HOME" "$GOCACHE" "$GOMODCACHE"
+    ./scripts/gnu-test.sh
   '
 
 echo "report: $RESULTS_DIR_HOST/index.html"
