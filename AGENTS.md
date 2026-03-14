@@ -11,6 +11,8 @@ go build ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./con
 go test ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 ```
 
+Before submitting or updating a PR, run `make lint` from the repo root and fix any reported issues.
+
 ## Key Project Rules
 - Unknown commands must never fall through to the host OS.
 - Match the registry pattern in `commands/` when adding new built-in commands.
@@ -33,4 +35,4 @@ Read the relevant `SPEC.md` sections before editing code, and update them once t
 - **upstream-diff** — Diff against upstream [vercel-labs/just-bash](https://github.com/vercel-labs/just-bash) to find missing commands/flags. Located at `.claude/skills/upstream-diff/`.
 
 ## Commits & PRs
-Use short, imperative subjects scoped to one change (e.g., `runtime: normalize command-not-found errors`). PRs should explain user-visible behavior, note any SPEC updates, and include trace/CLI output when changing execution behavior.
+Use short, imperative subjects scoped to one change (e.g., `runtime: normalize command-not-found errors`). PRs should explain user-visible behavior, note any SPEC updates, include trace/CLI output when changing execution behavior, and only be submitted after a clean local `make lint`.

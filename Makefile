@@ -27,7 +27,7 @@ GNU_CACHE_DIR ?= .cache/gnu
 GNU_RESULTS_DIR ?=
 COMPAT_DOCKER_IMAGE ?= gbash-compat-local
 COMPAT_DOCKER_BASE_IMAGE ?= ghcr.io/ewhauser/gbash-compat:latest
-COMPAT_DOCKER_PLATFORM ?= linux/amd64
+COMPAT_DOCKER_PLATFORM ?=
 COMPAT_DOCKER_PULL ?= always
 
 FUZZ_SMOKE_SHARD_CORE := \

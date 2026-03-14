@@ -6,7 +6,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 IMAGE_NAME=${COMPAT_DOCKER_IMAGE:-gbash-compat-local}
 BASE_IMAGE=${COMPAT_DOCKER_BASE_IMAGE:-}
-PLATFORM=${COMPAT_DOCKER_PLATFORM:-linux/amd64}
+PLATFORM=${COMPAT_DOCKER_PLATFORM:-}
 PULL_MODE=${COMPAT_DOCKER_PULL:-0}
 GNU_CACHE_DIR=${GNU_CACHE_DIR:-.cache/gnu}
 GNU_RESULTS_DIR=${GNU_RESULTS_DIR:-.cache/gnu/results/docker-latest}
@@ -35,7 +35,7 @@ ensure_image() {
   if [[ -n "$BASE_IMAGE" ]]; then
     case "$PULL_MODE" in
       1|true|TRUE|always)
-        docker pull --platform "$PLATFORM" "$BASE_IMAGE" >/dev/null 2>&1 || true
+        docker pull ${PLATFORM:+--platform "$PLATFORM"} "$BASE_IMAGE" >/dev/null 2>&1 || true
         if docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
           if [[ "$BASE_IMAGE" != "$IMAGE_NAME" ]]; then
             docker tag "$BASE_IMAGE" "$IMAGE_NAME"
@@ -47,7 +47,7 @@ ensure_image() {
   fi
   case "$PULL_MODE" in
     1|true|TRUE|always)
-      if docker pull --platform "$PLATFORM" "$IMAGE_NAME" >/dev/null 2>&1; then
+      if docker pull ${PLATFORM:+--platform "$PLATFORM"} "$IMAGE_NAME" >/dev/null 2>&1; then
         return
       fi
       ;;
@@ -59,7 +59,7 @@ ensure_image() {
     case "$PULL_MODE" in
       1|true|TRUE|always|missing)
         if [[ "$PULL_MODE" == "missing" ]] && ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
-          docker pull --platform "$PLATFORM" "$BASE_IMAGE" || true
+          docker pull ${PLATFORM:+--platform "$PLATFORM"} "$BASE_IMAGE" || true
         fi
         if docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
           if [[ "$BASE_IMAGE" != "$IMAGE_NAME" ]]; then
@@ -72,7 +72,7 @@ ensure_image() {
   fi
   case "$PULL_MODE" in
     1|true|TRUE|always|missing)
-      if docker pull --platform "$PLATFORM" "$IMAGE_NAME"; then
+      if docker pull ${PLATFORM:+--platform "$PLATFORM"} "$IMAGE_NAME"; then
         return
       fi
       ;;
@@ -96,7 +96,7 @@ mkdir -p \
 
 ensure_image
 
-docker run --rm --platform "$PLATFORM" \
+docker run --rm ${PLATFORM:+--platform "$PLATFORM"} \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp/gbash-home \
   -e GOCACHE=/workspace/.cache/go-build \

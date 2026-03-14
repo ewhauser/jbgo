@@ -200,7 +200,7 @@ You can also force interactive mode explicitly:
 printf 'pwd\ncd /tmp\npwd\nexit\n' | gbash -i
 ```
 
-The interactive shell reuses one sandbox session and carries forward filesystem and environment state, but does not provide history, line editing, or job control.
+The interactive shell reuses one sandbox session and carries forward filesystem and environment state. It exposes a session-local `history` command, but it does not provide readline-style line editing or job control.
 
 For host-backed CLI runs, you can switch the filesystem mode explicitly:
 
@@ -335,9 +335,9 @@ The default registry includes commands for file ops, text processing, archival, 
 | Category | Commands |
 |---|---|
 | File and path | `basename` `cat` `chmod` `chown` `cp` `dircolors` `dirname` `du` `file` `find` `ln` `link` `ls` `dir` `mkdir` `mktemp` `mv` `readlink` `realpath` `rm` `rmdir` `stat` `touch` `tree` `truncate` `unlink` `vdir` |
-| Search and text | `base32` `base64` `basenc` `column` `comm` `csplit` `cut` `diff` `grep` `head` `join` `nl` `numfmt` `od` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `tac` `tail` `tee` `tr` `uniq` `wc` |
+| Search and text | `base32` `base64` `basenc` `column` `comm` `csplit` `cut` `diff` `egrep` `fgrep` `grep` `head` `join` `nl` `numfmt` `od` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `strings` `tac` `tail` `tee` `tr` `uniq` `wc` |
 | Archive | `gzip` `gunzip` `tar` `zcat` |
-| Environment and execution | `arch` `b2sum` `bash` `cksum` `date` `echo` `env` `expr` `factor` `false` `help` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha224sum` `sha256sum` `sha384sum` `sha512sum` `sleep` `sum` `test` `timeout` `true` `tsort` `tty` `uname` `uptime` `which` `who` `whoami` `xargs` `yes` |
+| Environment and execution | `arch` `b2sum` `bash` `cksum` `clear` `date` `echo` `env` `expr` `factor` `false` `help` `history` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha224sum` `sha256sum` `sha384sum` `sha512sum` `sleep` `sum` `test` `timeout` `true` `tsort` `tty` `uname` `uptime` `which` `who` `whoami` `xargs` `yes` |
 | Network (when configured) | `curl` |
 | Extras* | `awk` `html-to-markdown` `jq` `sqlite3` `yq` |
 
@@ -382,7 +382,7 @@ The runtime supports a practical shell subset for agent workflows, including:
 - virtual `cd` and `pwd` behavior against the sandbox filesystem
 - nested `bash` and `sh` execution inside the same sandbox session
 
-It is intentionally not a full Bash reimplementation. It does not aim to provide full GNU Bash compatibility, readline-style UX, shell history, job control, or host TTY emulation.
+It is intentionally not a full Bash reimplementation. It does not aim to provide full GNU Bash compatibility, readline-style UX, history navigation/editing, job control, or host TTY emulation.
 
 ## Default Sandbox Layout
 

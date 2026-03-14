@@ -6,7 +6,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 IMAGE_NAME=${COMPAT_DOCKER_IMAGE:-gbash-compat-local}
 BASE_IMAGE=${COMPAT_DOCKER_BASE_IMAGE:-}
-PLATFORM=${COMPAT_DOCKER_PLATFORM:-linux/amd64}
+PLATFORM=${COMPAT_DOCKER_PLATFORM:-}
 PULL_MODE=${COMPAT_DOCKER_PULL:-0}
 GO_VERSION=${COMPAT_DOCKER_GO_VERSION:-$(awk '/^go / { print $2; exit }' "$REPO_ROOT/go.mod")}
 
@@ -17,11 +17,11 @@ sync_from_base_image() {
 
   case "$PULL_MODE" in
     1|true|TRUE|always)
-      docker pull --platform "$PLATFORM" "$BASE_IMAGE" || true
+      docker pull ${PLATFORM:+--platform "$PLATFORM"} "$BASE_IMAGE" || true
       ;;
     missing)
       if ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
-        docker pull --platform "$PLATFORM" "$BASE_IMAGE" || return 1
+        docker pull ${PLATFORM:+--platform "$PLATFORM"} "$BASE_IMAGE" || return 1
       fi
       ;;
     0|false|FALSE|"")
@@ -43,8 +43,13 @@ if sync_from_base_image; then
   exit 0
 fi
 
+platform_args=()
+if [[ -n "$PLATFORM" ]]; then
+  platform_args=(--platform "$PLATFORM")
+fi
+
 exec docker build \
-  --platform "$PLATFORM" \
+  "${platform_args[@]}" \
   --build-arg "GO_VERSION=$GO_VERSION" \
   -t "$IMAGE_NAME" \
   -f "$REPO_ROOT/docker/compat/Dockerfile" \

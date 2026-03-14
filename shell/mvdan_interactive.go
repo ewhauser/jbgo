@@ -74,6 +74,7 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 		if err != nil {
 			return &InteractiveResult{ExitCode: exitCode}, err
 		}
+		script = withInteractiveHistory(runner, script)
 		file, err := m.parseUserProgram(exec.Name, script)
 		if err != nil {
 			return &InteractiveResult{ExitCode: exitCode}, err
