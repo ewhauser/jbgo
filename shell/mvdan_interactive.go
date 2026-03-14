@@ -93,9 +93,6 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 		if err := instrumentLoopBudgets(file, exec.Policy); err != nil {
 			return &InteractiveResult{ExitCode: exitCode}, err
 		}
-		if err := interp.StdIO(input, exec.Stdout, exec.Stderr)(runner); err != nil {
-			return &InteractiveResult{ExitCode: exitCode}, err
-		}
 		runErr := runner.Run(ctx, file)
 		exitCode = ExitCode(runErr)
 		if runner.Exited() {
