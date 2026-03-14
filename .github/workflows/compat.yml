@@ -18,14 +18,6 @@ concurrency:
 jobs:
   compat:
     runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-compat:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      GNU_BUILD_CACHE_VERSION: v3
-      GNU_BUILD_CACHE_TAG: gnu-build-cache-v3
     outputs:
       exit_code: ${{ steps.run-compat.outputs.exit_code }}
       publishable: ${{ steps.publish-state.outputs.publishable }}
@@ -33,64 +25,29 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Compute GNU build cache key
-        id: gnu-build-cache-key
-        run: echo "key=$(./scripts/gnu-build-cache.sh cache-key)" >> "$GITHUB_OUTPUT"
-
-      - name: Compute prepared GNU build archive path
-        id: gnu-build-cache-path
-        run: echo "path=$(./scripts/gnu-build-cache.sh archive-path)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore prepared GNU build archive cache
-        id: restore-gnu-build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: .cache/gnu/prebuilt
-          key: ${{ steps.gnu-build-cache-key.outputs.key }}
-
-      - name: Ensure prepared GNU build archive exists
-        env:
-          GNU_ARCHIVE_PATH: ${{ steps.gnu-build-cache-path.outputs.path }}
-        run: |
-          set -euo pipefail
-
-          if [ -s "$GNU_ARCHIVE_PATH" ]; then
-            echo "Using cached prepared GNU build archive at $GNU_ARCHIVE_PATH"
-            exit 0
-          fi
-
-          mkdir -p "$(dirname "$GNU_ARCHIVE_PATH")"
-          go run ./cmd/gbash-gnu --cache-dir .cache/gnu --write-prepared-build-archive "$GNU_ARCHIVE_PATH"
-
-      - name: Save prepared GNU build archive cache
-        if: steps.restore-gnu-build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: .cache/gnu/prebuilt
-          key: ${{ steps.gnu-build-cache-key.outputs.key }}
-
       - uses: actions/configure-pages@v5
 
       - name: Run GNU compatibility harness
         id: run-compat
         env:
-          GNU_RESULTS_DIR: ${{ runner.temp }}/compat-pages/compat/latest
+          RESULTS_DIR: .cache/gnu/results/ci-latest
         run: |
           set +e
-          mkdir -p "$GNU_RESULTS_DIR"
-          GNU_RESULTS_DIR="$GNU_RESULTS_DIR" make gnu-test
-          status=$?
-          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          rm -rf "$RESULTS_DIR"
+          mkdir -p "$RESULTS_DIR"
+          GNU_RESULTS_DIR="$RESULTS_DIR" make gnu-test
+          rc=$?
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Render compat report assets
         if: always()
         env:
-          GNU_RESULTS_DIR: ${{ runner.temp }}/compat-pages/compat/latest
+          RESULTS_DIR: .cache/gnu/results/ci-latest
         run: |
           set +e
-          if [ -f "$GNU_RESULTS_DIR/summary.json" ]; then
-            go run ./scripts/compat-report --summary "$GNU_RESULTS_DIR/summary.json" --output "$GNU_RESULTS_DIR"
+          if [ -f "$RESULTS_DIR/summary.json" ]; then
+            go run ./scripts/compat-report --summary "$RESULTS_DIR/summary.json" --output "$RESULTS_DIR"
           fi
           exit 0
 
@@ -98,26 +55,33 @@ jobs:
         id: publish-state
         if: always()
         env:
+          RESULTS_DIR: .cache/gnu/results/ci-latest
           PAGES_ROOT: ${{ runner.temp }}/compat-pages
-          GNU_RESULTS_DIR: ${{ runner.temp }}/compat-pages/compat/latest
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REF_NAME: ${{ github.ref_name }}
+        shell: bash
         run: |
           set -euo pipefail
+          bundle_dir="$PAGES_ROOT/compat/latest"
 
-          if [ -f "$GNU_RESULTS_DIR/summary.json" ] && { [ ! -f "$GNU_RESULTS_DIR/index.html" ] || [ ! -f "$GNU_RESULTS_DIR/badge.svg" ]; }; then
+          rm -rf "$bundle_dir"
+          mkdir -p "$bundle_dir"
+
+          if [ -f "$RESULTS_DIR/summary.json" ] && { [ ! -f "$RESULTS_DIR/index.html" ] || [ ! -f "$RESULTS_DIR/badge.svg" ]; }; then
             set +e
-            go run ./scripts/compat-report --summary "$GNU_RESULTS_DIR/summary.json" --output "$GNU_RESULTS_DIR"
+            go run ./scripts/compat-report --summary "$RESULTS_DIR/summary.json" --output "$RESULTS_DIR"
             set -e
           fi
 
-          if [ -f "$GNU_RESULTS_DIR/summary.json" ] && [ -f "$GNU_RESULTS_DIR/index.html" ] && [ -f "$GNU_RESULTS_DIR/badge.svg" ]; then
+          if [ -f "$RESULTS_DIR/summary.json" ] && [ -f "$RESULTS_DIR/index.html" ] && [ -f "$RESULTS_DIR/badge.svg" ]; then
+            cp -a "$RESULTS_DIR"/. "$bundle_dir"/
             echo "publishable=true" >> "$GITHUB_OUTPUT"
           else
+            rm -rf "$bundle_dir"
             echo "publishable=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ -f "$GNU_RESULTS_DIR/summary.json" ] && [ -f "$GNU_RESULTS_DIR/index.html" ] && [ -f "$GNU_RESULTS_DIR/badge.svg" ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
+          if [ -f "$bundle_dir/summary.json" ] && [ -f "$bundle_dir/index.html" ] && [ -f "$bundle_dir/badge.svg" ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
             mkdir -p "$PAGES_ROOT"
             cat > "$PAGES_ROOT/index.html" <<'EOF'
           <!DOCTYPE html>
@@ -166,7 +130,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: compat-results-${{ github.run_id }}
-          path: ${{ runner.temp }}/compat-pages/compat/latest
+          path: .cache/gnu/results/ci-latest
           retention-days: 30
 
       - name: Upload Pages artifact
