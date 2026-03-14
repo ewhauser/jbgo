@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "packageRules": [
+    {
+      "description": "Internal Go modules are released together from this repository.",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": [
+        "github.com/ewhauser/gbash",
+        "github.com/ewhauser/gbash/contrib/awk",
+        "github.com/ewhauser/gbash/contrib/extras",
+        "github.com/ewhauser/gbash/contrib/jq",
+        "github.com/ewhauser/gbash/contrib/nodejs",
+        "github.com/ewhauser/gbash/contrib/sqlite3",
+        "github.com/ewhauser/gbash/contrib/yq",
+        "github.com/ewhauser/gbash/examples"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The workspace package is versioned by this repository's release flow.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@ewhauser/gbash-wasm"],
+      "enabled": false
+    },
+    {
+      "description": "Keep GitHub Action updates together so digest refreshes stay readable.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    }
+  ]
+}
