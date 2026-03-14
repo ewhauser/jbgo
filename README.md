@@ -13,6 +13,7 @@ Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with pr
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
+  - [Go API](#go-api)
   - [Persistent Sessions](#persistent-sessions)
   - [CLI](#cli)
 - [Configuration](#configuration)
@@ -57,6 +58,25 @@ Prebuilt archives are also available on the [GitHub Releases page](https://githu
 
 ## Quick Start
 
+Try it with `go run` — no install required:
+
+```bash
+go run github.com/ewhauser/gbash/cmd/gbash@latest -c 'echo hello; pwd; ls /tmp'
+```
+
+```text
+hello
+/home/agent
+```
+
+Everything runs inside a virtual filesystem — nothing touches your host.
+
+## Usage
+
+### Go API
+
+Use `gbash.New` to configure a runtime and `Runtime.Run` for one-shot execution.
+
 ```go
 package main
 
@@ -90,8 +110,6 @@ exit=0
 hello
 /home/agent
 ```
-
-## Usage
 
 ### Persistent Sessions
 
