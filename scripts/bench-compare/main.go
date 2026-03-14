@@ -13,7 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -93,7 +93,7 @@ type scenarioConfig struct {
 
 type runtimeConfig struct {
 	Name    string
-	Command func(context.Context, scenarioConfig) *exec.Cmd
+	Command func(context.Context, *scenarioConfig) *exec.Cmd
 }
 
 type commandResult struct {
@@ -126,7 +126,11 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			_, _ = fmt.Fprintf(stderr, "bench-compare: remove temp dir: %v\n", err)
+		}
+	}()
 
 	helperPath := filepath.Join(tmpDir, executableName("gbash-runner"))
 	if err := buildGbashRunner(ctx, repoRoot, helperPath); err != nil {
@@ -168,7 +172,8 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		Runs:         opts.Runs,
 		JustBashSpec: opts.JustBashSpec,
 	}
-	for _, scenario := range scenarios {
+	for i := range scenarios {
+		scenario := &scenarios[i]
 		scenarioReport := scenarioReport{
 			Name:           scenario.Name,
 			Description:    scenario.Description,
@@ -272,7 +277,7 @@ func primeJustBash(ctx context.Context, spec string) error {
 func gbashRuntime(helperPath string) runtimeConfig {
 	return runtimeConfig{
 		Name: "gbash",
-		Command: func(ctx context.Context, scenario scenarioConfig) *exec.Cmd {
+		Command: func(ctx context.Context, scenario *scenarioConfig) *exec.Cmd {
 			args := make([]string, 0, 6)
 			if scenario.Workspace && scenario.Fixture != nil {
 				args = append(args, "--workspace", scenario.Fixture.Root, "--cwd", gbash.DefaultWorkspaceMountPoint)
@@ -286,7 +291,7 @@ func gbashRuntime(helperPath string) runtimeConfig {
 func justBashRuntime(spec string) runtimeConfig {
 	return runtimeConfig{
 		Name: "just-bash",
-		Command: func(ctx context.Context, scenario scenarioConfig) *exec.Cmd {
+		Command: func(ctx context.Context, scenario *scenarioConfig) *exec.Cmd {
 			args := []string{"--yes", spec}
 			if scenario.Workspace && scenario.Fixture != nil {
 				args = append(args, "--root", scenario.Fixture.Root, "--cwd", justBashWorkspace)
@@ -333,13 +338,13 @@ func createWorkspaceFixture(root string) (fixtureSummary, error) {
 	return summary, nil
 }
 
-func runTrials(ctx context.Context, runtime runtimeConfig, scenario scenarioConfig, runs int) runtimeReport {
+func runTrials(ctx context.Context, runtime runtimeConfig, scenario *scenarioConfig, runs int) runtimeReport {
 	report := runtimeReport{
 		Name:   runtime.Name,
 		Trials: make([]trialResult, 0, runs),
 	}
 	successDurations := make([]time.Duration, 0, runs)
-	for i := 0; i < runs; i++ {
+	for i := range runs {
 		result := runCommand(ctx, runtime.Command, scenario)
 		trial := trialResult{
 			Index:         i + 1,
@@ -371,7 +376,7 @@ func runTrials(ctx context.Context, runtime runtimeConfig, scenario scenarioConf
 	return report
 }
 
-func runCommand(ctx context.Context, build func(context.Context, scenarioConfig) *exec.Cmd, scenario scenarioConfig) commandResult {
+func runCommand(ctx context.Context, build func(context.Context, *scenarioConfig) *exec.Cmd, scenario *scenarioConfig) commandResult {
 	trialCtx, cancel := context.WithTimeout(ctx, trialTimeout)
 	defer cancel()
 
@@ -427,7 +432,7 @@ func summarizeDurations(durations []time.Duration) (latencyStats, bool) {
 
 	values := make([]time.Duration, len(durations))
 	copy(values, durations)
-	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	slices.Sort(values)
 
 	stats := latencyStats{
 		MinNanos: values[0].Nanoseconds(),
