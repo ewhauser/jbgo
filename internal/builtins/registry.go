@@ -55,6 +55,7 @@ func DefaultRegistry() *commands.Registry {
 		NewHistory(),
 		NewTimeout(),
 		NewXArgs(),
+		NewXan(),
 		NewYes(),
 		NewBash(),
 		NewSh(),

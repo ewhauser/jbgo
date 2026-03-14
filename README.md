@@ -335,7 +335,7 @@ The default registry includes commands for file ops, text processing, archival, 
 | Category | Commands |
 |---|---|
 | File and path | `basename` `cat` `chmod` `chown` `cp` `dircolors` `dirname` `du` `file` `find` `ln` `link` `ls` `dir` `mkdir` `mktemp` `mv` `readlink` `realpath` `rm` `rmdir` `stat` `touch` `tree` `truncate` `unlink` `vdir` |
-| Search and text | `base32` `base64` `basenc` `column` `comm` `csplit` `cut` `diff` `egrep` `fgrep` `grep` `head` `join` `nl` `numfmt` `od` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `strings` `tac` `tail` `tee` `tr` `uniq` `wc` |
+| Search and text | `base32` `base64` `basenc` `column` `comm` `csplit` `cut` `diff` `egrep` `fgrep` `grep` `head` `join` `nl` `numfmt` `od` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `strings` `tac` `tail` `tee` `tr` `uniq` `wc` `xan` |
 | Archive | `gzip` `gunzip` `tar` `zcat` |
 | Environment and execution | `arch` `b2sum` `bash` `cksum` `clear` `date` `echo` `env` `expr` `factor` `false` `help` `history` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha224sum` `sha256sum` `sha384sum` `sha512sum` `sleep` `sum` `test` `timeout` `true` `tsort` `tty` `uname` `uptime` `which` `who` `whoami` `xargs` `yes` |
 | Network (when configured) | `curl` |
