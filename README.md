@@ -210,7 +210,7 @@ gbash --root /path/to/project --cwd /home/agent/project -c 'pwd; ls'
 
 `--root` mounts a host directory read-only at `/home/agent/project` under an in-memory writable overlay. `--cwd` sets the initial sandbox working directory.
 
-Install `gbash-extras` when you want the same CLI surface with the stable official contrib commands (`awk`, `jq`, `sqlite3`, and `yq`) pre-registered:
+Install `gbash-extras` when you want the same CLI surface with the stable official contrib commands (`awk`, `html-to-markdown`, `jq`, `sqlite3`, and `yq`) pre-registered:
 
 ```bash
 gbash-extras -c 'jq -r .name data.json'
@@ -339,7 +339,7 @@ The default registry includes commands for file ops, text processing, archival, 
 | Archive | `gzip` `gunzip` `tar` `zcat` |
 | Environment and execution | `arch` `b2sum` `bash` `cksum` `date` `echo` `env` `expr` `factor` `false` `help` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha224sum` `sha256sum` `sha384sum` `sha512sum` `sleep` `sum` `test` `timeout` `true` `tsort` `tty` `uname` `uptime` `which` `who` `whoami` `xargs` `yes` |
 | Network (when configured) | `curl` |
-| Extras* | `awk` `jq` `sqlite3` `yq` |
+| Extras* | `awk` `html-to-markdown` `jq` `sqlite3` `yq` |
 
 \* Use `gbash-extras` for extras commands.
 
@@ -352,6 +352,7 @@ Optional commands live in [`contrib/`](./contrib/) as separate Go modules so the
 | Command | Module | Backed by |
 |---|---|---|
 | [`awk`](./contrib/awk/) | `github.com/ewhauser/gbash/contrib/awk` | [`benhoyt/goawk`](https://github.com/benhoyt/goawk) |
+| [`html-to-markdown`](./contrib/htmltomarkdown/) | `github.com/ewhauser/gbash/contrib/htmltomarkdown` | [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) |
 | [`jq`](./contrib/jq/) | `github.com/ewhauser/gbash/contrib/jq` | [`itchyny/gojq`](https://github.com/itchyny/gojq) |
 | [`sqlite3`](./contrib/sqlite3/) | `github.com/ewhauser/gbash/contrib/sqlite3` | [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) |
 | [`yq`](./contrib/yq/) | `github.com/ewhauser/gbash/contrib/yq` | [`mikefarah/yq`](https://github.com/mikefarah/yq) |

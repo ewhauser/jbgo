@@ -7,7 +7,7 @@ This page covers the repository structure, build process, and release workflow. 
 The repo is a committed Go workspace plus a pnpm workspace.
 
 - **Root module** (`./`) -- public `gbash` package, CLI (`cmd/gbash/`), internal runtime, and core commands
-- **`contrib/`** -- optional modules (`awk`, `jq`, `sqlite3`, `yq`, `extras`, `nodejs`) kept separate to avoid pulling optional dependencies into the core import graph
+- **`contrib/`** -- optional modules (`awk`, `htmltomarkdown`, `jq`, `sqlite3`, `yq`, `extras`, `nodejs`) kept separate to avoid pulling optional dependencies into the core import graph
 - **`examples/`** -- standalone example projects (separate Go module)
 - **`packages/`** -- publishable JavaScript packages, including `@ewhauser/gbash-wasm`
 - **`website/`** -- documentation site
@@ -40,12 +40,12 @@ npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile
 
 ## Module versioning
 
-The repo uses `go.work` for local development with 8 modules (root + 7 children):
+The repo uses `go.work` for local development with 9 modules (root + 8 children):
 
 ```
-.                  contrib/awk     contrib/extras
-contrib/jq         contrib/nodejs  contrib/sqlite3
-contrib/yq         examples
+.                        contrib/awk              contrib/extras
+contrib/htmltomarkdown   contrib/jq               contrib/nodejs
+contrib/sqlite3          contrib/yq               examples
 ```
 
 Published versions are coordinated. The root module uses plain tags (`v0.0.10`); contrib modules use nested-module tags (`contrib/jq/v0.0.10`). Child modules maintain real version requirements in `go.mod` plus local `replace` directives for development.

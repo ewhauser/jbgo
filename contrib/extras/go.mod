@@ -5,12 +5,15 @@ go 1.26.1
 require (
 	github.com/ewhauser/gbash v0.0.11
 	github.com/ewhauser/gbash/contrib/awk v0.0.11
+	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.11
 	github.com/ewhauser/gbash/contrib/jq v0.0.11
 	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.11
 	github.com/ewhauser/gbash/contrib/yq v0.0.11
 )
 
 require (
+	github.com/JohannesKaufmann/dom v0.2.0 // indirect
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0 // indirect
 	github.com/a8m/envsubst v1.4.3 // indirect
 	github.com/agext/levenshtein v1.2.1 // indirect
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
@@ -54,6 +57,8 @@ require (
 replace github.com/ewhauser/gbash => ../..
 
 replace github.com/ewhauser/gbash/contrib/awk => ../awk
+
+replace github.com/ewhauser/gbash/contrib/htmltomarkdown => ../htmltomarkdown
 
 replace github.com/ewhauser/gbash/contrib/jq => ../jq
 

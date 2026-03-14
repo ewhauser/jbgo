@@ -62,6 +62,7 @@ func TestCLIRegistersStableExtras(t *testing.T) {
 	var stderr strings.Builder
 
 	exitCode, err := runCLI(context.Background(), "gbash-extras", []string{"-c", "printf 'a,b\\n' | awk -F, '{print $2}'\n" +
+		"printf '<h1>docs</h1>' | html-to-markdown\n" +
 		"printf '{\"name\":\"alice\"}\\n' | jq -r '.name'\n" +
 		"printf 'name: alice\\n' | yq '.name'\n" +
 		`sqlite3 :memory: "select 1;"`}, strings.NewReader(""), &stdout, &stderr, false)
@@ -71,7 +72,7 @@ func TestCLIRegistersStableExtras(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
-	if got, want := stdout.String(), "b\nalice\nalice\n1\n"; got != want {
+	if got, want := stdout.String(), "b\n# docs\nalice\nalice\n1\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {

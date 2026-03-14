@@ -7,6 +7,7 @@ import (
 	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/commands"
 	contribawk "github.com/ewhauser/gbash/contrib/awk"
+	contribhtmltomarkdown "github.com/ewhauser/gbash/contrib/htmltomarkdown"
 	contribjq "github.com/ewhauser/gbash/contrib/jq"
 	contribsqlite3 "github.com/ewhauser/gbash/contrib/sqlite3"
 	contribyq "github.com/ewhauser/gbash/contrib/yq"
@@ -27,6 +28,9 @@ func Register(registry commands.CommandRegistry) error {
 		return nil
 	}
 	if err := contribawk.Register(registry); err != nil {
+		return err
+	}
+	if err := contribhtmltomarkdown.Register(registry); err != nil {
 		return err
 	}
 	if err := contribjq.Register(registry); err != nil {
