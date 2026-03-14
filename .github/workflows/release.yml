@@ -43,8 +43,6 @@ jobs:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
@@ -60,9 +58,11 @@ jobs:
             && [[ "${PR_BASE_REF}" == "main" ]] \
             && [[ "${PR_HEAD_REPO}" == "${REPOSITORY}" ]] \
             && [[ "${PR_HEAD_REF}" == release/v* ]] \
-            && [[ ",${PR_LABELS}," == *",release,"* ]] \
-            && [[ "${PR_AUTHOR}" == "github-actions[bot]" ]] \
             && [[ -n "${PR_MERGE_SHA}" ]]; then
+            # Trust merged in-repo release branches whether the PR was opened by
+            # automation or manually. The publish job still re-verifies that the
+            # merge commit is synchronized for the requested version before it
+            # creates any tags or releases.
             should_publish=true
             version="${PR_HEAD_REF#release/}"
             ref="${PR_MERGE_SHA}"

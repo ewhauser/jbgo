@@ -22,6 +22,8 @@ The supported release path is GitHub Actions driven:
 
 `Prepare Release` derives the next release line by taking the latest root `v*` tag and incrementing the patch number.
 
+If repository settings block GitHub Actions from creating pull requests, `Prepare Release` may still push the `release/vX.Y.Z` branch even though the workflow fails at the final PR-creation step. In that case, open the PR manually from the pushed release branch. `Publish Release` keys off the merged `release/vX.Y.Z` branch name, so the release will still publish automatically after merge.
+
 `make tag-release RELEASE_VERSION=vX.Y.Z` remains available as a local fallback for debugging or manual recovery, but it is no longer the primary release path.
 
 ## Benchmarks
