@@ -728,6 +728,14 @@ func mustFuzzCommandMetadata(tb testing.TB) []fuzzCommandMetadata {
 			fuzzVariant("", "path.remove", "-f", "{path.remove}"),
 			fuzzVariant("", "flag:r", "-r", "-f", "{path.rmdir}"),
 		),
+		fuzzSpec("xan", "text",
+			fuzzVariant("", "csv:count", "count", "{path.csv}"),
+			fuzzVariant("", "csv:headers", "headers", "{path.csv}"),
+			fuzzVariant("", "csv:select", "select", "name", "{path.csv}"),
+			fuzzVariant("", "csv:filter", "filter", "value > 0", "{path.csv}"),
+			fuzzVariant("", "flag:seed", "sample", "--seed", "1", "1", "{path.csv}"),
+			fuzzVariant("", "csv:to-json", "to", "json", "{path.csv}"),
+		),
 	}
 
 	seen := make(map[string]struct{}, len(specs))

@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -32,8 +33,8 @@ func (r *rgTypeRegistry) AddType(spec string) {
 		return
 	}
 	current := r.types[name]
-	if strings.HasPrefix(pattern, "include:") {
-		other := r.types[strings.TrimPrefix(pattern, "include:")]
+	if otherName, ok := strings.CutPrefix(pattern, "include:"); ok {
+		other := r.types[otherName]
 		current.extensions = appendUniqueStrings(current.extensions, other.extensions...)
 		current.globs = appendUniqueStrings(current.globs, other.globs...)
 		r.types[name] = current
@@ -112,14 +113,7 @@ func formatRGTypeList() string {
 
 func appendUniqueStrings(dst []string, values ...string) []string {
 	for _, value := range values {
-		found := false
-		for _, existing := range dst {
-			if existing == value {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(dst, value) {
 			dst = append(dst, value)
 		}
 	}

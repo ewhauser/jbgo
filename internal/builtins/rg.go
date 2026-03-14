@@ -178,7 +178,7 @@ func (c *RG) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		return rgWriteTypeList(inv)
 	}
 
-	patterns, err := rgLoadPatterns(ctx, inv, opts)
+	patterns, err := rgLoadPatterns(ctx, inv, &opts)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (c *RG) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		return exitf(inv, 2, "rg: no pattern given")
 	}
 
-	re, err := rgCompilePattern(patterns, opts)
+	re, err := rgCompilePattern(patterns, &opts)
 	if err != nil {
 		return exitf(inv, 2, "rg: invalid regex: %v", err)
 	}
@@ -208,10 +208,10 @@ func (c *RG) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 
 	var ignoreMatcher *rgIgnoreMatcher
 	if !opts.noIgnore {
-		ignoreMatcher = newRGIgnoreMatcher(opts)
+		ignoreMatcher = newRGIgnoreMatcher(&opts)
 	}
 
-	collectResult, err := c.collectFiles(ctx, inv, roots, opts, ignoreMatcher, typeRegistry)
+	collectResult, err := c.collectFiles(ctx, inv, roots, &opts, ignoreMatcher, typeRegistry)
 	if err != nil {
 		return err
 	}
@@ -233,8 +233,8 @@ func (c *RG) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 
 	grepOpts := grepOptions{
 		pattern:           strings.Join(patterns, "\n"),
-		ignoreCase:        rgDetermineIgnoreCase(opts, patterns),
-		lineNumber:        rgEffectiveLineNumbers(opts, collectResult.singleExplicitFile, len(collectResult.files)),
+		ignoreCase:        rgDetermineIgnoreCase(&opts, patterns),
+		lineNumber:        rgEffectiveLineNumbers(&opts, collectResult.singleExplicitFile, len(collectResult.files)),
 		invert:            opts.invert,
 		count:             opts.count,
 		listFiles:         opts.listFiles,
@@ -466,7 +466,7 @@ func parseRGFlagInt(value string) (int, error) {
 	return number, nil
 }
 
-func rgLoadPatterns(ctx context.Context, inv *Invocation, opts rgOptions) ([]string, error) {
+func rgLoadPatterns(ctx context.Context, inv *Invocation, opts *rgOptions) ([]string, error) {
 	patterns := append([]string(nil), opts.patterns...)
 	for _, name := range opts.patternFiles {
 		var data []byte
@@ -489,7 +489,7 @@ func rgLoadPatterns(ctx context.Context, inv *Invocation, opts rgOptions) ([]str
 	return patterns, nil
 }
 
-func rgCompilePattern(patterns []string, opts rgOptions) (*regexp.Regexp, error) {
+func rgCompilePattern(patterns []string, opts *rgOptions) (*regexp.Regexp, error) {
 	ignoreCase := rgDetermineIgnoreCase(opts, patterns)
 	pattern := ""
 	switch {
@@ -515,7 +515,7 @@ func rgCompilePattern(patterns []string, opts rgOptions) (*regexp.Regexp, error)
 	})
 }
 
-func rgDetermineIgnoreCase(opts rgOptions, patterns []string) bool {
+func rgDetermineIgnoreCase(opts *rgOptions, patterns []string) bool {
 	switch opts.caseMode {
 	case rgCaseModeIgnore:
 		return true
@@ -533,21 +533,21 @@ func rgDetermineIgnoreCase(opts rgOptions, patterns []string) bool {
 	}
 }
 
-func rgEffectiveLineNumbers(opts rgOptions, singleExplicitFile bool, fileCount int) bool {
+func rgEffectiveLineNumbers(opts *rgOptions, singleExplicitFile bool, fileCount int) bool {
 	if opts.explicitLineNumbers {
 		return opts.lineNumber
 	}
 	if opts.onlyMatching {
 		return false
 	}
-	return !(singleExplicitFile && fileCount == 1)
+	return !singleExplicitFile || fileCount != 1
 }
 
 func rgLooksBinary(data []byte) bool {
 	return bytes.IndexByte(data, 0) >= 0
 }
 
-func (c *RG) collectFiles(ctx context.Context, inv *Invocation, roots []string, opts rgOptions, ignoreMatcher *rgIgnoreMatcher, typeRegistry *rgTypeRegistry) (rgCollectResult, error) {
+func (c *RG) collectFiles(ctx context.Context, inv *Invocation, roots []string, opts *rgOptions, ignoreMatcher *rgIgnoreMatcher, typeRegistry *rgTypeRegistry) (rgCollectResult, error) {
 	result := rgCollectResult{
 		files: make([]rgCollectedFile, 0),
 	}
@@ -578,7 +578,7 @@ func (c *RG) collectFiles(ctx context.Context, inv *Invocation, roots []string, 
 			continue
 		}
 		directoryCount++
-		if err := c.walkRoot(ctx, inv, rgWalkState{
+		if err := c.walkRoot(ctx, inv, &rgWalkState{
 			rootAbs:      abs,
 			prefix:       rgDisplayDirRoot(root),
 			depth:        0,
@@ -603,12 +603,12 @@ type rgWalkState struct {
 	rootAbs      string
 	prefix       string
 	depth        int
-	opts         rgOptions
+	opts         *rgOptions
 	ignore       *rgIgnoreMatcher
 	typeRegistry *rgTypeRegistry
 }
 
-func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state rgWalkState, files *[]rgCollectedFile) error {
+func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state *rgWalkState, files *[]rgCollectedFile) error {
 	if state.depth >= state.opts.maxDepth {
 		return nil
 	}
@@ -655,16 +655,16 @@ func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state rgWalkState, f
 		if state.ignore != nil && state.ignore.matches(childAbs, isDir) {
 			continue
 		}
-		if !state.opts.hidden && strings.HasPrefix(name, ".") && !(state.ignore != nil && state.ignore.whitelisted(childAbs, isDir)) {
+		if !state.opts.hidden && strings.HasPrefix(name, ".") && (state.ignore == nil || !state.ignore.whitelisted(childAbs, isDir)) {
 			continue
 		}
 
 		if isDir {
-			next := state
+			next := *state
 			next.rootAbs = childAbs
 			next.prefix = display
 			next.depth++
-			if err := c.walkRoot(ctx, inv, next, files); err != nil {
+			if err := c.walkRoot(ctx, inv, &next, files); err != nil {
 				return err
 			}
 			continue
@@ -677,7 +677,7 @@ func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state rgWalkState, f
 	return nil
 }
 
-func (c *RG) includeFile(display, abs string, opts rgOptions, ignoreMatcher *rgIgnoreMatcher, typeRegistry *rgTypeRegistry) bool {
+func (c *RG) includeFile(display, abs string, opts *rgOptions, ignoreMatcher *rgIgnoreMatcher, typeRegistry *rgTypeRegistry) bool {
 	if ignoreMatcher != nil && ignoreMatcher.matches(abs, false) {
 		return false
 	}
@@ -710,8 +710,8 @@ func rgMatchGlobSet(display, filename string, globs []string, ignoreCase bool) b
 		if trimmed == "" {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "!") {
-			negative = append(negative, strings.TrimPrefix(trimmed, "!"))
+		if negatedGlob, ok := strings.CutPrefix(trimmed, "!"); ok {
+			negative = append(negative, negatedGlob)
 			continue
 		}
 		positive = append(positive, trimmed)
@@ -721,11 +721,10 @@ func rgMatchGlobSet(display, filename string, globs []string, ignoreCase bool) b
 		matched := false
 		for _, glob := range positive {
 			ok, _ := rgMatchGlob(filename, glob, ignoreCase)
-			if !ok && !strings.HasPrefix(glob, "/") {
+			if rootedGlob, rooted := strings.CutPrefix(glob, "/"); rooted {
+				ok, _ = rgMatchGlob(display, rootedGlob, ignoreCase)
+			} else if !ok {
 				ok, _ = rgMatchGlob(display, glob, ignoreCase)
-			}
-			if strings.HasPrefix(glob, "/") {
-				ok, _ = rgMatchGlob(display, strings.TrimPrefix(glob, "/"), ignoreCase)
 			}
 			if ok {
 				matched = true
@@ -739,11 +738,10 @@ func rgMatchGlobSet(display, filename string, globs []string, ignoreCase bool) b
 
 	for _, glob := range negative {
 		ok, _ := rgMatchGlob(filename, glob, ignoreCase)
-		if !ok && !strings.HasPrefix(glob, "/") {
+		if rootedGlob, rooted := strings.CutPrefix(glob, "/"); rooted {
+			ok, _ = rgMatchGlob(display, rootedGlob, ignoreCase)
+		} else if !ok {
 			ok, _ = rgMatchGlob(display, glob, ignoreCase)
-		}
-		if strings.HasPrefix(glob, "/") {
-			ok, _ = rgMatchGlob(display, strings.TrimPrefix(glob, "/"), ignoreCase)
 		}
 		if ok {
 			return false
@@ -840,8 +838,8 @@ func rgRelativeToCwd(inv *Invocation, abs string) string {
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
-	if strings.HasPrefix(abs, prefix) {
-		return strings.TrimPrefix(abs, prefix)
+	if rel, ok := strings.CutPrefix(abs, prefix); ok {
+		return rel
 	}
 	return abs
 }

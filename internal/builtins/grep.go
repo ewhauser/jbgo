@@ -269,19 +269,6 @@ func compileGrepPattern(opts grepOptions) (*regexp.Regexp, error) {
 	return regexp.Compile(pattern)
 }
 
-func grepContent(inv *Invocation, re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions) (bool, error) {
-	result, err := grepSearchContent(re, data, name, showName, opts)
-	if err != nil {
-		return false, err
-	}
-	if result.output != "" {
-		if _, err := fmt.Fprint(inv.Stdout, result.output); err != nil {
-			return result.matched, &ExitError{Code: 1, Err: err}
-		}
-	}
-	return result.matched, nil
-}
-
 func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions) (grepSearchResult, error) {
 	if opts.count {
 		matchCount := 0
