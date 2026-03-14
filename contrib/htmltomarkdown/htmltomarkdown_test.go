@@ -111,26 +111,27 @@ func TestHTMLToMarkdownSupportsFormattingFlags(t *testing.T) {
 	t.Parallel()
 
 	result := mustExecHTMLToMarkdown(t, "printf '<h1>Title</h1>' | html-to-markdown --heading-style=setext\n"+
+		"printf '<h1>Another</h1>' | html-to-markdown --heading-style setext\n"+
 		"printf '<ul><li>Item</li></ul>' | html-to-markdown -b '*'\n"+
 		"printf '<pre><code>code</code></pre>' | html-to-markdown -c '~~~'\n"+
 		"printf '<hr>' | html-to-markdown -r '***'\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := "Title\n=====\n* Item\n~~~\ncode\n~~~\n***\n"
+	want := "Title\n=====\nAnother\n=======\n* Item\n~~~\ncode\n~~~\n***\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
-func TestHTMLToMarkdownStripsRemovedTags(t *testing.T) {
+func TestHTMLToMarkdownStripsScriptAndStyleTags(t *testing.T) {
 	t.Parallel()
 
 	result := mustExecHTMLToMarkdown(t, "printf '<p>Hello</p><script>alert(1);</script><style>.x { color: red; }</style><footer>Footer</footer><p>World</p>' | html-to-markdown\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "Hello\n\nWorld\n"; got != want {
+	if got, want := result.Stdout, "Hello\n\nFooter\n\nWorld\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -185,6 +186,22 @@ func TestHTMLToMarkdownMissingOptionValuesUseDefaults(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	want := "- Item\n```\ncode\n```\n---\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownMissingValuesDoNotConsumeFollowingFlags(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecHTMLToMarkdown(t, "printf '<ul><li>Item</li></ul><pre><code>code</code></pre>' | html-to-markdown -b --code=~~~\n"+
+		"printf '<pre><code>code</code></pre><hr>' | html-to-markdown -c --hr=***\n"+
+		"printf '<hr><h1>Title</h1>' | html-to-markdown -r --heading-style setext\n"+
+		"printf '<h1>Title</h1>' | html-to-markdown --heading-style setext\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	want := "- Item\n\n~~~\ncode\n~~~\n```\ncode\n```\n\n***\n---\n\nTitle\n=====\nTitle\n=====\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}

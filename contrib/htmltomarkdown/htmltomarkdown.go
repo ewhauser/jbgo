@@ -7,6 +7,7 @@ import (
 	"io"
 	stdfs "io/fs"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
@@ -110,7 +111,7 @@ func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, [
 		arg := args[i]
 		switch {
 		case arg == "-b" || arg == "--bullet":
-			if i+1 < len(args) {
+			if i+1 < len(args) && isHTMLToMarkdownBulletValue(args[i+1]) {
 				i++
 				opts.bullet = args[i]
 			} else {
@@ -119,7 +120,7 @@ func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, [
 		case strings.HasPrefix(arg, "--bullet="):
 			opts.bullet = strings.TrimPrefix(arg, "--bullet=")
 		case arg == "-c" || arg == "--code":
-			if i+1 < len(args) {
+			if i+1 < len(args) && isHTMLToMarkdownCodeFenceValue(args[i+1]) {
 				i++
 				opts.codeFence = args[i]
 			} else {
@@ -128,7 +129,7 @@ func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, [
 		case strings.HasPrefix(arg, "--code="):
 			opts.codeFence = strings.TrimPrefix(arg, "--code=")
 		case arg == "-r" || arg == "--hr":
-			if i+1 < len(args) {
+			if i+1 < len(args) && isHTMLToMarkdownHorizontalRuleValue(args[i+1]) {
 				i++
 				opts.horizontalRule = args[i]
 			} else {
@@ -136,6 +137,14 @@ func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, [
 			}
 		case strings.HasPrefix(arg, "--hr="):
 			opts.horizontalRule = strings.TrimPrefix(arg, "--hr=")
+		case arg == "--heading-style":
+			if i+1 < len(args) {
+				i++
+				style := args[i]
+				if style == "atx" || style == "setext" {
+					opts.headingStyle = style
+				}
+			}
 		case strings.HasPrefix(arg, "--heading-style="):
 			style := strings.TrimPrefix(arg, "--heading-style=")
 			if style == "atx" || style == "setext" {
@@ -152,6 +161,28 @@ func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, [
 		}
 	}
 	return opts, files, nil
+}
+
+func isHTMLToMarkdownBulletValue(value string) bool {
+	return value == "-" || value == "+" || value == "*"
+}
+
+func isHTMLToMarkdownCodeFenceValue(value string) bool {
+	return value == "```" || value == "~~~"
+}
+
+func isHTMLToMarkdownHorizontalRuleValue(value string) bool {
+	if utf8.RuneCountInString(value) < 3 {
+		return false
+	}
+	for _, ch := range value {
+		switch ch {
+		case '-', '_', '*':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func htmlToMarkdownUsageError(inv *commands.Invocation, format string, args ...any) error {
@@ -209,7 +240,6 @@ func convertHTMLToMarkdown(input string, opts htmlToMarkdownOptions) (string, er
 	)
 	conv.Register.TagType("script", converter.TagTypeRemove, converter.PriorityStandard)
 	conv.Register.TagType("style", converter.TagTypeRemove, converter.PriorityStandard)
-	conv.Register.TagType("footer", converter.TagTypeRemove, converter.PriorityStandard)
 
 	output, err := conv.ConvertString(input)
 	if err != nil {
