@@ -403,7 +403,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 
 		invocationArgs := append([]string(nil), resolved.args...)
 		invocationArgs = append(invocationArgs, args[1:]...)
-		err = commands.RunCommand(ctx, resolved.command, commands.NewInvocation(&commands.InvocationOptions{
+		invocation := commands.NewInvocation(&commands.InvocationOptions{
 			Args:       invocationArgs,
 			Env:        currentEnv,
 			Cwd:        virtualWD,
@@ -422,7 +422,11 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 				}
 				return exec.Registry.Names()
 			},
-		}))
+		})
+		err = commands.RunCommand(ctx, resolved.command, invocation)
+		if syncErr := syncCommandHistory(ctx, hc, currentEnv, invocation.Env); syncErr != nil {
+			return syncErr
+		}
 
 		if err == nil {
 			if !internal {

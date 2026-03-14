@@ -25,7 +25,10 @@ func DefaultRegistry() *commands.Registry {
 		NewDU(),
 		NewFile(),
 		NewFind(),
+		NewClear(),
 		NewGrep(),
+		NewEGrep(),
+		NewFGrep(),
 		NewRG(),
 		NewHead(),
 		NewTail(),
@@ -49,6 +52,7 @@ func DefaultRegistry() *commands.Registry {
 		NewWhoami(),
 		NewUptime(),
 		NewSleep(),
+		NewHistory(),
 		NewTimeout(),
 		NewXArgs(),
 		NewYes(),
@@ -120,6 +124,7 @@ func DefaultRegistry() *commands.Registry {
 		NewSHA256Sum(),
 		NewSHA384Sum(),
 		NewSHA512Sum(),
+		NewStrings(),
 		NewWho(),
 	}
 	return commands.NewRegistry(cmds...)

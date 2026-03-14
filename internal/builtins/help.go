@@ -30,6 +30,10 @@ var builtinHelp = map[string]helpTopic{
 		Synopsis: "help [-s] [pattern]",
 		Body:     "Display shell builtin help.",
 	},
+	"history": {
+		Synopsis: "history [-c] [n]",
+		Body:     "Display or clear the current shell history.",
+	},
 	"pwd": {
 		Synopsis: "pwd [-L|-P]",
 		Body:     "Print the current working directory, honoring logical and physical modes.",

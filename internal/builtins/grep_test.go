@@ -110,3 +110,22 @@ func TestGrepQuietNoMatchReturnsOneIsolated(t *testing.T) {
 		t.Fatalf("want quiet output, got stdout=%q stderr=%q", result.Stdout, result.Stderr)
 	}
 }
+
+func TestGrepAliasCommandsUseExtendedAndFixedModes(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'abc\\na.c\\n' > /tmp/input.txt\n" +
+			"egrep 'a.c' /tmp/input.txt\n" +
+			"fgrep 'a.c' /tmp/input.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "abc\na.c\na.c\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
