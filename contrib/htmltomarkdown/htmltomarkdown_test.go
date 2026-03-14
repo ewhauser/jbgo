@@ -196,7 +196,7 @@ func TestHTMLToMarkdownMissingValuesDoNotConsumeFollowingFlags(t *testing.T) {
 
 	result := mustExecHTMLToMarkdown(t, "printf '<ul><li>Item</li></ul><pre><code>code</code></pre>' | html-to-markdown -b --code=~~~\n"+
 		"printf '<pre><code>code</code></pre><hr>' | html-to-markdown -c --hr=***\n"+
-		"printf '<hr><h1>Title</h1>' | html-to-markdown -r --heading-style setext\n"+
+		"printf '<hr><h1>Title</h1>' | html-to-markdown -r --heading-style --heading-style=setext\n"+
 		"printf '<h1>Title</h1>' | html-to-markdown --heading-style setext\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
@@ -216,6 +216,31 @@ func TestHTMLToMarkdownIgnoresInvalidHeadingStyle(t *testing.T) {
 	}
 	if got, want := result.Stdout, "# Title\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownInvalidSplitHeadingStyleDoesNotSwallowNextOption(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecHTMLToMarkdown(t, "printf '<pre><code>code</code></pre>' | html-to-markdown --heading-style --code=~~~\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "~~~\ncode\n~~~\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHTMLToMarkdownInvalidSplitHeadingStyleStillReportsUnknownOption(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecHTMLToMarkdown(t, "html-to-markdown --heading-style --invalid\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	want := "html-to-markdown: unrecognized option '--invalid'\nTry 'html-to-markdown --help' for more information.\n"
+	if got := result.Stderr; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
 

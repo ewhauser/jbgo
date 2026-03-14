@@ -138,16 +138,13 @@ func parseHTMLToMarkdownArgs(inv *commands.Invocation) (htmlToMarkdownOptions, [
 		case strings.HasPrefix(arg, "--hr="):
 			opts.horizontalRule = strings.TrimPrefix(arg, "--hr=")
 		case arg == "--heading-style":
-			if i+1 < len(args) {
+			if i+1 < len(args) && isHTMLToMarkdownHeadingStyleValue(args[i+1]) {
 				i++
-				style := args[i]
-				if style == "atx" || style == "setext" {
-					opts.headingStyle = style
-				}
+				opts.headingStyle = args[i]
 			}
 		case strings.HasPrefix(arg, "--heading-style="):
 			style := strings.TrimPrefix(arg, "--heading-style=")
-			if style == "atx" || style == "setext" {
+			if isHTMLToMarkdownHeadingStyleValue(style) {
 				opts.headingStyle = style
 			}
 		case arg == "-":
@@ -183,6 +180,10 @@ func isHTMLToMarkdownHorizontalRuleValue(value string) bool {
 		}
 	}
 	return true
+}
+
+func isHTMLToMarkdownHeadingStyleValue(value string) bool {
+	return value == "atx" || value == "setext"
 }
 
 func htmlToMarkdownUsageError(inv *commands.Invocation, format string, args ...any) error {
