@@ -3,11 +3,11 @@ module github.com/ewhauser/gbash/contrib/extras
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.7
-	github.com/ewhauser/gbash/contrib/awk v0.0.7
-	github.com/ewhauser/gbash/contrib/jq v0.0.7
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.7
-	github.com/ewhauser/gbash/contrib/yq v0.0.7
+	github.com/ewhauser/gbash v0.0.8
+	github.com/ewhauser/gbash/contrib/awk v0.0.8
+	github.com/ewhauser/gbash/contrib/jq v0.0.8
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.8
+	github.com/ewhauser/gbash/contrib/yq v0.0.8
 )
 
 require (

@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/benhoyt/goawk v1.31.0
-	github.com/ewhauser/gbash v0.0.7
+	github.com/ewhauser/gbash v0.0.8
 )
 
 require (
