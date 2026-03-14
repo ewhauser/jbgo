@@ -543,6 +543,9 @@ func withinHostRoot(candidate, root string) bool {
 	if candidate == root {
 		return true
 	}
+	if root == string(os.PathSeparator) {
+		return filepath.IsAbs(candidate)
+	}
 	return strings.HasPrefix(candidate, root+string(os.PathSeparator))
 }
 

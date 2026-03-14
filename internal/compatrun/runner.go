@@ -8,13 +8,14 @@ import (
 	"io"
 	stdfs "io/fs"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/internal/compatfs"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/shell"
 	"github.com/ewhauser/gbash/trace"
@@ -50,7 +51,7 @@ func New(cfg *Config) (*Runner, error) {
 	}
 	resolved := *cfg
 	if resolved.FS == nil {
-		fsys, err := compatfs.New()
+		fsys, err := defaultCompatFS()
 		if err != nil {
 			return nil, err
 		}
@@ -84,6 +85,22 @@ func New(cfg *Config) (*Runner, error) {
 	}
 	resolved.BaseEnv = cloneEnv(resolved.BaseEnv)
 	return &Runner{cfg: resolved}, nil
+}
+
+func defaultCompatFS() (gbfs.FileSystem, error) {
+	fsys, err := gbfs.NewReadWrite(gbfs.ReadWriteOptions{Root: "/"})
+	if err != nil {
+		return nil, err
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	if err := fsys.Chdir(filepath.ToSlash(cwd)); err != nil {
+		return nil, err
+	}
+	return fsys, nil
 }
 
 func (r *Runner) Exec(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {

@@ -106,8 +106,9 @@ type Config struct {
 // FileSystemConfig describes how gbash provisions a session filesystem.
 //
 // Callers rarely need to populate this struct directly. Prefer the helper
-// constructors [InMemoryFileSystem], [HostDirectoryFileSystem], and
-// [CustomFileSystem], and then apply the result with [WithFileSystem].
+// constructors [InMemoryFileSystem], [HostDirectoryFileSystem],
+// [ReadWriteDirectoryFileSystem], and [CustomFileSystem], and then apply the
+// result with [WithFileSystem].
 type FileSystemConfig struct {
 	// Factory builds the filesystem instance for a new session.
 	Factory gbfs.Factory
@@ -127,6 +128,19 @@ type HostDirectoryOptions struct {
 	// When empty, [DefaultWorkspaceMountPoint] is used.
 	MountPoint string
 
+	// MaxFileReadBytes limits the size of individual regular files that may be
+	// read from the host directory. When zero or negative, the default host read
+	// cap is used.
+	MaxFileReadBytes int64
+}
+
+// ReadWriteDirectoryOptions controls how a real host directory is mounted as a
+// mutable sandbox root.
+//
+// Unlike [HostDirectoryOptions], this mode writes directly back to the host
+// directory instead of using an in-memory overlay. It is intended for opt-in
+// compatibility harnesses and advanced embedding scenarios.
+type ReadWriteDirectoryOptions struct {
 	// MaxFileReadBytes limits the size of individual regular files that may be
 	// read from the host directory. When zero or negative, the default host read
 	// cap is used.
@@ -300,6 +314,22 @@ func HostDirectoryFileSystem(root string, opts HostDirectoryOptions) FileSystemC
 			MaxFileReadBytes: opts.MaxFileReadBytes,
 		})),
 		WorkingDir: mountPoint,
+	}
+}
+
+// ReadWriteDirectoryFileSystem mounts a real host directory as the mutable
+// sandbox root.
+//
+// This is the closest gbash equivalent to just-bash's ReadWriteFs: sandbox
+// paths are rooted at "/", sessions start at "/", and writes persist directly
+// to the host directory.
+func ReadWriteDirectoryFileSystem(root string, opts ReadWriteDirectoryOptions) FileSystemConfig {
+	return FileSystemConfig{
+		Factory: gbfs.ReadWrite(gbfs.ReadWriteOptions{
+			Root:             root,
+			MaxFileReadBytes: opts.MaxFileReadBytes,
+		}),
+		WorkingDir: "/",
 	}
 }
 

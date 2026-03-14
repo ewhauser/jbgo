@@ -495,6 +495,7 @@ Important properties:
 - the default backend is in-memory
 - the default backend exposes a Unix-like virtual layout rooted at `/`
 - host-backed filesystems must still satisfy policy checks and must never imply host command execution
+- a read-write host-backed filesystem may be enabled explicitly for compatibility harnesses or advanced embedding, but it is not the default runtime backend
 - developer-only CLI compatibility runs may use a host-backed filesystem adapter, but that adapter is not the default runtime backend and is only for opt-in test harnesses
 - shell redirects and command file access share the same filesystem view
 - symlink support is optional and must default to the safer behavior when policy is ambiguous
@@ -514,6 +515,7 @@ Current and planned backends:
 
 - `MemoryFS`: default mutable sandbox
 - `HostFS`: read-only host-backed directory view mounted at a configurable virtual root with sanitized errors and a backend-local regular-file read cap
+- `ReadWriteFS`: mutable host-backed directory view rooted at `/` with sanitized errors and a backend-local regular-file read cap for opt-in compatibility workflows
 - `OverlayFS`: copy-on-write backend with a read-only lower layer, writable in-memory upper layer, merged `readdir`, and tombstones for deletions
 - `SnapshotFS`: deterministic read-only clone of another filesystem for tests and replay fixtures
 
@@ -521,6 +523,7 @@ Backend boundary for the current implementation:
 
 - `gbash.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
 - `HostFS` is an opt-in lower-layer backend exposed through `gbfs.Host(...)`; it is intended to sit underneath `gbfs.Overlay(...)`, not to replace the default in-memory runtime path
+- `ReadWriteFS` is an opt-in mutable backend exposed through `gbfs.ReadWrite(...)`; it is intended for developer tooling, external compatibility harnesses, and embedders that explicitly want host mutations
 - `OverlayFS` is intended for internal session use and is exposed through `gbfs.Overlay(...)`
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests
 - `SnapshotFS` is not the default `runtime` session backend because session bootstrap still creates the sandbox layout and command stubs

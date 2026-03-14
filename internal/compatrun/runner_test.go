@@ -11,16 +11,15 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/commands"
-	"github.com/ewhauser/gbash/internal/compatfs"
 )
 
 func TestRunnerExecSupportsNestedSubexecAndHostWorkdir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"printf", "env", "cat", "pwd"})
 
@@ -60,9 +59,9 @@ func TestRunnerRunUtilityUsesStdinAndReturnsCommandFailures(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"cat"})
 
@@ -100,9 +99,9 @@ func TestRunnerRunUtilityStreamingPreservesNestedStdout(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"timeout", "cat"})
 
@@ -147,9 +146,9 @@ func TestRunnerRunUtilityStreamingPreservesNestedStderr(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"timeout", "tail"})
 
@@ -199,9 +198,9 @@ func TestRunnerExecKeepsBuiltinAndRegistryPrecedenceOverPATHShadow(t *testing.T)
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"echo", "seq", "bash", "sh"})
 	hostDir := filepath.Join(tmp, "host-bin")
@@ -253,9 +252,9 @@ func TestRunnerExecRunsShebangPATHExecutableViaRegisteredInterpreter(t *testing.
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh", "echo"})
 	hostDir := filepath.Join(tmp, "host-bin")
@@ -302,9 +301,9 @@ func TestRunnerExecRejectsUnregisteredPathExecutableWithoutShebang(t *testing.T)
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
-	fsys, err := compatfs.New()
+	fsys, err := defaultCompatFS()
 	if err != nil {
-		t.Fatalf("compatfs.New() error = %v", err)
+		t.Fatalf("defaultCompatFS() error = %v", err)
 	}
 	commandDir := makeCommandDir(t, tmp, []string{"bash", "sh"})
 	hostDir := filepath.Join(tmp, "host-bin")

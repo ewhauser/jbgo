@@ -19,6 +19,12 @@ type HostProjectOptions struct {
 	MaxFileReadBytes int64
 }
 
+// ReadWriteDirectoryOptions configures a host directory mounted as the mutable
+// sandbox root.
+type ReadWriteDirectoryOptions struct {
+	MaxFileReadBytes int64
+}
+
 // InMemoryFileSystem returns the default session filesystem setup.
 func InMemoryFileSystem() FileSystemConfig {
 	return FileSystemConfig{
@@ -49,6 +55,20 @@ func HostProjectFileSystem(root string, opts HostProjectOptions) FileSystemConfi
 			MaxFileReadBytes: opts.MaxFileReadBytes,
 		})),
 		WorkingDir: virtualRoot,
+	}
+}
+
+// ReadWriteDirectoryFileSystem mounts root as the mutable sandbox root.
+//
+// This mirrors just-bash's direct read-write host filesystem mode: sandbox
+// paths are rooted at "/", and mutations persist back to the host directory.
+func ReadWriteDirectoryFileSystem(root string, opts ReadWriteDirectoryOptions) FileSystemConfig {
+	return FileSystemConfig{
+		Factory: gbfs.ReadWrite(gbfs.ReadWriteOptions{
+			Root:             root,
+			MaxFileReadBytes: opts.MaxFileReadBytes,
+		}),
+		WorkingDir: "/",
 	}
 }
 

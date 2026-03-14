@@ -233,6 +233,7 @@ Most callers should use one of these entry points:
 
 - `gbash.New()` for the default mutable in-memory sandbox
 - `gbash.WithWorkspace(root)` for a real host directory mounted read-only under an in-memory overlay
+- `gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(...))` for a just-bash-style mutable host-backed root
 - `gbash.WithFileSystem(gbash.CustomFileSystem(...))` for seeded or otherwise custom backends
 
 The zero value of `gbash.Config` still gives you an in-memory sandbox rooted at `/home/agent`.
@@ -258,6 +259,17 @@ gb, err := gbash.New(
 ```
 
 `MountPoint` defaults to `gbash.DefaultWorkspaceMountPoint`. `MaxFileReadBytes` defaults to `gbash.DefaultHostFileReadBytes`. If you want the host tree mounted at `/`, set `MountPoint: "/"`.
+
+If you want writes to persist directly back to the host directory instead of landing in the in-memory overlay, use the read/write helper:
+
+```go
+gb, err := gbash.New(
+	gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem("/path/to/project", gbash.ReadWriteDirectoryOptions{})),
+	gbash.WithWorkingDir("/"),
+)
+```
+
+This mode maps the host directory to sandbox `/`, so it is best suited to compatibility harnesses and other opt-in developer workflows.
 
 ### Network Access
 
