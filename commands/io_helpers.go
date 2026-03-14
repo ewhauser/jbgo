@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"io"
+	"strings"
 )
 
 func readAllFile(ctx context.Context, inv *Invocation, name string) (data []byte, abs string, err error) {
@@ -20,7 +21,11 @@ func readAllFile(ctx context.Context, inv *Invocation, name string) (data []byte
 }
 
 func readAllStdin(inv *Invocation) ([]byte, error) {
-	data, err := io.ReadAll(ReaderWithContext(inv.Context, stdinReader(inv)))
+	stdin := io.Reader(strings.NewReader(""))
+	if inv != nil && inv.Stdin != nil {
+		stdin = inv.Stdin
+	}
+	data, err := io.ReadAll(ReaderWithContext(inv.Context, stdin))
 	if err != nil {
 		return nil, &ExitError{Code: 1, Err: err}
 	}
