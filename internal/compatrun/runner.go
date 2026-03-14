@@ -58,7 +58,7 @@ func New(cfg *Config) (*Runner, error) {
 		resolved.FS = fsys
 	}
 	if resolved.Registry == nil {
-		resolved.Registry = commands.DefaultRegistry()
+		resolved.Registry = DefaultRegistry()
 	}
 	if resolved.Engine == nil {
 		resolved.Engine = shell.New()

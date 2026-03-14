@@ -423,6 +423,25 @@ func TestRunCLICompatExecUnknownCommandReturns127(t *testing.T) {
 	}
 }
 
+func TestRunCLICompatExecDeletedCommandReportsNotImplemented(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), "gbash", []string{"compat", "exec", "mkfifo"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "mkfifo: not implemented") {
+		t.Fatalf("stderr = %q, want not-implemented message", stderr.String())
+	}
+}
+
 func TestRunCLICompatExecYesReportsSingleWriteErrorOnDevFull(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

@@ -21,7 +21,7 @@ import (
 )
 
 func runCompatInvocation(ctx context.Context, argv0 string, inv compatInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
-	registry := commands.DefaultRegistry()
+	registry := compatrun.DefaultRegistry()
 	commandDir := inv.commandDir
 	cleanup := func() {}
 	if commandDir == "" {
