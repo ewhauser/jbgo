@@ -1,0 +1,148 @@
+{
+  "generated_at": "2026-03-14T20:11:18Z",
+  "runs": 50,
+  "just_bash_spec": "just-bash@2.13.0",
+  "scenarios": [
+    {
+      "name": "startup_echo",
+      "description": "Process start plus one simple command.",
+      "command": "echo benchmark",
+      "expected_stdout": "benchmark\n",
+      "workspace": false,
+      "results": [
+        {
+          "name": "gbash",
+          "artifact_size_bytes": 13623154,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 6147792,
+            "median_nanos": 6468917,
+            "p95_nanos": 6983709
+          }
+        },
+        {
+          "name": "GNU bash",
+          "artifact_size_bytes": 896880,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 5762291,
+            "median_nanos": 6377917,
+            "p95_nanos": 6768209
+          }
+        },
+        {
+          "name": "gbash-extras",
+          "artifact_size_bytes": 33271922,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 8348417,
+            "median_nanos": 8843916,
+            "p95_nanos": 58970750
+          }
+        },
+        {
+          "name": "gbash-node-wasm",
+          "artifact_size_bytes": 18546233,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 136729083,
+            "median_nanos": 149648084,
+            "p95_nanos": 165961708
+          }
+        },
+        {
+          "name": "just-bash",
+          "artifact_size_bytes": 137506692,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 685543250,
+            "median_nanos": 719597229,
+            "p95_nanos": 864608875
+          }
+        }
+      ]
+    },
+    {
+      "name": "workspace_inventory",
+      "description": "Process start plus a pipe-free workspace inventory.",
+      "command": "set -- $(find . -type f); echo $#",
+      "expected_stdout": "300\n",
+      "workspace": true,
+      "fixture": {
+        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-3109534130/workspace",
+        "file_count": 300,
+        "total_bytes": 17100
+      },
+      "results": [
+        {
+          "name": "gbash",
+          "artifact_size_bytes": 13623154,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 16631958,
+            "median_nanos": 18633812,
+            "p95_nanos": 21777083
+          }
+        },
+        {
+          "name": "GNU bash",
+          "artifact_size_bytes": 896880,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 15938958,
+            "median_nanos": 17219125,
+            "p95_nanos": 18863917
+          }
+        },
+        {
+          "name": "gbash-extras",
+          "artifact_size_bytes": 33271922,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 19538250,
+            "median_nanos": 20630833,
+            "p95_nanos": 21955875
+          }
+        },
+        {
+          "name": "gbash-node-wasm",
+          "artifact_size_bytes": 18546233,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 217318666,
+            "median_nanos": 233262791,
+            "p95_nanos": 283151667
+          }
+        },
+        {
+          "name": "just-bash",
+          "artifact_size_bytes": 137506692,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 730709125,
+            "median_nanos": 782657604,
+            "p95_nanos": 959050208
+          }
+        }
+      ]
+    }
+  ],
+  "machine": {
+    "model": "MacBook Pro (Mac15,8)",
+    "chip": "Apple M3 Max",
+    "cores": "16 (12 performance + 4 efficiency)",
+    "memory": "64 GB",
+    "os": "macOS 15.5",
+    "go_version": "go1.26.1 darwin/arm64"
+  }
+}

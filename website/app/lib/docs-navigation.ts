@@ -13,6 +13,10 @@ export const docsNavigation: NavItem[] = [
       { title: "Quick Start", href: "/docs/getting-started/quick-start" },
     ],
   },
+  {
+    title: "Performance",
+    items: [{ title: "Benchmarks", href: "/docs/performance/benchmarks" }],
+  },
 ];
 
 export function flattenNav(items: NavItem[]): NavItem[] {

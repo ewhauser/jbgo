@@ -1,0 +1,38 @@
+# Benchmarks
+
+Cross-runtime comparison of gbash against GNU bash and alternative sandboxed-shell runtimes. Each scenario is run as an independent process invocation — measuring real end-to-end latency including startup, execution, and teardown.
+
+## Runtimes
+
+<table>
+  <thead>
+    <tr>
+      <th>Runtime</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>gbash</strong></td><td>Native Go binary — the default runtime</td></tr>
+    <tr><td><strong>GNU bash</strong></td><td>Host system bash (unsandboxed baseline)</td></tr>
+    <tr><td><strong>gbash-extras</strong></td><td>gbash with <code>awk</code>, <code>jq</code>, <code>sqlite3</code>, <code>yq</code> pre-registered</td></tr>
+    <tr><td><strong>gbash-node-wasm</strong></td><td>gbash compiled to WebAssembly, run in Node.js</td></tr>
+    <tr><td><strong>just-bash</strong></td><td>Published npm package (<code>just-bash@2.13.0</code>)</td></tr>
+  </tbody>
+</table>
+
+## Results
+
+import BenchmarkChart from "@/app/components/docs/BenchmarkChart";
+
+<BenchmarkChart />
+
+## Methodology
+
+- Each scenario runs the command as a fresh process invocation (cold start).
+- A single untimed warmup run precedes the timed trials to prime OS caches.
+- Latency is measured wall-clock from process spawn to exit.
+- Artifact size includes all files needed to run the runtime (e.g., for `just-bash`, this includes Node.js itself plus the npm package).
+- All runtimes execute the same shell command and validate stdout matches the expected output.
+- The harness source is at [`scripts/bench-compare/main.go`](https://github.com/ewhauser/gbash/blob/main/scripts/bench-compare/main.go).
+
+> **Note:** just-bash ships significantly more functionality than gbash today — Python and lightweight JavaScript runtimes are bundled in the core — so the artifact sizes and startup costs are not directly comparable.
