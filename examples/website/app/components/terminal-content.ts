@@ -2,7 +2,7 @@ export const version = "browser-demo";
 
 export const CMD_ABOUT = `gbash (browser demo)
 Deterministic, sandbox-only, bash-like runtime for AI agents.
-This page runs the @ewhauser/gbash-wasm package and keeps one persistent session.
+This page runs the @ewhauser/gbash-wasm/browser entrypoint and keeps one persistent session.
 
 Custom commands:
   about       What this demo is
@@ -43,7 +43,7 @@ export const FILE_README = `# gbash
 
 \`gbash\` is a deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
 
-This demo runs \`gbash\` in the browser through the published \`@ewhauser/gbash-wasm\` bridge and keeps a persistent session, so filesystem changes and cwd updates survive across commands.
+This demo runs \`gbash\` in the browser through the published \`@ewhauser/gbash-wasm/browser\` bridge and keeps a persistent session, so filesystem changes and cwd updates survive across commands.
 
 ## Quick start
 
@@ -166,12 +166,12 @@ func currentBuildMetadata() buildMetadata {
 
 export const FILE_WEBSITE_README = `# gbash website integration
 
-This app vendors Vercel's terminal website example and runs the \`@ewhauser/gbash-wasm\` package in the browser.
+This app vendors Vercel's terminal website example and runs the \`@ewhauser/gbash-wasm/browser\` entrypoint in the browser.
 
 Pieces involved:
 
-- \`packages/gbash-wasm/src/index.ts\`
-  The published browser bridge that exports \`Bash\` and \`defineCommand\`
+- \`packages/gbash-wasm/src/browser.ts\`
+  The published browser bridge behind \`@ewhauser/gbash-wasm/browser\`
 - \`packages/gbash-wasm/wasm/main.go\`
   The JS/WASM bridge around a persistent gbash session
 - \`examples/website/scripts/sync-gbash-wasm.mjs\`
@@ -186,7 +186,7 @@ Scope note:
 
 export const FILE_WTF_IS_THIS = `# WTF Is This?
 
-This is a vendored terminal website running gbash in the browser via the \`@ewhauser/gbash-wasm\` package.
+This is a vendored terminal website running gbash in the browser via the \`@ewhauser/gbash-wasm/browser\` entrypoint.
 
 What works:
 

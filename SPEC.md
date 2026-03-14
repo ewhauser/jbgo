@@ -193,7 +193,7 @@ Package responsibilities:
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `echo`, `cat`, `ls`, and `pwd`
 - `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface. Current examples include `awk`, `jq`, `nodejs`, `sqlite3`, and `yq`.
-- `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the browser-facing `js/wasm` bridge and its packaged WebAssembly assets.
+- `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the `js/wasm` assets plus explicit host entrypoints such as `@ewhauser/gbash-wasm/browser`.
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
 - `trace/`: event schema, recorder interfaces, and in-memory buffering
 - `examples/`: runnable demos that can depend on external SDKs without affecting the root module build list

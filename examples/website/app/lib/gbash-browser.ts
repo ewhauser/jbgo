@@ -1,1 +1,1 @@
-export * from "@ewhauser/gbash-wasm";
+export * from "@ewhauser/gbash-wasm/browser";

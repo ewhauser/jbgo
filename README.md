@@ -45,7 +45,7 @@ Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with pr
 
 - `github.com/ewhauser/gbash`: the core Go runtime and embedding API
 - `github.com/ewhauser/gbash/contrib/...`: optional Go command modules
-- `@ewhauser/gbash-wasm`: browser-focused JavaScript packaging for the `js/wasm` build. It is versioned in-repo today; npm publishing remains disabled in the release workflow for now.
+- `@ewhauser/gbash-wasm/browser`: the explicit browser entrypoint for the `js/wasm` package. It is versioned in-repo today; npm publishing remains disabled in the release workflow for now.
 
 ## Installation
 

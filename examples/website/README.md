@@ -6,7 +6,7 @@ This is a vendored copy of Vercel's `just-bash` website example, adapted to run
 The important difference is the shell boundary:
 
 - upstream browser shell: `just-bash/browser`
-- this browser shell: `@ewhauser/gbash-wasm`
+- this browser shell: `@ewhauser/gbash-wasm/browser`
 
 ## What's in this app
 
