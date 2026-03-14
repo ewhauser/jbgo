@@ -1,4 +1,4 @@
-.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish compat-docker-build compat-docker-run release-check release-snapshot
+.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test gnu-test-setup gnu-build-cache-fetch gnu-build-cache-publish compat-docker-build compat-docker-run release-check release-snapshot
 
 GO_PACKAGES := ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 BENCH_PACKAGES := ./runtime ./cmd/gbash ./contrib/jq
@@ -11,6 +11,9 @@ BENCH_SMOKE_TIME ?= 100ms
 BENCH_FULL_COUNT ?= 10
 BENCH_FULL_TIME ?= 200ms
 BENCH_SMOKE_REGEX ?= Benchmark(NewSession|RuntimeRunSimpleScript|SessionExecWarmSimpleScript|WorkflowCodebaseExploration|CommandRGRecursive|CLIBinary|CommandJQTransform)$$
+BENCH_COMPARE_RUNS ?= 100
+JUST_BASH_SPEC ?= just-bash@2.13.0
+JSON_OUT ?=
 GNU_CACHE_DIR ?= .cache/gnu
 GNU_GBASH_BIN ?= $(GNU_CACHE_DIR)/bin/gbash
 GNU_RESULTS_DIR ?=
@@ -165,6 +168,14 @@ bench-smoke:
 
 bench-full:
 	@go test $(BENCH_PACKAGES) -run=^$$ -bench . -benchmem -count=$(BENCH_FULL_COUNT) -benchtime=$(BENCH_FULL_TIME)
+
+bench-compare:
+	@set -eu; \
+	if [ -n "$(JSON_OUT)" ]; then \
+		go run ./scripts/bench-compare --runs "$(BENCH_COMPARE_RUNS)" --just-bash-spec "$(JUST_BASH_SPEC)" --json-out "$(JSON_OUT)"; \
+	else \
+		go run ./scripts/bench-compare --runs "$(BENCH_COMPARE_RUNS)" --just-bash-spec "$(JUST_BASH_SPEC)"; \
+	fi
 
 gnu-test-setup:
 	mkdir -p $(GNU_CACHE_DIR)/bin

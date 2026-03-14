@@ -354,6 +354,23 @@ The repo is a Go workspace. The root module has the runtime, CLI, and core comma
 
 `make build`, `make test`, and `make lint` cover all modules. See the [`Makefile`](./Makefile) for fuzz, bench, GNU coreutils compat, and release targets.
 
+### local comparison benchmark
+
+Run the benchmark from the repo root:
+
+```bash
+make bench-compare
+```
+
+Sample local results from March 13, 2026, using the default 100 runs:
+
+| Scenario | `gbash` median | `gbash` p95 | `just-bash` median | `just-bash` p95 |
+| --- | ---: | ---: | ---: | ---: |
+| `startup_echo` | `5.08ms` | `6.86ms` | `618.94ms` | `956.86ms` |
+| `workspace_inventory` | `18.50ms` | `51.81ms` | `618.30ms` | `725.79ms` |
+
+These numbers are a local reference point, not a portability guarantee. Startup comparisons may not be fully apples to apples yet, because `just-bash` currently embeds tools like Python in its base container and `gbash` does not.
+
 ### coreutils compatibility
 
 You can evaluate the skew between our implemented commands and [coreutils](https://www.gnu.org/software/coreutils/).
