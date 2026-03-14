@@ -127,6 +127,13 @@ The CLI also provides a minimal interactive shell mode. That mode is a front-end
 - it executes each completed entry via `Session.Exec`
 - it carries forward the virtual cwd and shell-visible variable state between entries at the CLI layer
 
+The normal CLI entrypoint also accepts filesystem selection flags before the shell arguments:
+
+- `gbash --root <dir> ...` mounts `<dir>` read-only at `/home/agent/project` with an in-memory writable overlay
+- `gbash --cwd <dir> ...` sets the initial sandbox working directory
+- `gbash --readwrite-root <dir> ...` mounts `<dir>` as sandbox `/` so writes persist back to the host, but only when `<dir>` is inside the system temp directory
+- when `--cwd` is omitted, `--root` starts at `/home/agent/project` and `--readwrite-root` starts at `/`
+
 The CLI also exposes a developer-only compatibility path for external test harnesses:
 
 - `gbash compat exec <utility> [args...]` runs one registered utility directly instead of reading a shell script from stdin
