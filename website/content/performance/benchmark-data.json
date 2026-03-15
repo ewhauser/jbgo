@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-14T20:11:18Z",
+  "generated_at": "2026-03-15T19:16:45Z",
   "runs": 50,
   "just_bash_spec": "just-bash@2.13.0",
   "scenarios": [
@@ -12,13 +12,13 @@
       "results": [
         {
           "name": "gbash",
-          "artifact_size_bytes": 13623154,
+          "artifact_size_bytes": 14720834,
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 6147792,
-            "median_nanos": 6468917,
-            "p95_nanos": 6983709
+            "min_nanos": 4835250,
+            "median_nanos": 5260667,
+            "p95_nanos": 7520417
           }
         },
         {
@@ -27,31 +27,31 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 5762291,
-            "median_nanos": 6377917,
-            "p95_nanos": 6768209
+            "min_nanos": 4046250,
+            "median_nanos": 4807750,
+            "p95_nanos": 6075084
           }
         },
         {
           "name": "gbash-extras",
-          "artifact_size_bytes": 33271922,
+          "artifact_size_bytes": 34609922,
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 8348417,
-            "median_nanos": 8843916,
-            "p95_nanos": 58970750
+            "min_nanos": 7805958,
+            "median_nanos": 8668479,
+            "p95_nanos": 13174250
           }
         },
         {
           "name": "gbash-node-wasm",
-          "artifact_size_bytes": 18546233,
+          "artifact_size_bytes": 20249069,
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 136729083,
-            "median_nanos": 149648084,
-            "p95_nanos": 165961708
+            "min_nanos": 109981625,
+            "median_nanos": 120496396,
+            "p95_nanos": 154232791
           }
         },
         {
@@ -60,9 +60,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 685543250,
-            "median_nanos": 719597229,
-            "p95_nanos": 864608875
+            "min_nanos": 708195833,
+            "median_nanos": 778432229,
+            "p95_nanos": 991723708
           }
         }
       ]
@@ -74,20 +74,20 @@
       "expected_stdout": "300\n",
       "workspace": true,
       "fixture": {
-        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-3109534130/workspace",
+        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-2785555721/workspace",
         "file_count": 300,
         "total_bytes": 17100
       },
       "results": [
         {
           "name": "gbash",
-          "artifact_size_bytes": 13623154,
+          "artifact_size_bytes": 14720834,
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 16631958,
-            "median_nanos": 18633812,
-            "p95_nanos": 21777083
+            "min_nanos": 12239125,
+            "median_nanos": 12763333,
+            "p95_nanos": 13749834
           }
         },
         {
@@ -96,31 +96,31 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 15938958,
-            "median_nanos": 17219125,
-            "p95_nanos": 18863917
+            "min_nanos": 10883500,
+            "median_nanos": 12067229,
+            "p95_nanos": 13250792
           }
         },
         {
           "name": "gbash-extras",
-          "artifact_size_bytes": 33271922,
+          "artifact_size_bytes": 34609922,
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 19538250,
-            "median_nanos": 20630833,
-            "p95_nanos": 21955875
+            "min_nanos": 15031834,
+            "median_nanos": 15478729,
+            "p95_nanos": 16010583
           }
         },
         {
           "name": "gbash-node-wasm",
-          "artifact_size_bytes": 18546233,
+          "artifact_size_bytes": 20249069,
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 217318666,
-            "median_nanos": 233262791,
-            "p95_nanos": 283151667
+            "min_nanos": 157927292,
+            "median_nanos": 162878979,
+            "p95_nanos": 165555250
           }
         },
         {
@@ -129,9 +129,72 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 730709125,
-            "median_nanos": 782657604,
-            "p95_nanos": 959050208
+            "min_nanos": 772378375,
+            "median_nanos": 816039000,
+            "p95_nanos": 950929042
+          }
+        }
+      ]
+    },
+    {
+      "name": "agentic_search",
+      "description": "Recursive search across mixed workspace files plus jq summaries.",
+      "command": "printf 'files=%s\\nmatches=%s\\nbad_jobs=%s\\ntier1=%s\\n' \"$(find . -type f | grep -c '^')\" \"$(grep -RniE 'timeout|rollback' . | grep -c '^')\" \"$(jq -s 'map(select(.status != \"ok\")) | length' logs/*.jsonl)\" \"$(jq '.services | map(select(.tier == 1)) | length' manifests/services.json)\"",
+      "expected_stdout": "files=300\nmatches=60\nbad_jobs=24\ntier1=8\n",
+      "workspace": true,
+      "fixture": {
+        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-2785555721/agentic-search-workspace",
+        "file_count": 300,
+        "total_bytes": 20694
+      },
+      "results": [
+        {
+          "name": "gbash",
+          "artifact_size_bytes": 14720834,
+          "status": "skipped",
+          "skip_reason": "requires jq; runtime does not bundle it",
+          "success_count": 0,
+          "failure_count": 0
+        },
+        {
+          "name": "GNU bash",
+          "artifact_size_bytes": 896880,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 29259250,
+            "median_nanos": 32950729,
+            "p95_nanos": 37480084
+          }
+        },
+        {
+          "name": "gbash-extras",
+          "artifact_size_bytes": 34609922,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 53930291,
+            "median_nanos": 54621041,
+            "p95_nanos": 55946583
+          }
+        },
+        {
+          "name": "gbash-node-wasm",
+          "artifact_size_bytes": 20249069,
+          "status": "skipped",
+          "skip_reason": "requires jq; runtime does not bundle it",
+          "success_count": 0,
+          "failure_count": 0
+        },
+        {
+          "name": "just-bash",
+          "artifact_size_bytes": 137506692,
+          "success_count": 50,
+          "failure_count": 0,
+          "stats": {
+            "min_nanos": 761114084,
+            "median_nanos": 799887625,
+            "p95_nanos": 1042205959
           }
         }
       ]

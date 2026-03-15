@@ -32,7 +32,8 @@ import BenchmarkChart from "@/app/components/docs/BenchmarkChart";
 - A single untimed warmup run precedes the timed trials to prime OS caches.
 - Latency is measured wall-clock from process spawn to exit.
 - Artifact size includes all files needed to run the runtime (e.g., for `just-bash`, this includes Node.js itself plus the npm package).
-- All runtimes execute the same shell command and validate stdout matches the expected output.
+- Participating runtimes execute the same shell command and validate stdout matches the expected output.
+- Scenarios that require optional commands can mark unsupported runtimes as `Skipped` with a reason instead of treating them as failures.
 - The harness source is at [`scripts/bench-compare/main.go`](https://github.com/ewhauser/gbash/blob/main/scripts/bench-compare/main.go).
 
 > **Note:** just-bash ships significantly more functionality than gbash today — Python and lightweight JavaScript runtimes are bundled in the core — so the artifact sizes and startup costs are not directly comparable.

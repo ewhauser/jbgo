@@ -11,9 +11,11 @@ interface Stats {
 interface RuntimeResult {
   name: string;
   artifact_size_bytes: number;
+  status?: string;
+  skip_reason?: string;
   success_count: number;
   failure_count: number;
-  stats: Stats;
+  stats?: Stats;
 }
 
 interface Scenario {
@@ -93,10 +95,17 @@ function ScenarioTable({ scenario }: { scenario: Scenario }) {
           <tbody>
             {scenario.results.map((r) => (
               <tr key={r.name}>
-                <td>{r.name}</td>
-                <td>{formatNanos(r.stats.min_nanos)}</td>
-                <td>{formatNanos(r.stats.median_nanos)}</td>
-                <td>{formatNanos(r.stats.p95_nanos)}</td>
+                <td>
+                  <div>{r.name}</div>
+                  {r.status === "skipped" && (
+                    <div className="text-xs text-[var(--fg-secondary)] mt-1">
+                      Skipped: {r.skip_reason}
+                    </div>
+                  )}
+                </td>
+                <td>{r.stats ? formatNanos(r.stats.min_nanos) : "-"}</td>
+                <td>{r.stats ? formatNanos(r.stats.median_nanos) : "-"}</td>
+                <td>{r.stats ? formatNanos(r.stats.p95_nanos) : "-"}</td>
                 <td>{formatBytes(r.artifact_size_bytes)}</td>
               </tr>
             ))}
