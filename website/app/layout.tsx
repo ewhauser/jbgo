@@ -9,6 +9,8 @@ const ibmPlexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 const metadataBase = new URL(
   process.env.NEXT_PUBLIC_SITE_URL ??
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -20,6 +22,13 @@ const metadataBase = new URL(
 
 export const metadata: Metadata = {
   metadataBase,
+  icons: {
+    icon: {
+      url: `${basePath}/icon`,
+      type: "image/png",
+      sizes: "32x32",
+    },
+  },
   title: {
     default: "gbash — A deterministic bash runtime for AI agents",
     template: "%s | gbash",
