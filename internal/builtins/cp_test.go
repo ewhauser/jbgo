@@ -46,3 +46,24 @@ func TestCPAcceptsForceFlagForOverwrite(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestCPNoDereferencePreservesSourceSymlink(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/target.txt\n" +
+			"cd /tmp\n" +
+			"ln -s target.txt src-link\n" +
+			"cp -d /tmp/src-link /tmp/dst-link\n" +
+			"readlink /tmp/dst-link\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "target.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
