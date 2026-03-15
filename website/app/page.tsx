@@ -32,7 +32,7 @@ export default function Home() {
                 Try it — no install required
               </p>
               <code className="text-sm font-mono text-accent leading-relaxed block">
-                go run github.com/ewhauser/gbash/cmd/gbash@latest -c &apos;echo hello; pwd; ls /tmp&apos;
+                go run github.com/ewhauser/gbash/cmd/gbash@latest -c &apos;echo hello; pwd; ls -la&apos;
               </code>
             </div>
 

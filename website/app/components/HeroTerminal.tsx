@@ -246,7 +246,7 @@ export default function HeroTerminal() {
         "/home/user/README.md":
           "# gbash\n\nA deterministic, sandbox-only, bash-like runtime for AI agents.\n\nSee https://github.com/ewhauser/gbash for more.",
         "/home/user/example.sh":
-          '#!/bin/bash\necho "Hello from gbash"\npwd\nls /tmp\n',
+          '#!/bin/bash\necho "Hello from gbash"\npwd\nls -la\n',
         "/home/user/is-this-really-gbash.txt":
           "Yes! This is a real gbash shell running in your browser via WebAssembly.\n\nThe Go runtime is compiled to WASM using the @ewhauser/gbash-wasm package.\nEvery command you run here executes inside a sandboxed, in-memory\nfilesystem — nothing touches your host machine.\n\nTry it: create files, pipe commands, use grep/sed/awk — it all works.\n\n  cat README.md | head -3\n  echo hello > /tmp/test.txt && cat /tmp/test.txt\n  ls -la\n",
       },

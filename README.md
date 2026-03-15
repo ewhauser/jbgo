@@ -77,13 +77,10 @@ The coordinated release workflow also exports the website and deploys it to [Git
 Try it with `go run` — no install required:
 
 ```bash
-go run github.com/ewhauser/gbash/cmd/gbash@latest -c 'echo hello; pwd; ls /tmp'
+go run github.com/ewhauser/gbash/cmd/gbash@latest -c 'echo hello; pwd; ls -la'
 ```
 
-```text
-hello
-/home/agent
-```
+You should see `hello`, the default working directory `/home/agent`, and the initial listing for the empty sandbox home directory.
 
 Everything runs inside a virtual filesystem — nothing touches your host.
 
