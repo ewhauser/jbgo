@@ -120,6 +120,33 @@ func TestSearchFallbackWhenProviderIsStale(t *testing.T) {
 	}
 }
 
+func TestSearchFallbackWhenProviderBecomesStaleAfterSearch(t *testing.T) {
+	mem := seededMemory(t, map[string]string{
+		"/workspace/live.txt": "needle\n",
+	})
+	fsys := searchCapableFS{
+		FileSystem: mem,
+		provider: staleAfterSearchProvider{
+			hits: []gbfs.SearchHit{{Path: "/workspace/wrong.txt", Verified: true}},
+		},
+	}
+
+	result, err := Search(context.Background(), fsys, &Query{
+		Roots:         []string{"/workspace"},
+		Literal:       "needle",
+		IndexEligible: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if result.UsedIndex {
+		t.Fatal("UsedIndex = true, want false")
+	}
+	if got, want := hitPaths(result.Hits), []string{"/workspace/live.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("Paths = %v, want %v", got, want)
+	}
+}
+
 func TestSearchVerifierFiltersIndexedCandidates(t *testing.T) {
 	fsys, err := gbfs.NewSearchableFileSystem(context.Background(), seededMemory(t, map[string]string{
 		"/workspace/a.txt": "needle\n",
@@ -237,6 +264,33 @@ func (staleProvider) IndexStatus() gbfs.IndexStatus {
 		CurrentGeneration: 2,
 		IndexedGeneration: 1,
 		Backend:           "stale-test",
+	}
+}
+
+type staleAfterSearchProvider struct {
+	hits []gbfs.SearchHit
+}
+
+func (p staleAfterSearchProvider) Search(context.Context, *gbfs.SearchQuery) (gbfs.SearchResult, error) {
+	return gbfs.SearchResult{
+		Hits: p.hits,
+		Status: gbfs.IndexStatus{
+			CurrentGeneration: 2,
+			IndexedGeneration: 1,
+			Backend:           "stale-after-search",
+		},
+	}, nil
+}
+
+func (staleAfterSearchProvider) SearchCapabilities() gbfs.SearchCapabilities {
+	return gbfs.SearchCapabilities{LiteralSearch: true}
+}
+
+func (staleAfterSearchProvider) IndexStatus() gbfs.IndexStatus {
+	return gbfs.IndexStatus{
+		CurrentGeneration: 1,
+		IndexedGeneration: 1,
+		Backend:           "stale-after-search",
 	}
 }
 

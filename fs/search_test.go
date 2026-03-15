@@ -272,6 +272,32 @@ func TestSearchableFSBootstrapsExistingSymlinkTracking(t *testing.T) {
 	assertSearchPaths(t, provider, &SearchQuery{Root: "/docs", Literal: "needle"}, nil)
 }
 
+func TestSearchableFSBootstrapsExistingHardLinkTracking(t *testing.T) {
+	base := NewMemory()
+	writeSearchFile(t, base, "/docs/target.txt", "needle before\n")
+	if err := base.Link(context.Background(), "/docs/target.txt", "/docs/link.txt"); err != nil {
+		t.Fatalf("Link() error = %v", err)
+	}
+
+	fsys, err := NewSearchableFileSystem(context.Background(), base, nil)
+	if err != nil {
+		t.Fatalf("NewSearchableFileSystem() error = %v", err)
+	}
+	provider := mustSearchProvider(t, fsys, "/")
+
+	assertSearchPaths(t, provider, &SearchQuery{Root: "/docs", Literal: "needle"}, []string{
+		"/docs/link.txt",
+		"/docs/target.txt",
+	})
+
+	writeSearchFile(t, fsys, "/docs/target.txt", "fresh after wrap\n")
+	assertSearchPaths(t, provider, &SearchQuery{Root: "/docs", Literal: "fresh"}, []string{
+		"/docs/link.txt",
+		"/docs/target.txt",
+	})
+	assertSearchPaths(t, provider, &SearchQuery{Root: "/docs", Literal: "needle"}, nil)
+}
+
 func TestSearchableFSOpenFileTracksCreateWithoutWrite(t *testing.T) {
 	fsys, err := NewSearchableFileSystem(context.Background(), NewMemory(), nil)
 	if err != nil {

@@ -15,12 +15,14 @@ import (
 
 // MemoryFS is the default mutable in-memory sandbox filesystem.
 type MemoryFS struct {
-	mu    sync.RWMutex
-	cwd   string
-	nodes map[string]*memoryNode
+	mu         sync.RWMutex
+	cwd        string
+	nodes      map[string]*memoryNode
+	nextNodeID uint64
 }
 
 type memoryNode struct {
+	id       uint64
 	mode     stdfs.FileMode
 	data     []byte
 	lazy     LazyFileProvider
@@ -40,9 +42,11 @@ var errTooManySymlinks = errors.New("too many levels of symbolic links")
 func NewMemory() *MemoryFS {
 	now := time.Now().UTC()
 	return &MemoryFS{
-		cwd: "/",
+		cwd:        "/",
+		nextNodeID: 1,
 		nodes: map[string]*memoryNode{
 			"/": {
+				id:       1,
 				mode:     stdfs.ModeDir | 0o755,
 				children: make(map[string]struct{}),
 				atime:    now,
@@ -62,6 +66,7 @@ func (m *MemoryFS) Clone() *MemoryFS {
 	nodes := make(map[string]*memoryNode, len(m.nodes))
 	for name, node := range m.nodes {
 		cloned := &memoryNode{
+			id:      node.id,
 			mode:    node.mode,
 			lazy:    node.lazy,
 			target:  node.target,
@@ -83,8 +88,9 @@ func (m *MemoryFS) Clone() *MemoryFS {
 	}
 
 	return &MemoryFS{
-		cwd:   m.cwd,
-		nodes: nodes,
+		cwd:        m.cwd,
+		nodes:      nodes,
+		nextNodeID: m.nextNodeID,
 	}
 }
 
@@ -126,6 +132,7 @@ func (m *MemoryFS) seedInitialFileLocked(name string, file InitialFile, now time
 	}
 
 	node := &memoryNode{
+		id:      m.newNodeIDLocked(),
 		mode:    mode,
 		lazy:    file.Lazy,
 		data:    append([]byte(nil), file.Content...),
@@ -221,6 +228,7 @@ func (m *MemoryFS) Symlink(_ context.Context, target, linkName string) error {
 		return err
 	}
 	m.nodes[abs] = &memoryNode{
+		id:      m.newNodeIDLocked(),
 		mode:    stdfs.ModeSymlink | 0o777,
 		target:  target,
 		atime:   time.Now().UTC(),
@@ -304,6 +312,7 @@ func (m *MemoryFS) OpenFile(ctx context.Context, name string, flag int, perm std
 			perm = 0o644
 		}
 		node = &memoryNode{
+			id:      m.newNodeIDLocked(),
 			mode:    perm,
 			atime:   time.Now().UTC(),
 			modTime: time.Now().UTC(),
@@ -591,6 +600,7 @@ func (m *MemoryFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
 			perm = 0o755
 		}
 		m.nodes[next] = &memoryNode{
+			id:       m.newNodeIDLocked(),
 			mode:     stdfs.ModeDir | perm,
 			children: make(map[string]struct{}),
 			atime:    time.Now().UTC(),
@@ -715,6 +725,11 @@ func parentDir(name string) string {
 		return "/"
 	}
 	return Clean(path.Dir(name))
+}
+
+func (m *MemoryFS) newNodeIDLocked() uint64 {
+	m.nextNodeID++
+	return m.nextNodeID
 }
 
 func canWrite(flag int) bool {
@@ -919,6 +934,7 @@ type fileInfo struct {
 	modTime time.Time
 	uid     uint32
 	gid     uint32
+	nodeID  uint64
 }
 
 type memoryDirEntry struct {
@@ -950,6 +966,7 @@ func newFileInfo(name string, node *memoryNode) *fileInfo {
 		modTime: node.modTime,
 		uid:     node.uid,
 		gid:     node.gid,
+		nodeID:  node.id,
 	}
 }
 
@@ -959,7 +976,11 @@ func (fi *fileInfo) Mode() stdfs.FileMode { return fi.mode }
 func (fi *fileInfo) ModTime() time.Time   { return fi.modTime }
 func (fi *fileInfo) IsDir() bool          { return fi.mode.IsDir() }
 func (fi *fileInfo) Sys() any {
-	return memoryStat{Atime: fi.atime.Unix(), AtimeNsec: int64(fi.atime.Nanosecond())}
+	return memoryStat{
+		Atime:     fi.atime.Unix(),
+		AtimeNsec: int64(fi.atime.Nanosecond()),
+		NodeID:    fi.nodeID,
+	}
 }
 func (fi *fileInfo) Ownership() (FileOwnership, bool) {
 	return FileOwnership{UID: fi.uid, GID: fi.gid}, true
@@ -968,6 +989,7 @@ func (fi *fileInfo) Ownership() (FileOwnership, bool) {
 type memoryStat struct {
 	Atime     int64
 	AtimeNsec int64
+	NodeID    uint64
 }
 
 func firstNonZeroTime(values ...time.Time) time.Time {

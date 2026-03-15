@@ -91,6 +91,9 @@ func Search(ctx context.Context, fsys gbfs.FileSystem, query *Query, verify Veri
 			}
 			return Result{}, err
 		}
+		if result.Status.CurrentGeneration != result.Status.IndexedGeneration {
+			return scan(ctx, fsys, roots, query, verify)
+		}
 
 		for _, hit := range result.Hits {
 			if verify != nil {

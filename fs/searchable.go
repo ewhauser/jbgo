@@ -8,6 +8,7 @@ import (
 	stdfs "io/fs"
 	"os"
 	"path"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -367,10 +368,21 @@ func readAllSearchFile(ctx context.Context, fsys FileSystem, name string) ([]byt
 }
 
 func (s *searchableFS) bootstrapSearchTracking(ctx context.Context) error {
-	return s.walkSearchTracking(ctx, "/")
+	state := bootstrapSearchState{
+		hardLinkPathsByID: make(map[string][]string),
+	}
+	if err := s.walkSearchTracking(ctx, "/", &state); err != nil {
+		return err
+	}
+	s.bootstrapHardLinkGroups(state.hardLinkPathsByID)
+	return nil
 }
 
-func (s *searchableFS) walkSearchTracking(ctx context.Context, current string) error {
+type bootstrapSearchState struct {
+	hardLinkPathsByID map[string][]string
+}
+
+func (s *searchableFS) walkSearchTracking(ctx context.Context, current string, state *bootstrapSearchState) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -383,6 +395,11 @@ func (s *searchableFS) walkSearchTracking(ctx context.Context, current string) e
 		return s.refreshTrackedSymlink(ctx, current)
 	}
 	if !linfo.IsDir() {
+		if state != nil {
+			if identity, ok := searchFileIdentity(linfo); ok {
+				state.hardLinkPathsByID[identity] = append(state.hardLinkPathsByID[identity], Clean(current))
+			}
+		}
 		return nil
 	}
 
@@ -391,11 +408,77 @@ func (s *searchableFS) walkSearchTracking(ctx context.Context, current string) e
 		return err
 	}
 	for _, entry := range entries {
-		if err := s.walkSearchTracking(ctx, joinChildPath(current, entry.Name())); err != nil {
+		if err := s.walkSearchTracking(ctx, joinChildPath(current, entry.Name()), state); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *searchableFS) bootstrapHardLinkGroups(pathsByID map[string][]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, paths := range pathsByID {
+		if len(paths) < 2 {
+			continue
+		}
+		s.nextHardLinkGroup++
+		groupID := s.nextHardLinkGroup
+		group := make(map[string]struct{}, len(paths))
+		for _, pathValue := range paths {
+			group[pathValue] = struct{}{}
+			s.hardLinkGroupByPath[pathValue] = groupID
+		}
+		s.hardLinkGroups[groupID] = group
+	}
+}
+
+func searchFileIdentity(info stdfs.FileInfo) (string, bool) {
+	if info == nil || info.IsDir() {
+		return "", false
+	}
+	sys := info.Sys()
+	if sys == nil {
+		return "", false
+	}
+	sysType := reflect.TypeOf(sys)
+	if nodeID, ok := searchIdentityField(sys, "NodeID"); ok {
+		return sysType.String() + ":node:" + nodeID, true
+	}
+	dev, okDev := searchIdentityField(sys, "Dev")
+	ino, okIno := searchIdentityField(sys, "Ino")
+	if okDev && okIno {
+		return sysType.String() + ":devino:" + dev + ":" + ino, true
+	}
+	return "", false
+}
+
+func searchIdentityField(value any, name string) (string, bool) {
+	v := reflect.ValueOf(value)
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return "", false
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return "", false
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() || !field.CanInterface() {
+		return "", false
+	}
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%d", field.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return fmt.Sprintf("%d", field.Uint()), true
+	case reflect.String:
+		return field.String(), true
+	default:
+		return "", false
+	}
 }
 
 func (s *searchableFS) syncSearchPath(ctx context.Context, name string) error {

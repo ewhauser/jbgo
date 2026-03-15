@@ -1180,6 +1180,7 @@ type sqliteFileInfo struct {
 	size    int64
 	mode    stdfs.FileMode
 	modTime time.Time
+	nodeID  int64
 }
 
 func newSQLiteFileInfo(name string, node *sqliteNode) sqliteFileInfo {
@@ -1194,6 +1195,7 @@ func newSQLiteFileInfo(name string, node *sqliteNode) sqliteFileInfo {
 		size:    size,
 		mode:    node.mode,
 		modTime: node.modTime,
+		nodeID:  node.id,
 	}
 }
 
@@ -1202,7 +1204,11 @@ func (fi sqliteFileInfo) Size() int64          { return fi.size }
 func (fi sqliteFileInfo) Mode() stdfs.FileMode { return fi.mode }
 func (fi sqliteFileInfo) ModTime() time.Time   { return fi.modTime }
 func (fi sqliteFileInfo) IsDir() bool          { return fi.mode.IsDir() }
-func (fi sqliteFileInfo) Sys() any             { return nil }
+func (fi sqliteFileInfo) Sys() any             { return sqliteStat{NodeID: fi.nodeID} }
+
+type sqliteStat struct {
+	NodeID int64
+}
 
 func parentDir(name string) string {
 	if name == "/" {
