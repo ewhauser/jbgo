@@ -348,6 +348,7 @@ gb, err := gbash.New(
 ```
 
 For full transport control in tests or embedding, inject your own `Config.NetworkClient`.
+See [`examples/oauth-network-extension`](./examples/oauth-network-extension) for a demo that injects OAuth headers from a host-side vault so the sandbox never sees the bearer token.
 
 ### Observability
 

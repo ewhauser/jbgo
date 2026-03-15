@@ -4,11 +4,15 @@ MODEL ?= gemini-2.5-flash
 SQLITE_FS_DB ?= /tmp/gbash-sandbox.db
 SQLITE_FS_SCRIPT ?= pwd
 
-.PHONY: run run-custom-zstd run-otel run-sqlite-backed-fs run-sqlite-backed-fs-repl run-transactional-workspaces run-vertex-bash-chat
+.PHONY: run run-custom-zstd run-oauth-network-extension run-otel run-sqlite-backed-fs run-sqlite-backed-fs-repl run-transactional-workspaces run-vertex-bash-chat
 run: run-vertex-bash-chat
 
 run-custom-zstd:
 	go run ./custom-zstd < ./custom-zstd/demo.sh
+
+run-oauth-network-extension:
+	@echo "Running oauth-network-extension demo"
+	@go run ./oauth-network-extension
 
 run-otel:
 	@echo "Running otel demo"
