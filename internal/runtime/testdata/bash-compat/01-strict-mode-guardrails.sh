@@ -15,7 +15,7 @@ false || printf 'or-list:recovered\n'
 ! grep -q alpha <<<"beta"
 printf 'bang-predicate:ok\n'
 
-printf 'x\ny\n' | tail -n 1 | grep y >/dev/null
+printf 'x\ny\n' | tail -n 1 | grep -q y
 printf 'pipefail:pass\n'
 
 count=0
