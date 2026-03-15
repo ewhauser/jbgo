@@ -91,21 +91,24 @@ func (r *rgTypeRegistry) matchesAnyType(filename string) bool {
 	return false
 }
 
-func formatRGTypeList() string {
-	names := make([]string, 0, len(rgDefaultFileTypes))
-	for name := range rgDefaultFileTypes {
+func (r *rgTypeRegistry) formatTypeList() string {
+	names := make([]string, 0, len(r.types))
+	for name := range r.types {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
 	lines := make([]string, 0, len(names))
 	for _, name := range names {
-		fileType := rgDefaultFileTypes[name]
+		fileType := r.types[name]
 		patterns := make([]string, 0, len(fileType.extensions)+len(fileType.globs))
 		for _, ext := range fileType.extensions {
 			patterns = append(patterns, "*"+ext)
 		}
 		patterns = append(patterns, fileType.globs...)
+		if len(patterns) == 0 {
+			continue
+		}
 		lines = append(lines, fmt.Sprintf("%s: %s", name, strings.Join(patterns, ", ")))
 	}
 	return strings.Join(lines, "\n") + "\n"

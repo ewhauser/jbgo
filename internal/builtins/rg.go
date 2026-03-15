@@ -174,8 +174,16 @@ func (c *RG) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		return err
 	}
 
+	typeRegistry := newRGTypeRegistry()
+	for _, name := range opts.typeClear {
+		typeRegistry.ClearType(name)
+	}
+	for _, spec := range opts.typeAdd {
+		typeRegistry.AddType(spec)
+	}
+
 	if opts.typeList {
-		return rgWriteTypeList(inv)
+		return rgWriteTypeListFromRegistry(inv, typeRegistry)
 	}
 
 	patterns, err := rgLoadPatterns(ctx, inv, &opts)
@@ -192,14 +200,6 @@ func (c *RG) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 	re, err := rgCompilePattern(patterns, &opts)
 	if err != nil {
 		return exitf(inv, 2, "rg: invalid regex: %v", err)
-	}
-
-	typeRegistry := newRGTypeRegistry()
-	for _, name := range opts.typeClear {
-		typeRegistry.ClearType(name)
-	}
-	for _, spec := range opts.typeAdd {
-		typeRegistry.AddType(spec)
 	}
 
 	if len(roots) == 0 {
@@ -653,7 +653,11 @@ func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state *rgWalkState, 
 
 		isDir := info.IsDir()
 		if state.ignore != nil && state.ignore.matches(childAbs, isDir) {
-			continue
+			// If positive globs exist, don't prune ignored paths —
+			// globs override ignore rules per ripgrep semantics.
+			if !rgHasPositiveGlobs(state.opts.globs) && !rgHasPositiveGlobs(state.opts.iglobs) {
+				continue
+			}
 		}
 		if !state.opts.hidden && strings.HasPrefix(name, ".") && (state.ignore == nil || !state.ignore.whitelisted(childAbs, isDir)) {
 			continue
@@ -678,10 +682,6 @@ func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state *rgWalkState, 
 }
 
 func (c *RG) includeFile(display, abs string, opts *rgOptions, ignoreMatcher *rgIgnoreMatcher, typeRegistry *rgTypeRegistry) bool {
-	if ignoreMatcher != nil && ignoreMatcher.matches(abs, false) {
-		return false
-	}
-
 	filename := path.Base(display)
 	if len(opts.types) > 0 && !typeRegistry.MatchesType(filename, opts.types) {
 		return false
@@ -690,64 +690,73 @@ func (c *RG) includeFile(display, abs string, opts *rgOptions, ignoreMatcher *rg
 		return false
 	}
 
-	if !rgMatchGlobSet(display, filename, opts.globs, opts.globCaseInsensitive) {
+	globInclude, globPositiveMatched := rgMatchGlobSet(display, filename, opts.globs, opts.globCaseInsensitive)
+	if !globInclude {
 		return false
 	}
-	if !rgMatchGlobSet(display, filename, opts.iglobs, true) {
+	iglobInclude, iglobPositiveMatched := rgMatchGlobSet(display, filename, opts.iglobs, true)
+	if !iglobInclude {
 		return false
+	}
+
+	// Positive glob match overrides ignore rules per ripgrep semantics.
+	if !globPositiveMatched && !iglobPositiveMatched {
+		if ignoreMatcher != nil && ignoreMatcher.matches(abs, false) {
+			return false
+		}
 	}
 	return true
 }
 
-func rgMatchGlobSet(display, filename string, globs []string, ignoreCase bool) bool {
+// rgMatchGlobSet evaluates globs in order with last-match-wins semantics.
+// Returns (include, positiveMatched) where positiveMatched indicates a positive
+// glob explicitly matched (used to override ignore rules).
+func rgMatchGlobSet(display, filename string, globs []string, ignoreCase bool) (include, positiveMatched bool) {
 	if len(globs) == 0 {
-		return true
+		return true, false
 	}
-	positive := make([]string, 0, len(globs))
-	negative := make([]string, 0, len(globs))
+	hasPositive := false
+	matched := false
+	lastResult := true
+
 	for _, glob := range globs {
-		trimmed := glob
-		if trimmed == "" {
+		if glob == "" {
 			continue
 		}
-		if negatedGlob, ok := strings.CutPrefix(trimmed, "!"); ok {
-			negative = append(negative, negatedGlob)
-			continue
+		negated := false
+		pattern := glob
+		if neg, ok := strings.CutPrefix(pattern, "!"); ok {
+			negated = true
+			pattern = neg
+		} else {
+			hasPositive = true
 		}
-		positive = append(positive, trimmed)
-	}
 
-	if len(positive) > 0 {
-		matched := false
-		for _, glob := range positive {
-			ok, _ := rgMatchGlob(filename, glob, ignoreCase)
-			if rootedGlob, rooted := strings.CutPrefix(glob, "/"); rooted {
-				ok, _ = rgMatchGlob(display, rootedGlob, ignoreCase)
-			} else if !ok {
-				ok, _ = rgMatchGlob(display, glob, ignoreCase)
-			}
-			if ok {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	for _, glob := range negative {
-		ok, _ := rgMatchGlob(filename, glob, ignoreCase)
-		if rootedGlob, rooted := strings.CutPrefix(glob, "/"); rooted {
+		ok, _ := rgMatchGlob(filename, pattern, ignoreCase)
+		if rootedGlob, rooted := strings.CutPrefix(pattern, "/"); rooted {
 			ok, _ = rgMatchGlob(display, rootedGlob, ignoreCase)
 		} else if !ok {
-			ok, _ = rgMatchGlob(display, glob, ignoreCase)
+			ok, _ = rgMatchGlob(display, pattern, ignoreCase)
 		}
 		if ok {
-			return false
+			matched = true
+			lastResult = !negated
 		}
 	}
-	return true
+
+	if !matched && hasPositive {
+		return false, false
+	}
+	return lastResult, matched && lastResult && hasPositive
+}
+
+func rgHasPositiveGlobs(globs []string) bool {
+	for _, g := range globs {
+		if g != "" && !strings.HasPrefix(g, "!") {
+			return true
+		}
+	}
+	return false
 }
 
 func rgMatchGlob(value, glob string, ignoreCase bool) (bool, error) {
@@ -853,8 +862,8 @@ func rgIsCommonIgnoredDir(name string) bool {
 	}
 }
 
-func rgWriteTypeList(inv *Invocation) error {
-	output := formatRGTypeList()
+func rgWriteTypeListFromRegistry(inv *Invocation, registry *rgTypeRegistry) error {
+	output := registry.formatTypeList()
 	if _, err := io.WriteString(inv.Stdout, output); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}

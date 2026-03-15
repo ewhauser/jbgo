@@ -194,7 +194,7 @@ func (m *rgIgnoreMatcher) state(abs string, isDir bool) (matched, ignored, negat
 		return false, false, false
 	}
 	for _, rule := range m.rules {
-		if !strings.HasPrefix(abs, rule.base) {
+		if rule.base != "/" && abs != rule.base && !strings.HasPrefix(abs, rule.base+"/") {
 			continue
 		}
 		rel := strings.TrimPrefix(abs, rule.base)
