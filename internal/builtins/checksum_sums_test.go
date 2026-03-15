@@ -297,7 +297,6 @@ func TestB2SumStrictCheckAcceptsOpenSSLTaggedLengthLines(t *testing.T) {
 		t.Fatalf("Stderr = %q, want empty", result.Stderr)
 	}
 }
-
 func TestChecksumSumCheckModeResolvesTargetsAgainstWorkingDirectory(t *testing.T) {
 	session := newSession(t, &Config{})
 	data := []byte("cwd-target")
