@@ -85,6 +85,10 @@ make bench-compare JSON_OUT=bench-compare.json  # JSON output
 
 The benchmark compares five runtimes: native `gbash`, GNU bash, `gbash-extras`, `gbash-node-wasm` (WASM in Node.js), and `just-bash` (npm).
 
+Some scenarios require optional commands such as `jq`. Those scenarios keep the full
+runtime table on the website, but unsupported runtimes are shown as skipped with a
+reason instead of being counted as failures.
+
 ## GNU compatibility testing
 
 Evaluate skew between gbash commands and GNU coreutils using the compatibility harness:

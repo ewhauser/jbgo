@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -21,9 +24,25 @@ func TestCreateWorkspaceFixture(t *testing.T) {
 	if summary.FileCount != 300 {
 		t.Fatalf("FileCount = %d, want 300", summary.FileCount)
 	}
+	assertFixtureSummaryMatchesWalk(t, root, summary)
+}
 
-	var countedFiles int
-	var countedBytes int64
+func TestCreateAgenticSearchFixture(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workspace")
+	summary, err := createAgenticSearchFixture(root)
+	if err != nil {
+		t.Fatalf("createAgenticSearchFixture() error = %v", err)
+	}
+	if summary.FileCount != 300 {
+		t.Fatalf("FileCount = %d, want 300", summary.FileCount)
+	}
+	assertFixtureSummaryMatchesWalk(t, root, summary)
+
+	extCounts := map[string]int{}
+	keywordMatches := 0
+	badJobs := 0
+	var tier1 int
+
 	err = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -31,18 +50,82 @@ func TestCreateWorkspaceFixture(t *testing.T) {
 		if info.IsDir() {
 			return nil
 		}
-		countedFiles++
-		countedBytes += info.Size()
+		extCounts[filepath.Ext(path)]++
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = file.Close() }()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, "timeout") || strings.Contains(line, "rollback") {
+				keywordMatches++
+			}
+			if filepath.Ext(path) == ".jsonl" {
+				var record struct {
+					Status string `json:"status"`
+				}
+				if err := json.Unmarshal([]byte(line), &record); err != nil {
+					return err
+				}
+				if record.Status != "ok" {
+					badJobs++
+				}
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+		if filepath.Base(path) == "services.json" {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			var manifest struct {
+				Services []struct {
+					Tier int `json:"tier"`
+				} `json:"services"`
+			}
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				return err
+			}
+			for _, service := range manifest.Services {
+				if service.Tier == 1 {
+					tier1++
+				}
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
-	if countedFiles != summary.FileCount {
-		t.Fatalf("walked files = %d, want %d", countedFiles, summary.FileCount)
+	if got, want := extCounts[".go"], 240; got != want {
+		t.Fatalf(".go file count = %d, want %d", got, want)
 	}
-	if countedBytes != summary.TotalBytes {
-		t.Fatalf("walked bytes = %d, want %d", countedBytes, summary.TotalBytes)
+	if got, want := extCounts[".md"], 24; got != want {
+		t.Fatalf(".md file count = %d, want %d", got, want)
+	}
+	if got, want := extCounts[".csv"], 12; got != want {
+		t.Fatalf(".csv file count = %d, want %d", got, want)
+	}
+	if got, want := extCounts[".jsonl"], 12; got != want {
+		t.Fatalf(".jsonl file count = %d, want %d", got, want)
+	}
+	if got, want := extCounts[".json"], 12; got != want {
+		t.Fatalf(".json file count = %d, want %d", got, want)
+	}
+	if got, want := keywordMatches, 60; got != want {
+		t.Fatalf("keyword match count = %d, want %d", got, want)
+	}
+	if got, want := badJobs, 24; got != want {
+		t.Fatalf("bad job count = %d, want %d", got, want)
+	}
+	if got, want := tier1, 8; got != want {
+		t.Fatalf("tier1 service count = %d, want %d", got, want)
 	}
 }
 
@@ -69,14 +152,19 @@ func TestSummarizeDurations(t *testing.T) {
 }
 
 func TestBenchmarkScenarios(t *testing.T) {
-	fixture := fixtureSummary{
+	workspaceFixture := fixtureSummary{
 		Root:       filepath.Join(string(filepath.Separator), "tmp", "workspace"),
 		FileCount:  300,
 		TotalBytes: 17100,
 	}
+	agenticFixture := fixtureSummary{
+		Root:       filepath.Join(string(filepath.Separator), "tmp", "agentic"),
+		FileCount:  300,
+		TotalBytes: 24120,
+	}
 
-	scenarios := benchmarkScenarios(fixture)
-	if got, want := len(scenarios), 2; got != want {
+	scenarios := benchmarkScenarios(workspaceFixture, agenticFixture)
+	if got, want := len(scenarios), 3; got != want {
 		t.Fatalf("len(benchmarkScenarios()) = %d, want %d", got, want)
 	}
 
@@ -87,12 +175,13 @@ func TestBenchmarkScenarios(t *testing.T) {
 	wantNames := []string{
 		"startup_echo",
 		"workspace_inventory",
+		"agentic_search",
 	}
 	if !slices.Equal(gotNames, wantNames) {
 		t.Fatalf("scenario names = %q, want %q", gotNames, wantNames)
 	}
 
-	for _, index := range []int{0, 1} {
+	for _, index := range []int{0, 1, 2} {
 		if got, want := scenarios[index].WarmupScript, "true\n"; got != want {
 			t.Fatalf("scenarios[%d].WarmupScript = %q, want %q", index, got, want)
 		}
@@ -106,8 +195,26 @@ func TestBenchmarkScenarios(t *testing.T) {
 	if scenarios[1].Fixture == nil {
 		t.Fatalf("workspace Fixture = nil, want fixture summary")
 	}
-	if got, want := scenarios[1].Fixture.Root, fixture.Root; got != want {
+	if got, want := scenarios[1].Fixture.Root, workspaceFixture.Root; got != want {
 		t.Fatalf("workspace Fixture.Root = %q, want %q", got, want)
+	}
+	if !scenarios[2].Workspace {
+		t.Fatalf("agentic_search scenario should mount the mixed fixture")
+	}
+	if !scenarios[2].RequiresJQ {
+		t.Fatalf("agentic_search should require jq")
+	}
+	if got, want := scenarios[2].ExpectedStdout, "files=300\nmatches=60\nbad_jobs=24\ntier1=8\n"; got != want {
+		t.Fatalf("agentic_search ExpectedStdout = %q, want %q", got, want)
+	}
+	if scenarios[2].Fixture == nil {
+		t.Fatalf("agentic_search Fixture = nil, want fixture summary")
+	}
+	if got, want := scenarios[2].Fixture.Root, agenticFixture.Root; got != want {
+		t.Fatalf("agentic_search Fixture.Root = %q, want %q", got, want)
+	}
+	if !strings.Contains(scenarios[2].Command, "jq -s") {
+		t.Fatalf("agentic_search command = %q, want jq usage", scenarios[2].Command)
 	}
 }
 
@@ -137,6 +244,12 @@ func TestRenderTextReportAndJSON(t *testing.T) {
 							{Index: 2, DurationNanos: int64(3 * time.Millisecond), ExitCode: 0, Success: true, Stdout: "benchmark\n"},
 						},
 					},
+					{
+						Name:              "gbash-node-wasm",
+						ArtifactSizeBytes: 7 << 20,
+						Status:            runtimeStatusSkipped,
+						SkipReason:        requiresJQSkipReason,
+					},
 				},
 			},
 		},
@@ -158,6 +271,9 @@ func TestRenderTextReportAndJSON(t *testing.T) {
 	if !strings.Contains(rendered, "median=2ms") {
 		t.Fatalf("renderTextReport() missing latency stats:\n%s", rendered)
 	}
+	if !strings.Contains(rendered, "gbash-node-wasm: skipped ("+requiresJQSkipReason+")") {
+		t.Fatalf("renderTextReport() missing skipped runtime summary:\n%s", rendered)
+	}
 
 	jsonPath := filepath.Join(t.TempDir(), "report.json")
 	if err := writeJSONReport(jsonPath, report); err != nil {
@@ -175,6 +291,71 @@ func TestRenderTextReportAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "\"just_bash_spec\": \"just-bash@2.13.0\"") {
 		t.Fatalf("JSON output missing just-bash spec: %s", string(data))
+	}
+	if !strings.Contains(string(data), "\"status\": \"skipped\"") {
+		t.Fatalf("JSON output missing skipped status: %s", string(data))
+	}
+	if !strings.Contains(string(data), "\"skip_reason\": \""+requiresJQSkipReason+"\"") {
+		t.Fatalf("JSON output missing skip reason: %s", string(data))
+	}
+}
+
+func TestRunTrialsSkipsRuntime(t *testing.T) {
+	called := false
+	report := runTrials(context.Background(), runtimeConfig{
+		Name:              "gbash",
+		ArtifactSizeBytes: 1234,
+		SkipReason: func(ctx context.Context, scenario *scenarioConfig) (string, error) {
+			return requiresJQSkipReason, nil
+		},
+		Command: func(ctx context.Context, scenario *scenarioConfig) *exec.Cmd {
+			called = true
+			return nil
+		},
+	}, &scenarioConfig{Name: "agentic_search", RequiresJQ: true}, 2)
+	if called {
+		t.Fatalf("runTrials() invoked Command for skipped runtime")
+	}
+	if got, want := report.Status, runtimeStatusSkipped; got != want {
+		t.Fatalf("report.Status = %q, want %q", got, want)
+	}
+	if got, want := report.SkipReason, requiresJQSkipReason; got != want {
+		t.Fatalf("report.SkipReason = %q, want %q", got, want)
+	}
+	if report.FailureCount != 0 || report.SuccessCount != 0 {
+		t.Fatalf("skipped report counts = %d/%d, want 0/0", report.SuccessCount, report.FailureCount)
+	}
+	if len(report.Trials) != 0 {
+		t.Fatalf("len(report.Trials) = %d, want 0", len(report.Trials))
+	}
+}
+
+func TestHasFailuresIgnoresSkippedResults(t *testing.T) {
+	report := benchmarkReport{
+		Scenarios: []scenarioReport{
+			{
+				Name: "agentic_search",
+				Results: []runtimeReport{
+					{
+						Name:       "gbash",
+						Status:     runtimeStatusSkipped,
+						SkipReason: requiresJQSkipReason,
+					},
+				},
+			},
+		},
+	}
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false for skipped-only report")
+	}
+
+	report.Scenarios[0].Results = append(report.Scenarios[0].Results, runtimeReport{
+		Name:         "just-bash",
+		FailureCount: 1,
+		Trials:       []trialResult{{Index: 1, Error: "boom"}},
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want true when a runtime failed")
 	}
 }
 
@@ -358,5 +539,32 @@ func TestDirectorySize(t *testing.T) {
 	}
 	if want := int64(len("abc") + len("hello")); got != want {
 		t.Fatalf("directorySize() = %d, want %d", got, want)
+	}
+}
+
+func assertFixtureSummaryMatchesWalk(t *testing.T, root string, summary fixtureSummary) {
+	t.Helper()
+
+	var countedFiles int
+	var countedBytes int64
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		countedFiles++
+		countedBytes += info.Size()
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+	if countedFiles != summary.FileCount {
+		t.Fatalf("walked files = %d, want %d", countedFiles, summary.FileCount)
+	}
+	if countedBytes != summary.TotalBytes {
+		t.Fatalf("walked bytes = %d, want %d", countedBytes, summary.TotalBytes)
 	}
 }

@@ -21,12 +21,16 @@ import (
 )
 
 const (
-	defaultRuns         = 100
-	defaultJustBashSpec = "just-bash@2.13.0"
-	buildTimeout        = 2 * time.Minute
-	primeTimeout        = 2 * time.Minute
-	trialTimeout        = 30 * time.Second
-	justBashWorkspace   = "/home/user/project"
+	defaultRuns          = 100
+	defaultJustBashSpec  = "just-bash@2.13.0"
+	buildTimeout         = 2 * time.Minute
+	primeTimeout         = 2 * time.Minute
+	trialTimeout         = 30 * time.Second
+	justBashWorkspace    = "/home/user/project"
+	runtimeStatusSkipped = "skipped"
+
+	requiresJQSkipReason    = "requires jq; runtime does not bundle it"
+	hostBashJQMissingReason = "requires jq; host bash environment does not provide it"
 )
 
 type options struct {
@@ -60,6 +64,8 @@ type trialResult struct {
 type runtimeReport struct {
 	Name              string        `json:"name"`
 	ArtifactSizeBytes int64         `json:"artifact_size_bytes,omitempty"`
+	Status            string        `json:"status,omitempty"`
+	SkipReason        string        `json:"skip_reason,omitempty"`
 	SuccessCount      int           `json:"success_count"`
 	FailureCount      int           `json:"failure_count"`
 	Stats             *latencyStats `json:"stats,omitempty"`
@@ -88,6 +94,7 @@ type scenarioConfig struct {
 	Description    string
 	Command        string
 	ExpectedStdout string
+	RequiresJQ     bool
 	Workspace      bool
 	Fixture        *fixtureSummary
 	WarmupScript   string
@@ -97,6 +104,7 @@ type runtimeConfig struct {
 	Name              string
 	ArtifactSizeBytes int64
 	Command           func(context.Context, *scenarioConfig) *exec.Cmd
+	SkipReason        func(context.Context, *scenarioConfig) (string, error)
 }
 
 type commandResult struct {
@@ -176,7 +184,12 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	}
 
 	workspaceRoot := filepath.Join(tmpDir, "workspace")
-	fixture, err := createWorkspaceFixture(workspaceRoot)
+	workspaceFixture, err := createWorkspaceFixture(workspaceRoot)
+	if err != nil {
+		return err
+	}
+	agenticSearchRoot := filepath.Join(tmpDir, "agentic-search-workspace")
+	agenticSearchFixture, err := createAgenticSearchFixture(agenticSearchRoot)
 	if err != nil {
 		return err
 	}
@@ -188,7 +201,7 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		gbashNodeWasmRuntime(repoRoot, wasmAssetDir, wasmSize),
 		justBashRuntime(opts.JustBashSpec, justBashSize),
 	}
-	scenarios := benchmarkScenarios(fixture)
+	scenarios := benchmarkScenarios(workspaceFixture, agenticSearchFixture)
 
 	report := benchmarkReport{
 		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
@@ -369,6 +382,12 @@ func gbashRuntime(helperPath string, artifactSizeBytes int64) runtimeConfig {
 			args = append(args, "-c", scenario.Command)
 			return exec.CommandContext(ctx, helperPath, args...)
 		},
+		SkipReason: func(ctx context.Context, scenario *scenarioConfig) (string, error) {
+			if scenario.RequiresJQ {
+				return requiresJQSkipReason, nil
+			}
+			return "", nil
+		},
 	}
 }
 
@@ -384,6 +403,22 @@ func gnuBashRuntime(repoRoot, bashPath string, artifactSizeBytes int64) runtimeC
 			}
 			cmd.Env = append(os.Environ(), "BASH_ENV=")
 			return cmd
+		},
+		SkipReason: func(ctx context.Context, scenario *scenarioConfig) (string, error) {
+			if !scenario.RequiresJQ {
+				return "", nil
+			}
+			cmd := exec.CommandContext(ctx, bashPath, "--noprofile", "--norc", "-c", "command -v jq >/dev/null 2>&1")
+			cmd.Dir = repoRoot
+			cmd.Env = append(os.Environ(), "BASH_ENV=")
+			if err := cmd.Run(); err != nil {
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+					return hostBashJQMissingReason, nil
+				}
+				return "", fmt.Errorf("check GNU bash jq availability: %w", err)
+			}
+			return "", nil
 		},
 	}
 }
@@ -422,6 +457,12 @@ func gbashNodeWasmRuntime(repoRoot, assetDir string, artifactSizeBytes int64) ru
 			cmd.Dir = repoRoot
 			return cmd
 		},
+		SkipReason: func(ctx context.Context, scenario *scenarioConfig) (string, error) {
+			if scenario.RequiresJQ {
+				return requiresJQSkipReason, nil
+			}
+			return "", nil
+		},
 	}
 }
 
@@ -440,7 +481,7 @@ func justBashRuntime(spec string, artifactSizeBytes int64) runtimeConfig {
 	}
 }
 
-func benchmarkScenarios(fixture fixtureSummary) []scenarioConfig {
+func benchmarkScenarios(workspaceFixture, agenticSearchFixture fixtureSummary) []scenarioConfig {
 	return []scenarioConfig{
 		{
 			Name:           "startup_echo",
@@ -453,9 +494,24 @@ func benchmarkScenarios(fixture fixtureSummary) []scenarioConfig {
 			Name:           "workspace_inventory",
 			Description:    "Process start plus a pipe-free workspace inventory.",
 			Command:        "set -- $(find . -type f); echo $#\n",
-			ExpectedStdout: fmt.Sprintf("%d\n", fixture.FileCount),
+			ExpectedStdout: fmt.Sprintf("%d\n", workspaceFixture.FileCount),
 			Workspace:      true,
-			Fixture:        &fixture,
+			Fixture:        &workspaceFixture,
+			WarmupScript:   "true\n",
+		},
+		{
+			Name:        "agentic_search",
+			Description: "Recursive search across mixed workspace files plus jq summaries.",
+			Command: "" +
+				"printf 'files=%s\\nmatches=%s\\nbad_jobs=%s\\ntier1=%s\\n' " +
+				"\"$(find . -type f | grep -c '^')\" " +
+				"\"$(grep -RniE 'timeout|rollback' . | grep -c '^')\" " +
+				"\"$(jq -s 'map(select(.status != \"ok\")) | length' logs/*.jsonl)\" " +
+				"\"$(jq '.services | map(select(.tier == 1)) | length' manifests/services.json)\"\n",
+			ExpectedStdout: "files=300\nmatches=60\nbad_jobs=24\ntier1=8\n",
+			RequiresJQ:     true,
+			Workspace:      true,
+			Fixture:        &agenticSearchFixture,
 			WarmupScript:   "true\n",
 		},
 	}
@@ -497,20 +553,136 @@ func createWorkspaceFixture(root string) (fixtureSummary, error) {
 	return summary, nil
 }
 
+func createAgenticSearchFixture(root string) (fixtureSummary, error) {
+	const (
+		codeFiles     = 240
+		docsFiles     = 24
+		csvFiles      = 12
+		logFiles      = 12
+		jsonFiles     = 12
+		timeoutHits   = 36
+		rollbackHits  = 12
+		badJobsPerLog = 2
+	)
+
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return fixtureSummary{}, fmt.Errorf("create agentic search root: %w", err)
+	}
+
+	summary := fixtureSummary{Root: root}
+	for i := range codeFiles {
+		content := fmt.Sprintf("package pkg%02d\n", i%12)
+		if i < timeoutHits {
+			content += fmt.Sprintf("// TODO: investigate timeout regression %03d\n", i)
+		}
+		content += fmt.Sprintf("func File%03d() int { return %d }\n", i, i)
+		if err := writeFixtureFile(root, fmt.Sprintf("src/pkg%02d/file%03d.go", i%12, i), content, &summary); err != nil {
+			return fixtureSummary{}, err
+		}
+	}
+	for i := range docsFiles {
+		content := fmt.Sprintf("# Runbook %02d\n", i)
+		if i < rollbackHits {
+			content += fmt.Sprintf("rollback dep-%04d after on-call review\n", 1000+i)
+		} else {
+			content += "normal steady-state notes\n"
+		}
+		if err := writeFixtureFile(root, fmt.Sprintf("docs/runbook%02d.md", i), content, &summary); err != nil {
+			return fixtureSummary{}, err
+		}
+	}
+	for i := range csvFiles {
+		content := fmt.Sprintf("service,owner,tier\nsvc-%02d,team-%02d,%d\n", i, i%4, 2+(i%2))
+		if err := writeFixtureFile(root, fmt.Sprintf("reports/summary%02d.csv", i), content, &summary); err != nil {
+			return fixtureSummary{}, err
+		}
+	}
+	for i := range logFiles {
+		var body strings.Builder
+		for j := range 5 {
+			status := "ok"
+			errMsg := ""
+			if j < badJobsPerLog {
+				status = "failed"
+				if j == 0 {
+					errMsg = "database timeout"
+				} else {
+					status = "slow"
+					errMsg = "retry budget warning"
+				}
+			}
+			fmt.Fprintf(
+				&body,
+				"{\"service\":\"svc-%02d\",\"job\":\"job-%d\",\"status\":\"%s\",\"error\":\"%s\",\"duration_ms\":%d}\n",
+				i,
+				j,
+				status,
+				errMsg,
+				1000+(i*10)+j,
+			)
+		}
+		if err := writeFixtureFile(root, fmt.Sprintf("logs/batch%02d.jsonl", i), body.String(), &summary); err != nil {
+			return fixtureSummary{}, err
+		}
+	}
+
+	services := `{"services":[
+{"name":"checkout","tier":1},
+{"name":"billing","tier":1},
+{"name":"search","tier":1},
+{"name":"worker","tier":1},
+{"name":"catalog","tier":1},
+{"name":"gateway","tier":1},
+{"name":"auth","tier":1},
+{"name":"payments","tier":1},
+{"name":"profiles","tier":2},
+{"name":"analytics","tier":2},
+{"name":"notifier","tier":3},
+{"name":"support","tier":3}
+]}
+`
+	if err := writeFixtureFile(root, "manifests/services.json", services, &summary); err != nil {
+		return fixtureSummary{}, err
+	}
+	for i := 1; i < jsonFiles; i++ {
+		content := fmt.Sprintf("{\"manifest\":\"meta-%02d\",\"team\":\"ops\",\"enabled\":%t}\n", i, i%2 == 0)
+		if err := writeFixtureFile(root, fmt.Sprintf("manifests/meta%02d.json", i), content, &summary); err != nil {
+			return fixtureSummary{}, err
+		}
+	}
+
+	return summary, nil
+}
+
+func writeFixtureFile(root, relPath, content string, summary *fixtureSummary) error {
+	target := filepath.Join(root, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("create fixture dir for %s: %w", target, err)
+	}
+	if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write fixture file %s: %w", target, err)
+	}
+	summary.FileCount++
+	summary.TotalBytes += int64(len(content))
+	return nil
+}
+
 func runTrials(ctx context.Context, runtime runtimeConfig, scenario *scenarioConfig, runs int) runtimeReport {
 	report := runtimeReport{
 		Name:              runtime.Name,
 		ArtifactSizeBytes: runtime.ArtifactSizeBytes,
 		Trials:            make([]trialResult, 0, runs),
 	}
+	if reason, err := runtimeSkipReason(ctx, runtime, scenario); err != nil {
+		appendRuntimeErrorTrials(&report, runs, fmt.Errorf("runtime preflight failed: %w", err))
+		return report
+	} else if reason != "" {
+		report.Status = runtimeStatusSkipped
+		report.SkipReason = reason
+		return report
+	}
 	if err := warmRuntimeForScenario(ctx, runtime, scenario); err != nil {
-		for i := range runs {
-			report.FailureCount++
-			report.Trials = append(report.Trials, trialResult{
-				Index: i + 1,
-				Error: err.Error(),
-			})
-		}
+		appendRuntimeErrorTrials(&report, runs, err)
 		return report
 	}
 	successDurations := make([]time.Duration, 0, runs)
@@ -544,6 +716,23 @@ func runTrials(ctx context.Context, runtime runtimeConfig, scenario *scenarioCon
 		report.Stats = &stats
 	}
 	return report
+}
+
+func runtimeSkipReason(ctx context.Context, runtime runtimeConfig, scenario *scenarioConfig) (string, error) {
+	if runtime.SkipReason == nil {
+		return "", nil
+	}
+	return runtime.SkipReason(ctx, scenario)
+}
+
+func appendRuntimeErrorTrials(report *runtimeReport, runs int, err error) {
+	for i := range runs {
+		report.FailureCount++
+		report.Trials = append(report.Trials, trialResult{
+			Index: i + 1,
+			Error: err.Error(),
+		})
+	}
 }
 
 func warmRuntimeForScenario(ctx context.Context, runtime runtimeConfig, scenario *scenarioConfig) error {
@@ -666,6 +855,12 @@ func renderTextReport(report benchmarkReport) string {
 			fmt.Fprintf(&b, "fixture: %d files, %d bytes\n", scenario.Fixture.FileCount, scenario.Fixture.TotalBytes)
 		}
 		for _, result := range scenario.Results {
+			if result.Status == runtimeStatusSkipped {
+				fmt.Fprintf(&b, "%s: skipped (%s)", result.Name, result.SkipReason)
+				fmt.Fprintf(&b, " size=%s", formatArtifactSize(result.ArtifactSizeBytes))
+				fmt.Fprintln(&b)
+				continue
+			}
 			fmt.Fprintf(&b, "%s: %d/%d successful", result.Name, result.SuccessCount, result.SuccessCount+result.FailureCount)
 			fmt.Fprintf(&b, " size=%s", formatArtifactSize(result.ArtifactSizeBytes))
 			if result.Stats != nil {

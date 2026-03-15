@@ -64,6 +64,10 @@ fixture into the in-memory `js/wasm` filesystem because host-backed filesystems 
 not available there. The shared command is intentionally pipe-free so it also runs
 on the current `js/wasm` target.
 
+`agentic_search` uses a separate mixed fixture with `.go`, `.md`, `.csv`, `.json`,
+and `.jsonl` files plus `jq` queries. Runtimes that do not bundle `jq` are reported
+as skipped for that scenario instead of failing the whole comparison.
+
 These numbers are a local reference point, not a portability guarantee. Startup
 comparisons are still not fully apples to apples, because `just-bash` currently
 embeds tools like Python in its base container and `gbash` does not.
@@ -73,6 +77,9 @@ For the native runtimes this is the built executable size, for `GNU bash` it is 
 host `bash` executable size, for Node/WASM it is the `gbash.wasm` size, and for
 `just-bash` it is the installed `node_modules` closure size measured from a
 temporary `npm install` plus the host `node` executable size.
+
+Scenario results may also include `status=skipped` with a `skip_reason` when a
+runtime cannot run a scenario because a required optional command is unavailable.
 
 ## GNU Coreutils Compatibility Testing
 
