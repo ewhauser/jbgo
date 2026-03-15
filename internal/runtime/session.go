@@ -9,7 +9,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/shell"
+	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/trace"
 )
 

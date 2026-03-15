@@ -13,7 +13,6 @@ import (
 	internalruntime "github.com/ewhauser/gbash/internal/runtime"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/shell"
 )
 
 // Runtime executes bash-like scripts inside the configured sandbox.
@@ -66,8 +65,7 @@ const (
 // Config describes the complete gbash runtime configuration.
 //
 // The zero value is useful: it creates the default in-memory sandbox rooted at
-// /home/agent with the default command registry, default shell engine, and the
-// default static policy.
+// /home/agent with the default command registry and the default static policy.
 //
 // Most callers should prefer [New] with a small number of option helpers such
 // as [WithWorkspace], [WithHTTPAccess], [WithRegistry], or [WithBaseEnv]. This
@@ -85,10 +83,6 @@ type Config struct {
 	// Policy governs path access, command limits, and other sandbox checks.
 	// When nil, the default static policy is used.
 	Policy policy.Policy
-
-	// Engine provides the shell parser and executor implementation. When nil,
-	// the default mvdan/sh-backed engine is used.
-	Engine shell.Engine
 
 	// BaseEnv provides the base environment visible to each execution before any
 	// per-request environment overrides are applied.
@@ -253,7 +247,6 @@ func (cfg *Config) runtimeConfig() *internalruntime.Config {
 		FileSystem:    cfg.FileSystem.runtimeConfig(),
 		Registry:      cfg.Registry,
 		Policy:        cfg.Policy,
-		Engine:        cfg.Engine,
 		BaseEnv:       copyStringMap(cfg.BaseEnv),
 		Network:       cfg.networkConfig(),
 		NetworkClient: cfg.NetworkClient,

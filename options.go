@@ -7,7 +7,6 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/shell"
 )
 
 // WithConfig overlays non-zero fields from cfg onto the runtime configuration.
@@ -27,9 +26,6 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.Policy != nil {
 			target.Policy = cfg.Policy
-		}
-		if cfg.Engine != nil {
-			target.Engine = cfg.Engine
 		}
 		if cfg.BaseEnv != nil {
 			target.BaseEnv = copyStringMap(cfg.BaseEnv)
@@ -102,14 +98,6 @@ func WithRegistry(registry commands.CommandRegistry) Option {
 func WithPolicy(p policy.Policy) Option {
 	return func(target *Config) error {
 		target.Policy = p
-		return nil
-	}
-}
-
-// WithEngine replaces the shell engine implementation.
-func WithEngine(engine shell.Engine) Option {
-	return func(target *Config) error {
-		target.Engine = engine
 		return nil
 	}
 }

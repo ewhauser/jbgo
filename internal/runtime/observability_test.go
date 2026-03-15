@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/shell"
 	"github.com/ewhauser/gbash/trace"
 	"mvdan.cc/sh/v3/syntax"
 )

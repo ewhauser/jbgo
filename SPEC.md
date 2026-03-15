@@ -227,7 +227,6 @@ type Config struct {
     FileSystem    FileSystemConfig
     Registry      commands.CommandRegistry
     Policy        Policy
-    Engine        shell.Engine
     BaseEnv       map[string]string
     Network       *network.Config
     NetworkClient network.Client

@@ -11,9 +11,9 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/builtins"
+	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/shell"
 )
 
 type Config struct {

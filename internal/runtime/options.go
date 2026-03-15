@@ -2,9 +2,9 @@ package runtime
 
 import (
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/shell"
 )
 
 // Option configures a runtime before initialization.

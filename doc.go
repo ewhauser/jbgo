@@ -8,8 +8,8 @@
 //   - mount a real host directory into the sandbox with [WithWorkspace]
 //   - enable allowlisted HTTP access for curl with [WithHTTPAccess] or
 //     [WithNetwork]
-//   - customize the registry, policy, engine, or filesystem with explicit
-//     options when you need lower-level control
+//   - customize the registry, policy, or filesystem with explicit options when
+//     you need lower-level control
 //
 // Most embedders should only import the root package. Advanced integrations may
 // also import the supported extension packages:
@@ -18,7 +18,6 @@
 //   - fs for custom filesystem backends and factories
 //   - network for sandbox HTTP client customization
 //   - policy for sandbox policy implementations
-//   - shell for alternative shell engine implementations
 //   - trace for structured execution event consumption when callers opt in to
 //     tracing on the runtime
 //
