@@ -597,18 +597,23 @@ func (c *checksumSum) parseTaggedChecksumLine(line string) (checksumLine, bool) 
 		trimmed = trimmed[len(c.tagName)+2:]
 		lengthBytes = c.digestLen
 	case c.supportsLength && strings.HasPrefix(trimmed, c.tagName+"-"):
-		closeIdx := strings.Index(trimmed, " (")
-		if closeIdx < 0 {
+		openIdx := strings.Index(trimmed, "(")
+		if openIdx < 0 {
 			return checksumLine{}, false
 		}
-		lengthLabel := trimmed[len(c.tagName)+1 : closeIdx]
+		lengthLabel := strings.TrimSpace(trimmed[len(c.tagName)+1 : openIdx])
 		parsedLength, ok := parseTaggedLengthBits(lengthLabel)
 		if !ok {
 			return checksumLine{}, false
 		}
 		lengthBytes = parsedLength
-		sep = ") = "
-		trimmed = trimmed[closeIdx+2:]
+		if openIdx > 0 && trimmed[openIdx-1] == ' ' {
+			sep = ") = "
+			trimmed = trimmed[openIdx+1:]
+		} else {
+			sep = ")= "
+			trimmed = trimmed[openIdx+1:]
+		}
 	case strings.HasPrefix(trimmed, c.tagName+"("):
 		sep = ")= "
 		trimmed = trimmed[len(c.tagName)+1:]

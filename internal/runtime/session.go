@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/ewhauser/gbash/commands"
@@ -55,6 +58,10 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	}
 	if err := s.fs.Chdir(workDir); err != nil {
 		return nil, err
+	}
+	if hasVisiblePWD && !runtimeVisiblePWDMatchesCurrentDir(ctx, s.fs, visiblePWD) {
+		visiblePWD = ""
+		hasVisiblePWD = false
 	}
 
 	limits := s.cfg.Policy.Limits()
@@ -178,6 +185,10 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	if err := s.fs.Chdir(workDir); err != nil {
 		return nil, err
 	}
+	if hasVisiblePWD && !runtimeVisiblePWDMatchesCurrentDir(ctx, s.fs, visiblePWD) {
+		visiblePWD = ""
+		hasVisiblePWD = false
+	}
 
 	engine, ok := s.cfg.Engine.(shell.InteractiveEngine)
 	if !ok {
@@ -262,6 +273,30 @@ func executionContext(ctx context.Context, timeout time.Duration) (context.Conte
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, timeout)
+}
+
+func runtimeVisiblePWDMatchesCurrentDir(ctx context.Context, fsys gbfs.FileSystem, candidate string) bool {
+	if fsys == nil || !path.IsAbs(candidate) {
+		return false
+	}
+	for piece := range strings.SplitSeq(candidate, "/") {
+		if piece == "." || piece == ".." {
+			return false
+		}
+	}
+
+	candidateInfo, candidateErr := fsys.Stat(ctx, candidate)
+	currentInfo, currentErr := fsys.Stat(ctx, ".")
+	if candidateErr == nil && currentErr == nil && os.SameFile(candidateInfo, currentInfo) {
+		return true
+	}
+
+	candidateReal, candidateRealErr := fsys.Realpath(ctx, candidate)
+	currentReal, currentRealErr := fsys.Realpath(ctx, ".")
+	if candidateRealErr != nil || currentRealErr != nil {
+		return false
+	}
+	return candidateReal == currentReal
 }
 
 func classifyExecutionControlError(ctx context.Context, timeout time.Duration, runErr error, stderr *captureBuffer, result *ExecutionResult) bool {

@@ -87,6 +87,50 @@ func TestWorkDirUpdatesPWD(t *testing.T) {
 	}
 }
 
+func TestInvalidVisiblePWDDoesNotOverrideSandboxWorkDir(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		WorkDir: "/tmp",
+		Env: map[string]string{
+			"PWD": "/private/tmp/host-only-path",
+		},
+		Script: "echo \"$PWD\"\npwd -L\npwd -P\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/tmp\n/tmp\n/tmp\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCommandsResolveAgainstInternalPWDWhenVisiblePWDCorrupted(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "" +
+			"mkdir dir\n" +
+			"cd dir\n" +
+			"mkdir target\n" +
+			"PWD=/tmp/host-physical\n" +
+			"chmod -R 700 target\n" +
+			"stat -c '%a' /home/agent/dir/target\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "0700\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestRelativePathsUseVirtualWorkDir(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 

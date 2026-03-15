@@ -897,7 +897,7 @@ __JB_PWD='%s'
 OLDPWD=$__JB_PWD
 %s
 __JB_DIR_STACK=( "$__JB_PWD" )
-export PWD OLDPWD
+export PWD OLDPWD __JB_PWD
 
 pwd() {
 	command /bin/pwd "$@"
@@ -1002,7 +1002,7 @@ __jb_activate_new_top() {
 	OLDPWD=$__jb_activate_old
 	__JB_PWD=$__jb_activate_next
 	PWD=$__JB_PWD
-	export PWD OLDPWD
+	export PWD OLDPWD __JB_PWD
 }
 
 dirs() {
@@ -1165,7 +1165,7 @@ cd() {
 	__JB_PWD=$next
 	PWD=$next
 	__JB_DIR_STACK[0]=$next
-	export PWD OLDPWD
+	export PWD OLDPWD __JB_PWD
 	if [ -n "$show" ]; then
 		printf '%%s\n' "$PWD"
 	fi
@@ -1283,7 +1283,7 @@ pushd() {
 	OLDPWD=$__jb_old_current
 	__JB_PWD=$__jb_next
 	PWD=$__JB_PWD
-	export PWD OLDPWD
+	export PWD OLDPWD __JB_PWD
 	dirs
 }
 

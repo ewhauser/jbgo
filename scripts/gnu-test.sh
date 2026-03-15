@@ -136,6 +136,8 @@ case "\$host_pwd" in
   "\$root_dir"/*) sandbox_cwd="/\${host_pwd#"\$root_dir"/}" ;;
 esac
 gbash_bin=\$root_dir/build-aux/gbash-harness/gbash
+PWD=\$sandbox_cwd
+export PWD
 EOF
   if [[ -n "$command_name" ]]; then
     printf '%s\n' "exec \"\$gbash_bin\" --readwrite-root \"\$root_dir\" --cwd \"\$sandbox_cwd\" -c 'exec \"\$@\"' _ $command_name \"\$@\"" >> "$path"
@@ -192,6 +194,8 @@ write_wrapper() {
     printf '%s\n' '  "$root_dir"/*) sandbox_cwd="/${host_pwd#"$root_dir"/}" ;;'
     printf '%s\n' 'esac'
     printf '%s\n' 'gbash_bin=$root_dir/build-aux/gbash-harness/gbash'
+    printf '%s\n' 'PWD=$sandbox_cwd'
+    printf '%s\n' 'export PWD'
     if [ -n "$command_name" ]; then
       printf '%s\n' "exec \"\$gbash_bin\" --readwrite-root \"\$root_dir\" --cwd \"\$sandbox_cwd\" -c 'exec \"\$@\"' _ $command_name \"\$@\""
     else
@@ -294,6 +298,29 @@ fi
 setup_ "$@"
 PATH=$jbgo_path_before_setup_
 export PATH
+
+jbgo_host_chmod_=/bin/chmod
+test -x "$jbgo_host_chmod_" || jbgo_host_chmod_=chmod
+jbgo_host_rm_=/bin/rm
+test -x "$jbgo_host_rm_" || jbgo_host_rm_=rm
+jbgo_host_sleep_=/bin/sleep
+test -x "$jbgo_host_sleep_" || jbgo_host_sleep_=sleep
+
+remove_tmp_ ()
+{
+  __st=$?
+  cleanup_
+  if test "$KEEP" = yes; then
+    echo "Not removing temporary directory $test_dir_"
+  else
+    cd "$initial_cwd_" || cd / || cd /tmp
+    "$jbgo_host_chmod_" -R u+rwx "$test_dir_"
+    "$jbgo_host_rm_" -rf "$test_dir_" 2>/dev/null \
+      || { "$jbgo_host_sleep_" 1 && "$jbgo_host_rm_" -rf "$test_dir_"; } \
+      || { test $__st = 0 && __st=1; }
+  fi
+  exit $__st
+}
 # This trap is here, rather than in the setup_ function, because some
 # shells run the exit trap at shell function exit, rather than script exit.
 trap remove_tmp_ EXIT

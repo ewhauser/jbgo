@@ -273,6 +273,31 @@ func TestB2SumCheckModeSupportsVariableLengths(t *testing.T) {
 	}
 }
 
+func TestB2SumStrictCheckAcceptsOpenSSLTaggedLengthLines(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	files := []string{"/tmp/a", "/tmp/ b", "/tmp/*c", "/tmp/44", "/tmp/ "}
+	var content strings.Builder
+	for _, name := range files {
+		data := []byte(name + "\n")
+		writeSessionFile(t, session, name, data)
+		fmt.Fprintf(&content, "BLAKE2b(%s)= %s\n", name[len("/tmp/"):], b2Hex(data))
+		fmt.Fprintf(&content, "BLAKE2b-128(%s)= %s\n", name[len("/tmp/"):], b2HexSized(data, 16))
+	}
+	writeSessionFile(t, session, "/tmp/openssl.b2sum", []byte(content.String()))
+
+	result := mustExecSession(t, session, "cd /tmp\nb2sum --strict -c openssl.b2sum\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "a: OK\na: OK\n b: OK\n b: OK\n*c: OK\n*c: OK\n44: OK\n44: OK\n : OK\n : OK\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
 func TestChecksumSumCheckModeResolvesTargetsAgainstWorkingDirectory(t *testing.T) {
 	session := newSession(t, &Config{})
 	data := []byte("cwd-target")
