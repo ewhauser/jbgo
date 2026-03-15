@@ -78,6 +78,8 @@ func TestCksumCheckModeAndValidation(t *testing.T) {
 	writeSessionFile(t, session, "/tmp/md5.sum", fmt.Appendf(nil, "MD5 (/tmp/input.txt) = %s\n", md5Hex(data)))
 	writeSessionFile(t, session, "/tmp/sha256.sum", fmt.Appendf(nil, "%s  /tmp/input.txt\n", sha256Hex(data)))
 	writeSessionFile(t, session, "/tmp/sha256b64.sum", fmt.Appendf(nil, "SHA256 (/tmp/input.txt) = %s\n", base64.StdEncoding.EncodeToString(mustHexDecode(t, sha256Hex(data)))))
+	writeSessionFile(t, session, "/tmp/sha3.sum", fmt.Appendf(nil, "SHA3 (/tmp/input.txt) = %s\n", sha3Hex(data)))
+	writeSessionFile(t, session, "/tmp/b2b64.sum", fmt.Appendf(nil, "%s  /tmp/input.txt\n", base64.StdEncoding.EncodeToString(mustHexDecode(t, b2HexSized(data, 16)))))
 	writeSessionFile(t, session, "/tmp/sm3.sum", []byte("SM3 (/tmp/input.txt) = 0000000000000000000000000000000000000000000000000000000000000000\n"))
 
 	tests := []struct {
@@ -89,7 +91,10 @@ func TestCksumCheckModeAndValidation(t *testing.T) {
 	}{
 		{"tagged", "cksum --check /tmp/md5.sum\n", "/tmp/input.txt: OK\n", "", true},
 		{"untagged-cli-algo", "cksum --algorithm=sha256 --check /tmp/sha256.sum\n", "/tmp/input.txt: OK\n", "", true},
+		{"untagged-cli-sha2-infers-length", "cksum --algorithm=sha2 --check /tmp/sha256.sum\n", "/tmp/input.txt: OK\n", "", true},
 		{"base64", "cksum --check /tmp/sha256b64.sum\n", "/tmp/input.txt: OK\n", "", true},
+		{"base64-cli-sha3-infers-length", "cksum --algorithm=sha3 --check /tmp/sha3.sum\n", "/tmp/input.txt: OK\n", "", true},
+		{"base64-cli-blake2b-infers-length", "cksum --algorithm=blake2b --check /tmp/b2b64.sum\n", "/tmp/input.txt: OK\n", "", true},
 		{"text-without-untagged", "cksum --algorithm=md5 --text /tmp/input.txt\n", "", "cksum: --text mode is only supported with --untagged\n", false},
 		{"legacy-check", "cksum --algorithm=crc --check /tmp/input.txt\n", "", "cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}\n", false},
 		{"sm3-unsupported", "cksum --algorithm=sm3 /tmp/input.txt\n", "", "cksum: SM3 is not supported\n", false},
@@ -98,6 +103,8 @@ func TestCksumCheckModeAndValidation(t *testing.T) {
 		{"raw-multiple", "cksum --algorithm=md5 --raw /tmp/input.txt /tmp/input.txt\n", "", "cksum: the --raw option is not supported with multiple files\n", false},
 		{"blake2b-length", "cksum --algorithm=blake2b --length=513 /tmp/input.txt\n", "", "cksum: invalid length: '513'\ncksum: maximum digest length for 'BLAKE2b' is 512 bits\n", false},
 		{"blake2b-length-overflow", "cksum --algorithm=blake2b --length=18446744073709551616 /tmp/input.txt\n", "", "cksum: invalid length: '18446744073709551616'\ncksum: maximum digest length for 'BLAKE2b' is 512 bits\n", false},
+		{"sha3-length-overflow", "cksum --algorithm=sha3 --length=18446744073709551616 /tmp/input.txt\n", "", "cksum: invalid length: '18446744073709551616'\ncksum: digest length for 'SHA3' must be 224, 256, 384, or 512\n", false},
+		{"sha3-check-warn-invalid-tag", fmt.Sprintf("printf 'SHA3-248 (/tmp/input.txt) = %s\\n' '%s' > /tmp/bad-sha3.sum\ncksum --algorithm=sha3 --check --warn /tmp/bad-sha3.sum\n", sha3Hex(data)[:62], sha3Hex(data)[:62]), "", "cksum: /tmp/bad-sha3.sum: 1: improperly formatted SHA3 checksum line\ncksum: /tmp/bad-sha3.sum: no properly formatted checksum lines found\n", false},
 	}
 
 	for _, tc := range tests {
@@ -145,4 +152,9 @@ func TestCksumZeroAndRawModes(t *testing.T) {
 	if raw.Stdout != string(h.Sum(nil)) {
 		t.Fatalf("raw Stdout mismatch: got %x want %x", raw.Stdout, h.Sum(nil))
 	}
+}
+
+func sha3Hex(data []byte) string {
+	sum := sha3.Sum256(data)
+	return fmt.Sprintf("%x", sum)
 }

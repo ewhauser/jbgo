@@ -295,19 +295,19 @@ func (c *checksumSum) optionsFromMatches(inv *Invocation, matches *ParsedCommand
 
 	if !opts.check {
 		if opts.ignoreFlagSet {
-			return checksumOptions{}, exitf(inv, 1, "%s: the --ignore-missing option is meaningful only when verifying checksums", c.name)
+			return checksumOptions{}, checksumCheckOnlyOptionError(inv, c.name, "ignore-missing")
 		}
 		if opts.quietFlagSet {
-			return checksumOptions{}, exitf(inv, 1, "%s: the --quiet option is meaningful only when verifying checksums", c.name)
+			return checksumOptions{}, checksumCheckOnlyOptionError(inv, c.name, "quiet")
 		}
 		if opts.statusFlagSet {
-			return checksumOptions{}, exitf(inv, 1, "%s: the --status option is meaningful only when verifying checksums", c.name)
+			return checksumOptions{}, checksumCheckOnlyOptionError(inv, c.name, "status")
 		}
 		if opts.strictFlagSet {
-			return checksumOptions{}, exitf(inv, 1, "%s: the --strict option is meaningful only when verifying checksums", c.name)
+			return checksumOptions{}, checksumCheckOnlyOptionError(inv, c.name, "strict")
 		}
 		if opts.warnFlagSet {
-			return checksumOptions{}, exitf(inv, 1, "%s: the --warn option is meaningful only when verifying checksums", c.name)
+			return checksumOptions{}, checksumCheckOnlyOptionError(inv, c.name, "warn")
 		}
 	}
 	if opts.check {
@@ -446,6 +446,7 @@ func (c *checksumSum) verifyChecksumList(ctx context.Context, inv *Invocation, o
 	stats := checksumStats{}
 
 	for i, lineText := range lines {
+		lineText = strings.TrimSuffix(lineText, "\r")
 		lineErr := c.processChecksumLine(ctx, inv, opts, lineText, i, &cachedFormat)
 		switch lineErr {
 		case checksumLineSkipped:
@@ -753,6 +754,11 @@ func writeChecksumLengthError(inv *Invocation, cmdName, value string, err error)
 	}
 }
 
+func checksumCheckOnlyOptionError(inv *Invocation, cmdName, option string) error {
+	_ = exitf(inv, 1, "%s: the --%s option is meaningful only when verifying checksums", cmdName, option)
+	return exitf(inv, 1, "Try '%s --help' for more information.", cmdName)
+}
+
 func checksumLooksHex(sum string) bool {
 	if sum == "" {
 		return false
@@ -770,7 +776,8 @@ func checksumEscapeFilename(name string, zero bool) (escaped, prefix string) {
 		return name, ""
 	}
 	replacedBackslash := strings.ReplaceAll(name, "\\", "\\\\")
-	replaced := strings.ReplaceAll(replacedBackslash, "\n", "\\n")
+	replacedNewline := strings.ReplaceAll(replacedBackslash, "\n", "\\n")
+	replaced := strings.ReplaceAll(replacedNewline, "\r", "\\r")
 	if replaced != name {
 		return replaced, "\\"
 	}
@@ -785,6 +792,10 @@ func checksumUnescapeFilename(name string) string {
 			switch name[i+1] {
 			case 'n':
 				b.WriteByte('\n')
+				i++
+				continue
+			case 'r':
+				b.WriteByte('\r')
 				i++
 				continue
 			case '\\':
@@ -810,7 +821,8 @@ func (c *checksumSum) writeVerifyResult(inv *Invocation, name, status string, ve
 		}
 	default:
 	}
-	_, _ = fmt.Fprintf(inv.Stdout, "%s: %s\n", name, status)
+	escaped, prefix := checksumEscapeFilename(name, false)
+	_, _ = fmt.Fprintf(inv.Stdout, "%s%s: %s\n", prefix, escaped, status)
 }
 
 func (c *checksumSum) printCheckSummary(inv *Invocation, stats checksumStats) {

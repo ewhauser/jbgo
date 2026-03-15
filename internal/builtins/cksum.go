@@ -257,7 +257,7 @@ func (c *Cksum) optionsFromMatches(inv *Invocation, matches *ParsedCommand) (cks
 		if !algo.isSupported() {
 			return cksumOptions{}, exitf(inv, 1, "cksum: %s is not supported", algo.tagLabel())
 		}
-		finalAlgo, err := sanitizeCksumLength(inv, *algo, lengthValue)
+		finalAlgo, err := sanitizeCksumLength(inv, *algo, lengthValue, opts.check)
 		if err != nil {
 			return cksumOptions{}, err
 		}
@@ -290,10 +290,13 @@ func (c *Cksum) optionsFromMatches(inv *Invocation, matches *ParsedCommand) (cks
 	return opts, nil
 }
 
-func sanitizeCksumLength(inv *Invocation, algo cksumAlgorithm, value string) (cksumAlgorithm, error) {
+func sanitizeCksumLength(inv *Invocation, algo cksumAlgorithm, value string, allowImplicitLength bool) (cksumAlgorithm, error) {
 	if value == "" {
 		switch algo.family {
 		case cksumSHA2, cksumSHA3:
+			if allowImplicitLength {
+				return algo, nil
+			}
 			if algo.bits == 0 {
 				return cksumAlgorithm{}, exitf(inv, 1, "cksum: --algorithm=%s requires specifying --length 224, 256, 384, or 512", algo.family)
 			}
@@ -305,13 +308,14 @@ func sanitizeCksumLength(inv *Invocation, algo cksumAlgorithm, value string) (ck
 
 	switch algo.family {
 	case cksumSHA2, cksumSHA3:
-		n, err := strconv.Atoi(value)
+		n, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			return cksumAlgorithm{}, exitf(inv, 1, "cksum: invalid length: '%s'", value)
+			_ = exitf(inv, 1, "cksum: invalid length: '%s'", value)
+			return cksumAlgorithm{}, exitf(inv, 1, "cksum: digest length for '%s' must be 224, 256, 384, or 512", strings.ToUpper(string(algo.family)))
 		}
 		switch n {
 		case 224, 256, 384, 512:
-			algo.bits = n
+			algo.bits = int(n)
 			return algo, nil
 		default:
 			if _, err := fmt.Fprintf(inv.Stderr, "cksum: invalid length: '%s'\n", value); err != nil {
@@ -430,6 +434,20 @@ func (a cksumAlgorithm) tagLabel() string {
 	default:
 		return strings.ToUpper(string(a.family))
 	}
+}
+
+func (a cksumAlgorithm) diagnosticLabel() string {
+	switch a.family {
+	case cksumSHA2:
+		if a.bits == 0 {
+			return "SHA2"
+		}
+	case cksumSHA3:
+		if a.bits == 0 {
+			return "SHA3"
+		}
+	}
+	return a.tagLabel()
 }
 
 func (a cksumAlgorithm) defaultBits() int {
@@ -750,6 +768,7 @@ func (c *Cksum) verifyChecksumList(ctx context.Context, inv *Invocation, opts ck
 	stats := cksumCheckStats{}
 
 	for i, lineText := range lines {
+		lineText = strings.TrimSuffix(lineText, "\r")
 		result := c.processChecksumLine(ctx, inv, opts, verbosity, lineText, i, &cached)
 		switch result {
 		case cksumLineSkipped:
@@ -758,7 +777,11 @@ func (c *Cksum) verifyChecksumList(ctx context.Context, inv *Invocation, opts ck
 			stats.totalConsidered++
 			stats.badFormat++
 			if verbosity == cksumVerbosityWarn {
-				_, _ = fmt.Fprintf(inv.Stderr, "cksum: %s: %d: improperly formatted checksum line\n", listName, i+1)
+				if opts.algorithm != nil && !opts.algorithm.isLegacy() {
+					_, _ = fmt.Fprintf(inv.Stderr, "cksum: %s: %d: improperly formatted %s checksum line\n", listName, i+1, opts.algorithm.diagnosticLabel())
+				} else {
+					_, _ = fmt.Fprintf(inv.Stderr, "cksum: %s: %d: improperly formatted checksum line\n", listName, i+1)
+				}
 			}
 		case cksumLineFailedChecksum:
 			stats.totalConsidered++
@@ -859,7 +882,7 @@ func (c *Cksum) processChecksumLine(ctx context.Context, inv *Invocation, opts c
 		}
 		if !opts.ignoreMissing || !errorsIsNotExist(err) {
 			_, _ = fmt.Fprintf(inv.Stderr, "cksum: %s: %s\n", name, checksumOpenErrorText(err))
-			c.writeVerifyResult(inv, []byte(line.prefix+line.filename), "FAILED open or read", true, verbosity)
+			c.writeVerifyResult(inv, name, "FAILED open or read", true, verbosity)
 		}
 		if opts.ignoreMissing && errorsIsNotExist(err) {
 			return cksumLineIgnoredMissing
@@ -872,7 +895,7 @@ func (c *Cksum) processChecksumLine(ctx context.Context, inv *Invocation, opts c
 		return cksumLineFailedOpen
 	}
 	ok = bytes.Equal(got, line.sum)
-	c.writeVerifyResult(inv, []byte(line.prefix+line.filename), ternary(ok, "OK", "FAILED"), !ok, verbosity)
+	c.writeVerifyResult(inv, name, ternary(ok, "OK", "FAILED"), !ok, verbosity)
 	if ok {
 		return cksumLineOK
 	}
@@ -902,7 +925,7 @@ func (c *Cksum) readVerifyTarget(ctx context.Context, inv *Invocation, name stri
 	return data, err
 }
 
-func (c *Cksum) writeVerifyResult(inv *Invocation, name []byte, status string, failed bool, verbosity cksumVerbosity) {
+func (c *Cksum) writeVerifyResult(inv *Invocation, name string, status string, failed bool, verbosity cksumVerbosity) {
 	if !failed {
 		if verbosity <= cksumVerbosityQuiet {
 			return
@@ -910,8 +933,8 @@ func (c *Cksum) writeVerifyResult(inv *Invocation, name []byte, status string, f
 	} else if verbosity == cksumVerbosityStatus {
 		return
 	}
-	_, _ = inv.Stdout.Write(name)
-	_, _ = io.WriteString(inv.Stdout, ": "+status+"\n")
+	escaped, prefix := checksumEscapeFilename(name, false)
+	_, _ = io.WriteString(inv.Stdout, prefix+escaped+": "+status+"\n")
 }
 
 func parseCksumLine(lineText string, cached **cksumLineFormat, cliAlgo *cksumAlgorithm) (*cksumLine, bool) {
@@ -972,6 +995,11 @@ func parseCksumAlgoLine(line string, cliAlgo *cksumAlgorithm) (*cksumLine, bool)
 	if !ok {
 		return nil, false
 	}
+	if algo.bits == 0 {
+		if inferred := inferCLIAlgorithm(algo, sumText); inferred != nil {
+			algo = *inferred
+		}
+	}
 	sum, ok := decodeExpectedDigest(sumText, algo.defaultBits())
 	if !ok {
 		return nil, false
@@ -1020,6 +1048,13 @@ func parseTaggedAlgorithm(text string, cliAlgo *cksumAlgorithm) (cksumAlgorithm,
 		algo = cksumAlgorithm{family: cksumShake256, bits: bits}
 	default:
 		return cksumAlgorithm{}, false
+	}
+	if (algo.family == cksumSHA2 || algo.family == cksumSHA3) && algo.bits != 0 {
+		switch algo.bits {
+		case 224, 256, 384, 512:
+		default:
+			return cksumAlgorithm{}, false
+		}
 	}
 	if cliAlgo == nil {
 		return algo, true
@@ -1086,9 +1121,9 @@ func inferCLIAlgorithm(cli cksumAlgorithm, digestText string) *cksumAlgorithm {
 		return &cli
 	}
 	if cli.family == cksumBlake2b && cli.bits == 0 {
-		if len(digestText)%2 == 0 {
-			if raw, err := hex.DecodeString(digestText); err == nil {
-				cli.bits = len(raw) * 8
+		if digestLen, ok := inferDigestBitLength(digestText); ok {
+			if digestLen > 0 && digestLen <= 512 && digestLen%8 == 0 {
+				cli.bits = digestLen
 			}
 		}
 	}
@@ -1100,9 +1135,6 @@ func inferDigestBitLength(text string) (int, bool) {
 		return len(raw) * 8, true
 	}
 	if raw, err := base64.StdEncoding.DecodeString(text); err == nil {
-		return len(raw) * 8, true
-	}
-	if raw, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(text, "=")); err == nil {
 		return len(raw) * 8, true
 	}
 	return 0, false
@@ -1118,11 +1150,6 @@ func decodeExpectedDigest(text string, bitHint int) ([]byte, bool) {
 		}
 	}
 	if raw, err := base64.StdEncoding.DecodeString(text); err == nil {
-		if bitHint == 0 || len(raw)*8 == bitHint || (bitHint%8 != 0 && len(raw)*8 >= bitHint) {
-			return raw, true
-		}
-	}
-	if raw, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(text, "=")); err == nil {
 		if bitHint == 0 || len(raw)*8 == bitHint || (bitHint%8 != 0 && len(raw)*8 >= bitHint) {
 			return raw, true
 		}

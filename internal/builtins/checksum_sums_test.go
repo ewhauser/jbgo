@@ -233,6 +233,24 @@ func TestChecksumSumCheckModeParsesTaggedAndSingleSpaceFormats(t *testing.T) {
 	}
 }
 
+func TestChecksumSumCheckModeHandlesCRLFAndEscapedFilenames(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/.\rfoo", nil)
+	sum := md5Hex(nil)
+	writeSessionFile(t, session, "/tmp/checksums.txt", []byte(fmt.Sprintf("\\%s  /tmp/.\\rfoo\r\n", sum)))
+
+	result := mustExecSession(t, session, "md5sum --check /tmp/checksums.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "\\/tmp/.\\rfoo: OK\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
 func TestB2SumCheckModeSupportsVariableLengths(t *testing.T) {
 	session := newSession(t, &Config{})
 	data := []byte("format-data")
@@ -441,12 +459,12 @@ func TestChecksumSumRejectsMeaninglessAndUnknownOptions(t *testing.T) {
 		{
 			name:   "ignore-missing-without-check",
 			script: "md5sum --ignore-missing\n",
-			stderr: "md5sum: the --ignore-missing option is meaningful only when verifying checksums\n",
+			stderr: "md5sum: the --ignore-missing option is meaningful only when verifying checksums\nTry 'md5sum --help' for more information.\n",
 		},
 		{
 			name:   "quiet-without-check",
 			script: "md5sum --quiet\n",
-			stderr: "md5sum: the --quiet option is meaningful only when verifying checksums\n",
+			stderr: "md5sum: the --quiet option is meaningful only when verifying checksums\nTry 'md5sum --help' for more information.\n",
 		},
 		{
 			name:   "tag-with-text",
