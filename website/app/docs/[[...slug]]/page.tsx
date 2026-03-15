@@ -4,6 +4,7 @@ import { flattenNav, docsNavigation } from "@/app/lib/docs-navigation";
 
 // Map of slug paths to their MDX imports
 const pages: Record<string, () => Promise<{ default: React.ComponentType; metadata?: { title?: string; description?: string } }>> = {
+  faq: () => import("@/content/faq/index.mdx"),
   "getting-started": () => import("@/content/getting-started/index.mdx"),
   "getting-started/installation": () => import("@/content/getting-started/installation.mdx"),
   "getting-started/quick-start": () => import("@/content/getting-started/quick-start.mdx"),

@@ -23,6 +23,10 @@ export const docsNavigation: NavItem[] = [
     title: "Performance",
     items: [{ title: "Benchmarks", href: "/docs/performance/benchmarks" }],
   },
+  {
+    title: "FAQ",
+    items: [{ title: "Common Questions", href: "/docs/faq" }],
+  },
 ];
 
 export function flattenNav(items: NavItem[]): NavItem[] {
