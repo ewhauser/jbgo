@@ -159,6 +159,7 @@ type cpOptions struct {
 	removeDestination bool
 	hardLink          bool
 	symbolicLink      bool
+	update            bool
 }
 
 func parseCPMatches(matches *ParsedCommand) cpOptions {
@@ -198,7 +199,9 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 			opts.hardLink = true
 		case "symbolic-link":
 			opts.symbolicLink = true
-		case "backup", "attributes-only", "debug", "reflink", "update":
+		case "update":
+			opts.update = true
+		case "backup", "attributes-only", "debug", "reflink":
 			// Accepted for forward GNU compatibility; semantics will be filled in incrementally.
 		}
 	}
@@ -211,6 +214,8 @@ func validateCPOptions(inv *Invocation, opts cpOptions) error {
 		return exitf(inv, 1, "cp: --link is not yet supported")
 	case opts.symbolicLink:
 		return exitf(inv, 1, "cp: --symbolic-link is not yet supported")
+	case opts.update:
+		return exitf(inv, 1, "cp: --update is not yet supported")
 	default:
 		return nil
 	}

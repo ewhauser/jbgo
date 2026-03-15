@@ -177,6 +177,8 @@ The default in-memory sandbox should look Unix-like enough for agent scripts:
 
 Commands remain registry-backed Go implementations. `/bin/ls` and similar paths are virtual command identities, not host executables.
 
+Ownership name resolution for commands such as `ls`, `chown`, and `chgrp` must come from those runtime identity defaults plus sandbox-visible `/etc/passwd` and `/etc/group` data when present. The runtime must not consult host account databases outside the sandbox contract.
+
 The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` are guaranteed by default.
 
 Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesystem, the runtime treats `PWD` as the authoritative virtual working directory and injects a small shell prelude that preserves virtual `cd` and `pwd` behavior without host directory access.

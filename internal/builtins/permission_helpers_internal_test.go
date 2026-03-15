@@ -98,3 +98,47 @@ func TestLoadPermissionIdentityDBDoesNotFallbackToHostFiles(t *testing.T) {
 		t.Fatalf("identity DB = %#v, want no host fallback entries", db)
 	}
 }
+
+func TestSeedPermissionIdentityDBFromEnvDoesNotInjectHostIdentity(t *testing.T) {
+	db := &permissionIdentityDB{
+		usersByName:  make(map[string]uint32),
+		usersByID:    make(map[uint32]string),
+		groupsByName: make(map[string]uint32),
+		groupsByID:   make(map[uint32]string),
+	}
+	inv := NewInvocation(&InvocationOptions{
+		Env: map[string]string{
+			"USER":  "sandbox-user",
+			"GROUP": "sandbox-group",
+			"UID":   "4242",
+			"GID":   "4343",
+		},
+	})
+
+	seedPermissionIdentityDBFromEnv(db, inv)
+
+	if got, want := len(db.usersByName), 1; got != want {
+		t.Fatalf("len(usersByName) = %d, want %d; db=%#v", got, want, db)
+	}
+	if got, want := len(db.usersByID), 1; got != want {
+		t.Fatalf("len(usersByID) = %d, want %d; db=%#v", got, want, db)
+	}
+	if got, want := len(db.groupsByName), 1; got != want {
+		t.Fatalf("len(groupsByName) = %d, want %d; db=%#v", got, want, db)
+	}
+	if got, want := len(db.groupsByID), 1; got != want {
+		t.Fatalf("len(groupsByID) = %d, want %d; db=%#v", got, want, db)
+	}
+	if got, want := db.usersByName["sandbox-user"], uint32(4242); got != want {
+		t.Fatalf("usersByName[sandbox-user] = %d, want %d", got, want)
+	}
+	if got, want := db.usersByID[4242], "sandbox-user"; got != want {
+		t.Fatalf("usersByID[4242] = %q, want %q", got, want)
+	}
+	if got, want := db.groupsByName["sandbox-group"], uint32(4343); got != want {
+		t.Fatalf("groupsByName[sandbox-group] = %d, want %d", got, want)
+	}
+	if got, want := db.groupsByID[4343], "sandbox-group"; got != want {
+		t.Fatalf("groupsByID[4343] = %q, want %q", got, want)
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	stdfs "io/fs"
-	osuser "os/user"
 	"path"
 	"strconv"
 	"strings"
@@ -127,28 +126,6 @@ func seedPermissionIdentityDBFromEnv(db *permissionIdentityDB, inv *Invocation) 
 	db.groupsByName[group] = gid
 	if _, ok := db.groupsByID[gid]; !ok {
 		db.groupsByID[gid] = group
-	}
-
-	current, err := osuser.Current()
-	if err != nil {
-		return
-	}
-	hostUID, err := strconv.ParseUint(current.Uid, 10, 32)
-	if err == nil && strings.TrimSpace(current.Username) != "" {
-		db.usersByName[current.Username] = uint32(hostUID)
-		if _, ok := db.usersByID[uint32(hostUID)]; !ok {
-			db.usersByID[uint32(hostUID)] = current.Username
-		}
-	}
-	hostGID, err := strconv.ParseUint(current.Gid, 10, 32)
-	if err != nil {
-		return
-	}
-	if groupInfo, groupErr := osuser.LookupGroupId(current.Gid); groupErr == nil && strings.TrimSpace(groupInfo.Name) != "" {
-		db.groupsByName[groupInfo.Name] = uint32(hostGID)
-		if _, ok := db.groupsByID[uint32(hostGID)]; !ok {
-			db.groupsByID[uint32(hostGID)] = groupInfo.Name
-		}
 	}
 }
 
