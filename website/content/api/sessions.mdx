@@ -86,4 +86,4 @@ For advanced use cases, `Session.FileSystem()` returns the live sandbox filesyst
 fs := session.FileSystem()
 ```
 
-This is an escape hatch for tests and bootstrapping. Most callers should interact with the session through `Exec`.
+This is an escape hatch for tests and bootstrapping. Treat the result as the `gbfs.FileSystem` interface rather than relying on concrete backend types. Most callers should interact with the session through `Exec`.

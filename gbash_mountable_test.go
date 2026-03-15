@@ -66,13 +66,14 @@ func TestMountableFileSystemSupportsShellMvAcrossMounts(t *testing.T) {
 	}
 }
 
-func TestSessionFileSystemExposesConcreteMountableFS(t *testing.T) {
+func TestSessionFileSystemProvidesLiveSandboxAccess(t *testing.T) {
 	t.Parallel()
 
 	rt, err := gbash.New(
 		gbash.WithFileSystem(gbash.MountableFileSystem(gbash.MountableFileSystemOptions{
 			Mounts: []gbfs.MountConfig{
 				{MountPoint: "/src", Factory: gbfs.Memory()},
+				{MountPoint: "/dynamic", Factory: gbfs.Memory()},
 			},
 		})),
 	)
@@ -85,16 +86,12 @@ func TestSessionFileSystemExposesConcreteMountableFS(t *testing.T) {
 		t.Fatalf("NewSession() error = %v", err)
 	}
 
-	mountable, ok := session.FileSystem().(*gbfs.MountableFS)
-	if !ok {
-		t.Fatalf("Session.FileSystem() = %T, want *fs.MountableFS", session.FileSystem())
-	}
-	if err := mountable.Mount("/dynamic", gbfs.NewMemory()); err != nil {
-		t.Fatalf("Mount(/dynamic) error = %v", err)
+	if err := writeFSFile(context.Background(), session.FileSystem(), "/dynamic/note.txt", "hi\n"); err != nil {
+		t.Fatalf("writeFSFile(/dynamic/note.txt) error = %v", err)
 	}
 
 	result, err := session.Exec(context.Background(), &gbash.ExecutionRequest{
-		Script: "echo hi > /dynamic/note.txt\ncat /dynamic/note.txt\n",
+		Script: "cat /dynamic/note.txt\n",
 	})
 	if err != nil {
 		t.Fatalf("Exec() error = %v", err)

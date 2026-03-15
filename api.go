@@ -432,7 +432,8 @@ func (s *Session) Interact(ctx context.Context, req *InteractiveRequest) (*Inter
 //
 // Most callers do not need this method. It exists as an advanced escape hatch
 // for tests, bootstrapping, and integrations that need direct filesystem
-// access.
+// access. Callers should treat the result as the [gbfs.FileSystem] interface
+// and should not rely on concrete backend types.
 func (s *Session) FileSystem() gbfs.FileSystem {
 	if s == nil || s.inner == nil {
 		return nil
