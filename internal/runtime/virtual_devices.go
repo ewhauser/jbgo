@@ -253,6 +253,22 @@ func (f *virtualDeviceFS) Chdir(name string) error {
 	return nil
 }
 
+func (f *virtualDeviceFS) SearchProviderForPath(name string) (gbfs.SearchProvider, bool) {
+	abs := f.resolve(name)
+	switch {
+	case abs == "/", abs == virtualDeviceDir, abs == virtualNullDevice:
+		return nil, false
+	case strings.HasPrefix(abs, virtualDeviceDir+"/"):
+		return nil, false
+	default:
+	}
+	capable, ok := f.base.(gbfs.SearchCapable)
+	if !ok {
+		return nil, false
+	}
+	return capable.SearchProviderForPath(abs)
+}
+
 func (f *virtualDeviceFS) resolve(name string) string {
 	return gbfs.Resolve(f.Getwd(), name)
 }

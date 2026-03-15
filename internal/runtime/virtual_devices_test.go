@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 func TestNullDeviceSemanticsAcrossSandboxBackends(t *testing.T) {
@@ -132,5 +134,42 @@ func TestVirtualNullDeviceReportsCharacterDevice(t *testing.T) {
 	}
 	if info.Mode()&os.ModeDevice == 0 || info.Mode()&os.ModeCharDevice == 0 {
 		t.Fatalf("Mode = %v, want character device bits", info.Mode())
+	}
+}
+
+func TestVirtualDeviceFSPreservesSearchCapabilityForBasePaths(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{
+		FileSystem: CustomFileSystem(gbfs.NewSearchableFactory(gbfs.Memory(), nil), "/workspace"),
+	})
+	writeSessionFile(t, session, "/workspace/docs/readme.txt", []byte("needle\n"))
+
+	capable, ok := session.FileSystem().(gbfs.SearchCapable)
+	if !ok {
+		t.Fatalf("filesystem %T does not implement SearchCapable", session.FileSystem())
+	}
+
+	if provider, ok := capable.SearchProviderForPath("/"); ok {
+		t.Fatalf("SearchProviderForPath(/) = %v, %v, want nil,false", provider, ok)
+	}
+	if provider, ok := capable.SearchProviderForPath("/dev"); ok {
+		t.Fatalf("SearchProviderForPath(/dev) = %v, %v, want nil,false", provider, ok)
+	}
+
+	provider, ok := capable.SearchProviderForPath("/workspace")
+	if !ok {
+		t.Fatal("SearchProviderForPath(/workspace) = false, want true")
+	}
+
+	result, err := provider.Search(context.Background(), &gbfs.SearchQuery{
+		Root:    "/workspace",
+		Literal: "needle",
+	})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(result.Hits) != 1 || result.Hits[0].Path != "/workspace/docs/readme.txt" {
+		t.Fatalf("Search hits = %#v, want [/workspace/docs/readme.txt]", result.Hits)
 	}
 }
