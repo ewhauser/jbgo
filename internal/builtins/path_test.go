@@ -1512,7 +1512,6 @@ func TestChownPreserveRootSkipsUntraversedChildSymlinkAndFormatsRootMessage(t *t
 		t.Fatalf("Stderr = %q, want %q", got, wantErr)
 	}
 }
-
 func TestChgrpSupportsReferenceFromRecursiveAndTrailingReference(t *testing.T) {
 	session := newSession(t, &Config{})
 
