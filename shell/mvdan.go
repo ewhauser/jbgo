@@ -81,6 +81,7 @@ type MVdan struct {
 }
 
 const hostRunnerDir = "/"
+const letHelperCommandName = "__jb_let"
 
 func New() *MVdan {
 	return &MVdan{
@@ -121,6 +122,9 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		}
 		validationProgram = parsed
 	}
+	if err := rewriteLetClauses(validationProgram); err != nil {
+		return nil, err
+	}
 	if violation := validateExecutionBudgets(validationProgram, exec.Policy); violation != nil {
 		if exec.Stderr != nil {
 			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
@@ -140,6 +144,11 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 			return nil, err
 		}
 		program = parsed
+	}
+	if program != validationProgram {
+		if err := rewriteLetClauses(program); err != nil {
+			return nil, err
+		}
 	}
 
 	if exec.Stdin == nil {
@@ -368,6 +377,9 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		}
 		if args[0] == loopIterCommandName {
 			return budget.beforeLoopIteration(ctx, args[1:])
+		}
+		if args[0] == letHelperCommandName {
+			return execLetHelper(ctx, args[1:])
 		}
 
 		hc := interp.HandlerCtx(ctx)
@@ -1093,6 +1105,62 @@ func prependRuntimePreludeLines(script string) string {
 
 func isInternalHelperCommand(name string) bool {
 	return strings.HasPrefix(name, "__jb_")
+}
+
+func execLetHelper(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return shellFailure(ctx, 2, "let: expression expected")
+	}
+
+	hc := interp.HandlerCtx(ctx)
+	return hc.Builtin(ctx, []string{"eval", buildLetEvalScript(args)})
+}
+
+func buildLetEvalScript(args []string) string {
+	expressions := parseLetArgs(args)
+	if len(expressions) == 0 {
+		return ""
+	}
+
+	var script strings.Builder
+	for i, expr := range expressions {
+		if i > 0 {
+			script.WriteString("; ")
+		}
+		script.WriteString("(( ")
+		script.WriteString(expr)
+		script.WriteString(" ))")
+	}
+	return script.String()
+}
+
+func parseLetArgs(args []string) []string {
+	expressions := make([]string, 0, len(args))
+	var current strings.Builder
+	parenDepth := 0
+
+	for _, arg := range args {
+		for _, ch := range arg {
+			switch ch {
+			case '(':
+				parenDepth++
+			case ')':
+				parenDepth--
+			}
+		}
+		if current.Len() > 0 {
+			current.WriteByte(' ')
+		}
+		current.WriteString(arg)
+		if parenDepth == 0 {
+			expressions = append(expressions, current.String())
+			current.Reset()
+		}
+	}
+	if current.Len() > 0 {
+		expressions = append(expressions, current.String())
+	}
+	return expressions
 }
 
 var _ Engine = (*MVdan)(nil)
