@@ -52,6 +52,7 @@ func DefaultRegistry() *commands.Registry {
 		NewWhoami(),
 		NewUptime(),
 		NewSleep(),
+		NewComplete(),
 		NewHistory(),
 		NewTimeout(),
 		NewXArgs(),

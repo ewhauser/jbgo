@@ -1,7 +1,6 @@
 package shell
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -26,21 +25,6 @@ func withInteractiveHistory(runner *interp.Runner, script string) string {
 		return script
 	}
 	return fmt.Sprintf("%s='%s'\n%s", shellHistoryEnvVar, shellSingleQuote(string(raw)), script)
-}
-
-func syncCommandHistory(ctx context.Context, hc *interp.HandlerContext, before, after map[string]string) error {
-	if hc == nil {
-		return nil
-	}
-	beforeValue, beforeOK := before[shellHistoryEnvVar]
-	afterValue, afterOK := after[shellHistoryEnvVar]
-	if beforeOK == afterOK && beforeValue == afterValue {
-		return nil
-	}
-	if !afterOK {
-		return hc.Builtin(ctx, []string{"unset", shellHistoryEnvVar})
-	}
-	return hc.Builtin(ctx, []string{"eval", fmt.Sprintf("%s='%s'", shellHistoryEnvVar, shellSingleQuote(afterValue))})
 }
 
 func historyEntriesFromRunner(runner *interp.Runner) []string {

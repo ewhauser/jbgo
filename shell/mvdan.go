@@ -325,20 +325,15 @@ func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.Cal
 		})
 		recordCommand(exec.Trace, trace.EventCallExpanded, commandInfo)
 
-		if interp.IsBuiltin(args[0]) && shouldRewriteBuiltin(args[0]) {
-			if _, ok := exec.Registry.Lookup(args[0]); ok {
-				rewritten := make([]string, len(args))
-				copy(rewritten[1:], args[1:])
-				rewritten[0] = path.Join(builtinCommandDir(exec), args[0])
-				return rewritten, nil
-			}
-		}
-
 		if interp.IsBuiltin(args[0]) {
 			if err := allowBuiltin(ctx, exec.Policy, args[0], args); err != nil {
 				recordPolicyDenied(exec.Trace, err, "", "", args[0], 126, "builtin")
 				return nil, shellFailure(ctx, 126, "%v", err)
 			}
+		}
+
+		if rewritten, ok := rewriteBuiltinArgs(args, exec); ok {
+			return rewritten, nil
 		}
 
 		return args, nil
@@ -359,6 +354,62 @@ func builtinCommandDir(exec *Execution) string {
 		return "/bin"
 	}
 	return gbfs.Clean(exec.BuiltinCommandDir)
+}
+
+func rewriteBuiltinArgs(args []string, exec *Execution) ([]string, bool) {
+	if len(args) == 0 || exec == nil || exec.Registry == nil {
+		return nil, false
+	}
+	if rewritten, ok := rewriteBuiltinCommand(args[0], args[1:], exec); ok {
+		return rewritten, true
+	}
+	switch args[0] {
+	case "builtin":
+		return rewriteBuiltinWrapper(args[1:], exec)
+	case "command":
+		return rewriteCommandWrapper(args[1:], exec)
+	default:
+		return nil, false
+	}
+}
+
+func rewriteBuiltinCommand(name string, rest []string, exec *Execution) ([]string, bool) {
+	if !interp.IsBuiltin(name) || !shouldRewriteBuiltin(name) {
+		return nil, false
+	}
+	if _, ok := exec.Registry.Lookup(name); !ok {
+		return nil, false
+	}
+	rewritten := make([]string, 0, len(rest)+1)
+	rewritten = append(rewritten, path.Join(builtinCommandDir(exec), name))
+	rewritten = append(rewritten, rest...)
+	return rewritten, true
+}
+
+func rewriteBuiltinWrapper(args []string, exec *Execution) ([]string, bool) {
+	if len(args) == 0 {
+		return nil, false
+	}
+	if args[0] == "--" {
+		args = args[1:]
+		if len(args) == 0 {
+			return nil, false
+		}
+	}
+	return rewriteBuiltinCommand(args[0], args[1:], exec)
+}
+
+func rewriteCommandWrapper(args []string, exec *Execution) ([]string, bool) {
+	if len(args) == 0 {
+		return nil, false
+	}
+	if args[0] == "--" {
+		return rewriteBuiltinWrapper(args, exec)
+	}
+	if strings.HasPrefix(args[0], "-") {
+		return nil, false
+	}
+	return rewriteBuiltinCommand(args[0], args[1:], exec)
 }
 
 func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.ExecHandlerFunc {
@@ -424,7 +475,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			},
 		})
 		err = commands.RunCommand(ctx, resolved.command, invocation)
-		if syncErr := syncCommandHistory(ctx, &hc, currentEnv, invocation.Env); syncErr != nil {
+		if syncErr := syncCommandState(ctx, &hc, currentEnv, invocation.Env); syncErr != nil {
 			return syncErr
 		}
 

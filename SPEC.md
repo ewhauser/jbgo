@@ -127,7 +127,8 @@ The CLI also provides a minimal interactive shell mode. That mode is a front-end
 - it uses `syntax.Parser.InteractiveSeq` to gather complete interactive statements and continuation prompts
 - it executes each completed entry via `Session.Exec`
 - it carries forward the virtual cwd and shell-visible variable state between entries at the CLI layer
-- it may expose session-local command history via the `history` command, with entries stored in `BASH_HISTORY`
+- it may expose session-local command history via the `history` command and programmable completion specs via the `complete` command, bridged through `BASH_HISTORY` and `GBASH_COMPLETE_SPECS`
+- it still does not provide readline-style tab completion or consume `complete` specs at the CLI frontend layer
 
 The normal CLI entrypoint also accepts filesystem selection flags before the shell arguments:
 
@@ -196,7 +197,7 @@ Package responsibilities:
 - `shell/`: parser and runner adapter; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
-- `commands/`: registry and Go-native command implementations such as `clear`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `pwd`, `strings`, and `xan`
+- `commands/`: registry and Go-native command implementations such as `clear`, `complete`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `pwd`, `strings`, and `xan`
 - `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface, and may ship official opt-in binaries such as `contrib/extras/cmd/gbash-extras` from the corresponding contrib module. Current examples include `awk`, `html-to-markdown`, `jq`, `nodejs`, `sqlite3`, and `yq`.
 - `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the `js/wasm` assets plus explicit host entrypoints such as `@ewhauser/gbash-wasm/browser` and `@ewhauser/gbash-wasm/node`.
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers
