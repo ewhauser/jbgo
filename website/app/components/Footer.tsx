@@ -14,7 +14,7 @@ export default function Footer() {
               className="h-6 w-6 opacity-60"
             />
             <span className="text-sm text-fg-dim">
-              gbash — Apache 2.0 License
+              gbash - Apache 2.0 License
             </span>
           </div>
           <nav className="flex items-center gap-6 text-sm text-fg-secondary">

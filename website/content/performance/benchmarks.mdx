@@ -1,6 +1,6 @@
 # Benchmarks
 
-Cross-runtime comparison of gbash against GNU bash and alternative sandboxed-shell runtimes. Each scenario is run as an independent process invocation — measuring real end-to-end latency including startup, execution, and teardown.
+Cross-runtime comparison of gbash against GNU bash and alternative sandboxed-shell runtimes. Each scenario is run as an independent process invocation - measuring real end-to-end latency including startup, execution, and teardown.
 
 ## Runtimes
 
@@ -12,7 +12,7 @@ Cross-runtime comparison of gbash against GNU bash and alternative sandboxed-she
     </tr>
   </thead>
   <tbody>
-    <tr><td><strong>gbash</strong></td><td>Native Go binary — the default runtime</td></tr>
+    <tr><td><strong>gbash</strong></td><td>Native Go binary - the default runtime</td></tr>
     <tr><td><strong>GNU bash</strong></td><td>Host system bash (unsandboxed baseline)</td></tr>
     <tr><td><strong>gbash-extras</strong></td><td>gbash with <code>awk</code>, <code>html-to-markdown</code>, <code>jq</code>, <code>sqlite3</code>, <code>yq</code> pre-registered</td></tr>
     <tr><td><strong>gbash-node-wasm</strong></td><td>gbash compiled to WebAssembly, run in Node.js</td></tr>
@@ -37,7 +37,7 @@ import FilesystemBenchmarkChart from "@/app/components/docs/FilesystemBenchmarkC
 - Scenarios that require optional commands can mark unsupported runtimes as `Skipped` with a reason instead of treating them as failures.
 - The harness source is at [`scripts/bench-compare/main.go`](https://github.com/ewhauser/gbash/blob/main/scripts/bench-compare/main.go).
 
-> **Note:** just-bash ships significantly more functionality than gbash today — Python and lightweight JavaScript runtimes are bundled in the core — so the artifact sizes and startup costs are not directly comparable.
+> **Note:** just-bash ships significantly more functionality than gbash today - Python and lightweight JavaScript runtimes are bundled in the core - so the artifact sizes and startup costs are not directly comparable.
 
 ## Filesystem Results
 

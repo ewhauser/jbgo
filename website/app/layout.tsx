@@ -30,13 +30,13 @@ export const metadata: Metadata = {
     },
   },
   title: {
-    default: "gbash — A deterministic bash runtime for AI agents",
+    default: "gbash - A deterministic bash runtime for AI agents",
     template: "%s | gbash",
   },
   description:
     "A deterministic, sandbox-only, bash-like runtime for AI agents. 60+ commands, virtual filesystem, WebAssembly support.",
   openGraph: {
-    title: "gbash — A deterministic bash runtime for AI agents",
+    title: "gbash - A deterministic bash runtime for AI agents",
     description:
       "A deterministic, sandbox-only, bash-like runtime for AI agents. 60+ commands, virtual filesystem, WebAssembly support.",
     type: "website",

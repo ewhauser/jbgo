@@ -6,23 +6,23 @@ Commands never fall through to host binaries, and network access is off by defau
 
 > gbash is beta software. Additional security hardening is likely needed. Use with care.
 
-## Key Features
+## What it does
 
-- **Virtual in-memory filesystem** — no host access by default
-- **Registry-backed command execution** — unknown commands never run host binaries
-- **100+ built-in commands and shell builtins** with GNU coreutils compatibility tracking ([compatibility report](/docs/performance/compatibility))
-- **Optional network access** via allowlisted `curl`
-- **Persistent sessions** with shared filesystem state across executions
-- **Host directory mounting** with read-only overlay for real project workspaces
-- **Execution budgets** — command count, loop iterations, glob expansion, stdout/stderr limits
-- **Opt-in tracing and logging** for debugging and agent orchestration
-- **WebAssembly support** — runs in the browser
+- Ships a virtual in-memory filesystem with no host access by default
+- Resolves commands through a registry, so unknown commands never run host binaries
+- Includes 100+ built-in commands and shell builtins with GNU coreutils compatibility tracking ([compatibility report](/docs/performance/compatibility))
+- Supports optional network access via allowlisted `curl`
+- Provides persistent sessions with shared filesystem state across executions
+- Allows host directory mounting with read-only overlay for real project workspaces
+- Enforces execution budgets for command count, loop iterations, glob expansion, and stdout/stderr limits
+- Has opt-in tracing and logging for debugging and agent orchestration
+- Runs in the browser via WebAssembly
 
 ## Next Steps
 
-- [Installation](/docs/getting-started/installation) — install the Go library, CLI, or prebuilt binaries
-- [Quick Start](/docs/getting-started/quick-start) — run your first sandboxed shell command in under a minute
-- [Configuration](/docs/configuration) — choose an in-memory, mounted, or custom filesystem and decide whether network access is allowed
-- [Commands](/docs/commands) — review the default registry, shell builtins, and optional contrib modules
-- [API](/docs/api) — embed gbash in Go or JavaScript hosts
-- [Security](/docs/security) — understand the sandbox guarantees, threat model, and observability tradeoffs
+- [Installation](/docs/getting-started/installation) - install the Go library, CLI, or prebuilt binaries
+- [Quick Start](/docs/getting-started/quick-start) - run your first sandboxed shell command in under a minute
+- [Configuration](/docs/configuration) - choose an in-memory, mounted, or custom filesystem and decide whether network access is allowed
+- [Commands](/docs/commands) - review the default registry, shell builtins, and optional contrib modules
+- [API](/docs/api) - embed gbash in Go or JavaScript hosts
+- [Security](/docs/security) - understand the sandbox guarantees, threat model, and observability tradeoffs

@@ -757,7 +757,7 @@ export class LiteTerminal {
 
   /**
    * Scroll to bottom of terminal output within the nearest scrollable ancestor.
-   * Never scrolls the main window — only scrolls an overflow container if found.
+   * Never scrolls the main window - only scrolls an overflow container if found.
    */
   private scrollToBottom(): void {
     let el = this.container?.parentElement;

@@ -9,7 +9,7 @@ export default function Home() {
     <>
       <Header />
 
-      {/* Hero: two-column — info left, terminal right */}
+      {/* Hero: two-column - info left, terminal right */}
       <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-12 pb-10 lg:pt-16 lg:pb-14">
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-12 items-start">
           {/* Left: project info */}
@@ -29,7 +29,7 @@ export default function Home() {
             {/* Try it */}
             <div className="rounded-lg border border-fg-dim/20 bg-bg-secondary/50 px-4 py-3 mb-6">
               <p className="text-xs text-fg-dim mb-1.5 font-medium uppercase tracking-wider">
-                Try it — no install required
+                Try it - no install required
               </p>
               <code className="text-sm font-mono text-accent leading-relaxed block">
                 go run github.com/ewhauser/gbash/cmd/gbash@latest -c &apos;echo hello; pwd; ls -la&apos;

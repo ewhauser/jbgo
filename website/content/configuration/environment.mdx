@@ -23,20 +23,20 @@ This means `ls /usr/bin` lists the available command names, but the files themse
 
 gbash supports a broad subset of bash syntax and behavior:
 
-- **Pipelines** — `cmd1 | cmd2 | cmd3`
-- **Redirections** — `>`, `>>`, `<`, `2>&1`, `&>`
-- **Variable expansion** — `$VAR`, `${VAR:-default}`, `${#VAR}`
-- **Command substitution** — `$(cmd)`, `` `cmd` ``
-- **Arithmetic** — `$((x + 1))`, `$(( 2 ** 10 ))`
-- **Conditionals** — `if/elif/else/fi`, `[[ ... ]]`, `test`, `[ ... ]`
-- **Loops** — `for`, `while`, `until`
-- **Shell functions** — `fn() { ...; }`
-- **Logical operators** — `&&`, `||`
-- **Here documents** — `<<EOF`
+- **Pipelines** - `cmd1 | cmd2 | cmd3`
+- **Redirections** - `>`, `>>`, `<`, `2>&1`, `&>`
+- **Variable expansion** - `$VAR`, `${VAR:-default}`, `${#VAR}`
+- **Command substitution** - `$(cmd)`, `` `cmd` ``
+- **Arithmetic** - `$((x + 1))`, `$(( 2 ** 10 ))`
+- **Conditionals** - `if/elif/else/fi`, `[[ ... ]]`, `test`, `[ ... ]`
+- **Loops** - `for`, `while`, `until`
+- **Shell functions** - `fn() { ...; }`
+- **Logical operators** - `&&`, `||`
+- **Here documents** - `<<EOF`
 - **Indexed and associative arrays**
-- **Sourcing and evaluation** — `source`, `.`, and `eval`
-- **Directory stack builtins** — `cd`, `pushd`, `popd`, `dirs`
-- **Nested bash/sh** — `bash -c "..."` and `sh -c "..."` re-enter the runtime
+- **Sourcing and evaluation** - `source`, `.`, and `eval`
+- **Directory stack builtins** - `cd`, `pushd`, `popd`, `dirs`
+- **Nested bash/sh** - `bash -c "..."` and `sh -c "..."` re-enter the runtime
 
 ## Limitations
 

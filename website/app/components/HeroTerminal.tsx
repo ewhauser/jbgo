@@ -224,10 +224,10 @@ export default function HeroTerminal() {
 
     const aboutCmd = defineCommand("about", async () => ({
       stdout: [
-        "gbash — A deterministic bash runtime for AI agents",
+        "gbash - A deterministic bash runtime for AI agents",
         "",
         "  - 60+ built-in commands with GNU coreutils flag parity",
-        "  - Virtual in-memory filesystem — no host access",
+        "  - Virtual in-memory filesystem - no host access",
         "  - Persistent sessions across executions",
         "  - WebAssembly support (you're using it right now!)",
         "  - Execution budgets and policy enforcement",
@@ -248,7 +248,7 @@ export default function HeroTerminal() {
         "/home/user/example.sh":
           '#!/bin/bash\necho "Hello from gbash"\npwd\nls -la\n',
         "/home/user/is-this-really-gbash.txt":
-          "Yes! This is a real gbash shell running in your browser via WebAssembly.\n\nThe Go runtime is compiled to WASM using the @ewhauser/gbash-wasm package.\nEvery command you run here executes inside a sandboxed, in-memory\nfilesystem — nothing touches your host machine.\n\nTry it: create files, pipe commands, use grep/sed/awk — it all works.\n\n  cat README.md | head -3\n  echo hello > /tmp/test.txt && cat /tmp/test.txt\n  ls -la\n",
+          "Yes! This is a real gbash shell running in your browser via WebAssembly.\n\nThe Go runtime is compiled to WASM using the @ewhauser/gbash-wasm package.\nEvery command you run here executes inside a sandboxed, in-memory\nfilesystem - nothing touches your host machine.\n\nTry it: create files, pipe commands, use grep/sed/awk - it all works.\n\n  cat README.md | head -3\n  echo hello > /tmp/test.txt && cat /tmp/test.txt\n  ls -la\n",
       },
       cwd: "/home/user",
       wasmUrl: withBasePath("/gbash.wasm"),
