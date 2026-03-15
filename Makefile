@@ -1,4 +1,4 @@
-.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test compat-docker-build compat-docker-run release release-check release-snapshot fix-modules tag-release update-mvdan-sh
+.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release update-mvdan-sh
 
 GO_PACKAGES := ./... ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 BENCH_PACKAGES := ./internal/runtime ./cmd/gbash ./contrib/jq
@@ -31,6 +31,10 @@ COMPAT_DOCKER_IMAGE ?= gbash-compat-local
 COMPAT_DOCKER_BASE_IMAGE ?= ghcr.io/ewhauser/gbash-compat:latest
 COMPAT_DOCKER_PLATFORM ?=
 COMPAT_DOCKER_PULL ?= always
+WEBSITE_PNPM ?= npx --yes pnpm@10.32.1
+GBASH_WEBSITE_REMOTE_COMPAT_BASE_URL ?= https://ewhauser.github.io/gbash/compat/latest
+GBASH_WEBSITE_REMOTE_COMPAT_SUMMARY_URL ?= $(GBASH_WEBSITE_REMOTE_COMPAT_BASE_URL)/summary.json
+GBASH_WEBSITE_REMOTE_COMPAT_BADGE_URL ?= $(GBASH_WEBSITE_REMOTE_COMPAT_BASE_URL)/badge.svg
 
 FUZZ_SMOKE_SHARD_CORE := \
 	FuzzRuntimeScript \
@@ -206,6 +210,21 @@ compat-docker-build:
 
 compat-docker-run:
 	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_RESULTS_DIR='$(GNU_RESULTS_DIR)' GNU_UTILS='$(GNU_UTILS)' GNU_TESTS='$(GNU_TESTS)' GNU_KEEP_WORKDIR='$(GNU_KEEP_WORKDIR)' COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-run.sh
+
+website-dev:
+	@set -eu; \
+	compat_tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$compat_tmp"' EXIT INT TERM; \
+	curl --fail --location --silent --show-error --output "$$compat_tmp/summary.json" "$(GBASH_WEBSITE_REMOTE_COMPAT_SUMMARY_URL)"; \
+	curl --fail --location --silent --show-error --output "$$compat_tmp/badge.svg" "$(GBASH_WEBSITE_REMOTE_COMPAT_BADGE_URL)"; \
+	echo "==> website dev with remote compat from $(GBASH_WEBSITE_REMOTE_COMPAT_BASE_URL)"; \
+	status=0; \
+	GBASH_WEBSITE_COMPAT_SUMMARY_PATH="$$compat_tmp/summary.json" \
+	GBASH_WEBSITE_COMPAT_BADGE_PATH="$$compat_tmp/badge.svg" \
+	$(WEBSITE_PNPM) --dir website dev || status=$$?; \
+	if [ "$$status" -ne 0 ] && [ "$$status" -ne 130 ] && [ "$$status" -ne 143 ]; then \
+		exit "$$status"; \
+	fi
 
 release:
 	@command -v $(GH) > /dev/null || { echo "$(GH) CLI is required"; exit 1; }

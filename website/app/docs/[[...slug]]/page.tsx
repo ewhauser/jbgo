@@ -9,6 +9,7 @@ const pages: Record<string, () => Promise<{ default: React.ComponentType; metada
   "getting-started/quick-start": () => import("@/content/getting-started/quick-start.mdx"),
   "observability/tracing-and-logging": () => import("@/content/observability/tracing-and-logging.mdx"),
   "performance/benchmarks": () => import("@/content/performance/benchmarks.mdx"),
+  "performance/compatibility": () => import("@/content/performance/compatibility.mdx"),
 };
 
 interface Props {

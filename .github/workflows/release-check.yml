@@ -79,3 +79,11 @@ jobs:
           GBASH_WEBSITE_BASE_PATH: /gbash
           NEXT_PUBLIC_SITE_URL: https://ewhauser.github.io/gbash
         run: ./scripts/export_website_pages.sh "$PWD" "${RUNNER_TEMP}/github-pages"
+
+      - name: Validate website export
+        env:
+          EXPORT_ROOT: ${{ runner.temp }}/github-pages
+        run: |
+          set -euo pipefail
+          test -f "$EXPORT_ROOT/docs/performance/compatibility/index.html"
+          test ! -e "$EXPORT_ROOT/compat/latest/index.html"

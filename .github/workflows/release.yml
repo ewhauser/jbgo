@@ -85,6 +85,8 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      pages_deployable: ${{ steps.pages_state.outputs.deployable }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -157,29 +159,61 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Preserve published compatibility assets
+        id: compat_assets
+        env:
+          COMPAT_URL: https://${{ github.repository_owner }}.github.io${{ steps.pages.outputs.base_path }}/compat/latest
+          COMPAT_DIR: ${{ runner.temp }}/compat-assets
+        run: |
+          set -euo pipefail
+          rm -rf "$COMPAT_DIR"
+          mkdir -p "$COMPAT_DIR"
+
+          if curl --fail --location --silent --show-error --output "$COMPAT_DIR/summary.json" "$COMPAT_URL/summary.json" \
+            && curl --fail --location --silent --show-error --output "$COMPAT_DIR/badge.svg" "$COMPAT_URL/badge.svg"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "summary_path=$COMPAT_DIR/summary.json" >> "$GITHUB_OUTPUT"
+            echo "badge_path=$COMPAT_DIR/badge.svg" >> "$GITHUB_OUTPUT"
+          else
+            rm -rf "$COMPAT_DIR"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build website Pages bundle
+        id: website_build
+        if: steps.compat_assets.outputs.available == 'true'
         env:
           GBASH_WEBSITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io${{ steps.pages.outputs.base_path }}
           PAGES_ROOT: ${{ runner.temp }}/github-pages
-          COMPAT_URL: https://${{ github.repository_owner }}.github.io${{ steps.pages.outputs.base_path }}/compat/latest
+          GBASH_WEBSITE_COMPAT_SUMMARY_PATH: ${{ steps.compat_assets.outputs.summary_path }}
+          GBASH_WEBSITE_COMPAT_BADGE_PATH: ${{ steps.compat_assets.outputs.badge_path }}
         run: |
           set -euo pipefail
           ./scripts/export_website_pages.sh "$PWD" "$PAGES_ROOT"
 
-          compat_dir="$PAGES_ROOT/compat/latest"
-          mkdir -p "$compat_dir"
-
-          if curl --fail --location --silent --show-error --output "$compat_dir/summary.json" "$COMPAT_URL/summary.json" \
-            && curl --fail --location --silent --show-error --output "$compat_dir/index.html" "$COMPAT_URL/index.html" \
-            && curl --fail --location --silent --show-error --output "$compat_dir/badge.svg" "$COMPAT_URL/badge.svg"; then
-            echo "preserved compat report from $COMPAT_URL"
+      - name: Determine Pages publish state
+        id: pages_state
+        if: always()
+        env:
+          COMPAT_AVAILABLE: ${{ steps.compat_assets.outputs.available }}
+          WEBSITE_BUILD_OUTCOME: ${{ steps.website_build.outcome }}
+          PAGES_ROOT: ${{ runner.temp }}/github-pages
+        run: |
+          set -euo pipefail
+          if [ "$COMPAT_AVAILABLE" = "true" ] \
+            && [ "${WEBSITE_BUILD_OUTCOME:-}" = "success" ] \
+            && [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ] \
+            && [ -f "$PAGES_ROOT/compat/latest/summary.json" ] \
+            && [ -f "$PAGES_ROOT/compat/latest/badge.svg" ] \
+            && [ ! -e "$PAGES_ROOT/compat/latest/index.html" ]; then
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
           else
-            rm -rf "$compat_dir"
-            echo "no published compat report found at $COMPAT_URL; continuing without it"
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload Pages artifact
+        if: steps.pages_state.outputs.deployable == 'true'
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: ${{ runner.temp }}/github-pages
@@ -269,7 +303,7 @@ jobs:
     needs:
       - resolve
       - publish
-    if: needs.resolve.outputs.should_publish == 'true'
+    if: needs.resolve.outputs.should_publish == 'true' && needs.publish.outputs.pages_deployable == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: github-pages
