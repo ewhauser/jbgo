@@ -60,6 +60,11 @@ func (f *virtualDeviceFS) OpenFile(ctx context.Context, name string, flag int, p
 	case abs == virtualDeviceDir || strings.HasPrefix(abs, virtualNullDevice+"/"):
 		return nil, &os.PathError{Op: "open", Path: abs, Err: stdfs.ErrInvalid}
 	default:
+		if isVirtualDeviceChild(abs) && openMayCreateOrWrite(flag) {
+			if err := f.ensureVirtualDeviceDir(ctx); err != nil {
+				return nil, err
+			}
+		}
 		return f.base.OpenFile(ctx, abs, flag, perm)
 	}
 }
@@ -135,6 +140,11 @@ func (f *virtualDeviceFS) Symlink(ctx context.Context, target, linkName string) 
 	if err := rejectVirtualDeviceMutation("symlink", abs); err != nil {
 		return err
 	}
+	if isVirtualDeviceChild(abs) {
+		if err := f.ensureVirtualDeviceDir(ctx); err != nil {
+			return err
+		}
+	}
 	return f.base.Symlink(ctx, target, abs)
 }
 
@@ -146,6 +156,11 @@ func (f *virtualDeviceFS) Link(ctx context.Context, oldName, newName string) err
 	}
 	if err := rejectVirtualDeviceMutation("link", newAbs); err != nil {
 		return err
+	}
+	if isVirtualDeviceChild(newAbs) {
+		if err := f.ensureVirtualDeviceDir(ctx); err != nil {
+			return err
+		}
 	}
 	return f.base.Link(ctx, oldAbs, newAbs)
 }
@@ -178,7 +193,7 @@ func (f *virtualDeviceFS) MkdirAll(ctx context.Context, name string, perm stdfs.
 	abs := f.resolve(name)
 	switch {
 	case abs == virtualDeviceDir:
-		return nil
+		return f.ensureVirtualDeviceDir(ctx)
 	case abs == virtualNullDevice || strings.HasPrefix(abs, virtualNullDevice+"/"):
 		return &os.PathError{Op: "mkdir", Path: abs, Err: stdfs.ErrInvalid}
 	default:
@@ -202,6 +217,11 @@ func (f *virtualDeviceFS) Rename(ctx context.Context, oldName, newName string) e
 	}
 	if err := rejectVirtualDeviceMutation("rename", newAbs); err != nil {
 		return err
+	}
+	if isVirtualDeviceChild(newAbs) {
+		if err := f.ensureVirtualDeviceDir(ctx); err != nil {
+			return err
+		}
 	}
 	return f.base.Rename(ctx, oldAbs, newAbs)
 }
@@ -235,6 +255,20 @@ func (f *virtualDeviceFS) Chdir(name string) error {
 
 func (f *virtualDeviceFS) resolve(name string) string {
 	return gbfs.Resolve(f.Getwd(), name)
+}
+
+func (f *virtualDeviceFS) ensureVirtualDeviceDir(ctx context.Context) error {
+	return f.base.MkdirAll(ctx, virtualDeviceDir, 0o755)
+}
+
+func isVirtualDeviceChild(abs string) bool {
+	return strings.HasPrefix(abs, virtualDeviceDir+"/") &&
+		abs != virtualNullDevice &&
+		!strings.HasPrefix(abs, virtualNullDevice+"/")
+}
+
+func openMayCreateOrWrite(flag int) bool {
+	return flag&os.O_CREATE != 0 || flag&(os.O_WRONLY|os.O_RDWR) != 0
 }
 
 func (f *virtualDeviceFS) readRootDir(ctx context.Context) ([]stdfs.DirEntry, error) {

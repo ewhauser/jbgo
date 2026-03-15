@@ -73,6 +73,34 @@ func TestVirtualDeviceDirectoryMergesSandboxEntries(t *testing.T) {
 	}
 }
 
+func TestVirtualDeviceChildrenCanBeCreatedOnHostReadWriteFS(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime(t, &Config{
+		FileSystem: ReadWriteDirectoryFileSystem(t.TempDir(), ReadWriteDirectoryOptions{}),
+		BaseEnv: map[string]string{
+			"HOME": "/",
+			"PATH": "/bin",
+		},
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "" +
+			"printf 'tty1\\n' >/dev/tty1\n" +
+			"ls /dev\n" +
+			"cat /dev/tty1\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "null\ntty1\ntty1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestVirtualNullDeviceRejectsRemoval(t *testing.T) {
 	t.Parallel()
 
