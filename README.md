@@ -459,4 +459,4 @@ For the documentation site, run `make website-dev` to start a local Next.js serv
 ## License
 
 This project is licensed under the [Apache License 2.0](./LICENSE). Copyright
-2026 Cadence RPM.
+2026 Eric Hauser.
