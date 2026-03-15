@@ -169,11 +169,15 @@ The default in-memory sandbox should look Unix-like enough for agent scripts:
 
 - `/home/agent` as the default home and working directory
 - `/tmp` for scratch files
+- `/dev` as a small runtime-owned device namespace
+- `/dev/null` as a character device that always reads EOF and discards writes
 - `/bin` and `/usr/bin` as virtual command locations
 - `PATH=/usr/bin:/bin`
 - deterministic identity defaults via `USER=agent`, `LOGNAME=agent`, `GROUP=agent`, `GROUPS=1000`, `UID=1000`, `EUID=1000`, `GID=1000`, `EGID=1000`, and `SHELL=/bin/sh`
 
 Commands remain registry-backed Go implementations. `/bin/ls` and similar paths are virtual command identities, not host executables.
+
+The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` are guaranteed by default.
 
 Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesystem, the runtime treats `PWD` as the authoritative virtual working directory and injects a small shell prelude that preserves virtual `cd` and `pwd` behavior without host directory access.
 
@@ -557,6 +561,7 @@ Important properties:
 - paths use POSIX semantics internally
 - the default backend is in-memory
 - the default backend exposes a Unix-like virtual layout rooted at `/`
+- the runtime may reserve a small synthetic namespace such as `/dev/null` above any backend so shell-visible device behavior stays consistent across in-memory and host-backed filesystems
 - host-backed filesystems must still satisfy policy checks and must never imply host command execution
 - a read-write host-backed filesystem may be enabled explicitly for external test harnesses or advanced embedding, but it is not the default runtime backend
 - shell redirects and command file access share the same filesystem view
@@ -570,6 +575,7 @@ Implementation detail for the current runtime:
 - `Lstat`, `Readlink`, and `Realpath` are now part of the core interface because path introspection is needed for future agent commands and safer path handling
 - command-facing copy semantics stay in `commands/`, where policy and shell-facing errors already live
 - `fs/` may use private clone helpers internally for backend composition, but that is not the same as moving user-visible `cp` semantics into the filesystem layer
+- the runtime wraps the configured backend with a tiny virtual-device layer; today that layer reserves `/dev` and `/dev/null`, while non-reserved `/dev/*` entries still come from the underlying sandbox filesystem when present
 - `MemoryFS` stores symlink entries directly for testing and path-safety enforcement, but the runtime still defaults to `SymlinkDeny`
 - `MemoryFS.Stat`, `Open`, `ReadDir`, `Chdir`, and `Realpath` follow symlinks; `Lstat`, `Readlink`, `Remove`, and `Rename` operate on the symlink entry itself
 - `MemoryFS` may also hold lazy regular-file providers that materialize on first content-sensitive access such as `Open`, `Stat`, `Lstat`, or `DirEntry.Info`

@@ -33,7 +33,7 @@ Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with pr
 
 - Virtual in-memory filesystem — no host access by default
 - Registry-backed command execution — unknown commands never run host binaries
-- 90+ built-in commands with GNU coreutils flag parity ([compatibility matrix](https://ewhauser.github.io/gbash/compat/latest/))
+- 90+ built-in commands with GNU coreutils compatibility coverage ([compatibility report](https://ewhauser.github.io/gbash/docs/performance/compatibility/))
 - Optional allowlisted network access via `curl`
 - Persistent sessions with shared filesystem state across executions
 - Host directory mounting with read-only overlay for real project workspaces
@@ -70,7 +70,7 @@ go install github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras@latest
 
 Prebuilt `gbash` and `gbash-extras` archives are also available on the [GitHub Releases page](https://github.com/ewhauser/gbash/releases).
 Released Go modules are also requested from the public Go proxy during the release workflow so their API docs stay current on [pkg.go.dev](https://pkg.go.dev/github.com/ewhauser/gbash).
-The coordinated release workflow also exports the website and deploys it to [GitHub Pages](https://ewhauser.github.io/gbash/), preserving the latest published compatibility report under `/compat/latest/`.
+The coordinated release workflow also exports the website and deploys it to [GitHub Pages](https://ewhauser.github.io/gbash/), preserving raw compatibility assets under `/compat/latest/` for the published [compatibility report](https://ewhauser.github.io/gbash/docs/performance/compatibility/).
 
 ## Quick Start
 
@@ -387,7 +387,7 @@ Some builtin names, such as `echo`, `help`, `history`, `printf`, `pwd`, `test`, 
 
 Shell language support also includes indexed arrays and associative arrays.
 
-Many commands are ported from [uutils/coreutils](https://github.com/uutils/coreutils) and have full GNU flag parity. See the current [compatibility matrix](https://ewhauser.github.io/gbash/compat/latest/).
+Many commands are ported from [uutils/coreutils](https://github.com/uutils/coreutils) and have full GNU flag parity. See the current [compatibility report](https://ewhauser.github.io/gbash/docs/performance/compatibility/).
 
 ### Contrib Commands
 
@@ -452,6 +452,8 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 ## Development
 
 `make build`, `make test`, and `make lint` cover the Go modules. See [CONTRIBUTING.md](./CONTRIBUTING.md) for repository structure, module versioning, release process, benchmarks, and GNU coreutils compatibility testing.
+
+For the documentation site, run `make website-dev` to start a local Next.js server seeded with the latest published compatibility assets from `/compat/latest/`.
 
 ## License
 

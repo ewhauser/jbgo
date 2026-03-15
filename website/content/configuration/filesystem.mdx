@@ -91,7 +91,7 @@ rt, err := gbash.New(
 )
 ```
 
-The concrete `*gbfs.MountableFS` also exposes live `Mount`, `Unmount`, `Mounts`, and `IsMountPoint` methods when you need to mutate the namespace through `Session.FileSystem()`.
+`Session.FileSystem()` only promises the `gbfs.FileSystem` interface. Do not rely on concrete backend types or type assertions for mount management.
 
 ## Custom Filesystem
 

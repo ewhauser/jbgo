@@ -107,6 +107,7 @@ func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	fsys = wrapSandboxFileSystem(fsys)
 
 	if !r.sessionFactory.layoutReady() {
 		if err := initializeSandboxLayout(ctx, fsys, r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir, r.cfg.Registry.Names()); err != nil {

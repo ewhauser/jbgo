@@ -50,33 +50,6 @@ jobs:
           tag="$(git tag --list 'v*' --sort=-version:refname | head -n 1 || true)"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
-      - name: Build released website bundle
-        id: website_build
-        if: steps.website_tag.outputs.tag != ''
-        continue-on-error: true
-        env:
-          RELEASE_TAG: ${{ steps.website_tag.outputs.tag }}
-          RELEASED_SOURCE: ${{ runner.temp }}/released-website-source
-          PAGES_ROOT: ${{ runner.temp }}/compat-pages
-          GBASH_WEBSITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
-          NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io${{ steps.pages.outputs.base_path }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf "$RELEASED_SOURCE"
-          git worktree add --detach "$RELEASED_SOURCE" "$RELEASE_TAG"
-          cleanup() {
-            git worktree remove --force "$RELEASED_SOURCE" || true
-          }
-          trap cleanup EXIT
-
-          (
-            cd "$RELEASED_SOURCE"
-            pnpm install --frozen-lockfile
-          )
-
-          ./scripts/export_website_pages.sh "$RELEASED_SOURCE" "$PAGES_ROOT"
-
       - name: Run GNU compatibility harness
         id: run-compat
         env:
@@ -101,6 +74,86 @@ jobs:
           fi
           exit 0
 
+      - name: Build released website bundle
+        id: website_build
+        if: always() && steps.website_tag.outputs.tag != ''
+        continue-on-error: true
+        env:
+          RELEASE_TAG: ${{ steps.website_tag.outputs.tag }}
+          RELEASED_SOURCE: ${{ runner.temp }}/released-website-source
+          PAGES_ROOT: ${{ runner.temp }}/compat-pages
+          RESULTS_DIR: .cache/gnu/results/ci-latest
+          GBASH_WEBSITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io${{ steps.pages.outputs.base_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RESULTS_DIR/summary.json" ] || [ ! -f "$RESULTS_DIR/badge.svg" ]; then
+            echo "compatibility assets unavailable; skipping website export"
+            exit 1
+          fi
+
+          summary_path="$PWD/$RESULTS_DIR/summary.json"
+          badge_path="$PWD/$RESULTS_DIR/badge.svg"
+
+          rm -rf "$RELEASED_SOURCE"
+          git worktree add --detach "$RELEASED_SOURCE" "$RELEASE_TAG"
+          cleanup() {
+            git worktree remove --force "$RELEASED_SOURCE" || true
+          }
+          trap cleanup EXIT
+
+          (
+            cd "$RELEASED_SOURCE"
+            pnpm install --frozen-lockfile
+          )
+
+          GBASH_WEBSITE_COMPAT_SUMMARY_PATH="$summary_path" \
+          GBASH_WEBSITE_COMPAT_BADGE_PATH="$badge_path" \
+          ./scripts/export_website_pages.sh "$RELEASED_SOURCE" "$PAGES_ROOT"
+
+      - name: Check released website bundle
+        id: released_bundle
+        if: always()
+        env:
+          PAGES_ROOT: ${{ runner.temp }}/compat-pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ] \
+            && [ -f "$PAGES_ROOT/compat/latest/summary.json" ] \
+            && [ -f "$PAGES_ROOT/compat/latest/badge.svg" ] \
+            && [ ! -e "$PAGES_ROOT/compat/latest/index.html" ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build current checkout website bundle fallback
+        id: website_build_fallback
+        if: always() && steps.released_bundle.outputs.usable != 'true'
+        continue-on-error: true
+        env:
+          PAGES_ROOT: ${{ runner.temp }}/compat-pages
+          RESULTS_DIR: .cache/gnu/results/ci-latest
+          GBASH_WEBSITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io${{ steps.pages.outputs.base_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RESULTS_DIR/summary.json" ] || [ ! -f "$RESULTS_DIR/badge.svg" ]; then
+            echo "compatibility assets unavailable; skipping fallback website export"
+            exit 1
+          fi
+
+          summary_path="$PWD/$RESULTS_DIR/summary.json"
+          badge_path="$PWD/$RESULTS_DIR/badge.svg"
+
+          pnpm install --frozen-lockfile
+          GBASH_WEBSITE_COMPAT_SUMMARY_PATH="$summary_path" \
+          GBASH_WEBSITE_COMPAT_BADGE_PATH="$badge_path" \
+          ./scripts/export_website_pages.sh "$PWD" "$PAGES_ROOT"
+
       - name: Determine publishable compat bundle
         id: publish-state
         if: always()
@@ -111,49 +164,34 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           WEBSITE_TAG: ${{ steps.website_tag.outputs.tag }}
           WEBSITE_BUILD_OUTCOME: ${{ steps.website_build.outcome }}
+          RELEASED_BUNDLE_USABLE: ${{ steps.released_bundle.outputs.usable }}
+          FALLBACK_BUILD_OUTCOME: ${{ steps.website_build_fallback.outcome }}
         shell: bash
         run: |
           set -euo pipefail
-          bundle_dir="$PAGES_ROOT/compat/latest"
 
-          if [ "${WEBSITE_BUILD_OUTCOME:-}" != "success" ]; then
-            rm -rf "$PAGES_ROOT"
-            mkdir -p "$PAGES_ROOT"
-          fi
-
-          rm -rf "$bundle_dir"
-          mkdir -p "$bundle_dir"
-
-          if [ -f "$RESULTS_DIR/summary.json" ] && { [ ! -f "$RESULTS_DIR/index.html" ] || [ ! -f "$RESULTS_DIR/badge.svg" ]; }; then
-            set +e
-            go run ./scripts/compat-report --summary "$RESULTS_DIR/summary.json" --output "$RESULTS_DIR"
-            set -e
-          fi
-
-          if [ -f "$RESULTS_DIR/summary.json" ] && [ -f "$RESULTS_DIR/index.html" ] && [ -f "$RESULTS_DIR/badge.svg" ]; then
-            cp -a "$RESULTS_DIR"/. "$bundle_dir"/
+          if [ -f "$RESULTS_DIR/summary.json" ] && [ -f "$RESULTS_DIR/badge.svg" ]; then
             echo "publishable=true" >> "$GITHUB_OUTPUT"
           else
-            rm -rf "$bundle_dir"
             echo "publishable=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ -f "$bundle_dir/summary.json" ] && [ -f "$bundle_dir/index.html" ] && [ -f "$bundle_dir/badge.svg" ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
-            if [ "${WEBSITE_BUILD_OUTCOME:-}" != "success" ]; then
-              cat > "$PAGES_ROOT/index.html" <<'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta http-equiv="refresh" content="0; url=./compat/latest/">
-            <title>gbash compatibility</title>
-          </head>
-          <body>
-            <p>Redirecting to <a href="./compat/latest/">the latest compatibility report</a>.</p>
-          </body>
-          </html>
-          EOF
-            fi
+          if [ "$RELEASED_BUNDLE_USABLE" = "true" ]; then
+            echo "site_source=released tag $WEBSITE_TAG" >> "$GITHUB_OUTPUT"
+          elif [ "${FALLBACK_BUILD_OUTCOME:-}" = "success" ] \
+            && [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ]; then
+            echo "site_source=current checkout fallback" >> "$GITHUB_OUTPUT"
+          else
+            echo "site_source=unavailable" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -f "$RESULTS_DIR/summary.json" ] \
+            && [ -f "$RESULTS_DIR/badge.svg" ] \
+            && [ "$REF_NAME" = "$DEFAULT_BRANCH" ] \
+            && [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ] \
+            && [ -f "$PAGES_ROOT/compat/latest/summary.json" ] \
+            && [ -f "$PAGES_ROOT/compat/latest/badge.svg" ] \
+            && [ ! -e "$PAGES_ROOT/compat/latest/index.html" ]; then
             touch "$PAGES_ROOT/.nojekyll"
             echo "deployable=true" >> "$GITHUB_OUTPUT"
           else
@@ -163,7 +201,8 @@ jobs:
       - name: Summarize compat run
         if: always()
         env:
-          PAGE_URL: https://ewhauser.github.io/gbash/compat/latest/
+          PAGE_URL: https://ewhauser.github.io/gbash/docs/performance/compatibility/
+          RAW_SUMMARY_URL: https://ewhauser.github.io/gbash/compat/latest/summary.json
           COMPAT_EXIT_CODE: ${{ steps.run-compat.outputs.exit_code }}
           PUBLISHABLE: ${{ steps.publish-state.outputs.publishable }}
           DEPLOYABLE: ${{ steps.publish-state.outputs.deployable }}
@@ -171,29 +210,40 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           WEBSITE_TAG: ${{ steps.website_tag.outputs.tag }}
           WEBSITE_BUILD_OUTCOME: ${{ steps.website_build.outcome }}
+          FALLBACK_BUILD_OUTCOME: ${{ steps.website_build_fallback.outcome }}
+          SITE_SOURCE: ${{ steps.publish-state.outputs.site_source }}
         run: |
           {
             echo "## Compatibility"
             echo
             echo "Harness exit code: \`$COMPAT_EXIT_CODE\`"
             echo
-            if [ -n "$WEBSITE_TAG" ] && [ "$WEBSITE_BUILD_OUTCOME" = "success" ]; then
+            if [ "$SITE_SOURCE" = "current checkout fallback" ]; then
+              echo "Website bundle source: current checkout fallback"
+              echo
+            elif [ -n "$WEBSITE_TAG" ] && [ "$WEBSITE_BUILD_OUTCOME" = "success" ]; then
               echo "Website bundle source: released tag \`$WEBSITE_TAG\`"
               echo
             elif [ -n "$WEBSITE_TAG" ]; then
-              echo "Website bundle source: failed to build released tag \`$WEBSITE_TAG\`; using compat-only fallback."
+              echo "Website bundle source: failed to build released tag \`$WEBSITE_TAG\`."
               echo
             else
-              echo "Website bundle source: no release tag found; using compat-only fallback."
+              echo "Website bundle source: no release tag found."
               echo
             fi
             if [ "$DEPLOYABLE" = "true" ]; then
               echo "Published latest report: $PAGE_URL"
             elif [ "$PUBLISHABLE" = "true" ]; then
-              echo "Report bundle generated, but not deployed because ref \`$REF_NAME\` is not the default branch \`$DEFAULT_BRANCH\`."
+              if [ "${WEBSITE_BUILD_OUTCOME:-}" != "success" ] && [ "${FALLBACK_BUILD_OUTCOME:-}" != "success" ]; then
+                echo "Compatibility assets were generated, but the website export failed so the previous published page remains in place."
+              else
+                echo "Report bundle generated, but not deployed because ref \`$REF_NAME\` is not the default branch \`$DEFAULT_BRANCH\`."
+              fi
             else
               echo "No new report published. The previous report remains in place at $PAGE_URL"
             fi
+            echo
+            echo "Raw summary asset: $RAW_SUMMARY_URL"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload raw compat artifacts

@@ -22,8 +22,11 @@ func TestShellScriptsMatchBashBehavior(t *testing.T) {
 	// Keep each allowlisted divergence in its own single-purpose fixture so a
 	// known gap never suppresses unrelated parity checks from the same script.
 	knownDivergences := map[string]string{
-		"07-null-redirection.sh":     "the sandbox does not currently provide /dev/null, so Bash-style null redirections fail",
-		"08-brace-glob-expansion.sh": "brace expansion mixed with globs does not yet match Bash, so the *.log arm remains literal instead of expanding to matching files",
+		"08-brace-glob-expansion.sh":       "brace expansion mixed with globs does not yet match Bash, so the *.log arm remains literal instead of expanding to matching files",
+		"10-ifs-consecutive-delimiters.sh": "IFS splitting with consecutive delimiters collapses empty fields instead of preserving them",
+		"11-bitwise-hex-arithmetic.sh":     "hex literals (0xFF) and bitwise operators in arithmetic expansion do not evaluate correctly",
+		"12-herestring-whitespace.sh":      "read from a here-string does not strip leading/trailing IFS whitespace the way Bash does",
+		"13-sparse-array-unset.sh":         "unsetting individual array indices does not create sparse arrays; the array remains densely indexed",
 	}
 
 	for _, scriptPath := range scripts {

@@ -1,0 +1,17 @@
+# FAQ
+
+## Do you think virtual shells are the future for AI agents?
+
+No. Agents work best when they have a full computer, and virtual shells are limiting. That being said, there are a number of use cases where virtual shells are useful: smaller tool surfaces, local testing, etc.
+
+## What attempts have been taken to validate the sandbox is secure from jailbreaks?
+
+There are a few concrete validation efforts in the repo, but it does not claim to be a hardened sandbox. The project has a dedicated [`THREAT_MODEL.md`](../../../THREAT_MODEL.md), keeps the runtime closed over registry-backed commands so unknown commands never fall through to host execution, and ships regression tests for common escape paths like direct host-path reads, nested-shell host reads, symlink traversal, and policy-denied redirections. It also has a fuzzing corpus of known attacks plus mutational fuzz tests that check for panics, sensitive output leaks such as `/etc/passwd`, host home-directory leaks, and runaway execution. On top of that, the default policy enforces limits like command count, loop iterations, substitution depth, output size, and file-read size, with tests covering those failure modes. The current security model is best described as heavily tested and policy-constrained, not formally jailbreak-proof, and the README explicitly recommends adding OS- or process-level isolation if you need stronger containment.
+
+## What's the relationship to just-bash?
+
+This project started as a port of Vercel's just-bash but has diverged in a few ways. Many of the upstream commands were ported directly from Vercel's code.
+
+## Was AI used to built this?
+
+Yes, this project was entirely generated via AI - 99% of it with Codex 5.4. Claude Code was used for some smaller bits.

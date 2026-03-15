@@ -16,7 +16,7 @@ func TestDefaultSandboxLayout(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "echo \"$HOME\"\necho \"$PATH\"\nls /\nls /bin\n",
+		Script: "echo \"$HOME\"\necho \"$PATH\"\nls /\nls /bin\nls /dev\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -36,7 +36,7 @@ func TestDefaultSandboxLayout(t *testing.T) {
 		t.Fatalf("PATH = %q, want %q", got, want)
 	}
 
-	for _, entry := range []string{"bin", "home", "tmp", "usr"} {
+	for _, entry := range []string{"bin", "dev", "home", "tmp", "usr"} {
 		if !containsLine(lines, entry) {
 			t.Fatalf("Stdout missing root entry %q: %q", entry, result.Stdout)
 		}
@@ -48,6 +48,9 @@ func TestDefaultSandboxLayout(t *testing.T) {
 	}
 	if containsLine(lines, "__jb_cd_resolve") {
 		t.Fatalf("Stdout should not expose internal command stubs: %q", result.Stdout)
+	}
+	if !containsLine(lines, "null") {
+		t.Fatalf("Stdout missing /dev entry %q: %q", "null", result.Stdout)
 	}
 }
 

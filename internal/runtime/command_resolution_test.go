@@ -35,7 +35,7 @@ func TestBareCommandResolutionRespectsPATH(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	for _, entry := range []string{"bin", "home", "tmp", "usr"} {
+	for _, entry := range []string{"bin", "dev", "home", "tmp", "usr"} {
 		if !containsLine(strings.Split(strings.TrimSpace(result.Stdout), "\n"), entry) {
 			t.Fatalf("Stdout missing root entry %q: %q", entry, result.Stdout)
 		}
@@ -88,7 +88,7 @@ func TestExplicitPathResolutionBypassesPATH(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	for _, entry := range []string{"bin", "home", "tmp", "usr"} {
+	for _, entry := range []string{"bin", "dev", "home", "tmp", "usr"} {
 		if !containsLine(strings.Split(strings.TrimSpace(result.Stdout), "\n"), entry) {
 			t.Fatalf("Stdout missing root entry %q: %q", entry, result.Stdout)
 		}
