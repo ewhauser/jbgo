@@ -209,6 +209,38 @@ func TestSessionInteractTracksHistoryCommand(t *testing.T) {
 	}
 }
 
+func TestSessionInteractUsesPipelineSubshellSemantics(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	result, err := session.Interact(context.Background(), &InteractiveRequest{
+		Stdin: strings.NewReader("" +
+			"unset value\n" +
+			"printf 'hello\\n' | read -r value\n" +
+			"printf 'value:<%s>\\n' \"${value-}\"\n" +
+			"exit\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Interact() error = %v", err)
+	}
+	if result == nil {
+		t.Fatalf("Interact() result = nil")
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if !strings.Contains(stdout.String(), "value:<>\n") {
+		t.Fatalf("stdout = %q, want pipeline mutation to stay isolated", stdout.String())
+	}
+}
+
 func TestSessionInteractNormalizesLetBeforeParseAndKeepsRawHistory(t *testing.T) {
 	session := newSession(t, &Config{})
 

@@ -73,6 +73,8 @@ We do not reimplement parsing, quoting, command substitution, loops, or shell AS
 
 The shell adapter may pre-validate parsed AST forms that are known to trigger `mvdan/sh` interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
 
+The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in explicit subshells so parent-shell state matches Bash's default `lastpipe=off` behavior.
+
 ### 5.3 Project-owned boundaries
 
 The runtime owns:

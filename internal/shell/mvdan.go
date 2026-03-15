@@ -142,10 +142,9 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 			return nil, err
 		}
 		validationProgram = parsed
-	} else {
-		if err := rewriteLetClauses(validationProgram); err != nil {
-			return nil, err
-		}
+	}
+	if err := normalizeExecutionProgram(validationProgram); err != nil {
+		return nil, err
 	}
 	if violation := validateExecutionBudgets(validationProgram, exec.Policy); violation != nil {
 		if exec.Stderr != nil {
@@ -166,8 +165,9 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 			return nil, err
 		}
 		program = parsed
-	} else if program != validationProgram {
-		if err := rewriteLetClauses(program); err != nil {
+	}
+	if program != validationProgram {
+		if err := normalizeExecutionProgram(program); err != nil {
 			return nil, err
 		}
 	}

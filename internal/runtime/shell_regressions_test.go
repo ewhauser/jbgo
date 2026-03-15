@@ -26,6 +26,41 @@ func TestPipelineRegressionChainsShellAndRegistryCommands(t *testing.T) {
 	}
 }
 
+func TestPipelineRegressionDoesNotLeakPipedLoopVariableMutations(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"count=0\n"+
+		"printf '%s\\n' alpha beta gamma | while IFS= read -r _; do count=$((count + 1)); done\n"+
+		"printf 'after-pipeline:%s\\n' \"$count\"\n"+
+		"while IFS= read -r _; do count=$((count + 1)); done <<'EOF'\n"+
+		"delta\n"+
+		"epsilon\n"+
+		"EOF\n"+
+		"printf 'after-heredoc:%s\\n' \"$count\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "after-pipeline:0\nafter-heredoc:2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPipelineRegressionDoesNotPersistFinalStageReadVariable(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"unset value\n"+
+		"printf 'hello\\n' | read -r value\n"+
+		"printf 'value:<%s>\\n' \"${value-}\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "value:<>\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCommandSubstitutionRegressionFeedsExpandedArgs(t *testing.T) {
 	session := newSession(t, &Config{})
 	writeSessionFile(t, session, "/home/agent/note.txt", []byte("sandbox\n"))
