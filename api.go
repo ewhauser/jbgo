@@ -116,7 +116,8 @@ type Config struct {
 // FileSystemConfig describes how gbash provisions a session filesystem.
 //
 // Callers rarely need to populate this struct directly. Prefer the helper
-// constructors [InMemoryFileSystem], [HostDirectoryFileSystem],
+// constructors [InMemoryFileSystem], [SeededInMemoryFileSystem],
+// [HostDirectoryFileSystem], [MountableFileSystem],
 // [ReadWriteDirectoryFileSystem], and [CustomFileSystem], and then apply the
 // result with [WithFileSystem].
 type FileSystemConfig struct {
@@ -124,6 +125,20 @@ type FileSystemConfig struct {
 	Factory gbfs.Factory
 
 	// WorkingDir is the directory new sessions start in.
+	WorkingDir string
+}
+
+// MountableFileSystemOptions configures a multi-mount sandbox filesystem.
+type MountableFileSystemOptions struct {
+	// Base provisions the base filesystem used for unmounted paths. When nil, a
+	// fresh in-memory filesystem is used.
+	Base gbfs.Factory
+
+	// Mounts configures the mounted filesystems visible inside the sandbox.
+	Mounts []gbfs.MountConfig
+
+	// WorkingDir is the directory new sessions start in. When empty,
+	// /home/agent is used.
 	WorkingDir string
 }
 
@@ -297,6 +312,15 @@ func InMemoryFileSystem() FileSystemConfig {
 	}
 }
 
+// SeededInMemoryFileSystem returns an in-memory filesystem configuration
+// preloaded with the provided files.
+func SeededInMemoryFileSystem(files gbfs.InitialFiles) FileSystemConfig {
+	return FileSystemConfig{
+		Factory:    gbfs.SeededMemory(files),
+		WorkingDir: InMemoryFileSystem().WorkingDir,
+	}
+}
+
 // CustomFileSystem wires an arbitrary filesystem factory into the runtime.
 //
 // This is the low-level escape hatch for callers that want to seed a custom
@@ -304,6 +328,21 @@ func InMemoryFileSystem() FileSystemConfig {
 func CustomFileSystem(factory gbfs.Factory, workingDir string) FileSystemConfig {
 	return FileSystemConfig{
 		Factory:    factory,
+		WorkingDir: workingDir,
+	}
+}
+
+// MountableFileSystem returns a multi-mount filesystem configuration.
+func MountableFileSystem(opts MountableFileSystemOptions) FileSystemConfig {
+	workingDir := strings.TrimSpace(opts.WorkingDir)
+	if workingDir == "" {
+		workingDir = InMemoryFileSystem().WorkingDir
+	}
+	return FileSystemConfig{
+		Factory: gbfs.Mountable(gbfs.MountableOptions{
+			Base:   opts.Base,
+			Mounts: append([]gbfs.MountConfig(nil), opts.Mounts...),
+		}),
 		WorkingDir: workingDir,
 	}
 }

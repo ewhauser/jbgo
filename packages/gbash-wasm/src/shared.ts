@@ -7,6 +7,23 @@ export type CommandResult = {
 
 export type CommandHandler = (args: string[]) => CommandResult | Promise<CommandResult>;
 
+export type FileContent = string | Uint8Array;
+export type LazyFileProvider = () => FileContent | Promise<FileContent>;
+
+export type InitialFile =
+  | {
+      content: FileContent;
+      mode?: number;
+      mtime?: Date;
+    }
+  | {
+      lazy: LazyFileProvider;
+      mode?: number;
+      mtime?: Date;
+    };
+
+export type InitialFiles = Record<string, FileContent | LazyFileProvider | InitialFile>;
+
 export type BridgeShell = {
   exec(command: string): Promise<CommandResult>;
   writeFile(path: string, content: string): void;
@@ -18,7 +35,7 @@ export type GBashRuntime = {
   createShell(options?: {
     cwd?: string;
     env?: Record<string, string>;
-    files?: Record<string, string>;
+    files?: InitialFiles;
   }): Promise<BridgeShell>;
 };
 
@@ -30,7 +47,7 @@ export type CustomCommand = {
 export type BashOptions = {
   cwd?: string;
   env?: Record<string, string>;
-  files?: Record<string, string>;
+  files?: InitialFiles;
   customCommands?: CustomCommand[];
   wasmUrl?: string;
   wasmExecUrl?: string;

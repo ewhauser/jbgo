@@ -26,6 +26,10 @@ export type {
   CommandResult,
   CustomCommand,
   GBashRuntime,
+  FileContent,
+  InitialFile,
+  InitialFiles,
+  LazyFileProvider,
 } from "./shared.js";
 
 type NodeGlobal = typeof globalThis & {

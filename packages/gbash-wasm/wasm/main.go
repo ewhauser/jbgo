@@ -6,13 +6,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"os"
 	"path"
 	"strings"
 	"sync"
 	"syscall/js"
+	"time"
 
 	"github.com/ewhauser/gbash"
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type browserShell struct {
@@ -48,11 +51,22 @@ func createShell(this js.Value, args []js.Value) any {
 func newBrowserShell(options js.Value) (*browserShell, error) {
 	cwd := cleanPath(valueOrDefault(options, "cwd", "/home/agent"))
 	baseEnv := envFromOptions(options, cwd)
+	initialFiles, err := initialFilesFromOptions(options)
+	if err != nil {
+		return nil, err
+	}
 
-	rt, err := gbash.New(
-		gbash.WithWorkingDir(cwd),
+	runtimeOptions := []gbash.Option{
 		gbash.WithBaseEnv(baseEnv),
-	)
+		gbash.WithWorkingDir(cwd),
+	}
+	if len(initialFiles) > 0 {
+		runtimeOptions = append([]gbash.Option{
+			gbash.WithFileSystem(gbash.SeededInMemoryFileSystem(initialFiles)),
+		}, runtimeOptions...)
+	}
+
+	rt, err := gbash.New(runtimeOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,12 +80,6 @@ func newBrowserShell(options js.Value) (*browserShell, error) {
 		session: session,
 		cwd:     cwd,
 		env:     cloneEnv(baseEnv),
-	}
-
-	for filePath, content := range stringMapValue(options, "files") {
-		if err := shell.writeFileSync(filePath, content); err != nil {
-			return nil, err
-		}
 	}
 
 	return shell, nil
@@ -278,6 +286,190 @@ func stringMapValue(value js.Value, key string) map[string]string {
 		out[name] = field.Get(name).String()
 	}
 	return out
+}
+
+func initialFilesFromOptions(value js.Value) (gbfs.InitialFiles, error) {
+	if value.IsUndefined() || value.IsNull() || value.Type() != js.TypeObject {
+		return nil, nil
+	}
+	field := value.Get("files")
+	if field.IsUndefined() || field.IsNull() || field.Type() != js.TypeObject {
+		return nil, nil
+	}
+
+	keys := js.Global().Get("Object").Call("keys", field)
+	out := make(gbfs.InitialFiles, keys.Length())
+	for i := 0; i < keys.Length(); i++ {
+		name := keys.Index(i).String()
+		file, err := initialFileFromJSValue(field.Get(name))
+		if err != nil {
+			return nil, fmt.Errorf("files[%q]: %w", name, err)
+		}
+		out[name] = file
+	}
+	return out, nil
+}
+
+func initialFileFromJSValue(value js.Value) (gbfs.InitialFile, error) {
+	switch {
+	case value.Type() == js.TypeString:
+		return gbfs.InitialFile{Content: []byte(value.String())}, nil
+	case isUint8Array(value):
+		content, err := bytesFromJSValue(value)
+		if err != nil {
+			return gbfs.InitialFile{}, err
+		}
+		return gbfs.InitialFile{Content: content}, nil
+	case value.Type() == js.TypeFunction:
+		return gbfs.InitialFile{Lazy: lazyProviderFromJS(value)}, nil
+	case value.Type() != js.TypeObject || value.IsNull():
+		return gbfs.InitialFile{}, fmt.Errorf("unsupported file value type %s", value.Type())
+	}
+
+	contentField := value.Get("content")
+	lazyField := value.Get("lazy")
+	hasContent := isDefined(contentField)
+	hasLazy := isDefined(lazyField)
+	if hasContent == hasLazy {
+		return gbfs.InitialFile{}, fmt.Errorf("expected exactly one of content or lazy")
+	}
+
+	var file gbfs.InitialFile
+	var err error
+	if hasContent {
+		file.Content, err = bytesFromJSValue(contentField)
+		if err != nil {
+			return gbfs.InitialFile{}, err
+		}
+	} else {
+		if lazyField.Type() != js.TypeFunction {
+			return gbfs.InitialFile{}, fmt.Errorf("lazy must be a function")
+		}
+		file.Lazy = lazyProviderFromJS(lazyField)
+	}
+
+	if modeField := value.Get("mode"); isDefined(modeField) {
+		if modeField.Type() != js.TypeNumber {
+			return gbfs.InitialFile{}, fmt.Errorf("mode must be a number")
+		}
+		file.Mode = stdfs.FileMode(modeField.Int())
+	}
+	if mtimeField := value.Get("mtime"); isDefined(mtimeField) {
+		modTime, err := timeFromJSValue(mtimeField)
+		if err != nil {
+			return gbfs.InitialFile{}, err
+		}
+		file.ModTime = modTime
+	}
+
+	return file, nil
+}
+
+func lazyProviderFromJS(provider js.Value) gbfs.LazyFileProvider {
+	return func(ctx context.Context) ([]byte, error) {
+		type result struct {
+			data []byte
+			err  error
+		}
+
+		done := make(chan result, 1)
+		var once sync.Once
+		resolve := func(data []byte, err error) {
+			once.Do(func() {
+				done <- result{data: data, err: err}
+			})
+		}
+
+		onResolve := js.FuncOf(func(this js.Value, args []js.Value) any {
+			var value js.Value
+			if len(args) > 0 {
+				value = args[0]
+			}
+			data, err := bytesFromJSValue(value)
+			resolve(data, err)
+			return nil
+		})
+		onReject := js.FuncOf(func(this js.Value, args []js.Value) any {
+			reason := "lazy file provider rejected"
+			if len(args) > 0 {
+				reason = jsValueString(args[0])
+			}
+			resolve(nil, fmt.Errorf("%s", reason))
+			return nil
+		})
+		defer onResolve.Release()
+		defer onReject.Release()
+
+		invoked := provider.Invoke()
+		if isPromise(invoked) {
+			invoked.Call("then", onResolve)
+			invoked.Call("catch", onReject)
+		} else {
+			data, err := bytesFromJSValue(invoked)
+			resolve(data, err)
+		}
+
+		select {
+		case result := <-done:
+			return result.data, result.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func bytesFromJSValue(value js.Value) ([]byte, error) {
+	switch {
+	case value.Type() == js.TypeUndefined || value.Type() == js.TypeNull:
+		return nil, fmt.Errorf("file content must be a string or Uint8Array")
+	case value.Type() == js.TypeString:
+		return []byte(value.String()), nil
+	case isUint8Array(value):
+		buf := make([]byte, value.Get("byteLength").Int())
+		js.CopyBytesToGo(buf, value)
+		return buf, nil
+	default:
+		return nil, fmt.Errorf("unsupported file content type %s", value.Type())
+	}
+}
+
+func isUint8Array(value js.Value) bool {
+	ctor := js.Global().Get("Uint8Array")
+	return ctor.Truthy() && value.Type() == js.TypeObject && value.InstanceOf(ctor)
+}
+
+func isPromise(value js.Value) bool {
+	ctor := js.Global().Get("Promise")
+	return ctor.Truthy() && value.Type() == js.TypeObject && value.InstanceOf(ctor)
+}
+
+func isDefined(value js.Value) bool {
+	return !value.IsUndefined() && !value.IsNull()
+}
+
+func timeFromJSValue(value js.Value) (time.Time, error) {
+	dateCtor := js.Global().Get("Date")
+	if !dateCtor.Truthy() || value.Type() != js.TypeObject || !value.InstanceOf(dateCtor) {
+		return time.Time{}, fmt.Errorf("mtime must be a Date")
+	}
+	return time.UnixMilli(int64(value.Call("getTime").Float())).UTC(), nil
+}
+
+func jsValueString(value js.Value) string {
+	switch value.Type() {
+	case js.TypeString:
+		return value.String()
+	case js.TypeUndefined:
+		return "undefined"
+	case js.TypeNull:
+		return "null"
+	default:
+		text := value.String()
+		if strings.TrimSpace(text) == "" {
+			return value.Type().String()
+		}
+		return text
+	}
 }
 
 func cleanPath(name string) string {

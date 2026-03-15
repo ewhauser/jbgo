@@ -20,6 +20,7 @@ const bash = new Bash({
   env: { MY_VAR: "hello" },
   files: {
     "/home/agent/greeting.txt": "hello world\n",
+    "/home/agent/large.txt": async () => "lazy payload\n",
   },
 });
 ```
@@ -30,7 +31,7 @@ const bash = new Bash({
 |--------|------|-------------|
 | `cwd` | `string` | Initial working directory. Defaults to `/home/agent`. |
 | `env` | `Record<string, string>` | Environment variables. |
-| `files` | `Record<string, string>` | Files to pre-populate in the virtual filesystem. |
+| `files` | `InitialFiles` | Files to pre-populate in the virtual filesystem. Supports strings, `Uint8Array`, lazy providers, and descriptor objects with `content` or `lazy` plus optional `mode` and `mtime`. |
 | `customCommands` | `CustomCommand[]` | Custom commands implemented in JavaScript. |
 | `wasmUrl` | `string` | Override URL for `gbash.wasm`. |
 | `wasmExecUrl` | `string` | Override URL for `wasm_exec.js`. |
@@ -61,6 +62,18 @@ type CommandResult = {
 bash.writeFile("/home/agent/data.json", '{"key": "value"}');
 const result = await bash.exec("cat /home/agent/data.json");
 ```
+
+### Initial Files
+
+`files` accepts:
+
+- `string`
+- `Uint8Array`
+- `() => string | Uint8Array | Promise<string | Uint8Array>`
+- `{ content: string | Uint8Array; mode?: number; mtime?: Date }`
+- `{ lazy: () => string | Uint8Array | Promise<string | Uint8Array>; mode?: number; mtime?: Date }`
+
+Lazy providers are materialized on first content-sensitive access inside the sandbox.
 
 ### Custom Commands
 

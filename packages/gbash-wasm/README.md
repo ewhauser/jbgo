@@ -17,5 +17,8 @@ The initial API is the same one used by the website example:
 - `new Bash({ cwd, env, files, wasmUrl, wasmExecUrl })`
 - `defineCommand(name, run)`
 
+`files` accepts eager strings, `Uint8Array` values, lazy provider functions, and
+descriptor objects with `{ content, mode?, mtime? }` or `{ lazy, mode?, mtime? }`.
+
 The package currently exposes explicit browser and Node entrypoints for JavaScript
 hosts. It does not yet expose a host-neutral WASI/component-model interface.

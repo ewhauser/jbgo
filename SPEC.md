@@ -568,24 +568,30 @@ Implementation detail for the current runtime:
 - `fs/` may use private clone helpers internally for backend composition, but that is not the same as moving user-visible `cp` semantics into the filesystem layer
 - `MemoryFS` stores symlink entries directly for testing and path-safety enforcement, but the runtime still defaults to `SymlinkDeny`
 - `MemoryFS.Stat`, `Open`, `ReadDir`, `Chdir`, and `Realpath` follow symlinks; `Lstat`, `Readlink`, `Remove`, and `Rename` operate on the symlink entry itself
+- `MemoryFS` may also hold lazy regular-file providers that materialize on first content-sensitive access such as `Open`, `Stat`, `Lstat`, or `DirEntry.Info`
 
 Current and planned backends:
 
 - `MemoryFS`: default mutable sandbox
+- `SeededMemory`: in-memory factory seeded with eager or lazy per-path files for a fresh session
 - `HostFS`: read-only host-backed directory view mounted at a configurable virtual root with sanitized errors and a backend-local regular-file read cap
 - `ReadWriteFS`: mutable host-backed directory view rooted at `/` with sanitized errors and a backend-local regular-file read cap for opt-in host-backed workflows
 - `OverlayFS`: copy-on-write backend with a read-only lower layer, writable in-memory upper layer, merged `readdir`, and tombstones for deletions
+- `MountableFS`: multi-mount namespace over a base filesystem plus sibling mount points, with synthetic parent directories and path routing handled inside the backend
 - `SnapshotFS`: deterministic read-only clone of another filesystem for tests and replay fixtures
 
 Backend boundary for the current implementation:
 
 - `gbash.Config.FileSystem` is the public setup boundary for session storage and starting directory; callers should not have to coordinate separate runtime knobs to mount a backend and choose the initial working directory
+- `SeededMemory` and `gbash.SeededInMemoryFileSystem(...)` are the productized seed path for eager or lazy per-file session bootstrap
 - `HostFS` is an opt-in lower-layer backend exposed through `gbfs.Host(...)`; it is intended to sit underneath `gbfs.Overlay(...)`, not to replace the default in-memory runtime path
 - `ReadWriteFS` is an opt-in mutable backend exposed through `gbfs.ReadWrite(...)`; it is intended for developer tooling, external test harnesses, and embedders that explicitly want host mutations
 - `OverlayFS` is intended for internal session use and is exposed through `gbfs.Overlay(...)`
+- `MountableFS` is an opt-in namespace backend exposed through `gbfs.Mountable(...)` and `gbash.MountableFileSystem(...)`; live `mount` and `unmount` behavior remains a concrete-backend capability rather than part of the core filesystem interface
 - `SnapshotFS` is a read-only backend for deterministic fixtures and direct tests
 - `SnapshotFS` is not the default `runtime` session backend because session bootstrap still creates the sandbox layout and command stubs
 - the common host-project workflow should be represented as a high-level runtime helper that mounts a read-only host tree under an in-memory overlay and starts the session in that mounted directory
+- the `@ewhauser/gbash-wasm` bridge should expose the same seeded-memory model for `files`, including lazy per-path providers, rather than eagerly writing every file after session creation
 
 ## 12. Policy Model
 

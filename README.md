@@ -232,9 +232,39 @@ The shared frontend is also exposed as the public `github.com/ewhauser/gbash/cli
 Most callers should use one of these entry points:
 
 - `gbash.New()` — default mutable in-memory sandbox
+- `gbash.WithFileSystem(gbash.SeededInMemoryFileSystem(...))` — in-memory sandbox preloaded with eager or lazy files
 - `gbash.WithWorkspace(root)` — real host directory mounted read-only under an in-memory overlay
+- `gbash.WithFileSystem(gbash.MountableFileSystem(...))` — multi-mount namespace over a base filesystem plus sibling mounts
 - `gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(...))` — just-bash-style mutable host-backed root
 - `gbash.WithFileSystem(gbash.CustomFileSystem(...))` — seeded or custom backends
+
+Preload an in-memory sandbox with eager or lazy files:
+
+```go
+gb, err := gbash.New(
+	gbash.WithFileSystem(gbash.SeededInMemoryFileSystem(gbfs.InitialFiles{
+		"/home/agent/config.json": {Content: []byte("{\"mode\":\"dev\"}\n")},
+		"/home/agent/big.txt": {
+			Lazy: func(ctx context.Context) ([]byte, error) {
+				return fetchLargeFixture(ctx)
+			},
+		},
+	})),
+)
+```
+
+Compose multiple sandbox mounts under one namespace:
+
+```go
+gb, err := gbash.New(
+	gbash.WithFileSystem(gbash.MountableFileSystem(gbash.MountableFileSystemOptions{
+		Mounts: []gbfs.MountConfig{
+			{MountPoint: "/workspace", Factory: gbfs.Overlay(gbfs.Host(gbfs.HostOptions{Root: "/path/to/project", VirtualRoot: "/"}))},
+			{MountPoint: "/cache", Factory: gbfs.Memory()},
+		},
+	})),
+)
+```
 
 Mount a host directory as a read-only workspace overlay:
 

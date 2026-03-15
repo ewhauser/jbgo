@@ -1,6 +1,6 @@
 # Filesystem
 
-gbash provisions a fresh virtual filesystem for each session. Four entry points cover the spectrum from fully isolated to fully mutable host access.
+gbash provisions a fresh virtual filesystem for each session. Six entry points cover the spectrum from fully isolated to fully mutable host access.
 
 ## Default: In-Memory Filesystem
 
@@ -15,6 +15,21 @@ This is equivalent to:
 ```go
 rt, err := gbash.New(
     gbash.WithFileSystem(gbash.InMemoryFileSystem()),
+)
+```
+
+To preload eager or lazy files into that in-memory sandbox, use `SeededInMemoryFileSystem`:
+
+```go
+rt, err := gbash.New(
+    gbash.WithFileSystem(gbash.SeededInMemoryFileSystem(gbfs.InitialFiles{
+        "/home/agent/config.json": {Content: []byte("{\"mode\":\"dev\"}\n")},
+        "/home/agent/large.txt": {
+            Lazy: func(ctx context.Context) ([]byte, error) {
+                return loadLargeFixture(ctx)
+            },
+        },
+    })),
 )
 ```
 
@@ -54,6 +69,29 @@ rt, err := gbash.New(
 ```
 
 Use this when you intentionally want shell commands to modify the host filesystem, for example in compatibility test harnesses or controlled build pipelines.
+
+## Mountable Namespace
+
+`MountableFileSystem` composes a base filesystem with one or more sibling mount points inside the sandbox. This is the productized multi-mount path when you want, for example, a workspace, a scratch area, and a fixture tree under one namespace.
+
+```go
+rt, err := gbash.New(
+    gbash.WithFileSystem(gbash.MountableFileSystem(gbash.MountableFileSystemOptions{
+        Mounts: []gbfs.MountConfig{
+            {
+                MountPoint: "/workspace",
+                Factory: gbfs.Overlay(gbfs.Host(gbfs.HostOptions{
+                    Root:        "/path/to/project",
+                    VirtualRoot: "/",
+                })),
+            },
+            {MountPoint: "/cache", Factory: gbfs.Memory()},
+        },
+    })),
+)
+```
+
+The concrete `*gbfs.MountableFS` also exposes live `Mount`, `Unmount`, `Mounts`, and `IsMountPoint` methods when you need to mutate the namespace through `Session.FileSystem()`.
 
 ## Custom Filesystem
 
