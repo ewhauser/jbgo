@@ -10,6 +10,7 @@ import (
 
 	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/internal/builtins"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type runtimeOptions struct {
@@ -96,7 +97,8 @@ func (opts runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 		return nil, fmt.Errorf("--root and --readwrite-root are mutually exclusive")
 	}
 
-	runtimeOpts := make([]gbash.Option, 0, 3)
+	baseEnv := inheritedCLIEnv(nil)
+	runtimeOpts := make([]gbash.Option, 0, 4)
 	switch {
 	case rootValue != "":
 		root, err := filepath.Abs(rootValue)
@@ -115,22 +117,55 @@ func (opts runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 		if err := ensureReadWriteRootIsTemporary(root); err != nil {
 			return nil, err
 		}
+		baseEnv = inheritedCLIEnv(map[string]string{
+			"HOME": "/home",
+			"PATH": "/bin",
+		})
+		registry := builtins.DefaultRegistry()
 		runtimeOpts = append(runtimeOpts,
 			gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(root, gbash.ReadWriteDirectoryOptions{})),
-			gbash.WithBaseEnv(map[string]string{
-				"HOME": "/home",
-				"PATH": "/bin",
-			}),
+			gbash.WithRegistry(registry),
+			gbash.WithPolicy(policy.NewStatic(&policy.Config{
+				AllowedCommands: registry.Names(),
+				ReadRoots:       []string{"/"},
+				WriteRoots:      []string{"/"},
+				Limits: policy.Limits{
+					MaxCommandCount:      10000,
+					MaxGlobOperations:    100000,
+					MaxLoopIterations:    10000,
+					MaxSubstitutionDepth: 50,
+					MaxStdoutBytes:       1 << 20,
+					MaxStderrBytes:       1 << 20,
+					MaxFileBytes:         8 << 20,
+				},
+				SymlinkMode: policy.SymlinkFollow,
+			})),
 		)
 		if cwdValue == "" {
 			cwdValue = "/"
 		}
 	}
+	runtimeOpts = append(runtimeOpts, gbash.WithBaseEnv(baseEnv))
 
 	if cwdValue != "" {
 		runtimeOpts = append(runtimeOpts, gbash.WithWorkingDir(normalizeSandboxPath(cwdValue)))
 	}
 	return runtimeOpts, nil
+}
+
+func inheritedCLIEnv(overrides map[string]string) map[string]string {
+	env := make(map[string]string, len(os.Environ())+len(overrides))
+	for _, entry := range os.Environ() {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
+		}
+		env[key] = value
+	}
+	for key, value := range overrides {
+		env[key] = value
+	}
+	return env
 }
 
 func ensureReadWriteRootIsTemporary(root string) error {

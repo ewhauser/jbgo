@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -71,6 +73,44 @@ func TestSessionDoesNotPersistCDAcrossExecs(t *testing.T) {
 	}
 	if got, want := second.Stdout, "/home/agent\n"; got != want {
 		t.Fatalf("second Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestExecPreservesInheritedStdoutFileMetadata(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatalf("Mkdir(sub) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sub", "out"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(out) error = %v", err)
+	}
+
+	session := newSession(t, &Config{
+		FileSystem: ReadWriteDirectoryFileSystem(root, ReadWriteDirectoryOptions{}),
+	})
+
+	stdoutFile, err := os.OpenFile(filepath.Join(root, "sub", "out"), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(stdout) error = %v", err)
+	}
+	defer func() { _ = stdoutFile.Close() }()
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		WorkDir: "/sub",
+		Script:  "cat out\n",
+		Stdout:  stdoutFile,
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "cat: out: input file is output file\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if got := string(readSessionFile(t, session, "/sub/out")); got != "x\n" {
+		t.Fatalf("file contents = %q, want %q", got, "x\n")
 	}
 }
 

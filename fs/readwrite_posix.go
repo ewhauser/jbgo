@@ -421,15 +421,40 @@ func (h *ReadWriteFS) resolveLeaf(abs string) (string, error) {
 
 	lexical := h.lexicalPath(abs)
 	parent := filepath.Dir(lexical)
-	canonicalParent, err := filepath.EvalSymlinks(parent)
-	if err != nil {
-		return "", err
+	missingParts := make([]string, 0, 4)
+	for {
+		canonicalParent, err := filepath.EvalSymlinks(parent)
+		if err == nil {
+			canonicalParent = filepath.Clean(canonicalParent)
+			if !withinHostRoot(canonicalParent, h.canonicalRoot) {
+				return "", stdfs.ErrPermission
+			}
+			target := canonicalParent
+			for i := len(missingParts) - 1; i >= 0; i-- {
+				target = filepath.Join(target, missingParts[i])
+			}
+			return filepath.Join(target, filepath.Base(lexical)), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		if filepath.Clean(parent) == h.root {
+			if !withinHostRoot(h.canonicalRoot, h.canonicalRoot) {
+				return "", stdfs.ErrPermission
+			}
+			target := h.canonicalRoot
+			for i := len(missingParts) - 1; i >= 0; i-- {
+				target = filepath.Join(target, missingParts[i])
+			}
+			return filepath.Join(target, filepath.Base(lexical)), nil
+		}
+		missingParts = append(missingParts, filepath.Base(parent))
+		next := filepath.Dir(parent)
+		if next == parent {
+			return "", err
+		}
+		parent = next
 	}
-	canonicalParent = filepath.Clean(canonicalParent)
-	if !withinHostRoot(canonicalParent, h.canonicalRoot) {
-		return "", stdfs.ErrPermission
-	}
-	return filepath.Join(canonicalParent, filepath.Base(lexical)), nil
 }
 
 func (h *ReadWriteFS) lexicalPath(abs string) string {

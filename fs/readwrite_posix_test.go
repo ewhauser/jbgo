@@ -91,6 +91,27 @@ func TestReadWriteFSReadsWritesAndResolvesSymlinks(t *testing.T) {
 	}
 }
 
+func TestReadWriteFSMkdirAllCreatesNestedMissingParents(t *testing.T) {
+	root := t.TempDir()
+
+	fsys, err := NewReadWrite(ReadWriteOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewReadWrite() error = %v", err)
+	}
+
+	if err := fsys.MkdirAll(context.Background(), "/nested/path", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/nested/path) error = %v", err)
+	}
+
+	info, err := fsys.Stat(context.Background(), "/nested/path")
+	if err != nil {
+		t.Fatalf("Stat(/nested/path) error = %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("Stat(/nested/path).IsDir() = false, want true")
+	}
+}
+
 func TestReadWriteFSStatPreservesRawSysStat(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello\n"), 0o644); err != nil {

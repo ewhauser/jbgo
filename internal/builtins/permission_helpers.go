@@ -470,7 +470,9 @@ func runPermissionApply(ctx context.Context, inv *Invocation, db *permissionIden
 			continue
 		}
 		hadError = true
-		_, _ = fmt.Fprintln(inv.Stderr, permissionTargetError(opts.commandName, target, err))
+		if opts.verbosity.level != permissionVerbositySilent {
+			_, _ = fmt.Fprintln(inv.Stderr, permissionTargetError(opts.commandName, target, err))
+		}
 	}
 
 	if hadError {

@@ -171,10 +171,10 @@ func catOptionsFromParsed(matches *ParsedCommand) catOptions {
 
 func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) (bool, error) {
 	output, ok := inv.Stdout.(catRedirectHandle)
-	if ok {
+	if ok && output.RedirectPath() != "" {
 		if name == "-" {
 			input, ok := inv.Stdin.(catRedirectHandle)
-			if !ok || input.RedirectPath() != output.RedirectPath() {
+			if !ok || input.RedirectPath() == "" || input.RedirectPath() != output.RedirectPath() {
 				return false, nil
 			}
 			return catIsUnsafeOverwrite(input.RedirectOffset(), output), nil
@@ -207,8 +207,19 @@ func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) 
 		return false, err
 	}
 	outputInfo, err := outputHost.Stat()
-	if err != nil || !testSameFile(info, outputInfo) {
+	if err != nil {
 		return false, nil
+	}
+	if !testSameFile(info, outputInfo) {
+		file, _, openErr := openRead(ctx, inv, name)
+		if openErr != nil {
+			return false, openErr
+		}
+		defer func() { _ = file.Close() }()
+		info, err = file.Stat()
+		if err != nil || !testSameFile(info, outputInfo) {
+			return false, nil
+		}
 	}
 	return catUnsafeByOffsets(0, outputInfo.Size(), catHostAppendMode(outputHost), catHostOffset(outputHost)), nil
 }

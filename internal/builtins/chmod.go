@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	stdfs "io/fs"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -41,20 +43,23 @@ func (c *Chmod) Name() string {
 }
 
 func (c *Chmod) Run(ctx context.Context, inv *Invocation) error {
-	return RunCommand(ctx, c, inv)
+	spec := c.Spec()
+	opts, action, err := parseChmodInvocation(inv, &spec)
+	if err != nil {
+		return err
+	}
+	switch action {
+	case "help":
+		return RenderCommandHelp(inv.Stdout, &spec)
+	case "version":
+		return RenderCommandVersion(inv.Stdout, &spec)
+	default:
+		return runChmod(ctx, inv, &opts)
+	}
 }
 
 func (c *Chmod) NormalizeInvocation(inv *Invocation) *Invocation {
-	if inv == nil {
-		return nil
-	}
-	negativeMode, args := extractChmodNegativeModes(inv.Args)
-	if negativeMode == "" {
-		return inv
-	}
-	clone := *inv
-	clone.Args = args
-	return &clone
+	return inv
 }
 
 func (c *Chmod) Spec() CommandSpec {
@@ -91,7 +96,7 @@ func (c *Chmod) Spec() CommandSpec {
 	}
 }
 
-func (c *Chmod) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+func (c *Chmod) runParsedShared(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	spec := c.Spec()
 	if matches.Has("help") {
 		return RenderCommandHelp(inv.Stdout, &spec)
@@ -101,31 +106,6 @@ func (c *Chmod) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 		return err
 	}
 	return runChmod(ctx, inv, &opts)
-}
-
-func extractChmodNegativeModes(args []string) (negativeMode string, out []string) {
-	var modes []string
-	var before []string
-	i := 0
-	for i < len(args) && args[i] != "--" {
-		arg := args[i]
-		if isChmodNegativeMode(arg) {
-			modes = append(modes, arg)
-		} else {
-			before = append(before, arg)
-		}
-		i++
-	}
-	if len(modes) == 0 {
-		return "", args
-	}
-	out = make([]string, 0, len(args))
-	out = append(out, strings.Join(modes, ","))
-	out = append(out, before...)
-	if i < len(args) {
-		out = append(out, args[i:]...)
-	}
-	return strings.Join(modes, ","), out
 }
 
 func isChmodNegativeMode(arg string) bool {
@@ -140,10 +120,231 @@ func isChmodNegativeMode(arg string) bool {
 	}
 }
 
+func parseChmodInvocation(inv *Invocation, spec *CommandSpec) (chmodOptions, string, error) {
+	opts := chmodOptions{traverse: permissionTraverseFirst}
+	args := append([]string(nil), inv.Args...)
+	operandsOnly := false
+	modeNegative := false
+	var preMode []string
+	for len(args) > 0 {
+		arg := args[0]
+		if !operandsOnly && arg == "--" {
+			args = args[1:]
+			if opts.modeSpec == "" {
+				if len(preMode) == 0 {
+					operandsOnly = true
+					continue
+				}
+				break
+			}
+			opts.files = append(opts.files, args...)
+			args = nil
+			break
+		}
+		if !operandsOnly {
+			if strings.HasPrefix(arg, "--") && arg != "--" {
+				action, remaining, err := parseChmodLongOption(inv, spec, &opts, args)
+				if err == nil || action != "" {
+					if action != "" {
+						return chmodOptions{}, action, nil
+					}
+					args = remaining
+					continue
+				}
+				if opts.modeSpec == "" {
+					return chmodOptions{}, "", err
+				}
+			}
+			if strings.HasPrefix(arg, "-") && arg != "-" && !isChmodNegativeMode(arg) {
+				remaining, err := parseChmodShortOptions(inv, &opts, args)
+				if err == nil {
+					args = remaining
+					continue
+				}
+				if opts.modeSpec == "" {
+					return chmodOptions{}, "", err
+				}
+			}
+		}
+
+		if opts.modeSpec == "" {
+			if opts.referenceSet {
+				break
+			}
+			if !operandsOnly && !isChmodNegativeMode(arg) {
+				preMode = append(preMode, arg)
+				args = args[1:]
+				continue
+			}
+			opts.files = append(opts.files, preMode...)
+			preMode = nil
+			if !operandsOnly && isChmodNegativeMode(arg) {
+				opts.modeSpec = arg
+				modeNegative = true
+				args = args[1:]
+				continue
+			}
+			opts.modeSpec = arg
+			args = args[1:]
+			continue
+		}
+
+		if !operandsOnly && modeNegative && len(opts.files) == 0 && isChmodNegativeMode(arg) {
+			opts.modeSpec += "," + arg
+			args = args[1:]
+			continue
+		}
+
+		opts.files = append(opts.files, arg)
+		args = args[1:]
+	}
+	if opts.referenceSet {
+		if len(opts.files) == 0 && len(preMode) > 0 {
+			opts.files = append(opts.files, preMode...)
+		}
+		if len(opts.files) == 0 {
+			return chmodOptions{}, "", exitf(inv, 1, "chmod: missing operand after %s", quoteGNUOperand(opts.reference))
+		}
+		return opts, "", nil
+	}
+	if opts.modeSpec == "" && len(preMode) > 0 {
+		opts.modeSpec = preMode[0]
+		opts.files = append(opts.files, preMode[1:]...)
+	}
+	if opts.modeSpec == "" || len(opts.files) == 0 {
+		return chmodOptions{}, "", exitf(inv, 1, "chmod: missing operand")
+	}
+	return opts, "", nil
+}
+
+func parseChmodLongOption(inv *Invocation, spec *CommandSpec, opts *chmodOptions, args []string) (string, []string, error) {
+	raw := args[0]
+	name := strings.TrimPrefix(raw, "--")
+	value := ""
+	hasValue := false
+	if spec != nil && spec.Parse.LongOptionValueEquals {
+		name, value, hasValue = strings.Cut(name, "=")
+	}
+	switch matched := matchChmodLongOption(spec, name); matched {
+	case "help":
+		if hasValue {
+			return "", nil, exitf(inv, 1, "chmod: option '--help' doesn't allow an argument\nTry 'chmod --help' for more information.")
+		}
+		return "help", args[1:], nil
+	case "version":
+		if hasValue {
+			return "", nil, exitf(inv, 1, "chmod: option '--version' doesn't allow an argument\nTry 'chmod --help' for more information.")
+		}
+		return "version", args[1:], nil
+	case "changes":
+		opts.changes = true
+	case "quiet":
+		opts.quiet = true
+	case "verbose":
+		opts.verbose = true
+	case "preserve-root":
+		opts.preserveRoot = true
+	case "no-preserve-root":
+		opts.preserveRoot = false
+	case "reference":
+		if !hasValue {
+			if len(args) < 2 {
+				return "", nil, exitf(inv, 1, "chmod: option '--reference' requires an argument\nTry 'chmod --help' for more information.")
+			}
+			value = args[1]
+			args = args[1:]
+		}
+		opts.reference = value
+		opts.referenceSet = true
+	case "recursive":
+		opts.recursive = true
+	case "dereference":
+		v := true
+		opts.dereference = &v
+	case "no-dereference":
+		v := false
+		opts.dereference = &v
+	default:
+		return "", nil, exitf(inv, 1, "chmod: unrecognized option '%s'\nTry 'chmod --help' for more information.", raw)
+	}
+	return "", args[1:], nil
+}
+
+func parseChmodShortOptions(inv *Invocation, opts *chmodOptions, args []string) ([]string, error) {
+	raw := args[0]
+	for _, ch := range raw[1:] {
+		switch ch {
+		case 'c':
+			opts.changes = true
+		case 'f':
+			opts.quiet = true
+		case 'v':
+			opts.verbose = true
+		case 'R':
+			opts.recursive = true
+		case 'H':
+			opts.traverse = permissionTraverseFirst
+		case 'L':
+			opts.traverse = permissionTraverseAll
+		case 'P':
+			opts.traverse = permissionTraverseNone
+		case 'h':
+			v := false
+			opts.dereference = &v
+		default:
+			return nil, exitf(inv, 1, "chmod: invalid option -- '%c'\nTry 'chmod --help' for more information.", ch)
+		}
+	}
+	return args[1:], nil
+}
+
+func matchChmodLongOption(spec *CommandSpec, name string) string {
+	if spec == nil {
+		return ""
+	}
+	var match string
+	for i := range spec.Options {
+		opt := spec.Options[i]
+		names := append([]string{}, opt.Long)
+		names = append(names, opt.Aliases...)
+		for _, candidate := range names {
+			if candidate == "" {
+				continue
+			}
+			if candidate == name {
+				return opt.Name
+			}
+			if spec.Parse.InferLongOptions && strings.HasPrefix(candidate, name) {
+				if match == "" {
+					match = opt.Name
+					continue
+				}
+				if match != opt.Name {
+					return ""
+				}
+			}
+		}
+	}
+	if spec.Parse.AutoVersion && strings.HasPrefix("version", name) {
+		if match != "" && match != "version" {
+			return ""
+		}
+		return "version"
+	}
+	if spec.Parse.AutoHelp && strings.HasPrefix("help", name) {
+		if match != "" && match != "help" {
+			return ""
+		}
+		return "help"
+	}
+	return match
+}
+
 func parseChmodMatches(inv *Invocation, matches *ParsedCommand) (chmodOptions, error) {
 	opts := chmodOptions{
 		reference:    matches.Value("reference"),
 		referenceSet: matches.Has("reference"),
+		traverse:     permissionTraverseFirst,
 	}
 	for _, name := range matches.OptionOrder() {
 		switch name {
@@ -207,6 +408,18 @@ func runChmod(ctx context.Context, inv *Invocation, opts *chmodOptions) error {
 
 	hadError := false
 	for _, target := range opts.files {
+		if walk.dereference {
+			abs := inv.FS.Resolve(target)
+			if linfo, err := inv.FS.Lstat(ctx, abs); err == nil && linfo.Mode()&stdfs.ModeSymlink != 0 {
+				if _, err := inv.FS.Stat(ctx, abs); errors.Is(err, stdfs.ErrNotExist) {
+					hadError = true
+					if !opts.quiet {
+						_, _ = fmt.Fprintln(inv.Stderr, fmt.Sprintf("chmod: cannot operate on dangling symlink %s", quoteGNUOperand(target)))
+					}
+					continue
+				}
+			}
+		}
 		err := walkPermissionTarget(ctx, inv, target, walk, func(visit permissionVisit) error {
 			linfo, err := inv.FS.Lstat(ctx, visit.Abs)
 			if err != nil {
@@ -221,7 +434,14 @@ func runChmod(ctx context.Context, inv *Invocation, opts *chmodOptions) error {
 			if err != nil {
 				return err
 			}
+			reportPartial := after != naive && chmodReportsPartialImplicitRemoval(opts.modeSpec)
+			if reportPartial {
+				hadError = true
+			}
 			if after == before {
+				if reportPartial && !opts.quiet {
+					_, _ = fmt.Fprintf(inv.Stderr, "chmod: %s: new permissions are %s, not %s\n", chmodDisplayPath(target, visit.Abs), chmodPermissionString(after), chmodPermissionString(naive))
+				}
 				if opts.verbose {
 					if _, err := fmt.Fprintf(inv.Stdout, "mode of %s retained as %s (%s)\n", quoteGNUOperand(chmodDisplayPath(target, visit.Abs)), formatModeOctal(after), chmodPermissionString(after)); err != nil {
 						return &ExitError{Code: 1, Err: err}
@@ -231,6 +451,9 @@ func runChmod(ctx context.Context, inv *Invocation, opts *chmodOptions) error {
 			}
 			if err := inv.FS.Chmod(ctx, visit.Abs, after); err != nil {
 				return err
+			}
+			if reportPartial && !opts.quiet {
+				_, _ = fmt.Fprintf(inv.Stderr, "chmod: %s: new permissions are %s, not %s\n", chmodDisplayPath(target, visit.Abs), chmodPermissionString(after), chmodPermissionString(naive))
 			}
 			if opts.verbose || opts.changes {
 				if _, err := fmt.Fprintf(inv.Stdout, "mode of %s changed from %s (%s) to %s (%s)\n", quoteGNUOperand(chmodDisplayPath(target, visit.Abs)), formatModeOctal(before), chmodPermissionString(before), formatModeOctal(naive), chmodPermissionString(naive)); err != nil {
@@ -246,7 +469,7 @@ func runChmod(ctx context.Context, inv *Invocation, opts *chmodOptions) error {
 		if opts.quiet {
 			continue
 		}
-		_, _ = fmt.Fprintln(inv.Stderr, chmodErrorString(target, err, walk))
+		_, _ = fmt.Fprintln(inv.Stderr, chmodErrorString(inv, target, err, walk))
 	}
 	if hadError {
 		return &ExitError{Code: 1}
@@ -274,6 +497,9 @@ func computeChmodMode(inv *Invocation, current stdfs.FileMode, modeSpec string) 
 }
 
 func computeChmodModeWithUmask(current stdfs.FileMode, modeSpec string, umask stdfs.FileMode, isDir bool) (stdfs.FileMode, error) {
+	if modeSpec == "--" {
+		return current, nil
+	}
 	mode := current
 	for clause := range strings.SplitSeq(modeSpec, ",") {
 		if clause == "" {
@@ -422,23 +648,46 @@ func chmodWhoMasks(who string) (permMask, specialMask stdfs.FileMode, explicit b
 }
 
 func chmodPermMasks(perms string, current, whoMask stdfs.FileMode, whoExplicit bool, umask stdfs.FileMode, isDir bool) (permMask, specialMask stdfs.FileMode, err error) {
+	hasCopy := false
 	for _, ch := range perms {
 		switch ch {
 		case 'r':
+			if hasCopy {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
 			permMask |= 0o444 & whoMask
 		case 'w':
+			if hasCopy {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
 			permMask |= 0o222 & whoMask
 		case 'x':
+			if hasCopy {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
 			permMask |= 0o111 & whoMask
 		case 'X':
+			if hasCopy {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
 			if isDir || current&0o111 != 0 {
 				permMask |= 0o111 & whoMask
 			}
 		case 's':
+			if hasCopy {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
 			specialMask |= chmodSpecialMaskForWho(whoMask, whoExplicit)
 		case 't':
+			if hasCopy {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
 			specialMask |= stdfs.ModeSticky
 		case 'u', 'g', 'o':
+			if hasCopy || len(perms) != 1 {
+				return 0, 0, fmt.Errorf("invalid permission")
+			}
+			hasCopy = true
 			permMask |= chmodCopyMask(current, ch, whoMask)
 		default:
 			return 0, 0, fmt.Errorf("invalid permission")
@@ -506,6 +755,16 @@ func chmodCurrentUmask(inv *Invocation) stdfs.FileMode {
 	return stdfs.FileMode(value) & 0o777
 }
 
+func chmodReportsPartialImplicitRemoval(modeSpec string) bool {
+	for clause := range strings.SplitSeq(modeSpec, ",") {
+		idx := strings.IndexAny(clause, "+-=")
+		if idx == 0 && len(clause) > 1 && clause[0] == '-' {
+			return true
+		}
+	}
+	return false
+}
+
 func chmodDisplayPath(original, abs string) string {
 	if original != "" {
 		return original
@@ -521,7 +780,7 @@ func chmodPermissionString(mode stdfs.FileMode) string {
 	return value
 }
 
-func chmodErrorString(target string, err error, walk permissionWalkOptions) string {
+func chmodErrorString(inv *Invocation, target string, err error, walk permissionWalkOptions) string {
 	if target == "" {
 		target = "."
 	}
@@ -529,13 +788,17 @@ func chmodErrorString(target string, err error, walk permissionWalkOptions) stri
 	if strings.Contains(message, "it is dangerous to operate recursively on") {
 		return message
 	}
-	if errors.Is(err, stdfs.ErrNotExist) {
-		return fmt.Sprintf("chmod: cannot access %s: No such file or directory", quoteGNUOperand(target))
-	}
 	if strings.Contains(message, "dangling symlink") {
 		return fmt.Sprintf("chmod: cannot operate on dangling symlink %s", quoteGNUOperand(target))
 	}
-	if strings.Contains(message, "Permission denied") {
+	if errors.Is(err, stdfs.ErrNotExist) {
+		return fmt.Sprintf("chmod: cannot access %s: No such file or directory", quoteGNUOperand(target))
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && errors.Is(pathErr.Err, stdfs.ErrPermission) {
+		return fmt.Sprintf("chmod: %s: Permission denied", quoteGNUOperand(chmodPermissionDeniedPath(inv, target, pathErr.Path)))
+	}
+	if strings.Contains(strings.ToLower(message), "permission denied") {
 		return fmt.Sprintf("chmod: %s: Permission denied", quoteGNUOperand(target))
 	}
 	if strings.Contains(message, "invalid") {
@@ -551,7 +814,24 @@ func chmodErrorString(target string, err error, walk permissionWalkOptions) stri
 	return "chmod: " + message
 }
 
+func chmodPermissionDeniedPath(inv *Invocation, fallback, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || inv == nil {
+		return fallback
+	}
+	cwd := path.Clean(strings.TrimSpace(inv.Cwd))
+	if cwd == "." || cwd == "" {
+		return raw
+	}
+	if raw == cwd {
+		return "."
+	}
+	if strings.HasPrefix(raw, cwd+"/") {
+		return strings.TrimPrefix(raw, cwd+"/")
+	}
+	return raw
+}
+
 var _ Command = (*Chmod)(nil)
 var _ SpecProvider = (*Chmod)(nil)
-var _ ParsedRunner = (*Chmod)(nil)
 var _ ParseInvocationNormalizer = (*Chmod)(nil)

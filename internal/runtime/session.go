@@ -67,14 +67,8 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	limits := s.cfg.Policy.Limits()
 	stdout := newCaptureBuffer(limits.MaxStdoutBytes)
 	stderr := newCaptureBuffer(limits.MaxStderrBytes)
-	stdoutWriter := io.Writer(stdout)
-	if req.Stdout != nil {
-		stdoutWriter = io.MultiWriter(stdout, req.Stdout)
-	}
-	stderrWriter := io.Writer(stderr)
-	if req.Stderr != nil {
-		stderrWriter = io.MultiWriter(stderr, req.Stderr)
-	}
+	stdoutWriter := newCapturePassthroughWriter(stdout, req.Stdout)
+	stderrWriter := newCapturePassthroughWriter(stderr, req.Stderr)
 	executionID := nextTraceID("exec")
 	recorder, traceBuffer := newExecutionTraceRecorder(ctx, s.id, executionID, s.cfg.Tracing, true)
 	if s.layout != nil {

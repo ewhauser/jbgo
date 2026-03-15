@@ -1165,6 +1165,111 @@ func TestChmodSymbolicModeUsesSandboxUmask(t *testing.T) {
 	}
 }
 
+func TestChmodSymbolicEqualsHonorsShellUmask(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "umask 005\necho hi > /home/agent/file.txt\nchmod 644 /home/agent/file.txt\nchmod a=r,=x /home/agent/file.txt\nstat -c '%a %A' /home/agent/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "0110 ---x--x---"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestChmodSupportsNegativeModeOperands(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo hi > /home/agent/file.txt\nchmod 644 /home/agent/file.txt\nchmod -w /home/agent/file.txt\nstat -c '%a' /home/agent/file.txt\nchmod -w -w /home/agent/file.txt\nstat -c '%a' /home/agent/file.txt\necho hi > /home/agent/later.txt\nchmod 644 /home/agent/later.txt\nchmod /home/agent/later.txt -w\nstat -c '%a' /home/agent/later.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("Stdout lines = %v, want 3", lines)
+	}
+	if got, want := lines[0], "0444"; got != want {
+		t.Fatalf("first stat = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "0444"; got != want {
+		t.Fatalf("second stat = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "0444"; got != want {
+		t.Fatalf("third stat = %q, want %q", got, want)
+	}
+}
+
+func TestChmodReportsPartialImplicitWhoApplication(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo hi > /home/agent/file.txt\nchmod 755 /home/agent/file.txt\numask 077\nchmod -x /home/agent/file.txt\nprintf 'status=%s\\n' \"$?\"\nstat -c '%a %A' /home/agent/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout lines = %v, want 2", lines)
+	}
+	if got, want := lines[0], "status=1"; got != want {
+		t.Fatalf("status line = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "0655 -rw-r-xr-x"; got != want {
+		t.Fatalf("stat line = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "new permissions are rw-r-xr-x, not rw-r--r--") {
+		t.Fatalf("Stderr = %q, want partial-application diagnostic", result.Stderr)
+	}
+}
+
+func TestChmodQuietSuppressesMissingFileDiagnostics(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "chmod -f 0 /home/agent/missing\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestChmodDanglingSymlinkMatchesGNUDiagnostic(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "ln -s missing /home/agent/dangle\nchmod 644 /home/agent/dangle\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if got, want := strings.TrimSpace(result.Stderr), "chmod: cannot operate on dangling symlink '/home/agent/dangle'"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestChmodRecursiveDefaultsToTraverseFirstOnCLIArgs(t *testing.T) {
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /home/agent/a\nln -s missing /home/agent/a/dangle\nchmod 755 -R /home/agent/a/dangle\nprintf 'status=%s\\n' \"$?\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "status=1"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cannot operate on dangling symlink '/home/agent/a/dangle'") {
+		t.Fatalf("Stderr = %q, want dangling-symlink diagnostic", result.Stderr)
+	}
+}
+
 func TestChmodSupportsRecursiveMode(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -1174,6 +1279,55 @@ func TestChmodSupportsRecursiveMode(t *testing.T) {
 	}
 	if got, want := strings.TrimSpace(result.Stdout), "0700"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestChmodAcceptsRecursiveOptionAfterMode(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "mkdir -p /home/agent/dir/sub\necho hi > /home/agent/dir/sub/file.txt\nchmod 444 /home/agent/dir/sub/file.txt\nchmod u+w -R /home/agent/dir\nstat -c '%a' /home/agent/dir/sub/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "0644"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestChmodSupportsDoubleDashModeAndFiles(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo one > /home/agent/--\necho two > /home/agent/file.txt\nchmod -- -- /home/agent/file.txt\nstat -c '%a' /home/agent/--\nstat -c '%a' /home/agent/file.txt\nchmod -w -- /home/agent/-- /home/agent/file.txt\nstat -c '%a' /home/agent/--\nstat -c '%a' /home/agent/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("Stdout lines = %v, want 4", lines)
+	}
+	if got, want := lines[0], "0644"; got != want {
+		t.Fatalf("first stat = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "0644"; got != want {
+		t.Fatalf("second stat = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "0444"; got != want {
+		t.Fatalf("third stat = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "0444"; got != want {
+		t.Fatalf("fourth stat = %q, want %q", got, want)
+	}
+}
+
+func TestChmodRejectsMixedCopyAndLiteralPermissions(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "echo hi > /home/agent/file.txt\nchmod u+gr /home/agent/file.txt\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "chmod: invalid mode: /home/agent/file.txt") {
+		t.Fatalf("Stderr = %q, want invalid-mode diagnostic", result.Stderr)
 	}
 }
 
@@ -1310,6 +1464,18 @@ func TestChgrpSupportsNamedNumericAndColonGroups(t *testing.T) {
 	}
 	if got, want := lines[3], "789:789"; got != want {
 		t.Fatalf("colon chgrp stat = %q, want %q", got, want)
+	}
+}
+
+func TestChgrpAndChownQuietSuppressMissingFileDiagnostics(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "chgrp -f 0 /home/agent/missing\nchown -f 0:0 /home/agent/missing\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
 	}
 }
 
