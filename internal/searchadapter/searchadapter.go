@@ -172,6 +172,7 @@ func PrefilterCandidates(ctx context.Context, provider gbfs.SearchProvider, root
 	if !ok {
 		return PrefilterResult{}, nil
 	}
+	ignoreCase = ignoreCase || regexpHasFoldCase(re)
 	caps := provider.SearchCapabilities()
 	if !caps.LiteralSearch || !caps.RootRestriction {
 		return PrefilterResult{}, nil
@@ -367,6 +368,32 @@ func extractRegexpPrefilterLiterals(expr string) ([]string, bool) {
 		return nil, false
 	}
 	return literals, true
+}
+
+func regexpHasFoldCase(re *regexp.Regexp) bool {
+	if re == nil {
+		return false
+	}
+	parsed, err := syntax.Parse(re.String(), syntax.Perl)
+	if err != nil {
+		return false
+	}
+	return regexpTreeHasFoldCase(parsed)
+}
+
+func regexpTreeHasFoldCase(re *syntax.Regexp) bool {
+	if re == nil {
+		return false
+	}
+	if re.Flags&syntax.FoldCase != 0 {
+		return true
+	}
+	for _, sub := range re.Sub {
+		if regexpTreeHasFoldCase(sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func mandatoryLiteralSet(re *syntax.Regexp) []string {

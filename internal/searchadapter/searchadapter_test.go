@@ -477,6 +477,29 @@ func TestPrefilterCandidatesFallsBackWhenProviderIsStale(t *testing.T) {
 	}
 }
 
+func TestPrefilterCandidatesUsesIgnoreCaseWhenRegexpContainsInlineFlag(t *testing.T) {
+	provider := &caseAwareLiteralProvider{}
+
+	result, err := PrefilterCandidates(context.Background(), provider, "/workspace", []string{
+		"/workspace/hit.txt",
+	}, regexp.MustCompile("(?i)Needle"), false)
+	if err != nil {
+		t.Fatalf("PrefilterCandidates() error = %v", err)
+	}
+	if !result.UsedIndex {
+		t.Fatal("UsedIndex = false, want true")
+	}
+	if got, want := sortedCandidatePaths(result.CandidatePaths), []string{"/workspace/hit.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("CandidatePaths = %v, want %v", got, want)
+	}
+	if len(provider.queries) != 1 {
+		t.Fatalf("query count = %d, want 1", len(provider.queries))
+	}
+	if !provider.queries[0].IgnoreCase {
+		t.Fatal("query IgnoreCase = false, want true")
+	}
+}
+
 type searchCapableFS struct {
 	gbfs.FileSystem
 	provider gbfs.SearchProvider
@@ -640,6 +663,44 @@ func (limitedCapabilitiesProvider) IndexStatus() gbfs.IndexStatus {
 		CurrentGeneration: 1,
 		IndexedGeneration: 1,
 		Backend:           "limited-capabilities",
+	}
+}
+
+type caseAwareLiteralProvider struct {
+	queries []gbfs.SearchQuery
+}
+
+func (p *caseAwareLiteralProvider) Search(_ context.Context, query *gbfs.SearchQuery) (gbfs.SearchResult, error) {
+	if query != nil {
+		p.queries = append(p.queries, *query)
+	}
+	hits := []gbfs.SearchHit{}
+	if query != nil && query.IgnoreCase && query.Literal == "NEEDLE" {
+		hits = append(hits, gbfs.SearchHit{Path: "/workspace/hit.txt", Verified: true})
+	}
+	return gbfs.SearchResult{
+		Hits: hits,
+		Status: gbfs.IndexStatus{
+			CurrentGeneration: 1,
+			IndexedGeneration: 1,
+			Backend:           "case-aware-literal",
+		},
+	}, nil
+}
+
+func (*caseAwareLiteralProvider) SearchCapabilities() gbfs.SearchCapabilities {
+	return gbfs.SearchCapabilities{
+		LiteralSearch:           true,
+		IgnoreCaseLiteralSearch: true,
+		RootRestriction:         true,
+	}
+}
+
+func (*caseAwareLiteralProvider) IndexStatus() gbfs.IndexStatus {
+	return gbfs.IndexStatus{
+		CurrentGeneration: 1,
+		IndexedGeneration: 1,
+		Backend:           "case-aware-literal",
 	}
 }
 

@@ -55,6 +55,29 @@ func TestRGSingleExplicitFileKeepsNoFilenameOnIndexedPath(t *testing.T) {
 	}
 }
 
+func TestRGInlineIgnoreCaseFlagUsesIndexedPrefilter(t *testing.T) {
+	fsys, provider := newCountedSearchableFS(t, map[string]string{
+		"/workspace/hit.txt": "needle\n",
+	})
+	session := newSession(t, &Config{
+		FileSystem: CustomFileSystem(factoryForFS(fsys), "/workspace"),
+	})
+
+	result := mustExecSession(t, session, "rg '(?i)Needle' /workspace/hit.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "needle\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if provider.SearchCount() == 0 {
+		t.Fatal("SearchCount = 0, want indexed query")
+	}
+	if got := fsys.OpenCount("/workspace/hit.txt"); got == 0 {
+		t.Fatal("OpenCount(hit) = 0, want verification read")
+	}
+}
+
 func TestRGUsesIndexPerRootOnMountableFS(t *testing.T) {
 	indexedFS, indexedProvider := newCountedSearchableFS(t, map[string]string{
 		"/hit.txt":  "needle\n",
