@@ -9,6 +9,7 @@ import (
 	stdfs "io/fs"
 	"path"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -38,6 +39,15 @@ type Result struct {
 	Hits      []gbfs.SearchHit
 	UsedIndex bool
 	Truncated bool
+}
+
+const MaxPrefilterLiterals = 8
+
+// PrefilterResult reports candidate paths selected by indexed literal queries.
+type PrefilterResult struct {
+	CandidatePaths map[string]struct{}
+	Literals       []string
+	UsedIndex      bool
 }
 
 // Search resolves indexed candidates when every requested root exposes a fresh
@@ -124,6 +134,96 @@ func Search(ctx context.Context, fsys gbfs.FileSystem, query *Query, verify Veri
 		Hits:      hits,
 		UsedIndex: true,
 		Truncated: truncated,
+	}, nil
+}
+
+// RegexpPrefilterLiterals extracts a bounded set of literals such that every
+// real regexp match must contain at least one returned literal.
+func RegexpPrefilterLiterals(re *regexp.Regexp) ([]string, bool) {
+	if re == nil {
+		return nil, false
+	}
+
+	literals, ok := extractRegexpPrefilterLiterals(re.String())
+	if !ok || len(literals) == 0 {
+		prefix, _ := re.LiteralPrefix()
+		if prefix == "" {
+			return nil, false
+		}
+		literals = []string{prefix}
+	}
+
+	literals = normalizePrefilterLiterals(literals)
+	if len(literals) == 0 || len(literals) > MaxPrefilterLiterals {
+		return nil, false
+	}
+	return literals, true
+}
+
+// PrefilterCandidates uses a fresh indexed provider to build a candidate set
+// for eligiblePaths under root. It falls back cleanly when indexing is
+// unsupported, stale, or missing required capabilities.
+func PrefilterCandidates(ctx context.Context, provider gbfs.SearchProvider, root string, eligiblePaths []string, re *regexp.Regexp, ignoreCase bool) (PrefilterResult, error) {
+	if provider == nil {
+		return PrefilterResult{}, nil
+	}
+
+	literals, ok := RegexpPrefilterLiterals(re)
+	if !ok {
+		return PrefilterResult{}, nil
+	}
+	caps := provider.SearchCapabilities()
+	if !caps.LiteralSearch || !caps.RootRestriction {
+		return PrefilterResult{}, nil
+	}
+	if ignoreCase && !caps.IgnoreCaseLiteralSearch {
+		return PrefilterResult{}, nil
+	}
+	status := provider.IndexStatus()
+	if status.CurrentGeneration != status.IndexedGeneration {
+		return PrefilterResult{}, nil
+	}
+
+	eligible := make(map[string]struct{}, len(eligiblePaths))
+	for _, name := range eligiblePaths {
+		eligible[gbfs.Clean(name)] = struct{}{}
+	}
+	if len(eligible) == 0 {
+		return PrefilterResult{
+			CandidatePaths: make(map[string]struct{}),
+			Literals:       literals,
+			UsedIndex:      true,
+		}, nil
+	}
+
+	candidates := make(map[string]struct{})
+	for _, literal := range literals {
+		result, err := provider.Search(ctx, &gbfs.SearchQuery{
+			Root:       root,
+			Literal:    literal,
+			IgnoreCase: ignoreCase,
+		})
+		if err != nil {
+			if errors.Is(err, gbfs.ErrSearchUnsupported) {
+				return PrefilterResult{}, nil
+			}
+			return PrefilterResult{}, err
+		}
+		if result.Status.CurrentGeneration != result.Status.IndexedGeneration {
+			return PrefilterResult{}, nil
+		}
+		for _, hit := range result.Hits {
+			pathValue := gbfs.Clean(hit.Path)
+			if _, ok := eligible[pathValue]; ok {
+				candidates[pathValue] = struct{}{}
+			}
+		}
+	}
+
+	return PrefilterResult{
+		CandidatePaths: candidates,
+		Literals:       literals,
+		UsedIndex:      true,
 	}, nil
 }
 
@@ -253,6 +353,127 @@ func normalizedRoots(fsys gbfs.FileSystem, roots []string) []string {
 	for _, root := range roots {
 		out = append(out, gbfs.Resolve(cwd, root))
 	}
+	return out
+}
+
+func extractRegexpPrefilterLiterals(expr string) ([]string, bool) {
+	parsed, err := syntax.Parse(expr, syntax.Perl)
+	if err != nil {
+		return nil, false
+	}
+	parsed = parsed.Simplify()
+	literals := mandatoryLiteralSet(parsed)
+	if len(literals) == 0 {
+		return nil, false
+	}
+	return literals, true
+}
+
+func mandatoryLiteralSet(re *syntax.Regexp) []string {
+	if re == nil {
+		return nil
+	}
+	switch re.Op {
+	case syntax.OpLiteral:
+		if len(re.Rune) == 0 {
+			return nil
+		}
+		return []string{string(re.Rune)}
+	case syntax.OpCapture:
+		if len(re.Sub) == 0 {
+			return nil
+		}
+		return mandatoryLiteralSet(re.Sub[0])
+	case syntax.OpPlus:
+		if len(re.Sub) == 0 {
+			return nil
+		}
+		return mandatoryLiteralSet(re.Sub[0])
+	case syntax.OpRepeat:
+		if re.Min <= 0 || len(re.Sub) == 0 {
+			return nil
+		}
+		return mandatoryLiteralSet(re.Sub[0])
+	case syntax.OpConcat:
+		var best []string
+		for _, sub := range re.Sub {
+			candidate := mandatoryLiteralSet(sub)
+			if betterMandatoryLiteralSet(candidate, best) {
+				best = candidate
+			}
+		}
+		return best
+	case syntax.OpAlternate:
+		out := make([]string, 0, len(re.Sub))
+		for _, sub := range re.Sub {
+			candidate := mandatoryLiteralSet(sub)
+			if len(candidate) == 0 {
+				return nil
+			}
+			out = append(out, bestMandatoryLiteral(candidate))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func betterMandatoryLiteralSet(candidate, current []string) bool {
+	if len(candidate) == 0 {
+		return false
+	}
+	if len(current) == 0 {
+		return true
+	}
+	candidateLen := len(bestMandatoryLiteral(candidate))
+	currentLen := len(bestMandatoryLiteral(current))
+	if candidateLen != currentLen {
+		return candidateLen > currentLen
+	}
+	if len(candidate) != len(current) {
+		return len(candidate) < len(current)
+	}
+	return strings.Join(candidate, "\x00") < strings.Join(current, "\x00")
+}
+
+func bestMandatoryLiteral(literals []string) string {
+	best := ""
+	for _, literal := range literals {
+		if len(literal) > len(best) || (len(literal) == len(best) && literal < best) {
+			best = literal
+		}
+	}
+	return best
+}
+
+func normalizePrefilterLiterals(literals []string) []string {
+	if len(literals) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(literals))
+	out := make([]string, 0, len(literals))
+	for _, literal := range literals {
+		if literal == "" {
+			continue
+		}
+		if _, ok := seen[literal]; ok {
+			continue
+		}
+		seen[literal] = struct{}{}
+		out = append(out, literal)
+	}
+	slices.SortFunc(out, func(a, b string) int {
+		switch {
+		case len(a) != len(b):
+			return len(b) - len(a)
+		case a < b:
+			return -1
+		case a > b:
+			return 1
+		default:
+			return 0
+		}
+	})
 	return out
 }
 

@@ -8,6 +8,7 @@ import (
 	stdfs "io/fs"
 	"os"
 	"path"
+	"regexp"
 	"slices"
 	"testing"
 	"time"
@@ -367,6 +368,109 @@ func TestSearchFallbackWhenProviderWrapsUnsupported(t *testing.T) {
 	}
 }
 
+func TestRegexpPrefilterLiterals(t *testing.T) {
+	tests := []struct {
+		name       string
+		pattern    string
+		want       []string
+		wantUsable bool
+	}{
+		{
+			name:       "fixed-string-alternation",
+			pattern:    "(?:a\\.c|foo)",
+			want:       []string{"a.c", "foo"},
+			wantUsable: true,
+		},
+		{
+			name:       "concat-picks-mandatory-literal",
+			pattern:    "foo.*bar",
+			want:       []string{"bar"},
+			wantUsable: true,
+		},
+		{
+			name:       "alternation-unions-branches",
+			pattern:    "foo|bar",
+			want:       []string{"bar", "foo"},
+			wantUsable: true,
+		},
+		{
+			name:       "optional-pattern-falls-back",
+			pattern:    "a*",
+			want:       nil,
+			wantUsable: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			re := regexp.MustCompile(tc.pattern)
+			got, ok := RegexpPrefilterLiterals(re)
+			if ok != tc.wantUsable {
+				t.Fatalf("RegexpPrefilterLiterals(%q) usable = %v, want %v", tc.pattern, ok, tc.wantUsable)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("RegexpPrefilterLiterals(%q) = %v, want %v", tc.pattern, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRegexpPrefilterLiteralsRejectsBroadAlternations(t *testing.T) {
+	re := regexp.MustCompile("aa|bb|cc|dd|ee|ff|gg|hh|ii")
+
+	got, ok := RegexpPrefilterLiterals(re)
+	if ok {
+		t.Fatalf("RegexpPrefilterLiterals() usable = true, want false; got %v", got)
+	}
+	if got != nil {
+		t.Fatalf("RegexpPrefilterLiterals() = %v, want nil", got)
+	}
+}
+
+func TestPrefilterCandidatesUsesLiteralUnionAndEligibleIntersection(t *testing.T) {
+	provider := &literalHitsProvider{
+		hitsByLiteral: map[string][]gbfs.SearchHit{
+			"bar": {
+				{Path: "/workspace/bar.txt", Verified: true},
+				{Path: "/workspace/outside.txt", Verified: true},
+			},
+			"foo": {
+				{Path: "/workspace/foo.txt", Verified: true},
+			},
+		},
+	}
+
+	result, err := PrefilterCandidates(context.Background(), provider, "/workspace", []string{
+		"/workspace/foo.txt",
+		"/workspace/miss.txt",
+	}, regexp.MustCompile("foo|bar"), false)
+	if err != nil {
+		t.Fatalf("PrefilterCandidates() error = %v", err)
+	}
+	if !result.UsedIndex {
+		t.Fatal("UsedIndex = false, want true")
+	}
+	if got, want := result.Literals, []string{"bar", "foo"}; !slices.Equal(got, want) {
+		t.Fatalf("Literals = %v, want %v", got, want)
+	}
+	if got, want := sortedCandidatePaths(result.CandidatePaths), []string{"/workspace/foo.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("CandidatePaths = %v, want %v", got, want)
+	}
+	if got, want := provider.queries, []string{"bar", "foo"}; !slices.Equal(got, want) {
+		t.Fatalf("provider queries = %v, want %v", got, want)
+	}
+}
+
+func TestPrefilterCandidatesFallsBackWhenProviderIsStale(t *testing.T) {
+	result, err := PrefilterCandidates(context.Background(), staleProvider{}, "/workspace", []string{"/workspace/a.txt"}, regexp.MustCompile("needle"), false)
+	if err != nil {
+		t.Fatalf("PrefilterCandidates() error = %v", err)
+	}
+	if result.UsedIndex {
+		t.Fatal("UsedIndex = true, want false")
+	}
+}
+
 type searchCapableFS struct {
 	gbfs.FileSystem
 	provider gbfs.SearchProvider
@@ -533,6 +637,39 @@ func (limitedCapabilitiesProvider) IndexStatus() gbfs.IndexStatus {
 	}
 }
 
+type literalHitsProvider struct {
+	hitsByLiteral map[string][]gbfs.SearchHit
+	queries       []string
+}
+
+func (p *literalHitsProvider) Search(_ context.Context, query *gbfs.SearchQuery) (gbfs.SearchResult, error) {
+	p.queries = append(p.queries, query.Literal)
+	hits := append([]gbfs.SearchHit(nil), p.hitsByLiteral[query.Literal]...)
+	return gbfs.SearchResult{
+		Hits: hits,
+		Status: gbfs.IndexStatus{
+			CurrentGeneration: 1,
+			IndexedGeneration: 1,
+			Backend:           "literal-hits",
+		},
+	}, nil
+}
+
+func (*literalHitsProvider) SearchCapabilities() gbfs.SearchCapabilities {
+	return gbfs.SearchCapabilities{
+		LiteralSearch:   true,
+		RootRestriction: true,
+	}
+}
+
+func (*literalHitsProvider) IndexStatus() gbfs.IndexStatus {
+	return gbfs.IndexStatus{
+		CurrentGeneration: 1,
+		IndexedGeneration: 1,
+		Backend:           "literal-hits",
+	}
+}
+
 func seededMemory(t *testing.T, files map[string]string) gbfs.FileSystem {
 	t.Helper()
 	mem := gbfs.NewMemory()
@@ -564,6 +701,15 @@ func hitPaths(hits []gbfs.SearchHit) []string {
 	for _, hit := range hits {
 		out = append(out, hit.Path)
 	}
+	return out
+}
+
+func sortedCandidatePaths(paths map[string]struct{}) []string {
+	out := make([]string, 0, len(paths))
+	for name := range paths {
+		out = append(out, name)
+	}
+	slices.Sort(out)
 	return out
 }
 

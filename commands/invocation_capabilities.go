@@ -8,6 +8,7 @@ import (
 	stdfs "io/fs"
 	"maps"
 	"os"
+	"strings"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -185,6 +186,30 @@ func (fs *CommandFS) ReadDir(ctx context.Context, name string) ([]stdfs.DirEntry
 	return entries, nil
 }
 
+// SearchProviderForPath returns a search provider scoped to name after
+// enforcing read policy.
+//
+// Experimental: This API is experimental and subject to change.
+func (fs *CommandFS) SearchProviderForPath(ctx context.Context, name string) (provider gbfs.SearchProvider, abs string, ok bool, err error) {
+	abs, err = fs.prepare(ctx, policy.FileActionRead, name)
+	if err != nil {
+		return nil, "", false, err
+	}
+	capable, ok := fs.raw().(gbfs.SearchCapable)
+	if !ok {
+		return nil, abs, false, nil
+	}
+	inner, ok := capable.SearchProviderForPath(abs)
+	if !ok {
+		return nil, abs, false, nil
+	}
+	return &commandSearchProvider{
+		fs:    fs,
+		scope: abs,
+		inner: inner,
+	}, abs, true, nil
+}
+
 // Readlink reads the target of the symlink at name after enforcing readlink
 // policy.
 func (fs *CommandFS) Readlink(ctx context.Context, name string) (string, error) {
@@ -344,6 +369,58 @@ func (fs *CommandFS) raw() gbfs.FileSystem {
 	return fs.fsys
 }
 
+type commandSearchProvider struct {
+	fs    *CommandFS
+	scope string
+	inner gbfs.SearchProvider
+}
+
+func (p *commandSearchProvider) Search(ctx context.Context, query *gbfs.SearchQuery) (gbfs.SearchResult, error) {
+	if query == nil {
+		return gbfs.SearchResult{}, fmt.Errorf("commands: search query is required")
+	}
+	root := p.scope
+	if query.Root != "" {
+		root = query.Root
+	}
+	root, err := p.fs.prepare(ctx, policy.FileActionRead, root)
+	if err != nil {
+		return gbfs.SearchResult{}, err
+	}
+	if !commandSearchPathWithinScope(p.scope, root) {
+		return gbfs.SearchResult{}, fmt.Errorf("commands: search root %q is outside scope %q", root, p.scope)
+	}
+
+	innerQuery := *query
+	innerQuery.Root = root
+	result, err := p.inner.Search(ctx, &innerQuery)
+	if err != nil {
+		return gbfs.SearchResult{}, err
+	}
+	if len(result.Hits) == 0 {
+		return result, nil
+	}
+
+	filtered := result.Hits[:0]
+	for _, hit := range result.Hits {
+		if commandSearchPathWithinScope(root, hit.Path) {
+			filtered = append(filtered, hit)
+		}
+	}
+	result.Hits = filtered
+	return result, nil
+}
+
+func (p *commandSearchProvider) SearchCapabilities() gbfs.SearchCapabilities {
+	caps := p.inner.SearchCapabilities()
+	caps.RootRestriction = true
+	return caps
+}
+
+func (p *commandSearchProvider) IndexStatus() gbfs.IndexStatus {
+	return p.inner.IndexStatus()
+}
+
 func (fs *CommandFS) maxFileBytes() int64 {
 	if fs == nil {
 		return 0
@@ -391,6 +468,15 @@ func wrapCommandError(err error) error {
 		return err
 	}
 	return &ExitError{Code: 1, Err: err}
+}
+
+func commandSearchPathWithinScope(scope, target string) bool {
+	scope = gbfs.Clean(scope)
+	target = gbfs.Clean(target)
+	if scope == "/" {
+		return true
+	}
+	return target == scope || strings.HasPrefix(target, scope+"/")
 }
 
 func cloneEnv(src map[string]string) map[string]string {

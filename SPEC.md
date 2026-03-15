@@ -422,6 +422,12 @@ type PolicyEvent struct {
 
 The command-facing `Invocation` is capability-only. Custom commands get sandboxed filesystem and fetch helpers plus nested execution and limits metadata, but they do not receive the raw policy object, raw trace recorder, or raw network client. Policy checks and file-access tracing happen behind `Invocation.FS`, and `Invocation.Fetch` is nil unless network access is configured.
 
+Experimental command-facing search bridge:
+
+- `Invocation.FS.SearchProviderForPath(ctx, name)` is an opt-in capability for built-ins and custom commands that want indexed search without reaching around the command filesystem boundary
+- the bridge resolves `name` against the invocation working directory, applies normal read policy and symlink checks, and returns a scoped provider view rather than the raw backend capability
+- delegated search queries must stay within the scoped root, and returned hits are filtered back to that subtree so commands keep policy enforcement behind `Invocation.FS`
+
 Registry semantics are override-friendly: later registrations replace earlier ones so embedders can swap in custom implementations for built-ins, and `RegisterLazy` defers expensive command setup until first execution while still participating in `PATH` resolution and `Names()`.
 
 Key design decisions:
@@ -606,6 +612,8 @@ Optional experimental search capability:
 - the built-in v1 provider is synchronous, literal-only, and exact for the indexed file paths it tracks; it supports case-insensitive literal queries, root restriction, include/exclude path globs, optional byte offsets, and verified result flags
 - the built-in wrapper performs an initial crawl and may materialize lazy files because full-text search is a content-sensitive capability
 - search remains an accelerator, not the semantic source of truth for `grep`/`rg`; callers may use provider hits as verified matches or as prefiltered candidates and still apply exact userspace verification
+- `grep` may use indexed providers as a per-root prefilter when it can extract safe mandatory literals from the compiled pattern; candidate files are still opened and matched in userspace before output is emitted
+- `grep` falls back per root when a provider is unavailable, stale, unsupported, or the current search mode cannot produce a bounded safe literal set; stdin, invert-match mode, and symlink-directory descendants stay on the direct scan path
 
 Backend boundary for the current implementation:
 

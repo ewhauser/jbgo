@@ -3,11 +3,14 @@ package builtins
 import (
 	"context"
 	"fmt"
+	stdfs "io/fs"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
 
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/searchadapter"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -45,6 +48,19 @@ type grepRunState struct {
 	filesWithoutMatchAny bool
 	hadError             bool
 	quietMatched         bool
+}
+
+type grepFileRecord struct {
+	abs           string
+	scope         *grepSearchScope
+	indexEligible bool
+}
+
+type grepSearchScope struct {
+	root          string
+	eligiblePaths []string
+	candidates    map[string]struct{}
+	usedIndex     bool
 }
 
 func NewGrep() *Grep {
@@ -122,8 +138,34 @@ func (c *Grep) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	} else {
 		showNames := (len(files) > 1 || opts.recursive) && !opts.noFilename
 		for _, file := range files {
-			if err := c.processPath(ctx, inv, file, re, opts, showNames, state); err != nil {
+			records := make([]grepFileRecord, 0, 8)
+			scope, err := c.enumerateTopLevelPath(ctx, inv, file, opts, state, &records)
+			if err != nil {
 				return err
+			}
+			if scope != nil {
+				if err := c.prefilterScopes(ctx, inv, []*grepSearchScope{scope}, re, opts); err != nil {
+					return err
+				}
+			}
+			for _, record := range records {
+				if state.quietMatched {
+					return nil
+				}
+				if !grepPathNeedsVerification(record) {
+					if err := writeGrepGuaranteedMiss(inv, record.abs, showNames, opts, state); err != nil {
+						return err
+					}
+					continue
+				}
+
+				data, _, err := readAllFile(ctx, inv, record.abs)
+				if err != nil {
+					return err
+				}
+				if err := writeGrepResult(inv, re, data, record.abs, showNames, opts, state); err != nil {
+					return err
+				}
 			}
 			if state.quietMatched {
 				return nil
@@ -479,48 +521,115 @@ func writeGrepResult(inv *Invocation, re *regexp.Regexp, data []byte, name strin
 	return nil
 }
 
-func (c *Grep) processPath(ctx context.Context, inv *Invocation, file string, re *regexp.Regexp, opts grepOptions, showNames bool, state *grepRunState) error {
-	info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, file)
+func writeGrepGuaranteedMiss(inv *Invocation, name string, showName bool, opts grepOptions, state *grepRunState) error {
+	if opts.filesWithoutMatch {
+		state.filesWithoutMatchAny = true
+		if opts.quiet {
+			return nil
+		}
+		if _, err := fmt.Fprintln(inv.Stdout, name); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+		return nil
+	}
+
+	if opts.listFiles || opts.quiet {
+		return nil
+	}
+
+	if opts.count {
+		prefix := ""
+		if showName {
+			prefix = name + ":"
+		}
+		if _, err := fmt.Fprintf(inv.Stdout, "%s0\n", prefix); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+	}
+	return nil
+}
+
+func (c *Grep) enumerateTopLevelPath(ctx context.Context, inv *Invocation, file string, opts grepOptions, state *grepRunState, records *[]grepFileRecord) (*grepSearchScope, error) {
+	linfo, abs, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, file)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !exists {
 		_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: No such file or directory\n", file)
 		state.hadError = true
-		return nil
+		return nil, nil
+	}
+
+	info := linfo
+	throughSymlinkDir := false
+	if linfo.Mode()&stdfs.ModeSymlink != 0 {
+		info, _, err = statPath(ctx, inv, abs)
+		if err != nil {
+			if errorsIsNotExist(err) {
+				_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: No such file or directory\n", file)
+				state.hadError = true
+				return nil, nil
+			}
+			return nil, err
+		}
+		throughSymlinkDir = info.IsDir()
 	}
 
 	if info.IsDir() {
 		if !opts.recursive {
 			_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: Is a directory\n", file)
 			state.hadError = true
-			return nil
+			return nil, nil
 		}
-		return c.walkRecursive(ctx, inv, abs, re, opts, showNames, state)
+		scope := &grepSearchScope{root: abs}
+		if err := c.enumerateRecursive(ctx, inv, abs, throughSymlinkDir, scope, records); err != nil {
+			return nil, err
+		}
+		return scope, nil
 	}
 
-	data, _, err := readAllFile(ctx, inv, abs)
-	if err != nil {
-		return err
+	scope := &grepSearchScope{root: abs}
+	record := grepFileRecord{
+		abs:           abs,
+		scope:         scope,
+		indexEligible: grepIndexableFileInfo(info),
 	}
-	return writeGrepResult(inv, re, data, abs, showNames, opts, state)
+	if record.indexEligible {
+		scope.eligiblePaths = append(scope.eligiblePaths, abs)
+	}
+	*records = append(*records, record)
+	return scope, nil
 }
 
-func (c *Grep) walkRecursive(ctx context.Context, inv *Invocation, currentAbs string, re *regexp.Regexp, opts grepOptions, showNames bool, state *grepRunState) error {
-	if state.quietMatched {
-		return nil
-	}
-
-	info, _, err := statPath(ctx, inv, currentAbs)
+func (c *Grep) enumerateRecursive(ctx context.Context, inv *Invocation, currentAbs string, throughSymlinkDir bool, scope *grepSearchScope, records *[]grepFileRecord) error {
+	linfo, _, err := lstatPath(ctx, inv, currentAbs)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() {
-		data, _, err := readAllFile(ctx, inv, currentAbs)
+
+	info := linfo
+	currentThroughSymlinkDir := throughSymlinkDir
+	if linfo.Mode()&stdfs.ModeSymlink != 0 {
+		info, _, err = statPath(ctx, inv, currentAbs)
 		if err != nil {
 			return err
 		}
-		return writeGrepResult(inv, re, data, currentAbs, showNames, opts, state)
+		if info.IsDir() {
+			currentThroughSymlinkDir = true
+		}
+	}
+
+	if !info.IsDir() {
+		record := grepFileRecord{
+			abs:           currentAbs,
+			scope:         scope,
+			indexEligible: grepIndexableFileInfo(info) && !currentThroughSymlinkDir,
+		}
+		if record.indexEligible {
+			scope.eligiblePaths = append(scope.eligiblePaths, currentAbs)
+		}
+		*records = append(*records, record)
+		return nil
 	}
 
 	entries, _, err := readDir(ctx, inv, currentAbs)
@@ -528,15 +637,51 @@ func (c *Grep) walkRecursive(ctx context.Context, inv *Invocation, currentAbs st
 		return err
 	}
 	for _, entry := range entries {
-		if state.quietMatched {
-			return nil
-		}
 		childAbs := path.Join(currentAbs, entry.Name())
-		if err := c.walkRecursive(ctx, inv, childAbs, re, opts, showNames, state); err != nil {
+		if err := c.enumerateRecursive(ctx, inv, childAbs, currentThroughSymlinkDir, scope, records); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *Grep) prefilterScopes(ctx context.Context, inv *Invocation, scopes []*grepSearchScope, re *regexp.Regexp, opts grepOptions) error {
+	if opts.invert || inv == nil || inv.FS == nil {
+		return nil
+	}
+	for _, scope := range scopes {
+		if scope == nil || len(scope.eligiblePaths) == 0 {
+			continue
+		}
+		provider, _, ok, err := inv.FS.SearchProviderForPath(ctx, scope.root)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		result, err := searchadapter.PrefilterCandidates(ctx, provider, scope.root, scope.eligiblePaths, re, opts.ignoreCase)
+		if err != nil {
+			return err
+		}
+		if result.UsedIndex {
+			scope.candidates = result.CandidatePaths
+			scope.usedIndex = true
+		}
+	}
+	return nil
+}
+
+func grepIndexableFileInfo(info stdfs.FileInfo) bool {
+	return info != nil && info.Mode().IsRegular()
+}
+
+func grepPathNeedsVerification(record grepFileRecord) bool {
+	if record.scope == nil || !record.scope.usedIndex || !record.indexEligible {
+		return true
+	}
+	_, ok := record.scope.candidates[gbfs.Clean(record.abs)]
+	return ok
 }
 
 var _ Command = (*Grep)(nil)
