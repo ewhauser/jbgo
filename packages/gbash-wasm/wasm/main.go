@@ -297,6 +297,7 @@ func initialFilesFromOptions(value js.Value) (gbfs.InitialFiles, error) {
 		return nil, nil
 	}
 
+	cwd := cleanPath(valueOrDefault(value, "cwd", "/home/agent"))
 	keys := js.Global().Get("Object").Call("keys", field)
 	out := make(gbfs.InitialFiles, keys.Length())
 	for i := 0; i < keys.Length(); i++ {
@@ -305,7 +306,7 @@ func initialFilesFromOptions(value js.Value) (gbfs.InitialFiles, error) {
 		if err != nil {
 			return nil, fmt.Errorf("files[%q]: %w", name, err)
 		}
-		out[name] = file
+		out[resolvePath(cwd, name)] = file
 	}
 	return out, nil
 }

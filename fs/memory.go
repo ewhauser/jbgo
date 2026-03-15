@@ -264,9 +264,11 @@ func (m *MemoryFS) Open(ctx context.Context, name string) (File, error) {
 }
 
 func (m *MemoryFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (File, error) {
-	if !hasWriteIntent(flag) && flag&os.O_CREATE == 0 {
+	if flag&os.O_TRUNC == 0 || !canWrite(flag) {
 		if _, _, err := m.materializePath(ctx, name, true); err != nil {
-			return nil, &os.PathError{Op: "open", Path: Resolve(m.Getwd(), name), Err: err}
+			if flag&os.O_CREATE == 0 || !errors.Is(err, stdfs.ErrNotExist) {
+				return nil, &os.PathError{Op: "open", Path: Resolve(m.Getwd(), name), Err: err}
+			}
 		}
 	}
 
@@ -796,8 +798,15 @@ func (f *memoryFile) Write(p []byte) (int, error) {
 		return 0, &os.PathError{Op: "write", Path: f.path, Err: stdfs.ErrInvalid}
 	}
 	if isLazyFileNode(node) {
-		node.lazy = nil
-		node.data = nil
+		f.fs.mu.Unlock()
+		if err := f.fs.materializeResolvedPath(context.Background(), f.path); err != nil {
+			return 0, &os.PathError{Op: "write", Path: f.path, Err: err}
+		}
+		f.fs.mu.Lock()
+		node, ok = f.fs.nodes[f.path]
+		if !ok {
+			return 0, &os.PathError{Op: "write", Path: f.path, Err: stdfs.ErrNotExist}
+		}
 	}
 
 	if f.flag&os.O_APPEND != 0 {
