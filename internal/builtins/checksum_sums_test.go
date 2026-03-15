@@ -237,7 +237,7 @@ func TestChecksumSumCheckModeHandlesCRLFAndEscapedFilenames(t *testing.T) {
 	session := newSession(t, &Config{})
 	writeSessionFile(t, session, "/tmp/.\rfoo", nil)
 	sum := md5Hex(nil)
-	writeSessionFile(t, session, "/tmp/checksums.txt", []byte(fmt.Sprintf("\\%s  /tmp/.\\rfoo\r\n", sum)))
+	writeSessionFile(t, session, "/tmp/checksums.txt", fmt.Appendf(nil, "\\%s  /tmp/.\\rfoo\r\n", sum))
 
 	result := mustExecSession(t, session, "md5sum --check /tmp/checksums.txt\n")
 	if result.ExitCode != 0 {

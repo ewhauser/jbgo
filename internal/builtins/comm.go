@@ -234,8 +234,8 @@ func commDelimiterValues(inv *Invocation, matches *ParsedCommand) []string {
 		if arg == "--" {
 			break
 		}
-		if strings.HasPrefix(arg, "--output-delimiter=") {
-			rebuilt = append(rebuilt, strings.TrimPrefix(arg, "--output-delimiter="))
+		if delimiter, ok := strings.CutPrefix(arg, "--output-delimiter="); ok {
+			rebuilt = append(rebuilt, delimiter)
 			continue
 		}
 		if arg == "--output-delimiter" {

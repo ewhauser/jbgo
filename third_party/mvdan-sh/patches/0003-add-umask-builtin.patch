@@ -1,0 +1,54 @@
+diff --git a/interp/builtin.go b/interp/builtin.go
+index d7f2142..55aca88 100644
+--- a/interp/builtin.go
++++ b/interp/builtin.go
+@@ -123,6 +123,21 @@ func atoi(s string) int64 {
+ 	return n
+ }
+ 
++func runnerUmask(r *Runner) uint32 {
++	if r == nil {
++		return 0o022
++	}
++	raw := strings.TrimSpace(r.envGet("GBASH_UMASK"))
++	if raw == "" {
++		return 0o022
++	}
++	value, err := strconv.ParseUint(raw, 8, 32)
++	if err != nil || value > 0o777 {
++		return 0o022
++	}
++	return uint32(value)
++}
++
+ type errBuiltinExitStatus exitStatus
+ 
+ func (e errBuiltinExitStatus) Error() string {
+@@ -302,6 +317,27 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args
+ 			}
+ 		}
+ 		r.outf("%s\n", pwd)
++	case "umask":
++		switch len(args) {
++		case 0:
++			r.outf("%04o\n", runnerUmask(r))
++		case 1:
++			if strings.HasPrefix(args[0], "-") {
++				return failf(2, "umask: unsupported option %q\n", args[0])
++			}
++			value, err := strconv.ParseUint(args[0], 8, 32)
++			if err != nil || value > 0o777 {
++				return failf(1, "umask: %s: invalid mode\n", args[0])
++			}
++			r.setVar("GBASH_UMASK", expand.Variable{
++				Set:      true,
++				Kind:     expand.String,
++				Str:      fmt.Sprintf("%04o", value),
++				Exported: true,
++			})
++		default:
++			return failf(2, "usage: umask [mode]\n")
++		}
+ 	case "cd":
+ 		var path string
+ 		switch len(args) {

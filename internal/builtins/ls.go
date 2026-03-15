@@ -50,6 +50,7 @@ type lsOptions struct {
 	showGroup             bool
 	showOwner             bool
 	numericIDs            bool
+	identityDB            *permissionIdentityDB
 	timeStyle             string
 	dereference           lsDereferenceMode
 	dired                 bool
@@ -235,6 +236,7 @@ func (c *LS) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 	if err != nil {
 		return err
 	}
+	primeLSIdentityDB(ctx, inv, &opts)
 	targets := matches.Args("file")
 	if len(targets) == 0 {
 		targets = []string{"."}
@@ -430,6 +432,21 @@ func renderStaticHelp(text string) func(io.Writer, CommandSpec) error {
 	}
 }
 
+var lsIdentityDBLoader = loadPermissionIdentityDB
+
+func primeLSIdentityDB(ctx context.Context, inv *Invocation, opts *lsOptions) {
+	if opts == nil || opts.identityDB != nil {
+		return
+	}
+	if !opts.longFormat || opts.numericIDs {
+		return
+	}
+	if !opts.showOwner && !opts.showGroup && !opts.showAuthor {
+		return
+	}
+	opts.identityDB = lsIdentityDBLoader(ctx, inv)
+}
+
 func renderStaticVersion(text string) func(io.Writer, CommandSpec) error {
 	return func(w io.Writer, _ CommandSpec) error {
 		_, err := io.WriteString(w, text)
@@ -580,7 +597,7 @@ func (c *LS) renderPathEntry(ctx context.Context, inv *Invocation, target, abs s
 		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, dired := formatLSLongLine(inv, name, info, opts, ranges)
+		line, dired := formatLSLongLine(name, info, opts, ranges)
 		if opts.dired {
 			line = "  " + line
 			for i := range dired {
@@ -630,7 +647,7 @@ func lsRenderEntries(ctx context.Context, inv *Invocation, dirAbs string, entrie
 			return lsRenderResult{}, err
 		}
 		if opts.longFormat {
-			line, dired := formatLSLongLine(inv, name, entry.info, opts, ranges)
+			line, dired := formatLSLongLine(name, entry.info, opts, ranges)
 			if opts.dired {
 				line = "  " + line
 				for i := range dired {
@@ -1460,9 +1477,9 @@ func lsNumericChunk(value string) (chunk, rest string) {
 	return value[:index], value[index:]
 }
 
-func formatLSLongLine(inv *Invocation, name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
+func formatLSLongLine(name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
 	fields := make([]string, 0, 9)
-	userToken, groupToken, authorToken := lsIdentityTokens(inv, info, opts.numericIDs)
+	userToken, groupToken, authorToken := lsIdentityTokens(info, opts.numericIDs, opts.identityDB)
 	if opts.showInode {
 		fields = append(fields, strconv.FormatUint(statInode(info), 10))
 	}
@@ -1570,7 +1587,7 @@ func formatLSShortPrefix(info stdfs.FileInfo, opts *lsOptions) string {
 	return strings.Join(parts, " ") + " "
 }
 
-func lsIdentityTokens(inv *Invocation, info stdfs.FileInfo, numericIDs bool) (userToken, groupToken, authorToken string) {
+func lsIdentityTokens(info stdfs.FileInfo, numericIDs bool, db *permissionIdentityDB) (userToken, groupToken, authorToken string) {
 	ownership, ok := gbfs.OwnershipFromFileInfo(info)
 	if !ok {
 		ownership = gbfs.DefaultOwnership()
@@ -1581,7 +1598,6 @@ func lsIdentityTokens(inv *Invocation, info stdfs.FileInfo, numericIDs bool) (us
 	if numericIDs {
 		return userToken, groupToken, authorToken
 	}
-	db := loadPermissionIdentityDB(context.Background(), inv)
 	owner := permissionLookupOwnership(db, info)
 	userToken = permissionNameOrID(owner.user, owner.uid)
 	groupToken = permissionNameOrID(owner.group, owner.gid)

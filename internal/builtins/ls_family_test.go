@@ -516,20 +516,18 @@ func TestLSLongFormatMetadataFlags(t *testing.T) {
 	if strings.Contains(longNoOwner, " user ") {
 		t.Fatalf("-g output = %q, want owner omitted", longNoOwner)
 	}
-	if !regexp.MustCompile(`\bgroup\b`).MatchString(longNoOwner) {
+	if !strings.Contains(longNoOwner, " "+defaultUser+" ") {
 		t.Fatalf("-g output = %q, want group shown", longNoOwner)
 	}
 
 	longNoGroupWithAuthor := strings.TrimSpace(parts[2])
-	if strings.Contains(longNoGroupWithAuthor, " group ") {
-		t.Fatalf("-o --author output = %q, want group omitted", longNoGroupWithAuthor)
-	}
-	if !strings.Contains(longNoGroupWithAuthor, " author ") {
-		t.Fatalf("-o --author output = %q, want author shown", longNoGroupWithAuthor)
+	longNoGroupWithAuthorFields := strings.Fields(longNoGroupWithAuthor)
+	if len(longNoGroupWithAuthorFields) < 9 || longNoGroupWithAuthorFields[2] != defaultUser || longNoGroupWithAuthorFields[3] != defaultUser {
+		t.Fatalf("-o --author output = %q, want owner and author shown without group", longNoGroupWithAuthor)
 	}
 
 	numericIDs := strings.TrimSpace(parts[3])
-	if !regexp.MustCompile(`\s0\s0\s`).MatchString(numericIDs) {
+	if !regexp.MustCompile(`\s` + defaultUID + `\s` + defaultGID + `\s`).MatchString(numericIDs) {
 		t.Fatalf("-n output = %q, want numeric owner/group ids", numericIDs)
 	}
 

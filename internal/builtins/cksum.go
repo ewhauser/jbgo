@@ -925,7 +925,7 @@ func (c *Cksum) readVerifyTarget(ctx context.Context, inv *Invocation, name stri
 	return data, err
 }
 
-func (c *Cksum) writeVerifyResult(inv *Invocation, name string, status string, failed bool, verbosity cksumVerbosity) {
+func (c *Cksum) writeVerifyResult(inv *Invocation, name, status string, failed bool, verbosity cksumVerbosity) {
 	if !failed {
 		if verbosity <= cksumVerbosityQuiet {
 			return

@@ -385,8 +385,8 @@ func (h *ReadWriteFS) lookupOwnership(target string) *FileOwnership {
 	if !ok {
 		return nil
 	}
-	copy := ownership
-	return &copy
+	ownershipCopy := ownership
+	return &ownershipCopy
 }
 
 func (h *ReadWriteFS) recordOwnership(target string, ownership FileOwnership) {

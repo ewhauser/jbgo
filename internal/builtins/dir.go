@@ -55,6 +55,7 @@ func (c *Dir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 	if err != nil {
 		return err
 	}
+	primeLSIdentityDB(ctx, inv, &opts)
 	targets := matches.Args("file")
 	if len(targets) == 0 {
 		targets = []string{"."}
@@ -180,7 +181,7 @@ func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs 
 		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, _ := formatLSLongLine(inv, name, info, opts, nil)
+		line, _ := formatLSLongLine(name, info, opts, nil)
 		return line, 0, lsRenderResult{text: line}, nil
 	}
 	if defaultColumns {

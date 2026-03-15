@@ -76,6 +76,9 @@ func (c *CP) Spec() CommandSpec {
 
 func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	opts := parseCPMatches(matches)
+	if err := validateCPOptions(inv, opts); err != nil {
+		return err
+	}
 	args := matches.Positionals()
 	sources, destArg, err := cpOperands(inv, opts, args)
 	if err != nil {
@@ -202,6 +205,17 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 	return opts
 }
 
+func validateCPOptions(inv *Invocation, opts cpOptions) error {
+	switch {
+	case opts.hardLink:
+		return exitf(inv, 1, "cp: --link is not yet supported")
+	case opts.symbolicLink:
+		return exitf(inv, 1, "cp: --symbolic-link is not yet supported")
+	default:
+		return nil
+	}
+}
+
 func cpOperands(inv *Invocation, opts cpOptions, args []string) (sources []string, destArg string, err error) {
 	if opts.targetDirectory != "" {
 		if opts.noTargetDirectory {
@@ -218,7 +232,7 @@ func cpOperands(inv *Invocation, opts cpOptions, args []string) (sources []strin
 	return args[:len(args)-1], args[len(args)-1], nil
 }
 
-func resolveCPDestination(ctx context.Context, inv *Invocation, opts cpOptions, sourceArg, destArg string, multipleSources bool) (string, stdfs.FileInfo, bool, error) {
+func resolveCPDestination(ctx context.Context, inv *Invocation, opts cpOptions, sourceArg, destArg string, multipleSources bool) (destAbs string, destInfo stdfs.FileInfo, destExists bool, err error) {
 	if opts.noTargetDirectory {
 		info, abs, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, destArg)
 		if err != nil {
@@ -232,7 +246,7 @@ func resolveCPDestination(ctx context.Context, inv *Invocation, opts cpOptions, 
 		}
 		return abs, info, exists, nil
 	}
-	destInfo, destAbs, destExists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, destArg)
+	destInfo, destAbs, destExists, err = lstatMaybe(ctx, inv, policy.FileActionLstat, destArg)
 	if err != nil {
 		return "", nil, false, err
 	}
