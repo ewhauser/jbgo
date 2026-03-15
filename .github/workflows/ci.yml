@@ -22,22 +22,50 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version-file: go.mod
+
       - id: detect
+        shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          set -eu
+          set -euo pipefail
           run_core_deep=false
           run_jq_deep=false
           run_yq_deep=false
           run_sqlite3_deep=false
 
+          repo_core_deep_dirs=()
+          while IFS= read -r dir; do
+            case "$dir" in
+              "$GITHUB_WORKSPACE"/*)
+                repo_core_deep_dirs+=("${dir#"$GITHUB_WORKSPACE"/}")
+                ;;
+            esac
+          done < <(
+            go list -deps -test -f '{{if and .Dir (not .Standard)}}{{.Dir}}{{end}}' ./internal/runtime ./fs ./policy ./network \
+              | sort -u
+          )
+          repo_core_deep_dirs+=("third_party/mvdan-sh/patches")
+
           while IFS= read -r file; do
             case "$file" in
-              internal/runtime/*|fs/*|policy/*|network/*|Makefile|.github/workflows/ci.yml|.github/workflows/fuzz-full.yml)
+              Makefile|go.mod|go.sum|go.work|go.work.sum|.github/workflows/ci.yml|.github/workflows/fuzz-full.yml)
                 run_core_deep=true
                 ;;
             esac
+            if [ "$run_core_deep" = false ]; then
+              for dir in "${repo_core_deep_dirs[@]}"; do
+                case "$file" in
+                  "$dir"|"$dir"/*)
+                    run_core_deep=true
+                    break
+                    ;;
+                esac
+              done
+            fi
             case "$file" in
               contrib/jq/*)
                 run_jq_deep=true
@@ -70,43 +98,6 @@ jobs:
       - run: make build
 
       - run: make test
-
-  fuzz-smoke:
-    if: github.event_name == 'pull_request'
-    name: Fuzz Smoke (${{ matrix.shard }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - shard: core
-            make_var: FUZZ_SMOKE_SHARD_CORE
-          - shard: paths
-            make_var: FUZZ_SMOKE_SHARD_PATHS
-          - shard: data
-            make_var: FUZZ_SMOKE_SHARD_DATA
-          - shard: security
-            make_var: FUZZ_SMOKE_SHARD_SECURITY
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
-        with:
-          go-version-file: go.mod
-
-      - run: make fuzz-shard
-        env:
-          FUZZ_SHARD: ${{ matrix.make_var }}
-          FUZZTIME: 3s
-
-      - name: Upload fuzz corpus artifacts
-        if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: fuzz-smoke-${{ matrix.shard }}-corpus
-          if-no-files-found: ignore
-          path: |
-            **/testdata/fuzz/Fuzz*/*
 
   fuzz-pr-core-deep:
     if: github.event_name == 'pull_request' && needs.detect-fuzz-changes.outputs.run_core_deep == 'true'

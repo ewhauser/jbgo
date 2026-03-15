@@ -16,8 +16,9 @@ Use `npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile` at the repo root 
 
 The repo uses Go native fuzzing locally and in GitHub Actions.
 
-- `make fuzz-smoke` runs the PR-oriented smoke shards.
-- `make fuzz-full` runs the broader shard set used on `main` and on the scheduled full-fuzz workflow.
+- PRs run the full deep shard set when a changed file touches the dependency graph for the fuzzed core runtime packages or one of the contrib fuzz packages.
+- `make fuzz-smoke` runs a smaller local shard set for quick iteration.
+- `make fuzz-full` runs the broader shard set used for PR deep fuzz, on `main`, and on the scheduled full-fuzz workflow.
 - `make fuzz-shard FUZZ_SHARD=FUZZ_FULL_SHARD_2 FUZZTIME=15s` reruns one shard locally.
 - `make fuzz-run FUZZ_TARGETS="./contrib/sqlite3:FuzzSQLiteCommands ./network:FuzzHTTPClientPolicy" FUZZTIME=15s` reruns exact targets.
 
