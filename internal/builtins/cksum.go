@@ -320,26 +320,24 @@ func sanitizeCksumLength(inv *Invocation, algo cksumAlgorithm, value string) (ck
 			return cksumAlgorithm{}, exitf(inv, 1, "cksum: digest length for '%s' must be 224, 256, 384, or 512", strings.ToUpper(string(algo.family)))
 		}
 	case cksumBlake2b:
-		n, err := strconv.Atoi(value)
+		lengthBytes, err := parseChecksumLengthBits(value)
 		if err != nil {
-			return cksumAlgorithm{}, exitf(inv, 1, "cksum: invalid length: '%s'", value)
+			_ = exitf(inv, 1, "cksum: invalid length: '%s'", value)
+			switch err.Error() {
+			case "too_large":
+				return cksumAlgorithm{}, exitf(inv, 1, "cksum: maximum digest length for 'BLAKE2b' is 512 bits")
+			case "not_multiple_of_8":
+				return cksumAlgorithm{}, exitf(inv, 1, "cksum: length is not a multiple of 8")
+			default:
+				return cksumAlgorithm{}, &ExitError{Code: 1}
+			}
 		}
-		switch {
-		case n == 0 || n == 512:
+		switch bits := lengthBytes * 8; bits {
+		case 512:
 			algo.bits = 0
 			return algo, nil
-		case n < 0 || n > 512:
-			if _, err := fmt.Fprintf(inv.Stderr, "cksum: invalid length: '%s'\n", value); err != nil {
-				return cksumAlgorithm{}, &ExitError{Code: 1, Err: err}
-			}
-			return cksumAlgorithm{}, exitf(inv, 1, "cksum: maximum digest length for 'BLAKE2b' is 512 bits")
-		case n%8 != 0:
-			if _, err := fmt.Fprintf(inv.Stderr, "cksum: invalid length: '%s'\n", value); err != nil {
-				return cksumAlgorithm{}, &ExitError{Code: 1, Err: err}
-			}
-			return cksumAlgorithm{}, exitf(inv, 1, "cksum: length is not a multiple of 8")
 		default:
-			algo.bits = n
+			algo.bits = bits
 			return algo, nil
 		}
 	case cksumShake128, cksumShake256:

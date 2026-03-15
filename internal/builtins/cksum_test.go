@@ -97,6 +97,7 @@ func TestCksumCheckModeAndValidation(t *testing.T) {
 		{"sha2-missing-length", "cksum --algorithm=sha2 /tmp/input.txt\n", "", "cksum: --algorithm=sha2 requires specifying --length 224, 256, 384, or 512\n", false},
 		{"raw-multiple", "cksum --algorithm=md5 --raw /tmp/input.txt /tmp/input.txt\n", "", "cksum: the --raw option is not supported with multiple files\n", false},
 		{"blake2b-length", "cksum --algorithm=blake2b --length=513 /tmp/input.txt\n", "", "cksum: invalid length: '513'\ncksum: maximum digest length for 'BLAKE2b' is 512 bits\n", false},
+		{"blake2b-length-overflow", "cksum --algorithm=blake2b --length=18446744073709551616 /tmp/input.txt\n", "", "cksum: invalid length: '18446744073709551616'\ncksum: maximum digest length for 'BLAKE2b' is 512 bits\n", false},
 	}
 
 	for _, tc := range tests {
