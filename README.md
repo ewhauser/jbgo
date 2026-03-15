@@ -338,18 +338,23 @@ This is not a hardened sandbox. If you need stronger containment against denial-
 
 ## Supported Commands
 
-The default registry includes commands for file ops, text processing, archival, and execution. Use `gbash.DefaultRegistry()` to start from the stock builtin set and register custom commands on top.
+The default runtime exposes registry-backed commands plus shell builtins and shims. Use `gbash.DefaultRegistry()` to start from the stock registry-backed command set and register custom commands on top.
 
 | Category | Commands |
 |---|---|
 | File and path | `basename` `cat` `chmod` `chown` `cp` `dircolors` `dirname` `du` `file` `find` `ln` `link` `ls` `dir` `mkdir` `mktemp` `mv` `readlink` `realpath` `rm` `rmdir` `stat` `touch` `tree` `truncate` `unlink` `vdir` |
 | Search and text | `base32` `base64` `basenc` `column` `comm` `csplit` `cut` `diff` `egrep` `fgrep` `grep` `head` `join` `nl` `numfmt` `od` `paste` `printf` `rev` `rg` `sed` `seq` `sort` `split` `strings` `tac` `tail` `tee` `tr` `uniq` `wc` `xan` |
 | Archive | `gzip` `gunzip` `tar` `zcat` |
+| Builtins | `.` `:` `[` `alias` `break` `builtin` `cd` `command` `continue` `declare` `dirs` `echo` `eval` `exec` `exit` `export` `false` `getopts` `hash` `help` `history` `let` `local` `mapfile` `popd` `printf` `pushd` `pwd` `read` `readarray` `readonly` `return` `set` `shift` `shopt` `source` `test` `trap` `true` `type` `typeset` `unalias` `unset` `wait` |
 | Environment and execution | `arch` `b2sum` `bash` `cksum` `clear` `date` `echo` `env` `expr` `factor` `false` `help` `history` `id` `md5sum` `printenv` `pwd` `sh` `sha1sum` `sha224sum` `sha256sum` `sha384sum` `sha512sum` `sleep` `sum` `test` `timeout` `true` `tsort` `tty` `uname` `uptime` `which` `who` `whoami` `xargs` `yes` |
 | Network (when configured) | `curl` |
 | Extras* | `awk` `html-to-markdown` `jq` `sqlite3` `yq` |
 
 \* Use `gbash-extras` for extras commands.
+
+Some builtin names, such as `echo`, `help`, `history`, `printf`, `pwd`, `test`, `true`, and `false`, are routed to `gbash`'s registry-backed implementations and therefore also appear in the command categories above.
+
+Shell language support also includes indexed arrays and associative arrays.
 
 Many commands are ported from [uutils/coreutils](https://github.com/uutils/coreutils) and have full GNU flag parity. See the current [compatibility matrix](https://ewhauser.github.io/gbash/compat/latest/).
 
