@@ -55,6 +55,75 @@ func instrumentLoopBudgets(program *syntax.File, pol policy.Policy) error {
 	return walkErr
 }
 
+func rewriteLetClauses(program *syntax.File) error {
+	if program == nil {
+		return nil
+	}
+
+	printer := syntax.NewPrinter()
+	parser := syntax.NewParser()
+	var walkErr error
+
+	syntax.Walk(program, func(node syntax.Node) bool {
+		if walkErr != nil {
+			return false
+		}
+
+		stmt, ok := node.(*syntax.Stmt)
+		if !ok || stmt.Cmd == nil {
+			return true
+		}
+		_, ok = stmt.Cmd.(*syntax.LetClause)
+		if !ok {
+			return true
+		}
+
+		call, err := rewriteLetClause(printer, parser, stmt.Cmd)
+		if err != nil {
+			walkErr = err
+			return false
+		}
+		stmt.Cmd = call
+		return true
+	})
+
+	return walkErr
+}
+
+func rewriteLetClause(printer *syntax.Printer, parser *syntax.Parser, cmd syntax.Command) (*syntax.CallExpr, error) {
+	if printer == nil {
+		printer = syntax.NewPrinter()
+	}
+	if parser == nil {
+		parser = syntax.NewParser()
+	}
+
+	var rendered strings.Builder
+	if err := printer.Print(&rendered, cmd); err != nil {
+		return nil, err
+	}
+
+	source := strings.TrimSpace(rendered.String())
+	rest, ok := strings.CutPrefix(source, "let")
+	if !ok {
+		return nil, fmt.Errorf("unexpected let rendering: %q", source)
+	}
+
+	file, err := parser.Parse(strings.NewReader(letHelperCommandName+rest+"\n"), "let-helper")
+	if err != nil {
+		return nil, err
+	}
+	if len(file.Stmts) != 1 {
+		return nil, fmt.Errorf("unexpected let helper statement count: %d", len(file.Stmts))
+	}
+
+	call, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		return nil, fmt.Errorf("unexpected let helper command type: %T", file.Stmts[0].Cmd)
+	}
+	return call, nil
+}
+
 func loopKind(clause *syntax.WhileClause) string {
 	if clause != nil && clause.Until {
 		return "until"

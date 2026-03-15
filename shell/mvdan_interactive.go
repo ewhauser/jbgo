@@ -79,6 +79,9 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 		if err != nil {
 			return &InteractiveResult{ExitCode: exitCode}, err
 		}
+		if err := rewriteLetClauses(file); err != nil {
+			return &InteractiveResult{ExitCode: exitCode}, err
+		}
 		if violation := validateExecutionBudgets(file, exec.Policy); violation != nil {
 			exitCode = 126
 			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())

@@ -464,6 +464,7 @@ Implementation detail for MVP:
 - `interp.Dir(...)` is set to a host-safe existing directory such as `/`, not the virtual sandbox cwd
 - the runtime prepends a shell shim that initializes `PWD` and `OLDPWD`
 - the shim owns virtual `cd` and wraps shell-visible `pwd` to the Go `pwd` command so `-L` / `-P` still honor virtual `PWD`
+- `let` clauses are rewritten through an internal helper so quoted and runtime-expanded arithmetic expressions still mutate the current shell state
 - all project path handlers resolve relative paths from virtual `PWD`, not from `HandlerContext.Dir`
 
 ### 9.3 Stdio
