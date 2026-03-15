@@ -17,7 +17,7 @@ Key internal packages:
 | Package | Purpose |
 |---|---|
 | `internal/runtime` | Session lifecycle, execution, budget enforcement |
-| `shell` | Shell AST parsing and execution via `mvdan/sh` |
+| `internal/shell` | Shell AST parsing and execution via `mvdan/sh` |
 | `commands` | Built-in command implementations |
 | `fs` | Filesystem interface and backends (memory, overlay) |
 | `policy` | Path checks, command allowlists, limits |
@@ -54,7 +54,7 @@ contrib/htmltomarkdown   contrib/jq               contrib/nodejs
 contrib/sqlite3          contrib/yq               examples
 ```
 
-Published versions are coordinated. The root module uses plain tags (`v0.0.10`); contrib modules use nested-module tags (`contrib/jq/v0.0.10`). Child modules maintain real version requirements in `go.mod` plus local `replace` directives for development.
+Published versions are coordinated. The root module uses plain tags such as `vX.Y.Z`; contrib modules use nested-module tags such as `contrib/jq/vX.Y.Z`. Child modules maintain real version requirements in `go.mod` plus local `replace` directives for development.
 
 To prepare a coordinated release across all modules:
 

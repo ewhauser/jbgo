@@ -1,8 +1,10 @@
 # Commands
 
-gbash ships with 60+ built-in commands. Every command is backed by a **command registry** -- if a command is not registered, it cannot execute. Unknown commands never fall through to host binaries.
+gbash ships with a large default registry of file, text, archive, and system commands. That registry-backed surface is complemented by shell builtins handled by the `mvdan/sh` execution layer.
 
-The built-in set targets GNU coreutils flag parity. See the [compatibility report](/docs/performance/compatibility) for current coverage.
+Unknown commands never fall through to host binaries. If a name is not registered or implemented by the shell engine, it fails with a normal shell-style error instead of executing anything on the host.
+
+The built-in set targets GNU coreutils flag parity where practical. See the [compatibility report](/docs/performance/compatibility) for current coverage.
 
 ## Default Registry
 
@@ -14,7 +16,7 @@ registry := gbash.DefaultRegistry()
 gb, err := gbash.New(gbash.WithRegistry(registry))
 ```
 
-You can also register additional commands on top of the default set (see [Contrib Commands](/commands/contrib) and the [custom-zstd example](https://github.com/ewhauser/gbash/tree/main/examples/custom-zstd)).
+You can also register additional commands on top of the default set (see [Contrib Commands](/docs/commands/contrib) and the [custom-zstd example](https://github.com/ewhauser/gbash/tree/main/examples/custom-zstd)).
 
 ## Command Reference
 
@@ -25,26 +27,36 @@ You can also register additional commands on top of the default set (see [Contri
 | `basename` | Strip directory and suffix from a filename |
 | `cat` | Concatenate and print files |
 | `chmod` | Change file mode bits |
+| `chgrp` | Change file group ownership |
 | `chown` | Change file owner and group |
 | `cp` | Copy files and directories |
+| `dd` | Copy and transform data streams |
+| `df` | Report filesystem space usage |
+| `dir` | List directory contents (ls-style) |
 | `dirname` | Strip the last component from a path |
 | `du` | Estimate file space usage |
 | `file` | Determine file type |
 | `find` | Search for files in a directory hierarchy |
-| `ln` | Create symbolic links |
+| `install` | Copy files and set permissions in one step |
 | `link` | Create a hard link |
+| `ln` | Create symbolic links |
 | `ls` | List directory contents |
-| `dir` | List directory contents (ls-style) |
 | `mkdir` | Create directories |
+| `mktemp` | Create temporary files and directories |
 | `mv` | Move or rename files |
+| `pathchk` | Validate path names for portability and safety |
 | `readlink` | Print the target of a symbolic link |
+| `realpath` | Resolve a path to its canonical absolute form |
 | `rm` | Remove files or directories |
 | `rmdir` | Remove empty directories |
 | `stat` | Display file status |
 | `touch` | Change file timestamps or create empty files |
 | `tree` | List directory contents in a tree format |
+| `truncate` | Shrink or extend files to a target size |
+| `unlink` | Remove a single directory entry |
+| `vdir` | Verbose directory listing (ls `-l` style) |
 
-See [File and Path](/commands/file-and-path) for details.
+See [File and Path](/docs/commands/file-and-path) for details.
 
 ### Search and Text Processing
 
@@ -52,31 +64,46 @@ See [File and Path](/commands/file-and-path) for details.
 |---|---|
 | `base32` | Base32 encode/decode |
 | `base64` | Base64 encode/decode |
+| `basenc` | Encode/decode using multiple base encodings |
 | `column` | Format input into columns |
 | `comm` | Compare two sorted files line by line |
+| `csplit` | Split a file by context or regex boundaries |
 | `cut` | Remove sections from each line |
 | `diff` | Compare files line by line |
+| `egrep` | `grep` alias optimized for extended regex syntax |
+| `expand` | Convert tabs to spaces |
+| `fgrep` | `grep` alias for fixed-string matching |
+| `fold` | Wrap long lines to a fixed width |
+| `fmt` | Reflow plain text paragraphs |
 | `grep` | Search for patterns in files |
 | `head` | Output the first part of files |
 | `join` | Join lines of two files on a common field |
 | `nl` | Number lines of files |
+| `numfmt` | Reformat numbers into human-readable or raw forms |
+| `od` | Dump files in octal, hex, or other formats |
 | `paste` | Merge lines of files |
+| `pr` | Paginate text for printing |
 | `printf` | Format and print data |
+| `ptx` | Build permuted indexes for text |
 | `rev` | Reverse lines character-wise |
 | `rg` | ripgrep-style recursive search |
 | `sed` | Stream editor for filtering and transforming text |
 | `seq` | Print a sequence of numbers |
+| `shuf` | Randomize input lines |
 | `sort` | Sort lines of text files |
 | `split` | Split a file into pieces |
+| `strings` | Extract printable strings from binary data |
 | `tac` | Concatenate and print files in reverse |
 | `tail` | Output the last part of files |
 | `tee` | Read from stdin and write to stdout and files |
 | `tr` | Translate or delete characters |
+| `tsort` | Topologically sort dependency pairs |
+| `unexpand` | Convert spaces back to tabs |
 | `uniq` | Report or omit repeated lines |
 | `wc` | Print newline, word, and byte counts |
 | `xan` | CSV toolkit for row, column, aggregation, reshape, and conversion operations |
 
-See [Search and Text Processing](/commands/search-and-text) for details.
+See [Search and Text Processing](/docs/commands/search-and-text) for details.
 
 ### Archive and Compression
 
@@ -87,36 +114,65 @@ See [Search and Text Processing](/commands/search-and-text) for details.
 | `tar` | Archive files |
 | `zcat` | View compressed files |
 
-See [Archive and Compression](/commands/archive) for details.
+See [Archive and Compression](/docs/commands/archive) for details.
 
-### Environment and System
+### Environment and Execution
 
 | Command | Description |
 |---|---|
-| `bash` | Execute a bash sub-shell |
+| `arch` | Report the sandbox architecture |
+| `b2sum` | Compute BLAKE2 checksums |
+| `bash` | Execute a bash sub-shell inside the sandbox |
+| `cksum` | Compute POSIX CRC checksums |
+| `clear` | Clear the terminal display |
 | `curl` | Transfer data from URLs (when network is configured) |
 | `date` | Display or set the date and time |
+| `dircolors` | Emit shell code for colorized directory listings |
 | `echo` | Display a line of text |
 | `env` | Run a command in a modified environment |
 | `expr` | Evaluate expressions |
+| `factor` | Print prime factors |
 | `false` | Exit with failure status |
+| `groups` | Print group memberships |
 | `help` | Display help for built-in commands |
+| `hostid` | Print the sandbox host identifier |
+| `hostname` | Print the sandbox hostname |
 | `id` | Print user identity |
-| `md5sum` | Compute MD5 message digest |
+| `kill` | Send signals to shell-managed jobs or PIDs |
+| `logname` | Print the login name |
+| `md5sum` | Compute MD5 message digests |
+| `nohup` | Run a command with hangup ignored |
+| `nproc` | Print the available processor count |
+| `pinky` | Lightweight user information report |
 | `printenv` | Print environment variables |
 | `pwd` | Print working directory |
-| `sh` | Execute a shell sub-shell |
-| `sha1sum` | Compute SHA-1 digest |
-| `sha256sum` | Compute SHA-256 digest |
+| `sh` | Execute a shell sub-shell inside the sandbox |
+| `sha1sum` | Compute SHA-1 digests |
+| `sha224sum` | Compute SHA-224 digests |
+| `sha256sum` | Compute SHA-256 digests |
+| `sha384sum` | Compute SHA-384 digests |
+| `sha512sum` | Compute SHA-512 digests |
 | `sleep` | Delay for a specified time |
+| `sum` | Compute historical BSD/System V checksums |
 | `timeout` | Run a command with a time limit |
 | `true` | Exit with success status |
+| `tty` | Print the terminal name |
+| `uname` | Print sandbox system information |
 | `uptime` | Show how long the system has been running |
+| `users` | Print logged-in users |
 | `which` | Locate a command in the registry |
+| `who` | Show logged-in session records |
+| `whoami` | Print the effective user name |
 | `xargs` | Build and execute command lines from stdin |
 | `yes` | Repeatedly output a string |
 
-See [Environment and System](/commands/environment) for details.
+See [Environment and Execution](/docs/commands/environment) for details.
+
+### Shell Builtins and Session Helpers
+
+The shell engine also exposes builtins and shims such as `.`, `:`, `[`, `alias`, `cd`, `command`, `complete`, `compopt`, `declare`, `dirs`, `eval`, `exec`, `exit`, `export`, `getopts`, `history`, `let`, `local`, `mapfile`, `popd`, `pushd`, `read`, `readarray`, `readonly`, `return`, `set`, `shift`, `shopt`, `source`, `test`, `trap`, `type`, `typeset`, `unalias`, `unset`, and `wait`.
+
+Those names stay inside the gbash runtime as well. They do not resolve to host binaries.
 
 ### Contrib (Optional)
 
@@ -128,4 +184,4 @@ See [Environment and System](/commands/environment) for details.
 | `sqlite3` | SQLite database shell (via go-sqlite3) |
 | `yq` | YAML/JSON/XML processor (via yq) |
 
-See [Contrib Commands](/commands/contrib) for details.
+See [Contrib Commands](/docs/commands/contrib) for details.

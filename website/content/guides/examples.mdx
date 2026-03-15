@@ -1,6 +1,6 @@
 # Examples
 
-The repository includes six examples demonstrating different gbash capabilities. Each is a standalone project under [`examples/`](https://github.com/ewhauser/gbash/tree/main/examples).
+The repository includes several examples demonstrating different gbash capabilities. Each is a standalone project under [`examples/`](https://github.com/ewhauser/gbash/tree/main/examples).
 
 ## adk-bash-chat
 
@@ -14,11 +14,23 @@ Demonstrates custom command registration. Shows how to extend the gbash command 
 
 [View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/custom-zstd)
 
+## oauth-network-extension
+
+Shows how to extend the sandbox network layer for OAuth-style flows while keeping outbound access explicit and policy-controlled.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/oauth-network-extension)
+
 ## openai-tool-call
 
 Uses the OpenAI Responses API with gbash registered as a bash tool. Shows how to wire gbash into an LLM tool-calling loop where the model generates shell commands and gbash executes them in a sandbox.
 
 [View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/openai-tool-call)
+
+## otel
+
+Demonstrates OpenTelemetry-style tracing and lifecycle logging integration so execution events can flow into a larger observability pipeline.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/otel)
 
 ## sqlite-backed-fs
 

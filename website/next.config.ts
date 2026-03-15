@@ -20,7 +20,22 @@ const cspHeader = `
   .replace(/\n/g, " ")
   .trim();
 
-const withMDX = createMDX({});
+const withMDX = createMDX({
+  options: {
+    // Turbopack requires loader options to stay serializable.
+    remarkPlugins: ["remark-gfm"],
+    rehypePlugins: [
+      [
+        "rehype-pretty-code",
+        {
+          theme: "github-dark-default",
+          keepBackground: false,
+        },
+      ],
+      "rehype-slug",
+    ],
+  },
+});
 
 const nextConfig: NextConfig = {
   basePath: basePath || undefined,

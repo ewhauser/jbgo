@@ -1,8 +1,8 @@
 # Agent Integration
 
-gbash is designed to be used as a tool for AI agents. It provides a sandboxed shell runtime that agents can call repeatedly within a persistent session, with execution budgets and opt-in observability hooks for safety and debugging.
+gbash is designed to sit behind an agent tool boundary: one runtime, one or more persistent sessions, explicit budgets, and optional structured observability.
 
-## Go API integration
+## Go API Integration
 
 Create a runtime, open a session, and execute scripts:
 
@@ -12,70 +12,114 @@ package main
 import (
     "context"
     "fmt"
+    "log"
+
     "github.com/ewhauser/gbash"
 )
 
 func main() {
-    rt := gbash.New()
-    session, _ := rt.NewSession()
+    ctx := context.Background()
 
-    result, _ := session.Execute(context.Background(), &gbash.ExecutionRequest{
+    rt, err := gbash.New()
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    session, err := rt.NewSession(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    result, err := session.Exec(ctx, &gbash.ExecutionRequest{
         Script: "echo hello world",
     })
-    fmt.Println(result.Stdout) // "hello world\n"
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Print(result.Stdout) // "hello world\n"
 }
 ```
 
-## Exposing gbash as a tool
+## Exposing gbash as a Tool
 
-Wrap the session's `Execute` method as a tool callable by your agent framework. The input is the shell command string; the output is stdout, stderr, and the exit code.
+For most agent frameworks, return a structured tool payload instead of only stdout:
 
 ```go
-func bashTool(ctx context.Context, session *gbash.Session, command string) (string, error) {
-    result, err := session.Execute(ctx, &gbash.ExecutionRequest{
+type BashToolResult struct {
+    Stdout   string            `json:"stdout"`
+    Stderr   string            `json:"stderr"`
+    ExitCode int               `json:"exitCode"`
+    FinalEnv map[string]string `json:"finalEnv,omitempty"`
+}
+
+func bashTool(ctx context.Context, session *gbash.Session, command string, env map[string]string) (*BashToolResult, error) {
+    result, err := session.Exec(ctx, &gbash.ExecutionRequest{
         Script: command,
+        Env:    env,
     })
     if err != nil {
-        return "", err
+        return nil, err
     }
-    return result.Stdout, nil
+    return &BashToolResult{
+        Stdout:   result.Stdout,
+        Stderr:   result.Stderr,
+        ExitCode: result.ExitCode,
+        FinalEnv: result.FinalEnv,
+    }, nil
 }
 ```
 
-## Persistent sessions
+That shape makes it easier for the agent host to preserve state and reason about failures without parsing free-form text.
 
-A single session preserves the filesystem, working directory, and exported environment variables across multiple `Execute` calls. This allows multi-turn agent conversations where each step builds on previous work:
+## Persistent Sessions
+
+A `Session` preserves the sandbox filesystem automatically across multiple `Exec` calls. That is the main building block for multi-turn agent workflows:
 
 ```go
-session, _ := rt.NewSession()
+_, _ = session.Exec(ctx, &gbash.ExecutionRequest{
+    Script: `echo "data" > /tmp/output.txt`,
+})
 
-// Turn 1: create a file
-session.Execute(ctx, &gbash.ExecutionRequest{Script: `echo "data" > /tmp/output.txt`})
-
-// Turn 2: read the file back
-result, _ := session.Execute(ctx, &gbash.ExecutionRequest{Script: "cat /tmp/output.txt"})
+result, _ := session.Exec(ctx, &gbash.ExecutionRequest{
+    Script: "cat /tmp/output.txt",
+})
 // result.Stdout == "data\n"
 ```
 
-This is critical for agent workflows where the model explores a workspace, runs analysis, and iterates on results.
+Working directory and exported environment do **not** persist automatically across separate `Session.Exec` calls. To preserve them, feed `ExecutionResult.FinalEnv` into the next request:
 
-## Execution budgets prevent runaway agents
+```go
+first, _ := session.Exec(ctx, &gbash.ExecutionRequest{
+    Script: "cd /tmp && export MODE=debug",
+})
+
+second, _ := session.Exec(ctx, &gbash.ExecutionRequest{
+    Script: "pwd && echo $MODE",
+    Env:    first.FinalEnv,
+})
+```
+
+That pattern is a good fit for agent tool loops where each turn needs to remember `PWD`, exported variables, or shell-derived state.
+
+## Execution Budgets Prevent Runaway Agents
 
 LLM-generated scripts can be unpredictable. Execution budgets ensure that no single call can exhaust resources:
 
-- **Command count**: caps total commands per execution (default 10,000)
-- **Loop iterations**: caps iterations per loop (default 10,000)
-- **Substitution depth**: caps nested `$(...)` expansion (default 50)
-- **Output size**: truncates stdout/stderr beyond 1 MB each
+- **Command count** caps total commands per execution
+- **Loop iterations** cap iterations per loop
+- **Substitution depth** caps nested `$(...)` and arithmetic expansion
+- **Stdout/stderr limits** truncate oversized output
+- **File and network limits** bound individual reads and responses
 
-When a budget is exceeded, execution stops with an error. The session remains usable for subsequent calls.
+When a budget is exceeded, execution stops with an error and the session remains usable for later calls.
 
-## Trace events for observability
+## Trace Events for Observability
 
-If you enable tracing, execution results include structured events in `result.Events`. Use these to observe what the agent did without parsing stdout:
+If you enable tracing, execution results include structured events in `result.Events`. Use them to observe what the agent did without parsing stdout:
 
 ```go
-result, _ := session.Execute(ctx, &gbash.ExecutionRequest{
+result, _ := session.Exec(ctx, &gbash.ExecutionRequest{
     Script: "ls /workspace && cat /workspace/data.csv",
 })
 
@@ -94,15 +138,16 @@ for _, event := range result.Events {
 Trace events are particularly useful for:
 
 - Logging agent actions for audit trails
-- Detecting when an agent attempts blocked operations
-- Tracking file modifications between turns
-- Measuring execution cost
+- Detecting blocked operations without scraping stderr
+- Tracking file mutations between turns
+- Measuring execution complexity and tool cost
 
-See [Tracing and Logging](/docs/observability/tracing-and-logging) for the trace modes and logging callbacks.
+See [Tracing and Logging](/docs/api/tracing-and-logging) for the available trace modes and log callbacks.
 
 ## Examples
 
 See these working examples in the repository:
 
-- [openai-tool-call](https://github.com/ewhauser/gbash/tree/main/examples/openai-tool-call) -- uses the OpenAI Responses API with gbash as a bash tool
-- [adk-bash-chat](https://github.com/ewhauser/gbash/tree/main/examples/adk-bash-chat) -- CLI chatbot using Google ADK with a persistent gbash session
+- [openai-tool-call](https://github.com/ewhauser/gbash/tree/main/examples/openai-tool-call) — uses the OpenAI Responses API with gbash as a bash tool
+- [adk-bash-chat](https://github.com/ewhauser/gbash/tree/main/examples/adk-bash-chat) — CLI chatbot using Google ADK with a persistent gbash session
+- [otel](https://github.com/ewhauser/gbash/tree/main/examples/otel) — demonstrates tracing and lifecycle logging integration

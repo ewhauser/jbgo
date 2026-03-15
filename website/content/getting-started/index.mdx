@@ -4,13 +4,13 @@ gbash is a deterministic, sandbox-only, bash-like runtime for AI agents, impleme
 
 Commands never fall through to host binaries, and network access is off by default.
 
-> gbash is beta software (v0.0.10). Additional security hardening is likely needed. Use with care.
+> gbash is beta software. Additional security hardening is likely needed. Use with care.
 
 ## Key Features
 
 - **Virtual in-memory filesystem** — no host access by default
 - **Registry-backed command execution** — unknown commands never run host binaries
-- **60+ built-in commands** with GNU coreutils compatibility coverage ([compatibility report](/docs/performance/compatibility))
+- **100+ built-in commands and shell builtins** with GNU coreutils compatibility tracking ([compatibility report](/docs/performance/compatibility))
 - **Optional network access** via allowlisted `curl`
 - **Persistent sessions** with shared filesystem state across executions
 - **Host directory mounting** with read-only overlay for real project workspaces
@@ -22,3 +22,7 @@ Commands never fall through to host binaries, and network access is off by defau
 
 - [Installation](/docs/getting-started/installation) — install the Go library, CLI, or prebuilt binaries
 - [Quick Start](/docs/getting-started/quick-start) — run your first sandboxed shell command in under a minute
+- [Configuration](/docs/configuration) — choose an in-memory, mounted, or custom filesystem and decide whether network access is allowed
+- [Commands](/docs/commands) — review the default registry, shell builtins, and optional contrib modules
+- [API](/docs/api) — embed gbash in Go or JavaScript hosts
+- [Security](/docs/security) — understand the sandbox guarantees, threat model, and observability tradeoffs

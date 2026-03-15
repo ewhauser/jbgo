@@ -81,3 +81,34 @@ printf 'pwd\ncd /tmp\npwd\nexit\n' | gbash -i
 ```
 
 The interactive shell reuses one sandbox session and carries forward filesystem and environment state across commands. It exposes a session-local `history` command, but it does not provide readline-style line editing or job control.
+
+## Host-Backed CLI Runs
+
+Mount a real project into the sandbox under a writable in-memory overlay:
+
+```bash
+gbash --root /path/to/project --cwd /home/agent/project -c 'pwd; ls'
+```
+
+`--root` mounts the host directory read-only at `/home/agent/project`. Writes stay inside the sandbox overlay, so the host tree is not mutated.
+
+## JSON Output
+
+Non-interactive runs can emit a single structured result object:
+
+```bash
+gbash -c 'echo hello' --json
+```
+
+The JSON payload includes `stdout`, `stderr`, `exitCode`, truncation flags, timing metadata, and trace metadata when tracing is enabled by the wrapper.
+
+## Extras CLI
+
+Install `gbash-extras` when you want the stable official contrib commands (`awk`, `html-to-markdown`, `jq`, `sqlite3`, and `yq`) pre-registered:
+
+```bash
+go install github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras@latest
+gbash-extras -c 'jq -r .name data.json'
+```
+
+See [Contrib Commands](/docs/commands/contrib) for the Go modules behind the extras registry.

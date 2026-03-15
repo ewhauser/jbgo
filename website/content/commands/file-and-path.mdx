@@ -193,3 +193,22 @@ tree
 tree -L 2 src/
 tree -d                                     # directories only
 ```
+
+## Additional File and Path Utilities
+
+These commands are also part of the default registry:
+
+| Command | Description |
+|---|---|
+| `chgrp` | Change file group ownership without changing the owning user |
+| `dd` | Copy raw data streams with block-size, skip, and count controls |
+| `df` | Report filesystem space usage for the current sandbox backend |
+| `install` | Copy files into place while setting permissions and ownership-like metadata |
+| `mktemp` | Create uniquely named temporary files or directories |
+| `pathchk` | Validate path names against portability and length rules |
+| `realpath` | Resolve a path to its canonical absolute location |
+| `truncate` | Set a file to an exact byte length |
+| `unlink` | Remove a single file path without recursive behavior |
+| `vdir` | Verbose directory listing equivalent to `ls -l` |
+
+For flags and shell-facing help text, run `help <command>` inside gbash.

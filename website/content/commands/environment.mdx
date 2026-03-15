@@ -20,7 +20,7 @@ sh -c 'echo "hello"'
 
 ## curl
 
-Transfer data from URLs. Only available when network access is configured via `WithHTTPAccess`.
+Transfer data from URLs. Only available when network access is configured via `WithHTTPAccess`, `WithNetwork`, or `WithNetworkClient`.
 
 ```bash
 curl https://api.example.com/data
@@ -196,3 +196,49 @@ Repeatedly output a string until killed or piped.
 yes | head -n 5
 yes "agree" | head -n 3
 ```
+
+## Session and Shell Helpers
+
+The default runtime also exposes a few session-oriented helpers and shell-condition commands:
+
+| Command | Description |
+|---|---|
+| `history` | Print the current interactive session history |
+| `complete` | Register programmable completion handlers |
+| `compopt` | Adjust completion behavior for the current completion spec |
+| `test` | Evaluate shell conditions |
+| `[` | Alternate `test` syntax that must end with `]` |
+
+Most other shell builtins such as `cd`, `source`, `eval`, `pushd`, `popd`, `type`, and `trap` are provided by the shell engine itself rather than by the registry.
+
+## Additional Environment and System Utilities
+
+These commands are also part of the default registry:
+
+| Command | Description |
+|---|---|
+| `arch` | Print the sandbox machine architecture |
+| `b2sum` | Compute BLAKE2 checksums |
+| `cksum` | Compute POSIX CRC checksums |
+| `clear` | Clear the terminal display |
+| `dircolors` | Emit shell code for colorized directory listings |
+| `factor` | Print the prime factors of integers |
+| `groups` | Print the current user's group memberships |
+| `hostid` | Print the sandbox host identifier |
+| `hostname` | Print the sandbox host name |
+| `kill` | Send signals to shell-managed jobs or PIDs |
+| `logname` | Print the login name |
+| `nohup` | Run a command with hangup ignored |
+| `nproc` | Print the available processor count |
+| `pinky` | Print a compact user information report |
+| `sha224sum` | Compute SHA-224 message digests |
+| `sha384sum` | Compute SHA-384 message digests |
+| `sha512sum` | Compute SHA-512 message digests |
+| `sum` | Compute historical BSD/System V checksums |
+| `tty` | Print the terminal device name |
+| `uname` | Print sandbox system information |
+| `users` | Print logged-in user names |
+| `who` | Show logged-in session records |
+| `whoami` | Print the effective user name |
+
+For flags and shell-facing help text, run `help <command>` inside gbash.

@@ -1,6 +1,6 @@
 # Filesystem
 
-gbash provisions a fresh virtual filesystem for each session. Six entry points cover the spectrum from fully isolated to fully mutable host access.
+gbash provisions a fresh virtual filesystem for each session. The documented entry points cover the common spectrum from fully isolated in-memory sandboxes to controlled host-backed overlays and custom backends.
 
 ## Default: In-Memory Filesystem
 
@@ -55,20 +55,6 @@ rt, err := gbash.New(
     })),
 )
 ```
-
-## Mutable Host Directory
-
-`ReadWriteDirectoryFileSystem` maps the sandbox root directly onto a host directory. Writes persist to disk. Sessions start at `/`.
-
-```go
-rt, err := gbash.New(
-    gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem("/path/to/dir", gbash.ReadWriteDirectoryOptions{
-        MaxFileReadBytes: 10 << 20,
-    })),
-)
-```
-
-Use this when you intentionally want shell commands to modify the host filesystem, for example in compatibility test harnesses or controlled build pipelines.
 
 ## Mountable Namespace
 

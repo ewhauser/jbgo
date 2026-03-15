@@ -33,6 +33,7 @@ gb, err := gbash.New(
 | `WithFileSystem(cfg)` | Replace the session filesystem configuration with a custom `FileSystemConfig`. |
 | `WithHTTPAccess(prefixes...)` | Enable `curl` with a URL allowlist. Only the listed prefixes are reachable. |
 | `WithNetwork(cfg)` | Full control over HTTP methods, timeouts, response size limits, and private-range blocking. |
+| `WithNetworkClient(client)` | Inject a fully custom `network.Client` for `curl`. |
 | `WithRegistry(registry)` | Replace the command registry visible inside the sandbox. |
 | `WithWorkingDir(dir)` | Override the initial working directory for new sessions. |
 | `WithBaseEnv(env)` | Replace the base environment inherited by each execution. |
@@ -55,7 +56,7 @@ if err != nil {
 fmt.Println(result.Stdout)
 ```
 
-Each call to `Run` starts with a clean filesystem. Use [sessions](/api/sessions) when you need state to persist across executions.
+Each call to `Run` starts with a clean filesystem. Use [sessions](/docs/api/sessions) when you need state to persist across executions.
 
 ## ExecutionRequest
 
@@ -65,10 +66,15 @@ The `Script` field is the primary input. Additional fields are available for adv
 |-------|------|-------------|
 | `Script` | `string` | The bash script to execute. |
 | `Name` | `string` | Optional name for the execution (appears in traces). |
+| `Interpreter` | `string` | Override the shell name used for this execution (`bash`, `sh`, or a wrapper name). |
+| `PassthroughArgs` | `[]string` | Shell argv forwarded into nested invocations and CLI-style wrappers. |
 | `Args` | `[]string` | Positional arguments (`$1`, `$2`, ...). |
+| `StartupOptions` | `[]string` | Shell startup flags such as `-e` or `-u`. |
 | `Env` | `map[string]string` | Per-execution environment overrides. |
 | `WorkDir` | `string` | Override the working directory for this execution. |
 | `Timeout` | `time.Duration` | Execution timeout. |
+| `ReplaceEnv` | `bool` | Replace the base environment entirely instead of overlaying on top of it. |
+| `Interactive` | `bool` | Marks the request as interactive when a wrapper is bridging an interactive shell. |
 | `Stdin` | `io.Reader` | Standard input for the script. |
 | `Stdout` | `io.Writer` | Direct stdout to a writer instead of capturing it. |
 | `Stderr` | `io.Writer` | Direct stderr to a writer instead of capturing it. |
@@ -78,8 +84,12 @@ The `Script` field is the primary input. Additional fields are available for adv
 | Field | Type | Description |
 |-------|------|-------------|
 | `ExitCode` | `int` | The exit code of the script. |
+| `ShellExited` | `bool` | Reports whether the shell terminated via `exit` rather than simply finishing the script. |
 | `Stdout` | `string` | Captured standard output (empty when `Stdout` writer is set on the request). |
 | `Stderr` | `string` | Captured standard error (empty when `Stderr` writer is set on the request). |
+| `ControlStderr` | `string` | Non-script diagnostics emitted by the runtime or CLI wrapper. |
+| `StartedAt` | `time.Time` | Wall-clock start timestamp. |
+| `FinishedAt` | `time.Time` | Wall-clock finish timestamp. |
 | `Duration` | `time.Duration` | Wall-clock execution time. |
 | `Events` | `[]trace.Event` | Structured trace events, populated only when tracing is enabled. |
 | `FinalEnv` | `map[string]string` | The environment after execution completes. |
@@ -90,5 +100,5 @@ The `Script` field is the primary input. Additional fields are available for adv
 
 Tracing and logging are both opt-in.
 
-- Use [`WithTracing`](/docs/observability/tracing-and-logging) to populate `ExecutionResult.Events` and optionally receive `OnEvent` callbacks.
-- Use [`WithLogger`](/docs/observability/tracing-and-logging) for `exec.start`, `stdout`, `stderr`, `exec.finish`, and `exec.error` lifecycle hooks.
+- Use [`WithTracing`](/docs/api/tracing-and-logging) to populate `ExecutionResult.Events` and optionally receive `OnEvent` callbacks.
+- Use [`WithLogger`](/docs/api/tracing-and-logging) for `exec.start`, `stdout`, `stderr`, `exec.finish`, and `exec.error` lifecycle hooks.

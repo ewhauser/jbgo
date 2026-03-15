@@ -12,7 +12,7 @@ rt := gbash.New() // memory FS, no network, no host commands
 
 ## Network
 
-Network access is **off by default**. When you supply a network client, gbash registers `curl` and constrains requests through URL-prefix allowlists, method allowlists, redirect revalidation, optional private-range blocking, and response-size caps. Without a client, `curl` is not available and all egress is denied.
+Network access is **off by default**. When you enable it with `WithHTTPAccess`, `WithNetwork`, or a custom network client, gbash registers `curl`. The built-in client constrains requests through URL-prefix allowlists, method allowlists, redirect revalidation, optional private-range blocking, and response-size caps. Without any network configuration, `curl` is not available and all egress is denied.
 
 ## Execution budgets
 
@@ -30,7 +30,7 @@ Every execution is bounded by configurable limits that prevent runaway scripts:
 
 ## Observability
 
-Tracing is opt-in. When enabled, gbash can emit structured execution events covering command starts and exits, file access and mutation, and policy denials. Redacted tracing is the recommended mode for shared systems, and lifecycle logging is available through a separate callback API. See [Tracing and Logging](/docs/observability/tracing-and-logging) for details.
+Tracing is opt-in. When enabled, gbash can emit structured execution events covering command starts and exits, file access and mutation, and policy denials. Redacted tracing is the recommended mode for shared systems, and lifecycle logging is available through a separate callback API. See [Tracing and Logging](/docs/api/tracing-and-logging) for details.
 
 ## What gbash is not
 

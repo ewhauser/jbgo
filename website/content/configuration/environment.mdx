@@ -15,9 +15,9 @@ The default `PATH` is `/usr/bin:/bin`.
 
 ## Command Directories
 
-`/usr/bin` and `/bin` contain virtual stubs that allow the shell to resolve command names during parsing. These are not real executables. When a command runs, gbash dispatches it through the command registry, not through the filesystem.
+`/usr/bin` and `/bin` contain virtual stubs that allow the shell to resolve command names during parsing. These are not real executables. When a command runs, gbash dispatches it through the command registry or shell engine, not through the host filesystem.
 
-This means `ls /usr/bin` lists the available commands, but the files themselves are zero-byte stubs used only for shell resolution (e.g., `which`, `type`, `command -v`).
+This means `ls /usr/bin` lists the available command names, but the files themselves are placeholders used only for shell resolution (`which`, `type`, `command -v`, and related flows).
 
 ## Shell Features
 
@@ -28,35 +28,53 @@ gbash supports a broad subset of bash syntax and behavior:
 - **Variable expansion** — `$VAR`, `${VAR:-default}`, `${#VAR}`
 - **Command substitution** — `$(cmd)`, `` `cmd` ``
 - **Arithmetic** — `$((x + 1))`, `$(( 2 ** 10 ))`
-- **Conditionals** — `if/elif/else/fi`, `[[ ... ]]`, `test`
+- **Conditionals** — `if/elif/else/fi`, `[[ ... ]]`, `test`, `[ ... ]`
 - **Loops** — `for`, `while`, `until`
 - **Shell functions** — `fn() { ...; }`
 - **Logical operators** — `&&`, `||`
 - **Here documents** — `<<EOF`
-- **Virtual cd/pwd** — directory changes are tracked in-memory
+- **Indexed and associative arrays**
+- **Sourcing and evaluation** — `source`, `.`, and `eval`
+- **Directory stack builtins** — `cd`, `pushd`, `popd`, `dirs`
 - **Nested bash/sh** — `bash -c "..."` and `sh -c "..."` re-enter the runtime
 
 ## Limitations
 
 gbash is not a full bash reimplementation. Notable differences:
 
-- No process management (`bg`, `fg`, `jobs`, `&` for backgrounding)
-- No signal handling (`trap`)
-- No `source`/`.` for external scripts (inline functions work)
-- No `eval` (use `bash -c` instead)
-- Some advanced parameter expansion forms may not be supported
+- No job control (`bg`, `fg`, `jobs`, background process orchestration)
+- No readline-style line editing or tab-completion frontend in the shipped CLI
+- No host TTY emulation or subprocess passthrough
+- Shell-local variables, functions, and option state do not persist across separate `Session.Exec` calls
+- Some advanced edge-case shell forms may still surface as normal shell errors instead of matching GNU Bash exactly
 
 ## Base Environment
 
-Override the default environment variables with `WithBaseEnv`:
+New sessions inherit a deterministic base environment:
+
+| Variable | Default |
+|---|---|
+| `HOME` | `/home/agent` |
+| `PATH` | `/usr/bin:/bin` |
+| `USER` | `agent` |
+| `LOGNAME` | `agent` |
+| `GROUP` | `agent` |
+| `GROUPS` | `1000` |
+| `UID` / `EUID` | `1000` |
+| `GID` / `EGID` | `1000` |
+| `SHELL` | `/bin/sh` |
+
+gbash also seeds internal metadata variables such as `GBASH_ARCH`, `GBASH_UNAME_*`, and `GBASH_UMASK` so commands like `arch` and `uname` have deterministic values inside the sandbox.
+
+Override the base environment with `WithBaseEnv`:
 
 ```go
 rt, err := gbash.New(
     gbash.WithBaseEnv(map[string]string{
-        "LANG":  "en_US.UTF-8",
+        "LANG": "en_US.UTF-8",
         "EDITOR": "vim",
     }),
 )
 ```
 
-Per-execution environment overrides can also be passed through `ExecutionRequest`.
+Per-execution environment overrides can also be passed through `ExecutionRequest`, and `ExecutionResult.FinalEnv` lets you carry exported variables and `PWD` forward between session turns when needed.

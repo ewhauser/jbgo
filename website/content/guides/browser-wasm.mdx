@@ -19,15 +19,17 @@ Import the `Bash` class from `@ewhauser/gbash-wasm/browser`:
 import { Bash } from "@ewhauser/gbash-wasm/browser";
 
 const bash = new Bash({
-  cwd: "/home/user",
+  cwd: "/home/agent",
   env: { TERM: "xterm-256color" },
   files: {
-    "/home/user/hello.txt": "Hello from gbash!",
+    "/home/agent/hello.txt": "Hello from gbash!\n",
   },
 });
 
-const result = await bash.exec("cat /home/user/hello.txt");
-console.log(result.output); // "Hello from gbash!"
+const result = await bash.exec("cat /home/agent/hello.txt");
+console.log(result.stdout);   // "Hello from gbash!\n"
+console.log(result.stderr);   // ""
+console.log(result.exitCode); // 0
 ```
 
 The runtime loads lazily on first use. It fetches `wasm_exec.js` and `gbash.wasm`, boots the Go runtime, and waits for `window.GBashWasm` to register. Subsequent `Bash` instances reuse the same loaded runtime.
@@ -70,7 +72,8 @@ import { Bash, defineCommand } from "@ewhauser/gbash-wasm/browser";
 const bash = new Bash({
   customCommands: [
     defineCommand("now", async () => ({
-      output: new Date().toISOString(),
+      stdout: new Date().toISOString() + "\n",
+      stderr: "",
       exitCode: 0,
     })),
   ],
@@ -79,7 +82,7 @@ const bash = new Bash({
 const result = await bash.exec("now");
 ```
 
-Custom commands are matched before the WASM runtime, so they can override or extend built-in commands.
+Custom commands are matched before the WASM runtime for simple command invocations, so they can override or extend built-in commands.
 
 ## CSP headers
 

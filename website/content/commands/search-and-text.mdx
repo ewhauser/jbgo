@@ -251,3 +251,27 @@ xan to json data.csv                       # CSV -> JSON
 xan slice -s 1 -e 3 data.csv               # row slicing
 xan flatten -l 2 data.csv                  # vertical record view
 ```
+
+## Additional Search and Text Utilities
+
+These commands are also part of the default registry:
+
+| Command | Description |
+|---|---|
+| `basenc` | Encode or decode data using base16, base32, base64, base64url, and related alphabets |
+| `csplit` | Split files by line number, repeated patterns, or regex boundaries |
+| `egrep` | `grep` compatibility alias for extended regular expressions |
+| `expand` | Convert tab characters into spaces |
+| `fgrep` | `grep` compatibility alias for fixed-string matching |
+| `fold` | Wrap long lines to a target width |
+| `fmt` | Reflow plain text paragraphs to a readable width |
+| `numfmt` | Convert numbers between raw and human-readable forms |
+| `od` | Inspect files as octal, hexadecimal, decimal, or character dumps |
+| `pr` | Paginate and columnize text for terminal or print-style output |
+| `ptx` | Generate permuted indexes for words in text |
+| `shuf` | Randomize lines or number ranges |
+| `strings` | Extract printable strings from binary files |
+| `tsort` | Topologically sort dependency edges from stdin or a file |
+| `unexpand` | Convert runs of spaces back into tabs |
+
+For flags and shell-facing help text, run `help <command>` inside gbash.
