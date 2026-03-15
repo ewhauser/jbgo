@@ -3,7 +3,7 @@ module github.com/ewhauser/gbash/contrib/yq
 go 1.26.1
 
 require (
-	github.com/ewhauser/gbash v0.0.13
+	github.com/ewhauser/gbash v0.0.14
 	github.com/mikefarah/yq/v4 v4.52.4
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 )
