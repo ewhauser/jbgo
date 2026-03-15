@@ -4,6 +4,9 @@ formatters:
   enable:
     - gofmt
     - goimports
+  exclusions:
+    paths:
+      - ^third_party/mvdan-sh/
 
 linters:
   enable:
@@ -134,6 +137,8 @@ linters:
           msg: Use invocation-provided identity or process state instead of host process state.
 
   exclusions:
+    paths:
+      - ^third_party/mvdan-sh/
     rules:
       - path-except: ^internal/builtins/
         linters:

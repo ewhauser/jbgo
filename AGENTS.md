@@ -28,6 +28,9 @@ Before submitting or updating a PR, run `make lint` from the repo root and fix a
 
 Read the relevant `SPEC.md` sections before editing code, and update them once the design is clear. When in doubt, prefer a small SPEC update over silent drift.
 
+## Third-Party Forks
+Changes under `third_party/mvdan-sh/` must follow [`third_party/mvdan-sh/AGENTS.md`](/Users/ewhauser/.codex/worktrees/694a/gbash/third_party/mvdan-sh/AGENTS.md). Do not edit mirrored fork sources directly; update or add patch files and rerun `./scripts/update_mvdan_sh.sh`.
+
 ## Skills
 - **command** — Guide for adding or modifying built-in commands. Located at `.agents/skills/command/`.
 - **implement-coreutils-command** — Port a command from uutils/coreutils Rust repo into Go. Located at `.agents/skills/implement-coreutils-command/`.

@@ -9,7 +9,7 @@ Last updated: 2026-03-14
 
 It preserves the product idea behind Vercel's `just-bash` while making different implementation choices:
 
-- shell parsing and evaluation are delegated to `mvdan/sh/v3`
+- shell parsing and evaluation are delegated to a small local fork of `mvdan/sh/v3` under `third_party/mvdan-sh`
 - filesystem access is virtualized by default
 - commands are implemented in Go and resolved through an explicit registry
 - unknown commands never fall through to the host OS
@@ -42,7 +42,7 @@ The runtime is optimized for LLM and agent workloads:
 ## 3. Goals
 
 1. Port the `just-bash` concept to a Go-native runtime named `gbash`.
-2. Use `mvdan/sh/v3` for parsing, ASTs, expansion semantics, control flow, and interpreter behavior where feasible.
+2. Use the tracked `third_party/mvdan-sh` fork of `mvdan/sh/v3` for parsing, ASTs, expansion semantics, control flow, and interpreter behavior where feasible.
 3. Support only sandbox mode.
 4. Use explicit Go command implementations instead of host subprocesses.
 5. Default to an in-memory or otherwise virtualized filesystem.
@@ -69,11 +69,13 @@ There is no runtime mode where command execution falls back to `exec.Command`, `
 
 ### 5.2 `mvdan/sh` owns shell semantics
 
-We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch. Those responsibilities stay in `mvdan/sh/v3`.
+We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch. Those responsibilities stay in a small tracked fork of `mvdan/sh/v3` under `third_party/mvdan-sh`.
 
-The shell adapter may pre-validate parsed AST forms that are known to trigger `mvdan/sh` interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
+That fork is maintained as upstream source plus an ordered local patch stack. Upstream refreshes must run `./scripts/update_mvdan_sh.sh`, which mirrors the pinned upstream ref and reapplies `third_party/mvdan-sh/patches/*.patch`.
 
-The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in explicit subshells so parent-shell state matches Bash's default `lastpipe=off` behavior.
+The shell adapter may pre-validate parsed AST forms that are known to trigger the interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
+
+The shell adapter may also apply small AST normalizations before execution when interpreter behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in explicit subshells so parent-shell state matches Bash's default `lastpipe=off` behavior.
 
 ### 5.3 Project-owned boundaries
 
@@ -98,7 +100,7 @@ Every major subsystem should have a narrow interface. Callers should be able to 
 
 The runtime is composed of five layers:
 
-1. `syntax` parser layer from `mvdan/sh/v3`
+1. `syntax` parser layer from `third_party/mvdan-sh`
 2. shell execution adapter around `interp.Runner`
 3. sandboxed project-owned filesystem abstraction
 4. Go command registry
@@ -430,11 +432,11 @@ Key design decisions:
 - orchestration-style commands such as `xargs`, `find -exec`, and shell-wrapper helpers should use `Invocation.Exec`
 - policy is an explicit interface so embedders can swap simple allowlists for richer policy engines later
 
-## 9. `mvdan/sh/v3` Integration Plan
+## 9. `mvdan/sh` Integration Plan
 
 ### 9.1 Parser
 
-Use `syntax.NewParser()` to parse the script into a `*syntax.File`.
+Use `github.com/ewhauser/gbash/third_party/mvdan-sh/syntax.NewParser()` to parse the script into a `*syntax.File`.
 
 We keep parsing separate from execution so we can:
 
@@ -468,8 +470,8 @@ Implementation detail for MVP:
 - the runtime prepends a shell shim that initializes `PWD` and `OLDPWD`
 - the shim owns virtual `cd`, `pushd`, `popd`, and `dirs`, and it keeps a shell-local directory stack aligned with virtual `PWD`
 - the shim wraps shell-visible `pwd` to the Go `pwd` command so `-L` / `-P` still honor virtual `PWD`
-- raw user scripts normalize bare command-position `let` to a same-width internal helper alias before parse so bash-valid runtime-expanded arithmetic forms still parse and mutate the current shell state
-- prebuilt AST programs still rewrite `let` clauses through the internal helper so quoted and runtime-expanded arithmetic expressions keep the same shell-state mutation behavior when callers bypass raw-script parsing
+- gbash carries a targeted local parser/interpreter patch stack in `third_party/mvdan-sh/patches/`
+- Bash-style `let` compatibility lives in that fork, not in gbash-side preparsing or AST rewriting
 - all project path handlers resolve relative paths from virtual `PWD`, not from `HandlerContext.Dir`
 
 ### 9.3 Stdio

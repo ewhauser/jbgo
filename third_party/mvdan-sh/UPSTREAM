@@ -1,0 +1,4 @@
+# Managed by ./scripts/update_mvdan_sh.sh
+UPSTREAM_REPO=https://github.com/mvdan/sh.git
+UPSTREAM_REF=v3.13.0
+UPSTREAM_COMMIT=5c4d285c3e8fa3b85137b34cec5ce66b98d97bdc

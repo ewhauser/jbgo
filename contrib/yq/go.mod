@@ -38,7 +38,6 @@ require (
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
-	mvdan.cc/sh/v3 v3.13.0 // indirect
 )
 
 replace github.com/ewhauser/gbash => ../..

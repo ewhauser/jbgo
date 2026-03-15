@@ -1,0 +1,79 @@
+diff --git a/interp/builtin.go b/interp/builtin.go
+index 1cc628c..d7f2142 100644
+--- a/interp/builtin.go
++++ b/interp/builtin.go
+@@ -95,7 +95,7 @@ func IsBuiltin(name string) bool {
+ 		"enable",
+ 		"history",
+ 		"help",
+-		"let", // NOTE: our parser treats this as a keyword
++		"let",
+ 		"local",
+ 		"logout",
+ 		"mapfile",
+@@ -449,6 +449,11 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args
+ 		}
+ 		r.stmts(ctx, file.Stmts)
+ 		exit = r.exit
++	case "let":
++		if len(args) == 0 {
++			return failf(2, "let: expression expected\n")
++		}
++		exit = r.builtin(ctx, pos, "eval", []string{buildLetEvalScript(args)})
+ 	case "source", ".":
+ 		if len(args) < 1 {
+ 			return failf(2, "%v: source: need filename\n", pos)
+@@ -1168,6 +1173,53 @@ func (p *flagParser) value() string {
+ 
+ func (p *flagParser) args() []string { return p.remaining }
+ 
++func buildLetEvalScript(args []string) string {
++	expressions := parseLetArgs(args)
++	if len(expressions) == 0 {
++		return ""
++	}
++
++	var script strings.Builder
++	for i, expr := range expressions {
++		if i > 0 {
++			script.WriteString("; ")
++		}
++		script.WriteString("(( ")
++		script.WriteString(expr)
++		script.WriteString(" ))")
++	}
++	return script.String()
++}
++
++func parseLetArgs(args []string) []string {
++	expressions := make([]string, 0, len(args))
++	var current strings.Builder
++	parenDepth := 0
++
++	for _, arg := range args {
++		for _, ch := range arg {
++			switch ch {
++			case '(':
++				parenDepth++
++			case ')':
++				parenDepth--
++			}
++		}
++		if current.Len() > 0 {
++			current.WriteByte(' ')
++		}
++		current.WriteString(arg)
++		if parenDepth == 0 {
++			expressions = append(expressions, current.String())
++			current.Reset()
++		}
++	}
++	if current.Len() > 0 {
++		expressions = append(expressions, current.String())
++	}
++	return expressions
++}
++
+ type getopts struct {
+ 	argidx  int
+ 	runeidx int
