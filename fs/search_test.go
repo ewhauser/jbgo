@@ -224,6 +224,28 @@ func TestSearchableFSIndexesNewLinks(t *testing.T) {
 	}
 }
 
+func TestSearchableFSTracksDanglingSymlinkUntilTargetExists(t *testing.T) {
+	fsys, err := NewSearchableFileSystem(context.Background(), NewMemory(), nil)
+	if err != nil {
+		t.Fatalf("NewSearchableFileSystem() error = %v", err)
+	}
+	provider := mustSearchProvider(t, fsys, "/")
+
+	if err := fsys.MkdirAll(context.Background(), "/docs", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/docs) error = %v", err)
+	}
+	if err := fsys.Symlink(context.Background(), "future.txt", "/docs/link.txt"); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+	assertSearchPaths(t, provider, &SearchQuery{Root: "/docs", Literal: "needle"}, nil)
+
+	writeSearchFile(t, fsys, "/docs/future.txt", "needle later\n")
+	assertSearchPaths(t, provider, &SearchQuery{Root: "/docs", Literal: "needle"}, []string{
+		"/docs/future.txt",
+		"/docs/link.txt",
+	})
+}
+
 func TestSearchableFSOpenFileTracksCreateWithoutWrite(t *testing.T) {
 	fsys, err := NewSearchableFileSystem(context.Background(), NewMemory(), nil)
 	if err != nil {

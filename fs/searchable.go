@@ -488,29 +488,42 @@ func (s *searchableFS) refreshTrackedSymlink(ctx context.Context, name string) e
 		s.removeTrackedSymlink(abs)
 		return nil
 	}
+	targetHint, err := s.readTrackedSymlinkTarget(ctx, abs)
+	if err != nil {
+		s.removeTrackedSymlink(abs)
+		return err
+	}
 
 	info, err := s.inner.Stat(ctx, abs)
 	switch {
 	case errors.Is(err, stdfs.ErrNotExist), errors.Is(err, stdfs.ErrInvalid):
-		s.removeTrackedSymlink(abs)
+		s.setTrackedSymlink(abs, targetHint)
 		return nil
 	case err != nil:
 		return err
 	case info.IsDir():
-		s.removeTrackedSymlink(abs)
+		s.setTrackedSymlink(abs, targetHint)
 		return nil
 	}
 
 	target, err := s.inner.Realpath(ctx, abs)
 	switch {
 	case errors.Is(err, stdfs.ErrNotExist), errors.Is(err, stdfs.ErrInvalid):
-		s.removeTrackedSymlink(abs)
+		s.setTrackedSymlink(abs, targetHint)
 		return nil
 	case err != nil:
 		return err
 	}
 	s.setTrackedSymlink(abs, target)
 	return nil
+}
+
+func (s *searchableFS) readTrackedSymlinkTarget(ctx context.Context, abs string) (string, error) {
+	target, err := s.inner.Readlink(ctx, abs)
+	if err != nil {
+		return "", err
+	}
+	return Resolve(parentDir(abs), target), nil
 }
 
 func (s *searchableFS) recordHardLink(oldPath, newPath string) {
