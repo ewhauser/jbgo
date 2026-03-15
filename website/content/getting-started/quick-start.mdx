@@ -80,4 +80,4 @@ You can also force interactive mode explicitly:
 printf 'pwd\ncd /tmp\npwd\nexit\n' | gbash -i
 ```
 
-The interactive shell reuses one sandbox session and carries forward filesystem and environment state across commands. It does not provide history, line editing, or job control.
+The interactive shell reuses one sandbox session and carries forward filesystem and environment state across commands. It exposes a session-local `history` command, but it does not provide readline-style line editing or job control.

@@ -233,3 +233,21 @@ wc file.txt
 wc -l file.txt                              # line count only
 wc -w file.txt                              # word count only
 ```
+
+## xan
+
+CSV toolkit for row, column, aggregation, reshape, and conversion operations.
+
+```bash
+xan headers data.csv
+xan count data.csv
+xan select 'name,email' data.csv
+xan select 'vec_*' data.csv                # glob column selection
+xan filter 'age > 30' data.csv             # expression filtering
+xan groupby region 'sum(amount) as total'  # grouped aggregation
+xan explode tags data.csv                  # reshape rows
+xan join id left.csv user_id right.csv     # multi-file join
+xan to json data.csv                       # CSV -> JSON
+xan slice -s 1 -e 3 data.csv               # row slicing
+xan flatten -l 2 data.csv                  # vertical record view
+```
