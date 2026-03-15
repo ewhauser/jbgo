@@ -241,7 +241,7 @@ func TestSessionInteractUsesPipelineSubshellSemantics(t *testing.T) {
 	}
 }
 
-func TestSessionInteractNormalizesLetBeforeParseAndKeepsRawHistory(t *testing.T) {
+func TestSessionInteractSupportsLetAndKeepsRawHistory(t *testing.T) {
 	session := newSession(t, &Config{})
 
 	var stdout strings.Builder

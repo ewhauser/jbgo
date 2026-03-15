@@ -1,0 +1,24 @@
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 51cbdc8..9c60d41 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -2154,10 +2154,6 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+ 				p.curErr(`%#q can only be used to close a test`, dblRightBrack)
+ 			}
+-		case "let":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+-				p.letClause(s)
+-			}
+ 		case "function":
+ 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+ 				p.bashFuncDecl(s)
+@@ -2707,7 +2703,7 @@ func isBashCompoundCommand(tok token, val string) bool {
+ 	case _LitWord:
+ 		switch val {
+ 		case "{", "if", "while", "until", "for", "case", "[[",
+-			"coproc", "let", "function", "declare", "local",
++			"coproc", "function", "declare", "local",
+ 			"export", "readonly", "typeset", "nameref":
+ 			return true
+ 		}

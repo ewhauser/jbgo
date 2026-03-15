@@ -2,7 +2,7 @@
 
 package shell
 
-import "mvdan.cc/sh/v3/interp"
+import "github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
 
 func runnerDirOption(dir string) interp.RunnerOption {
 	return func(r *interp.Runner) error {

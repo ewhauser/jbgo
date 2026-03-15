@@ -132,6 +132,93 @@ func TestLetRegressionSupportsExpandedAssignmentTargetExpression(t *testing.T) {
 	}
 }
 
+func TestLetRegressionAllowsFunctionShadowingForBareLet(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"a=1\n"+
+		"function let { a=99; echo function; }\n"+
+		"let a+=1\n"+
+		"printf '%s\\n' \"$a\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "function\n99\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLetRegressionSupportsCommandAndBuiltinForms(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"a=1\n"+
+		"function let { a=99; echo function; }\n"+
+		"command let a+=1\n"+
+		"builtin let a+=1\n"+
+		"printf '%s\\n' \"$a\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "3\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLetRegressionSupportsSourceAndEval(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/let.sh", []byte("let $a+=1\n"))
+
+	result := mustExecSession(t, session, ""+
+		"a=b\n"+
+		"b=3\n"+
+		"source /home/agent/let.sh\n"+
+		"eval 'let ${a}+=1'\n"+
+		"printf '%s\\n' \"$b\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "5\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLetRegressionSupportsTrapCallbacks(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"a=b\n"+
+		"b=3\n"+
+		"trap 'let ++$a; printf \"trap:%s\\\\n\" \"$b\"' EXIT\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "trap:4\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLetRegressionLeavesLiteralContextsUntouched(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"case let in\n"+
+		"  let) echo case-ok ;;\n"+
+		"  *) echo case-bad ;;\n"+
+		"esac\n"+
+		"if ((let=5, let<6)); then echo arith-ok; fi\n"+
+		"cat <<'EOF'\n"+
+		"let $a+=1\n"+
+		"EOF\n"+
+		"printf '%s\\n' \"$(printf 'let $a+=1')\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "case-ok\narith-ok\nlet $a+=1\nlet $a+=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestArithmeticRegressionDoesNotRewriteLetIdentifiersInsideArithmeticCommands(t *testing.T) {
 	session := newSession(t, &Config{})
 

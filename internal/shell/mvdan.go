@@ -21,10 +21,10 @@ import (
 	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/expand"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 	"github.com/ewhauser/gbash/trace"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 type Engine interface {
@@ -84,11 +84,6 @@ type MVdan struct {
 
 const hostRunnerDir = "/"
 
-const (
-	letHelperCommandName  = "__jb_let"
-	letHelperCommandAlias = "__l"
-)
-
 var internalHelperCommands = map[string]struct{}{
 	"__jb_activate_new_top":  {},
 	"__jb_cd_resolve":        {},
@@ -99,8 +94,6 @@ var internalHelperCommands = map[string]struct{}{
 	"__jb_stack_parse_index": {},
 	"__jb_stack_remove":      {},
 	"__jb_stack_rotate":      {},
-	letHelperCommandAlias:    {},
-	letHelperCommandName:     {},
 	loopIterCommandName:      {},
 }
 
@@ -115,7 +108,7 @@ func (m *MVdan) Parse(name, script string) (*syntax.File, error) {
 }
 
 func (m *MVdan) parseUserProgram(name, script string) (*syntax.File, error) {
-	return m.Parse(name, prependRuntimePreludeLines(normalizeLetCommands(script)))
+	return m.Parse(name, prependRuntimePreludeLines(script))
 }
 
 func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
@@ -401,9 +394,6 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		}
 		if args[0] == loopIterCommandName {
 			return budget.beforeLoopIteration(ctx, args[1:])
-		}
-		if args[0] == letHelperCommandName || args[0] == letHelperCommandAlias {
-			return execLetHelper(ctx, args[1:])
 		}
 
 		hc := interp.HandlerCtx(ctx)
@@ -1560,62 +1550,6 @@ func prependRuntimePreludeLines(script string) string {
 func isInternalHelperCommand(name string) bool {
 	_, ok := internalHelperCommands[name]
 	return ok
-}
-
-func execLetHelper(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return shellFailure(ctx, 2, "let: expression expected")
-	}
-
-	hc := interp.HandlerCtx(ctx)
-	return hc.Builtin(ctx, []string{"eval", buildLetEvalScript(args)})
-}
-
-func buildLetEvalScript(args []string) string {
-	expressions := parseLetArgs(args)
-	if len(expressions) == 0 {
-		return ""
-	}
-
-	var script strings.Builder
-	for i, expr := range expressions {
-		if i > 0 {
-			script.WriteString("; ")
-		}
-		script.WriteString("(( ")
-		script.WriteString(expr)
-		script.WriteString(" ))")
-	}
-	return script.String()
-}
-
-func parseLetArgs(args []string) []string {
-	expressions := make([]string, 0, len(args))
-	var current strings.Builder
-	parenDepth := 0
-
-	for _, arg := range args {
-		for _, ch := range arg {
-			switch ch {
-			case '(':
-				parenDepth++
-			case ')':
-				parenDepth--
-			}
-		}
-		if current.Len() > 0 {
-			current.WriteByte(' ')
-		}
-		current.WriteString(arg)
-		if parenDepth == 0 {
-			expressions = append(expressions, current.String())
-			current.Reset()
-		}
-	}
-	if current.Len() > 0 {
-		expressions = append(expressions, current.String())
-	}
-	return expressions
 }
 
 var _ Engine = (*MVdan)(nil)
