@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-15T18:53:54Z",
+  "generated_at": "2026-03-15T19:16:45Z",
   "runs": 50,
   "just_bash_spec": "just-bash@2.13.0",
   "scenarios": [
@@ -16,9 +16,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 5117042,
-            "median_nanos": 5777312,
-            "p95_nanos": 6369542
+            "min_nanos": 4835250,
+            "median_nanos": 5260667,
+            "p95_nanos": 7520417
           }
         },
         {
@@ -27,9 +27,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 4215416,
-            "median_nanos": 4707000,
-            "p95_nanos": 5824875
+            "min_nanos": 4046250,
+            "median_nanos": 4807750,
+            "p95_nanos": 6075084
           }
         },
         {
@@ -38,9 +38,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 7358459,
-            "median_nanos": 7961500,
-            "p95_nanos": 9859459
+            "min_nanos": 7805958,
+            "median_nanos": 8668479,
+            "p95_nanos": 13174250
           }
         },
         {
@@ -49,9 +49,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 115784500,
-            "median_nanos": 119071063,
-            "p95_nanos": 122000709
+            "min_nanos": 109981625,
+            "median_nanos": 120496396,
+            "p95_nanos": 154232791
           }
         },
         {
@@ -60,9 +60,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 568363041,
-            "median_nanos": 580078958,
-            "p95_nanos": 601910833
+            "min_nanos": 708195833,
+            "median_nanos": 778432229,
+            "p95_nanos": 991723708
           }
         }
       ]
@@ -74,7 +74,7 @@
       "expected_stdout": "300\n",
       "workspace": true,
       "fixture": {
-        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-1050301983/workspace",
+        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-2785555721/workspace",
         "file_count": 300,
         "total_bytes": 17100
       },
@@ -85,9 +85,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 12912208,
-            "median_nanos": 13721708,
-            "p95_nanos": 14612000
+            "min_nanos": 12239125,
+            "median_nanos": 12763333,
+            "p95_nanos": 13749834
           }
         },
         {
@@ -96,9 +96,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 11466917,
-            "median_nanos": 12388104,
-            "p95_nanos": 13808625
+            "min_nanos": 10883500,
+            "median_nanos": 12067229,
+            "p95_nanos": 13250792
           }
         },
         {
@@ -107,9 +107,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 15582083,
-            "median_nanos": 15993729,
-            "p95_nanos": 16849875
+            "min_nanos": 15031834,
+            "median_nanos": 15478729,
+            "p95_nanos": 16010583
           }
         },
         {
@@ -118,9 +118,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 159612292,
-            "median_nanos": 163319084,
-            "p95_nanos": 166725792
+            "min_nanos": 157927292,
+            "median_nanos": 162878979,
+            "p95_nanos": 165555250
           }
         },
         {
@@ -129,9 +129,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 581240833,
-            "median_nanos": 598938375,
-            "p95_nanos": 620642500
+            "min_nanos": 772378375,
+            "median_nanos": 816039000,
+            "p95_nanos": 950929042
           }
         }
       ]
@@ -143,7 +143,7 @@
       "expected_stdout": "files=300\nmatches=60\nbad_jobs=24\ntier1=8\n",
       "workspace": true,
       "fixture": {
-        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-1050301983/agentic-search-workspace",
+        "root": "/var/folders/9p/g5cvvwmj6253tvhh89thzjxh0000gp/T/gbash-bench-compare-2785555721/agentic-search-workspace",
         "file_count": 300,
         "total_bytes": 20694
       },
@@ -162,9 +162,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 30921291,
-            "median_nanos": 32038042,
-            "p95_nanos": 33869167
+            "min_nanos": 29259250,
+            "median_nanos": 32950729,
+            "p95_nanos": 37480084
           }
         },
         {
@@ -173,9 +173,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 57128125,
-            "median_nanos": 58221750,
-            "p95_nanos": 60660833
+            "min_nanos": 53930291,
+            "median_nanos": 54621041,
+            "p95_nanos": 55946583
           }
         },
         {
@@ -192,9 +192,9 @@
           "success_count": 50,
           "failure_count": 0,
           "stats": {
-            "min_nanos": 623880542,
-            "median_nanos": 640694895,
-            "p95_nanos": 669920791
+            "min_nanos": 761114084,
+            "median_nanos": 799887625,
+            "p95_nanos": 1042205959
           }
         }
       ]
