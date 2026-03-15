@@ -100,6 +100,111 @@ linters:
           deny:
             - pkg: golang.org/x/sys/unix$
               desc: Do not access host kernel APIs directly from commands.
+        broad_host_packages:
+          files:
+            - "*.go"
+            - commands/**/*.go
+            - internal/**/*.go
+            - trace/**/*.go
+            - policy/**/*.go
+            - network/**/*.go
+            - "!**/*_test.go"
+          deny:
+            - pkg: os/exec$
+              desc: Use inv.Exec or executeCommand so subprocess policy is enforced.
+            - pkg: path/filepath$
+              desc: Use gbfs/path helpers and inv.FS so sandbox path policy is enforced.
+            - pkg: os/user$
+              desc: Use invocation-provided identity instead of host user lookups.
+            - pkg: os/signal$
+              desc: Do not mutate process-wide signal handlers from commands.
+            - pkg: plugin$
+              desc: Do not load host plugins from commands.
+            - pkg: crypto/tls$
+              desc: Use inv.Fetch instead of direct host TLS clients or listeners.
+            - pkg: unsafe$
+              desc: Do not use unsafe in sandbox code.
+            - pkg: runtime/cgo$
+              desc: Do not use CGO FFI in sandbox code.
+            - pkg: ^log$
+              desc: Use invocation-provided writers instead of host log sinks.
+        broad_syscall:
+          files:
+            - "*.go"
+            - commands/**/*.go
+            - internal/**/*.go
+            - trace/**/*.go
+            - policy/**/*.go
+            - network/**/*.go
+            - "!**/*_test.go"
+            - "!internal/builtins/basenc.go"
+            - "!internal/builtins/basenc_formats.go"
+            - "!internal/builtins/readlink.go"
+            - "!internal/builtins/realpath.go"
+            - "!internal/builtins/rmdir.go"
+            - "!internal/builtins/tee.go"
+            - "!internal/builtins/truncate.go"
+            - "!internal/builtins/unlink.go"
+            - "!internal/builtins/yes.go"
+          deny:
+            - pkg: syscall$
+              desc: Do not access host syscalls directly from commands.
+        broad_unix:
+          files:
+            - "*.go"
+            - commands/**/*.go
+            - internal/**/*.go
+            - trace/**/*.go
+            - policy/**/*.go
+            - network/**/*.go
+            - "!**/*_test.go"
+            - "!internal/builtins/cat_appendmode_unix.go"
+            - "!internal/runtime/arch_default_unix.go"
+          deny:
+            - pkg: golang.org/x/sys/unix$
+              desc: Do not access host kernel APIs directly from commands.
+        broad_term:
+          files:
+            - "*.go"
+            - commands/**/*.go
+            - internal/**/*.go
+            - trace/**/*.go
+            - policy/**/*.go
+            - network/**/*.go
+            - "!**/*_test.go"
+            - "!internal/builtins/ls.go"
+            - "!internal/builtins/test.go"
+          deny:
+            - pkg: golang.org/x/term$
+              desc: Use reviewed helpers for terminal detection instead of raw file descriptor probes.
+        broad_net:
+          files:
+            - "*.go"
+            - commands/**/*.go
+            - internal/**/*.go
+            - trace/**/*.go
+            - policy/**/*.go
+            - network/**/*.go
+            - "!**/*_test.go"
+            - "!network/network.go"
+          deny:
+            - pkg: net$
+              desc: Use invocation network capabilities instead of direct host networking.
+        broad_net_http:
+          files:
+            - "*.go"
+            - commands/**/*.go
+            - internal/**/*.go
+            - trace/**/*.go
+            - policy/**/*.go
+            - network/**/*.go
+            - "!**/*_test.go"
+            - "!internal/builtins/curl.go"
+            - "!internal/builtins/file.go"
+            - "!network/network.go"
+          deny:
+            - pkg: net/http
+              desc: Use inv.Fetch for network access; keep pure HTTP helpers behind reviewed wrappers.
 
     forbidigo:
       analyze-types: true
@@ -135,21 +240,26 @@ linters:
           msg: Use commands.ReadAll, commands.ReadAllStdin, or inv.FS.ReadFile so MaxFileBytes is enforced.
         - pattern: '^os\.(FindProcess|Geteuid|Getegid|Getuid|Getgid|Getpid|Getppid)$'
           msg: Use invocation-provided identity or process state instead of host process state.
+        - pattern: '^os\.(Stdout|Stderr|Stdin)$'
+          msg: Use invocation-provided writers (inv.Stdout/inv.Stderr/inv.Stdin) instead of host stdio.
+        - pattern: '^fmt\.(Print|Println|Printf)$'
+          pkg: '^fmt$'
+          msg: Use fmt.Fprint with inv.Stdout/inv.Stderr instead of writing to host stdout.
 
   exclusions:
     paths:
       - ^third_party/mvdan-sh/
     rules:
-      - path-except: ^internal/builtins/
+      - path-except: ^(commands|internal/|trace/|policy/|network/|contrib/)/|^[^/]+\.go$
         linters:
           - depguard
-      - path-except: ^(commands|internal/builtins)/
+      - path-except: ^(commands|internal/|trace/|policy/|network/|contrib/)/|^[^/]+\.go$
         linters:
           - forbidigo
-      - path: ^internal/builtins/.*_test\.go$
+      - path: ^(commands|internal/|trace/|policy/|network/|contrib/)/.*_test\.go$|^[^/]+_test\.go$
         linters:
           - depguard
-      - path: ^(commands|internal/builtins)/.*_test\.go$
+      - path: ^(commands|internal/|trace/|policy/|network/|contrib/)/.*_test\.go$|^[^/]+_test\.go$
         linters:
           - forbidigo
       - path: ^commands/invocation_capabilities\.go$
@@ -158,6 +268,10 @@ linters:
           - forbidigo
       - path: ^commands/read\.go$
         text: "use of `io\\.ReadAll` forbidden because \"Use commands\\.ReadAll, commands\\.ReadAllStdin, or inv\\.FS\\.ReadFile so MaxFileBytes is enforced\\.\""
+        linters:
+          - forbidigo
+      - path: ^internal/runtime/arch_default_unix\.go$
+        text: "use of `unix\\.Uname` forbidden"
         linters:
           - forbidigo
 
