@@ -20,16 +20,26 @@ func (c *CDResolve) Name() string {
 }
 
 func (c *CDResolve) Run(ctx context.Context, inv *Invocation) error {
-	if len(inv.Args) != 2 {
-		return exitf(inv, 2, "%s: usage: %s <cwd> <target>", c.Name(), c.Name())
+	if len(inv.Args) != 2 && len(inv.Args) != 3 {
+		return exitf(inv, 2, "%s: usage: %s <cwd> <target> [command]", c.Name(), c.Name())
 	}
 
+	commandName := "cd"
+	if len(inv.Args) == 3 && inv.Args[2] != "" {
+		commandName = inv.Args[2]
+	}
 	next := gbfs.Resolve(inv.Args[0], inv.Args[1])
 	info, _, err := statPath(ctx, inv, next)
 	if err != nil {
+		if commandName != "cd" {
+			return exitf(inv, 1, "%s: %s: No such file or directory", commandName, inv.Args[1])
+		}
 		return exitf(inv, 1, "cd: no such file or directory: %q", inv.Args[1])
 	}
 	if !info.IsDir() {
+		if commandName != "cd" {
+			return exitf(inv, 1, "%s: %s: Not a directory", commandName, inv.Args[1])
+		}
 		return exitf(inv, 1, "cd: not a directory: %q", inv.Args[1])
 	}
 

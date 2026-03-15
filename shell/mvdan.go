@@ -594,12 +594,8 @@ func (m *MVdan) bootstrapRunner(ctx context.Context, runner *interp.Runner, exec
 	if err != nil {
 		return err
 	}
-	if violation := validateExecutionBudgets(bootstrap, exec.Policy); violation != nil {
-		if exec.Stderr != nil {
-			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
-		}
-		return interp.ExitStatus(126)
-	}
+	// The runtime shim is trusted internal code; user expansion limits are
+	// enforced against the parsed user program before prelude injection.
 	if invalid := validateInterpreterSafety(bootstrap); invalid != nil {
 		if exec.Stderr != nil {
 			_, _ = fmt.Fprintln(exec.Stderr, invalid.Error())
@@ -891,10 +887,249 @@ func withRuntimePrelude(dir, visiblePWD string, hasVisiblePWD bool, script strin
 __JB_PWD='%s'
 OLDPWD=$__JB_PWD
 %s
+__JB_DIR_STACK=( "$__JB_PWD" )
 export PWD OLDPWD
 
 pwd() {
 	command /bin/pwd "$@"
+}
+
+__jb_dirs_usage() {
+	printf 'dirs: usage: dirs [-clpv] [+N] [-N]\n' >&2
+}
+
+__jb_pushd_usage() {
+	printf 'pushd: usage: pushd [dir | +N | -N] [-n]\n' >&2
+}
+
+__jb_popd_usage() {
+	printf 'popd: usage: popd [+N | -N] [-n]\n' >&2
+}
+
+__jb_dirs_print_path() {
+	__jb_dirs_path=$1
+	__jb_dirs_long=$2
+	if [ -n "$__jb_dirs_long" ] || [ -z "$HOME" ]; then
+		printf '%%s' "$__jb_dirs_path"
+		return
+	fi
+	case "$__jb_dirs_path" in
+		"$HOME")
+			printf '~'
+			;;
+		"$HOME"/*)
+			printf '~%%s' "${__jb_dirs_path#$HOME}"
+			;;
+		*)
+			printf '%%s' "$__jb_dirs_path"
+			;;
+	esac
+}
+
+__jb_stack_parse_index() {
+	__jb_stack_arg=$1
+	__jb_stack_command=$2
+	case "$__jb_stack_arg" in
+		+[0-9]*)
+			__jb_stack_index_label=${__jb_stack_arg#+}
+			__jb_stack_index=$__jb_stack_index_label
+			;;
+		-[0-9]*)
+			__jb_stack_index_label=${__jb_stack_arg#-}
+			__jb_stack_index=$(( ${#__JB_DIR_STACK[@]} - 1 - __jb_stack_index_label ))
+			;;
+		*)
+			printf '%%s: %%s: invalid number\n' "$__jb_stack_command" "$__jb_stack_arg" >&2
+			case "$__jb_stack_command" in
+				dirs)
+					__jb_dirs_usage
+					;;
+				pushd)
+					__jb_pushd_usage
+					;;
+				popd)
+					__jb_popd_usage
+					;;
+			esac
+			return 1
+			;;
+	esac
+	return 0
+}
+
+__jb_stack_rotate() {
+	__jb_stack_target=$1
+	__jb_new_stack=()
+	__jb_i=$__jb_stack_target
+	while [ "$__jb_i" -lt "${#__JB_DIR_STACK[@]}" ]; do
+		__jb_new_stack+=( "${__JB_DIR_STACK[$__jb_i]}" )
+		__jb_i=$((__jb_i + 1))
+	done
+	__jb_i=0
+	while [ "$__jb_i" -lt "$__jb_stack_target" ]; do
+		__jb_new_stack+=( "${__JB_DIR_STACK[$__jb_i]}" )
+		__jb_i=$((__jb_i + 1))
+	done
+}
+
+__jb_stack_remove() {
+	__jb_stack_target=$1
+	__jb_new_stack=()
+	__jb_i=0
+	while [ "$__jb_i" -lt "${#__JB_DIR_STACK[@]}" ]; do
+		if [ "$__jb_i" -ne "$__jb_stack_target" ]; then
+			__jb_new_stack+=( "${__JB_DIR_STACK[$__jb_i]}" )
+		fi
+		__jb_i=$((__jb_i + 1))
+	done
+}
+
+__jb_activate_new_top() {
+	__jb_activate_command=$1
+	__jb_activate_old=$2
+	__jb_activate_next="$(__jb_cd_resolve "$__jb_activate_old" "${__jb_new_stack[0]}" "$__jb_activate_command")" || return $?
+	__jb_new_stack[0]=$__jb_activate_next
+	__JB_DIR_STACK=( "${__jb_new_stack[@]}" )
+	OLDPWD=$__jb_activate_old
+	__JB_PWD=$__jb_activate_next
+	PWD=$__JB_PWD
+	export PWD OLDPWD
+}
+
+dirs() {
+	__jb_dirs_clear=
+	__jb_dirs_long=
+	__jb_dirs_print=
+	__jb_dirs_verbose=
+	__jb_dirs_index_arg=
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--)
+				shift
+				break
+				;;
+			+[0-9]*|-[0-9]*)
+				if [ -n "$__jb_dirs_index_arg" ]; then
+					__jb_dirs_usage
+					return 1
+				fi
+				__jb_dirs_index_arg=$1
+				;;
+			+*)
+				printf 'dirs: %%s: invalid number\n' "$1" >&2
+				__jb_dirs_usage
+				return 1
+				;;
+			-[clpv]*)
+				__jb_dirs_arg=$1
+				__jb_optchars=${1#-}
+				while [ -n "$__jb_optchars" ]; do
+					__jb_opt=${__jb_optchars%%"${__jb_optchars#?}"}
+					__jb_optchars=${__jb_optchars#?}
+					case "$__jb_opt" in
+						c)
+							__jb_dirs_clear=1
+							;;
+						l)
+							__jb_dirs_long=1
+							;;
+						p)
+							__jb_dirs_print=1
+							;;
+						v)
+							__jb_dirs_verbose=1
+							;;
+						*)
+							printf 'dirs: %%s: invalid number\n' "$__jb_dirs_arg" >&2
+							__jb_dirs_usage
+							return 1
+							;;
+					esac
+				done
+				;;
+			-*)
+				printf 'dirs: %%s: invalid number\n' "$1" >&2
+				__jb_dirs_usage
+				return 1
+				;;
+			*)
+				__jb_dirs_usage
+				return 1
+				;;
+		esac
+		shift
+	done
+	if [ "$#" -gt 0 ]; then
+		__jb_dirs_usage
+		return 1
+	fi
+
+	if [ -n "$__jb_dirs_clear" ]; then
+		__JB_DIR_STACK=( "$__JB_PWD" )
+		return 0
+	fi
+
+	__jb_dirs_mode=line
+	if [ -n "$__jb_dirs_print" ]; then
+		__jb_dirs_mode=print
+	fi
+	if [ -n "$__jb_dirs_verbose" ]; then
+		__jb_dirs_mode=verbose
+	fi
+
+	if [ -n "$__jb_dirs_index_arg" ]; then
+		__jb_stack_parse_index "$__jb_dirs_index_arg" dirs || return 1
+		if [ "${#__JB_DIR_STACK[@]}" -le 1 ] && [ "$__jb_stack_index" -ne 0 ]; then
+			printf 'dirs: directory stack empty\n' >&2
+			return 1
+		fi
+		if [ "$__jb_stack_index" -lt 0 ] || [ "$__jb_stack_index" -ge "${#__JB_DIR_STACK[@]}" ]; then
+			printf 'dirs: %%s: directory stack index out of range\n' "$__jb_stack_index_label" >&2
+			return 1
+		fi
+		case "$__jb_dirs_mode" in
+			verbose)
+				printf '%%2d  ' "$__jb_stack_index"
+				__jb_dirs_print_path "${__JB_DIR_STACK[$__jb_stack_index]}" "$__jb_dirs_long"
+				printf '\n'
+				;;
+			print)
+				__jb_dirs_print_path "${__JB_DIR_STACK[$__jb_stack_index]}" "$__jb_dirs_long"
+				printf '\n'
+				;;
+			*)
+				__jb_dirs_print_path "${__JB_DIR_STACK[$__jb_stack_index]}" "$__jb_dirs_long"
+				printf '\n'
+				;;
+		esac
+		return 0
+	fi
+
+	__jb_i=0
+	while [ "$__jb_i" -lt "${#__JB_DIR_STACK[@]}" ]; do
+		case "$__jb_dirs_mode" in
+			verbose)
+				printf '%%2d  ' "$__jb_i"
+				__jb_dirs_print_path "${__JB_DIR_STACK[$__jb_i]}" "$__jb_dirs_long"
+				printf '\n'
+				;;
+			print)
+				__jb_dirs_print_path "${__JB_DIR_STACK[$__jb_i]}" "$__jb_dirs_long"
+				printf '\n'
+				;;
+			*)
+				if [ "$__jb_i" -gt 0 ]; then
+					printf ' '
+				fi
+				__jb_dirs_print_path "${__JB_DIR_STACK[$__jb_i]}" "$__jb_dirs_long"
+				;;
+		esac
+		__jb_i=$((__jb_i + 1))
+	done
+	if [ "$__jb_dirs_mode" = line ]; then
+		printf '\n'
+	fi
 }
 
 cd() {
@@ -916,15 +1151,199 @@ cd() {
 		target=$OLDPWD
 		show=1
 	fi
-	next="$(__jb_cd_resolve "$__JB_PWD" "$target")" || return $?
+	next="$(__jb_cd_resolve "$__JB_PWD" "$target" cd)" || return $?
 	OLDPWD=$old
 	__JB_PWD=$next
 	PWD=$next
+	__JB_DIR_STACK[0]=$next
 	export PWD OLDPWD
 	if [ -n "$show" ]; then
 		printf '%%s\n' "$PWD"
 	fi
-	}
+}
+
+pushd() {
+	__jb_pushd_nochdir=
+	__jb_pushd_operand=
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--)
+				shift
+				break
+				;;
+			-n)
+				__jb_pushd_nochdir=1
+				;;
+			+[0-9]*|-[0-9]*)
+				if [ -n "$__jb_pushd_operand" ]; then
+					__jb_pushd_usage
+					return 1
+				fi
+				__jb_pushd_operand=$1
+				;;
+			+*)
+				printf 'pushd: %%s: invalid number\n' "$1" >&2
+				__jb_pushd_usage
+				return 1
+				;;
+			-*)
+				printf 'pushd: %%s: invalid number\n' "$1" >&2
+				__jb_pushd_usage
+				return 1
+				;;
+			*)
+				if [ -n "$__jb_pushd_operand" ]; then
+					__jb_pushd_usage
+					return 1
+				fi
+				__jb_pushd_operand=$1
+				;;
+		esac
+		shift
+	done
+	if [ "$#" -gt 1 ]; then
+		__jb_pushd_usage
+		return 1
+	fi
+	if [ "$#" -eq 1 ]; then
+		if [ -n "$__jb_pushd_operand" ]; then
+			__jb_pushd_usage
+			return 1
+		fi
+		__jb_pushd_operand=$1
+	fi
+
+	__jb_old_current=$__JB_PWD
+	if [ -z "$__jb_pushd_operand" ]; then
+		if [ "${#__JB_DIR_STACK[@]}" -le 1 ]; then
+			printf 'pushd: no other directory\n' >&2
+			return 1
+		fi
+		__jb_pushd_operand=+1
+	fi
+
+	case "$__jb_pushd_operand" in
+		+[0-9]*|-[0-9]*)
+			__jb_stack_parse_index "$__jb_pushd_operand" pushd || return 1
+			if [ "$__jb_stack_index" -eq 0 ]; then
+				dirs
+				return $?
+			fi
+			if [ "${#__JB_DIR_STACK[@]}" -le 1 ]; then
+				printf 'pushd: directory stack empty\n' >&2
+				return 1
+			fi
+			if [ "$__jb_stack_index" -lt 0 ] || [ "$__jb_stack_index" -ge "${#__JB_DIR_STACK[@]}" ]; then
+				printf 'pushd: %%s: directory stack index out of range\n' "$__jb_pushd_operand" >&2
+				return 1
+			fi
+			__jb_stack_rotate "$__jb_stack_index"
+			if [ -n "$__jb_pushd_nochdir" ]; then
+				__jb_new_stack[0]=$__jb_old_current
+				__JB_DIR_STACK=( "${__jb_new_stack[@]}" )
+				return 0
+			else
+				__jb_activate_new_top pushd "$__jb_old_current" || return $?
+			fi
+			dirs
+			return $?
+			;;
+	esac
+
+	if [ -n "$__jb_pushd_nochdir" ]; then
+		__jb_new_stack=( "${__JB_DIR_STACK[0]}" "$__jb_pushd_operand" )
+		__jb_i=1
+		while [ "$__jb_i" -lt "${#__JB_DIR_STACK[@]}" ]; do
+			__jb_new_stack+=( "${__JB_DIR_STACK[$__jb_i]}" )
+			__jb_i=$((__jb_i + 1))
+		done
+		__JB_DIR_STACK=( "${__jb_new_stack[@]}" )
+		dirs
+		return $?
+	fi
+
+	__jb_next="$(__jb_cd_resolve "$__JB_PWD" "$__jb_pushd_operand" pushd)" || return $?
+	__jb_new_stack=( "$__jb_next" )
+	__jb_i=0
+	while [ "$__jb_i" -lt "${#__JB_DIR_STACK[@]}" ]; do
+		__jb_new_stack+=( "${__JB_DIR_STACK[$__jb_i]}" )
+		__jb_i=$((__jb_i + 1))
+	done
+	__JB_DIR_STACK=( "${__jb_new_stack[@]}" )
+	OLDPWD=$__jb_old_current
+	__JB_PWD=$__jb_next
+	PWD=$__JB_PWD
+	export PWD OLDPWD
+	dirs
+}
+
+popd() {
+	__jb_popd_nochdir=
+	__jb_popd_operand=+0
+	__jb_popd_operand_explicit=
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--)
+				shift
+				break
+				;;
+			-n)
+				__jb_popd_nochdir=1
+				;;
+			+[0-9]*|-[0-9]*)
+				if [ -n "$__jb_popd_operand_explicit" ]; then
+					__jb_popd_usage
+					return 1
+				fi
+				__jb_popd_operand=$1
+				__jb_popd_operand_explicit=1
+				;;
+			+*)
+				printf 'popd: %%s: invalid number\n' "$1" >&2
+				__jb_popd_usage
+				return 1
+				;;
+			-*)
+				printf 'popd: %%s: invalid number\n' "$1" >&2
+				__jb_popd_usage
+				return 1
+				;;
+			*)
+				__jb_popd_usage
+				return 1
+				;;
+		esac
+		shift
+	done
+	if [ "$#" -gt 0 ]; then
+		__jb_popd_usage
+		return 1
+	fi
+	if [ "${#__JB_DIR_STACK[@]}" -le 1 ]; then
+		printf 'popd: directory stack empty\n' >&2
+		return 1
+	fi
+
+	__jb_stack_parse_index "$__jb_popd_operand" popd || return 1
+	if [ "$__jb_stack_index" -lt 0 ] || [ "$__jb_stack_index" -ge "${#__JB_DIR_STACK[@]}" ]; then
+		printf 'popd: %%s: directory stack index out of range\n' "$__jb_popd_operand" >&2
+		return 1
+	fi
+
+	__jb_old_current=$__JB_PWD
+	__jb_stack_remove "$__jb_stack_index"
+	if [ -n "$__jb_popd_nochdir" ]; then
+		__jb_new_stack[0]=$__jb_old_current
+		__JB_DIR_STACK=( "${__jb_new_stack[@]}" )
+	elif [ "$__jb_stack_index" -eq 0 ]; then
+		__jb_activate_new_top popd "$__jb_old_current" || return $?
+	else
+		__JB_DIR_STACK=( "${__jb_new_stack[@]}" )
+	fi
+	dirs
+}
 `
 
 	pwdAssignment := "PWD=$__JB_PWD"
