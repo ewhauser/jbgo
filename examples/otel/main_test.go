@@ -8,6 +8,7 @@ import (
 )
 
 func TestRunEmitsTelemetryForSessionFlow(t *testing.T) {
+	t.Parallel()
 	var telemetry bytes.Buffer
 	var status bytes.Buffer
 

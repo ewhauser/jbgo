@@ -10,6 +10,7 @@ import (
 )
 
 func TestRunRequiresDB(t *testing.T) {
+	t.Parallel()
 	_, err := run(context.Background(), strings.NewReader(""), io.Discard, io.Discard, nil)
 	if err == nil {
 		t.Fatal("run() error = nil, want required db error")
@@ -20,7 +21,9 @@ func TestRunRequiresDB(t *testing.T) {
 }
 
 func TestRunUsesScriptFlagAndStdin(t *testing.T) {
+	t.Parallel()
 	t.Run("script flag", func(t *testing.T) {
+		t.Parallel()
 		dbPath := filepath.Join(t.TempDir(), "flag.db")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
@@ -41,6 +44,7 @@ func TestRunUsesScriptFlagAndStdin(t *testing.T) {
 	})
 
 	t.Run("stdin", func(t *testing.T) {
+		t.Parallel()
 		dbPath := filepath.Join(t.TempDir(), "stdin.db")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
@@ -61,6 +65,7 @@ func TestRunUsesScriptFlagAndStdin(t *testing.T) {
 }
 
 func TestRunREPLPersistsCWDAndEnvAcrossEntries(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "repl.db")
 	input := strings.NewReader("pwd\ncd /tmp\npwd\nexport FOO=bar\necho $FOO\nexit\n")
 	var stdout bytes.Buffer
@@ -93,6 +98,7 @@ func TestRunREPLPersistsCWDAndEnvAcrossEntries(t *testing.T) {
 }
 
 func TestRunREPLSupportsMultilineStatements(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "multiline.db")
 	input := &chunkReader{
 		chunks: []string{
@@ -129,6 +135,7 @@ func TestRunREPLSupportsMultilineStatements(t *testing.T) {
 }
 
 func TestRunREPLHonorsExitStatus(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "exit.db")
 	input := strings.NewReader("echo hi\nexit 7\necho later\n")
 	var stdout bytes.Buffer
@@ -158,6 +165,7 @@ func TestRunREPLHonorsExitStatus(t *testing.T) {
 }
 
 func TestRunRejectsREPLAndScriptTogether(t *testing.T) {
+	t.Parallel()
 	_, err := run(context.Background(), strings.NewReader(""), io.Discard, io.Discard, []string{
 		"--db", filepath.Join(t.TempDir(), "conflict.db"),
 		"--repl",
@@ -172,6 +180,7 @@ func TestRunRejectsREPLAndScriptTogether(t *testing.T) {
 }
 
 func TestRunPropagatesExitCodeAndStderr(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "stderr.db")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

@@ -9,12 +9,14 @@ import (
 )
 
 func TestRegisterNilRegistry(t *testing.T) {
+	t.Parallel()
 	if err := Register(nil); err != nil {
 		t.Fatalf("Register(nil) error = %v", err)
 	}
 }
 
 func TestRegisterAddsContribCommands(t *testing.T) {
+	t.Parallel()
 	registry := FullRegistry()
 
 	for _, name := range []string{"awk", "html-to-markdown", "jq", "sqlite3", "yq"} {
@@ -28,6 +30,7 @@ func TestRegisterAddsContribCommands(t *testing.T) {
 }
 
 func TestRegisterSupportsBundledCommands(t *testing.T) {
+	t.Parallel()
 	rt, err := gbruntime.New(gbruntime.WithRegistry(FullRegistry()))
 	if err != nil {
 		t.Fatalf("runtime.New() error = %v", err)

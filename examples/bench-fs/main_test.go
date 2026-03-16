@@ -12,6 +12,7 @@ import (
 )
 
 func TestBuildBenchmarkFixture(t *testing.T) {
+	t.Parallel()
 	fixture := buildBenchmarkFixture()
 
 	if fixture.Summary.FileCount == 0 {
@@ -35,6 +36,7 @@ func TestBuildBenchmarkFixture(t *testing.T) {
 }
 
 func TestPrepareBenchmarkEnvSeedsSQLiteTemplate(t *testing.T) {
+	t.Parallel()
 	env, err := prepareBenchmarkEnv(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("prepareBenchmarkEnv() error = %v", err)
@@ -71,6 +73,7 @@ func TestPrepareBenchmarkEnvSeedsSQLiteTemplate(t *testing.T) {
 }
 
 func TestWorkloadsPassOnMemoryBackend(t *testing.T) {
+	t.Parallel()
 	fixture := buildBenchmarkFixture()
 	factory := gbfs.SeededMemory(fixture.Files)
 
@@ -90,6 +93,7 @@ func TestWorkloadsPassOnMemoryBackend(t *testing.T) {
 }
 
 func TestFTSUsesIndexedSearch(t *testing.T) {
+	t.Parallel()
 	fixture := buildBenchmarkFixture()
 	factory, cleanup, err := benchmarkBackends()[3].Prepare(context.Background(), &benchmarkEnv{fixture: fixture})
 	if err != nil {
@@ -115,6 +119,7 @@ func TestFTSUsesIndexedSearch(t *testing.T) {
 }
 
 func TestRunMainWritesJSONReport(t *testing.T) {
+	t.Parallel()
 	jsonPath := filepath.Join(t.TempDir(), "filesystem-bench.json")
 	if err := runMain(context.Background(), []string{"--runs", "1", "--json-out", jsonPath}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("runMain() error = %v", err)

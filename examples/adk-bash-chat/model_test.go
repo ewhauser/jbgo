@@ -3,6 +3,7 @@ package main
 import "testing"
 
 func TestResolveBackendAutoPrefersGeminiAPIKey(t *testing.T) {
+	t.Parallel()
 	got, err := resolveBackend(backendAuto, map[string]string{
 		"GOOGLE_API_KEY":        "api-key",
 		"GOOGLE_CLOUD_PROJECT":  "demo-project",
@@ -20,6 +21,7 @@ func TestResolveBackendAutoPrefersGeminiAPIKey(t *testing.T) {
 }
 
 func TestResolveBackendAutoUsesVertexWhenConfigured(t *testing.T) {
+	t.Parallel()
 	got, err := resolveBackend(backendAuto, map[string]string{
 		"GOOGLE_CLOUD_PROJECT":      "demo-project",
 		"GOOGLE_CLOUD_LOCATION":     "us-central1",
@@ -37,6 +39,7 @@ func TestResolveBackendAutoUsesVertexWhenConfigured(t *testing.T) {
 }
 
 func TestResolveBackendExplicitVertexRequiresProjectAndLocation(t *testing.T) {
+	t.Parallel()
 	_, err := resolveBackend(backendVertex, map[string]string{
 		"GOOGLE_CLOUD_PROJECT": "demo-project",
 	})
@@ -46,6 +49,7 @@ func TestResolveBackendExplicitVertexRequiresProjectAndLocation(t *testing.T) {
 }
 
 func TestParseCLIOptionsRejectsUnknownBackend(t *testing.T) {
+	t.Parallel()
 	_, err := parseCLIOptions([]string{"--backend=other"})
 	if err == nil {
 		t.Fatal("parseCLIOptions() error = nil, want error")

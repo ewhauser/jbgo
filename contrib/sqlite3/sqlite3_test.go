@@ -7,6 +7,7 @@ import (
 )
 
 func TestSQLite3SupportsMemoryDatabase(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `sqlite3 :memory: "create table users(id integer, name text); insert into users values (1, 'alice'), (2, null); select id, name from users order by id;"`+"\n")
@@ -20,6 +21,7 @@ func TestSQLite3SupportsMemoryDatabase(t *testing.T) {
 }
 
 func TestSQLite3PersistsSandboxDatabaseFilesAcrossExecs(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	first := mustExecSession(t, session, `sqlite3 /tmp/app.db "create table users(name text); insert into users values ('alice'), ('bob');"`+"\n")
@@ -41,6 +43,7 @@ func TestSQLite3PersistsSandboxDatabaseFilesAcrossExecs(t *testing.T) {
 }
 
 func TestSQLite3ReadsSQLFromStdin(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `printf "create table t(x); insert into t values (7); select x from t;" | sqlite3 :memory:`+"\n")
@@ -54,6 +57,7 @@ func TestSQLite3ReadsSQLFromStdin(t *testing.T) {
 }
 
 func TestSQLite3OutputsJSONAndCSVModes(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	jsonResult := mustExecSession(t, session, `sqlite3 -json :memory: "create table t(id integer, name text); insert into t values (1, 'alice'), (2, null); select id, name from t order by id;"`+"\n")
@@ -74,6 +78,7 @@ func TestSQLite3OutputsJSONAndCSVModes(t *testing.T) {
 }
 
 func TestSQLite3SupportsLineAndTableFormatting(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	lineResult := mustExecSession(t, session, `sqlite3 -line :memory: "create table t(id integer, name text); insert into t values (1, 'alice'); select id, name from t;"`+"\n")
@@ -96,6 +101,7 @@ func TestSQLite3SupportsLineAndTableFormatting(t *testing.T) {
 }
 
 func TestSQLite3SupportsAdditionalOutputModes(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	markdown := mustExecSession(t, session, `sqlite3 -markdown -header :memory: "create table t(a,b); insert into t values (1,'x'); select * from t;"`+"\n")
@@ -150,6 +156,7 @@ func TestSQLite3SupportsAdditionalOutputModes(t *testing.T) {
 }
 
 func TestSQLite3QuoteModeMatchesUpstreamQuotingAndFloatFormatting(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `sqlite3 -quote -header :memory: "select 'O''Reilly' as author, 0.1 as ratio;"`+"\n")
@@ -162,6 +169,7 @@ func TestSQLite3QuoteModeMatchesUpstreamQuotingAndFloatFormatting(t *testing.T) 
 }
 
 func TestSQLite3RunsCmdBeforeMainSQL(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `sqlite3 -cmd "create table t(x); insert into t values (41);" :memory: "insert into t values (42); select x from t order by x;"`+"\n")
@@ -175,6 +183,7 @@ func TestSQLite3RunsCmdBeforeMainSQL(t *testing.T) {
 }
 
 func TestSQLite3ReadonlyRejectsWritesAndDoesNotPersist(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	setup := mustExecSession(t, session, `sqlite3 /tmp/readonly.db "create table t(x); insert into t values (1);"`+"\n")
@@ -197,6 +206,7 @@ func TestSQLite3ReadonlyRejectsWritesAndDoesNotPersist(t *testing.T) {
 }
 
 func TestSQLite3ContinuesWithoutBailButReturnsFailure(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `sqlite3 :memory: "create table t(x unique); insert into t values (1); select x from t; insert into t values (1); select 2;"`+"\n")
@@ -213,6 +223,7 @@ func TestSQLite3ContinuesWithoutBailButReturnsFailure(t *testing.T) {
 }
 
 func TestSQLite3BailStopsOnFirstError(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `sqlite3 -bail :memory: "create table t(x unique); insert into t values (1); select x from t; insert into t values (1); select 2;"`+"\n")
@@ -229,6 +240,7 @@ func TestSQLite3BailStopsOnFirstError(t *testing.T) {
 }
 
 func TestSQLite3RejectsSandboxEscapeSQL(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	loadExt := mustExecSession(t, session, `sqlite3 :memory: "select load_extension('x');"`+"\n")
@@ -257,6 +269,7 @@ func TestSQLite3RejectsSandboxEscapeSQL(t *testing.T) {
 }
 
 func TestSQLite3MissingWritableDatabaseDoesNotCreateEmptyFile(t *testing.T) {
+	t.Parallel()
 	session := newSQLiteSession(t)
 
 	result := mustExecSession(t, session, `sqlite3 /tmp/missing.db "select * from missing;"`+"\n")

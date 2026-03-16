@@ -17,6 +17,7 @@ import (
 )
 
 func TestSQLiteFSFileLifecycle(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	writeFSFile(t, fsys, "/data/file.txt", "alpha\n")
@@ -65,6 +66,7 @@ func TestSQLiteFSFileLifecycle(t *testing.T) {
 }
 
 func TestSQLiteFSReadDirAndRename(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	writeFSFile(t, fsys, "/dir/b.txt", "b\n")
@@ -94,6 +96,7 @@ func TestSQLiteFSReadDirAndRename(t *testing.T) {
 }
 
 func TestSQLiteFSRemoveRecursiveKeepsExternalHardLink(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	writeFSFile(t, fsys, "/tree/file.txt", "shared\n")
@@ -117,6 +120,7 @@ func TestSQLiteFSRemoveRecursiveKeepsExternalHardLink(t *testing.T) {
 }
 
 func TestSQLiteFSSymlinkIntrospectionAndTraversal(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	writeFSFile(t, fsys, "/safe/target.txt", "hello\n")
@@ -154,6 +158,7 @@ func TestSQLiteFSSymlinkIntrospectionAndTraversal(t *testing.T) {
 }
 
 func TestSQLiteFSSymlinkLoopFails(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	if err := fsys.Symlink(context.Background(), "b", "/a"); err != nil {
@@ -173,6 +178,7 @@ func TestSQLiteFSSymlinkLoopFails(t *testing.T) {
 }
 
 func TestSQLiteFSHardLinksShareContentAndRejectDirectories(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	writeFSFile(t, fsys, "/docs/original.txt", "draft\n")
@@ -204,6 +210,7 @@ func TestSQLiteFSHardLinksShareContentAndRejectDirectories(t *testing.T) {
 }
 
 func TestSQLiteFSMetadataAndCwd(t *testing.T) {
+	t.Parallel()
 	fsys := newTestSQLiteFS(t)
 
 	if err := fsys.MkdirAll(context.Background(), "/workspace", 0o755); err != nil {
@@ -242,6 +249,7 @@ func TestSQLiteFSMetadataAndCwd(t *testing.T) {
 }
 
 func TestSQLiteBackedRuntimePersistsAcrossRuns(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "sandbox.db")
 
 	first := newSQLiteRuntime(t, dbPath)

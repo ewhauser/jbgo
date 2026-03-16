@@ -8,6 +8,7 @@ import (
 )
 
 func TestJQSupportsCompatibilityAliasesIsolated(t *testing.T) {
+	t.Parallel()
 	rt := newJQRuntime(t)
 
 	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{

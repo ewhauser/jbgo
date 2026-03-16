@@ -7,6 +7,7 @@ import (
 )
 
 func TestRun(t *testing.T) {
+	t.Parallel()
 	var stdout bytes.Buffer
 	if err := run(context.Background(), &stdout); err != nil {
 		t.Fatalf("run() error = %v", err)

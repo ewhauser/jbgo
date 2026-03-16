@@ -8,6 +8,7 @@ import (
 )
 
 func TestRunQuietDemo(t *testing.T) {
+	t.Parallel()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 

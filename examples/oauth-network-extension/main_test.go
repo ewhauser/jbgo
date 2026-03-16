@@ -9,6 +9,7 @@ import (
 )
 
 func TestRunDemoInjectsOAuthWithoutLeakingSecret(t *testing.T) {
+	t.Parallel()
 	report, err := runDemo(context.Background())
 	if err != nil {
 		t.Fatalf("runDemo() error = %v", err)
@@ -110,6 +111,7 @@ func TestRunDemoInjectsOAuthWithoutLeakingSecret(t *testing.T) {
 }
 
 func TestOAuthInjectingClientAuditsLowercaseAuthorizationHeader(t *testing.T) {
+	t.Parallel()
 	vault := newDemoVault()
 	server := newDemoAPIServer(vault)
 	defer server.Close()

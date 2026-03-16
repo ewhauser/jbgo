@@ -22,6 +22,7 @@ func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, s
 }
 
 func TestCLIHelpAndVersionIdentifyBinary(t *testing.T) {
+	t.Parallel()
 	prevVersion, prevCommit, prevDate, prevBuiltBy := version, commit, date, builtBy
 	version, commit, date, builtBy = "v1.2.3", "abc123", "2026-03-10T20:00:00Z", "test"
 	t.Cleanup(func() {
@@ -64,6 +65,7 @@ func TestCLIHelpAndVersionIdentifyBinary(t *testing.T) {
 }
 
 func TestCLIRegistersStableExtras(t *testing.T) {
+	t.Parallel()
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -87,6 +89,7 @@ func TestCLIRegistersStableExtras(t *testing.T) {
 }
 
 func TestCLIDoesNotRegisterNodeJSByDefault(t *testing.T) {
+	t.Parallel()
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -106,6 +109,7 @@ func TestCLIDoesNotRegisterNodeJSByDefault(t *testing.T) {
 }
 
 func TestCLIServerServesStableExtrasRegistry(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -224,6 +228,7 @@ func TestCLIServerServesStableExtrasRegistry(t *testing.T) {
 }
 
 func TestCLIServerListensOnTCPWithStableExtrasRegistry(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 

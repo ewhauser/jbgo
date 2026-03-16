@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewFactoryProvidesIndexedSearch(t *testing.T) {
+	t.Parallel()
 	factory := NewFactory(gbfs.SeededMemory(gbfs.InitialFiles{
 		"/workspace/docs/readme.txt": {Content: []byte("guide needle\n")},
 		"/workspace/logs/app.log":    {Content: []byte("log needle\n")},
