@@ -53,6 +53,9 @@ jobs:
       - name: Build @ewhauser/gbash-wasm
         run: pnpm --filter @ewhauser/gbash-wasm build
 
+      - name: Test @ewhauser/gbash-wasm
+        run: pnpm --filter @ewhauser/gbash-wasm test
+
   website-export:
     runs-on: ubuntu-latest
     steps:

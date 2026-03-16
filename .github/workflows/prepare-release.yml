@@ -91,6 +91,9 @@ jobs:
       - name: Build @ewhauser/gbash-wasm
         run: pnpm --filter @ewhauser/gbash-wasm build
 
+      - name: Test @ewhauser/gbash-wasm
+        run: pnpm --filter @ewhauser/gbash-wasm test
+
       - name: Create or update release PR
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
         with:
@@ -104,6 +107,6 @@ jobs:
 
             This PR:
             - syncs nested module requirements and local replaces via `make fix-modules`
-            - validates the release candidate with `make test`, `make lint`, `make release-check`, and `@ewhauser/gbash-wasm` package builds
+            - validates the release candidate with `make test`, `make lint`, `make release-check`, `@ewhauser/gbash-wasm` build, and `@ewhauser/gbash-wasm` tests
           labels: release
           delete-branch: false
