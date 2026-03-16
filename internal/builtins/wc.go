@@ -270,6 +270,11 @@ func wcCountFile(ctx context.Context, inv *Invocation, opts wcOptions, name stri
 			return wcCounts{}, err
 		}
 		if info.Mode().IsRegular() {
+			f, _, openErr := openRead(ctx, inv, name)
+			if openErr != nil {
+				return wcCounts{}, openErr
+			}
+			_ = f.Close()
 			return wcCounts{bytes: int(info.Size())}, nil
 		}
 	}

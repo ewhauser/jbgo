@@ -365,9 +365,12 @@ func lsOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (lsOptions, er
 	if err != nil {
 		return lsOptions{}, err
 	}
-	timeStyle, err := parseLSTimeStyle(inv, matches)
-	if err != nil {
-		return lsOptions{}, err
+	var timeStyle string
+	if longFormat {
+		timeStyle, err = parseLSTimeStyle(inv, matches)
+		if err != nil {
+			return lsOptions{}, err
+		}
 	}
 	dereference := parseLSDereferenceMode(matches, longFormat, indicatorMode)
 	hyperlinkMode, err := parseLSHyperlinkMode(inv, matches)
@@ -613,7 +616,7 @@ func lsStatMaybeForTarget(ctx context.Context, inv *Invocation, target string, o
 		}
 		targetInfo, _, resolveErr := lsResolveSymlinkInfo(ctx, inv, lAbs)
 		if resolveErr != nil {
-			return nil, lAbs, false, nil
+			return nil, lAbs, false, resolveErr
 		}
 		return targetInfo, lAbs, true, nil
 	case opts.dereference == lsDerefDirArgs:
@@ -898,11 +901,14 @@ func lsDiredQuotingStyle(mode lsQuotingMode) string {
 	}
 }
 
-func lsRenderGrid(names []string, across bool, width, _ int) string {
+func lsRenderGrid(names []string, across bool, width, tabSize int) string {
+	if tabSize <= 0 {
+		tabSize = 8
+	}
 	displayWidths := make([]int, len(names))
 	maxWidth := 0
 	for i, name := range names {
-		displayWidths[i] = lsVisibleWidth(name)
+		displayWidths[i] = lsVisibleWidthTabAware(name, tabSize)
 		if displayWidths[i] > maxWidth {
 			maxWidth = displayWidths[i]
 		}
@@ -962,6 +968,27 @@ func lsVisibleWidth(value string) int {
 			inEscape = true
 		case inEscape && value[i] == 'm':
 			inEscape = false
+		case !inEscape:
+			width++
+		}
+	}
+	return width
+}
+
+func lsVisibleWidthTabAware(value string, tabSize int) int {
+	if tabSize <= 0 {
+		tabSize = 8
+	}
+	width := 0
+	inEscape := false
+	for i := 0; i < len(value); i++ {
+		switch {
+		case !inEscape && value[i] == '\x1b':
+			inEscape = true
+		case inEscape && value[i] == 'm':
+			inEscape = false
+		case !inEscape && value[i] == '\t':
+			width += tabSize - (width % tabSize)
 		case !inEscape:
 			width++
 		}
@@ -1617,10 +1644,16 @@ func lsColorCodeFromEnv(ctx context.Context, inv *Invocation, abs string, info, 
 		}
 	}
 	name := path.Base(abs)
+	lastMatch := ""
+	matched := false
 	for _, pattern := range parsed.patterns {
 		if pattern.suffix == "" || strings.HasSuffix(name, pattern.suffix) {
-			return pattern.code, true, nil
+			lastMatch = pattern.code
+			matched = true
 		}
+	}
+	if matched {
+		return lastMatch, true, nil
 	}
 	if code, ok := parsed.entries["fi"]; ok {
 		return code, true, nil
