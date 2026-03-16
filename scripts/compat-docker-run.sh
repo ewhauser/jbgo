@@ -26,6 +26,37 @@ enable_trace() {
   set -x
 }
 
+print_disk_snapshot() {
+  local container_name=$1
+  local upper_dir
+
+  printf '=== compat disk snapshot %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  df -h "$REPO_ROOT" / || true
+  du -sh "$CACHE_DIR_HOST" "$RESULTS_DIR_HOST" 2>/dev/null || true
+  docker system df || true
+
+  upper_dir=$(docker inspect -f '{{ .GraphDriver.Data.UpperDir }}' "$container_name" 2>/dev/null || true)
+  if [[ -n "$upper_dir" ]]; then
+    echo "container upperdir: $upper_dir"
+    if command -v sudo >/dev/null 2>&1; then
+      sudo -n du -sh "$upper_dir" 2>/dev/null || du -sh "$upper_dir" 2>/dev/null || true
+    else
+      du -sh "$upper_dir" 2>/dev/null || true
+    fi
+  fi
+}
+
+watch_disk_usage() {
+  local container_name=$1
+  while ! docker inspect "$container_name" >/dev/null 2>&1; do
+    sleep 1
+  done
+  while docker inspect "$container_name" >/dev/null 2>&1; do
+    print_disk_snapshot "$container_name"
+    sleep 30
+  done
+}
+
 abs_repo_path() {
   local path=$1
   if [[ "$path" = /* ]]; then
@@ -102,10 +133,17 @@ require_repo_path "$RESULTS_DIR_HOST"
 
 CACHE_DIR_REL=${CACHE_DIR_HOST#"$REPO_ROOT"/}
 RESULTS_DIR_REL=${RESULTS_DIR_HOST#"$REPO_ROOT"/}
+TMP_DIR_HOST="$CACHE_DIR_HOST/tmp"
+HOME_DIR_HOST="$CACHE_DIR_HOST/home"
+TMP_DIR_REL=${TMP_DIR_HOST#"$REPO_ROOT"/}
+HOME_DIR_REL=${HOME_DIR_HOST#"$REPO_ROOT"/}
+CONTAINER_NAME="gbash-compat-${GITHUB_RUN_ID:-$$}"
 
 mkdir -p \
   "$CACHE_DIR_HOST" \
   "$RESULTS_DIR_HOST" \
+  "$TMP_DIR_HOST" \
+  "$HOME_DIR_HOST" \
   "$REPO_ROOT/.cache/go-build" \
   "$REPO_ROOT/.cache/go-mod"
 
@@ -115,9 +153,23 @@ fi
 
 ensure_image
 
-docker run --rm ${PLATFORM:+--platform "$PLATFORM"} \
+watch_pid=
+if trace_enabled; then
+  watch_disk_usage "$CONTAINER_NAME" &
+  watch_pid=$!
+fi
+cleanup_watchdog() {
+  if [[ -n "${watch_pid:-}" ]]; then
+    kill "$watch_pid" 2>/dev/null || true
+    wait "$watch_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup_watchdog EXIT
+
+docker run --rm --name "$CONTAINER_NAME" ${PLATFORM:+--platform "$PLATFORM"} \
   --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp/gbash-home \
+  -e HOME="/workspace/$HOME_DIR_REL" \
+  -e TMPDIR="/workspace/$TMP_DIR_REL" \
   -e GOCACHE=/workspace/.cache/go-build \
   -e GOMODCACHE=/workspace/.cache/go-mod \
   -e GNU_CACHE_DIR="/workspace/$CACHE_DIR_REL" \
@@ -138,7 +190,9 @@ docker run --rm ${PLATFORM:+--platform "$PLATFORM"} \
         set -x
         ;;
     esac
-    mkdir -p "$HOME" "$GOCACHE" "$GOMODCACHE"
+    mkdir -p "$HOME" "$TMPDIR" "$GOCACHE" "$GOMODCACHE"
+    df -h / /workspace || true
+    du -sh "$TMPDIR" "$GNU_CACHE_DIR" "$GNU_RESULTS_DIR" 2>/dev/null || true
     ./scripts/gnu-test.sh
   '
 
