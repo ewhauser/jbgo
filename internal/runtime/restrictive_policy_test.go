@@ -158,6 +158,26 @@ func TestRestrictivePolicyCommandBuiltinCannotBypassBuiltinAllowlist(t *testing.
 	}
 }
 
+func TestRestrictivePolicyExecBuiltinRespectsCommandAllowlist(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: restrictivePolicy([]string{"echo"}, []string{"exec"}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo note > note.txt\nexec cat note.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, `command "cat" denied`) {
+		t.Fatalf("Stderr = %q, want exec child denial", result.Stderr)
+	}
+}
+
 func TestRestrictivePolicyTimeoutRespectsCommandAllowlist(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{
