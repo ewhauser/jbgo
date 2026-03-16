@@ -43,6 +43,66 @@ func TestPrintfSupportsBareOctalEscapes(t *testing.T) {
 	}
 }
 
+func TestPrintfSupportsDashVAssignmentMode(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "foo=old\nprintf -v foo %s hi\nprintf '<%s>\\n' \"$foo\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "<hi>\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestPrintfSupportsDoubleDashBeforeFormat(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf -- '%s\\n' '-v'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "-v\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestPrintfRejectsInvalidDashVVariableName(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf -v bad-name %s hi\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
+	}
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
+	}
+	if got, want := result.Stderr, "printf: \"bad-name\": invalid variable name for -v\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestCommSupportsStdinAndColumnSuppression(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
