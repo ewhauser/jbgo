@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/internal/builtins"
 	gbserver "github.com/ewhauser/gbash/server"
 )
 
@@ -91,6 +93,56 @@ type testClient struct {
 	enc    *json.Encoder
 	dec    *json.Decoder
 	nextID atomic.Uint64
+}
+
+func newSocketPath(t testing.TB) string {
+	t.Helper()
+
+	file, err := os.CreateTemp("", "gbs-")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	path := file.Name()
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close(%q) error = %v", path, err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("Remove(%q) error = %v", path, err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	return path
+}
+
+func registryWithCommands(t testing.TB, extras ...commands.Command) *commands.Registry {
+	t.Helper()
+
+	registry := builtins.DefaultRegistry()
+	for _, cmd := range extras {
+		if err := registry.Register(cmd); err != nil {
+			t.Fatalf("Register(%q) error = %v", cmd.Name(), err)
+		}
+	}
+	return registry
+}
+
+func newBlockingCommand(name, line string, started chan struct{}, release <-chan struct{}) commands.Command {
+	var once sync.Once
+
+	return commands.DefineCommand(name, func(ctx context.Context, inv *commands.Invocation) error {
+		once.Do(func() { close(started) })
+
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		if inv.Stdout == nil {
+			return nil
+		}
+		_, err := fmt.Fprintln(inv.Stdout, line)
+		return err
+	})
 }
 
 func TestServerSessionLifecycleAndExec(t *testing.T) {
@@ -176,11 +228,13 @@ func TestServerSessionLifecycleAndExec(t *testing.T) {
 
 func TestServerConcurrentSessionsAndBusy(t *testing.T) {
 	t.Parallel()
+	started := make(chan struct{})
+	release := make(chan struct{})
 	srv := startServer(t, gbserver.Config{
 		Name:       "gbash",
 		Version:    "test",
 		SessionTTL: time.Second,
-	})
+	}, gbash.WithRegistry(registryWithCommands(t, newBlockingCommand("blockone", "one", started, release))))
 	client1 := dialClient(t, srv.socket)
 	defer client1.Close()
 	client2 := dialClient(t, srv.socket)
@@ -193,11 +247,15 @@ func TestServerConcurrentSessionsAndBusy(t *testing.T) {
 	go func() {
 		done <- client1.call("session.exec", map[string]any{
 			"session_id": session1,
-			"script":     "sleep 0.2\nprintf 'one\\n'",
+			"script":     "blockone",
 		})
 	}()
 
-	waitForSessionState(t, client2, session1, "running")
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for blocking session to start")
+	}
 
 	busy := client2.call("session.exec", map[string]any{
 		"session_id": session1,
@@ -217,6 +275,8 @@ func TestServerConcurrentSessionsAndBusy(t *testing.T) {
 	if okPayload.Stdout != "two\n" || okPayload.ExitCode != 0 {
 		t.Fatalf("second session exec = %+v, want exit 0 and two", okPayload)
 	}
+
+	close(release)
 
 	first := <-done
 	mustOK(t, &first)
@@ -288,7 +348,6 @@ func TestServerSessionTTLExpiry(t *testing.T) {
 		t.Fatalf("session.get result = %#v, want SESSION_NOT_FOUND", get)
 	}
 }
-
 func TestServeTCPListenerReportsTCPTransport(t *testing.T) {
 	t.Parallel()
 	rt, err := gbash.New()
@@ -351,22 +410,19 @@ func startServer(t *testing.T, cfg gbserver.Config, opts ...gbash.Option) *serve
 	cfg.Runtime = rt
 
 	ctx, cancel := context.WithCancel(context.Background())
-	socket := filepath.Join(os.TempDir(), fmt.Sprintf("gbs-%d.sock", time.Now().UnixNano()))
-	t.Cleanup(func() { _ = os.Remove(socket) })
+	socket := newSocketPath(t)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "unix", socket)
+	if err != nil {
+		t.Fatalf("Listen(unix) error = %v", err)
+	}
+	if err := os.Chmod(socket, 0o600); err != nil {
+		_ = ln.Close()
+		t.Fatalf("Chmod(%q) error = %v", socket, err)
+	}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gbserver.ListenAndServeUnix(ctx, socket, cfg)
+		errCh <- gbserver.Serve(ctx, ln, cfg)
 	}()
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", socket, 50*time.Millisecond) //nolint:noctx // test helper
-		if err == nil {
-			_ = conn.Close()
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 
 	handle := &serverHandle{
 		socket: socket,
@@ -442,24 +498,6 @@ func (c *testClient) call(method string, params any) rpcResponse {
 		c.t.Fatalf("Decode(%s) error = %v", method, err)
 	}
 	return resp
-}
-
-func waitForSessionState(t *testing.T, client *testClient, sessionID, want string) {
-	t.Helper()
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		resp := client.call("session.get", map[string]any{"session_id": sessionID})
-		if resp.Error == nil {
-			var payload sessionResult
-			decodeResult(t, &resp, &payload)
-			if payload.Session.State == want {
-				return
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for session %s to reach state %q", sessionID, want)
 }
 
 func mustCreateSession(t *testing.T, client *testClient) string {
@@ -558,15 +596,34 @@ func TestServerParallelStress(t *testing.T) {
 
 func TestServerParallelExecOnSharedSession(t *testing.T) {
 	t.Parallel()
+	started := make(chan struct{})
+	release := make(chan struct{})
 	srv := startServer(t, gbserver.Config{
 		Name:       "gbash",
 		Version:    "test",
 		SessionTTL: 5 * time.Second,
-	})
+	}, gbash.WithRegistry(registryWithCommands(t, newBlockingCommand("blockdone", "done", started, release))))
 
 	setup := dialClient(t, srv.socket)
 	defer setup.Close()
 	sessionID := mustCreateSession(t, setup)
+
+	blocker := dialClient(t, srv.socket)
+	defer blocker.Close()
+
+	blocked := make(chan rpcResponse, 1)
+	go func() {
+		blocked <- blocker.call("session.exec", map[string]any{
+			"session_id": sessionID,
+			"script":     "blockdone",
+		})
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for blocking exec to start")
+	}
 
 	const numWorkers = 10
 	type result struct {
@@ -583,7 +640,7 @@ func TestServerParallelExecOnSharedSession(t *testing.T) {
 			defer c.Close()
 			resp := c.call("session.exec", map[string]any{
 				"session_id": sessionID,
-				"script":     "sleep 0.1\nprintf 'done\\n'",
+				"script":     "printf 'done\\n'",
 			})
 			if resp.Error != nil {
 				if resp.Error.Data != nil && resp.Error.Data.Code == "SESSION_BUSY" {
@@ -597,6 +654,7 @@ func TestServerParallelExecOnSharedSession(t *testing.T) {
 		})
 	}
 	wg.Wait()
+	close(release)
 
 	var okCount, busyCount, errCount int
 	for _, r := range results {
@@ -611,13 +669,26 @@ func TestServerParallelExecOnSharedSession(t *testing.T) {
 		}
 	}
 
-	if okCount == 0 {
-		t.Fatalf("expected at least one successful exec, got ok=%d busy=%d err=%d", okCount, busyCount, errCount)
+	if okCount != 0 {
+		t.Fatalf("expected competing execs to be rejected, got ok=%d busy=%d err=%d", okCount, busyCount, errCount)
 	}
 	if errCount > 0 {
 		t.Fatalf("unexpected errors: ok=%d busy=%d err=%d", okCount, busyCount, errCount)
 	}
-	t.Logf("results: ok=%d busy=%d", okCount, busyCount)
+	if busyCount != numWorkers {
+		t.Fatalf("expected all competing execs to be busy, got ok=%d busy=%d err=%d", okCount, busyCount, errCount)
+	}
+
+	resp := <-blocked
+	mustOK(t, &resp)
+	var payload execResult
+	decodeResult(t, &resp, &payload)
+	if got, want := payload.Stdout, "done\n"; got != want {
+		t.Fatalf("blocking exec stdout = %q, want %q", got, want)
+	}
+	if payload.ExitCode != 0 {
+		t.Fatalf("blocking exec exit_code = %d, want 0", payload.ExitCode)
+	}
 }
 
 func TestServerParallelCreateDestroy(t *testing.T) {

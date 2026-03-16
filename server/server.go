@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ewhauser/gbash"
@@ -44,27 +45,45 @@ type Config struct {
 
 // ListenAndServeUnix serves the gbash JSON-RPC protocol on a Unix domain socket.
 func ListenAndServeUnix(ctx context.Context, socketPath string, cfg Config) error {
-	socketPath = strings.TrimSpace(socketPath)
-	if socketPath == "" {
-		return fmt.Errorf("server: socket path must not be empty")
-	}
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
-		return fmt.Errorf("server: create socket directory: %w", err)
-	}
-	if err := removeStaleUnixSocket(socketPath); err != nil {
+	socketPath, ln, err := listenUnixSocket(ctx, socketPath)
+	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = ln.Close()
+		_ = os.Remove(socketPath)
+	}()
+	return Serve(ctx, ln, cfg)
+}
 
+func listenUnixSocket(ctx context.Context, socketPath string) (string, net.Listener, error) {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return "", nil, fmt.Errorf("server: socket path must not be empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
+		return "", nil, fmt.Errorf("server: create socket directory: %w", err)
+	}
+	if err := removeStaleUnixSocket(ctx, socketPath); err != nil {
+		return "", nil, err
+	}
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "unix", socketPath)
 	if err != nil {
-		return fmt.Errorf("server: listen on unix socket: %w", err)
+		return "", nil, fmt.Errorf("server: listen on unix socket: %w", err)
 	}
-	defer func() { _ = os.Remove(socketPath) }()
-	if err := os.Chmod(socketPath, 0o600); err != nil {
+	cleanup := true
+	defer func() {
+		if !cleanup {
+			return
+		}
 		_ = ln.Close()
-		return fmt.Errorf("server: chmod socket: %w", err)
+		_ = os.Remove(socketPath)
+	}()
+	if err := os.Chmod(socketPath, 0o600); err != nil {
+		return "", nil, fmt.Errorf("server: chmod socket: %w", err)
 	}
-	return Serve(ctx, ln, cfg)
+	cleanup = false
+	return socketPath, ln, nil
 }
 
 // Serve serves the gbash JSON-RPC protocol on an existing listener.
@@ -192,11 +211,23 @@ func listenerTransport(ln net.Listener) string {
 	}
 }
 
-func removeStaleUnixSocket(socketPath string) error {
+func removeStaleUnixSocket(ctx context.Context, socketPath string) error {
 	info, err := os.Lstat(socketPath)
 	if err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return fmt.Errorf("server: path exists and is not a socket: %s", socketPath)
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+		conn, dialErr := (&net.Dialer{}).DialContext(probeCtx, "unix", socketPath)
+		if dialErr == nil {
+			_ = conn.Close()
+			return fmt.Errorf("server: socket already in use: %s", socketPath)
+		}
+		switch {
+		case errors.Is(dialErr, syscall.ECONNREFUSED), errors.Is(dialErr, syscall.ENOENT), errors.Is(dialErr, os.ErrNotExist):
+		default:
+			return fmt.Errorf("server: probe existing socket: %w", dialErr)
 		}
 		if removeErr := os.Remove(socketPath); removeErr != nil {
 			return fmt.Errorf("server: remove stale socket: %w", removeErr)

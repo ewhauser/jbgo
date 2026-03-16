@@ -175,6 +175,7 @@ This matches the agent workflow we care about: a sequence of shell calls operati
 - the protocol is JSON-RPC 2.0 request/response, not a custom streaming transport
 - the shared CLI requires exactly one transport flag: `--socket` or `--listen`
 - the shared CLI restricts `--listen` to loopback hosts because v1 has no authentication layer
+- the Unix socket helper must chmod the socket to `0600`, reject an already-active socket path, and only replace stale socket files
 - `session_id` maps 1:1 to a persistent `Session`
 - filesystem shape is configured once at server startup through the normal runtime options and is not part of the wire protocol
 - the primary remote operation is `session.exec`, which runs one non-interactive `Session.Exec` call and returns the full execution result in one response
