@@ -3,6 +3,7 @@ package builtins_test
 import "testing"
 
 func TestPrintfSupportsBashNumericCharConstants(t *testing.T) {
+	t.Parallel()
 	session := newSession(t, &Config{})
 
 	result := mustExecSession(t, session,
@@ -19,6 +20,7 @@ func TestPrintfSupportsBashNumericCharConstants(t *testing.T) {
 }
 
 func TestPrintfCharacterFormatUsesFirstCharacter(t *testing.T) {
+	t.Parallel()
 	session := newSession(t, &Config{})
 
 	result := mustExecSession(t, session,
