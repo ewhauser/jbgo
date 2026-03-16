@@ -1,17 +1,10 @@
 {
   "last_run_ids": {
-    "23152405354": {
-      "checked": "2026-03-16T16:24:48.355230+00:00",
-      "status": "processed",
-      "files_copied": [
-        "internal/runtime/testdata/fuzz/FuzzGeneratedPrograms/b6805dcc35ae491f"
-      ]
-    },
     "23126928378": {
-      "checked": "2026-03-16T16:25:01.986084+00:00",
+      "checked": "2026-03-16T16:37:13.192832+00:00",
       "status": "processed",
       "files_copied": []
     }
   },
-  "last_checked": "2026-03-16T16:25:01.986375+00:00"
+  "last_checked": "2026-03-16T16:37:13.193222+00:00"
 }

@@ -287,6 +287,8 @@ def pull_fuzz_corpus(
 
     for rid, source in run_ids_to_check.items():
         result.runs_checked.append(rid)
+        run_had_errors = False
+        run_files_copied = []
         print(f"\nChecking run {rid} ({source})...")
 
         try:
@@ -307,20 +309,23 @@ def pull_fuzz_corpus(
                     try:
                         copied = download_and_copy_corpus(rid, aname, repo_root)
                         result.files_copied.extend(copied)
+                        run_files_copied.extend(copied)
                         for c in copied:
                             print(f"      Copied: {c}")
                     except RuntimeError as e:
                         result.errors.append(str(e))
+                        run_had_errors = True
                         print(f"      Error: {e}")
             elif artifacts and dry_run:
                 print(f"    Found artifacts: {', '.join(artifacts)}")
                 print(f"    (dry run, skipping download)")
             else:
                 print(f"  No artifacts found either")
-            watermark.setdefault("last_run_ids", {})[str(rid)] = {
-                "checked": datetime.now(timezone.utc).isoformat(),
-                "status": "artifacts_only" if artifacts else "no_fuzz_failures",
-            }
+            if not run_had_errors:
+                watermark.setdefault("last_run_ids", {})[str(rid)] = {
+                    "checked": datetime.now(timezone.utc).isoformat(),
+                    "status": "artifacts_only" if artifacts else "no_fuzz_failures",
+                }
             if not artifacts:
                 continue
 
@@ -349,20 +354,24 @@ def pull_fuzz_corpus(
                 try:
                     copied = download_and_copy_corpus(rid, aname, repo_root)
                     result.files_copied.extend(copied)
+                    run_files_copied.extend(copied)
                     for c in copied:
                         print(f"      Copied: {c}")
                 except RuntimeError as e:
                     result.errors.append(str(e))
+                    run_had_errors = True
                     print(f"      Error: {e}")
 
-        watermark.setdefault("last_run_ids", {})[str(rid)] = {
-            "checked": datetime.now(timezone.utc).isoformat(),
-            "status": "processed",
-            "files_copied": [
-                f for f in result.files_copied
-                # only include files from this run
-            ],
-        }
+        # Only mark as processed if there were no download errors for
+        # this run. Transient failures (auth issues, network errors)
+        # should allow retries on the next invocation without needing
+        # --all or --reset-watermark.
+        if not run_had_errors:
+            watermark.setdefault("last_run_ids", {})[str(rid)] = {
+                "checked": datetime.now(timezone.utc).isoformat(),
+                "status": "processed",
+                "files_copied": run_files_copied,
+            }
 
     if not dry_run:
         save_watermark(repo_root, watermark)
