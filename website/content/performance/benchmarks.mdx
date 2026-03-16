@@ -21,7 +21,6 @@ Cross-runtime comparison of gbash against GNU bash and alternative sandboxed-she
 </table>
 
 import BenchmarkChart from "@/app/components/docs/BenchmarkChart";
-import FilesystemBenchmarkChart from "@/app/components/docs/FilesystemBenchmarkChart";
 
 ## Runtime Results
 
@@ -39,16 +38,3 @@ import FilesystemBenchmarkChart from "@/app/components/docs/FilesystemBenchmarkC
 
 > **Note:** just-bash ships significantly more functionality than gbash today - Python and lightweight JavaScript runtimes are bundled in the core - so the artifact sizes and startup costs are not directly comparable.
 
-## Filesystem Results
-
-These numbers compare gbash filesystem backends directly rather than measuring shell process startup. The core rows are `memory` and `overlay`; `sqlite` and `fts` are experimental example-backed filesystems included for side-by-side comparison.
-
-<FilesystemBenchmarkChart />
-
-### Filesystem Methodology
-
-- Each trial starts from a clean backend state with the same canonical `/workspace` fixture.
-- Latency is measured from `Factory.New(...)` through workload verification, so backend open/index-build costs are included.
-- The benchmark uses direct filesystem operations instead of shell command execution.
-- `literal_search` uses `searchadapter.Search(..., IndexEligible=true)` so `fts` can take the indexed path while the other rows fall back to scan.
-- The harness source is at [`examples/bench-fs`](https://github.com/ewhauser/gbash/tree/main/examples/bench-fs).

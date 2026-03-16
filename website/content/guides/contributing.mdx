@@ -91,8 +91,6 @@ Some scenarios require optional commands such as `jq`. Those scenarios keep the 
 runtime table on the website, but unsupported runtimes are shown as skipped with a
 reason instead of being counted as failures.
 
-`make bench-fs` refreshes the filesystem benchmark dataset used on the same page. It compares the `memory`, `overlay`, `sqlite`, and `fts` filesystem backends, and writes the website JSON to `website/content/performance/filesystem-benchmark-data.json` by default.
-
 ## GNU compatibility testing
 
 Evaluate skew between gbash commands and GNU coreutils using the compatibility harness:
