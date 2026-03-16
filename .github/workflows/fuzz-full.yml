@@ -1,14 +1,13 @@
 name: Fuzz Full
 
 on:
-  push:
-    branches: [main]
   schedule:
     - cron: "0 7 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   fuzz-full:
@@ -52,6 +51,62 @@ jobs:
           name: fuzz-full-${{ matrix.shard }}-corpus
           if-no-files-found: error
           path: ${{ steps.collect_fuzz_artifacts.outputs.artifact_dir }}
+
+      - name: Open PR for real reproducers
+        if: steps.collect_fuzz_artifacts.outputs.has_files == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/open_fuzz_pr.sh "fuzz-full-${{ matrix.shard }}"
+
+      - name: Fail if fuzzing found a reproducer
+        if: steps.fuzz.outcome == 'failure'
+        run: exit 1
+
+  fuzz-contrib:
+    name: Fuzz Contrib (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: jq
+            targets: ./contrib/jq:FuzzJQCompatibilityFlags ./contrib/jq:FuzzJQCommands
+          - name: yq
+            targets: ./contrib/yq:FuzzYQCommands
+          - name: sqlite3
+            targets: ./contrib/sqlite3:FuzzSQLiteCommands ./contrib/sqlite3:FuzzSQLiteFileCommands
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version-file: go.mod
+
+      - id: fuzz
+        continue-on-error: true
+        run: make fuzz-run
+        env:
+          FUZZ_TARGETS: ${{ matrix.targets }}
+          FUZZTIME: 15s
+
+      - id: collect_fuzz_artifacts
+        if: steps.fuzz.outcome == 'failure'
+        shell: bash
+        run: ./scripts/collect_fuzz_failure_artifacts.sh "$RUNNER_TEMP/fuzz-contrib-${{ matrix.name }}-corpus"
+
+      - name: Upload fuzz corpus artifacts
+        if: steps.collect_fuzz_artifacts.outputs.has_files == 'true'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: fuzz-contrib-${{ matrix.name }}-corpus
+          if-no-files-found: error
+          path: ${{ steps.collect_fuzz_artifacts.outputs.artifact_dir }}
+
+      - name: Open PR for real reproducers
+        if: steps.collect_fuzz_artifacts.outputs.has_files == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/open_fuzz_pr.sh "fuzz-contrib-${{ matrix.name }}"
 
       - name: Fail if fuzzing found a reproducer
         if: steps.fuzz.outcome == 'failure'
