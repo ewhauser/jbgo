@@ -1,8 +1,17 @@
 package conformance
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestConformance(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv("GBASH_RUN_CONFORMANCE") != "1" {
+		t.Skip("set GBASH_RUN_CONFORMANCE=1 to run the full vendored conformance corpus")
+	}
+
 	suites := []SuiteConfig{
 		{
 			Name:         "bash",

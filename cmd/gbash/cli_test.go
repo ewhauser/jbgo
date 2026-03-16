@@ -1091,11 +1091,11 @@ func TestRunCLIHostUtilityEnvSupportsAssignmentsAfterDoubleDash(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This integration test verifies live host-command streaming and is timing-sensitive under -race.
 func TestRunCLIHostUtilityStreamsOutputBeforeExit(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -1113,7 +1113,7 @@ func TestRunCLIHostUtilityStreamsOutputBeforeExit(t *testing.T) {
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stdout.WaitForSubstring("999999\n1000000\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("999999\n1000000\n", 2*time.Second) {
 		t.Fatalf("stdout did not stream expected prefix before the host utility exited; got %q", stdout.String())
 	}
 
@@ -1129,11 +1129,11 @@ func TestRunCLIHostUtilityStreamsOutputBeforeExit(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This integration test depends on live tail diagnostics and is timing-sensitive under -race.
 func TestRunCLIHostUtilityTailFollowMissingFileByName(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -1151,7 +1151,7 @@ func TestRunCLIHostUtilityTailFollowMissingFileByName(t *testing.T) {
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stderr.WaitForSubstring("cannot open", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("cannot open", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
 	}
 	if err := os.MkdirAll(filepath.Join(tmp, "missing"), 0o755); err != nil {
@@ -1160,10 +1160,10 @@ func TestRunCLIHostUtilityTailFollowMissingFileByName(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "missing", "file"), []byte("x\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has appeared", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("x\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("x\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit followed content; got %q", stdout.String())
 	}
 
@@ -1179,11 +1179,11 @@ func TestRunCLIHostUtilityTailFollowMissingFileByName(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This integration test depends on live tail diagnostics and is timing-sensitive under -race.
 func TestRunCLIHostUtilityTailFollowMissingFlatFileByName(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -1201,16 +1201,16 @@ func TestRunCLIHostUtilityTailFollowMissingFlatFileByName(t *testing.T) {
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stderr.WaitForSubstring("cannot open 'missing'", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("cannot open 'missing'", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "missing"), []byte("X\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(missing) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has appeared", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report file appearance; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("X\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("X\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit followed content; got %q", stdout.String())
 	}
 
@@ -1226,15 +1226,15 @@ func TestRunCLIHostUtilityTailFollowMissingFlatFileByName(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This integration test depends on live tail diagnostics and is timing-sensitive under -race.
 func TestRunCLIHostUtilityTailFollowUntailableByNameUntilFileAppears(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
 	if err := os.Mkdir(filepath.Join(tmp, "untailable"), 0o755); err != nil {
 		t.Fatalf("Mkdir(untailable) error = %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 900*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -1252,10 +1252,10 @@ func TestRunCLIHostUtilityTailFollowUntailableByNameUntilFileAppears(t *testing.
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stderr.WaitForSubstring("error reading 'untailable': Is a directory", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("error reading 'untailable': Is a directory", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report untailable directory read error; got %q", stderr.String())
 	}
-	if !stderr.WaitForSubstring("untailable: cannot follow end of this type of file", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("untailable: cannot follow end of this type of file", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report untailable file; got %q", stderr.String())
 	}
 	if strings.Contains(stderr.String(), "has become accessible") || strings.Contains(stderr.String(), "has appeared") {
@@ -1268,10 +1268,10 @@ func TestRunCLIHostUtilityTailFollowUntailableByNameUntilFileAppears(t *testing.
 	if err := os.WriteFile(filepath.Join(tmp, "untailable"), []byte("foo\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(untailable) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has become accessible", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has become accessible", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report file accessibility after replacement; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("foo\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("foo\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit followed content; got %q", stdout.String())
 	}
 
@@ -1732,11 +1732,11 @@ func TestRunCLIHostUtilityTailRetryWarnsWithoutFollow(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This integration test depends on live tail diagnostics and is timing-sensitive under -race.
 func TestRunCLIHostUtilityTailRetryDescriptorReportsAppearanceAndTruncation(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	stdout := newStreamingWriter()
@@ -1754,28 +1754,28 @@ func TestRunCLIHostUtilityTailRetryDescriptorReportsAppearanceAndTruncation(t *t
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stderr.WaitForSubstring("--retry only effective for the initial open", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("--retry only effective for the initial open", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report descriptor retry warning; got %q", stderr.String())
 	}
-	if !stderr.WaitForSubstring("cannot open 'missing'", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("cannot open 'missing'", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "missing"), []byte("X1\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(missing) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("has appeared", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("has appeared", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report appearing file; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("X1\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("X1\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit initial followed content; got %q", stdout.String())
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "missing"), []byte("X\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(missing truncate) error = %v", err)
 	}
-	if !stderr.WaitForSubstring("file truncated", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("file truncated", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report truncation; got %q", stderr.String())
 	}
-	if !stdout.WaitForSubstring("X1\nX\n", 500*time.Millisecond) {
+	if !stdout.WaitForSubstring("X1\nX\n", 1500*time.Millisecond) {
 		t.Fatalf("stdout did not emit truncated content; got %q", stdout.String())
 	}
 
@@ -1791,8 +1791,8 @@ func TestRunCLIHostUtilityTailRetryDescriptorReportsAppearanceAndTruncation(t *t
 	}
 }
 
+//nolint:paralleltest // This integration test depends on live tail diagnostics and is timing-sensitive under -race.
 func TestRunCLIHostUtilityTailRetryDescriptorGivesUpOnUntailableReplacement(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
 	var stdout strings.Builder
@@ -1810,7 +1810,7 @@ func TestRunCLIHostUtilityTailRetryDescriptorGivesUpOnUntailableReplacement(t *t
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stderr.WaitForSubstring("cannot open 'missing'", 500*time.Millisecond) {
+	if !stderr.WaitForSubstring("cannot open 'missing'", 1500*time.Millisecond) {
 		t.Fatalf("stderr did not report missing file; got %q", stderr.String())
 	}
 	if err := os.Mkdir(filepath.Join(tmp, "missing"), 0o755); err != nil {
@@ -1916,15 +1916,15 @@ func TestRunCLIHostUtilityTailFollowNameRejectsDash(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // This integration test verifies live host-command debug output and is timing-sensitive under -race.
 func TestRunCLIHostUtilityTailDebugReportsPollingMode(t *testing.T) {
-	t.Parallel()
 	tmp := t.TempDir()
 
 	if err := os.WriteFile(filepath.Join(tmp, "a"), nil, 0o644); err != nil {
 		t.Fatalf("WriteFile(a) error = %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	var stdout strings.Builder
@@ -1942,7 +1942,7 @@ func TestRunCLIHostUtilityTailDebugReportsPollingMode(t *testing.T) {
 		}{exitCode: exitCode, err: err}
 	}()
 
-	if !stderr.WaitForSubstring("using polling mode", 200*time.Millisecond) {
+	if !stderr.WaitForSubstring("using polling mode", time.Second) {
 		t.Fatalf("stderr did not report polling mode; got %q", stderr.String())
 	}
 

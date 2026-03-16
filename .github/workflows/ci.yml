@@ -97,6 +97,17 @@ jobs:
 
       - run: make test
 
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version-file: go.mod
+
+      - run: make conformance-test
+
   fuzz-pr-core-deep:
     if: github.event_name == 'pull_request' && needs.detect-fuzz-changes.outputs.run_core_deep == 'true'
     needs: detect-fuzz-changes

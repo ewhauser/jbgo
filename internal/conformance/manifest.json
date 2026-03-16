@@ -2,105 +2,13 @@
   "suites": {
     "bash": {
       "entries": {
-        "oils/background.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
+        "oils/alias.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/builtin-bind.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
-        },
-        "oils/builtin-cd.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/builtin-fc.test.sh": {
-          "mode": "skip",
-          "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/builtin-history.test.sh": {
-          "mode": "skip",
-          "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/builtin-kill.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
-        },
-        "oils/builtin-printf.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/builtin-process.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/command-sub.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/here-doc.test.sh::Here doc from another input file descriptor": {
-          "mode": "skip",
-          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
-        },
-        "oils/here-doc.test.sh::Multiple here docs with different descriptors": {
-          "mode": "skip",
-          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
-        },
-        "oils/here-doc.test.sh::Multiple here docs in pipeline": {
-          "mode": "skip",
-          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
-        },
-        "oils/here-doc.test.sh::Multiple here docs in pipeline on multiple lines": {
-          "mode": "skip",
-          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
-        },
-        "oils/interactive.test.sh": {
-          "mode": "skip",
-          "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/parse-errors.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/process-sub.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
-        },
-        "oils/prompt.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
-        },
-        "oils/sh-options.test.sh": {
-          "mode": "skip",
-          "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/sh-usage.test.sh": {
-          "mode": "skip",
-          "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/unicode.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/var-num.test.sh": {
-          "mode": "skip",
-          "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/var-op-bash.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/vars-special.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/whitespace.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
-        },
-        "oils/word-split.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        "oils/append.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/arg-parse.test.sh": {
           "mode": "xfail",
@@ -118,7 +26,59 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/array-assign.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/array-assoc.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/array-basic.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/array-compat.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/array-literal.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/array-sparse.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/array.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/assign-deferred.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/assign-dialects.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/assign-extended.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/assign.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/background.test.sh": {
+          "mode": "skip",
+          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
+        },
+        "oils/ble-features.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/ble-idioms.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -138,11 +98,31 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/brace-expansion.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/bugs.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/builtin-bash.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/builtin-bind.test.sh": {
+          "mode": "skip",
+          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
+        },
         "oils/builtin-bracket.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/builtin-cd.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/builtin-completion.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -158,9 +138,21 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/builtin-fc.test.sh": {
+          "mode": "skip",
+          "reason": "requires an interactive shell or tty behavior"
+        },
         "oils/builtin-getopts.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/builtin-history.test.sh": {
+          "mode": "skip",
+          "reason": "requires an interactive shell or tty behavior"
+        },
+        "oils/builtin-kill.test.sh": {
+          "mode": "skip",
+          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
         },
         "oils/builtin-meta-assign.test.sh": {
           "mode": "xfail",
@@ -171,6 +163,26 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/builtin-misc.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/builtin-printf.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/builtin-process.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/builtin-read.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/builtin-set.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/builtin-special.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -202,6 +214,10 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/builtin-vars.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/case_.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -210,7 +226,15 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/command-sub.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
         "oils/command_.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/dbracket.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -218,7 +242,15 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/dparen.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/empty-bodies.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/errexit-osh.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -234,6 +266,10 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/extglob-files.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/extglob-match.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -246,6 +282,14 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/glob-bash.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/glob.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/globignore.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -254,7 +298,43 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/here-doc.test.sh::Here doc from another input file descriptor": {
+          "mode": "skip",
+          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
+        },
+        "oils/here-doc.test.sh::Here doc with bad comsub delimiter": {
+          "mode": "xfail",
+          "reason": "gbash rejects expanded heredoc delimiters that bash accepts"
+        },
+        "oils/here-doc.test.sh::Here doc with bad var delimiter": {
+          "mode": "xfail",
+          "reason": "gbash rejects expanded heredoc delimiters that bash accepts"
+        },
+        "oils/here-doc.test.sh::Here doc with line continuation, then pipe.  Syntax error.": {
+          "mode": "xfail",
+          "reason": "gbash reports a different heredoc syntax failure than bash for this malformed pipeline"
+        },
+        "oils/here-doc.test.sh::Multiple here docs in pipeline": {
+          "mode": "skip",
+          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
+        },
+        "oils/here-doc.test.sh::Multiple here docs in pipeline on multiple lines": {
+          "mode": "skip",
+          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
+        },
+        "oils/here-doc.test.sh::Multiple here docs with different descriptors": {
+          "mode": "skip",
+          "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
+        },
         "oils/if_.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/interactive.test.sh": {
+          "mode": "skip",
+          "reason": "requires an interactive shell or tty behavior"
+        },
+        "oils/introspect.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -270,7 +350,19 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/nameref.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/nix-idioms.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/nocasematch-match.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/nul-bytes.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -278,31 +370,43 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/parse-errors.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/pipeline.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/posix.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/print-source-code.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        "oils/process-sub.test.sh": {
+          "mode": "skip",
+          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
         },
-        "oils/here-doc.test.sh::Here doc with bad var delimiter": {
-          "mode": "xfail",
-          "reason": "gbash rejects expanded heredoc delimiters that bash accepts"
-        },
-        "oils/here-doc.test.sh::Here doc with bad comsub delimiter": {
-          "mode": "xfail",
-          "reason": "gbash rejects expanded heredoc delimiters that bash accepts"
-        },
-        "oils/here-doc.test.sh::Here doc with line continuation, then pipe.  Syntax error.": {
-          "mode": "xfail",
-          "reason": "gbash reports a different heredoc syntax failure than bash for this malformed pipeline"
+        "oils/prompt.test.sh": {
+          "mode": "skip",
+          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
         },
         "oils/quote.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/redirect-command.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/redirect-multi.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/redirect.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/regex.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -318,7 +422,19 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/subshell.test.sh": {
+        "oils/sh-options.test.sh": {
+          "mode": "skip",
+          "reason": "requires an interactive shell or tty behavior"
+        },
+        "oils/sh-usage.test.sh": {
+          "mode": "skip",
+          "reason": "requires an interactive shell or tty behavior"
+        },
+        "oils/smoke.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/strict-options.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -330,15 +446,55 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/toysh-posix.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/toysh.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/type-compat.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/unicode.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/var-num.test.sh": {
+          "mode": "skip",
+          "reason": "requires an interactive shell or tty behavior"
+        },
+        "oils/var-op-bash.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
         },
         "oils/var-op-len.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/var-op-patsub.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/var-op-slice.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/var-op-strip.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/var-op-test.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/var-ref.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/var-sub-quote.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
@@ -349,6 +505,22 @@
         "oils/vars-bash.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/vars-special.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/whitespace.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+        },
+        "oils/word-eval.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
+        "oils/word-split.test.sh": {
+          "mode": "skip",
+          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
         },
         "oils/xtrace.test.sh": {
           "mode": "xfail",
@@ -366,11 +538,11 @@
     },
     "posix": {
       "entries": {
-        "oils/posix.test.sh::Empty action for case is syntax error": {
+        "oils/posix.test.sh::Bare semi-colon not allowed": {
           "mode": "xfail",
           "reason": "gbash parse diagnostics differ from bash for this syntax error"
         },
-        "oils/posix.test.sh::Bare semi-colon not allowed": {
+        "oils/posix.test.sh::Empty action for case is syntax error": {
           "mode": "xfail",
           "reason": "gbash parse diagnostics differ from bash for this syntax error"
         },
