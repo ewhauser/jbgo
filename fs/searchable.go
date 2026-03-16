@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -281,7 +282,7 @@ type searchableFile struct {
 	file       File
 	owner      *searchableFS
 	path       string
-	dirty      bool
+	dirty      atomic.Bool
 	dirtyOnEnd bool
 }
 
@@ -292,7 +293,7 @@ func (f *searchableFile) Read(p []byte) (int, error) {
 func (f *searchableFile) Write(p []byte) (int, error) {
 	n, err := f.file.Write(p)
 	if n > 0 {
-		f.dirty = true
+		f.dirty.Store(true)
 	}
 	return n, err
 }
@@ -301,7 +302,7 @@ func (f *searchableFile) Close() error {
 	if err := f.file.Close(); err != nil {
 		return err
 	}
-	if !f.dirty && !f.dirtyOnEnd {
+	if !f.dirty.Load() && !f.dirtyOnEnd {
 		return nil
 	}
 	return f.owner.syncSearchPathAndAliases(context.Background(), f.path)
