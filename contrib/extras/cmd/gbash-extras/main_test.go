@@ -12,27 +12,40 @@ import (
 	"testing"
 	"time"
 
+	gbash "github.com/ewhauser/gbash"
 	rootcli "github.com/ewhauser/gbash/cli"
+	"github.com/ewhauser/gbash/contrib/extras"
 )
 
 func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
-	cfg := newCLIConfig()
+	return runCLIWithConfig(ctx, newCLIConfig(), argv0, args, stdin, stdout, stderr, stdinTTY)
+}
+
+func runCLIWithConfig(ctx context.Context, cfg rootcli.Config, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
 	cfg.TTYDetector = func(io.Reader) bool { return stdinTTY }
 	return rootcli.Run(ctx, cfg, argv0, args, stdin, stdout, stderr)
 }
 
 func TestCLIHelpAndVersionIdentifyBinary(t *testing.T) {
 	t.Parallel()
-	prevVersion, prevCommit, prevDate, prevBuiltBy := version, commit, date, builtBy
-	version, commit, date, builtBy = "v1.2.3", "abc123", "2026-03-10T20:00:00Z", "test"
-	t.Cleanup(func() {
-		version, commit, date, builtBy = prevVersion, prevCommit, prevDate, prevBuiltBy
-	})
+
+	cfg := rootcli.Config{
+		Name: "gbash-extras",
+		Build: &rootcli.BuildInfo{
+			Version: "v1.2.3",
+			Commit:  "abc123",
+			Date:    "2026-03-10T20:00:00Z",
+			BuiltBy: "test",
+		},
+		BaseOptions: []gbash.Option{
+			gbash.WithRegistry(extras.FullRegistry()),
+		},
+	}
 
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash-extras", []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLIWithConfig(context.Background(), cfg, "gbash-extras", []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI(--help) error = %v", err)
 	}
@@ -48,7 +61,7 @@ func TestCLIHelpAndVersionIdentifyBinary(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	exitCode, err = runCLI(context.Background(), "gbash-extras", []string{"--version"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err = runCLIWithConfig(context.Background(), cfg, "gbash-extras", []string{"--version"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI(--version) error = %v", err)
 	}

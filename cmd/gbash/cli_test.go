@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/cli"
 )
 
 type cliJSONTiming struct {
@@ -43,16 +44,21 @@ type cliJSONResult struct {
 
 func TestRunCLIPrintsVersion(t *testing.T) {
 	t.Parallel()
-	prevVersion, prevCommit, prevDate, prevBuiltBy := version, commit, date, builtBy
-	version, commit, date, builtBy = "v1.2.3", "abc123", "2026-03-10T20:00:00Z", "test"
-	t.Cleanup(func() {
-		version, commit, date, builtBy = prevVersion, prevCommit, prevDate, prevBuiltBy
-	})
+
+	cfg := cli.Config{
+		Name: "gbash",
+		Build: &cli.BuildInfo{
+			Version: "v1.2.3",
+			Commit:  "abc123",
+			Date:    "2026-03-10T20:00:00Z",
+			BuiltBy: "test",
+		},
+	}
 
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--version"}, strings.NewReader("echo ignored"), &stdout, &stderr, false)
+	exitCode, err := runCLIWithConfig(context.Background(), cfg, "gbash", []string{"--version"}, strings.NewReader("echo ignored"), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
