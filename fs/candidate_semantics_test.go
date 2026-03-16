@@ -3,9 +3,11 @@ package fs_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	stdfs "io/fs"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -262,6 +264,41 @@ func TestBenchmarkBackendsSymlinkCreationInSymlinkedDirectory(t *testing.T) {
 					t.Fatalf("Lstat(/real/missing.txt) error = %v, want not exist", err)
 				}
 			})
+		})
+	}
+}
+
+func TestBenchmarkBackendsConcurrentReadDirOnDirtyDirectory(t *testing.T) {
+	t.Parallel()
+
+	for _, backend := range benchmarkBackends() {
+		t.Run(backend.name, func(t *testing.T) {
+			fsys := backend.new(t)
+			for i := range 64 {
+				writeFile(t, fsys, fmt.Sprintf("/dir/file%03d.txt", i), "x\n")
+			}
+
+			const goroutines = 16
+			const iterations = 32
+			var wg sync.WaitGroup
+			wg.Add(goroutines)
+			for range goroutines {
+				go func() {
+					defer wg.Done()
+					for range iterations {
+						entries, err := fsys.ReadDir(context.Background(), "/dir")
+						if err != nil {
+							t.Errorf("ReadDir(/dir) error = %v", err)
+							return
+						}
+						if got, want := len(entries), 64; got != want {
+							t.Errorf("len(ReadDir(/dir)) = %d, want %d", got, want)
+							return
+						}
+					}
+				}()
+			}
+			wg.Wait()
 		})
 	}
 }

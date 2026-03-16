@@ -378,29 +378,37 @@ func (f *TrieFS) Lstat(ctx context.Context, name string) (stdfs.FileInfo, error)
 }
 
 func (f *TrieFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	requested := Resolve(f.Getwd(), name)
 
-	abs, entry, err := f.resolvePathLocked(name, true, false)
+	f.mu.RLock()
+	abs, entry, err := f.resolveAbsLocked(requested, true, false, 0)
 	if err != nil {
-		return nil, &os.PathError{Op: "readdir", Path: Resolve(f.cwd, name), Err: err}
+		f.mu.RUnlock()
+		return nil, &os.PathError{Op: "readdir", Path: requested, Err: err}
+	}
+	if !entry.inode.mode.IsDir() {
+		f.mu.RUnlock()
+		return nil, &os.PathError{Op: "readdir", Path: abs, Err: stdfs.ErrInvalid}
+	}
+	if !entry.inode.dirty && len(entry.inode.names) == len(entry.inode.children) {
+		entries := f.dirEntriesLocked(abs, entry.inode, entry.inode.names)
+		f.mu.RUnlock()
+		return entries, nil
+	}
+	f.mu.RUnlock()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	abs, entry, err = f.resolveAbsLocked(requested, true, false, 0)
+	if err != nil {
+		return nil, &os.PathError{Op: "readdir", Path: requested, Err: err}
 	}
 	if !entry.inode.mode.IsDir() {
 		return nil, &os.PathError{Op: "readdir", Path: abs, Err: stdfs.ErrInvalid}
 	}
-
 	names := f.sortedChildNamesLocked(entry.inode)
-	entries := make([]stdfs.DirEntry, 0, len(names))
-	for _, childName := range names {
-		child := entry.inode.children[childName]
-		entries = append(entries, trieDirEntry{
-			fs:   f,
-			name: childName,
-			path: joinChildPath(abs, childName),
-			mode: child.inode.mode,
-		})
-	}
-	return entries, nil
+	return f.dirEntriesLocked(abs, entry.inode, names), nil
 }
 
 func (f *TrieFS) Readlink(_ context.Context, name string) (string, error) {
@@ -894,6 +902,23 @@ func (f *TrieFS) sortedChildNamesLocked(node *trieInode) []string {
 	slices.Sort(node.names)
 	node.dirty = false
 	return node.names
+}
+
+func (f *TrieFS) dirEntriesLocked(abs string, node *trieInode, names []string) []stdfs.DirEntry {
+	entries := make([]stdfs.DirEntry, 0, len(names))
+	for _, childName := range names {
+		child := node.children[childName]
+		if child == nil {
+			continue
+		}
+		entries = append(entries, trieDirEntry{
+			fs:   f,
+			name: childName,
+			path: joinChildPath(abs, childName),
+			mode: child.inode.mode,
+		})
+	}
+	return entries
 }
 
 func (f *TrieFS) newNodeIDLocked() uint64 {
