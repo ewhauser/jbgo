@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -455,6 +456,266 @@ func decodeResult[T any](t *testing.T, resp *rpcResponse, out *T) {
 	if err := json.Unmarshal(resp.Result, out); err != nil {
 		t.Fatalf("Unmarshal(result) error = %v; raw=%s", err, string(resp.Result))
 	}
+}
+
+func TestServerParallelStress(t *testing.T) {
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: 5 * time.Second,
+	})
+
+	const numClients = 8
+	const opsPerClient = 10
+
+	var wg sync.WaitGroup
+	for i := range numClients {
+		wg.Go(func() {
+			client := dialClient(t, srv.socket)
+			defer client.Close()
+
+			sessionID := mustCreateSession(t, client)
+
+			for j := range opsPerClient {
+				script := fmt.Sprintf("printf 'c%d-j%d\\n'", i, j)
+				resp := client.call("session.exec", map[string]any{
+					"session_id": sessionID,
+					"script":     script,
+				})
+				mustOK(t, &resp)
+				var payload execResult
+				decodeResult(t, &resp, &payload)
+				want := fmt.Sprintf("c%d-j%d\n", i, j)
+				if payload.Stdout != want {
+					t.Errorf("client %d op %d: stdout = %q, want %q", i, j, payload.Stdout, want)
+				}
+				if payload.ExitCode != 0 {
+					t.Errorf("client %d op %d: exit_code = %d, want 0", i, j, payload.ExitCode)
+				}
+			}
+
+			resp := client.call("session.get", map[string]any{"session_id": sessionID})
+			mustOK(t, &resp)
+
+			resp = client.call("session.list", nil)
+			mustOK(t, &resp)
+
+			resp = client.call("session.destroy", map[string]any{"session_id": sessionID})
+			mustOK(t, &resp)
+		})
+	}
+	wg.Wait()
+
+	verifier := dialClient(t, srv.socket)
+	defer verifier.Close()
+	list := verifier.call("session.list", nil)
+	mustOK(t, &list)
+	var listed sessionListResult
+	decodeResult(t, &list, &listed)
+	if len(listed.Sessions) != 0 {
+		t.Fatalf("session.list after stress = %+v, want empty", listed)
+	}
+}
+
+func TestServerParallelExecOnSharedSession(t *testing.T) {
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: 5 * time.Second,
+	})
+
+	setup := dialClient(t, srv.socket)
+	defer setup.Close()
+	sessionID := mustCreateSession(t, setup)
+
+	const numWorkers = 10
+	type result struct {
+		ok   bool
+		busy bool
+		err  string
+	}
+
+	results := make([]result, numWorkers)
+	var wg sync.WaitGroup
+	for i := range numWorkers {
+		wg.Go(func() {
+			c := dialClient(t, srv.socket)
+			defer c.Close()
+			resp := c.call("session.exec", map[string]any{
+				"session_id": sessionID,
+				"script":     "sleep 0.1\nprintf 'done\\n'",
+			})
+			if resp.Error != nil {
+				if resp.Error.Data != nil && resp.Error.Data.Code == "SESSION_BUSY" {
+					results[i] = result{busy: true}
+				} else {
+					results[i] = result{err: resp.Error.Message}
+				}
+			} else {
+				results[i] = result{ok: true}
+			}
+		})
+	}
+	wg.Wait()
+
+	var okCount, busyCount, errCount int
+	for _, r := range results {
+		switch {
+		case r.ok:
+			okCount++
+		case r.busy:
+			busyCount++
+		default:
+			errCount++
+			t.Errorf("unexpected error: %s", r.err)
+		}
+	}
+
+	if okCount == 0 {
+		t.Fatalf("expected at least one successful exec, got ok=%d busy=%d err=%d", okCount, busyCount, errCount)
+	}
+	if errCount > 0 {
+		t.Fatalf("unexpected errors: ok=%d busy=%d err=%d", okCount, busyCount, errCount)
+	}
+	t.Logf("results: ok=%d busy=%d", okCount, busyCount)
+}
+
+func TestServerParallelCreateDestroy(t *testing.T) {
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: 5 * time.Second,
+	})
+
+	const rounds = 20
+	var wg sync.WaitGroup
+	for range rounds {
+		wg.Go(func() {
+			c := dialClient(t, srv.socket)
+			defer c.Close()
+
+			id := mustCreateSession(t, c)
+
+			resp := c.call("session.exec", map[string]any{
+				"session_id": id,
+				"script":     "printf 'ok\\n'",
+			})
+			mustOK(t, &resp)
+
+			resp = c.call("session.destroy", map[string]any{"session_id": id})
+			mustOK(t, &resp)
+		})
+	}
+	wg.Wait()
+
+	verifier := dialClient(t, srv.socket)
+	defer verifier.Close()
+	list := verifier.call("session.list", nil)
+	mustOK(t, &list)
+	var listed sessionListResult
+	decodeResult(t, &list, &listed)
+	if len(listed.Sessions) != 0 {
+		t.Fatalf("session.list after create/destroy = %+v, want empty", listed)
+	}
+}
+
+func TestServerParallelFileIO(t *testing.T) {
+	// Seed a temp directory with files that every session can read through
+	// the overlay FS, then hammer the server with concurrent sessions doing
+	// file reads, writes, tails, and pipes.
+	hostDir := t.TempDir()
+	for i := range 5 {
+		name := filepath.Join(hostDir, fmt.Sprintf("data-%d.txt", i))
+		var lines []string
+		for j := range 20 {
+			lines = append(lines, fmt.Sprintf("line-%d-%d", i, j))
+		}
+		if err := os.WriteFile(name, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: 10 * time.Second,
+	}, gbash.WithWorkspace(hostDir))
+
+	const numClients = 6
+	var wg sync.WaitGroup
+	for i := range numClients {
+		wg.Go(func() {
+			c := dialClient(t, srv.socket)
+			defer c.Close()
+			sid := mustCreateSession(t, c)
+
+			// cat a host file
+			resp := c.call("session.exec", map[string]any{
+				"session_id": sid,
+				"script":     fmt.Sprintf("cat data-%d.txt | wc -l", i%5),
+			})
+			mustOK(t, &resp)
+			var payload execResult
+			decodeResult(t, &resp, &payload)
+			if got := strings.TrimSpace(payload.Stdout); got != "20" {
+				t.Errorf("client %d cat|wc: got %q, want 20", i, got)
+			}
+
+			// tail the last 3 lines
+			resp = c.call("session.exec", map[string]any{
+				"session_id": sid,
+				"script":     fmt.Sprintf("tail -n 3 data-%d.txt", i%5),
+			})
+			mustOK(t, &resp)
+			decodeResult(t, &resp, &payload)
+			tailLines := strings.Split(strings.TrimRight(payload.Stdout, "\n"), "\n")
+			if len(tailLines) != 3 {
+				t.Errorf("client %d tail: got %d lines, want 3", i, len(tailLines))
+			}
+
+			// write a new file in the sandbox overlay, then read it back
+			resp = c.call("session.exec", map[string]any{
+				"session_id": sid,
+				"script": fmt.Sprintf(
+					"seq 1 100 > /tmp/out-%d.txt\nwc -l < /tmp/out-%d.txt", i, i),
+			})
+			mustOK(t, &resp)
+			decodeResult(t, &resp, &payload)
+			if got := strings.TrimSpace(payload.Stdout); got != "100" {
+				t.Errorf("client %d seq|wc: got %q, want 100", i, got)
+			}
+
+			// head + grep pipeline on host file
+			resp = c.call("session.exec", map[string]any{
+				"session_id": sid,
+				"script":     fmt.Sprintf("head -n 10 data-%d.txt | grep 'line-%d-5'", i%5, i%5),
+			})
+			mustOK(t, &resp)
+			decodeResult(t, &resp, &payload)
+			want := fmt.Sprintf("line-%d-5\n", i%5)
+			if payload.Stdout != want {
+				t.Errorf("client %d head|grep: got %q, want %q", i, payload.Stdout, want)
+			}
+
+			// append to a file then cat it
+			resp = c.call("session.exec", map[string]any{
+				"session_id": sid,
+				"script": fmt.Sprintf(
+					"cp data-%d.txt /tmp/copy-%d.txt\n"+
+						"echo 'appended' >> /tmp/copy-%d.txt\n"+
+						"tail -n 1 /tmp/copy-%d.txt", i%5, i, i, i),
+			})
+			mustOK(t, &resp)
+			decodeResult(t, &resp, &payload)
+			if got := strings.TrimSpace(payload.Stdout); got != "appended" {
+				t.Errorf("client %d append+tail: got %q, want appended", i, got)
+			}
+
+			resp = c.call("session.destroy", map[string]any{"session_id": sid})
+			mustOK(t, &resp)
+		})
+	}
+	wg.Wait()
 }
 
 func TestServerRejectsInvalidMethod(t *testing.T) {

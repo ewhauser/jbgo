@@ -475,7 +475,6 @@ func withYQSandbox(run func() error) error {
 	return run()
 }
 
-
 func runYQEval(ctx context.Context, expression string, inputs []namedInput, printer yqlib.Printer, inputFormat *yqlib.Format, nullInput bool) error {
 	stream := yqlib.NewStreamEvaluator()
 	if nullInput {
