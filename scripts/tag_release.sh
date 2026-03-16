@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 VERSION="${1:-${RELEASE_VERSION:-}}"
 REMOTE="${REMOTE:-origin}"
 PUSH="${PUSH:-0}"
@@ -35,9 +35,9 @@ fi
 
 HEAD_COMMIT="$(git rev-parse HEAD)"
 tags=("${VERSION}")
-while IFS= read -r module_dir; do
+for module_dir in $(find contrib -mindepth 1 -maxdepth 1 -type d | sort); do
 	tags+=("${module_dir}/${VERSION}")
-done < <(find contrib -mindepth 1 -maxdepth 1 -type d | sort)
+done
 
 created_tags=()
 for tag in "${tags[@]}"; do
