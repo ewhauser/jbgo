@@ -136,6 +136,72 @@ func TestTraceRawPreservesSensitiveArgv(t *testing.T) {
 	}
 }
 
+func TestTraceRedactedLeavesResultsFinalEnvAndLoggerOutputsRaw(t *testing.T) {
+	t.Parallel()
+	var (
+		callbackEvents []trace.Event
+		logEvents      []LogEvent
+	)
+	rt := newRuntime(t, &Config{
+		Tracing: TraceConfig{
+			Mode: TraceRedacted,
+			OnEvent: func(_ context.Context, event trace.Event) {
+				callbackEvents = append(callbackEvents, event)
+			},
+		},
+		Logger: func(_ context.Context, event LogEvent) {
+			logEvents = append(logEvents, event)
+		},
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "" +
+			"export API_TOKEN=env-secret\n" +
+			"printf 'stdout:%s\\n' \"$API_TOKEN\"\n" +
+			"printf 'stderr:%s\\n' \"$API_TOKEN\" >&2\n" +
+			"echo -H 'Authorization: Bearer argv-secret' >/dev/null\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := result.Stdout, "stdout:env-secret\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "stderr:env-secret\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if got, want := result.FinalEnv["API_TOKEN"], "env-secret"; got != want {
+		t.Fatalf("FinalEnv[API_TOKEN] = %q, want %q", got, want)
+	}
+
+	event := findCommandEvent(callbackEvents, trace.EventCallExpanded, "echo")
+	if event == nil || event.Command == nil {
+		t.Fatalf("missing callback echo event: %#v", callbackEvents)
+	}
+	if !event.Redacted {
+		t.Fatalf("event.Redacted = %t, want true", event.Redacted)
+	}
+	if got, want := event.Command.Argv, []string{"echo", "-H", "Authorization: [REDACTED]"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("redacted argv = %#v, want %#v", got, want)
+	}
+
+	stdoutEvent := findLogEvent(logEvents, LogStdout)
+	if stdoutEvent == nil {
+		t.Fatalf("missing stdout log event: %#v", logEvents)
+	}
+	if got, want := stdoutEvent.Output, "stdout:env-secret\n"; got != want {
+		t.Fatalf("stdout log output = %q, want %q", got, want)
+	}
+
+	stderrEvent := findLogEvent(logEvents, LogStderr)
+	if stderrEvent == nil {
+		t.Fatalf("missing stderr log event: %#v", logEvents)
+	}
+	if got, want := stderrEvent.Output, "stderr:env-secret\n"; got != want {
+		t.Fatalf("stderr log output = %q, want %q", got, want)
+	}
+}
+
 func TestNestedExecTracingInvokesInheritedCallbacks(t *testing.T) {
 	t.Parallel()
 	var executionIDs []string
@@ -343,4 +409,13 @@ func logKinds(events []LogEvent) []LogKind {
 		out = append(out, events[i].Kind)
 	}
 	return out
+}
+
+func findLogEvent(events []LogEvent, kind LogKind) *LogEvent {
+	for i := range events {
+		if events[i].Kind == kind {
+			return &events[i]
+		}
+	}
+	return nil
 }

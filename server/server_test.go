@@ -227,6 +227,40 @@ func TestServerConcurrentSessionsAndBusy(t *testing.T) {
 	}
 }
 
+func TestServerExecReturnsRawOutputsAndFinalEnvWithTraceRedacted(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: time.Second,
+	}, gbash.WithTracing(gbash.TraceConfig{Mode: gbash.TraceRedacted}))
+	client := dialClient(t, srv.socket)
+	defer client.Close()
+
+	sessionID := mustCreateSession(t, client)
+	exec := client.call("session.exec", map[string]any{
+		"session_id": sessionID,
+		"script": "" +
+			"export API_TOKEN=env-secret\n" +
+			"printf 'stdout:%s\\n' \"$API_TOKEN\"\n" +
+			"printf 'stderr:%s\\n' \"$API_TOKEN\" >&2\n" +
+			"echo -H 'Authorization: Bearer argv-secret' >/dev/null\n",
+	})
+	mustOK(t, &exec)
+
+	var payload execResult
+	decodeResult(t, &exec, &payload)
+	if got, want := payload.Stdout, "stdout:env-secret\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := payload.Stderr, "stderr:env-secret\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+	if got, want := payload.FinalEnv["API_TOKEN"], "env-secret"; got != want {
+		t.Fatalf("FinalEnv[API_TOKEN] = %q, want %q", got, want)
+	}
+}
+
 func TestServerSessionTTLExpiry(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t, gbserver.Config{
