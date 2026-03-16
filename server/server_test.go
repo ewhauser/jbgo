@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -304,6 +305,166 @@ func TestServeTCPListenerReportsTCPTransport(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for tcp server shutdown")
+	}
+}
+
+func TestListenAndServeUnixSetsSocketPermissions0600(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: time.Second,
+	})
+
+	info, err := os.Stat(srv.socket)
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", srv.socket, err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		t.Fatalf("mode = %v, want socket bit set", info.Mode())
+	}
+	if got, want := info.Mode().Perm(), os.FileMode(0o600); got != want {
+		t.Fatalf("socket mode = %o, want %o", got, want)
+	}
+}
+
+func TestListenAndServeUnixRejectsExistingNonSocketPath(t *testing.T) {
+	t.Parallel()
+	socket := filepath.Join(t.TempDir(), "gbash.sock")
+	if err := os.WriteFile(socket, []byte("not a socket"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", socket, err)
+	}
+
+	rt, err := gbash.New()
+	if err != nil {
+		t.Fatalf("gbash.New() error = %v", err)
+	}
+
+	err = gbserver.ListenAndServeUnix(t.Context(), socket, gbserver.Config{
+		Runtime:    rt,
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: time.Second,
+	})
+	if err == nil {
+		t.Fatal("ListenAndServeUnix() error = nil, want non-socket path rejection")
+	}
+	if !strings.Contains(err.Error(), "path exists and is not a socket") {
+		t.Fatalf("error = %v, want non-socket path rejection", err)
+	}
+}
+
+func TestListenAndServeUnixRejectsActiveSocketPath(t *testing.T) {
+	t.Parallel()
+	socket := filepath.Join(os.TempDir(), fmt.Sprintf("gbs-active-%d.sock", time.Now().UnixNano()))
+	t.Cleanup(func() { _ = os.Remove(socket) })
+
+	active, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatalf("Listen(unix) error = %v", err)
+	}
+	defer func() { _ = active.Close() }()
+
+	rt, err := gbash.New()
+	if err != nil {
+		t.Fatalf("gbash.New() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- gbserver.ListenAndServeUnix(ctx, socket, gbserver.Config{
+			Runtime:    rt,
+			Name:       "gbash",
+			Version:    "test",
+			SessionTTL: time.Second,
+		})
+	}()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("ListenAndServeUnix() error = nil, want active socket rejection")
+		}
+		if !strings.Contains(err.Error(), "socket already in use") {
+			t.Fatalf("error = %v, want active socket rejection", err)
+		}
+	case <-time.After(2 * time.Second):
+		cancel()
+		select {
+		case err := <-errCh:
+			t.Fatalf("ListenAndServeUnix() blocked on active socket path, err after cancel = %v", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for active-socket probe to stop")
+		}
+	}
+}
+
+func TestListenAndServeUnixRemovesStaleSocket(t *testing.T) {
+	t.Parallel()
+	socket := filepath.Join(os.TempDir(), fmt.Sprintf("gbs-stale-%d.sock", time.Now().UnixNano()))
+	t.Cleanup(func() { _ = os.Remove(socket) })
+
+	fd, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatalf("Socket(AF_UNIX) error = %v", err)
+	}
+	if err := syscall.Bind(fd, &syscall.SockaddrUnix{Name: socket}); err != nil {
+		_ = syscall.Close(fd)
+		t.Fatalf("Bind(%q) error = %v", socket, err)
+	}
+	if err := syscall.Listen(fd, 1); err != nil {
+		_ = syscall.Close(fd)
+		t.Fatalf("Listen(stale fd) error = %v", err)
+	}
+	if err := syscall.Close(fd); err != nil {
+		t.Fatalf("Close(stale fd) error = %v", err)
+	}
+	if _, err := os.Lstat(socket); err != nil {
+		t.Fatalf("Lstat(%q) error = %v", socket, err)
+	}
+
+	rt, err := gbash.New()
+	if err != nil {
+		t.Fatalf("gbash.New() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- gbserver.ListenAndServeUnix(ctx, socket, gbserver.Config{
+			Runtime:    rt,
+			Name:       "gbash",
+			Version:    "test",
+			SessionTTL: time.Second,
+		})
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	var ready bool
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("unix", socket, 50*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			ready = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !ready {
+		t.Fatalf("timed out waiting for replacement server at %s", socket)
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("ListenAndServeUnix() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for unix server shutdown")
 	}
 }
 

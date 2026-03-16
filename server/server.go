@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ewhauser/gbash"
@@ -197,6 +198,16 @@ func removeStaleUnixSocket(socketPath string) error {
 	if err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return fmt.Errorf("server: path exists and is not a socket: %s", socketPath)
+		}
+		conn, dialErr := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
+		if dialErr == nil {
+			_ = conn.Close()
+			return fmt.Errorf("server: socket already in use: %s", socketPath)
+		}
+		switch {
+		case errors.Is(dialErr, syscall.ECONNREFUSED), errors.Is(dialErr, syscall.ENOENT), errors.Is(dialErr, os.ErrNotExist):
+		default:
+			return fmt.Errorf("server: probe existing socket: %w", dialErr)
 		}
 		if removeErr := os.Remove(socketPath); removeErr != nil {
 			return fmt.Errorf("server: remove stale socket: %w", removeErr)
