@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -1092,11 +1093,11 @@ type sqliteFile struct {
 	path   string
 	flag   int
 	offset int64
-	closed bool
+	closed atomic.Bool
 }
 
 func (f *sqliteFile) Read(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canRead(f.flag) {
@@ -1123,7 +1124,7 @@ func (f *sqliteFile) Read(p []byte) (int, error) {
 }
 
 func (f *sqliteFile) Write(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canWrite(f.flag) {
@@ -1168,12 +1169,12 @@ func (f *sqliteFile) Write(p []byte) (int, error) {
 }
 
 func (f *sqliteFile) Close() error {
-	f.closed = true
+	f.closed.Store(true)
 	return nil
 }
 
 func (f *sqliteFile) Stat() (stdfs.FileInfo, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return nil, stdfs.ErrClosed
 	}
 	return f.fs.Stat(context.Background(), f.path)

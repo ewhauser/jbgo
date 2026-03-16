@@ -61,7 +61,12 @@ type namedInput struct {
 }
 
 var yqEvalMu sync.Mutex
-var yqLoggingOnce sync.Once
+
+func init() {
+	backend := logging.AddModuleLevel(logging.NewLogBackend(io.Discard, "", 0))
+	backend.SetLevel(logging.ERROR, "")
+	logging.SetBackend(backend)
+}
 
 func NewYQ() *YQ {
 	return &YQ{}
@@ -459,7 +464,6 @@ func withYQSandbox(run func() error) error {
 	yqEvalMu.Lock()
 	defer yqEvalMu.Unlock()
 
-	configureYQLogging()
 	yqlib.InitExpressionParser()
 	security := yqlib.ConfiguredSecurityPreferences
 	yqlib.ConfiguredSecurityPreferences.DisableEnvOps = true
@@ -471,13 +475,6 @@ func withYQSandbox(run func() error) error {
 	return run()
 }
 
-func configureYQLogging() {
-	yqLoggingOnce.Do(func() {
-		backend := logging.AddModuleLevel(logging.NewLogBackend(io.Discard, "", 0))
-		backend.SetLevel(logging.ERROR, "")
-		logging.SetBackend(backend)
-	})
-}
 
 func runYQEval(ctx context.Context, expression string, inputs []namedInput, printer yqlib.Printer, inputFormat *yqlib.Format, nullInput bool) error {
 	stream := yqlib.NewStreamEvaluator()

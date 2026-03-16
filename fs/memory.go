@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -765,11 +766,11 @@ type memoryFile struct {
 	path   string
 	flag   int
 	offset int64
-	closed bool
+	closed atomic.Bool
 }
 
 func (f *memoryFile) Read(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canRead(f.flag) {
@@ -810,7 +811,7 @@ func (f *memoryFile) Read(p []byte) (int, error) {
 }
 
 func (f *memoryFile) Write(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canWrite(f.flag) {
@@ -905,12 +906,12 @@ func (f *memoryFile) WriteTo(w io.Writer) (int64, error) {
 }
 
 func (f *memoryFile) Close() error {
-	f.closed = true
+	f.closed.Store(true)
 	return nil
 }
 
 func (f *memoryFile) Stat() (stdfs.FileInfo, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return nil, stdfs.ErrClosed
 	}
 	return f.fs.Stat(context.Background(), f.path)

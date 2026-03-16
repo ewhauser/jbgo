@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -388,11 +389,11 @@ func (fi virtualFileInfo) Ownership() (gbfs.FileOwnership, bool) {
 type nullDeviceFile struct {
 	path   string
 	flag   int
-	closed bool
+	closed atomic.Bool
 }
 
 func (f *nullDeviceFile) Read(_ []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canReadVirtualDevice(f.flag) {
@@ -402,7 +403,7 @@ func (f *nullDeviceFile) Read(_ []byte) (int, error) {
 }
 
 func (f *nullDeviceFile) Write(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canWriteVirtualDevice(f.flag) {
@@ -412,12 +413,12 @@ func (f *nullDeviceFile) Write(p []byte) (int, error) {
 }
 
 func (f *nullDeviceFile) Close() error {
-	f.closed = true
+	f.closed.Store(true)
 	return nil
 }
 
 func (f *nullDeviceFile) Stat() (stdfs.FileInfo, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return nil, stdfs.ErrClosed
 	}
 	return virtualNullInfo(), nil

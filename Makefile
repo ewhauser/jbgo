@@ -165,7 +165,7 @@ lint-new:
 	done
 
 test:
-	go test $(GO_PACKAGES)
+	go test -race $(GO_PACKAGES)
 
 build:
 	go build $(GO_PACKAGES)

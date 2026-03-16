@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -951,11 +952,11 @@ type trieFile struct {
 	path   string
 	flag   int
 	offset int64
-	closed bool
+	closed atomic.Bool
 }
 
 func (f *trieFile) Read(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canRead(f.flag) {
@@ -992,7 +993,7 @@ func (f *trieFile) Read(p []byte) (int, error) {
 }
 
 func (f *trieFile) Write(p []byte) (int, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return 0, stdfs.ErrClosed
 	}
 	if !canWrite(f.flag) {
@@ -1086,12 +1087,12 @@ func (f *trieFile) WriteTo(w io.Writer) (int64, error) {
 }
 
 func (f *trieFile) Close() error {
-	f.closed = true
+	f.closed.Store(true)
 	return nil
 }
 
 func (f *trieFile) Stat() (stdfs.FileInfo, error) {
-	if f.closed {
+	if f.closed.Load() {
 		return nil, stdfs.ErrClosed
 	}
 	return f.fs.Stat(context.Background(), f.path)

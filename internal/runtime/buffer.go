@@ -1,8 +1,12 @@
 package runtime
 
-import "bytes"
+import (
+	"bytes"
+	"sync"
+)
 
 type captureBuffer struct {
+	mu        sync.Mutex
 	buf       bytes.Buffer
 	limit     int64
 	truncated bool
@@ -13,6 +17,9 @@ func newCaptureBuffer(limit int64) *captureBuffer {
 }
 
 func (b *captureBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	if b.limit <= 0 {
 		return b.buf.Write(p)
 	}
@@ -33,9 +40,13 @@ func (b *captureBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *captureBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.buf.String()
 }
 
 func (b *captureBuffer) Truncated() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.truncated
 }
