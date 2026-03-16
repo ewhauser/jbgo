@@ -9,8 +9,6 @@ import (
 	"os"
 	"path"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Gzip struct {
@@ -150,9 +148,6 @@ func runGzipItem(ctx context.Context, inv *Invocation, opts *gzipOptions, name, 
 	if err := ensureParentDirExists(ctx, inv, targetAbs); err != nil {
 		return err
 	}
-	if _, err := allowPath(ctx, inv, policy.FileActionWrite, targetAbs); err != nil {
-		return err
-	}
 	if exists, err := gzipTargetExists(ctx, inv, targetAbs); err != nil {
 		return err
 	} else if exists {
@@ -236,7 +231,7 @@ func resolveGzipOutputPath(inv *Invocation, opts *gzipOptions, sourceAbs string)
 }
 
 func gzipTargetExists(ctx context.Context, inv *Invocation, targetAbs string) (bool, error) {
-	_, _, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, targetAbs)
+	_, _, exists, err := lstatMaybe(ctx, inv, targetAbs)
 	if err != nil {
 		return false, err
 	}

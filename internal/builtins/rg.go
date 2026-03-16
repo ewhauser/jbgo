@@ -16,7 +16,6 @@ import (
 
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/searchadapter"
-	"github.com/ewhauser/gbash/policy"
 )
 
 type RG struct{}
@@ -625,7 +624,7 @@ func (c *RG) collectFiles(ctx context.Context, inv *Invocation, roots []string, 
 	explicitFileCount := 0
 	directoryCount := 0
 	for _, root := range roots {
-		linfo, abs, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, root)
+		linfo, abs, exists, err := lstatMaybe(ctx, inv, root)
 		if err != nil {
 			return rgCollectResult{}, err
 		}
@@ -719,7 +718,7 @@ func (c *RG) walkRoot(ctx context.Context, inv *Invocation, state *rgWalkState, 
 		}
 	}
 
-	entries, _, err := readDir(ctx, inv, state.rootAbs)
+	entries, err := readDir(ctx, inv, state.rootAbs)
 	if err != nil {
 		return err
 	}

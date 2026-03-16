@@ -7,8 +7,6 @@ import (
 	"io"
 	"maps"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Env struct{}
@@ -251,7 +249,7 @@ func validateEnvUnsetName(inv *Invocation, name string) error {
 }
 
 func resolveEnvWorkingDir(ctx context.Context, inv *Invocation, dir string) (string, error) {
-	_, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, dir)
+	_, abs, exists, err := statMaybe(ctx, inv, dir)
 	if err != nil {
 		return "", err
 	}

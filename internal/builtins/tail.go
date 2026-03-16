@@ -12,7 +12,6 @@ import (
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Tail struct{}
@@ -260,7 +259,7 @@ func (c *Tail) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 
 	for {
 		if opts.follow != tailFollowNone && opts.pid != 0 {
-			alive, err := tailPIDIsAlive(ctx, inv, opts.pid)
+			alive, err := tailPIDIsAlive(inv)
 			if err != nil {
 				return err
 			}
@@ -379,7 +378,7 @@ func (c *Tail) pollTailByName(
 	process func([]byte) []byte,
 	outputState *tailOutputState,
 ) error {
-	info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, state.path)
+	info, _, exists, err := statMaybe(ctx, inv, state.path)
 	if err != nil {
 		return &ExitError{Code: exitCodeForError(err), Err: err}
 	}
@@ -595,14 +594,14 @@ func tailOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (tailOptions
 }
 
 func tailPathIsUntailable(ctx context.Context, inv *Invocation, name string) bool {
-	info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, name)
+	info, _, exists, err := statMaybe(ctx, inv, name)
 	if err != nil || !exists {
 		return false
 	}
 	return info.IsDir()
 }
 
-func tailPIDIsAlive(ctx context.Context, inv *Invocation, pid int) (bool, error) {
+func tailPIDIsAlive(inv *Invocation) (bool, error) {
 	return false, exitf(inv, 1, "tail: --pid is unsupported in this sandbox")
 }
 

@@ -26,6 +26,7 @@ linters:
     - paralleltest
     - testifylint
     - unconvert
+    - unparam
 
   settings:
     revive:

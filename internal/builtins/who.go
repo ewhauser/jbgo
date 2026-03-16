@@ -153,21 +153,21 @@ func (c *Who) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 				}
 			case whoBootTimeType:
 				if opts.needBootTime {
-					writeErr = whoWriteNamedRecord(inv, opts, "", ' ', "system boot", record, "", "")
+					writeErr = whoWriteNamedRecord(inv, opts, "", "system boot", record, "", "")
 				}
 			case whoNewTimeType:
 				if opts.needClockChange {
-					writeErr = whoWriteNamedRecord(inv, opts, "", ' ', "clock change", record, "", "")
+					writeErr = whoWriteNamedRecord(inv, opts, "", "clock change", record, "", "")
 				}
 			case whoInitProcessType:
 				if opts.needInitSpawn {
 					comment := fmt.Sprintf("id=%s", record.id)
-					writeErr = whoWriteNamedRecord(inv, opts, "", ' ', record.line, record, fmt.Sprintf("%d", record.pid), comment)
+					writeErr = whoWriteNamedRecord(inv, opts, "", record.line, record, fmt.Sprintf("%d", record.pid), comment)
 				}
 			case whoLoginType:
 				if opts.needLogin {
 					comment := fmt.Sprintf("id=%s", record.id)
-					writeErr = whoWriteNamedRecord(inv, opts, "LOGIN", ' ', record.line, record, fmt.Sprintf("%d", record.pid), comment)
+					writeErr = whoWriteNamedRecord(inv, opts, "LOGIN", record.line, record, fmt.Sprintf("%d", record.pid), comment)
 				}
 			case whoDeadType:
 				if opts.needDeadProcs {
@@ -386,8 +386,8 @@ func whoWriteRunlevel(inv *Invocation, opts whoOptions, record *whoRecord) error
 	)
 }
 
-func whoWriteNamedRecord(inv *Invocation, opts whoOptions, user string, state rune, line string, record *whoRecord, pid, comment string) error {
-	return whoWriteLine(inv, opts, user, state, line, whoTimeString(inv.Env, record.timestamp), "", pid, comment, "")
+func whoWriteNamedRecord(inv *Invocation, opts whoOptions, user, line string, record *whoRecord, pid, comment string) error {
+	return whoWriteLine(inv, opts, user, ' ', line, whoTimeString(inv.Env, record.timestamp), "", pid, comment, "")
 }
 
 func whoWriteLine(inv *Invocation, opts whoOptions, user string, state rune, line, when, idle, pid, comment, exit string) error {

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	stdfs "io/fs"
 	"path"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Mkdir struct{}
@@ -73,10 +71,7 @@ func (c *Mkdir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 	}
 
 	for _, name := range args {
-		abs, err := allowPath(ctx, inv, policy.FileActionMkdir, name)
-		if err != nil {
-			return err
-		}
+		abs := allowPath(inv, name)
 
 		created, err := mkdirPath(ctx, inv, abs, createMode, opts.parents)
 		if err != nil {

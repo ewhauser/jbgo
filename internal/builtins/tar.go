@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Tar struct{}
@@ -285,10 +284,7 @@ func openTarWriter(ctx context.Context, inv *Invocation, opts *tarOptions) (*tar
 	closers := make([]io.Closer, 0, 3)
 
 	if opts.archive != "-" {
-		archiveAbs, err := allowPath(ctx, inv, policy.FileActionWrite, opts.archive)
-		if err != nil {
-			return nil, nil, err
-		}
+		archiveAbs := allowPath(inv, opts.archive)
 		if err := ensureParentDirExists(ctx, inv, archiveAbs); err != nil {
 			return nil, nil, err
 		}
@@ -426,7 +422,7 @@ func tarWriteHeader(ctx context.Context, inv *Invocation, tw *tar.Writer, abs, n
 }
 
 func tarWriteDirChildren(ctx context.Context, inv *Invocation, tw *tar.Writer, abs, name string) error {
-	entries, _, err := readDir(ctx, inv, abs)
+	entries, err := readDir(ctx, inv, abs)
 	if err != nil {
 		return err
 	}
@@ -477,9 +473,6 @@ func sanitizeTarEntryName(name string) (string, error) {
 }
 
 func tarEnsureDir(ctx context.Context, inv *Invocation, targetAbs string, perm stdfs.FileMode) error {
-	if _, err := allowPath(ctx, inv, policy.FileActionMkdir, targetAbs); err != nil {
-		return err
-	}
 	if err := inv.FS.MkdirAll(ctx, targetAbs, perm.Perm()); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
@@ -488,9 +481,6 @@ func tarEnsureDir(ctx context.Context, inv *Invocation, targetAbs string, perm s
 
 func tarExtractFile(ctx context.Context, inv *Invocation, tr *tar.Reader, targetAbs string, header *tar.Header, keepOld bool) error {
 	if err := tarEnsureParents(ctx, inv, targetAbs); err != nil {
-		return err
-	}
-	if _, err := allowPath(ctx, inv, policy.FileActionWrite, targetAbs); err != nil {
 		return err
 	}
 	if exists, err := gzipTargetExists(ctx, inv, targetAbs); err != nil {
@@ -532,9 +522,6 @@ func tarExtractSymlink(ctx context.Context, inv *Invocation, entryName, targetAb
 	if err := tarEnsureParents(ctx, inv, targetAbs); err != nil {
 		return err
 	}
-	if _, err := allowPath(ctx, inv, policy.FileActionWrite, targetAbs); err != nil {
-		return err
-	}
 	if exists, err := gzipTargetExists(ctx, inv, targetAbs); err != nil {
 		return err
 	} else if exists {
@@ -558,12 +545,6 @@ func tarExtractHardlink(ctx context.Context, inv *Invocation, baseDir, targetAbs
 	}
 	linkAbs := gbfs.Resolve(baseDir, linkName)
 	if err := tarEnsureParents(ctx, inv, targetAbs); err != nil {
-		return err
-	}
-	if _, err := allowPath(ctx, inv, policy.FileActionWrite, targetAbs); err != nil {
-		return err
-	}
-	if _, err := allowPath(ctx, inv, policy.FileActionRead, linkAbs); err != nil {
 		return err
 	}
 	if exists, err := gzipTargetExists(ctx, inv, targetAbs); err != nil {
@@ -600,9 +581,6 @@ func tarEnsureParents(ctx context.Context, inv *Invocation, targetAbs string) er
 	parent := path.Dir(targetAbs)
 	if parent == "." || parent == "/" {
 		return nil
-	}
-	if _, err := allowPath(ctx, inv, policy.FileActionMkdir, parent); err != nil {
-		return err
 	}
 	if err := inv.FS.MkdirAll(ctx, parent, 0o755); err != nil {
 		return &ExitError{Code: 1, Err: err}

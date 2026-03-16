@@ -12,8 +12,6 @@ import (
 	"path"
 	"strings"
 	"syscall"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Truncate struct{}
@@ -473,10 +471,7 @@ func truncateReferenceSize(ctx context.Context, inv *Invocation, raw string) (ui
 }
 
 func (c *Truncate) truncatePath(ctx context.Context, inv *Invocation, raw string, noCreate bool, referenceSize *uint64, mode truncateMode) error {
-	abs, err := allowPath(ctx, inv, policy.FileActionWrite, raw)
-	if err != nil {
-		return &ExitError{Code: exitCodeForError(err), Err: err}
-	}
+	abs := allowPath(inv, raw)
 
 	info, err := inv.FS.Stat(ctx, abs)
 	switch {

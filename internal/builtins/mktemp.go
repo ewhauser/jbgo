@@ -127,7 +127,7 @@ func (c *Mktemp) RunParsed(ctx context.Context, inv *Invocation, matches *Parsed
 
 	var output string
 	if opts.dryRun {
-		output, err = mktempDryRun(params)
+		output = mktempDryRun(params)
 	} else {
 		output, err = mktempExec(ctx, inv, params, opts.directory)
 	}
@@ -314,12 +314,9 @@ func mktempTrimVisibleDir(value string) string {
 	}
 }
 
-func mktempDryRun(params mktempParams) (string, error) {
-	randomPart, err := mktempRandomString(params.numRandom)
-	if err != nil {
-		return "", err
-	}
-	return mktempCandidatePath(params, randomPart), nil
+func mktempDryRun(params mktempParams) string {
+	randomPart := mktempRandomString(params.numRandom)
+	return mktempCandidatePath(params, randomPart)
 }
 
 func mktempExec(ctx context.Context, inv *Invocation, params mktempParams, makeDir bool) (string, error) {
@@ -333,12 +330,10 @@ func mktempExec(ctx context.Context, inv *Invocation, params mktempParams, makeD
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		randomPart, err := mktempRandomString(params.numRandom)
-		if err != nil {
-			return "", &mktempCreateError{kind: kind, template: templatePath, err: err}
-		}
+		randomPart := mktempRandomString(params.numRandom)
 		visiblePath := mktempCandidatePath(params, randomPart)
 		absPath := inv.FS.Resolve(visiblePath)
+		var err error
 		if makeDir {
 			err = mktempCreateDir(ctx, inv, absPath)
 		} else {
@@ -399,9 +394,9 @@ func mktempCandidatePath(params mktempParams, randomPart string) string {
 	return mktempJoinVisible(params.directory, params.prefix+randomPart+params.suffix)
 }
 
-func mktempRandomString(length int) (string, error) {
+func mktempRandomString(length int) string {
 	if length <= 0 {
-		return "", nil
+		return ""
 	}
 
 	buf := make([]byte, length)
@@ -420,7 +415,7 @@ func mktempRandomString(length int) (string, error) {
 	for i, b := range buf {
 		out[i] = mktempAlphabet[int(b)]
 	}
-	return string(out), nil
+	return string(out)
 }
 
 func mktempCreateErrorText(err error) string {

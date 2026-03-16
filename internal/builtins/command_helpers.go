@@ -26,18 +26,15 @@ func exitCodeForError(err error) int {
 	return 1
 }
 
-func allowPath(_ context.Context, inv *Invocation, _ policy.FileAction, name string) (string, error) {
+func allowPath(inv *Invocation, name string) string {
 	if inv == nil || inv.FS == nil {
-		return gbfs.Clean(name), nil
+		return gbfs.Clean(name)
 	}
-	return inv.FS.Resolve(name), nil
+	return inv.FS.Resolve(name)
 }
 
 func openRead(ctx context.Context, inv *Invocation, name string) (gbfs.File, string, error) {
-	abs, err := allowPath(ctx, inv, policy.FileActionRead, name)
-	if err != nil {
-		return nil, "", err
-	}
+	abs := allowPath(inv, name)
 	file, err := inv.FS.Open(ctx, abs)
 	if err != nil {
 		return nil, "", err
@@ -45,23 +42,17 @@ func openRead(ctx context.Context, inv *Invocation, name string) (gbfs.File, str
 	return file, abs, nil
 }
 
-func readDir(ctx context.Context, inv *Invocation, name string) ([]stdfs.DirEntry, string, error) {
-	abs, err := allowPath(ctx, inv, policy.FileActionReadDir, name)
-	if err != nil {
-		return nil, "", err
-	}
+func readDir(ctx context.Context, inv *Invocation, name string) ([]stdfs.DirEntry, error) {
+	abs := allowPath(inv, name)
 	entries, err := inv.FS.ReadDir(ctx, abs)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return entries, abs, nil
+	return entries, nil
 }
 
 func statPath(ctx context.Context, inv *Invocation, name string) (stdfs.FileInfo, string, error) {
-	abs, err := allowPath(ctx, inv, policy.FileActionStat, name)
-	if err != nil {
-		return nil, "", err
-	}
+	abs := allowPath(inv, name)
 	info, err := inv.FS.Stat(ctx, abs)
 	if err != nil {
 		return nil, "", err
@@ -70,10 +61,7 @@ func statPath(ctx context.Context, inv *Invocation, name string) (stdfs.FileInfo
 }
 
 func lstatPath(ctx context.Context, inv *Invocation, name string) (stdfs.FileInfo, string, error) {
-	abs, err := allowPath(ctx, inv, policy.FileActionLstat, name)
-	if err != nil {
-		return nil, "", err
-	}
+	abs := allowPath(inv, name)
 	info, err := inv.FS.Lstat(ctx, abs)
 	if err != nil {
 		return nil, "", err
@@ -81,11 +69,8 @@ func lstatPath(ctx context.Context, inv *Invocation, name string) (stdfs.FileInf
 	return info, abs, nil
 }
 
-func statMaybe(ctx context.Context, inv *Invocation, action policy.FileAction, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
-	abs, err = allowPath(ctx, inv, action, name)
-	if err != nil {
-		return nil, "", false, err
-	}
+func statMaybe(ctx context.Context, inv *Invocation, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
+	abs = allowPath(inv, name)
 	info, err = inv.FS.Stat(ctx, abs)
 	if err != nil {
 		if errors.Is(err, stdfs.ErrNotExist) {
@@ -96,11 +81,8 @@ func statMaybe(ctx context.Context, inv *Invocation, action policy.FileAction, n
 	return info, abs, true, nil
 }
 
-func lstatMaybe(ctx context.Context, inv *Invocation, action policy.FileAction, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
-	abs, err = allowPath(ctx, inv, action, name)
-	if err != nil {
-		return nil, "", false, err
-	}
+func lstatMaybe(ctx context.Context, inv *Invocation, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
+	abs = allowPath(inv, name)
 	info, err = inv.FS.Lstat(ctx, abs)
 	if err != nil {
 		if errors.Is(err, stdfs.ErrNotExist) {

@@ -2,9 +2,8 @@ package shell
 
 import "mvdan.cc/sh/v3/syntax"
 
-func normalizeExecutionProgram(program *syntax.File) error {
+func normalizeExecutionProgram(program *syntax.File) {
 	rewritePipelineSubshells(program)
-	return nil
 }
 
 func rewritePipelineSubshells(program *syntax.File) {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	stdfs "io/fs"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Link struct{}
@@ -51,10 +49,7 @@ func (c *Link) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return exitf(inv, 1, "link: cannot create link %s to %s: Operation not permitted", quoteGNUOperand(newName), quoteGNUOperand(oldName))
 	}
 
-	newAbs, err := allowPath(ctx, inv, policy.FileActionWrite, newName)
-	if err != nil {
-		return err
-	}
+	newAbs := allowPath(inv, newName)
 	if err := ensureParentDirExists(ctx, inv, newAbs); err != nil {
 		return exitf(inv, 1, "link: cannot create link %s to %s: %s", quoteGNUOperand(newName), quoteGNUOperand(oldName), linkErrText(err))
 	}

@@ -245,7 +245,7 @@ func parseCutRanges(inv *Invocation, mode cutMode, value string, complement bool
 	ranges := make([]cutRange, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		current, err := parseCutRangePart(mode, part)
+		current, err := parseCutRangePart(part)
 		if err != nil {
 			return nil, cutRangeError(inv, mode, part, err)
 		}
@@ -257,7 +257,7 @@ func parseCutRanges(inv *Invocation, mode cutMode, value string, complement bool
 	return ranges, nil
 }
 
-func parseCutRangePart(mode cutMode, part string) (cutRange, error) {
+func parseCutRangePart(part string) (cutRange, error) {
 	if part == "" {
 		return cutRange{}, errCutRangeStartsAtOne
 	}

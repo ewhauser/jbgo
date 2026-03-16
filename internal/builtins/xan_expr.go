@@ -122,13 +122,13 @@ func (e xanBinaryExpr) eval(ctx *xanEvalContext) (any, error) {
 	case "ne":
 		return xanValueString(left) != xanValueString(right), nil
 	case "<":
-		return xanCompareOrdered(left, right, func(c int) bool { return c < 0 })
+		return xanCompareOrdered(left, right, func(c int) bool { return c < 0 }), nil
 	case "<=":
-		return xanCompareOrdered(left, right, func(c int) bool { return c <= 0 })
+		return xanCompareOrdered(left, right, func(c int) bool { return c <= 0 }), nil
 	case ">":
-		return xanCompareOrdered(left, right, func(c int) bool { return c > 0 })
+		return xanCompareOrdered(left, right, func(c int) bool { return c > 0 }), nil
 	case ">=":
-		return xanCompareOrdered(left, right, func(c int) bool { return c >= 0 })
+		return xanCompareOrdered(left, right, func(c int) bool { return c >= 0 }), nil
 	case "lt":
 		return xanCompareOrderedStrings(left, right, func(c int) bool { return c < 0 }), nil
 	case "le":
@@ -424,20 +424,20 @@ func xanCompareEq(left, right any) bool {
 	return xanValueString(left) == xanValueString(right)
 }
 
-func xanCompareOrdered(left, right any, match func(int) bool) (bool, error) {
+func xanCompareOrdered(left, right any, match func(int) bool) bool {
 	if lnum, lok := xanAsFloat(left); lok {
 		if rnum, rok := xanAsFloat(right); rok {
 			switch {
 			case lnum < rnum:
-				return match(-1), nil
+				return match(-1)
 			case lnum > rnum:
-				return match(1), nil
+				return match(1)
 			default:
-				return match(0), nil
+				return match(0)
 			}
 		}
 	}
-	return match(strings.Compare(xanValueString(left), xanValueString(right))), nil
+	return match(strings.Compare(xanValueString(left), xanValueString(right)))
 }
 
 func xanCompareOrderedStrings(left, right any, match func(int) bool) bool {

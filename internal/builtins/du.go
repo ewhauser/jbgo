@@ -131,7 +131,7 @@ func (c *DU) emit(ctx context.Context, inv *Invocation, abs string, info stdfs.F
 		return size, nil
 	}
 
-	entries, _, err := readDir(ctx, inv, abs)
+	entries, err := readDir(ctx, inv, abs)
 	if err != nil {
 		return 0, err
 	}

@@ -9,8 +9,6 @@ import (
 	"path"
 	"strings"
 	"syscall"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Rmdir struct{}
@@ -57,10 +55,7 @@ func (c *Rmdir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 	args := matches.Args("dir")
 
 	for _, dir := range args {
-		abs, err := allowPath(ctx, inv, policy.FileActionRemove, dir)
-		if err != nil {
-			return err
-		}
+		abs := allowPath(inv, dir)
 		if err := removeEmptyDir(ctx, inv, dir, abs, opts); err != nil {
 			return err
 		}

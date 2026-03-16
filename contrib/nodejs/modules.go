@@ -55,9 +55,9 @@ func (rt *nodeRuntime) processModule() (*goja.Object, error) {
 	return obj, nil
 }
 
-func (rt *nodeRuntime) fsModule() (*goja.Object, error) {
+func (rt *nodeRuntime) fsModule() *goja.Object {
 	if rt.fsExports != nil {
-		return rt.fsExports, nil
+		return rt.fsExports
 	}
 
 	obj := rt.vm.NewObject()
@@ -77,12 +77,12 @@ func (rt *nodeRuntime) fsModule() (*goja.Object, error) {
 
 	rt.fsExports = obj
 	_ = freezeObject(rt.vm, obj)
-	return obj, nil
+	return obj
 }
 
-func (rt *nodeRuntime) pathModule() (*goja.Object, error) {
+func (rt *nodeRuntime) pathModule() *goja.Object {
 	if rt.pathExports != nil {
-		return rt.pathExports, nil
+		return rt.pathExports
 	}
 
 	obj := rt.vm.NewObject()
@@ -99,7 +99,7 @@ func (rt *nodeRuntime) pathModule() (*goja.Object, error) {
 
 	rt.pathExports = obj
 	_ = freezeObject(rt.vm, obj)
-	return obj, nil
+	return obj
 }
 
 func (rt *nodeRuntime) readFileSync(call goja.FunctionCall) goja.Value {

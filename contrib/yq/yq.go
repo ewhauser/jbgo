@@ -104,15 +104,15 @@ func (c *YQ) Run(ctx context.Context, inv *commands.Invocation) error {
 	expression = processYQExpression(expression, opts.prettyPrint)
 
 	if opts.nullInput && len(inputs) > 0 {
-		return exitf(inv, 1, "yq: cannot pass files in when using null-input flag")
+		return exitf(inv, "yq: cannot pass files in when using null-input flag")
 	}
 	if opts.inPlace && (len(inputs) == 0 || inputs[0] == "-") {
-		return exitf(inv, 1, "yq: write in place flag only applicable when giving an expression and at least one file")
+		return exitf(inv, "yq: write in place flag only applicable when giving an expression and at least one file")
 	}
 
 	formats, err := resolveYQFormats(&opts, inputs)
 	if err != nil {
-		return exitf(inv, 1, "yq: %v", err)
+		return exitf(inv, "yq: %v", err)
 	}
 
 	namedInputs, err := readNamedInputs(ctx, inv, inputs, !opts.nullInput)
@@ -131,7 +131,7 @@ func (c *YQ) Run(ctx context.Context, inv *commands.Invocation) error {
 		return err
 	}
 	if opts.exitStatus && !printed {
-		return exitf(inv, 1, "yq: no matches found")
+		return exitf(inv, "yq: no matches found")
 	}
 	if opts.inPlace {
 		info, err := inv.FS.Stat(ctx, namedInputs[0].Abs)
@@ -189,10 +189,7 @@ func parseYQArgs(inv *commands.Invocation) (opts yqOptions, expression string, i
 		return opts, "", nil, nil
 	}
 
-	expression, inputs, err = classifyYQArgs(inv, &opts, args)
-	if err != nil {
-		return yqOptions{}, "", nil, err
-	}
+	expression, inputs = classifyYQArgs(inv, &opts, args)
 	return opts, expression, inputs, nil
 }
 
@@ -245,7 +242,7 @@ func parseYQLongFlag(inv *commands.Invocation, opts *yqOptions, args []string) (
 		}
 		indent, err := parseYQPositiveInt(val)
 		if err != nil {
-			return nil, exitf(inv, 1, "yq: invalid argument for %s: %v", arg, err)
+			return nil, exitf(inv, "yq: invalid argument for %s: %v", arg, err)
 		}
 		opts.indent = indent
 		return rest, nil
@@ -255,11 +252,11 @@ func parseYQLongFlag(inv *commands.Invocation, opts *yqOptions, args []string) (
 		}
 		unwrap, err := parseBoolValue(value)
 		if err != nil {
-			return nil, exitf(inv, 1, "yq: invalid argument for %s: %v", arg, err)
+			return nil, exitf(inv, "yq: invalid argument for %s: %v", arg, err)
 		}
 		opts.unwrapScalar = &unwrap
 	default:
-		return nil, exitf(inv, 1, "yq: unrecognized option %q", arg)
+		return nil, exitf(inv, "yq: unrecognized option %q", arg)
 	}
 	return args[1:], nil
 }
@@ -292,7 +289,7 @@ func parseYQShortFlags(inv *commands.Invocation, opts *yqOptions, args []string)
 			inline := arg[idx+1:]
 			if inline == "" {
 				if len(args) < 2 {
-					return nil, exitf(inv, 1, "yq: expected argument for -%c", flag)
+					return nil, exitf(inv, "yq: expected argument for -%c", flag)
 				}
 				inline = args[1]
 				args = append(args[:1], args[2:]...)
@@ -305,39 +302,39 @@ func parseYQShortFlags(inv *commands.Invocation, opts *yqOptions, args []string)
 			case 'I':
 				indent, err := parseYQPositiveInt(inline)
 				if err != nil {
-					return nil, exitf(inv, 1, "yq: invalid argument for -I: %v", err)
+					return nil, exitf(inv, "yq: invalid argument for -I: %v", err)
 				}
 				opts.indent = indent
 			}
 			return args[1:], nil
 		default:
-			return nil, exitf(inv, 1, "yq: unsupported flag -%c", flag)
+			return nil, exitf(inv, "yq: unsupported flag -%c", flag)
 		}
 	}
 	return args[1:], nil
 }
 
-func classifyYQArgs(inv *commands.Invocation, opts *yqOptions, args []string) (expression string, inputs []string, err error) {
+func classifyYQArgs(inv *commands.Invocation, opts *yqOptions, args []string) (expression string, inputs []string) {
 	if opts.expressionFile != "" {
 		if len(args) == 0 {
-			return ".", nil, nil
+			return ".", nil
 		}
 		if !opts.nullInput && len(args) == 1 && yqLooksLikeInput(inv, args[0]) {
-			return ".", args, nil
+			return ".", args
 		}
-		return ".", args, nil
+		return ".", args
 	}
 
 	switch len(args) {
 	case 0:
-		return ".", nil, nil
+		return ".", nil
 	case 1:
 		if !opts.nullInput && yqLooksLikeInput(inv, args[0]) {
-			return ".", args, nil
+			return ".", args
 		}
-		return args[0], nil, nil
+		return args[0], nil
 	default:
-		return args[0], args[1:], nil
+		return args[0], args[1:]
 	}
 }
 
@@ -439,7 +436,7 @@ func resolveYQFormats(opts *yqOptions, inputs []string) (*yqFormatConfig, error)
 func executeYQ(ctx context.Context, inv *commands.Invocation, opts *yqOptions, expression string, inputs []namedInput, formats *yqFormatConfig, out io.Writer) (bool, error) {
 	encoder, err := newYQEncoder(formats.outputFormat, opts, formats.unwrapScalar)
 	if err != nil {
-		return false, exitf(inv, 1, "yq: %v", err)
+		return false, exitf(inv, "yq: %v", err)
 	}
 	printer := yqlib.NewPrinter(encoder, yqlib.NewSinglePrinterWriter(out))
 	if opts.nulOutput {
@@ -603,7 +600,7 @@ func normalizeYQError(inv *commands.Invocation, err error) error {
 	if _, ok := commands.ExitCode(err); ok {
 		return err
 	}
-	return exitf(inv, 1, "yq: %v", err)
+	return exitf(inv, "yq: %v", err)
 }
 
 func splitYQLongFlag(arg string) (name, value string, hasValue bool) {
@@ -617,7 +614,7 @@ func parseYQValue(inv *commands.Invocation, arg, inline string, hasValue bool, r
 		return inline, rest, nil
 	}
 	if len(rest) == 0 {
-		return "", nil, exitf(inv, 1, "yq: expected argument for %s", arg)
+		return "", nil, exitf(inv, "yq: expected argument for %s", arg)
 	}
 	return rest[0], rest[1:], nil
 }
@@ -663,8 +660,8 @@ func normalizeYQFormat(format string) string {
 	return format
 }
 
-func exitf(inv *commands.Invocation, code int, format string, args ...any) error {
-	return commands.Exitf(inv, code, format, args...)
+func exitf(inv *commands.Invocation, format string, args ...any) error {
+	return commands.Exitf(inv, 1, format, args...)
 }
 
 func readAllFile(ctx context.Context, inv *commands.Invocation, name string) (data []byte, abs string, err error) {

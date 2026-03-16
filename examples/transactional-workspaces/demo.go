@@ -220,18 +220,18 @@ func (d scriptedDemo) branchFixes(ctx context.Context, snapshotName string) erro
 
 	d.section("Patch Branches")
 	d.command("patch fix-filter /workspace/scripts/clean.sh")
-	if err := d.manager.replaceInFile(ctx, "fix-filter", "/workspace/scripts/clean.sh", "| grep ',ok$' \\\n", "| grep -Ev ',invalid$' \\\n"); err != nil {
+	if err := d.manager.replaceInFile(ctx, "fix-filter", "| grep ',ok$' \\\n", "| grep -Ev ',invalid$' \\\n"); err != nil {
 		return err
 	}
-	if err := d.manager.replaceInFile(ctx, "fix-filter", "/workspace/scripts/clean.sh", "status=ok", "status!=invalid"); err != nil {
+	if err := d.manager.replaceInFile(ctx, "fix-filter", "status=ok", "status!=invalid"); err != nil {
 		return err
 	}
 
 	d.command("patch keep-everything /workspace/scripts/clean.sh")
-	if err := d.manager.replaceInFile(ctx, "keep-everything", "/workspace/scripts/clean.sh", "| grep ',ok$' \\\n", "| cat \\\n"); err != nil {
+	if err := d.manager.replaceInFile(ctx, "keep-everything", "| grep ',ok$' \\\n", "| cat \\\n"); err != nil {
 		return err
 	}
-	if err := d.manager.replaceInFile(ctx, "keep-everything", "/workspace/scripts/clean.sh", "status=ok", "all rows"); err != nil {
+	if err := d.manager.replaceInFile(ctx, "keep-everything", "status=ok", "all rows"); err != nil {
 		return err
 	}
 
@@ -622,7 +622,8 @@ func (m *workspaceManager) runFile(ctx context.Context, workspaceName, name, fil
 	return m.run(ctx, workspaceName, name, script)
 }
 
-func (m *workspaceManager) replaceInFile(ctx context.Context, workspaceName, filePath, old, replacement string) error {
+func (m *workspaceManager) replaceInFile(ctx context.Context, workspaceName, old, replacement string) error {
+	const filePath = "/workspace/scripts/clean.sh"
 	workspace, ok := m.workspaces[workspaceName]
 	if !ok {
 		return fmt.Errorf("unknown workspace %q", workspaceName)

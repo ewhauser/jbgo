@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 func resolveFindExpr(ctx context.Context, inv *Invocation, expr findExpr) error {
@@ -16,7 +14,7 @@ func resolveFindExpr(ctx context.Context, inv *Invocation, expr findExpr) error 
 	case nil:
 		return nil
 	case *findNewerExpr:
-		info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, e.refPath)
+		info, _, exists, err := statMaybe(ctx, inv, e.refPath)
 		if err != nil {
 			return err
 		}

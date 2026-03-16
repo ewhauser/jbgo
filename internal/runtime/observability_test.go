@@ -80,7 +80,7 @@ func TestTraceRedactedPopulatesEventsAndCallbacks(t *testing.T) {
 		t.Fatalf("callback event count = %d, want %d", got, want)
 	}
 
-	event := findCommandEvent(result.Events, trace.EventCallExpanded, "echo")
+	event := findCommandEvent(result.Events)
 	if event == nil || event.Command == nil {
 		t.Fatalf("missing redacted command event: %#v", result.Events)
 	}
@@ -98,7 +98,7 @@ func TestTraceRedactedPopulatesEventsAndCallbacks(t *testing.T) {
 		t.Fatalf("redacted argv = %#v, want %#v", got, want)
 	}
 
-	callbackEvent := findCommandEvent(callbackEvents, trace.EventCallExpanded, "echo")
+	callbackEvent := findCommandEvent(callbackEvents)
 	if callbackEvent == nil || callbackEvent.Command == nil {
 		t.Fatalf("missing callback command event: %#v", callbackEvents)
 	}
@@ -117,7 +117,7 @@ func TestTraceRawPreservesSensitiveArgv(t *testing.T) {
 	})
 
 	result := mustExecSession(t, session, "echo -H 'Authorization: Bearer secret-token' '--header=Authorization: Bearer inline-secret' 'https://example.test/download?token=query-secret&ok=1' 'Bearer literal-secret'\n")
-	event := findCommandEvent(result.Events, trace.EventCallExpanded, "echo")
+	event := findCommandEvent(result.Events)
 	if event == nil || event.Command == nil {
 		t.Fatalf("missing raw command event: %#v", result.Events)
 	}
@@ -174,7 +174,7 @@ func TestTraceRedactedLeavesResultsFinalEnvAndLoggerOutputsRaw(t *testing.T) {
 		t.Fatalf("FinalEnv[API_TOKEN] = %q, want %q", got, want)
 	}
 
-	event := findCommandEvent(callbackEvents, trace.EventCallExpanded, "echo")
+	event := findCommandEvent(callbackEvents)
 	if event == nil || event.Command == nil {
 		t.Fatalf("missing callback echo event: %#v", callbackEvents)
 	}

@@ -61,7 +61,7 @@ func run(ctx context.Context, telemetryOut, statusOut io.Writer) (err error) {
 		gbash.WithTracing(gbash.TraceConfig{
 			Mode: gbash.TraceRedacted,
 			OnEvent: func(ctx context.Context, event gbashtrace.Event) {
-				bridge.onTraceEvent(ctx, &event)
+				bridge.onTraceEvent(&event)
 			},
 		}),
 		gbash.WithLogger(func(ctx context.Context, event gbash.LogEvent) {
@@ -221,7 +221,7 @@ func (b *telemetryBridge) onLogEvent(ctx context.Context, event *gbash.LogEvent)
 	}
 }
 
-func (b *telemetryBridge) onTraceEvent(ctx context.Context, event *gbashtrace.Event) {
+func (b *telemetryBridge) onTraceEvent(event *gbashtrace.Event) {
 	if event == nil {
 		return
 	}

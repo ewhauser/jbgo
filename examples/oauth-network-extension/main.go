@@ -107,7 +107,7 @@ func runDemo(ctx context.Context) (*demoReport, error) {
 
 	scenarios := make([]scenarioReport, 0, len(specs))
 	for _, spec := range specs {
-		scenario, err := buildScenarioReport(spec, responseRecords, traceArgvByRequestID, auditByRequestID, serverByRequestID, vault.mustSecret(tokenRef).Token)
+		scenario, err := buildScenarioReport(spec, responseRecords, traceArgvByRequestID, auditByRequestID, serverByRequestID, vault.mustSecret().Token)
 		if err != nil {
 			return nil, err
 		}
@@ -216,10 +216,10 @@ func newDemoVault() *demoVault {
 	}
 }
 
-func (v *demoVault) mustSecret(ref string) oauthSecret {
-	secret, ok := v.secrets[ref]
+func (v *demoVault) mustSecret() oauthSecret {
+	secret, ok := v.secrets[tokenRef]
 	if !ok {
-		panic("missing demo vault secret: " + ref)
+		panic("missing demo vault secret: " + tokenRef)
 	}
 	return secret
 }
@@ -257,7 +257,7 @@ func (s *demoAPIServer) Close() {
 }
 
 func (s *demoAPIServer) handleProfile(w http.ResponseWriter, r *http.Request) {
-	expectedAuth := "Bearer " + s.vault.mustSecret(tokenRef).Token
+	expectedAuth := "Bearer " + s.vault.mustSecret().Token
 	gotAuth := r.Header.Get("Authorization")
 
 	s.mu.Lock()
@@ -282,7 +282,7 @@ func (s *demoAPIServer) handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret := s.vault.mustSecret(tokenRef)
+	secret := s.vault.mustSecret()
 	_ = json.NewEncoder(w).Encode(apiResponse{
 		OK:                  true,
 		Service:             "crm",
@@ -406,7 +406,7 @@ func (c *oauthInjectingClient) Do(ctx context.Context, req *network.Request) (*n
 		httpReq.Header.Set(name, value)
 	}
 
-	secret := c.vault.mustSecret(tokenRef)
+	secret := c.vault.mustSecret()
 	incomingAuthorization := headerValue(req.Headers, "Authorization")
 	requestID := headerValue(req.Headers, "X-Request-ID")
 	httpReq.Header.Set("Authorization", "Bearer "+secret.Token)

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/commandutil"
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Cat struct{}
@@ -180,10 +179,7 @@ func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) 
 			return catIsUnsafeOverwrite(input.RedirectOffset(), output), nil
 		}
 
-		abs, err := allowPath(ctx, inv, policy.FileActionRead, name)
-		if err != nil {
-			return false, err
-		}
+		abs := allowPath(inv, name)
 		if abs != output.RedirectPath() {
 			return false, nil
 		}
@@ -199,7 +195,7 @@ func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) 
 		if !ok {
 			return false, nil
 		}
-		return catIsUnsafeHostOverwrite(inputHost, outputHost)
+		return catIsUnsafeHostOverwrite(inputHost, outputHost), nil
 	}
 
 	info, _, err := statPath(ctx, inv, name)
@@ -232,16 +228,16 @@ func catIsUnsafeOverwrite(inputOffset int64, output catRedirectHandle) bool {
 	return catUnsafeByOffsets(inputOffset, info.Size(), output.RedirectFlags()&os.O_APPEND != 0, output.RedirectOffset())
 }
 
-func catIsUnsafeHostOverwrite(input, output catHostHandle) (bool, error) {
+func catIsUnsafeHostOverwrite(input, output catHostHandle) bool {
 	inputInfo, err := input.Stat()
 	if err != nil {
-		return false, nil //nolint:nilerr // stat failure means not the same file
+		return false
 	}
 	outputInfo, err := output.Stat()
 	if err != nil || !testSameFile(inputInfo, outputInfo) {
-		return false, nil //nolint:nilerr // stat failure means not the same file
+		return false
 	}
-	return catUnsafeByOffsets(catHostOffset(input), outputInfo.Size(), catHostAppendMode(output), catHostOffset(output)), nil
+	return catUnsafeByOffsets(catHostOffset(input), outputInfo.Size(), catHostAppendMode(output), catHostOffset(output))
 }
 
 func catUnsafeByOffsets(inputOffset, outputSize int64, appendMode bool, outputOffset int64) bool {
@@ -267,10 +263,7 @@ func readCatInput(ctx context.Context, inv *Invocation, name string) (data []byt
 		data, err := readAllReader(ctx, inv, inv.Stdin)
 		return data, name, err
 	}
-	abs, err := allowPath(ctx, inv, policy.FileActionRead, name)
-	if err != nil {
-		return nil, "", err
-	}
+	abs := allowPath(inv, name)
 	file, openErr := inv.FS.Open(ctx, abs)
 	if openErr != nil {
 		if errors.Is(openErr, stdfs.ErrInvalid) {

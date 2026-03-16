@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	stdfs "io/fs"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type RM struct{}
@@ -49,10 +47,7 @@ func (c *RM) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 	args := matches.Args("file")
 
 	for _, name := range args {
-		abs, err := allowPath(ctx, inv, policy.FileActionRemove, name)
-		if err != nil {
-			return err
-		}
+		abs := allowPath(inv, name)
 		info, err := inv.FS.Lstat(ctx, abs)
 		if err != nil {
 			if force && errors.Is(err, stdfs.ErrNotExist) {

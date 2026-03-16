@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Csplit struct{}
@@ -326,7 +324,7 @@ func readCsplitLines(ctx context.Context, inv *Invocation, name string) ([]strin
 	if name == "-" {
 		reader = inv.Stdin
 	} else {
-		info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, name)
+		info, _, exists, err := statMaybe(ctx, inv, name)
 		if err == nil && exists && info.IsDir() {
 			return nil, errors.New("read error: Is a directory")
 		}

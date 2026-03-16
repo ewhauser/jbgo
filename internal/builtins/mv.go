@@ -5,8 +5,6 @@ import (
 	"fmt"
 	stdfs "io/fs"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type MV struct{}
@@ -75,7 +73,7 @@ func (c *MV) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if err != nil {
 			return err
 		}
-		destInfo, _, destExists, err := statMaybe(ctx, inv, policy.FileActionStat, destAbs)
+		destInfo, _, destExists, err := statMaybe(ctx, inv, destAbs)
 		if err != nil {
 			return err
 		}

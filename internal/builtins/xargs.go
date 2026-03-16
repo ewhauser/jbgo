@@ -161,7 +161,7 @@ func (c *XArgs) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 		opts.exitIfTooLarge = true
 	}
 	if opts.showLimits {
-		if err := writeXArgsLimits(inv, &opts, maxSupported); err != nil {
+		if err := writeXArgsLimits(inv, &opts); err != nil {
 			return err
 		}
 	}
@@ -264,7 +264,7 @@ func parseXArgsMatches(inv *Invocation, matches *ParsedCommand) (opts xargsOptio
 			value := nextValue(name)
 			count := 1
 			if value != "" {
-				parsed, parseErr := parseXArgsNumber(inv, value, 'L', 1, math.MaxInt, true)
+				parsed, parseErr := parseXArgsNumber(inv, value, 'L', 1)
 				if parseErr != nil {
 					return xargsOptions{}, nil, parseErr
 				}
@@ -273,14 +273,14 @@ func parseXArgsMatches(inv *Invocation, matches *ParsedCommand) (opts xargsOptio
 			xargsApplyLines(inv, &opts, count, "--max-lines/-l")
 		case "max-lines-posix":
 			value := nextValue(name)
-			count, parseErr := parseXArgsNumber(inv, value, 'L', 1, math.MaxInt, true)
+			count, parseErr := parseXArgsNumber(inv, value, 'L', 1)
 			if parseErr != nil {
 				return xargsOptions{}, nil, parseErr
 			}
 			xargsApplyLines(inv, &opts, count, "-L")
 		case "max-args":
 			value := nextValue(name)
-			count, parseErr := parseXArgsNumber(inv, value, 'n', 1, math.MaxInt, true)
+			count, parseErr := parseXArgsNumber(inv, value, 'n', 1)
 			if parseErr != nil {
 				return xargsOptions{}, nil, parseErr
 			}
@@ -294,7 +294,7 @@ func parseXArgsMatches(inv *Invocation, matches *ParsedCommand) (opts xargsOptio
 			opts.noRunIfEmpty = true
 		case "max-chars":
 			value := nextValue(name)
-			count, parseErr := parseXArgsNumber(inv, value, 's', 1, math.MaxInt, true)
+			count, parseErr := parseXArgsNumber(inv, value, 's', 1)
 			if parseErr != nil {
 				return xargsOptions{}, nil, parseErr
 			}
@@ -308,7 +308,7 @@ func parseXArgsMatches(inv *Invocation, matches *ParsedCommand) (opts xargsOptio
 			opts.exitIfTooLarge = true
 		case "max-procs":
 			value := nextValue(name)
-			count, parseErr := parseXArgsNumber(inv, value, 'P', 0, math.MaxInt, true)
+			count, parseErr := parseXArgsNumber(inv, value, 'P', 0)
 			if parseErr != nil {
 				return xargsOptions{}, nil, parseErr
 			}
@@ -325,23 +325,17 @@ func parseXArgsMatches(inv *Invocation, matches *ParsedCommand) (opts xargsOptio
 	return opts, matches.Args("operand"), nil
 }
 
-func parseXArgsNumber(inv *Invocation, raw string, option byte, minValue, maxValue int, fatal bool) (int, error) {
+func parseXArgsNumber(inv *Invocation, raw string, option byte, minValue int) (int, error) {
 	value64, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
 		return 0, exitf(inv, 1, "xargs: invalid number %q for -%c option\nTry 'xargs --help' for more information.", raw, option)
 	}
 
 	if value64 < int64(minValue) {
-		if !fatal {
-			return minValue, nil
-		}
 		return 0, exitf(inv, 1, "xargs: value %s for -%c option should be >= %d\nTry 'xargs --help' for more information.", raw, option, minValue)
 	}
-	if maxValue >= 0 && value64 > int64(maxValue) {
-		if !fatal {
-			return maxValue, nil
-		}
-		return 0, exitf(inv, 1, "xargs: value %s for -%c option should be <= %d\nTry 'xargs --help' for more information.", raw, option, maxValue)
+	if math.MaxInt >= 0 && value64 > int64(math.MaxInt) {
+		return 0, exitf(inv, 1, "xargs: value %s for -%c option should be <= %d\nTry 'xargs --help' for more information.", raw, option, math.MaxInt)
 	}
 	return int(value64), nil
 }
@@ -484,7 +478,7 @@ func xargsEnvironmentSize(env map[string]string) int {
 	return total
 }
 
-func writeXArgsLimits(inv *Invocation, opts *xargsOptions, maxSupported int) error {
+func writeXArgsLimits(inv *Invocation, opts *xargsOptions) error {
 	if inv == nil || inv.Stderr == nil {
 		return nil
 	}

@@ -323,10 +323,7 @@ func parseTRSequences(input []byte) ([]trSequence, error) {
 			i = next
 			continue
 		}
-		if seq, next, ok, err := parseTRCharStar(input, i); ok || err != nil {
-			if err != nil {
-				return nil, err
-			}
+		if seq, next, ok := parseTRCharStar(input, i); ok {
 			seqs = append(seqs, seq)
 			i = next
 			continue
@@ -383,18 +380,18 @@ func parseTRCharRange(input []byte, i int) (seq trSequence, next int, ok bool, e
 	return trSequence{kind: trSequenceRange, start: left, end: right}, end, true, nil
 }
 
-func parseTRCharStar(input []byte, i int) (seq trSequence, next int, ok bool, err error) {
+func parseTRCharStar(input []byte, i int) (trSequence, int, bool) {
 	if i+4 > len(input) || input[i] != '[' {
-		return trSequence{}, 0, false, nil
+		return trSequence{}, 0, false
 	}
 	ch, next, err := parseTRByte(input, i+1)
 	if err != nil {
-		return trSequence{}, 0, false, nil //nolint:nilerr // parse failure means this parser doesn't match
+		return trSequence{}, 0, false
 	}
 	if next+2 <= len(input) && input[next] == '*' && input[next+1] == ']' {
-		return trSequence{kind: trSequenceStar, char: ch}, next + 2, true, nil
+		return trSequence{kind: trSequenceStar, char: ch}, next + 2, true
 	}
-	return trSequence{}, 0, false, nil
+	return trSequence{}, 0, false
 }
 
 func parseTRCharRepeat(input []byte, i int) (seq trSequence, next int, ok bool, err error) {

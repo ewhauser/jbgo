@@ -77,10 +77,7 @@ func (c *Column) RunParsed(ctx context.Context, inv *Invocation, matches *Parsed
 		return RenderCommandHelp(inv.Stdout, &spec)
 	}
 
-	opts, err := parseColumnMatches(matches)
-	if err != nil {
-		return err
-	}
+	opts := parseColumnMatches(matches)
 
 	content, err := readColumnContent(ctx, inv, matches.Positionals())
 	if err != nil {
@@ -131,13 +128,13 @@ func (c *Column) RunParsed(ctx context.Context, inv *Invocation, matches *Parsed
 	return nil
 }
 
-func parseColumnMatches(matches *ParsedCommand) (columnOptions, error) {
+func parseColumnMatches(matches *ParsedCommand) columnOptions {
 	opts := columnOptions{
 		width:      80,
 		widthValid: true,
 	}
 	if matches == nil {
-		return opts, nil
+		return opts
 	}
 	if matches.Has("table") {
 		opts.table = true
@@ -155,7 +152,7 @@ func parseColumnMatches(matches *ParsedCommand) (columnOptions, error) {
 	if matches.Has("no-merge") {
 		opts.noMerge = true
 	}
-	return opts, nil
+	return opts
 }
 
 func hasColumnHelpFlag(args []string) bool {

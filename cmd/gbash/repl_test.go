@@ -14,7 +14,7 @@ func TestRunCLIInteractivePersistsCWDAndEnvAcrossEntries(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-i"}, input, &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-i"}, input, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -51,7 +51,7 @@ func TestRunCLIInteractiveSupportsMultilineStatements(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-i"}, input, &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-i"}, input, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRunCLIInteractiveHonorsExitStatus(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-i"}, input, &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-i"}, input, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRunCLIInteractiveProvidesVirtualTTY(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-i"}, input, &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-i"}, input, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -127,7 +127,7 @@ func TestRunCLIInteractiveStartupOptionsPersistAcrossEntries(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-iu"}, input, &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-iu"}, input, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}

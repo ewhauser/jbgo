@@ -107,10 +107,7 @@ func (c *ID) RunParsed(_ context.Context, inv *Invocation, matches *ParsedComman
 			continue
 		}
 
-		output, err := idFormatOutput(&identity, opts, delimiter, len(opts.users) > 1)
-		if err != nil {
-			return err
-		}
+		output := idFormatOutput(&identity, opts, delimiter, len(opts.users) > 1)
 		if _, err := fmt.Fprint(inv.Stdout, output, lineEnding); err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
@@ -318,18 +315,18 @@ func idLookupIdentity(current *idIdentity, user string) (idIdentity, bool) {
 	return idIdentity{}, false
 }
 
-func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, multiUser bool) (string, error) {
+func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, multiUser bool) string {
 	if identity == nil {
-		return "", nil
+		return ""
 	}
 	if opts.audit {
-		return "", nil
+		return ""
 	}
 	if opts.passwordStyle {
-		return fmt.Sprintf("%s:x:%d:%d::%s:%s", identity.userName, identity.uid, identity.group.id, identity.homeDir, identity.shell), nil
+		return fmt.Sprintf("%s:x:%d:%d::%s:%s", identity.userName, identity.uid, identity.group.id, identity.homeDir, identity.shell)
 	}
 	if opts.humanReadable {
-		return idPretty(identity), nil
+		return idPretty(identity)
 	}
 	if opts.groupOnly {
 		idValue := identity.group.id
@@ -337,9 +334,9 @@ func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, mult
 			idValue = identity.egid
 		}
 		if opts.nameOnly {
-			return identity.group.name, nil
+			return identity.group.name
 		}
-		return strconv.FormatUint(uint64(idValue), 10), nil
+		return strconv.FormatUint(uint64(idValue), 10)
 	}
 	if opts.userOnly {
 		idValue := identity.uid
@@ -347,9 +344,9 @@ func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, mult
 			idValue = identity.euid
 		}
 		if opts.nameOnly {
-			return identity.userName, nil
+			return identity.userName
 		}
-		return strconv.FormatUint(uint64(idValue), 10), nil
+		return strconv.FormatUint(uint64(idValue), 10)
 	}
 	if opts.groupsOnly {
 		parts := make([]string, 0, len(identity.groups))
@@ -364,7 +361,7 @@ func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, mult
 		if opts.zero && multiUser {
 			out += "\x00"
 		}
-		return out, nil
+		return out
 	}
 
 	parts := []string{
@@ -383,7 +380,7 @@ func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, mult
 		groupParts = append(groupParts, fmt.Sprintf("%d(%s)", group.id, group.name))
 	}
 	parts = append(parts, "groups="+strings.Join(groupParts, ","))
-	return strings.Join(parts, " "), nil
+	return strings.Join(parts, " ")
 }
 
 func idPretty(identity *idIdentity) string {
