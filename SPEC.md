@@ -75,6 +75,8 @@ The shell adapter may pre-validate parsed AST forms that are known to trigger `m
 
 The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in explicit subshells so parent-shell state matches Bash's default `lastpipe=off` behavior.
 
+Registry-backed replacements for Bash builtins should preserve shell-visible Bash coercions when practical. One compatibility requirement is that numeric `printf` conversions accept quoted character constants such as `"'A"` and `"\"B"`.
+
 ### 5.3 Project-owned boundaries
 
 The runtime owns:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type Printf struct{}
@@ -150,20 +151,66 @@ func applyPrintfSpec(spec string, verb byte, arg string) (formatted string, stop
 	case 's', 'q':
 		return fmt.Sprintf(spec, arg), false, nil
 	case 'c':
-		value, _ := strconv.ParseInt(arg, 0, 64)
-		return fmt.Sprintf(spec, rune(value)), false, nil
+		return fmt.Sprintf(spec, printfCharArg(arg)), false, nil
 	case 'd', 'i', 'o', 'u', 'x', 'X':
-		value, _ := strconv.ParseInt(arg, 0, 64)
+		value := parsePrintfIntArg(arg)
+		if verb == 'i' {
+			return fmt.Sprintf(spec[:len(spec)-1]+"d", value), false, nil
+		}
 		if verb == 'u' {
 			return fmt.Sprintf(spec[:len(spec)-1]+"d", uint64(value)), false, nil
 		}
 		return fmt.Sprintf(spec, value), false, nil
 	case 'e', 'E', 'f', 'F', 'g', 'G':
-		value, _ := strconv.ParseFloat(arg, 64)
+		value := parsePrintfFloatArg(arg)
 		return fmt.Sprintf(spec, value), false, nil
 	default:
 		return "", false, fmt.Errorf("unsupported format verb %%%c", verb)
 	}
+}
+
+func printfCharArg(arg string) rune {
+	if arg == "" {
+		return 0
+	}
+	r, size := utf8.DecodeRuneInString(arg)
+	if r == utf8.RuneError && size == 1 {
+		return rune(arg[0])
+	}
+	return r
+}
+
+func parsePrintfIntArg(arg string) int64 {
+	if value, ok := parsePrintfQuotedCharArg(arg); ok {
+		return value
+	}
+	value, _ := strconv.ParseInt(arg, 0, 64)
+	return value
+}
+
+func parsePrintfFloatArg(arg string) float64 {
+	if value, ok := parsePrintfQuotedCharArg(arg); ok {
+		return float64(value)
+	}
+	value, _ := strconv.ParseFloat(arg, 64)
+	return value
+}
+
+func parsePrintfQuotedCharArg(arg string) (int64, bool) {
+	if len(arg) < 2 {
+		return 0, false
+	}
+	if arg[0] != '\'' && arg[0] != '"' {
+		return 0, false
+	}
+	r, size := utf8.DecodeRuneInString(arg[1:])
+	if r == utf8.RuneError && size == 1 {
+		return int64(arg[1]), true
+	}
+	if size == 0 {
+		return 0, false
+	}
+	return int64(r), true
 }
 
 func isPrintfVerb(ch byte) bool {
