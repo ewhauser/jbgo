@@ -9,7 +9,7 @@ import (
 	"path"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/examples/internal/ftsfs"
+	"github.com/ewhauser/gbash/examples/internal/blevefs"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/searchadapter"
 )
@@ -23,7 +23,7 @@ func main() {
 
 func run(ctx context.Context, stdout io.Writer) error {
 	rt, err := gbash.New(gbash.WithFileSystem(gbash.CustomFileSystem(
-		ftsfs.NewFactory(gbfs.Memory()),
+		blevefs.NewFactory(gbfs.Memory()),
 		"/workspace",
 	)))
 	if err != nil {
@@ -63,7 +63,7 @@ func run(ctx context.Context, stdout io.Writer) error {
 		return fmt.Errorf("direct search: %w", err)
 	}
 
-	if _, err := fmt.Fprintln(stdout, "direct search:"); err != nil {
+	if _, err := fmt.Fprintf(stdout, "direct search (backend=%s):\n", direct.Status.Backend); err != nil {
 		return err
 	}
 	for _, hit := range direct.Hits {

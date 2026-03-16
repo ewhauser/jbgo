@@ -24,7 +24,9 @@ BENCH_FULL_COUNT ?= 10
 BENCH_FULL_TIME ?= 200ms
 BENCH_SMOKE_REGEX ?= Benchmark(NewSession|RuntimeRunSimpleScript|SessionExecWarmSimpleScript|WorkflowCodebaseExploration|CommandRGRecursive|CLIBinary|CommandJQTransform)$$
 BENCH_COMPARE_RUNS ?= 100
-BENCH_FS_RUNS ?= 50
+BENCH_FS_RUNS ?= 5
+BENCH_FS_PROFILE ?= linux-kernel
+BENCH_FS_KERNEL_CACHE_DIR ?=
 BENCH_FS_JSON_OUT ?= website/content/performance/filesystem-benchmark-data.json
 JUST_BASH_SPEC ?= just-bash@2.13.0
 JSON_OUT ?=
@@ -221,7 +223,7 @@ bench-compare:
 
 bench-fs:
 	@set -eu; \
-	go run ./examples/bench-fs --runs "$(BENCH_FS_RUNS)" --json-out "$(BENCH_FS_JSON_OUT)"
+	go run ./examples/bench-fs --runs "$(BENCH_FS_RUNS)" --fixture-profile "$(BENCH_FS_PROFILE)" --kernel-cache-dir "$(BENCH_FS_KERNEL_CACHE_DIR)" --json-out "$(BENCH_FS_JSON_OUT)"
 
 gnu-test:
 	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_RESULTS_DIR='$(GNU_RESULTS_DIR)' GNU_UTILS='$(GNU_UTILS)' GNU_TESTS='$(GNU_TESTS)' GNU_KEEP_WORKDIR='$(GNU_KEEP_WORKDIR)' COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-run.sh

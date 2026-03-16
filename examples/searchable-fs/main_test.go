@@ -13,7 +13,7 @@ func TestRun(t *testing.T) {
 	}
 
 	const want = "" +
-		"direct search:\n" +
+		"direct search (backend=bleve):\n" +
 		"  /workspace/docs/readme.txt offsets=[6]\n" +
 		"  /workspace/logs/app.log offsets=[4]\n" +
 		"adapter used index: true\n" +
