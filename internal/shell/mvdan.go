@@ -487,7 +487,7 @@ type builtinInvocation struct {
 func wrappedBuiltinInvocations(args []string) []builtinInvocation {
 	current := append([]string(nil), args...)
 	invocations := make([]builtinInvocation, 0, 2)
-	for range 8 {
+	for len(current) > 0 {
 		switch current[0] {
 		case "builtin":
 			if len(current) < 2 || !interp.IsBuiltin(current[1]) {

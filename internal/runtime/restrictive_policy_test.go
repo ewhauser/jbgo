@@ -138,6 +138,26 @@ func TestRestrictivePolicyBuiltinBuiltinCannotBypassBuiltinAllowlist(t *testing.
 	}
 }
 
+func TestRestrictivePolicyDeepBuiltinWrapperChainStillChecksInnerBuiltin(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: restrictivePolicy([]string{"echo"}, []string{"builtin"}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: strings.Repeat("builtin ", 9) + "eval 'echo hi'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, `builtin "eval" denied`) {
+		t.Fatalf("Stderr = %q, want deep wrapper eval denial", result.Stderr)
+	}
+}
+
 func TestRestrictivePolicyCommandBuiltinCannotBypassBuiltinAllowlist(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{
