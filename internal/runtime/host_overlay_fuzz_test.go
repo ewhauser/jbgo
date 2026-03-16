@@ -16,8 +16,10 @@ func FuzzHostOverlaySymlinkPolicy(f *testing.F) {
 	f.Add([]byte{0, 0, 0})
 	f.Add([]byte{1, 1, 1})
 	f.Add([]byte{2, 2, 0})
+	f.Add([]byte{3, 0, 1})
+	f.Add([]byte{4, 1, 0})
 
-	linkTargets := []string{"target.txt", "", "outside"}
+	linkTargets := []string{"target.txt", "./target.txt", "", "outside", "missing"}
 	commands := []string{"cat link.txt\n", "readlink link.txt\n", "realpath -P link.txt || true\n"}
 
 	f.Fuzz(func(t *testing.T, raw []byte) {
@@ -34,10 +36,14 @@ func FuzzHostOverlaySymlinkPolicy(f *testing.F) {
 		linkCase := linkTargets[cursor.Intn(len(linkTargets))]
 		linkTarget := "target.txt"
 		switch linkCase {
+		case "./target.txt":
+			linkTarget = "./target.txt"
 		case "":
 			linkTarget = filepath.Join(root, "target.txt")
 		case "outside":
 			linkTarget = filepath.Join(outsideRoot, "secret.txt")
+		case "missing":
+			linkTarget = "missing.txt"
 		}
 		if err := os.Symlink(linkTarget, filepath.Join(root, "link.txt")); err != nil {
 			t.Fatalf("Symlink() error = %v", err)
@@ -65,8 +71,9 @@ func FuzzHostOverlaySymlinkPolicy(f *testing.F) {
 		}
 
 		outOfRoot := linkCase == "outside"
+		missingTarget := linkCase == "missing"
 		if strings.HasPrefix(command, "cat ") {
-			if outOfRoot || !follow {
+			if outOfRoot || missingTarget || !follow {
 				if result.ExitCode == 0 {
 					t.Fatalf("cat unexpectedly succeeded; linkCase=%q follow=%v stdout=%q stderr=%q", linkCase, follow, result.Stdout, result.Stderr)
 				}

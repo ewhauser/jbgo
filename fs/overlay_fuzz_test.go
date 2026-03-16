@@ -12,6 +12,8 @@ func FuzzOverlayFSRealpath(f *testing.F) {
 	f.Add([]byte{1, 1})
 	f.Add([]byte{2, 1})
 	f.Add([]byte{3, 0})
+	f.Add([]byte{4, 1})
+	f.Add([]byte{5, 0})
 
 	f.Fuzz(func(t *testing.T, raw []byte) {
 		cursor := newOverlayFuzzCursor(raw)
@@ -21,7 +23,7 @@ func FuzzOverlayFSRealpath(f *testing.F) {
 
 		linkPath := "/safe/link.txt"
 		aliasPath := "/safe/alias.txt"
-		targetCases := []string{"target.txt", "/safe/target.txt", aliasPath, "/safe/missing.txt", linkPath}
+		targetCases := []string{"target.txt", "./target.txt", "../safe/target.txt", "/safe/target.txt", aliasPath, "/safe/missing.txt", linkPath}
 		aliasCases := []string{"target.txt", "/safe/target.txt"}
 
 		linkTarget := targetCases[cursor.Intn(len(targetCases))]

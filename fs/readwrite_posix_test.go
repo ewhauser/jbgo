@@ -280,6 +280,7 @@ func TestReadWriteFSRemoveClearsOwnershipOverride(t *testing.T) {
 		t.Fatalf("recreated ownership = %#v, want host ownership %#v", got, want)
 	}
 }
+
 func TestReadWriteFSReadCapRejectsLargeFiles(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -304,6 +305,32 @@ func TestReadWriteFSReadCapRejectsLargeFiles(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "file too large") {
 		t.Fatalf("Open(big.txt) error = %v, want file too large message", err)
+	}
+}
+
+func TestReadWriteFSDeniesWriteThroughSymlinkedParent(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outsideRoot := t.TempDir()
+
+	if err := os.Symlink(outsideRoot, filepath.Join(root, "escape")); err != nil {
+		t.Fatalf("Symlink(escape) error = %v", err)
+	}
+
+	fsys, err := NewReadWrite(ReadWriteOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewReadWrite() error = %v", err)
+	}
+
+	_, err = fsys.OpenFile(context.Background(), "/escape/pwned.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err == nil {
+		t.Fatal("OpenFile(/escape/pwned.txt) error = nil, want permission")
+	}
+	if !errors.Is(err, stdfs.ErrPermission) {
+		t.Fatalf("OpenFile(/escape/pwned.txt) error = %v, want permission", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(outsideRoot, "pwned.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Stat(outside pwned.txt) error = %v, want not exist", statErr)
 	}
 }
 
@@ -346,6 +373,72 @@ func TestReadWriteFSDeniesEscapeViaSymlink(t *testing.T) {
 	}
 	if !errors.Is(err, stdfs.ErrPermission) {
 		t.Fatalf("Readlink(abs-out-link) error = %v, want permission", err)
+	}
+}
+
+func TestReadWriteFSDeniesRenameThroughSymlinkedParent(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outsideRoot := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(note) error = %v", err)
+	}
+	if err := os.Symlink(outsideRoot, filepath.Join(root, "escape")); err != nil {
+		t.Fatalf("Symlink(escape) error = %v", err)
+	}
+
+	fsys, err := NewReadWrite(ReadWriteOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewReadWrite() error = %v", err)
+	}
+
+	err = fsys.Rename(context.Background(), "/note.txt", "/escape/moved.txt")
+	if err == nil {
+		t.Fatal("Rename(/note.txt, /escape/moved.txt) error = nil, want permission")
+	}
+	if !errors.Is(err, stdfs.ErrPermission) {
+		t.Fatalf("Rename(/note.txt, /escape/moved.txt) error = %v, want permission", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(root, "note.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(note.txt) error = %v", err)
+	}
+	if got, want := string(data), "hello\n"; got != want {
+		t.Fatalf("note.txt = %q, want %q", got, want)
+	}
+	if _, statErr := os.Stat(filepath.Join(outsideRoot, "moved.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Stat(outside moved.txt) error = %v, want not exist", statErr)
+	}
+}
+
+func TestReadWriteFSDeniesHardLinkThroughSymlinkedParent(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outsideRoot := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(note) error = %v", err)
+	}
+	if err := os.Symlink(outsideRoot, filepath.Join(root, "escape")); err != nil {
+		t.Fatalf("Symlink(escape) error = %v", err)
+	}
+
+	fsys, err := NewReadWrite(ReadWriteOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewReadWrite() error = %v", err)
+	}
+
+	err = fsys.Link(context.Background(), "/note.txt", "/escape/hard.txt")
+	if err == nil {
+		t.Fatal("Link(/note.txt, /escape/hard.txt) error = nil, want permission")
+	}
+	if !errors.Is(err, stdfs.ErrPermission) {
+		t.Fatalf("Link(/note.txt, /escape/hard.txt) error = %v, want permission", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(outsideRoot, "hard.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Stat(outside hard.txt) error = %v, want not exist", statErr)
 	}
 }
 

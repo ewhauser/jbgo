@@ -85,6 +85,40 @@ func TestOverlayHostLowerTombstonesDoNotDeleteHostFiles(t *testing.T) {
 	}
 }
 
+func TestOverlayHostLowerDotDotReadCannotEscapeMountedRoot(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll(project) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "secret.txt"), []byte("top-secret\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(secret) error = %v", err)
+	}
+
+	rt := newRuntime(t, &Config{
+		FileSystem: HostProjectFileSystem(root, HostProjectOptions{
+			VirtualRoot: hostOverlayVirtualRoot,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cat ../secret.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if strings.Contains(result.Stdout, "top-secret") {
+		t.Fatalf("Stdout leaked host sibling data: %q", result.Stdout)
+	}
+	if strings.Contains(result.Stderr, parent) {
+		t.Fatalf("Stderr leaked host parent path: %q", result.Stderr)
+	}
+}
+
 func TestOverlayHostLowerDefaultPolicyDeniesSymlinkTraversal(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -147,5 +181,44 @@ func TestOverlayHostLowerFollowModeAllowsInRootSymlinkReads(t *testing.T) {
 	}
 	if got, want := result.Stdout, "hello\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestOverlayHostLowerFollowModeStillBlocksWritesThroughOutsideSymlink(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outsideRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outsideRoot, "outside"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(outside) error = %v", err)
+	}
+	if err := os.Symlink(filepath.Join(outsideRoot, "outside"), filepath.Join(root, "escape")); err != nil {
+		t.Fatalf("Symlink(escape) error = %v", err)
+	}
+
+	rt := newRuntime(t, &Config{
+		FileSystem: HostProjectFileSystem(root, HostProjectOptions{
+			VirtualRoot: hostOverlayVirtualRoot,
+		}),
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{hostOverlayVirtualRoot, "/usr/bin", "/bin"},
+			WriteRoots:  []string{hostOverlayVirtualRoot},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo upper > escape/pwned.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if _, statErr := os.Stat(filepath.Join(outsideRoot, "outside", "pwned.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("Stat(outside pwned.txt) error = %v, want not exist", statErr)
+	}
+	if strings.Contains(result.Stderr, outsideRoot) {
+		t.Fatalf("Stderr leaked outside root: %q", result.Stderr)
 	}
 }

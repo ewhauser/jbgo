@@ -96,6 +96,34 @@ func TestHostFSReadOnlyAndSanitizesErrors(t *testing.T) {
 	}
 }
 
+func TestHostFSDotDotPathsCannotEscapeMountedRoot(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll(project) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "secret.txt"), []byte("secret\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(secret) error = %v", err)
+	}
+
+	fsys, err := NewHost(HostOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewHost() error = %v", err)
+	}
+
+	_, err = fsys.Open(context.Background(), defaultHostVirtualRoot+"/../secret.txt")
+	if err == nil {
+		t.Fatal("Open(../secret.txt) error = nil, want not exist")
+	}
+	if !errors.Is(err, stdfs.ErrNotExist) {
+		t.Fatalf("Open(../secret.txt) error = %v, want not exist", err)
+	}
+	if strings.Contains(err.Error(), parent) {
+		t.Fatalf("Open(../secret.txt) error leaked host parent: %v", err)
+	}
+}
+
 func TestHostFSStatPreservesRawSysStat(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
