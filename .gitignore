@@ -16,6 +16,8 @@ coverage.html
 
 # Common local build directories
 bin/
+!internal/conformance/bin/
+!internal/conformance/bin/**
 dist/
 .cache
 .gocache

@@ -1,0 +1,53 @@
+#!/bin/bash
+
+print_reversed_stream() {
+  local lines=()
+  local line=
+  local i=0
+
+  while IFS= read -r line || [[ -n $line ]]; do
+    lines+=("$line")
+  done
+
+  for ((i = ${#lines[@]} - 1; i >= 0; i--)); do
+    printf '%s\n' "${lines[i]}"
+  done
+}
+
+print_reversed_file() {
+  local path=$1
+
+  if [[ $path == "-" ]]; then
+    print_reversed_stream
+    return
+  fi
+  if [[ ! -f $path ]]; then
+    printf 'tac: %s: No such file or directory\n' "$path" >&2
+    return 1
+  fi
+
+  local lines=()
+  local line=
+  local i=0
+
+  while IFS= read -r line || [[ -n $line ]]; do
+    lines+=("$line")
+  done <"$path"
+
+  for ((i = ${#lines[@]} - 1; i >= 0; i--)); do
+    printf '%s\n' "${lines[i]}"
+  done
+}
+
+if (($# == 0)); then
+  print_reversed_stream
+  exit $?
+fi
+
+status=0
+for path in "$@"; do
+  if ! print_reversed_file "$path"; then
+    status=1
+  fi
+done
+exit "$status"
