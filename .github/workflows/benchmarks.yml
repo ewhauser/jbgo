@@ -101,6 +101,46 @@ jobs:
             git worktree remove --force "$BASE_DIR"
           fi
 
+  fs-artifacts:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build filesystem benchmark artifacts
+        env:
+          ARTIFACT_DIR: ${{ runner.temp }}/bench-fs-artifacts
+        run: |
+          set -euo pipefail
+
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+
+          make bench-fs-artifacts BENCH_FS_PROFILE=linux-kernel BENCH_FS_KERNEL_CACHE_DIR=stream BENCH_FS_ARTIFACT_DIR="$ARTIFACT_DIR"
+
+          {
+            echo "## Filesystem Benchmark Artifacts"
+            echo
+            echo "Commit \`${GITHUB_SHA}\`."
+            echo
+            echo '```text'
+            find "$ARTIFACT_DIR" -maxdepth 3 -type f | sort
+            echo
+            du -sh "$ARTIFACT_DIR"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload filesystem benchmark artifacts
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: bench-fs-artifacts-${{ github.sha }}
+          path: ${{ runner.temp }}/bench-fs-artifacts
+          retention-days: 14
+
   full-suite:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04

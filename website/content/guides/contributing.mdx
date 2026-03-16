@@ -85,6 +85,7 @@ make bench-fs
 make bench-fs BENCH_FS_JSON_OUT=/tmp/filesystem-bench.json
 make bench-fs BENCH_FS_PROFILE=synthetic  # fast local synthetic profile
 make bench-fs BENCH_FS_KERNEL_CACHE_DIR=stream  # stream kernel tarball when local disk is tight
+make bench-fs-artifacts BENCH_FS_KERNEL_CACHE_DIR=stream  # prebuild reusable Bleve and SQLite artifacts
 ```
 
 The benchmark compares five runtimes: native `gbash`, GNU bash, `gbash-extras`, `gbash-node-wasm` (WASM in Node.js), and `just-bash` (npm).
@@ -93,7 +94,7 @@ Some scenarios require optional commands such as `jq`. Those scenarios keep the 
 runtime table on the website, but unsupported runtimes are shown as skipped with a
 reason instead of being counted as failures.
 
-`make bench-fs` runs the filesystem benchmark harness. By default it uses the pinned `linux-kernel` profile, downloads and verifies `linux-6.19.8.tar.xz` from kernel.org as needed, compares the `memory`, `overlay`, `sqlite`, and `bleve` filesystem backends on both cold and warm search scenarios, and writes JSON to `website/content/performance/filesystem-benchmark-data.json`.
+`make bench-fs` runs the filesystem benchmark harness. By default it uses the pinned `linux-kernel` profile, downloads and verifies `linux-6.19.8.tar.xz` from kernel.org as needed, reuses cached Bleve and SQLite benchmark artifacts when available, compares the `memory`, `overlay`, `sqlite`, and `bleve` filesystem backends on both cold and warm search scenarios, and writes JSON to `website/content/performance/filesystem-benchmark-data.json`.
 
 ## GNU compatibility testing
 

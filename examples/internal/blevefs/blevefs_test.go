@@ -6,8 +6,10 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sort"
 	"testing"
 
+	"github.com/blevesearch/bleve/v2"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/searchadapter"
 )
@@ -185,6 +187,97 @@ func TestBleveProviderSearchAdapterUsesIndex(t *testing.T) {
 		"/workspace/docs/readme.txt",
 		"/workspace/logs/app.log",
 	})
+}
+
+func TestPreparedBleveArtifactFactoryUsesIndex(t *testing.T) {
+	files := gbfs.InitialFiles{
+		"/workspace/docs/readme.txt": {Content: []byte("guide needle\n")},
+		"/workspace/logs/app.log":    {Content: []byte("log needle needle\n")},
+		"/workspace/notes/todo.txt":  {Content: []byte("nothing here\n")},
+	}
+
+	artifactDir := path.Join(t.TempDir(), "bleve-index")
+	if err := buildTestBleveArtifact(context.Background(), artifactDir, files); err != nil {
+		t.Fatalf("buildTestBleveArtifact() error = %v", err)
+	}
+
+	factory := NewPreparedFactory(gbfs.SeededMemory(files), artifactDir, len(files))
+	fsys, err := factory.New(context.Background())
+	if err != nil {
+		t.Fatalf("factory.New() error = %v", err)
+	}
+	defer func() {
+		type closer interface{ Close() error }
+		if c, ok := fsys.(closer); ok {
+			if err := c.Close(); err != nil {
+				t.Fatalf("Close() error = %v", err)
+			}
+		}
+	}()
+
+	result, err := searchadapter.Search(context.Background(), fsys, &searchadapter.Query{
+		Roots:         []string{"/workspace"},
+		Literal:       "needle",
+		IndexEligible: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("searchadapter.Search() error = %v", err)
+	}
+	if !result.UsedIndex {
+		t.Fatal("searchadapter.Search() UsedIndex = false, want true")
+	}
+	assertHitPaths(t, result.Hits, []string{
+		"/workspace/docs/readme.txt",
+		"/workspace/logs/app.log",
+	})
+
+	provider := mustBleveProvider(t, fsys)
+	searchResult, err := provider.Search(context.Background(), &gbfs.SearchQuery{
+		Root:        "/workspace/logs",
+		Literal:     "needle",
+		WantOffsets: true,
+	})
+	if err != nil {
+		t.Fatalf("provider.Search() error = %v", err)
+	}
+	if got, want := searchResult.Status.Backend, "bleve"; got != want {
+		t.Fatalf("Status.Backend = %q, want %q", got, want)
+	}
+	if len(searchResult.Hits) != 1 {
+		t.Fatalf("hit count = %d, want 1", len(searchResult.Hits))
+	}
+	if !slices.Equal(searchResult.Hits[0].Offsets, []int64{4, 11}) {
+		t.Fatalf("Offsets = %v, want [4 11]", searchResult.Hits[0].Offsets)
+	}
+}
+
+func buildTestBleveArtifact(ctx context.Context, artifactDir string, files gbfs.InitialFiles) error {
+	index, err := bleve.New(artifactDir, NewIndexMapping())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = index.Close() }()
+
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, gbfs.Clean(name))
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		initial := files[name]
+		data := initial.Content
+		if initial.Lazy != nil {
+			data, err = initial.Lazy(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		if err := index.Index(name, NewDocument(name, data)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newBleveSearchableFS(t *testing.T, files gbfs.InitialFiles) gbfs.FileSystem {

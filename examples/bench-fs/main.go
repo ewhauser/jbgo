@@ -47,6 +47,7 @@ const (
 	linuxKernelArchiveURL     = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.19.8.tar.xz"
 	linuxKernelArchiveSHA256  = "aada4722db8bcfa0b9732851856d405082b6a4fa2e3ab067be8db17cdd115b38"
 	linuxKernelTargetBytes    = 200 * 1024 * 1024
+	benchmarkArtifactVersion  = "v1"
 	mutationCreatePath        = "/workspace/base/scratch/session/output.txt"
 	mutationCreateBody        = "created in benchmark mutation\n"
 	mutationRewritePath       = "/workspace/base/docs/runbook00.md"
@@ -61,6 +62,8 @@ type options struct {
 	JSONOut        string
 	FixtureProfile string
 	KernelCacheDir string
+	ArtifactDir    string
+	PrepareOnly    bool
 }
 
 type fixtureSummary struct {
@@ -115,6 +118,7 @@ type benchmarkReport struct {
 
 type benchmarkFixture struct {
 	Files                gbfs.InitialFiles
+	Fingerprint          string
 	Summary              fixtureSummary
 	BaseRoot             string
 	BaseSummary          fixtureSummary
@@ -152,10 +156,19 @@ type literalBenchmarkQuery struct {
 }
 
 type benchmarkEnv struct {
-	tmpRoot          string
-	fixture          benchmarkFixture
-	hostFixtureRoot  string
-	sqliteTemplateDB string
+	tmpRoot                   string
+	fixture                   benchmarkFixture
+	artifactRoot              string
+	hostFixtureRoot           string
+	sqliteTemplateDB          string
+	sqliteTemplatePersistent  bool
+	preparedArtifactDirectory string
+}
+
+type benchmarkArtifactManifest struct {
+	Version            string         `json:"version"`
+	FixtureFingerprint string         `json:"fixture_fingerprint"`
+	Fixture            fixtureSummary `json:"fixture"`
 }
 
 type workloadObservation struct {
@@ -205,9 +218,17 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		}
 	}()
 
-	env, err := prepareBenchmarkEnv(ctx, tmpRoot, opts)
+	env, err := prepareBenchmarkEnv(ctx, tmpRoot, &opts)
 	if err != nil {
 		return err
+	}
+	if opts.PrepareOnly {
+		artifactDir, err := env.ensurePreparedArtifacts(ctx)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "Prepared benchmark artifacts at %s\n", artifactDir)
+		return nil
 	}
 	backends := benchmarkBackends()
 	scenarios := benchmarkScenarios(opts.FixtureProfile)
@@ -261,6 +282,8 @@ func parseOptions(args []string) (options, error) {
 	fs.StringVar(&opts.JSONOut, "json-out", "", "optional path to write a JSON report")
 	fs.StringVar(&opts.FixtureProfile, "fixture-profile", fixtureProfileSynthetic, "fixture profile: synthetic or linux-kernel")
 	fs.StringVar(&opts.KernelCacheDir, "kernel-cache-dir", "", "optional cache directory for the pinned Linux kernel archive")
+	fs.StringVar(&opts.ArtifactDir, "artifact-dir", "", "optional directory for reusable benchmark artifacts")
+	fs.BoolVar(&opts.PrepareOnly, "prepare-artifacts-only", false, "prepare reusable benchmark artifacts and exit")
 	if err := fs.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -273,6 +296,7 @@ func parseOptions(args []string) (options, error) {
 	opts.JSONOut = strings.TrimSpace(opts.JSONOut)
 	opts.FixtureProfile = strings.TrimSpace(opts.FixtureProfile)
 	opts.KernelCacheDir = strings.TrimSpace(opts.KernelCacheDir)
+	opts.ArtifactDir = strings.TrimSpace(opts.ArtifactDir)
 	switch opts.FixtureProfile {
 	case fixtureProfileSynthetic, fixtureProfileLinuxKernel:
 	default:
@@ -281,18 +305,22 @@ func parseOptions(args []string) (options, error) {
 	if opts.FixtureProfile == fixtureProfileLinuxKernel && opts.KernelCacheDir == "" {
 		opts.KernelCacheDir = defaultKernelCacheDir()
 	}
+	if opts.FixtureProfile == fixtureProfileLinuxKernel && opts.ArtifactDir == "" {
+		opts.ArtifactDir = defaultBenchmarkArtifactRoot()
+	}
 	return opts, nil
 }
 
-func prepareBenchmarkEnv(ctx context.Context, tmpRoot string, opts options) (*benchmarkEnv, error) {
+func prepareBenchmarkEnv(ctx context.Context, tmpRoot string, opts *options) (*benchmarkEnv, error) {
 	fixture, err := buildFixtureForProfile(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	return &benchmarkEnv{
-		tmpRoot: tmpRoot,
-		fixture: fixture,
+		tmpRoot:      tmpRoot,
+		fixture:      fixture,
+		artifactRoot: opts.ArtifactDir,
 	}, nil
 }
 
@@ -312,12 +340,86 @@ func (env *benchmarkEnv) ensureSQLiteTemplate(ctx context.Context) (string, erro
 	if env.sqliteTemplateDB != "" {
 		return env.sqliteTemplateDB, nil
 	}
+
+	if env.canUsePreparedArtifacts() {
+		if _, err := env.ensurePreparedArtifacts(ctx); err != nil {
+			return "", err
+		}
+		env.sqliteTemplateDB = filepath.Join(env.preparedArtifactDirectory, "sqlite-template.db")
+		env.sqliteTemplatePersistent = true
+		return env.sqliteTemplateDB, nil
+	}
+
 	sqliteTemplateDB := filepath.Join(env.tmpRoot, "sqlite-template.db")
 	if err := sqlitefs.SeedTemplate(ctx, sqliteTemplateDB, env.fixture.Files); err != nil {
 		return "", fmt.Errorf("seed sqlite template: %w", err)
 	}
 	env.sqliteTemplateDB = sqliteTemplateDB
+	env.sqliteTemplatePersistent = false
 	return sqliteTemplateDB, nil
+}
+
+func (env *benchmarkEnv) canUsePreparedArtifacts() bool {
+	return env.artifactRoot != "" && env.fixture.KernelSummary.FileCount > 0
+}
+
+func (env *benchmarkEnv) ensurePreparedArtifacts(ctx context.Context) (string, error) {
+	if !env.canUsePreparedArtifacts() {
+		return "", fmt.Errorf("prepared artifacts require the %q fixture profile", fixtureProfileLinuxKernel)
+	}
+	if env.preparedArtifactDirectory == "" {
+		env.preparedArtifactDirectory = filepath.Join(env.artifactRoot, env.fixture.Fingerprint)
+	}
+
+	artifactDir := env.preparedArtifactDirectory
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+		return "", fmt.Errorf("create benchmark artifact dir: %w", err)
+	}
+	manifest := benchmarkArtifactManifest{
+		Version:            benchmarkArtifactVersion,
+		FixtureFingerprint: env.fixture.Fingerprint,
+		Fixture:            env.fixture.Summary,
+	}
+	manifestPath := filepath.Join(artifactDir, "manifest.json")
+
+	needManifest := true
+	if current, err := readBenchmarkArtifactManifest(manifestPath); err == nil {
+		needManifest = current != manifest
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	sqliteTemplatePath := filepath.Join(artifactDir, "sqlite-template.db")
+	if needManifest || !fileExists(sqliteTemplatePath) {
+		tmpPath := sqliteTemplatePath + ".tmp"
+		if err := os.Remove(tmpPath); err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		if err := sqlitefs.SeedTemplate(ctx, tmpPath, env.fixture.Files); err != nil {
+			_ = os.Remove(tmpPath)
+			return "", fmt.Errorf("seed sqlite artifact: %w", err)
+		}
+		if err := os.Rename(tmpPath, sqliteTemplatePath); err != nil {
+			_ = os.Remove(tmpPath)
+			return "", fmt.Errorf("publish sqlite artifact: %w", err)
+		}
+		needManifest = true
+	}
+
+	bleveArtifactPath := filepath.Join(artifactDir, "bleve-index")
+	if needManifest || !fileExists(bleveArtifactPath) {
+		if err := buildBleveArtifact(ctx, bleveArtifactPath, env.fixture.Files); err != nil {
+			return "", fmt.Errorf("build bleve artifact: %w", err)
+		}
+		needManifest = true
+	}
+
+	if needManifest {
+		if err := writeBenchmarkArtifactManifest(manifestPath, manifest); err != nil {
+			return "", err
+		}
+	}
+	return artifactDir, nil
 }
 
 func (env *benchmarkEnv) releaseBackendResources(backend string) error {
@@ -334,15 +436,18 @@ func (env *benchmarkEnv) releaseBackendResources(backend string) error {
 		if env.sqliteTemplateDB == "" {
 			return nil
 		}
-		if err := os.Remove(env.sqliteTemplateDB); err != nil && !os.IsNotExist(err) {
-			return err
+		if !env.sqliteTemplatePersistent {
+			if err := os.Remove(env.sqliteTemplateDB); err != nil && !os.IsNotExist(err) {
+				return err
+			}
 		}
 		env.sqliteTemplateDB = ""
+		env.sqliteTemplatePersistent = false
 	}
 	return nil
 }
 
-func buildFixtureForProfile(ctx context.Context, opts options) (benchmarkFixture, error) {
+func buildFixtureForProfile(ctx context.Context, opts *options) (benchmarkFixture, error) {
 	switch opts.FixtureProfile {
 	case fixtureProfileSynthetic:
 		return buildBenchmarkFixture(), nil
@@ -409,7 +514,18 @@ func benchmarkBackends() []backendConfig {
 				Experimental: true,
 			},
 			ExpectIndexedMode: true,
-			Prepare: func(_ context.Context, env *benchmarkEnv) (gbfs.Factory, func() error, error) {
+			Prepare: func(ctx context.Context, env *benchmarkEnv) (gbfs.Factory, func() error, error) {
+				if env.canUsePreparedArtifacts() {
+					artifactDir, err := env.ensurePreparedArtifacts(ctx)
+					if err != nil {
+						return nil, nil, err
+					}
+					return blevefs.NewPreparedFactory(
+						gbfs.SeededMemory(env.fixture.Files),
+						filepath.Join(artifactDir, "bleve-index"),
+						env.fixture.KernelSummary.FileCount,
+					), noopCleanup, nil
+				}
 				return blevefs.NewFactory(gbfs.SeededMemory(env.fixture.Files)), noopCleanup, nil
 			},
 		},
@@ -739,6 +855,7 @@ func buildBenchmarkFixture() benchmarkFixture {
 
 	return benchmarkFixture{
 		Files:                files,
+		Fingerprint:          mustFixtureFingerprint(files),
 		Summary:              summary,
 		BaseRoot:             baseWorkspaceRoot,
 		BaseSummary:          baseSummary,
@@ -843,6 +960,7 @@ func buildLinuxKernelBenchmarkFixture(ctx context.Context, cacheDir string) (ben
 	if fixture.KernelSummary.FileCount == 0 {
 		return benchmarkFixture{}, fmt.Errorf("kernel fixture is empty after filtering %s", linuxKernelArchiveName)
 	}
+	fixture.Fingerprint = mustFixtureFingerprint(fixture.Files)
 	return fixture, nil
 }
 
@@ -1041,6 +1159,77 @@ func defaultKernelCacheDir() string {
 		return filepath.Join(os.TempDir(), "gbash-bench-fs-cache")
 	}
 	return filepath.Join(cacheDir, "gbash", "bench-fs")
+}
+
+func defaultBenchmarkArtifactRoot() string {
+	return filepath.Join(defaultKernelCacheDir(), "artifacts")
+}
+
+func mustFixtureFingerprint(files gbfs.InitialFiles) string {
+	fingerprint, err := fixtureFingerprint(files)
+	if err != nil {
+		panic(err)
+	}
+	return fingerprint
+}
+
+func fixtureFingerprint(files gbfs.InitialFiles) (string, error) {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, gbfs.Clean(name))
+	}
+	slices.Sort(names)
+
+	digest := sha256.New()
+	for _, name := range names {
+		initial := files[name]
+		if _, err := io.WriteString(digest, name); err != nil {
+			return "", err
+		}
+		if _, err := digest.Write([]byte{0}); err != nil {
+			return "", err
+		}
+		if _, err := digest.Write(initial.Content); err != nil {
+			return "", err
+		}
+		if _, err := digest.Write([]byte{0}); err != nil {
+			return "", err
+		}
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+func readBenchmarkArtifactManifest(pathValue string) (benchmarkArtifactManifest, error) {
+	data, err := os.ReadFile(pathValue)
+	if err != nil {
+		return benchmarkArtifactManifest{}, err
+	}
+	var manifest benchmarkArtifactManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return benchmarkArtifactManifest{}, fmt.Errorf("parse artifact manifest: %w", err)
+	}
+	return manifest, nil
+}
+
+func writeBenchmarkArtifactManifest(pathValue string, manifest benchmarkArtifactManifest) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal artifact manifest: %w", err)
+	}
+	tmpPath := pathValue + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return fmt.Errorf("write artifact manifest: %w", err)
+	}
+	if err := os.Rename(tmpPath, pathValue); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("publish artifact manifest: %w", err)
+	}
+	return nil
+}
+
+func fileExists(pathValue string) bool {
+	_, err := os.Stat(pathValue)
+	return err == nil
 }
 
 func materializeHostFixture(root string, files gbfs.InitialFiles) error {

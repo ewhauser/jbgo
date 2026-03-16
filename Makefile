@@ -1,4 +1,4 @@
-.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release update-mvdan-sh
+.PHONY: lint test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs bench-fs-artifacts gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release update-mvdan-sh
 
 GO_PACKAGES := ./... ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 BENCH_PACKAGES := ./internal/runtime ./cmd/gbash ./contrib/jq
@@ -27,6 +27,7 @@ BENCH_COMPARE_RUNS ?= 100
 BENCH_FS_RUNS ?= 5
 BENCH_FS_PROFILE ?= linux-kernel
 BENCH_FS_KERNEL_CACHE_DIR ?=
+BENCH_FS_ARTIFACT_DIR ?=
 BENCH_FS_JSON_OUT ?= website/content/performance/filesystem-benchmark-data.json
 JUST_BASH_SPEC ?= just-bash@2.13.0
 JSON_OUT ?=
@@ -223,7 +224,11 @@ bench-compare:
 
 bench-fs:
 	@set -eu; \
-	go run ./examples/bench-fs --runs "$(BENCH_FS_RUNS)" --fixture-profile "$(BENCH_FS_PROFILE)" --kernel-cache-dir "$(BENCH_FS_KERNEL_CACHE_DIR)" --json-out "$(BENCH_FS_JSON_OUT)"
+	go run ./examples/bench-fs --runs "$(BENCH_FS_RUNS)" --fixture-profile "$(BENCH_FS_PROFILE)" --kernel-cache-dir "$(BENCH_FS_KERNEL_CACHE_DIR)" --artifact-dir "$(BENCH_FS_ARTIFACT_DIR)" --json-out "$(BENCH_FS_JSON_OUT)"
+
+bench-fs-artifacts:
+	@set -eu; \
+	go run ./examples/bench-fs --fixture-profile "$(BENCH_FS_PROFILE)" --kernel-cache-dir "$(BENCH_FS_KERNEL_CACHE_DIR)" --artifact-dir "$(BENCH_FS_ARTIFACT_DIR)" --prepare-artifacts-only
 
 gnu-test:
 	GNU_CACHE_DIR='$(GNU_CACHE_DIR)' GNU_RESULTS_DIR='$(GNU_RESULTS_DIR)' GNU_UTILS='$(GNU_UTILS)' GNU_TESTS='$(GNU_TESTS)' GNU_KEEP_WORKDIR='$(GNU_KEEP_WORKDIR)' COMPAT_DOCKER_IMAGE='$(COMPAT_DOCKER_IMAGE)' COMPAT_DOCKER_BASE_IMAGE='$(COMPAT_DOCKER_BASE_IMAGE)' COMPAT_DOCKER_PLATFORM='$(COMPAT_DOCKER_PLATFORM)' COMPAT_DOCKER_PULL='$(COMPAT_DOCKER_PULL)' ./scripts/compat-docker-run.sh

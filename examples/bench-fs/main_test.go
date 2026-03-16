@@ -60,7 +60,7 @@ func TestBuildBenchmarkFixture(t *testing.T) {
 }
 
 func TestPrepareBenchmarkEnvSeedsSQLiteTemplate(t *testing.T) {
-	env, err := prepareBenchmarkEnv(context.Background(), t.TempDir(), options{FixtureProfile: fixtureProfileSynthetic})
+	env, err := prepareBenchmarkEnv(context.Background(), t.TempDir(), &options{FixtureProfile: fixtureProfileSynthetic})
 	if err != nil {
 		t.Fatalf("prepareBenchmarkEnv() error = %v", err)
 	}
@@ -92,6 +92,79 @@ func TestPrepareBenchmarkEnvSeedsSQLiteTemplate(t *testing.T) {
 	want := string(env.fixture.Files[mutationRewritePath].Content)
 	if got != want {
 		t.Fatalf("template read = %q, want %q", got, want)
+	}
+}
+
+func TestEnsurePreparedArtifactsBuildsSQLiteAndBleve(t *testing.T) {
+	files := gbfs.InitialFiles{
+		"/workspace/linux/kernel/a.c": {Content: []byte("module_init\n")},
+		"/workspace/linux/kernel/b.c": {Content: []byte("EXPORT_SYMBOL_GPL\n")},
+	}
+	env := &benchmarkEnv{
+		tmpRoot:      t.TempDir(),
+		artifactRoot: t.TempDir(),
+		fixture: benchmarkFixture{
+			Files:       files,
+			Fingerprint: mustFixtureFingerprint(files),
+			Summary: fixtureSummary{
+				FileCount:  len(files),
+				TotalBytes: int64(len(files["/workspace/linux/kernel/a.c"].Content) + len(files["/workspace/linux/kernel/b.c"].Content)),
+			},
+			KernelRoot: kernelWorkspaceRoot,
+			KernelSummary: fixtureSummary{
+				FileCount: len(files),
+			},
+		},
+	}
+
+	artifactDir, err := env.ensurePreparedArtifacts(context.Background())
+	if err != nil {
+		t.Fatalf("ensurePreparedArtifacts() error = %v", err)
+	}
+	if !fileExists(filepath.Join(artifactDir, "sqlite-template.db")) {
+		t.Fatalf("sqlite artifact missing under %q", artifactDir)
+	}
+	if !fileExists(filepath.Join(artifactDir, "bleve-index")) {
+		t.Fatalf("bleve artifact missing under %q", artifactDir)
+	}
+
+	manifest, err := readBenchmarkArtifactManifest(filepath.Join(artifactDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("readBenchmarkArtifactManifest() error = %v", err)
+	}
+	if manifest.FixtureFingerprint != env.fixture.Fingerprint {
+		t.Fatalf("manifest fingerprint = %q, want %q", manifest.FixtureFingerprint, env.fixture.Fingerprint)
+	}
+
+	factory, cleanup, err := benchmarkBackends()[3].Prepare(context.Background(), env)
+	if err != nil {
+		t.Fatalf("bleve Prepare() error = %v", err)
+	}
+	defer func() {
+		if err := cleanup(); err != nil {
+			t.Fatalf("cleanup() error = %v", err)
+		}
+	}()
+
+	fsys, err := factory.New(context.Background())
+	if err != nil {
+		t.Fatalf("factory.New() error = %v", err)
+	}
+	defer func() {
+		if err := closeIfPossible(fsys); err != nil {
+			t.Fatalf("closeIfPossible() error = %v", err)
+		}
+	}()
+
+	result, mode, err := countLiteralHits(context.Background(), fsys, kernelWorkspaceRoot, "module_init")
+	if err != nil {
+		t.Fatalf("countLiteralHits() error = %v", err)
+	}
+	if result != 1 {
+		t.Fatalf("countLiteralHits() = %d, want 1", result)
+	}
+	if mode != "index" {
+		t.Fatalf("countLiteralHits() mode = %q, want index", mode)
 	}
 }
 

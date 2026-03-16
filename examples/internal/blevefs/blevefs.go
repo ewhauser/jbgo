@@ -43,44 +43,29 @@ func NewFactory(base gbfs.Factory) gbfs.Factory {
 
 func newBleveProvider() gbfs.SearchIndexer {
 	provider := &bleveProvider{
-		records: make(map[string][]byte),
-		capabilities: gbfs.SearchCapabilities{
-			LiteralSearch:           true,
-			IgnoreCaseLiteralSearch: true,
-			RootRestriction:         true,
-			IncludeGlobs:            true,
-			ExcludeGlobs:            true,
-			Offsets:                 true,
-			ApproximateResults:      false,
-			VerifiedResults:         true,
-			GenerationTracking:      true,
-		},
+		records:      make(map[string][]byte),
+		capabilities: newBleveCapabilities(),
 	}
 
-	indexMapping := bleve.NewIndexMapping()
-	docMapping := blevemapping.NewDocumentMapping()
-
-	pathField := blevemapping.NewKeywordFieldMapping()
-	pathField.Store = false
-	docMapping.AddFieldMappingsAt("path", pathField)
-
-	contentField := blevemapping.NewKeywordFieldMapping()
-	contentField.Store = false
-	docMapping.AddFieldMappingsAt("content", contentField)
-
-	foldedField := blevemapping.NewKeywordFieldMapping()
-	foldedField.Store = false
-	docMapping.AddFieldMappingsAt("content_folded", foldedField)
-
-	indexMapping.DefaultMapping = docMapping
-
-	index, err := bleve.NewMemOnly(indexMapping)
+	index, err := bleve.NewMemOnly(newBleveIndexMapping())
 	if err != nil {
 		provider.initErr = fmt.Errorf("create bleve index: %w", err)
 		return provider
 	}
 	provider.index = index
 	return provider
+}
+
+// NewIndexMapping returns the Bleve mapping used by the example provider and
+// by the benchmark artifact builder.
+func NewIndexMapping() blevemapping.IndexMapping {
+	return newBleveIndexMapping()
+}
+
+// NewDocument returns the indexed document shape used by the example provider
+// and by the benchmark artifact builder.
+func NewDocument(name string, data []byte) any {
+	return newBleveDoc(name, data)
 }
 
 func (p *bleveProvider) Search(ctx context.Context, query *gbfs.SearchQuery) (gbfs.SearchResult, error) {
@@ -233,12 +218,7 @@ func (p *bleveProvider) ApplySearchMutation(_ context.Context, mutation *gbfs.Se
 }
 
 func (p *bleveProvider) indexStatusLocked() gbfs.IndexStatus {
-	return gbfs.IndexStatus{
-		CurrentGeneration: p.currentGen,
-		IndexedGeneration: p.indexedGen,
-		Backend:           "bleve",
-		Synchronous:       true,
-	}
+	return newBleveIndexStatus(p.currentGen, p.indexedGen)
 }
 
 func (p *bleveProvider) deletePathsLocked(paths []string) error {
@@ -524,4 +504,47 @@ func searchGlobRegexp(glob string) (*regexp.Regexp, error) {
 	}
 	b.WriteString("$")
 	return regexp.Compile(b.String())
+}
+
+func newBleveCapabilities() gbfs.SearchCapabilities {
+	return gbfs.SearchCapabilities{
+		LiteralSearch:           true,
+		IgnoreCaseLiteralSearch: true,
+		RootRestriction:         true,
+		IncludeGlobs:            true,
+		ExcludeGlobs:            true,
+		Offsets:                 true,
+		ApproximateResults:      false,
+		VerifiedResults:         true,
+		GenerationTracking:      true,
+	}
+}
+
+func newBleveIndexMapping() *blevemapping.IndexMappingImpl {
+	indexMapping := bleve.NewIndexMapping()
+	docMapping := blevemapping.NewDocumentMapping()
+
+	pathField := blevemapping.NewKeywordFieldMapping()
+	pathField.Store = false
+	docMapping.AddFieldMappingsAt("path", pathField)
+
+	contentField := blevemapping.NewKeywordFieldMapping()
+	contentField.Store = false
+	docMapping.AddFieldMappingsAt("content", contentField)
+
+	foldedField := blevemapping.NewKeywordFieldMapping()
+	foldedField.Store = false
+	docMapping.AddFieldMappingsAt("content_folded", foldedField)
+
+	indexMapping.DefaultMapping = docMapping
+	return indexMapping
+}
+
+func newBleveIndexStatus(currentGen, indexedGen uint64) gbfs.IndexStatus {
+	return gbfs.IndexStatus{
+		CurrentGeneration: currentGen,
+		IndexedGeneration: indexedGen,
+		Backend:           "bleve",
+		Synchronous:       true,
+	}
 }
