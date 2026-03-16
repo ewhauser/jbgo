@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -42,6 +43,23 @@ func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	}
 	if got, want := normalizeBashStderr("/tmp/x/bash: line 2: parse error\n"), "parse error\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
+	}
+}
+
+func TestResolvedSuiteConfigUsesPackagePaths(t *testing.T) {
+	t.Parallel()
+
+	cfg := resolvedSuiteConfig(&SuiteConfig{
+		SpecDir:      "oils",
+		BinDir:       "bin",
+		FixtureDirs:  []string{"fixtures"},
+		ManifestPath: "manifest.json",
+	})
+
+	for _, got := range []string{cfg.SpecDir, cfg.BinDir, cfg.FixtureDirs[0], cfg.ManifestPath} {
+		if !filepath.IsAbs(got) {
+			t.Fatalf("resolved path %q is not absolute", got)
+		}
 	}
 }
 

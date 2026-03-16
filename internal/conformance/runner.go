@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -18,8 +19,37 @@ import (
 
 var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?bash: line \d+: `)
 
+func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
+	resolved := *cfg
+	resolved.SpecDir = packageRelativePath(resolved.SpecDir)
+	resolved.BinDir = packageRelativePath(resolved.BinDir)
+	resolved.ManifestPath = packageRelativePath(resolved.ManifestPath)
+	if len(resolved.FixtureDirs) > 0 {
+		fixtures := make([]string, 0, len(resolved.FixtureDirs))
+		for _, dir := range resolved.FixtureDirs {
+			fixtures = append(fixtures, packageRelativePath(dir))
+		}
+		resolved.FixtureDirs = fixtures
+	}
+	return resolved
+}
+
+func packageRelativePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return path
+	}
+	return filepath.Join(filepath.Dir(file), path)
+}
+
 func RunSuite(t *testing.T, cfg *SuiteConfig) {
 	t.Helper()
+	resolvedCfg := resolvedSuiteConfig(cfg)
+	cfg = &resolvedCfg
 
 	bashPath, err := exec.LookPath("bash")
 	if err != nil {
@@ -89,6 +119,9 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 }
 
 func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath string, specCase SpecCase) (ComparisonResult, error) {
+	resolvedCfg := resolvedSuiteConfig(cfg)
+	cfg = &resolvedCfg
+
 	bashWorkspace, err := prepareWorkspace(cfg)
 	if err != nil {
 		return ComparisonResult{}, err
@@ -225,11 +258,11 @@ func copyFile(src, dst string) error {
 }
 
 func runGBash(ctx context.Context, cfg *SuiteConfig, workspace, script string) (ExecutionResult, error) {
-	runtime, err := gbash.New(gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(workspace, gbash.ReadWriteDirectoryOptions{})))
+	rt, err := gbash.New(gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(workspace, gbash.ReadWriteDirectoryOptions{})))
 	if err != nil {
 		return ExecutionResult{}, err
 	}
-	session, err := runtime.NewSession(ctx)
+	session, err := rt.NewSession(ctx)
 	if err != nil {
 		return ExecutionResult{}, err
 	}
