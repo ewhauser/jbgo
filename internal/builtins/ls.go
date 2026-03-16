@@ -764,7 +764,9 @@ func lsRunTargets(ctx context.Context, inv *Invocation, commandName string, targ
 	for _, target := range targets {
 		info, abs, exists, err := lsStatMaybeForTarget(ctx, inv, target, opts)
 		if err != nil {
-			return err
+			_, _ = fmt.Fprintf(inv.Stderr, "%s: %s\n", commandName, err)
+			exitCode = max(exitCode, 2)
+			continue
 		}
 		if !exists {
 			_, _ = fmt.Fprintf(inv.Stderr, "%s: %s: No such file or directory\n", commandName, target)

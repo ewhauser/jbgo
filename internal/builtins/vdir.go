@@ -77,9 +77,9 @@ func runVdirParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand)
 	if len(targets) == 0 {
 		targets = []string{"."}
 	}
-	lister := &Dir{}
+	lister := &LS{}
 	return lsRunTargets(ctx, inv, "vdir", targets, &opts, dirQuoteName, false, func(target string, showHeader bool) (string, int, lsRenderResult, error) {
-		return lister.listPath(ctx, inv, "vdir", target, &opts, showHeader, false)
+		return lister.listPath(ctx, inv, target, &opts, showHeader)
 	})
 }
 
