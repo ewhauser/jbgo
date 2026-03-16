@@ -458,6 +458,12 @@ func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.Cal
 				recordPolicyDenied(exec.Trace, err, "", "", args[0], 126, "builtin")
 				return nil, shellFailure(ctx, 126, "%v", err)
 			}
+			for _, invocation := range wrappedBuiltinInvocations(args) {
+				if err := allowBuiltin(ctx, exec.Policy, invocation.name, invocation.argv); err != nil {
+					recordPolicyDenied(exec.Trace, err, "", "", invocation.name, 126, "builtin")
+					return nil, shellFailure(ctx, 126, "%v", err)
+				}
+			}
 		}
 
 		return args, nil
@@ -471,6 +477,60 @@ func shouldRewriteBuiltin(name string) bool {
 	default:
 		return true
 	}
+}
+
+type builtinInvocation struct {
+	name string
+	argv []string
+}
+
+func wrappedBuiltinInvocations(args []string) []builtinInvocation {
+	current := append([]string(nil), args...)
+	invocations := make([]builtinInvocation, 0, 2)
+	for range 8 {
+		switch current[0] {
+		case "builtin":
+			if len(current) < 2 || !interp.IsBuiltin(current[1]) {
+				return invocations
+			}
+			current = append([]string(nil), current[1:]...)
+			invocations = append(invocations, builtinInvocation{
+				name: current[0],
+				argv: append([]string(nil), current...),
+			})
+		case "command":
+			next := commandBuiltinTarget(current[1:])
+			if len(next) == 0 || !interp.IsBuiltin(next[0]) {
+				return invocations
+			}
+			current = append([]string(nil), next...)
+			invocations = append(invocations, builtinInvocation{
+				name: current[0],
+				argv: append([]string(nil), current...),
+			})
+		default:
+			return invocations
+		}
+	}
+	return invocations
+}
+
+func commandBuiltinTarget(args []string) []string {
+	show := false
+	rest := append([]string(nil), args...)
+	for len(rest) > 0 {
+		switch rest[0] {
+		case "-v":
+			show = true
+			rest = rest[1:]
+		default:
+			if show || len(rest) == 0 {
+				return nil
+			}
+			return rest
+		}
+	}
+	return nil
 }
 
 func builtinCommandDir(exec *Execution) string {
