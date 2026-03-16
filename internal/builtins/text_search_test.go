@@ -44,6 +44,7 @@ func TestPrintfSupportsBareOctalEscapes(t *testing.T) {
 }
 
 func TestPrintfSupportsDashVAssignmentMode(t *testing.T) {
+	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
@@ -64,6 +65,7 @@ func TestPrintfSupportsDashVAssignmentMode(t *testing.T) {
 }
 
 func TestPrintfSupportsDoubleDashBeforeFormat(t *testing.T) {
+	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
@@ -84,6 +86,7 @@ func TestPrintfSupportsDoubleDashBeforeFormat(t *testing.T) {
 }
 
 func TestPrintfRejectsInvalidDashVVariableName(t *testing.T) {
+	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
