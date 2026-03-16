@@ -20,12 +20,14 @@ func FuzzHTTPClientPolicy(f *testing.F) {
 
 		allowlist := []string{
 			"https://api.example.com/",
+			"https://api.example.com/private",
 			"https://api.example.com/private/",
 			"https://cdn.example.com/files/",
 		}
 		requests := []string{
 			"https://api.example.com/data",
 			"https://api.example.com/private/token",
+			"https://api.example.com/private-token",
 			"https://cdn.example.com/files/item.txt",
 			"https://evil.example.net/data",
 			"http://localhost/admin",
@@ -34,6 +36,7 @@ func FuzzHTTPClientPolicy(f *testing.F) {
 			"",
 			"/data",
 			"https://api.example.com/data",
+			"https://api.example.com/private-token",
 			"https://evil.example.net/data",
 			"http://localhost/admin",
 		}

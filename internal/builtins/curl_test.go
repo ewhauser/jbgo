@@ -77,6 +77,34 @@ func TestCurlBlocksDisallowedOrigin(t *testing.T) {
 	}
 }
 
+func TestCurlBlocksPathPrefixConfusion(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("unexpected"))
+	}))
+	defer server.Close()
+
+	rt := newRuntime(t, &Config{
+		Network: &NetworkConfig{
+			AllowedURLPrefixes: []string{server.URL + "/private"},
+			DenyPrivateRanges:  false,
+		},
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "curl " + server.URL + "/private-token\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "allowlist") {
+		t.Fatalf("Stderr = %q, want allowlist denial", result.Stderr)
+	}
+}
+
 func TestCurlBlocksDisallowedMethodByDefault(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

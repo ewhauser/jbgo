@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,17 @@ type resolverFunc func(context.Context, string) ([]net.IPAddr, error)
 
 func (fn resolverFunc) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
 	return fn(ctx, host)
+}
+
+type staticHTTPDoer struct{}
+
+func (staticHTTPDoer) Do(*http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Status:     "200 OK",
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("ok")),
+	}, nil
 }
 
 func TestNewRejectsInvalidAllowList(t *testing.T) {
@@ -69,6 +81,33 @@ func TestClientBlocksPathOutsideAllowListPrefix(t *testing.T) {
 	}
 }
 
+func TestClientTreatsAllowListPathsAsSegmentBoundaries(t *testing.T) {
+	t.Parallel()
+	client, err := New(&Config{
+		AllowedURLPrefixes: []string{"https://api.example.com/private"},
+	}, WithDoer(staticHTTPDoer{}))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	for _, target := range []string{
+		"https://api.example.com/private",
+		"https://api.example.com/private/token",
+	} {
+		_, err := client.Do(context.Background(), &Request{URL: target})
+		if err != nil {
+			t.Fatalf("Do(%q) error = %v, want allowed request", target, err)
+		}
+	}
+
+	_, err = client.Do(context.Background(), &Request{
+		URL: "https://api.example.com/private-token",
+	})
+	if !IsDenied(err) {
+		t.Fatalf("Do() error = %v, want denied sibling-path request", err)
+	}
+}
+
 func TestClientBlocksDisallowedMethod(t *testing.T) {
 	t.Parallel()
 	client, err := New(&Config{
@@ -106,6 +145,32 @@ func TestClientRevalidatesRedirectTargets(t *testing.T) {
 
 	_, err = client.Do(context.Background(), &Request{
 		URL:             server.URL,
+		FollowRedirects: true,
+	})
+	var redirectErr *RedirectNotAllowedError
+	if !errors.As(err, &redirectErr) {
+		t.Fatalf("Do() error = %v, want redirect denied error", err)
+	}
+}
+
+func TestClientRevalidatesRedirectTargetsAcrossPathBoundary(t *testing.T) {
+	t.Parallel()
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, server.URL+"/private-token", http.StatusFound)
+	}))
+	defer server.Close()
+
+	client, err := New(&Config{
+		AllowedURLPrefixes: []string{server.URL + "/private"},
+		DenyPrivateRanges:  false,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = client.Do(context.Background(), &Request{
+		URL:             server.URL + "/private",
 		FollowRedirects: true,
 	})
 	var redirectErr *RedirectNotAllowedError

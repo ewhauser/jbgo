@@ -251,7 +251,7 @@ Package responsibilities:
 - `internal/runtime/`: internal runtime/session creation, run configuration, result collection, output capture
 - `shell/`: parser and runner adapter; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
-- `network/`: runtime-owned HTTP sandbox with URL-prefix allowlists, method controls, redirect revalidation, and response-size limits
+- `network/`: runtime-owned HTTP sandbox with origin- and path-boundary-aware allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `clear`, `complete`, `compopt`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `pwd`, `strings`, and `xan`
 - `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface, and may ship official opt-in binaries such as `contrib/extras/cmd/gbash-extras` from the corresponding contrib module. Current examples include `awk`, `html-to-markdown`, `jq`, `nodejs`, `sqlite3`, and `yq`.
 - `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the `js/wasm` assets plus explicit host entrypoints such as `@ewhauser/gbash-wasm/browser` and `@ewhauser/gbash-wasm/node`.

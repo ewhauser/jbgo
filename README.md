@@ -360,6 +360,8 @@ gb, err := gbash.New(
 )
 ```
 
+Allowed URL prefixes are origin- and path-boundary aware. For example, `https://api.example.com/v1` matches `/v1` and `/v1/...`, but not `/v10`.
+
 For full transport control in tests or embedding, inject your own `Config.NetworkClient`.
 See [`examples/oauth-network-extension`](./examples/oauth-network-extension) for a demo that injects OAuth headers from a host-side vault so the sandbox never sees the bearer token.
 

@@ -454,14 +454,24 @@ func urlAllowed(target *url.URL, entries []allowListEntry) bool {
 		if origin != entry.origin {
 			continue
 		}
-		if entry.pathPrefix == "/" || entry.pathPrefix == "" {
-			return true
-		}
-		if strings.HasPrefix(pathname, entry.pathPrefix) {
+		if allowListPathMatches(pathname, entry.pathPrefix) {
 			return true
 		}
 	}
 	return false
+}
+
+func allowListPathMatches(pathname, prefix string) bool {
+	if prefix == "" || prefix == "/" {
+		return true
+	}
+	if pathname == prefix {
+		return true
+	}
+	if strings.HasSuffix(prefix, "/") {
+		return strings.HasPrefix(pathname, prefix)
+	}
+	return strings.HasPrefix(pathname, prefix+"/")
 }
 
 func resolveRedirectURL(currentURL, location string) (string, error) {
