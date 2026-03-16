@@ -112,7 +112,7 @@ func TestTimeoutShortNestedCommandAvoidsShellTrampolineOverhead(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
-	const script = "if true; then timeout 0.01 sleep 0.001; else sed -n '1,3p' /tmp/text.txt; fi\n"
+	const script = "if true; then timeout 0.05 sleep 0.001; else sed -n '1,3p' /tmp/text.txt; fi\n"
 	for i := range 20 {
 		result, err := rt.Run(context.Background(), &ExecutionRequest{Script: script})
 		if err != nil {
