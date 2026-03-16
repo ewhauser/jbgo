@@ -45,27 +45,37 @@ type Config struct {
 
 // ListenAndServeUnix serves the gbash JSON-RPC protocol on a Unix domain socket.
 func ListenAndServeUnix(ctx context.Context, socketPath string, cfg Config) error {
-	socketPath = strings.TrimSpace(socketPath)
-	if socketPath == "" {
-		return fmt.Errorf("server: socket path must not be empty")
-	}
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
-		return fmt.Errorf("server: create socket directory: %w", err)
-	}
-	if err := removeStaleUnixSocket(socketPath); err != nil {
+	socketPath, ln, err := listenUnixSocket(socketPath)
+	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = ln.Close()
+		_ = os.Remove(socketPath)
+	}()
+	return Serve(ctx, ln, cfg)
+}
 
+func listenUnixSocket(socketPath string) (string, net.Listener, error) {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return "", nil, fmt.Errorf("server: socket path must not be empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
+		return "", nil, fmt.Errorf("server: create socket directory: %w", err)
+	}
+	if err := removeStaleUnixSocket(socketPath); err != nil {
+		return "", nil, err
+	}
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return fmt.Errorf("server: listen on unix socket: %w", err)
+		return "", nil, fmt.Errorf("server: listen on unix socket: %w", err)
 	}
-	defer func() { _ = os.Remove(socketPath) }()
 	if err := os.Chmod(socketPath, 0o600); err != nil {
 		_ = ln.Close()
-		return fmt.Errorf("server: chmod socket: %w", err)
+		return "", nil, fmt.Errorf("server: chmod socket: %w", err)
 	}
-	return Serve(ctx, ln, cfg)
+	return socketPath, ln, nil
 }
 
 // Serve serves the gbash JSON-RPC protocol on an existing listener.
