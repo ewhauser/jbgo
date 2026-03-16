@@ -14,16 +14,19 @@ type ExecutionRequest struct {
 	Interpreter     string
 	PassthroughArgs []string
 	Script          string
-	Args            []string
-	StartupOptions  []string
-	Env             map[string]string
-	WorkDir         string
-	Timeout         time.Duration
-	ReplaceEnv      bool
-	Interactive     bool
-	Stdin           io.Reader
-	Stdout          io.Writer
-	Stderr          io.Writer
+	// Command runs an already-tokenized command argv without shell parsing.
+	// Script and Command are mutually exclusive.
+	Command        []string
+	Args           []string
+	StartupOptions []string
+	Env            map[string]string
+	WorkDir        string
+	Timeout        time.Duration
+	ReplaceEnv     bool
+	Interactive    bool
+	Stdin          io.Reader
+	Stdout         io.Writer
+	Stderr         io.Writer
 }
 
 // ExecutionResult reports the outcome of an [ExecutionRequest].

@@ -34,15 +34,35 @@ func (c *subexecProbe) Run(ctx context.Context, inv *commands.Invocation) error 
 	switch inv.Args[0] {
 	case "inherit":
 		result, err = inv.Exec(ctx, &commands.ExecutionRequest{
-			Script: "echo \"$FOO\"\npwd\ncat note.txt\n",
+			Command: []string{"printenv", "FOO"},
 		})
+		if err == nil {
+			if _, writeErr := io.WriteString(inv.Stdout, result.Stdout); writeErr != nil {
+				return writeErr
+			}
+			result, err = inv.Exec(ctx, &commands.ExecutionRequest{Command: []string{"pwd"}})
+		}
+		if err == nil {
+			if _, writeErr := io.WriteString(inv.Stdout, result.Stdout); writeErr != nil {
+				return writeErr
+			}
+			result, err = inv.Exec(ctx, &commands.ExecutionRequest{Command: []string{"cat", "note.txt"}})
+		}
 	case "write":
 		result, err = inv.Exec(ctx, &commands.ExecutionRequest{
-			Script: "echo nested > nested.txt\n",
+			Command: []string{"cp", "note.txt", "nested.txt"},
 		})
 	case "deny":
 		result, err = inv.Exec(ctx, &commands.ExecutionRequest{
-			Script: "cat /denied.txt\n",
+			Command: []string{"cat", "/denied.txt"},
+		})
+	case "missing":
+		result, err = inv.Exec(ctx, &commands.ExecutionRequest{
+			Command: []string{"definitely-missing-command"},
+		})
+	case "shebang":
+		result, err = inv.Exec(ctx, &commands.ExecutionRequest{
+			Command: []string{"/tmp/subexec-script.sh", "value"},
 		})
 	default:
 		return fmt.Errorf("unknown mode %q", inv.Args[0])
@@ -61,7 +81,7 @@ func (c *subexecProbe) Run(ctx context.Context, inv *commands.Invocation) error 
 			return err
 		}
 	}
-	if inv.Args[0] == "deny" {
+	if inv.Args[0] == "deny" || inv.Args[0] == "missing" {
 		if _, err := fmt.Fprintf(inv.Stdout, "exit=%d\n", result.ExitCode); err != nil {
 			return err
 		}
@@ -99,7 +119,7 @@ func TestInvocationExecInheritsEnvDirAndSessionState(t *testing.T) {
 func TestInvocationExecUsesSameSessionFilesystem(t *testing.T) {
 	session := newSession(t, &Config{Registry: registryWithSubexecProbe(t)})
 
-	result := mustExecSession(t, session, "subexecprobe write\ncat nested.txt\n")
+	result := mustExecSession(t, session, "echo nested > note.txt\nsubexecprobe write\ncat nested.txt\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
@@ -138,6 +158,36 @@ func TestInvocationExecStaysWithinSessionPolicyBoundary(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, `command "cat" denied`) {
 		t.Fatalf("Stderr = %q, want nested policy denial message", result.Stderr)
+	}
+}
+
+func TestInvocationExecReturns127ForMissingDirectCommand(t *testing.T) {
+	rt := newRuntime(t, &Config{Registry: registryWithSubexecProbe(t)})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "subexecprobe missing\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "exit=127") {
+		t.Fatalf("Stdout = %q, want nested command-not-found exit code", result.Stdout)
+	}
+}
+
+func TestInvocationExecRunsShebangBackedCommand(t *testing.T) {
+	session := newSession(t, &Config{Registry: registryWithSubexecProbe(t)})
+	writeSessionFile(t, session, "/tmp/subexec-script.sh", []byte("#!/bin/sh\nprintf 'script:%s\\n' \"$1\"\n"))
+
+	result := mustExecSession(t, session, "chmod 755 /tmp/subexec-script.sh\nsubexecprobe shebang\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "script:value\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 

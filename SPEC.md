@@ -306,6 +306,7 @@ type Session struct {
 type ExecutionRequest struct {
     Name    string
     Script  string
+    Command []string
     Args    []string
     Env     map[string]string
     WorkDir string
@@ -487,6 +488,8 @@ Key design decisions:
 - command implementations receive project context through `Invocation`, not through globals
 - commands that need sub-execution should use the injected `Invocation.Exec` callback rather than reaching around the runtime
 - `Invocation.Exec` inherits the current command environment and virtual working directory by default while staying inside the same session and policy boundary
+- `Invocation.Exec` supports two non-interactive modes: `Script` for nested shell execution and `Command` for already-tokenized argv execution without shell parsing
+- `Script` and `Command` are mutually exclusive; `Args` applies to script mode positional parameters
 - direct filesystem and text-processing commands should prefer `Invocation.FS` over nested shell execution
 - commands that need whole-input reads should use `commands.ReadAll`, `commands.ReadAllStdin`, or `Invocation.FS.ReadFile` so `MaxFileBytes` and diagnostic behavior stay consistent
 - orchestration-style commands such as `xargs`, `find -exec`, and shell-wrapper helpers should use `Invocation.Exec`

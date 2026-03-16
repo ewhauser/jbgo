@@ -30,6 +30,7 @@ import (
 type Engine interface {
 	Parse(name, script string) (*syntax.File, error)
 	Run(ctx context.Context, exec *Execution) (*RunResult, error)
+	RunCommand(ctx context.Context, exec *Execution) (*RunResult, error)
 }
 
 type InteractiveEngine interface {
@@ -39,6 +40,7 @@ type InteractiveEngine interface {
 type Execution struct {
 	Name              string
 	Script            string
+	Command           []string
 	Program           *syntax.File
 	Args              []string
 	StartupOptions    []string
@@ -203,6 +205,94 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		FinalEnv:    envMapFromVars(runner.Vars),
 		ShellExited: runner.Exited(),
 	}, runErr
+}
+
+func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, error) {
+	if exec == nil {
+		exec = &Execution{}
+	}
+	if exec.Dir == "" {
+		exec.Dir = "/"
+	}
+	if exec.Stdin == nil {
+		exec.Stdin = strings.NewReader("")
+	}
+	if exec.Stdout == nil {
+		exec.Stdout = io.Discard
+	}
+	if exec.Stderr == nil {
+		exec.Stderr = io.Discard
+	}
+	if exec.Trace == nil {
+		exec.Trace = trace.NopRecorder{}
+	}
+
+	finalEnv := mergeEnv(nil, exec.Env)
+	if len(exec.Command) == 0 {
+		return &RunResult{FinalEnv: finalEnv}, nil
+	}
+
+	env := expand.ListEnviron(envPairs(finalEnv)...)
+	virtualWD := virtualDir(env, exec.Dir)
+	resolved, ok, err := lookupCommand(ctx, exec, virtualWD, env, exec.Command[0])
+	if err != nil {
+		if policy.IsDenied(err) {
+			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), "", exec.Command[0], 126, "")
+			return &RunResult{FinalEnv: finalEnv}, shellFailureToWriter(ctx, exec.Stderr, 126, "%v", err)
+		}
+		return &RunResult{FinalEnv: finalEnv}, err
+	}
+	start := time.Now().UTC()
+	if !ok {
+		return &RunResult{FinalEnv: finalEnv}, shellFailureToWriter(ctx, exec.Stderr, 127, "%s: command not found", exec.Command[0])
+	}
+	if err := allowCommand(ctx, exec.Policy, resolved.name, exec.Command); err != nil {
+		recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, 126, resolved.source)
+		return &RunResult{FinalEnv: finalEnv}, shellFailureToWriter(ctx, exec.Stderr, 126, "%v", err)
+	}
+	recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(exec.Command, false, &commandTraceResolution{
+		Dir:              virtualWD,
+		ResolvedName:     resolved.name,
+		ResolvedPath:     resolved.path,
+		ResolutionSource: resolved.source,
+	}))
+
+	finalEnv, err = invokeResolvedCommand(ctx, exec, resolved, exec.Command, finalEnv, virtualWD, exec.Stdin, exec.Stdout, exec.Stderr)
+	result := &RunResult{FinalEnv: finalEnv}
+	if err == nil {
+		recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(exec.Command, false, &commandTraceResolution{
+			Dir:              virtualWD,
+			ExitCode:         0,
+			Duration:         time.Since(start),
+			ResolvedName:     resolved.name,
+			ResolvedPath:     resolved.path,
+			ResolutionSource: resolved.source,
+		}))
+		return result, nil
+	}
+	if code, ok := commands.ExitCode(err); ok {
+		if message, ok := commands.DiagnosticMessage(err); ok && exec.Stderr != nil {
+			_, _ = fmt.Fprintln(exec.Stderr, message)
+		}
+		recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(exec.Command, false, &commandTraceResolution{
+			Dir:              virtualWD,
+			ExitCode:         code,
+			Duration:         time.Since(start),
+			ResolvedName:     resolved.name,
+			ResolvedPath:     resolved.path,
+			ResolutionSource: resolved.source,
+		}))
+		return result, interp.ExitStatus(code)
+	}
+	recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(exec.Command, false, &commandTraceResolution{
+		Dir:              virtualWD,
+		ExitCode:         1,
+		Duration:         time.Since(start),
+		ResolvedName:     resolved.name,
+		ResolvedPath:     resolved.path,
+		ResolutionSource: resolved.source,
+	}))
+	return result, err
 }
 
 func (m *MVdan) runnerOptions(exec *Execution, budget *executionBudget) []interp.RunnerOption {
@@ -430,34 +520,11 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			}))
 		}
 
-		invocationArgs := append([]string(nil), resolved.args...)
-		invocationArgs = append(invocationArgs, args[1:]...)
-		invocation := commands.NewInvocation(&commands.InvocationOptions{
-			Args:       invocationArgs,
-			Env:        currentEnv,
-			Cwd:        virtualWD,
-			Stdin:      hc.Stdin,
-			Stdout:     hc.Stdout,
-			Stderr:     hc.Stderr,
-			FileSystem: exec.FS,
-			Network:    exec.Network,
-			Policy:     exec.Policy,
-			Trace:      exec.Trace,
-			Exec:       subexecInvoker(exec.Exec, currentEnv, virtualWD),
-			Interact:   interactiveInvoker(exec.Interact, currentEnv, virtualWD),
-			GetRegisteredCommands: func() []string {
-				if exec.Registry == nil {
-					return nil
-				}
-				return exec.Registry.Names()
-			},
-		})
-		commandCtx := shellstate.WithCompletionState(ctx, completionStateForExecution(exec))
-		err = commands.RunCommand(commandCtx, resolved.command, invocation)
-		if syncErr := syncCommandHistory(ctx, &hc, currentEnv, invocation.Env); syncErr != nil {
+		finalEnv, err := invokeResolvedCommand(ctx, exec, resolved, args, currentEnv, virtualWD, hc.Stdin, hc.Stdout, hc.Stderr)
+		if syncErr := syncCommandHistory(ctx, &hc, currentEnv, finalEnv); syncErr != nil {
 			return syncErr
 		}
-		if syncErr := syncUmaskEnv(ctx, &hc, currentEnv, invocation.Env); syncErr != nil {
+		if syncErr := syncUmaskEnv(ctx, &hc, currentEnv, finalEnv); syncErr != nil {
 			return syncErr
 		}
 
@@ -509,6 +576,45 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 	}
 }
 
+func invokeResolvedCommand(
+	ctx context.Context,
+	exec *Execution,
+	resolved *resolvedCommand,
+	argv []string,
+	currentEnv map[string]string,
+	virtualWD string,
+	stdin io.Reader,
+	stdout io.Writer,
+	stderr io.Writer,
+) (map[string]string, error) {
+	invocationArgs := append([]string(nil), resolved.args...)
+	if len(argv) > 1 {
+		invocationArgs = append(invocationArgs, argv[1:]...)
+	}
+	invocation := commands.NewInvocation(&commands.InvocationOptions{
+		Args:       invocationArgs,
+		Env:        currentEnv,
+		Cwd:        virtualWD,
+		Stdin:      stdin,
+		Stdout:     stdout,
+		Stderr:     stderr,
+		FileSystem: exec.FS,
+		Network:    exec.Network,
+		Policy:     exec.Policy,
+		Trace:      exec.Trace,
+		Exec:       subexecInvoker(exec.Exec, currentEnv, virtualWD),
+		Interact:   interactiveInvoker(exec.Interact, currentEnv, virtualWD),
+		GetRegisteredCommands: func() []string {
+			if exec.Registry == nil {
+				return nil
+			}
+			return exec.Registry.Names()
+		},
+	})
+	commandCtx := shellstate.WithCompletionState(ctx, completionStateForExecution(exec))
+	return invocation.Env, commands.RunCommand(commandCtx, resolved.command, invocation)
+}
+
 func subexecInvoker(execFn func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error), currentEnv map[string]string, currentDir string) func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
 	if execFn == nil {
 		return nil
@@ -549,6 +655,7 @@ func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[stri
 		Interpreter:     req.Interpreter,
 		PassthroughArgs: append([]string(nil), req.PassthroughArgs...),
 		Script:          req.Script,
+		Command:         append([]string(nil), req.Command...),
 		Args:            append([]string(nil), req.Args...),
 		StartupOptions:  append([]string(nil), req.StartupOptions...),
 		Env:             mergeEnv(currentEnv, req.Env),

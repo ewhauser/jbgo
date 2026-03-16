@@ -302,6 +302,10 @@ func (f failingEngine) Run(context.Context, *shell.Execution) (*shell.RunResult,
 	return nil, f.err
 }
 
+func (f failingEngine) RunCommand(context.Context, *shell.Execution) (*shell.RunResult, error) {
+	return nil, f.err
+}
+
 func collectExecutionIDs(ids []string, events []trace.Event) []string {
 	seen := make(map[string]struct{}, len(ids)+len(events))
 	out := make([]string, 0, len(ids)+len(events))

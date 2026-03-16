@@ -14,6 +14,7 @@ type ExecutionRequest struct {
 	Interpreter     string
 	PassthroughArgs []string
 	Script          string
+	Command         []string
 	Args            []string
 	StartupOptions  []string
 	Env             map[string]string
@@ -66,6 +67,7 @@ func executionRequestFromCommand(req *commands.ExecutionRequest) *ExecutionReque
 		Interpreter:     req.Interpreter,
 		PassthroughArgs: cloneStrings(req.PassthroughArgs),
 		Script:          req.Script,
+		Command:         cloneStrings(req.Command),
 		Args:            cloneStrings(req.Args),
 		StartupOptions:  cloneStrings(req.StartupOptions),
 		Env:             copyStringMap(req.Env),

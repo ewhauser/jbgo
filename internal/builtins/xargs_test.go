@@ -259,3 +259,21 @@ func TestXArgsAcceptsMaxProcsFlag(t *testing.T) {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestXArgsRunsShebangScriptViaDirectExec(t *testing.T) {
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/xargs-script.sh", []byte("#!/bin/sh\nprintf '%s:%s\\n' \"$1\" \"$2\"\n"))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "chmod 755 /tmp/xargs-script.sh\nprintf 'left\\nright\\n' | xargs -n1 /tmp/xargs-script.sh fixed\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "fixed:left\nfixed:right\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

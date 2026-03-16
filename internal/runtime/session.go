@@ -42,6 +42,9 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	if req == nil {
 		req = &ExecutionRequest{}
 	}
+	if err := validateExecutionRequest(req); err != nil {
+		return nil, err
+	}
 	ctx, cancel := executionContext(ctx, req.Timeout)
 	defer cancel()
 
@@ -49,6 +52,9 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	execEnv := executionEnv(s.cfg.BaseEnv, req)
 	visiblePWD, hasVisiblePWD := execEnv["PWD"]
 	execEnv["PWD"] = workDir
+	if len(req.Command) > 0 {
+		execEnv["__JB_PWD"] = workDir
+	}
 	if !s.bootAt.IsZero() {
 		execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
 	}
@@ -94,9 +100,10 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Name:        baseLogEvent.Name,
 		WorkDir:     baseLogEvent.WorkDir,
 	})
-	runResult, runErr := s.cfg.Engine.Run(ctx, &shell.Execution{
+	execReq := &shell.Execution{
 		Name:           baseLogEvent.Name,
 		Script:         req.Script,
+		Command:        cloneStrings(req.Command),
 		Args:           req.Args,
 		StartupOptions: req.StartupOptions,
 		Interactive:    req.Interactive,
@@ -114,7 +121,16 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Trace:          recorder,
 		Exec:           s.subexecCallback,
 		Interact:       s.interactCallback,
-	})
+	}
+	var (
+		runResult *shell.RunResult
+		runErr    error
+	)
+	if len(req.Command) > 0 {
+		runResult, runErr = s.cfg.Engine.RunCommand(ctx, execReq)
+	} else {
+		runResult, runErr = s.cfg.Engine.Run(ctx, execReq)
+	}
 	finished := time.Now().UTC()
 
 	var events []trace.Event
@@ -267,6 +283,16 @@ func executionContext(ctx context.Context, timeout time.Duration) (context.Conte
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, timeout)
+}
+
+func validateExecutionRequest(req *ExecutionRequest) error {
+	if req == nil {
+		return nil
+	}
+	if req.Script != "" && len(req.Command) > 0 {
+		return errors.New("execution request cannot set both Script and Command")
+	}
+	return nil
 }
 
 func runtimeVisiblePWDMatchesCurrentDir(ctx context.Context, fsys gbfs.FileSystem, candidate string) bool {

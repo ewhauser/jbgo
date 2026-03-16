@@ -24,7 +24,7 @@ func (c *timeoutProbe) Run(ctx context.Context, inv *commands.Invocation) error 
 	}
 
 	result, err := inv.Exec(ctx, &commands.ExecutionRequest{
-		Script:  "while true; do :; done\n",
+		Command: []string{"sleep", "1"},
 		Timeout: 20 * time.Millisecond,
 	})
 	if err != nil {
@@ -85,7 +85,7 @@ func TestInvocationExecTimeoutIsScopedToSubexecution(t *testing.T) {
 	rt := newRuntime(t, &Config{
 		Registry: registryWithCommands(t, &timeoutProbe{}),
 		Policy: policy.NewStatic(&policy.Config{
-			AllowedCommands: []string{"echo", "timeoutprobe"},
+			AllowedCommands: []string{"echo", "sleep", "timeoutprobe"},
 			ReadRoots:       []string{"/"},
 			WriteRoots:      []string{"/"},
 		}),

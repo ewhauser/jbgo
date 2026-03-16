@@ -102,3 +102,18 @@ func TestTimeoutStopsOptionParsingAtDuration(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestTimeoutShortNestedCommandAvoidsShellTrampolineOverhead(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	const script = "if true; then timeout 0.01 sleep 0.001; else sed -n '1,3p' /tmp/text.txt; fi\n"
+	for i := range 20 {
+		result, err := rt.Run(context.Background(), &ExecutionRequest{Script: script})
+		if err != nil {
+			t.Fatalf("Run(attempt %d) error = %v", i+1, err)
+		}
+		if result.ExitCode != 0 {
+			t.Fatalf("attempt %d ExitCode = %d, want 0; stderr=%q", i+1, result.ExitCode, result.Stderr)
+		}
+	}
+}
