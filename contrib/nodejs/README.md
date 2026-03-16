@@ -4,6 +4,8 @@
 
 It is intentionally not included in `contrib/extras` yet. To use it, register it explicitly from `github.com/ewhauser/gbash/contrib/nodejs`.
 
+**WARNING: this implementation is absolutely not secure as-is. It needs a lot more hardening before it will be included in extras**
+
 ## Status
 
 - experimental
