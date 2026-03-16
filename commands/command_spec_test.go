@@ -103,6 +103,38 @@ func TestParseCommandSpecOptionalValueEqualsOnly(t *testing.T) {
 	}
 }
 
+func TestParseCommandSpecGroupedOptionalValueEqualsOnlyContinuesParsing(t *testing.T) {
+	spec := CommandSpec{
+		Name: "ls",
+		Options: []OptionSpec{
+			{Name: "classify", Short: 'F', Arity: OptionOptionalValue, OptionalValueEqualsOnly: true},
+			{Name: "dereference", Short: 'L'},
+			{Name: "recursive", Short: 'R'},
+		},
+		Args: []ArgSpec{{Name: "file", Repeatable: true}},
+		Parse: ParseConfig{
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+		},
+	}
+
+	matches, action, err := ParseCommandSpec(&Invocation{Args: []string{"-FLR", "sub"}}, &spec)
+	if err != nil {
+		t.Fatalf("ParseCommandSpec() error = %v", err)
+	}
+	if action != "" {
+		t.Fatalf("action = %q, want empty", action)
+	}
+	for _, name := range []string{"classify", "dereference", "recursive"} {
+		if !matches.Has(name) {
+			t.Fatalf("%s = false, want true", name)
+		}
+	}
+	if got, want := matches.Args("file"), []string{"sub"}; !equalStrings(got, want) {
+		t.Fatalf("files = %v, want %v", got, want)
+	}
+}
+
 func TestParseCommandSpecNegativeNumbersAsPositionals(t *testing.T) {
 	spec := CommandSpec{
 		Name: "seq",

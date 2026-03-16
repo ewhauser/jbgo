@@ -250,7 +250,6 @@ func TestChecksumSumCheckModeHandlesCRLFAndEscapedFilenames(t *testing.T) {
 		t.Fatalf("Stderr = %q, want empty", result.Stderr)
 	}
 }
-
 func TestB2SumCheckModeSupportsVariableLengths(t *testing.T) {
 	session := newSession(t, &Config{})
 	data := []byte("format-data")

@@ -29,6 +29,7 @@ type tailOptions struct {
 	lines              int
 	bytes              int
 	hasBytes           bool
+	fromBytes          bool
 	fromLine           bool
 	quiet              bool
 	verbose            bool
@@ -119,6 +120,9 @@ func (c *Tail) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 
 	process := func(data []byte) []byte {
 		if opts.hasBytes {
+			if opts.fromBytes {
+				return bytesFrom(data, opts.bytes)
+			}
 			return lastBytes(data, opts.bytes)
 		}
 		if opts.fromLine {
@@ -544,12 +548,13 @@ func tailOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (tailOptions
 		opts.fromLine = fromLine
 	}
 	if matches.Has("bytes") {
-		count, err := strconv.Atoi(matches.Value("bytes"))
-		if err != nil || count < 0 {
+		count, fromBytes, err := parseHeadTailCount(matches.Value("bytes"), true)
+		if err != nil {
 			return tailOptions{}, exitf(inv, 1, "tail: invalid number of bytes")
 		}
 		opts.bytes = count
 		opts.hasBytes = true
+		opts.fromBytes = fromBytes
 	}
 	if matches.Has("follow") {
 		switch follow := matches.Value("follow"); follow {

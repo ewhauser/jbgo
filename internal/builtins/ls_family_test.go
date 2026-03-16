@@ -3,8 +3,10 @@ package builtins_test
 import (
 	"bytes"
 	"context"
+	stdfs "io/fs"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -201,6 +203,38 @@ func TestLSReturnsMissingPathExitCode(t *testing.T) {
 	}
 }
 
+func TestLSAlmostAllOverridesAllAndRecursiveDotKeepsPrefixedHeaders(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-aA/dir/subdir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(ls-aA) error = %v", err)
+	}
+	writeSessionFile(t, session, "/tmp/ls-aA/dir/subdir/file2", []byte("x"))
+
+	result := mustExecSession(t, session,
+		"ls -aA /tmp/ls-aA/dir\n"+
+			"echo ---\n"+
+			"cd /tmp/ls-aA\n"+
+			"ls -R1 .\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if got := strings.TrimSpace(parts[0]); got != "subdir" {
+		t.Fatalf("ls -aA output = %q, want only subdir", got)
+	}
+	for _, want := range []string{"./dir:\n", "./dir/subdir:\n"} {
+		if !strings.Contains(parts[1], want) {
+			t.Fatalf("recursive output = %q, want %q", parts[1], want)
+		}
+	}
+}
+
 func TestLSLongFormatListsDanglingSymlinkWithoutDereferencing(t *testing.T) {
 	session := newSession(t, &Config{
 		Policy: policy.NewStatic(&policy.Config{
@@ -219,6 +253,43 @@ func TestLSLongFormatListsDanglingSymlinkWithoutDereferencing(t *testing.T) {
 	}
 	if !strings.Contains(result.Stdout, "dangle -> no-such") {
 		t.Fatalf("Stdout = %q, want dangling symlink listing", result.Stdout)
+	}
+}
+
+func TestLSDereferenceKeepsDanglingDirectoryEntriesForInodeAndBlockPrefixes(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-dangle-dir/d", 0o755); err != nil {
+		t.Fatalf("MkdirAll(d) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "no-such", "/tmp/ls-dangle-dir/d/dangle"); err != nil {
+		t.Fatalf("Symlink(dangle) error = %v", err)
+	}
+
+	result := mustExecSession(t, session,
+		"cd /tmp/ls-dangle-dir\n"+
+			"ls -Li d\n"+
+			"echo ---\n"+
+			"ls -Ls d\n",
+	)
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if got, want := parts[0], "? dangle\n"; got != want {
+		t.Fatalf("ls -Li output = %q, want %q", got, want)
+	}
+	if got, want := parts[1], "total 0\n? dangle\n"; got != want {
+		t.Fatalf("ls -Ls output = %q, want %q", got, want)
 	}
 }
 
@@ -322,6 +393,48 @@ func TestVdirSupportsColumnOutputViaLSFlags(t *testing.T) {
 	}
 }
 
+func TestVdirBatchesCommandLineFilesForExplicitGridOutput(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/vdir-grid/a", []byte("a"))
+	writeSessionFile(t, session, "/tmp/vdir-grid/b", []byte("b"))
+
+	result := mustExecSession(t, session, "cd /tmp/vdir-grid\nvdir -w0 -x -T1 a b\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a  b\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestVdirSupportsDiredAndRecursiveHeaders(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/vdir-dired/dir/subdir/file.txt", []byte("x"))
+
+	result := mustExecSession(t, session,
+		"vdir --dired /tmp/vdir-dired/dir\n"+
+			"echo ---\n"+
+			"cd /tmp/vdir-dired\n"+
+			"vdir -R .\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if !strings.Contains(parts[0], "//DIRED//") || !strings.Contains(parts[0], "//DIRED-OPTIONS//") {
+		t.Fatalf("dired output = %q, want dired footer", parts[0])
+	}
+	if !strings.Contains(parts[1], "./dir/subdir:") {
+		t.Fatalf("recursive output = %q, want nested header with ./ prefix", parts[1])
+	}
+}
+
 func TestVdirInvalidOptionUsesVdirPrefixAndExitCode(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -367,6 +480,63 @@ func TestLSColorFlagsAndLSColorsOverride(t *testing.T) {
 	plain := parts[1]
 	if strings.Contains(plain, "\x1b[") {
 		t.Fatalf("color=never output = %q, want no ANSI escapes", plain)
+	}
+}
+
+func TestLSColorsRespectOrderedCaseSensitiveExtensions(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-color-ext/img1.jpg", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-color-ext/IMG2.JPG", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-color-ext/img3.JpG", []byte("x"))
+
+	result := mustExecSession(t, session, "LS_COLORS='*.jpg=01;35:*.JPG=01;35;46' ls --color=always /tmp/ls-color-ext\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m") {
+		t.Fatalf("Stdout = %q, want lowercase extension color", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35;46mIMG2.JPG\x1b[0m") {
+		t.Fatalf("Stdout = %q, want ordered uppercase extension override", result.Stdout)
+	}
+	if strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35mimg3.JpG\x1b[0m") || strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35;46mimg3.JpG\x1b[0m") {
+		t.Fatalf("Stdout = %q, want mixed-case extension left uncolored", result.Stdout)
+	}
+}
+
+func TestLSColorsUseWritableAndStickyDirectoryClasses(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-color-dir/default/file", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-color-dir/other-writable/file", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-color-dir/sticky/file", []byte("x"))
+	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir/other-writable", 0o777); err != nil {
+		t.Fatalf("Chmod(other-writable) error = %v", err)
+	}
+	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir/sticky", 0o1755); err != nil {
+		t.Fatalf("Chmod(sticky) error = %v", err)
+	}
+	stickyInfo, err := session.FileSystem().Stat(context.Background(), "/tmp/ls-color-dir/sticky")
+	if err != nil {
+		t.Fatalf("Stat(sticky) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "LS_COLORS='di=01;34:ow=34;42:st=37;44' ls --color=always /tmp/ls-color-dir\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	wants := []string{
+		"\x1b[0m\x1b[01;34mdefault\x1b[0m",
+		"\x1b[0m\x1b[34;42mother-writable\x1b[0m",
+	}
+	if stickyInfo.Mode()&stdfs.ModeSticky != 0 {
+		wants = append(wants, "\x1b[0m\x1b[37;44msticky\x1b[0m")
+	}
+	for _, want := range wants {
+		if !strings.Contains(result.Stdout, want) {
+			t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+		}
 	}
 }
 
@@ -559,6 +729,31 @@ func TestLSHyperlinkMode(t *testing.T) {
 	}
 }
 
+func TestLSHyperlinkRecursiveHeadersAndLowercaseEscaping(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-hyperlink/sub/col:on", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-hyperlink/sub/back\\slash", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-hyperlink/sub/ques?tion", []byte("x"))
+
+	result := mustExecSession(t, session, "ls --hyperlink=always -R /tmp/ls-hyperlink/sub\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "\x1b]8;;file:///tmp/ls-hyperlink/sub\x1b\\/tmp/ls-hyperlink/sub\x1b]8;;\x1b\\:") {
+		t.Fatalf("Stdout = %q, want recursive header hyperlink", result.Stdout)
+	}
+	for _, want := range []string{
+		"file:///tmp/ls-hyperlink/sub/back%5cslash",
+		"file:///tmp/ls-hyperlink/sub/col%3aon",
+		"file:///tmp/ls-hyperlink/sub/ques%3ftion",
+	} {
+		if !strings.Contains(result.Stdout, want) {
+			t.Fatalf("Stdout = %q, want hyperlink target %q", result.Stdout, want)
+		}
+	}
+}
+
 func TestLSSupportsFormatSortingAndFilteringParityFlags(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -647,6 +842,285 @@ func TestLSSupportsQuotingHideControlAndZeroOutput(t *testing.T) {
 	}
 }
 
+func TestLSSupportsQuotingAliasAndWidthZeroWithTabsize(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-width/a", []byte("a"))
+	writeSessionFile(t, session, "/tmp/ls-width/b", []byte("b"))
+	writeSessionFile(t, session, "/tmp/ls-width/target file", []byte("x"))
+	if err := session.FileSystem().Symlink(context.Background(), "target file", "/tmp/ls-width/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	result := mustExecSession(t, session,
+		"cd /tmp/ls-width\n"+
+			"ls -w0 -x -T1 a b\n"+
+			"echo ---\n"+
+			"ls -l --quoting=shell-escape link\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if got := strings.TrimSpace(parts[0]); got != "a  b" {
+		t.Fatalf("width/tabsize output = %q, want %q", got, "a  b")
+	}
+	if !strings.Contains(parts[1], "link -> 'target file'") {
+		t.Fatalf("quoting alias output = %q, want shell-escaped symlink target", parts[1])
+	}
+}
+
+func TestLSLongShellEscapeSpacingRespectsTimeStyleEnv(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-quote-align/a b", []byte("a"))
+	writeSessionFile(t, session, "/tmp/ls-quote-align/c.foo", []byte("b"))
+
+	result := mustExecSession(t, session,
+		"cd /tmp\n"+
+			"env TERM=xterm LS_COLORS='*.foo=0;31;42' ls -x --quoting=shell-escape --color=always ls-quote-align\n"+
+			"echo ---\n"+
+			"env TERM=xterm LS_COLORS='*.foo=0;31;42' TIME_STYLE=+T ls -og --quoting=shell-escape --color=always ls-quote-align\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if !strings.Contains(parts[0], "'a b'   \x1b[0m\x1b[0;31;42mc.foo\x1b[0m") {
+		t.Fatalf("grid output = %q, want GNU spacing for quoted/colorized grid cells", parts[0])
+	}
+	if !regexp.MustCompile(`\sT 'a b'`).MatchString(parts[1]) {
+		t.Fatalf("long output = %q, want TIME_STYLE env to drive +T timestamps", parts[1])
+	}
+	if !regexp.MustCompile(`\n.* {2}\x1b\[0m\x1b\[0;31;42mc\.foo\x1b\[0m\n`).MatchString(parts[1]) {
+		t.Fatalf("long output = %q, want GNU shell-escape spacing for unquoted names", parts[1])
+	}
+}
+
+func TestLSInvalidWidthValuesUseGNUUsageExitCode(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	for _, script := range []string{"ls -w-1\n", "ls -w08\n"} {
+		result := mustExecSession(t, session, script)
+		if result.ExitCode != 2 {
+			t.Fatalf("script %q ExitCode = %d, want 2; stderr=%q", script, result.ExitCode, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "invalid line width") {
+			t.Fatalf("script %q Stderr = %q, want invalid width diagnostic", script, result.Stderr)
+		}
+	}
+}
+
+func TestLSInvalidTimeStyleMatchesGNUDiagnostic(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "ls -l --time-style=XX\n")
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	for _, want := range []string{
+		"ls: invalid argument 'XX' for 'time style'",
+		"Valid arguments are:",
+		"[posix-]full-iso",
+		"+FORMAT (e.g., +%H:%M) for a 'date'-style format",
+		"Try 'ls --help' for more information.",
+	} {
+		if !strings.Contains(result.Stderr, want) {
+			t.Fatalf("Stderr = %q, want %q", result.Stderr, want)
+		}
+	}
+	if result.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", result.Stdout)
+	}
+}
+
+func TestLSGroupDirectoriesFirstTreatsSymlinkedDirectoriesAsDirectories(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-group/dir/b", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir/b) error = %v", err)
+	}
+	writeSessionFile(t, session, "/tmp/ls-group/dir/a", []byte("a"))
+	if err := session.FileSystem().Symlink(context.Background(), "b", "/tmp/ls-group/dir/bl"); err != nil {
+		t.Fatalf("Symlink(bl) error = %v", err)
+	}
+
+	result := mustExecSession(t, session,
+		"cd /tmp/ls-group\n"+
+			"ls --group-directories-first dir\n"+
+			"echo ---\n"+
+			"ls --group-directories-first -d dir/*\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if got, want := parts[0], "b\nbl\na\n"; got != want {
+		t.Fatalf("directory listing = %q, want %q", got, want)
+	}
+	if got, want := parts[1], "dir/b\ndir/bl\ndir/a\n"; got != want {
+		t.Fatalf("directory-only listing = %q, want %q", got, want)
+	}
+}
+
+func TestLSZeroKeepsLongFormatAndDisablesFormattingOverrides(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-zero/dir/a", []byte("a"))
+	writeSessionFile(t, session, "/tmp/ls-zero/dir/b", []byte("b"))
+	writeSessionFile(t, session, "/tmp/ls-zero/dir/cc", []byte("cc"))
+
+	longResult := mustExecSession(t, session, "cd /tmp/ls-zero\nLC_ALL=C ls -l --zero dir\n")
+	if longResult.ExitCode != 0 {
+		t.Fatalf("long ExitCode = %d, want 0; stderr=%q", longResult.ExitCode, longResult.Stderr)
+	}
+	if !strings.Contains(longResult.Stdout, "total ") {
+		t.Fatalf("long zero output = %q, want long-format total line", longResult.Stdout)
+	}
+
+	zeroResult := mustExecSession(t, session, "cd /tmp/ls-zero\nLC_ALL=C ls --color=always -x -m -C -Q -q --zero dir\n")
+	if zeroResult.ExitCode != 0 {
+		t.Fatalf("disabled ExitCode = %d, want 0; stderr=%q", zeroResult.ExitCode, zeroResult.Stderr)
+	}
+	if got, want := zeroResult.Stdout, "a\x00b\x00cc\x00"; got != want {
+		t.Fatalf("disabled zero output = %q, want %q", got, want)
+	}
+}
+
+func TestLSDereferenceListsImplicitBrokenSymlinksAndRecursesIntoSymlinkDirs(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-follow/dir/sub", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir/sub) error = %v", err)
+	}
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-follow/dir1", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir1) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "link", "/tmp/ls-follow/dir/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "../../dir1", "/tmp/ls-follow/dir/sub/link-to-dir"); err != nil {
+		t.Fatalf("Symlink(link-to-dir) error = %v", err)
+	}
+
+	result := mustExecSession(t, session,
+		"cd /tmp/ls-follow/dir\n"+
+			"LC_ALL=C ls -L\n"+
+			"echo ---\n"+
+			"LC_ALL=C ls -FLR sub\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if got, want := parts[0], "link\nsub\n"; got != want {
+		t.Fatalf("ls -L output = %q, want %q", got, want)
+	}
+	if got, want := parts[1], "sub:\nlink-to-dir/\n\nsub/link-to-dir:\n"; got != want {
+		t.Fatalf("ls -FLR output = %q, want %q", got, want)
+	}
+}
+
+func TestLSDereferenceExplicitBrokenSymlinkStillFails(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-explicit/dir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "link", "/tmp/ls-explicit/dir/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	classify := mustExecSession(t, session, "cd /tmp/ls-explicit/dir\nls -F link >/dev/null\n")
+	if classify.ExitCode != 0 {
+		t.Fatalf("classify ExitCode = %d, want 0; stderr=%q", classify.ExitCode, classify.Stderr)
+	}
+
+	failed := mustExecSession(t, session, "cd /tmp/ls-explicit/dir\nls -L link\n")
+	if failed.ExitCode != 2 {
+		t.Fatalf("dereference ExitCode = %d, want 2; stderr=%q", failed.ExitCode, failed.Stderr)
+	}
+}
+
+func TestLSRecursiveListsCommandLineFilesBeforeDirectories(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-mixed/x", 0o755); err != nil {
+		t.Fatalf("MkdirAll(x) error = %v", err)
+	}
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-mixed/y", 0o755); err != nil {
+		t.Fatalf("MkdirAll(y) error = %v", err)
+	}
+	writeSessionFile(t, session, "/tmp/ls-mixed/f", []byte("f"))
+
+	result := mustExecSession(t, session, "cd /tmp/ls-mixed\nls -R1 x y f\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "f\n\nx:\n\ny:\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLSTrailingSlashDereferencesCommandLineSymlinkToDir(t *testing.T) {
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-slash/dir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "dir", "/tmp/ls-slash/symlink"); err != nil {
+		t.Fatalf("Symlink(symlink) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "cd /tmp/ls-slash\nls -l symlink/\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "total 0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
+	}
+}
+
 func TestDirDefaultsToColumnsAndRespectsExplicitFormats(t *testing.T) {
 	session := newSession(t, &Config{})
 
@@ -709,7 +1183,7 @@ func TestLSDiredParityModes(t *testing.T) {
 	}
 }
 
-func TestLSDiredRejectsZeroAndTracksSymlinkTargets(t *testing.T) {
+func TestLSDiredRejectsZeroAndTracksSymlinkFields(t *testing.T) {
 	session := newSession(t, &Config{})
 
 	writeSessionFile(t, session, "/tmp/ls-dired-link/target", []byte("x"))
@@ -732,8 +1206,30 @@ func TestLSDiredRejectsZeroAndTracksSymlinkTargets(t *testing.T) {
 	if !strings.Contains(result.Stdout, "link -> target") {
 		t.Fatalf("Stdout = %q, want symlink target in long output", result.Stdout)
 	}
-	if !regexp.MustCompile(`//DIRED// \d+ \d+ \d+ \d+ \d+ \d+`).MatchString(result.Stdout) {
-		t.Fatalf("Stdout = %q, want dired offsets for symlink name and target", result.Stdout)
+	if got, want := extractDiredFields(t, result.Stdout), []string{"link -> target", "target"}; !slices.Equal(got, want) {
+		t.Fatalf("dired fields = %v, want %v\nstdout=%q", got, want, result.Stdout)
+	}
+}
+
+func TestLSDiredMatchesGNUByteRangesForLongListings(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-dired-ranges/dir/1a", []byte("a"))
+	writeSessionFile(t, session, "/tmp/ls-dired-ranges/dir/2æ", []byte("a"))
+	writeSessionFile(t, session, "/tmp/ls-dired-ranges/dir/aaa", []byte("a"))
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/ls-dired-ranges/dir/3dir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(3dir) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "target", "/tmp/ls-dired-ranges/dir/0aaa_link"); err != nil {
+		t.Fatalf("Symlink(0aaa_link) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "LC_MESSAGES=C ls -l --dired /tmp/ls-dired-ranges/dir\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := extractDiredFields(t, result.Stdout), []string{"0aaa_link -> target", "1a", "2æ", "3dir", "aaa"}; !slices.Equal(got, want) {
+		t.Fatalf("dired fields = %v, want %v\nstdout=%q", got, want, result.Stdout)
 	}
 }
 
@@ -743,4 +1239,34 @@ func splitTrimmedLines(block string) []string {
 		return nil
 	}
 	return strings.Split(trimmed, "\n")
+}
+
+func extractDiredFields(t *testing.T, output string) []string {
+	t.Helper()
+
+	match := regexp.MustCompile(`(?m)^//DIRED//(.*)$`).FindStringSubmatch(output)
+	if match == nil {
+		t.Fatalf("output = %q, want //DIRED// footer", output)
+	}
+	fields := strings.Fields(match[1])
+	if len(fields)%2 != 0 {
+		t.Fatalf("dired footer = %q, want start/end pairs", match[0])
+	}
+
+	values := make([]string, 0, len(fields)/2)
+	for i := 0; i < len(fields); i += 2 {
+		start, err := strconv.Atoi(fields[i])
+		if err != nil {
+			t.Fatalf("Atoi(%q) error = %v", fields[i], err)
+		}
+		end, err := strconv.Atoi(fields[i+1])
+		if err != nil {
+			t.Fatalf("Atoi(%q) error = %v", fields[i+1], err)
+		}
+		if start < 0 || end < start || end > len(output) {
+			t.Fatalf("dired range = [%d,%d), output length = %d", start, end, len(output))
+		}
+		values = append(values, output[start:end])
+	}
+	return values
 }

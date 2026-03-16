@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	stdfs "io/fs"
-	"path"
 	"strconv"
 	"strings"
 
@@ -36,8 +35,10 @@ func (c *Dir) Spec() CommandSpec {
 			{Name: "file", ValueName: "FILE", Repeatable: true},
 		},
 		Parse: ParseConfig{
-			GroupShortOptions:     true,
-			LongOptionValueEquals: true,
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
 		},
 		HelpRenderer:    renderStaticHelp(dirHelpText),
 		VersionRenderer: renderStaticVersion(dirVersionText),
@@ -62,30 +63,9 @@ func (c *Dir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 	}
 
 	defaultColumns := !opts.longFormat && !opts.zero && !lsHasExplicitFormat(matches)
-	var stdout strings.Builder
-	exitCode := 0
-	for i, target := range targets {
-		if i > 0 && stdout.Len() > 0 && !strings.HasSuffix(stdout.String(), "\n\n") {
-			stdout.WriteByte('\n')
-		}
-
-		output, status, _, err := c.listPath(ctx, inv, c.Name(), target, &opts, len(targets) > 1, defaultColumns)
-		if err != nil {
-			return err
-		}
-		stdout.WriteString(output)
-		if status > exitCode {
-			exitCode = status
-		}
-	}
-
-	if _, err := fmt.Fprint(inv.Stdout, stdout.String()); err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-	if exitCode != 0 {
-		return &ExitError{Code: exitCode}
-	}
-	return nil
+	return lsRunTargets(ctx, inv, c.Name(), targets, &opts, dirQuoteName, defaultColumns, func(target string, showHeader bool) (string, int, lsRenderResult, error) {
+		return c.listPath(ctx, inv, c.Name(), target, &opts, showHeader, defaultColumns)
+	})
 }
 
 func (c *Dir) listPath(ctx context.Context, inv *Invocation, commandName, target string, opts *lsOptions, showHeader, defaultColumns bool) (output string, status int, rendered lsRenderResult, err error) {
@@ -153,14 +133,7 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, commandName, target
 		for _, dir := range subdirs {
 			out.WriteByte('\n')
 			subTarget := target
-			switch subTarget {
-			case ".":
-				subTarget = "./" + dir.name
-			case "/":
-				subTarget = "/" + dir.name
-			default:
-				subTarget = path.Join(subTarget, dir.name)
-			}
+			subTarget = lsJoinRecursiveTarget(subTarget, dir.name)
 			subOutput, status, _, err := c.listPath(ctx, inv, commandName, subTarget, opts, false, defaultColumns)
 			if err != nil {
 				return "", 0, lsRenderResult{}, err
@@ -181,7 +154,7 @@ func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs 
 		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, _ := formatLSLongLine(name, info, opts, nil)
+		line, _ := formatLSLongLine(inv, name, info, opts, nil)
 		return line, 0, lsRenderResult{text: line}, nil
 	}
 	if defaultColumns {

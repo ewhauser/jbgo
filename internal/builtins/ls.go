@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	stdfs "io/fs"
-	"net/url"
 	"os"
 	"path"
 	"sort"
@@ -38,6 +37,7 @@ type lsOptions struct {
 	directoryOnly         bool
 	format                lsFormatMode
 	width                 int
+	tabSize               int
 	zero                  bool
 	colorMode             lsColorMode
 	hyperlinkMode         lsColorMode
@@ -54,11 +54,37 @@ type lsOptions struct {
 	timeStyle             string
 	dereference           lsDereferenceMode
 	dired                 bool
+	listedDirs            map[lsListedDirKey]struct{}
 }
 
 type lsEntry struct {
-	name string
-	info stdfs.FileInfo
+	name                 string
+	info                 stdfs.FileInfo
+	groupAsDir           bool
+	unknownShortMetadata bool
+}
+
+type lsPathArg struct {
+	name       string
+	abs        string
+	info       stdfs.FileInfo
+	groupAsDir bool
+}
+
+type lsListedDirKey struct {
+	dev  uint64
+	ino  uint64
+	path string
+}
+
+type lsParsedColors struct {
+	entries  map[string]string
+	patterns []lsColorPattern
+}
+
+type lsColorPattern struct {
+	suffix string
+	code   string
 }
 
 type lsByteRange struct {
@@ -119,6 +145,7 @@ const (
 	lsQuoteEscape
 	lsQuoteC
 	lsQuoteShell
+	lsQuoteShellAlways
 )
 
 const (
@@ -221,8 +248,10 @@ func (c *LS) Spec() CommandSpec {
 			{Name: "file", ValueName: "FILE", Repeatable: true},
 		},
 		Parse: ParseConfig{
-			GroupShortOptions:     true,
-			LongOptionValueEquals: true,
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
 		},
 		HelpRenderer: renderStaticHelp(lsHelpText),
 	}
@@ -242,45 +271,9 @@ func (c *LS) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		targets = []string{"."}
 	}
 
-	var stdout strings.Builder
-	exitCode := 0
-	var diredPositions []lsByteRange
-	var subdiredPositions []lsByteRange
-
-	for i, target := range targets {
-		if i > 0 && stdout.Len() > 0 && !strings.HasSuffix(stdout.String(), "\n\n") {
-			stdout.WriteByte('\n')
-		}
-
-		output, status, rendered, err := c.listPath(ctx, inv, target, &opts, len(targets) > 1)
-		if err != nil {
-			return err
-		}
-		offset := stdout.Len()
-		stdout.WriteString(output)
-		if opts.dired {
-			for _, entry := range rendered.dired {
-				diredPositions = append(diredPositions, lsByteRange{start: offset + entry.start, end: offset + entry.end})
-			}
-			for _, entry := range rendered.subdired {
-				subdiredPositions = append(subdiredPositions, lsByteRange{start: offset + entry.start, end: offset + entry.end})
-			}
-		}
-		if status > exitCode {
-			exitCode = status
-		}
-	}
-	if opts.dired {
-		appendLSDiredFooter(&stdout, diredPositions, subdiredPositions, &opts)
-	}
-
-	if _, err := fmt.Fprint(inv.Stdout, stdout.String()); err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-	if exitCode != 0 {
-		return &ExitError{Code: exitCode}
-	}
-	return nil
+	return lsRunTargets(ctx, inv, "ls", targets, &opts, func(value string) string { return value }, false, func(target string, showHeader bool) (string, int, lsRenderResult, error) {
+		return c.listPath(ctx, inv, target, &opts, showHeader)
+	})
 }
 
 func lsOptionSpecs() []OptionSpec {
@@ -309,7 +302,7 @@ func lsOptionSpecs() []OptionSpec {
 		{Name: "long-no-group", Short: 'o', Help: "like -l, but do not list group information"},
 		{Name: "escape", Short: 'b', Long: "escape", Help: "print C-style escapes for nongraphic characters", Overrides: []string{"quoting-style", "literal", "escape", "quote-name"}},
 		{Name: "quote-name", Short: 'Q', Long: "quote-name", Help: "enclose entry names in double quotes", Overrides: []string{"quoting-style", "literal", "escape", "quote-name"}},
-		{Name: "quoting-style", Long: "quoting-style", ValueName: "WORD", Arity: OptionRequiredValue, Help: "literal, shell, shell-escape, shell-always, shell-escape-always, c, escape", Overrides: []string{"quoting-style", "literal", "escape", "quote-name"}},
+		{Name: "quoting-style", Long: "quoting-style", Aliases: []string{"quoting"}, ValueName: "WORD", Arity: OptionRequiredValue, Help: "literal, shell, shell-escape, shell-always, shell-escape-always, c, escape", Overrides: []string{"quoting-style", "literal", "escape", "quote-name"}},
 		{Name: "hide-control-chars", Short: 'q', Long: "hide-control-chars", Help: "print ? instead of nongraphic characters", Overrides: []string{"hide-control-chars", "show-control-chars"}},
 		{Name: "show-control-chars", Long: "show-control-chars", Help: "show nongraphic characters as-is", Overrides: []string{"hide-control-chars", "show-control-chars"}},
 		{Name: "reverse", Short: 'r', Long: "reverse", Help: "reverse order while sorting"},
@@ -334,6 +327,7 @@ func lsOptionSpecs() []OptionSpec {
 		{Name: "hyperlink", Long: "hyperlink", ValueName: "WHEN", Arity: OptionOptionalValue, OptionalValueEqualsOnly: true, Help: "hyperlink file names; WHEN can be 'always', 'auto', or 'never'"},
 		{Name: "dired", Long: "dired", Help: "generate output designed for Emacs' dired mode"},
 		{Name: "group-directories-first", Long: "group-directories-first", Help: "group directories before files"},
+		{Name: "tabsize", Short: 'T', Long: "tabsize", ValueName: "COLS", Arity: OptionRequiredValue, Help: "assume tab stops every COLS instead of 8"},
 		{Name: "width", Short: 'w', Long: "width", ValueName: "COLS", Arity: OptionRequiredValue, Help: "set output width to COLS"},
 		{Name: "zero", Long: "zero", Help: "end each output entry with NUL, not newline"},
 		{Name: "unsorted-all", Short: 'f', Help: "list all entries in directory order"},
@@ -363,13 +357,20 @@ func lsOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (lsOptions, er
 	if err != nil {
 		return lsOptions{}, err
 	}
+	tabSize, err := parseLSTabSize(inv, matches)
+	if err != nil {
+		return lsOptions{}, err
+	}
 	blockSize, err := parseLSBlockSize(inv, matches)
 	if err != nil {
 		return lsOptions{}, err
 	}
-	timeStyle, err := parseLSTimeStyle(inv, matches)
-	if err != nil {
-		return lsOptions{}, err
+	var timeStyle string
+	if longFormat {
+		timeStyle, err = parseLSTimeStyle(inv, matches)
+		if err != nil {
+			return lsOptions{}, err
+		}
 	}
 	dereference := parseLSDereferenceMode(matches, longFormat, indicatorMode)
 	hyperlinkMode, err := parseLSHyperlinkMode(inv, matches)
@@ -388,10 +389,15 @@ func lsOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (lsOptions, er
 		longFormat = true
 		hyperlinkMode = lsColorNever
 	}
-	showAll := matches.Has("all") || matches.Has("unsorted-all")
+	showAll, showAlmostAll := parseLSVisibility(matches)
+	if matches.Has("zero") {
+		colorMode = lsColorNever
+		hyperlinkMode = lsColorNever
+		quotingMode = lsQuoteLiteral
+	}
 	return lsOptions{
 		showAll:               showAll,
-		showAlmostAll:         matches.Has("almost-all"),
+		showAlmostAll:         showAlmostAll,
 		hidePatterns:          matches.Values("hide"),
 		ignorePatterns:        matches.Values("ignore"),
 		ignoreBackups:         matches.Has("ignore-backups"),
@@ -407,6 +413,7 @@ func lsOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (lsOptions, er
 		directoryOnly:         matches.Has("directory"),
 		format:                format,
 		width:                 width,
+		tabSize:               tabSize,
 		zero:                  matches.Has("zero"),
 		colorMode:             colorMode,
 		hyperlinkMode:         hyperlinkMode,
@@ -490,27 +497,43 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 		return "", 0, lsRenderResult{}, err
 	}
 	sortLSEntries(entryInfos, opts)
+	statusCode := 0
+	for _, entry := range entryInfos {
+		if entry.unknownShortMetadata {
+			statusCode = 1
+			break
+		}
+	}
 
 	var out strings.Builder
 	result := lsRenderResult{}
+	if opts.recursive {
+		if _, err := lsRememberListedDirectory(ctx, inv, abs, info, opts); err != nil {
+			return "", 0, lsRenderResult{}, err
+		}
+	}
 	if opts.recursive || showHeader {
+		header := lsQuoteName(target, opts.quotingMode, opts.hideControlChars)
+		if lsShouldUseColor(inv, opts.hyperlinkMode) {
+			header = lsHyperlink(header, lsHeaderHyperlinkTarget(ctx, inv, abs, info, opts))
+		}
 		if opts.dired {
 			out.WriteString("  ")
 			start := out.Len()
-			out.WriteString(target)
+			out.WriteString(header)
 			result.subdired = append(result.subdired, lsByteRange{start: start, end: out.Len()})
 			out.WriteString(":\n")
 		} else {
-			out.WriteString(target)
+			out.WriteString(header)
 			out.WriteString(":\n")
 		}
 	}
-	if opts.longFormat {
+	if lsShouldShowDirectoryTotal(opts) {
 		if opts.dired {
 			out.WriteString("  ")
 		}
 		out.WriteString("total ")
-		out.WriteString(strconv.Itoa(len(entryInfos)))
+		out.WriteString(strconv.FormatInt(lsDirectoryTotal(entryInfos, opts), 10))
 		out.WriteByte('\n')
 	}
 	entryRendered, err := lsRenderEntries(ctx, inv, abs, entryInfos, opts, func(value string) string { return value }, false)
@@ -528,6 +551,7 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 
 	if opts.recursive {
 		subdirs := make([]lsEntry, 0)
+		recursiveStatus := statusCode
 		for _, entry := range entryInfos {
 			if entry.name == "." || entry.name == ".." || !entry.info.IsDir() {
 				continue
@@ -535,16 +559,26 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 			subdirs = append(subdirs, entry)
 		}
 		for _, dir := range subdirs {
-			out.WriteByte('\n')
 			subTarget := target
+			subAbs := path.Join(abs, dir.name)
 			switch subTarget {
 			case ".":
 				subTarget = "./" + dir.name
 			case "/":
 				subTarget = "/" + dir.name
 			default:
-				subTarget = path.Join(subTarget, dir.name)
+				subTarget = lsJoinRecursiveTarget(subTarget, dir.name)
 			}
+			alreadyListed, err := lsHasListedDirectory(ctx, inv, subAbs, dir.info, opts)
+			if err != nil {
+				return "", 0, lsRenderResult{}, err
+			}
+			if alreadyListed {
+				_, _ = fmt.Fprintf(inv.Stderr, "ls: %s: not listing already-listed directory\n", subTarget)
+				recursiveStatus = max(recursiveStatus, 2)
+				continue
+			}
+			out.WriteByte('\n')
 			subOutput, status, subRendered, err := c.listPath(ctx, inv, subTarget, opts, false)
 			if err != nil {
 				return "", 0, lsRenderResult{}, err
@@ -561,15 +595,30 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 				return out.String(), status, result, nil
 			}
 		}
+		return out.String(), recursiveStatus, result, nil
 	}
 
-	return out.String(), 0, result, nil
+	return out.String(), statusCode, result, nil
 }
 
 func lsStatMaybeForTarget(ctx context.Context, inv *Invocation, target string, opts *lsOptions) (info stdfs.FileInfo, abs string, exists bool, err error) {
+	if target != "/" && strings.HasSuffix(target, "/") {
+		return statMaybe(ctx, inv, policy.FileActionStat, target)
+	}
 	switch {
 	case opts == nil || opts.dereference == lsDerefAll || opts.dereference == lsDerefArgs:
-		return statMaybe(ctx, inv, policy.FileActionStat, target)
+		linfo, lAbs, lExists, lErr := lstatMaybe(ctx, inv, policy.FileActionLstat, target)
+		if lErr != nil || !lExists {
+			return linfo, lAbs, lExists, lErr
+		}
+		if linfo.Mode()&stdfs.ModeSymlink == 0 {
+			return linfo, lAbs, true, nil
+		}
+		targetInfo, _, resolveErr := lsResolveSymlinkInfo(ctx, inv, lAbs)
+		if resolveErr != nil {
+			return nil, lAbs, false, resolveErr
+		}
+		return targetInfo, lAbs, true, nil
 	case opts.dereference == lsDerefDirArgs:
 		linfo, lAbs, lExists, lErr := lstatMaybe(ctx, inv, policy.FileActionLstat, target)
 		if lErr != nil || !lExists {
@@ -578,11 +627,8 @@ func lsStatMaybeForTarget(ctx context.Context, inv *Invocation, target string, o
 		if linfo.Mode()&stdfs.ModeSymlink == 0 {
 			return linfo, lAbs, true, nil
 		}
-		targetInfo, _, targetExists, targetErr := statMaybe(ctx, inv, policy.FileActionStat, target)
-		if targetErr != nil {
-			return nil, "", false, targetErr
-		}
-		if targetExists && targetInfo.IsDir() {
+		targetInfo, _, resolveErr := lsResolveSymlinkInfo(ctx, inv, lAbs)
+		if resolveErr == nil && targetInfo.IsDir() {
 			return targetInfo, lAbs, true, nil
 		}
 		return linfo, lAbs, true, nil
@@ -597,7 +643,7 @@ func (c *LS) renderPathEntry(ctx context.Context, inv *Invocation, target, abs s
 		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, dired := formatLSLongLine(name, info, opts, ranges)
+		line, dired := formatLSLongLine(inv, name, info, opts, ranges)
 		if opts.dired {
 			line = "  " + line
 			for i := range dired {
@@ -607,7 +653,7 @@ func (c *LS) renderPathEntry(ctx context.Context, inv *Invocation, target, abs s
 		}
 		return line, 0, lsRenderResult{text: line, dired: dired}, nil
 	}
-	line := formatLSShortPrefix(info, opts) + name + lsTerminator(opts)
+	line := formatLSShortPrefix(info, opts, false) + name + lsTerminator(opts)
 	return line, 0, lsRenderResult{text: line}, nil
 }
 
@@ -647,7 +693,7 @@ func lsRenderEntries(ctx context.Context, inv *Invocation, dirAbs string, entrie
 			return lsRenderResult{}, err
 		}
 		if opts.longFormat {
-			line, dired := formatLSLongLine(name, entry.info, opts, ranges)
+			line, dired := formatLSLongLine(inv, name, entry.info, opts, ranges)
 			if opts.dired {
 				line = "  " + line
 				for i := range dired {
@@ -662,7 +708,7 @@ func lsRenderEntries(ctx context.Context, inv *Invocation, dirAbs string, entrie
 			offset += len(line)
 			continue
 		}
-		names = append(names, formatLSShortPrefix(entry.info, opts)+name)
+		names = append(names, formatLSShortPrefix(entry.info, opts, entry.unknownShortMetadata)+name)
 	}
 	if opts.longFormat {
 		result.text = strings.Join(names, "")
@@ -670,6 +716,140 @@ func lsRenderEntries(ctx context.Context, inv *Invocation, dirAbs string, entrie
 	}
 	result.text = lsRenderNames(names, opts, forceColumns)
 	return result, nil
+}
+
+func lsRenderPathArgs(ctx context.Context, inv *Invocation, args []lsPathArg, opts *lsOptions, quote func(string) string, forceColumns bool) (lsRenderResult, error) {
+	names := make([]string, 0, len(args))
+	result := lsRenderResult{}
+	offset := 0
+	for _, arg := range args {
+		name, ranges, err := lsDecoratedName(ctx, inv, arg.name, arg.abs, arg.info, opts, quote)
+		if err != nil {
+			return lsRenderResult{}, err
+		}
+		if opts.longFormat {
+			line, dired := formatLSLongLine(inv, name, arg.info, opts, ranges)
+			if opts.dired {
+				line = "  " + line
+				for i := range dired {
+					dired[i].start += 2
+					dired[i].end += 2
+				}
+			}
+			names = append(names, line)
+			for _, entry := range dired {
+				result.dired = append(result.dired, lsByteRange{start: offset + entry.start, end: offset + entry.end})
+			}
+			offset += len(line)
+			continue
+		}
+		names = append(names, formatLSShortPrefix(arg.info, opts, false)+name)
+	}
+	if opts.longFormat {
+		result.text = strings.Join(names, "")
+		return result, nil
+	}
+	result.text = lsRenderNames(names, opts, forceColumns)
+	return result, nil
+}
+
+func lsRunTargets(ctx context.Context, inv *Invocation, commandName string, targets []string, opts *lsOptions, quote func(string) string, forceColumns bool, listPath func(string, bool) (string, int, lsRenderResult, error)) error {
+	var stdout strings.Builder
+	exitCode := 0
+	var diredPositions []lsByteRange
+	var subdiredPositions []lsByteRange
+	fileArgs := make([]lsPathArg, 0, len(targets))
+	dirTargets := make([]string, 0, len(targets))
+
+	for _, target := range targets {
+		info, abs, exists, err := lsStatMaybeForTarget(ctx, inv, target, opts)
+		if err != nil {
+			_, _ = fmt.Fprintf(inv.Stderr, "%s: %s\n", commandName, err)
+			exitCode = max(exitCode, 2)
+			continue
+		}
+		if !exists {
+			_, _ = fmt.Fprintf(inv.Stderr, "%s: %s: No such file or directory\n", commandName, target)
+			exitCode = max(exitCode, 2)
+			continue
+		}
+		if opts.directoryOnly || !info.IsDir() {
+			groupAsDir := info.IsDir()
+			if opts.groupDirectoriesFirst && opts.sortMode != lsSortNone {
+				groupAsDir = lsGroupsAsDirectory(ctx, inv, abs, info)
+			}
+			fileArgs = append(fileArgs, lsPathArg{
+				name:       target,
+				abs:        abs,
+				info:       info,
+				groupAsDir: groupAsDir,
+			})
+			continue
+		}
+		dirTargets = append(dirTargets, target)
+	}
+
+	showHeaders := len(targets) > 1
+
+	renderDirs := func() error {
+		for i, target := range dirTargets {
+			if opts.recursive {
+				opts.listedDirs = make(map[lsListedDirKey]struct{})
+			}
+			if i > 0 && stdout.Len() > 0 && !strings.HasSuffix(stdout.String(), "\n\n") {
+				stdout.WriteByte('\n')
+			}
+			output, status, rendered, err := listPath(target, showHeaders)
+			if err != nil {
+				return err
+			}
+			offset := stdout.Len()
+			stdout.WriteString(output)
+			if opts.dired {
+				for _, entry := range rendered.dired {
+					diredPositions = append(diredPositions, lsByteRange{start: offset + entry.start, end: offset + entry.end})
+				}
+				for _, entry := range rendered.subdired {
+					subdiredPositions = append(subdiredPositions, lsByteRange{start: offset + entry.start, end: offset + entry.end})
+				}
+			}
+			if status > exitCode {
+				exitCode = status
+			}
+		}
+		return nil
+	}
+
+	if len(fileArgs) > 0 {
+		sortLSPathArgs(fileArgs, opts)
+		rendered, err := lsRenderPathArgs(ctx, inv, fileArgs, opts, quote, forceColumns)
+		if err != nil {
+			return err
+		}
+		offset := stdout.Len()
+		stdout.WriteString(rendered.text)
+		for _, entry := range rendered.dired {
+			diredPositions = append(diredPositions, lsByteRange{start: offset + entry.start, end: offset + entry.end})
+		}
+		if len(dirTargets) > 0 && !strings.HasSuffix(stdout.String(), "\n\n") {
+			stdout.WriteByte('\n')
+		}
+	}
+
+	if err := renderDirs(); err != nil {
+		return err
+	}
+
+	if opts.dired {
+		appendLSDiredFooter(&stdout, diredPositions, subdiredPositions, opts)
+	}
+	if _, err := fmt.Fprint(inv.Stdout, stdout.String()); err != nil {
+		return &ExitError{Code: 1, Err: err}
+	}
+	if exitCode != 0 {
+		return &ExitError{Code: exitCode}
+	}
+	return nil
 }
 
 func lsRenderNames(names []string, opts *lsOptions, forceColumns bool) string {
@@ -680,10 +860,10 @@ func lsRenderNames(names []string, opts *lsOptions, forceColumns bool) string {
 		return strings.Join(names, "\x00") + "\x00"
 	}
 	if opts.format == lsFormatCommas {
-		return strings.Join(names, ", ") + "\n"
+		return lsRenderCommaNames(names, opts.width) + "\n"
 	}
 	if forceColumns || opts.format == lsFormatColumns || opts.format == lsFormatAcross {
-		return lsRenderGrid(names, opts.format == lsFormatAcross, max(1, opts.width)) + "\n"
+		return lsRenderGrid(names, opts.format == lsFormatAcross, opts.width, opts.tabSize) + "\n"
 	}
 	return strings.Join(names, "\n") + "\n"
 }
@@ -716,26 +896,42 @@ func lsDiredQuotingStyle(mode lsQuotingMode) string {
 		return "c"
 	case lsQuoteShell:
 		return "shell"
+	case lsQuoteShellAlways:
+		return "shell"
 	default:
 		return "literal"
 	}
 }
 
-func lsRenderGrid(names []string, across bool, width int) string {
+func lsRenderGrid(names []string, across bool, width, tabSize int) string {
+	if tabSize <= 0 {
+		tabSize = 8
+	}
 	displayWidths := make([]int, len(names))
 	maxWidth := 0
 	for i, name := range names {
-		displayWidths[i] = lsVisibleWidth(name)
+		displayWidths[i] = lsVisibleWidthTabAware(name, tabSize)
 		if displayWidths[i] > maxWidth {
 			maxWidth = displayWidths[i]
 		}
 	}
 	colWidth := maxWidth + 2
+	if width > 0 {
+		for _, name := range names {
+			if strings.Contains(name, "\x1b") || strings.ContainsAny(name, `'"`) {
+				colWidth++
+				break
+			}
+		}
+	}
 	if colWidth <= 0 {
 		colWidth = 1
 	}
-	cols := max(1, width/colWidth)
-	cols = min(cols, len(names))
+	cols := len(names)
+	if width > 0 {
+		cols = max(1, (width+2)/colWidth)
+		cols = min(cols, len(names))
+	}
 	rows := (len(names) + cols - 1) / cols
 
 	var lines []string
@@ -774,6 +970,27 @@ func lsVisibleWidth(value string) int {
 			inEscape = true
 		case inEscape && value[i] == 'm':
 			inEscape = false
+		case !inEscape:
+			width++
+		}
+	}
+	return width
+}
+
+func lsVisibleWidthTabAware(value string, tabSize int) int {
+	if tabSize <= 0 {
+		tabSize = 8
+	}
+	width := 0
+	inEscape := false
+	for i := 0; i < len(value); i++ {
+		switch {
+		case !inEscape && value[i] == '\x1b':
+			inEscape = true
+		case inEscape && value[i] == 'm':
+			inEscape = false
+		case !inEscape && value[i] == '\t':
+			width += tabSize - (width % tabSize)
 		case !inEscape:
 			width++
 		}
@@ -848,6 +1065,46 @@ func parseLSDiredMode(matches *ParsedCommand) (requested, active bool) {
 	return requested, active
 }
 
+func parseLSVisibility(matches *ParsedCommand) (showAll, showAlmostAll bool) {
+	for _, option := range matches.OptionOrder() {
+		switch option {
+		case "all", "unsorted-all":
+			showAll = true
+			showAlmostAll = false
+		case "almost-all":
+			showAll = false
+			showAlmostAll = true
+		}
+	}
+	return showAll, showAlmostAll
+}
+
+func lsRenderCommaNames(names []string, width int) string {
+	if len(names) == 0 {
+		return ""
+	}
+	if width <= 0 {
+		return strings.Join(names, ", ")
+	}
+
+	lines := make([]string, 0, len(names))
+	current := names[0]
+	currentWidth := lsVisibleWidth(current)
+	for _, name := range names[1:] {
+		segment := ", " + name
+		if currentWidth+lsVisibleWidth(segment) > width {
+			lines = append(lines, current+",")
+			current = name
+			currentWidth = lsVisibleWidth(name)
+			continue
+		}
+		current += segment
+		currentWidth += lsVisibleWidth(segment)
+	}
+	lines = append(lines, current)
+	return strings.Join(lines, "\n")
+}
+
 func parseLSFormat(inv *Invocation, matches *ParsedCommand) (lsFormatMode, bool, error) {
 	format := lsFormatOnePerLine
 	longFormat := false
@@ -865,6 +1122,8 @@ func parseLSFormat(inv *Invocation, matches *ParsedCommand) (lsFormatMode, bool,
 		case "commas":
 			format = lsFormatCommas
 			longFormat = false
+		case "long-no-group", "long-no-owner":
+			longFormat = true
 		case "long":
 			longFormat = true
 		case "format":
@@ -887,9 +1146,6 @@ func parseLSFormat(inv *Invocation, matches *ParsedCommand) (lsFormatMode, bool,
 				return lsFormatOnePerLine, false, exitf(inv, 1, "ls: invalid argument %s for '--format'", quoteGNUOperand(matches.Value("format")))
 			}
 		}
-	}
-	if matches.Has("zero") {
-		longFormat = false
 	}
 	return format, longFormat, nil
 }
@@ -995,8 +1251,10 @@ func parseLSQuotingMode(inv *Invocation, matches *ParsedCommand) (lsQuotingMode,
 				mode = lsQuoteEscape
 			case "c", "c-maybe", "clocale":
 				mode = lsQuoteC
-			case "shell", "shell-escape", "shell-always", "shell-escape-always":
+			case "shell", "shell-escape":
 				mode = lsQuoteShell
+			case "shell-always", "shell-escape-always":
+				mode = lsQuoteShellAlways
 			default:
 				return lsQuoteLiteral, exitf(inv, 1, "ls: invalid argument %s for '--quoting-style'", quoteGNUOperand(matches.Value("quoting-style")))
 			}
@@ -1009,11 +1267,54 @@ func parseLSWidth(inv *Invocation, matches *ParsedCommand) (int, error) {
 	if !matches.Has("width") {
 		return 80, nil
 	}
-	width, err := strconv.Atoi(matches.Value("width"))
-	if err != nil || width <= 0 {
-		return 0, commandUsageError(inv, "ls", "invalid line width: %s", quoteGNUOperand(matches.Value("width")))
+	invalidWidth := func() error {
+		return exitf(inv, 2, "ls: invalid line width: %s\nTry 'ls --help' for more information.", quoteGNUOperand(matches.Value("width")))
 	}
-	return width, nil
+	raw := matches.Value("width")
+	if strings.HasPrefix(raw, "-") {
+		return 0, invalidWidth()
+	}
+	width, err := strconv.ParseUint(raw, 0, 64)
+	if err != nil {
+		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
+			return int(^uint(0) >> 1), nil
+		}
+		return 0, invalidWidth()
+	}
+	maxInt := uint64(^uint(0) >> 1)
+	if width > maxInt {
+		return int(maxInt), nil
+	}
+	return int(width), nil
+}
+
+func parseLSTabSize(inv *Invocation, matches *ParsedCommand) (int, error) {
+	if !matches.Has("tabsize") {
+		return 8, nil
+	}
+	value := matches.Value("tabsize")
+	tabSize, err := strconv.ParseUint(value, 0, 64)
+	if err != nil {
+		return 0, exitf(inv, 2, "ls: invalid tab size: %s\nTry 'ls --help' for more information.", quoteGNUOperand(value))
+	}
+	maxInt := uint64(^uint(0) >> 1)
+	if tabSize > maxInt {
+		return int(maxInt), nil
+	}
+	return int(tabSize), nil
+}
+
+func lsJoinRecursiveTarget(base, name string) string {
+	switch {
+	case base == ".":
+		return "./" + name
+	case base == "/":
+		return "/" + name
+	case strings.HasPrefix(base, "./"):
+		return base + "/" + name
+	default:
+		return path.Join(base, name)
+	}
 }
 
 func parseLSBlockSize(inv *Invocation, matches *ParsedCommand) (int64, error) {
@@ -1060,24 +1361,24 @@ func parseLSBlockSizeValue(inv *Invocation, value string) (int64, error) {
 }
 
 func parseLSTimeStyle(inv *Invocation, matches *ParsedCommand) (string, error) {
-	style := ""
+	style := strings.TrimSpace(inv.Env["TIME_STYLE"])
 	for _, option := range matches.OptionOrder() {
 		switch option {
 		case "time-style":
 			style = matches.Value("time-style")
-			switch style {
-			case "full-iso", "long-iso", "iso", "locale":
-			default:
-				if strings.HasPrefix(style, "+") {
-					continue
-				}
-				return "", exitf(inv, 1, "ls: invalid argument %s for 'time-style' argument", quoteGNUOperand(style))
-			}
 		case "full-time":
 			style = "full-iso"
 		}
 	}
-	return style, nil
+	switch style {
+	case "", "full-iso", "long-iso", "iso", "locale":
+		return style, nil
+	default:
+		if strings.HasPrefix(style, "+") {
+			return style, nil
+		}
+		return "", exitf(inv, 2, "ls: invalid argument %s for 'time style'\nValid arguments are:\n  - [posix-]full-iso\n  - [posix-]long-iso\n  - [posix-]iso\n  - [posix-]locale\n  - +FORMAT (e.g., +%%H:%%M) for a 'date'-style format\nTry 'ls --help' for more information.", quoteGNUOperand(style))
+	}
 }
 
 func parseLSDereferenceMode(matches *ParsedCommand, longFormat bool, indicator lsIndicatorMode) lsDereferenceMode {
@@ -1101,6 +1402,13 @@ func lsDecoratedName(ctx context.Context, inv *Invocation, rawName, abs string, 
 	if err != nil {
 		return "", nil, err
 	}
+	leadingSpace := opts.longFormat && opts.quotingMode == lsQuoteShell && !lsNeedsShellQuoting(rawName)
+	if leadingSpace {
+		for i := range diredRanges {
+			diredRanges[i].start++
+			diredRanges[i].end++
+		}
+	}
 	suffix, linfo, err := lsSuffixAndInfo(ctx, inv, abs, info, rawName, opts)
 	if err != nil {
 		return "", nil, err
@@ -1110,6 +1418,9 @@ func lsDecoratedName(ctx context.Context, inv *Invocation, rawName, abs string, 
 		display = lsHyperlink(display, abs)
 	}
 	if !lsShouldUseColor(inv, opts.colorMode) {
+		if leadingSpace {
+			display = " " + display
+		}
 		return display, diredRanges, nil
 	}
 	code, err := lsColorCode(ctx, inv, abs, info, linfo)
@@ -1117,13 +1428,98 @@ func lsDecoratedName(ctx context.Context, inv *Invocation, rawName, abs string, 
 		return "", nil, err
 	}
 	if code == "" {
+		if leadingSpace {
+			display = " " + display
+		}
 		return display, diredRanges, nil
 	}
-	return "\x1b[" + code + "m" + display + "\x1b[0m", diredRanges, nil
+	if leadingSpace {
+		return " " + "\x1b[0m\x1b[" + code + "m" + display + "\x1b[0m", diredRanges, nil
+	}
+	return "\x1b[0m\x1b[" + code + "m" + display + "\x1b[0m", diredRanges, nil
 }
 
 func lsHyperlink(label, target string) string {
-	return "\x1b]8;;" + (&url.URL{Scheme: "file", Path: target}).String() + "\x1b\\" + label + "\x1b]8;;\x1b\\"
+	return "\x1b]8;;" + lsFileURI(target) + "\x1b\\" + label + "\x1b]8;;\x1b\\"
+}
+
+func lsFileURI(target string) string {
+	var b strings.Builder
+	b.Grow(len(target) + len("file://"))
+	b.WriteString("file://")
+	for i := 0; i < len(target); i++ {
+		ch := target[i]
+		if ch == '/' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '.' || ch == '_' || ch == '~' {
+			b.WriteByte(ch)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte("0123456789abcdef"[ch>>4])
+		b.WriteByte("0123456789abcdef"[ch&0x0f])
+	}
+	return b.String()
+}
+
+func lsHasListedDirectory(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, opts *lsOptions) (bool, error) {
+	key, ok, err := lsListedDirectoryKey(ctx, inv, abs, info, opts)
+	if err != nil || !ok || opts == nil || opts.listedDirs == nil {
+		return false, err
+	}
+	_, seen := opts.listedDirs[key]
+	return seen, nil
+}
+
+func lsRememberListedDirectory(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, opts *lsOptions) (bool, error) {
+	key, ok, err := lsListedDirectoryKey(ctx, inv, abs, info, opts)
+	if err != nil || !ok {
+		return false, err
+	}
+	if opts.listedDirs == nil {
+		opts.listedDirs = make(map[lsListedDirKey]struct{})
+	}
+	_, seen := opts.listedDirs[key]
+	if !seen {
+		opts.listedDirs[key] = struct{}{}
+	}
+	return seen, nil
+}
+
+func lsListedDirectoryKey(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, opts *lsOptions) (lsListedDirKey, bool, error) {
+	if opts == nil || info == nil || !info.IsDir() {
+		return lsListedDirKey{}, false, nil
+	}
+	keyPath := path.Clean(abs)
+	keyInfo := info
+	linfo, _, err := lstatPath(ctx, inv, abs)
+	if err != nil {
+		return lsListedDirKey{}, false, err
+	}
+	if linfo.Mode()&stdfs.ModeSymlink != 0 {
+		resolvedInfo, resolvedAbs, resolveErr := lsResolveSymlinkInfo(ctx, inv, abs)
+		if resolveErr == nil && resolvedInfo.IsDir() {
+			keyInfo = resolvedInfo
+			keyPath = resolvedAbs
+		}
+	}
+	if dev, ino, ok := testDeviceAndInode(keyInfo); ok {
+		return lsListedDirKey{dev: dev, ino: ino}, true, nil
+	}
+	return lsListedDirKey{path: keyPath}, true, nil
+}
+
+func lsHeaderHyperlinkTarget(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, opts *lsOptions) string {
+	if opts == nil || info == nil || !info.IsDir() || opts.dereference == lsDerefNone {
+		return abs
+	}
+	linfo, _, err := lstatPath(ctx, inv, abs)
+	if err != nil || linfo.Mode()&stdfs.ModeSymlink == 0 {
+		return abs
+	}
+	_, resolvedAbs, err := lsResolveSymlinkInfo(ctx, inv, abs)
+	if err != nil {
+		return abs
+	}
+	return resolvedAbs
 }
 
 func lsQuotedNameWithDired(ctx context.Context, inv *Invocation, rawName, abs string, _ stdfs.FileInfo, opts *lsOptions, quote func(string) string) (string, []lsByteRange, error) {
@@ -1156,14 +1552,30 @@ func lsQuotedNameWithDired(ctx context.Context, inv *Invocation, rawName, abs st
 	targetQuoted = lsQuoteName(targetQuoted, opts.quotingMode, opts.hideControlChars)
 
 	display := quoted + " -> " + targetQuoted
-	ranges = append(ranges, lsByteRange{
-		start: len(quoted) + len(" -> "),
-		end:   len(quoted) + len(" -> ") + len(targetQuoted),
-	})
-	return display, ranges, nil
+	return display, []lsByteRange{{start: 0, end: len(display)}}, nil
 }
 
 func lsSuffixAndInfo(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, rawName string, opts *lsOptions) (string, stdfs.FileInfo, error) {
+	if opts.dereference == lsDerefAll {
+		switch opts.indicatorMode {
+		case lsIndicatorClassify:
+			if rawName == "." || rawName == ".." {
+				return "/", info, nil
+			}
+			return classifyLSSuffix(info), info, nil
+		case lsIndicatorFileType:
+			if rawName == "." || rawName == ".." {
+				return "/", info, nil
+			}
+			return fileTypeLSSuffix(info), info, nil
+		case lsIndicatorSlash:
+			if info.IsDir() {
+				return "/", info, nil
+			}
+		}
+		return "", info, nil
+	}
+
 	linfo, _, err := lstatPath(ctx, inv, abs)
 	if err != nil {
 		return "", nil, err
@@ -1207,10 +1619,13 @@ func lsTerminalWriter(writer io.Writer) bool {
 }
 
 func lsColorCode(ctx context.Context, inv *Invocation, abs string, info, linfo stdfs.FileInfo) (string, error) {
-	if code, ok, err := lsColorCodeFromEnv(ctx, inv, abs, info, linfo); err != nil {
-		return "", err
-	} else if ok {
-		return code, nil
+	if inv != nil && inv.Env["LS_COLORS"] != "" {
+		if code, ok, err := lsColorCodeFromEnv(ctx, inv, abs, info, linfo); err != nil {
+			return "", err
+		} else if ok {
+			return code, nil
+		}
+		return "", nil
 	}
 	return lsDefaultColorCode(linfo), nil
 }
@@ -1220,32 +1635,39 @@ func lsColorCodeFromEnv(ctx context.Context, inv *Invocation, abs string, info, 
 	if lsColors == "" {
 		return "", false, nil
 	}
-	entries := parseLSColorsEnv(lsColors)
-	indicator, err := lsColorIndicator(ctx, inv, abs, info, linfo, entries)
+	parsed := parseLSColorsEnv(lsColors)
+	indicator, err := lsColorIndicator(ctx, inv, abs, info, linfo, parsed.entries)
 	if err != nil {
 		return "", false, err
 	}
 	if indicator != "" {
-		if code, ok := entries[indicator]; ok {
+		if code, ok := parsed.entries[indicator]; ok {
 			return code, true, nil
 		}
 	}
 	name := path.Base(abs)
-	lowerName := strings.ToLower(name)
-	for key, code := range entries {
-		if !strings.HasPrefix(key, "*") {
-			continue
+	lastMatch := ""
+	matched := false
+	for _, pattern := range parsed.patterns {
+		if pattern.suffix == "" || strings.HasSuffix(name, pattern.suffix) {
+			lastMatch = pattern.code
+			matched = true
 		}
-		pattern := strings.ToLower(strings.TrimPrefix(key, "*"))
-		if pattern == "" || strings.HasSuffix(lowerName, pattern) {
-			return code, true, nil
-		}
+	}
+	if matched {
+		return lastMatch, true, nil
+	}
+	if code, ok := parsed.entries["fi"]; ok {
+		return code, true, nil
+	}
+	if code, ok := parsed.entries["no"]; ok {
+		return code, true, nil
 	}
 	return "", false, nil
 }
 
-func parseLSColorsEnv(value string) map[string]string {
-	entries := make(map[string]string)
+func parseLSColorsEnv(value string) lsParsedColors {
+	parsed := lsParsedColors{entries: make(map[string]string)}
 	for part := range strings.SplitSeq(value, ":") {
 		if part == "" {
 			continue
@@ -1254,9 +1676,16 @@ func parseLSColorsEnv(value string) map[string]string {
 		if !ok {
 			continue
 		}
-		entries[key] = code
+		if suffix, ok := strings.CutPrefix(key, "*"); ok {
+			parsed.patterns = append(parsed.patterns, lsColorPattern{
+				suffix: suffix,
+				code:   code,
+			})
+			continue
+		}
+		parsed.entries[key] = code
 	}
-	return entries
+	return parsed
 }
 
 func lsColorIndicator(ctx context.Context, inv *Invocation, abs string, info, linfo stdfs.FileInfo, entries map[string]string) (string, error) {
@@ -1287,6 +1716,16 @@ func lsColorIndicator(ctx context.Context, inv *Invocation, abs string, info, li
 	}
 	switch {
 	case info.IsDir():
+		otherWritable := linfo.Mode().Perm()&0o002 != 0
+		sticky := linfo.Mode()&stdfs.ModeSticky != 0
+		switch {
+		case sticky && otherWritable:
+			return "tw", nil
+		case otherWritable:
+			return "ow", nil
+		case sticky:
+			return "st", nil
+		}
 		return "di", nil
 	case linfo.Mode()&stdfs.ModeNamedPipe != 0:
 		return "pi", nil
@@ -1315,6 +1754,18 @@ func lsDefaultColorCode(info stdfs.FileInfo) string {
 		switch entry.Key {
 		case "ln":
 			if info.Mode()&stdfs.ModeSymlink != 0 {
+				return entry.Code
+			}
+		case "tw":
+			if info.IsDir() && info.Mode()&stdfs.ModeSticky != 0 && info.Mode().Perm()&0o002 != 0 {
+				return entry.Code
+			}
+		case "ow":
+			if info.IsDir() && info.Mode().Perm()&0o002 != 0 && info.Mode()&stdfs.ModeSticky == 0 {
+				return entry.Code
+			}
+		case "st":
+			if info.IsDir() && info.Mode()&stdfs.ModeSticky != 0 && info.Mode().Perm()&0o002 == 0 {
 				return entry.Code
 			}
 		case "di":
@@ -1370,19 +1821,18 @@ func (c *LS) loadLSEntries(ctx context.Context, inv *Invocation, dirAbs string, 
 			if err != nil {
 				return nil, err
 			}
-			entries = append(entries, lsEntry{name: name, info: info})
+			entries = append(entries, lsEntry{name: name, info: info, groupAsDir: info.IsDir()})
 		default:
-			var info stdfs.FileInfo
-			var err error
-			if opts != nil && opts.dereference == lsDerefAll {
-				info, _, err = statPath(ctx, inv, path.Join(dirAbs, name))
-			} else {
-				info, _, err = lstatPath(ctx, inv, path.Join(dirAbs, name))
-			}
+			info, groupAsDir, unknownShortMetadata, err := lsLoadEntryInfo(ctx, inv, path.Join(dirAbs, name), opts)
 			if err != nil {
 				return nil, err
 			}
-			entries = append(entries, lsEntry{name: name, info: info})
+			entries = append(entries, lsEntry{
+				name:                 name,
+				info:                 info,
+				groupAsDir:           groupAsDir,
+				unknownShortMetadata: unknownShortMetadata,
+			})
 		}
 	}
 	return entries, nil
@@ -1432,15 +1882,157 @@ func sortLSEntries(entries []lsEntry, opts *lsOptions) {
 	}
 	if opts.groupDirectoriesFirst && opts.sortMode != lsSortNone {
 		sort.SliceStable(entries, func(i, j int) bool {
-			if entries[i].info.IsDir() == entries[j].info.IsDir() {
+			if entries[i].groupAsDir == entries[j].groupAsDir {
 				return false
 			}
-			return entries[i].info.IsDir()
+			return entries[i].groupAsDir
 		})
 	}
 	if opts.reverse {
 		for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
 			entries[i], entries[j] = entries[j], entries[i]
+		}
+	}
+}
+
+func lsLoadEntryInfo(ctx context.Context, inv *Invocation, abs string, opts *lsOptions) (info stdfs.FileInfo, groupAsDir, unknownShortMetadata bool, err error) {
+	linfo, _, err := lstatPath(ctx, inv, abs)
+	if err != nil {
+		return nil, false, false, err
+	}
+
+	info = linfo
+	groupAsDir = linfo.IsDir()
+	if opts != nil && opts.groupDirectoriesFirst && opts.sortMode != lsSortNone {
+		groupAsDir = lsGroupsAsDirectory(ctx, inv, abs, linfo)
+	}
+	if linfo.Mode()&stdfs.ModeSymlink != 0 {
+		targetInfo, _, statErr := lsResolveSymlinkInfo(ctx, inv, abs)
+		switch {
+		case statErr == nil:
+			if opts != nil && opts.groupDirectoriesFirst && opts.sortMode != lsSortNone {
+				groupAsDir = targetInfo.IsDir()
+			}
+			if opts != nil && opts.dereference == lsDerefAll {
+				info = targetInfo
+			}
+		case opts != nil && opts.dereference == lsDerefAll && lsCanListBrokenImplicitSymlink(opts, linfo):
+			return linfo, false, opts.showInode || opts.showAllocSize, nil
+		case opts != nil && opts.dereference == lsDerefAll:
+			return nil, false, false, statErr
+		}
+		return info, groupAsDir, false, nil
+	}
+
+	if opts != nil && opts.dereference == lsDerefAll {
+		info, _, err = statPath(ctx, inv, abs)
+		if err != nil {
+			return nil, false, false, err
+		}
+		if opts.groupDirectoriesFirst && opts.sortMode != lsSortNone {
+			groupAsDir = info.IsDir()
+		}
+	}
+	return info, groupAsDir, false, nil
+}
+
+func lsGroupsAsDirectory(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo) bool {
+	if info != nil && info.IsDir() {
+		return true
+	}
+	if info == nil || info.Mode()&stdfs.ModeSymlink == 0 {
+		return false
+	}
+	targetInfo, _, err := lsResolveSymlinkInfo(ctx, inv, abs)
+	return err == nil && targetInfo.IsDir()
+}
+
+func lsCanListBrokenImplicitSymlink(opts *lsOptions, info stdfs.FileInfo) bool {
+	if opts == nil || info == nil || info.Mode()&stdfs.ModeSymlink == 0 {
+		return false
+	}
+	return !opts.longFormat && opts.indicatorMode == lsIndicatorNone
+}
+
+func lsResolveSymlinkInfo(ctx context.Context, inv *Invocation, abs string) (stdfs.FileInfo, string, error) {
+	current := abs
+	for depth := 0; depth <= readlinkMaxSymlinkDepth; depth++ {
+		info, _, err := lstatPath(ctx, inv, current)
+		if err != nil {
+			return nil, "", err
+		}
+		if info.Mode()&stdfs.ModeSymlink == 0 {
+			return info, current, nil
+		}
+		if depth == readlinkMaxSymlinkDepth {
+			return nil, "", &os.PathError{Op: "realpath", Path: current, Err: fmt.Errorf("too many levels of symbolic links")}
+		}
+		target, err := inv.FS.Readlink(ctx, current)
+		if err != nil {
+			return nil, "", err
+		}
+		if path.IsAbs(target) {
+			current = path.Clean(target)
+		} else {
+			current = path.Clean(path.Join(path.Dir(current), target))
+		}
+	}
+	return nil, "", &os.PathError{Op: "realpath", Path: abs, Err: fmt.Errorf("too many levels of symbolic links")}
+}
+
+func sortLSPathArgs(args []lsPathArg, opts *lsOptions) {
+	switch opts.sortMode {
+	case lsSortSize:
+		sort.SliceStable(args, func(i, j int) bool {
+			if args[i].info.Size() == args[j].info.Size() {
+				return args[i].name < args[j].name
+			}
+			return args[i].info.Size() > args[j].info.Size()
+		})
+	case lsSortTime:
+		sort.SliceStable(args, func(i, j int) bool {
+			if args[i].info.ModTime().Equal(args[j].info.ModTime()) {
+				return args[i].name < args[j].name
+			}
+			return args[i].info.ModTime().After(args[j].info.ModTime())
+		})
+	case lsSortVersion:
+		sort.SliceStable(args, func(i, j int) bool {
+			return lsNaturalLess(args[i].name, args[j].name)
+		})
+	case lsSortExtension:
+		sort.SliceStable(args, func(i, j int) bool {
+			leftExt := path.Ext(args[i].name)
+			rightExt := path.Ext(args[j].name)
+			if leftExt == rightExt {
+				return args[i].name < args[j].name
+			}
+			return leftExt < rightExt
+		})
+	case lsSortWidth:
+		sort.SliceStable(args, func(i, j int) bool {
+			if len(args[i].name) == len(args[j].name) {
+				return args[i].name < args[j].name
+			}
+			return len(args[i].name) < len(args[j].name)
+		})
+	case lsSortNone:
+	default:
+		sort.SliceStable(args, func(i, j int) bool {
+			return args[i].name < args[j].name
+		})
+	}
+	if opts.groupDirectoriesFirst && opts.sortMode != lsSortNone {
+		sort.SliceStable(args, func(i, j int) bool {
+			if args[i].groupAsDir == args[j].groupAsDir {
+				return false
+			}
+			return args[i].groupAsDir
+		})
+	}
+	if opts.reverse {
+		for i, j := 0, len(args)-1; i < j; i, j = i+1, j-1 {
+			args[i], args[j] = args[j], args[i]
 		}
 	}
 }
@@ -1477,7 +2069,7 @@ func lsNumericChunk(value string) (chunk, rest string) {
 	return value[:index], value[index:]
 }
 
-func formatLSLongLine(name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
+func formatLSLongLine(inv *Invocation, name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
 	fields := make([]string, 0, 9)
 	userToken, groupToken, authorToken := lsIdentityTokens(info, opts.numericIDs, opts.identityDB)
 	if opts.showInode {
@@ -1564,22 +2156,49 @@ func formatLSSize(info stdfs.FileInfo, opts *lsOptions) string {
 	}
 }
 
-func formatLSBlockCount(info stdfs.FileInfo, opts *lsOptions) string {
+func lsBlockCountValue(info stdfs.FileInfo, opts *lsOptions) int64 {
 	blockSize := opts.blockSize
 	if blockSize <= 0 {
 		blockSize = 1024
 	}
 	size := info.Size()
-	return strconv.FormatInt((size+blockSize-1)/blockSize, 10)
+	return (size + blockSize - 1) / blockSize
 }
 
-func formatLSShortPrefix(info stdfs.FileInfo, opts *lsOptions) string {
+func formatLSBlockCount(info stdfs.FileInfo, opts *lsOptions) string {
+	return strconv.FormatInt(lsBlockCountValue(info, opts), 10)
+}
+
+func lsShouldShowDirectoryTotal(opts *lsOptions) bool {
+	return opts != nil && (opts.longFormat || opts.showAllocSize)
+}
+
+func lsDirectoryTotal(entries []lsEntry, opts *lsOptions) int64 {
+	var total int64
+	for _, entry := range entries {
+		if entry.unknownShortMetadata {
+			continue
+		}
+		total += lsBlockCountValue(entry.info, opts)
+	}
+	return total
+}
+
+func formatLSShortPrefix(info stdfs.FileInfo, opts *lsOptions, unknownMetadata bool) string {
 	parts := make([]string, 0, 2)
 	if opts.showInode {
-		parts = append(parts, strconv.FormatUint(statInode(info), 10))
+		if unknownMetadata {
+			parts = append(parts, "?")
+		} else {
+			parts = append(parts, strconv.FormatUint(statInode(info), 10))
+		}
 	}
 	if opts.showAllocSize {
-		parts = append(parts, formatLSBlockCount(info, opts))
+		if unknownMetadata {
+			parts = append(parts, "?")
+		} else {
+			parts = append(parts, formatLSBlockCount(info, opts))
+		}
 	}
 	if len(parts) == 0 {
 		return ""
@@ -1674,10 +2293,32 @@ func lsQuoteName(value string, mode lsQuotingMode, hideControlChars bool) string
 	case lsQuoteC:
 		return strconv.Quote(base)
 	case lsQuoteShell:
+		if !lsNeedsShellQuoting(base) {
+			return base
+		}
+		return shellSingleQuote(base)
+	case lsQuoteShellAlways:
 		return shellSingleQuote(base)
 	default:
 		return base
 	}
+}
+
+func lsNeedsShellQuoting(value string) bool {
+	if value == "" {
+		return true
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case strings.ContainsRune("._/-", r):
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 var _ Command = (*LS)(nil)

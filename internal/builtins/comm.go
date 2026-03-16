@@ -252,7 +252,6 @@ func commDelimiterValues(inv *Invocation, matches *ParsedCommand) []string {
 	}
 	return values
 }
-
 func readCommInput(ctx context.Context, inv *Invocation, name string) (data []byte, label string, err error) {
 	if name == "-" {
 		data, err := readAllStdin(ctx, inv)

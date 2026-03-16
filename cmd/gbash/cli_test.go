@@ -799,7 +799,6 @@ func TestRunCLIHostUtilityPassesStdin(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
-
 func TestRunCLIHostUtilityCatRejectsAppendToSelf(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

@@ -453,7 +453,6 @@ func (h *ReadWriteFS) moveOwnership(oldTarget, newTarget string) {
 	}
 	maps.Copy(h.ownership, moved)
 }
-
 func (h *ReadWriteFS) resolve(name string) string {
 	return Resolve(h.Getwd(), name)
 }
@@ -642,7 +641,6 @@ func (f *readWriteFile) Stat() (stdfs.FileInfo, error) {
 	}
 	return namedFileInfo{name: f.name, info: info, ownership: f.ownership}, nil
 }
-
 func (h *ReadWriteFS) checkFileSize(info stdfs.FileInfo) error {
 	if h.maxFileReadBytes <= 0 || info == nil || !info.Mode().IsRegular() {
 		return nil

@@ -373,8 +373,15 @@ func parseShortOptions(inv *Invocation, spec *CommandSpec, parsed *ParsedCommand
 		value := ""
 		hasValue := false
 		if spec.Parse.ShortOptionValueAttached && remaining != "" {
-			value = remaining
-			hasValue = true
+			if opt.Arity == OptionOptionalValue && opt.OptionalValueEqualsOnly {
+				if strings.HasPrefix(remaining, "=") {
+					value = remaining[1:]
+					hasValue = true
+				}
+			} else {
+				value = remaining
+				hasValue = true
+			}
 		}
 		if opt.Arity == OptionRequiredValue && spec.Parse.ContinueShortGroupValues && !hasValue {
 			pending = append(pending, pendingShortOption{
@@ -385,6 +392,9 @@ func parseShortOptions(inv *Invocation, spec *CommandSpec, parsed *ParsedCommand
 		}
 		if err := applyOptionValue(inv, spec, parsed, opt, "-"+string(ch), value, hasValue, rest, false); err != nil {
 			return "", false, err
+		}
+		if opt.Arity == OptionOptionalValue && !hasValue {
+			continue
 		}
 		for _, item := range pending {
 			if err := applyOptionValue(inv, spec, parsed, item.opt, item.shownName, "", false, rest, false); err != nil {

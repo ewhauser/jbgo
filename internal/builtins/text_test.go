@@ -1,6 +1,7 @@
 package builtins_test
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -181,6 +182,23 @@ func TestTailSupportsFromLineSyntax(t *testing.T) {
 	}
 }
 
+func TestTailSupportsFromByteSyntax(t *testing.T) {
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'abcdef\\n' > /tmp/in.txt\n tail -c +3 /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "cdef\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestTailWorksInPipeline(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
@@ -310,7 +328,7 @@ func TestWCSupportsMaxLineLengthAndTotalModes(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "3 /tmp/a.txt\n9 total\n3 /tmp/b.txt\n3 total\n"; got != want {
+	if got, want := result.Stdout, "3 /tmp/a.txt\n9\n3 /tmp/b.txt\n3 total\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -362,6 +380,87 @@ func TestWCRejectsFiles0FromConflictsAndBadNames(t *testing.T) {
 	}
 }
 
+func TestWCFiles0FromMatchesGNUEmptyInvalidAndQuotedNames(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf '' > /tmp/empty\nwc --files0-from=/tmp/empty > /tmp/empty.out\nprintf '\\0\\0' | wc --files0-from=- > /tmp/nul.out 2> /tmp/nul.err || true\ncd /tmp\ntouch '1\n2'\nprintf '%s\\0' '1\n2' | wc --files0-from=- > /tmp/nl.out\ncat /tmp/empty.out\nprintf '%s\\n' '---'\ncat /tmp/nul.out\nprintf '%s\\n' '---'\ncat /tmp/nul.err\nprintf '%s\\n' '---'\ncat /tmp/nl.out\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "---\n0 0 0 total\n---\nwc: -:1: invalid zero-length file name\nwc: -:2: invalid zero-length file name\n---\n0 0 0 '1'$'\\n''2'\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCMatchesGNUPaddingForMultipleFiles(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "cd /tmp\nprintf '%s\\n' '2' > 2b\nprintf '%s\\n' '2 words' > 2w\nwc --total=never 2b 2w\nwc --total=only 2b 2w\nwc -c 2b 2w\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = " 1  1  2 2b\n 1  2  8 2w\n2 3 10\n2 2b\n8 2w\n10 total\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCFiles0FromKeepsZeroCountOutputUnpadded(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "cd /tmp\ntouch g\nprintf 'g\\0g' | wc --files0-from=-\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "0 0 0 g\n0 0 0 g\n0 0 0 total\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCNonbreakingSpaceWordSeparators(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "export LC_ALL=en_US.iso8859-1\nprintf '=\\xA0=' | wc -w\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCUTF8NonbreakingSeparators(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/nbsp.txt", []byte("=\u00A0="))
+	writeSessionFile(t, session, "/tmp/wj.txt", []byte("=\u2060="))
+
+	result := mustExecSession(t, session, "export LC_ALL=en_US.UTF-8\nwc -w /tmp/nbsp.txt\nwc -L /tmp/nbsp.txt\nwc -w /tmp/wj.txt\nwc -L /tmp/wj.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "2 /tmp/nbsp.txt\n3 /tmp/nbsp.txt\n2 /tmp/wj.txt\n3 /tmp/wj.txt\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCBytesOnlyUsesRegularFileSizeWithoutReadingWholeFile(t *testing.T) {
+	session := newSession(t, &Config{})
+
+	const size = 8<<20 + 1
+	writeSessionFile(t, session, "/tmp/big.bin", bytes.Repeat([]byte{'x'}, size))
+
+	result := mustExecSession(t, session, "wc -c /tmp/big.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "8388609 /tmp/big.bin\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
 func TestCatSupportsNumberFlag(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 

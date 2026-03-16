@@ -274,7 +274,6 @@ func TestReadWriteFSRemoveClearsOwnershipOverride(t *testing.T) {
 		t.Fatalf("recreated ownership = %#v, want host ownership %#v", got, want)
 	}
 }
-
 func TestReadWriteFSReadCapRejectsLargeFiles(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "big.txt"), []byte("hello"), 0o644); err != nil {

@@ -147,3 +147,13 @@ func lastBytes(data []byte, count int) []byte {
 	}
 	return append([]byte(nil), data[len(data)-count:]...)
 }
+
+func bytesFrom(data []byte, start int) []byte {
+	if start <= 1 {
+		return append([]byte(nil), data...)
+	}
+	if start > len(data) {
+		return nil
+	}
+	return append([]byte(nil), data[start-1:]...)
+}

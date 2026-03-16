@@ -2,7 +2,6 @@ package builtins
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
@@ -45,8 +44,10 @@ func vdirSpec() CommandSpec {
 			{Name: "file", ValueName: "FILE", Repeatable: true},
 		},
 		Parse: ParseConfig{
-			GroupShortOptions:     true,
-			LongOptionValueEquals: true,
+			InferLongOptions:         true,
+			GroupShortOptions:        true,
+			ShortOptionValueAttached: true,
+			LongOptionValueEquals:    true,
 		},
 		HelpRenderer:    renderStaticHelp(vdirHelpText()),
 		VersionRenderer: renderStaticVersion(vdirVersionText),
@@ -76,32 +77,10 @@ func runVdirParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand)
 	if len(targets) == 0 {
 		targets = []string{"."}
 	}
-
-	var stdout strings.Builder
-	exitCode := 0
-	lister := &Dir{}
-	for i, target := range targets {
-		if i > 0 && stdout.Len() > 0 && !strings.HasSuffix(stdout.String(), "\n\n") {
-			stdout.WriteByte('\n')
-		}
-
-		output, status, _, err := lister.listPath(ctx, inv, "vdir", target, &opts, len(targets) > 1, false)
-		if err != nil {
-			return err
-		}
-		stdout.WriteString(output)
-		if status > exitCode {
-			exitCode = status
-		}
-	}
-
-	if _, err := fmt.Fprint(inv.Stdout, stdout.String()); err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-	if exitCode != 0 {
-		return &ExitError{Code: exitCode}
-	}
-	return nil
+	lister := &LS{}
+	return lsRunTargets(ctx, inv, "vdir", targets, &opts, dirQuoteName, false, func(target string, showHeader bool) (string, int, lsRenderResult, error) {
+		return lister.listPath(ctx, inv, target, &opts, showHeader)
+	})
 }
 
 func vdirHelpText() string {

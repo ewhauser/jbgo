@@ -94,39 +94,54 @@ func (c *WC) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		return err
 	}
 
-	files, exitCode, err := wcResolveInputs(ctx, inv, &opts, matches.Args("file"))
+	files, inputCount, exitCode, fromFiles0, err := wcResolveInputs(ctx, inv, &opts, matches.Args("file"))
 	if err != nil {
 		return err
 	}
 
 	if len(files) == 0 {
+		if fromFiles0 {
+			var output strings.Builder
+			if wcTotalVisible(opts.totalWhen, inputCount) {
+				if err := writeWCLine(&output, wcCounts{}, opts, wcTotalLabel(opts), 1); err != nil {
+					return err
+				}
+			}
+			if err := wcFlushOutput(inv, &output); err != nil {
+				return err
+			}
+			if exitCode != 0 {
+				return &ExitError{Code: exitCode}
+			}
+			return nil
+		}
+
 		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}
-		return writeWCLine(inv, countWC(data, inv), opts, "", wcOutputWidth(opts, nil, false))
+		var output strings.Builder
+		if err := writeWCLine(&output, countWC(data, inv), opts, "", wcOutputWidth(opts, nil, false, 1)); err != nil {
+			return err
+		}
+		return wcFlushOutput(inv, &output)
 	}
 
 	results := make([]wcLineResult, 0, len(files))
 	total := wcCounts{}
 	hasStdinInput := false
 	for _, file := range files {
-		var (
-			data []byte
-			err  error
-		)
 		if file == "-" {
 			hasStdinInput = true
-			data, err = readAllStdin(ctx, inv)
-		} else {
-			data, _, err = readAllFile(ctx, inv, file)
 		}
+
+		counts, err := wcCountFile(ctx, inv, opts, file)
 		if err != nil {
 			_, _ = fmt.Fprintf(inv.Stderr, "wc: %s: %s\n", file, readAllErrorText(err))
 			exitCode = 1
 			continue
 		}
-		counts := countWC(data, inv)
+
 		total.lines += counts.lines
 		total.words += counts.words
 		total.bytes += counts.bytes
@@ -137,18 +152,22 @@ func (c *WC) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		results = append(results, wcLineResult{label: file, counts: counts})
 	}
 
-	width := wcOutputWidth(opts, results, hasStdinInput)
+	width := wcOutputWidth(opts, results, hasStdinInput, inputCount)
+	var output strings.Builder
 	if opts.totalWhen != wcTotalOnly {
 		for _, result := range results {
-			if err := writeWCLine(inv, result.counts, opts, result.label, width); err != nil {
+			if err := writeWCLine(&output, result.counts, opts, result.label, width); err != nil {
 				return err
 			}
 		}
 	}
-	if wcTotalVisible(opts.totalWhen, len(files)) {
-		if err := writeWCLine(inv, total, opts, "total", width); err != nil {
+	if wcTotalVisible(opts.totalWhen, inputCount) {
+		if err := writeWCLine(&output, total, opts, wcTotalLabel(opts), width); err != nil {
 			return err
 		}
+	}
+	if err := wcFlushOutput(inv, &output); err != nil {
+		return err
 	}
 	if exitCode != 0 {
 		return &ExitError{Code: exitCode}
@@ -189,12 +208,12 @@ func parseWCMatches(inv *Invocation, matches *ParsedCommand) (wcOptions, error) 
 	return opts, nil
 }
 
-func wcResolveInputs(ctx context.Context, inv *Invocation, opts *wcOptions, files []string) (resolved []string, exitCode int, err error) {
+func wcResolveInputs(ctx context.Context, inv *Invocation, opts *wcOptions, files []string) (resolved []string, inputCount, exitCode int, fromFiles0 bool, err error) {
 	if opts.files0From == "" {
-		return files, 0, nil
+		return files, len(files), 0, false, nil
 	}
 	if len(files) > 0 {
-		return nil, 0, exitf(inv, 1, "wc: extra operand %s\nfile operands cannot be combined with --files0-from\nTry 'wc --help' for more information.", quoteGNUOperand(files[0]))
+		return nil, 0, 0, false, exitf(inv, 1, "wc: extra operand %s\nfile operands cannot be combined with --files0-from\nTry 'wc --help' for more information.", quoteGNUOperand(files[0]))
 	}
 
 	var (
@@ -205,39 +224,78 @@ func wcResolveInputs(ctx context.Context, inv *Invocation, opts *wcOptions, file
 	if source == "-" {
 		data, readErr = readAllStdin(ctx, inv)
 		if readErr != nil {
-			return nil, 0, readErr
+			return nil, 0, 0, false, readErr
 		}
 	} else {
 		data, _, readErr = readAllFile(ctx, inv, source)
 		if readErr != nil {
-			return nil, 0, exitf(inv, 1, "wc: cannot open %s for reading: %s", quoteGNUOperand(source), readAllErrorText(readErr))
+			return nil, 0, 0, false, exitf(inv, 1, "wc: cannot open %s for reading: %s", quoteGNUOperand(source), readAllErrorText(readErr))
 		}
 	}
-	return parseWCFiles0From(inv, source, data), 0, nil
+	resolved, inputCount, exitCode = parseWCFiles0From(inv, source, data)
+	return resolved, inputCount, exitCode, true, nil
 }
 
-func parseWCFiles0From(inv *Invocation, source string, data []byte) []string {
+func parseWCFiles0From(inv *Invocation, source string, data []byte) (files []string, inputCount, exitCode int) {
 	if len(data) == 0 {
-		return nil
+		return nil, 0, 0
 	}
 	parts := bytes.Split(data, []byte{0})
 	if len(parts) > 0 && len(parts[len(parts)-1]) == 0 {
 		parts = parts[:len(parts)-1]
 	}
-	files := make([]string, 0, len(parts))
+	inputCount = len(parts)
+	files = make([]string, 0, inputCount)
 	for i, part := range parts {
 		if len(part) == 0 {
 			_, _ = fmt.Fprintf(inv.Stderr, "wc: %s:%d: invalid zero-length file name\n", source, i+1)
+			exitCode = 1
 			continue
 		}
 		name := string(part)
 		if source == "-" && name == "-" {
 			_, _ = fmt.Fprintln(inv.Stderr, "wc: when reading file names from standard input, no file name of '-' allowed")
+			exitCode = 1
 			continue
 		}
 		files = append(files, name)
 	}
-	return files
+	return files, inputCount, exitCode
+}
+
+func wcCountFile(ctx context.Context, inv *Invocation, opts wcOptions, name string) (wcCounts, error) {
+	if name != "-" && wcBytesOnly(opts) {
+		info, _, err := statPath(ctx, inv, name)
+		if err != nil {
+			return wcCounts{}, err
+		}
+		if info.Mode().IsRegular() {
+			f, _, openErr := openRead(ctx, inv, name)
+			if openErr != nil {
+				return wcCounts{}, openErr
+			}
+			_ = f.Close()
+			return wcCounts{bytes: int(info.Size())}, nil
+		}
+	}
+
+	var (
+		data []byte
+		err  error
+	)
+	if name == "-" {
+		data, err = readAllStdin(ctx, inv)
+	} else {
+		data, _, err = readAllFile(ctx, inv, name)
+	}
+	if err != nil {
+		return wcCounts{}, err
+	}
+	return countWC(data, inv), nil
+}
+
+func wcBytesOnly(opts wcOptions) bool {
+	return opts.bytes && !opts.lines && !opts.words && !opts.chars && !opts.maxLineLength
 }
 
 func countWC(data []byte, inv *Invocation) wcCounts {
@@ -257,6 +315,11 @@ func wcCountWords(data []byte, inv *Invocation) int {
 	for len(data) > 0 {
 		r, size := utf8.DecodeRune(data)
 		if r == utf8.RuneError && size == 1 {
+			if wcSingleByteWordSeparator(data[0], inv) {
+				inWord = false
+				data = data[1:]
+				continue
+			}
 			if !inWord {
 				count++
 				inWord = true
@@ -268,7 +331,7 @@ func wcCountWords(data []byte, inv *Invocation) int {
 		if posix {
 			isSpace = r == ' ' || (r >= '\t' && r <= '\r')
 		} else {
-			isSpace = unicode.IsSpace(r)
+			isSpace = unicode.IsSpace(r) || wcExtraWordSeparator(r)
 		}
 		if isSpace {
 			inWord = false
@@ -316,7 +379,11 @@ func wcMaxLineLength(data []byte) int {
 	return maxWidth
 }
 
-func wcOutputWidth(opts wcOptions, results []wcLineResult, hasStdinInput bool) int {
+func wcOutputWidth(opts wcOptions, results []wcLineResult, hasStdinInput bool, numInputs int) int {
+	if opts.totalWhen == wcTotalOnly {
+		return 1
+	}
+
 	enabled := wcEnabledCount(opts)
 	if len(results) == 0 {
 		if enabled == 1 {
@@ -324,8 +391,12 @@ func wcOutputWidth(opts wcOptions, results []wcLineResult, hasStdinInput bool) i
 		}
 		return wcMinimumWidth
 	}
-	if enabled == 1 && len(results) == 1 {
-		return 1
+	if enabled == 1 {
+		if opts.words && len(results) > 1 {
+			// GNU preserves width alignment for words-only multi-file output.
+		} else {
+			return 1
+		}
 	}
 
 	width := 1
@@ -335,7 +406,7 @@ func wcOutputWidth(opts wcOptions, results []wcLineResult, hasStdinInput bool) i
 	for _, result := range results {
 		width = max(width, wcCountsWidth(result.counts, opts))
 	}
-	if wcTotalVisible(opts.totalWhen, len(results)) {
+	if numInputs > 1 || wcTotalVisible(opts.totalWhen, numInputs) {
 		total := wcCounts{}
 		for _, result := range results {
 			total.lines += result.counts.lines
@@ -410,7 +481,7 @@ func wcTotalVisible(totalWhen wcTotalWhen, numInputs int) bool {
 	}
 }
 
-func writeWCLine(inv *Invocation, counts wcCounts, opts wcOptions, label string, width int) error {
+func writeWCLine(w io.Writer, counts wcCounts, opts wcOptions, label string, width int) error {
 	parts := make([]string, 0, 5)
 	if opts.lines {
 		parts = append(parts, fmt.Sprintf("%*d", width, counts.lines))
@@ -430,12 +501,112 @@ func writeWCLine(inv *Invocation, counts wcCounts, opts wcOptions, label string,
 
 	line := strings.Join(parts, " ")
 	if label != "" {
-		line += " " + label
+		line += " " + wcDisplayLabel(label)
 	}
-	if _, err := io.WriteString(inv.Stdout, line+"\n"); err != nil {
+	if _, err := io.WriteString(w, line+"\n"); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
 	return nil
+}
+
+func wcFlushOutput(inv *Invocation, output *strings.Builder) error {
+	if output == nil || output.Len() == 0 {
+		return nil
+	}
+	if _, err := io.WriteString(inv.Stdout, output.String()); err != nil {
+		return &ExitError{Code: 1, Err: err}
+	}
+	return nil
+}
+
+func wcTotalLabel(opts wcOptions) string {
+	if opts.totalWhen == wcTotalOnly {
+		return ""
+	}
+	return "total"
+}
+
+func wcExtraWordSeparator(r rune) bool {
+	switch r {
+	case '\u00A0', '\u2007', '\u202F', '\u2060':
+		return true
+	default:
+		return false
+	}
+}
+
+func wcSingleByteWordSeparator(b byte, inv *Invocation) bool {
+	if inv == nil {
+		return false
+	}
+	locale := strings.ToUpper(wcFirstNonEmpty(inv.Env["LC_ALL"], inv.Env["LC_CTYPE"], inv.Env["LANG"]))
+	switch {
+	case strings.Contains(locale, "8859-1"), strings.Contains(locale, "ISO8859-1"), strings.Contains(locale, "LATIN1"):
+		return b == 0xA0
+	case strings.Contains(locale, "KOI8-R"):
+		return b == 0x9A
+	default:
+		return false
+	}
+}
+
+func wcFirstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func wcDisplayLabel(label string) string {
+	if label == "" || !strings.ContainsAny(label, "\a\b\f\n\r\t\v") {
+		return label
+	}
+
+	var out strings.Builder
+	start := 0
+	for i := 0; i < len(label); i++ {
+		escaped, ok := wcEscapedControlByte(label[i])
+		if !ok {
+			continue
+		}
+		if start < i {
+			out.WriteString(quoteGNUOperand(label[start:i]))
+		}
+		out.WriteString("$'")
+		out.WriteString(escaped)
+		out.WriteByte('\'')
+		start = i + 1
+	}
+	if start < len(label) {
+		out.WriteString(quoteGNUOperand(label[start:]))
+	}
+	if out.Len() == 0 {
+		return label
+	}
+	return out.String()
+}
+
+func wcEscapedControlByte(b byte) (string, bool) {
+	switch b {
+	case '\a':
+		return "\\a", true
+	case '\b':
+		return "\\b", true
+	case '\f':
+		return "\\f", true
+	case '\n':
+		return "\\n", true
+	case '\r':
+		return "\\r", true
+	case '\t':
+		return "\\t", true
+	case '\v':
+		return "\\v", true
+	default:
+		return "", false
+	}
 }
 
 var _ Command = (*WC)(nil)

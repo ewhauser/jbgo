@@ -137,6 +137,8 @@ case "\$host_pwd" in
 esac
 gbash_bin=\$root_dir/build-aux/gbash-harness/gbash
 PWD=\$sandbox_cwd
+GBASH_UMASK=\$(umask)
+export GBASH_UMASK
 export PWD
 GBASH_UMASK=\$(umask)
 EOF
@@ -196,6 +198,8 @@ write_wrapper() {
     printf '%s\n' 'esac'
     printf '%s\n' 'gbash_bin=$root_dir/build-aux/gbash-harness/gbash'
     printf '%s\n' 'PWD=$sandbox_cwd'
+    printf '%s\n' 'GBASH_UMASK=$(umask)'
+    printf '%s\n' 'export GBASH_UMASK'
     printf '%s\n' 'export PWD'
     printf '%s\n' 'GBASH_UMASK=$(umask)'
     if [ -n "$command_name" ]; then
