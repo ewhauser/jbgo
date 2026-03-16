@@ -114,6 +114,7 @@ Format and print data.
 ```bash
 printf "%s is %d years old\n" "Alice" 30
 printf "%05d\n" 42                          # 00042
+printf -v msg "%s-%02d" "build" 7; echo "$msg"
 ```
 
 ## rev

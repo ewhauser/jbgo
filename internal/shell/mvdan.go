@@ -520,7 +520,12 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			}))
 		}
 
-		finalEnv, err := invokeResolvedCommand(ctx, exec, resolved, args, currentEnv, virtualWD, hc.Stdin, hc.Stdout, hc.Stderr)
+		shellVars := shellstate.NewShellVarAssignments()
+		commandCtx := shellstate.WithShellVarAssignments(ctx, shellVars)
+		finalEnv, err := invokeResolvedCommand(commandCtx, exec, resolved, args, currentEnv, virtualWD, hc.Stdin, hc.Stdout, hc.Stderr)
+		if syncErr := syncShellVarAssignments(ctx, &hc, shellVars); syncErr != nil {
+			return syncErr
+		}
 		if syncErr := syncCommandHistory(ctx, &hc, currentEnv, finalEnv); syncErr != nil {
 			return syncErr
 		}
@@ -1680,6 +1685,34 @@ func syncUmaskEnv(ctx context.Context, hc *interp.HandlerContext, before, after 
 		return hc.Builtin(ctx, []string{"unset", umaskEnvVar})
 	}
 	return hc.Builtin(ctx, []string{"eval", fmt.Sprintf("%s='%s'; export %s", umaskEnvVar, shellSingleQuote(afterValue), umaskEnvVar)})
+}
+
+func syncShellVarAssignments(ctx context.Context, hc *interp.HandlerContext, assignments *shellstate.ShellVarAssignments) error {
+	if hc == nil || assignments == nil {
+		return nil
+	}
+	updates := assignments.Snapshot()
+	if len(updates) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(updates))
+	for name := range updates {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		update := updates[name]
+		if update.Unset {
+			if err := hc.Builtin(ctx, []string{"unset", name}); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := hc.Builtin(ctx, []string{"eval", fmt.Sprintf("%s='%s'", name, shellSingleQuote(update.Value))}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var _ Engine = (*MVdan)(nil)
