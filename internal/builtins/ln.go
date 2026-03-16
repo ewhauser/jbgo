@@ -7,8 +7,6 @@ import (
 	stdfs "io/fs"
 	"path"
 	"path/filepath"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type LN struct{}
@@ -127,7 +125,7 @@ func runLN(ctx context.Context, inv *Invocation, opts *lnOptions, files []string
 		return lnLinkIntoDirectory(ctx, inv, opts, files, ".")
 	case 2:
 		if !opts.noTargetDir {
-			if info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, files[1]); err != nil {
+			if info, _, exists, err := statMaybe(ctx, inv, files[1]); err != nil {
 				return err
 			} else if exists && info.IsDir() {
 				return lnLinkIntoDirectory(ctx, inv, opts, files[:1], files[1])
@@ -173,10 +171,7 @@ func lnLinkIntoDirectory(ctx context.Context, inv *Invocation, opts *lnOptions, 
 }
 
 func lnCreateOne(ctx context.Context, inv *Invocation, opts *lnOptions, target, linkName string) error {
-	linkAbs, err := allowPath(ctx, inv, policy.FileActionWrite, linkName)
-	if err != nil {
-		return err
-	}
+	linkAbs := allowPath(inv, linkName)
 	if err := ensureParentDirExists(ctx, inv, linkAbs); err != nil {
 		return err
 	}
@@ -222,7 +217,7 @@ func lnCreateOne(ctx context.Context, inv *Invocation, opts *lnOptions, target, 
 }
 
 func lnPrepareDestination(ctx context.Context, inv *Invocation, opts *lnOptions, target, linkName, linkAbs string) error {
-	info, _, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, linkName)
+	info, _, exists, err := lstatMaybe(ctx, inv, linkName)
 	if err != nil {
 		return err
 	}

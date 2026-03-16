@@ -75,7 +75,7 @@ func (c *Strings) RunParsed(ctx context.Context, inv *Invocation, matches *Parse
 		return err
 	}
 
-	inputs, err := readNamedInputs(ctx, inv, matches.Args("file"), true)
+	inputs, err := readNamedInputs(ctx, inv, matches.Args("file"))
 	if err != nil {
 		return err
 	}

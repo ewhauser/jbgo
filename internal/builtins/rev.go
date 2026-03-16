@@ -35,7 +35,7 @@ func (c *Rev) Spec() CommandSpec {
 
 func (c *Rev) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	args := matches.Args("file")
-	inputs, err := readNamedInputs(ctx, inv, args, true)
+	inputs, err := readNamedInputs(ctx, inv, args)
 	if err != nil {
 		return err
 	}

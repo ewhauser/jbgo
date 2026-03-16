@@ -106,10 +106,10 @@ func runPipelineParityBash(t testing.TB, bashPath, script string) normalizedExec
 	return normalizedExecutionResult{
 		ExitCode: exitCode,
 		Stdout:   stdout.String(),
-		Stderr:   stdoutlessBashDiagnostic(stderr.String(), homeDir),
+		Stderr:   stdoutlessBashDiagnostic(stderr.String()),
 	}
 }
 
-func stdoutlessBashDiagnostic(value, homeDir string) string {
+func stdoutlessBashDiagnostic(value string) string {
 	return bashLinePrefixPattern.ReplaceAllString(filepath.ToSlash(value), "")
 }

@@ -257,10 +257,7 @@ func readCommInput(ctx context.Context, inv *Invocation, name string) (data []by
 		data, err := readAllStdin(ctx, inv)
 		return data, name, err
 	}
-	abs, err := allowPath(ctx, inv, "", name)
-	if err != nil {
-		return nil, "", err
-	}
+	abs := allowPath(inv, name)
 	file, err := inv.FS.Open(ctx, abs)
 	if err != nil {
 		if errors.Is(err, stdfs.ErrInvalid) {

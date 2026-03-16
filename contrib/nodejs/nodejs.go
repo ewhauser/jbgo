@@ -310,20 +310,14 @@ func (rt *nodeRuntime) loadProcessModule(runtime *goja.Runtime, module *goja.Obj
 }
 
 func (rt *nodeRuntime) loadFSModule(runtime *goja.Runtime, module *goja.Object) {
-	exports, err := rt.fsModule()
-	if err != nil {
-		panic(runtime.NewGoError(err))
-	}
+	exports := rt.fsModule()
 	if err := module.Set("exports", exports); err != nil {
 		panic(runtime.NewGoError(err))
 	}
 }
 
 func (rt *nodeRuntime) loadPathModule(runtime *goja.Runtime, module *goja.Object) {
-	exports, err := rt.pathModule()
-	if err != nil {
-		panic(runtime.NewGoError(err))
-	}
+	exports := rt.pathModule()
 	if err := module.Set("exports", exports); err != nil {
 		panic(runtime.NewGoError(err))
 	}

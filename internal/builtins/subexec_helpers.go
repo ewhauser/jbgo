@@ -10,7 +10,6 @@ import (
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/policy"
 )
 
 type commandResolution struct {
@@ -76,7 +75,7 @@ type executeCommandOptions struct {
 
 func resolveCommand(ctx context.Context, inv *Invocation, env map[string]string, dir, name string) (*commandResolution, bool, error) {
 	if strings.Contains(name, "/") {
-		info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, name)
+		info, abs, exists, err := statMaybe(ctx, inv, name)
 		if err != nil {
 			return nil, false, err
 		}
@@ -88,7 +87,7 @@ func resolveCommand(ctx context.Context, inv *Invocation, env map[string]string,
 
 	for _, pathDir := range commandSearchDirs(env, dir) {
 		candidate := gbfs.Resolve(pathDir, name)
-		info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, candidate)
+		info, abs, exists, err := statMaybe(ctx, inv, candidate)
 		if err != nil {
 			return nil, false, err
 		}
@@ -102,7 +101,7 @@ func resolveCommand(ctx context.Context, inv *Invocation, env map[string]string,
 
 func resolveAllCommands(ctx context.Context, inv *Invocation, env map[string]string, dir, name string) ([]string, error) {
 	if strings.Contains(name, "/") {
-		info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, name)
+		info, abs, exists, err := statMaybe(ctx, inv, name)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +115,7 @@ func resolveAllCommands(ctx context.Context, inv *Invocation, env map[string]str
 	seen := make(map[string]struct{})
 	for _, pathDir := range commandSearchDirs(env, dir) {
 		candidate := gbfs.Resolve(pathDir, name)
-		info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, candidate)
+		info, abs, exists, err := statMaybe(ctx, inv, candidate)
 		if err != nil {
 			return nil, err
 		}

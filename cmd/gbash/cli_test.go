@@ -58,7 +58,7 @@ func TestRunCLIPrintsVersion(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIWithConfig(context.Background(), cfg, "gbash", []string{"--version"}, strings.NewReader("echo ignored"), &stdout, &stderr, false)
+	exitCode, err := runCLIWithConfig(context.Background(), cfg, []string{"--version"}, strings.NewReader("echo ignored"), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -80,7 +80,7 @@ func TestRunCLIHelpRendersBashInvocationFlags(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -104,7 +104,7 @@ func TestRunCLIHelpRendersFilesystemFlags(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -126,7 +126,7 @@ func TestRunCLIHelpRendersServerFlags(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--help"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -148,7 +148,7 @@ func TestRunCLIJSONOutputEncodesExecutionResult(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-c", "printf 'hello\\n'; printf 'warn\\n' >&2", "--json"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-c", "printf 'hello\\n'; printf 'warn\\n' >&2", "--json"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -185,7 +185,7 @@ func TestRunCLIJSONOutputEncodesCLIError(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-c", "pwd", "--json", "--root", "/", "--readwrite-root", "/"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-c", "pwd", "--json", "--root", "/", "--readwrite-root", "/"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -213,7 +213,7 @@ func TestRunCLIJSONOutputRejectsInteractiveShell(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--json"}, strings.NewReader(""), &stdout, &stderr, true)
+	exitCode, err := runCLI(context.Background(), []string{"--json"}, strings.NewReader(""), &stdout, &stderr, true)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -235,7 +235,7 @@ func TestRunCLIServerRequiresTransport(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--server"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--server"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("runCLI() error = nil, want transport requirement")
 	}
@@ -252,7 +252,7 @@ func TestRunCLIServerRejectsMultipleTransportFlags(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{
+	exitCode, err := runCLI(context.Background(), []string{
 		"--server",
 		"--socket", filepath.Join(t.TempDir(), "gbash.sock"),
 		"--listen", "127.0.0.1:9000",
@@ -273,7 +273,7 @@ func TestRunCLIServerRejectsNonLoopbackListen(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--server", "--listen", "0.0.0.0:9000"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--server", "--listen", "0.0.0.0:9000"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("runCLI() error = nil, want loopback requirement")
 	}
@@ -290,7 +290,7 @@ func TestRunCLIServerRejectsScriptExecutionFlags(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--server", "--socket", filepath.Join(t.TempDir(), "gbash.sock"), "-c", "echo hi"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--server", "--socket", filepath.Join(t.TempDir(), "gbash.sock"), "-c", "echo hi"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("runCLI() error = nil, want server/script rejection")
 	}
@@ -307,7 +307,7 @@ func TestRunCLIServerRejectsJSONMode(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--server", "--socket", filepath.Join(t.TempDir(), "gbash.sock"), "--json"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--server", "--socket", filepath.Join(t.TempDir(), "gbash.sock"), "--json"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -333,7 +333,7 @@ func TestRunCLIServerListensOnTCP(t *testing.T) {
 	var stderr strings.Builder
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := runCLI(ctx, "gbash", []string{"--server", "--listen", addr}, strings.NewReader(""), &stdout, &stderr, false)
+		_, err := runCLI(ctx, []string{"--server", "--listen", addr}, strings.NewReader(""), &stdout, &stderr, false)
 		errCh <- err
 	}()
 
@@ -410,7 +410,7 @@ func TestRunCLISharedFlagsStopAfterFirstScriptPositional(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-c", `printf '%s\n' "$1"`, "_", "--json"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-c", `printf '%s\n' "$1"`, "_", "--json"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -432,7 +432,7 @@ func TestRunCLIReadWriteRootPersistsHostWritesAcrossExecutions(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--readwrite-root", tmp, "--cwd", "/", "-c", "printf host-data > shared.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--readwrite-root", tmp, "--cwd", "/", "-c", "printf host-data > shared.txt"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI(write) error = %v", err)
 	}
@@ -455,7 +455,7 @@ func TestRunCLIReadWriteRootPersistsHostWritesAcrossExecutions(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	exitCode, err = runCLI(context.Background(), "gbash", []string{"--readwrite-root=" + tmp, "--cwd=/", "-c", "pwd; cat shared.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err = runCLI(context.Background(), []string{"--readwrite-root=" + tmp, "--cwd=/", "-c", "pwd; cat shared.txt"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI(read) error = %v", err)
 	}
@@ -508,7 +508,7 @@ func TestRunCLIRootMountReadsHostFilesWithoutPersistingWrites(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--root", root, "--cwd", gbash.DefaultWorkspaceMountPoint + "/subdir", "-c", "pwd; cat host.txt; printf overlay > overlay.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--root", root, "--cwd", gbash.DefaultWorkspaceMountPoint + "/subdir", "-c", "pwd; cat host.txt; printf overlay > overlay.txt"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -531,7 +531,7 @@ func TestRunCLIFilesystemFlagsRejectConflictingModes(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--root", "/", "--readwrite-root", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--root", "/", "--readwrite-root", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err == nil {
 		t.Fatalf("runCLI() error = nil, want conflict error")
 	}
@@ -549,7 +549,7 @@ func TestRunCLIReadWriteRootRejectsNonTempDirectories(t *testing.T) {
 	var stderr strings.Builder
 
 	nonTempRoot := filepath.Dir(filepath.Clean(os.TempDir()))
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"--readwrite-root", nonTempRoot, "--cwd", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--readwrite-root", nonTempRoot, "--cwd", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err == nil {
 		t.Fatalf("runCLI() error = nil, want temp-directory restriction")
 	}
@@ -566,7 +566,7 @@ func TestRunCLICommandStringSupportsGroupedShortFlags(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-ceu", `echo "$MISSING"`}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-ceu", `echo "$MISSING"`}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -609,7 +609,7 @@ func TestRunCLICommandStringUsesBashArg0Semantics(t *testing.T) {
 			var stdout strings.Builder
 			var stderr strings.Builder
 
-			exitCode, err := runCLI(context.Background(), "gbash", tc.args, strings.NewReader(""), &stdout, &stderr, false)
+			exitCode, err := runCLI(context.Background(), tc.args, strings.NewReader(""), &stdout, &stderr, false)
 			if err != nil {
 				t.Fatalf("runCLI() error = %v", err)
 			}
@@ -637,7 +637,7 @@ func TestRunCLISupportsScriptFileArgs(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{scriptPath, "left", "right"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{scriptPath, "left", "right"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -657,7 +657,7 @@ func TestRunCLIDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-s", "value"}, strings.NewReader("printf '%s|%s\\n' \"$0\" \"$1\"\n"), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-s", "value"}, strings.NewReader("printf '%s|%s\\n' \"$0\" \"$1\"\n"), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -677,7 +677,7 @@ func TestRunCLIImplicitStdinUsesInvocationNameAsArg0(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", nil, strings.NewReader("printf '%s\\n' \"$0\"\n"), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), nil, strings.NewReader("printf '%s\\n' \"$0\"\n"), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -697,7 +697,7 @@ func TestRunCLISupportsDashOPipefail(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-e", "-o", "pipefail", "-c", "false | true\necho after"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-e", "-o", "pipefail", "-c", "false | true\necho after"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -747,7 +747,7 @@ func TestRunCLIStartupOptionsAffectExecution(t *testing.T) {
 			var stdout strings.Builder
 			var stderr strings.Builder
 
-			exitCode, err := runCLI(context.Background(), "gbash", tc.args, strings.NewReader(""), &stdout, &stderr, false)
+			exitCode, err := runCLI(context.Background(), tc.args, strings.NewReader(""), &stdout, &stderr, false)
 			if err != nil {
 				t.Fatalf("runCLI() error = %v", err)
 			}
@@ -769,7 +769,7 @@ func TestRunCLIInteractiveCommandStringUsesInteractiveShellSemantics(t *testing.
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-ic", "alias hi='echo alias-ok'\nhi"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-ic", "alias hi='echo alias-ok'\nhi"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -795,7 +795,7 @@ func TestRunCLIInteractiveScriptUsesInteractiveShellSemantics(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash", []string{"-i", scriptPath}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-i", scriptPath}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -817,7 +817,7 @@ func TestRunCLIHostUtilityPassesStdin(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "cat", nil, strings.NewReader("stdin-data"), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "cat", nil, strings.NewReader("stdin-data"), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -846,7 +846,7 @@ func TestRunCLIHostUtilityCatRejectsAppendToSelf(t *testing.T) {
 	defer func() { _ = stdout.Close() }()
 
 	var stderr strings.Builder
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "cat", []string{"out"}, strings.NewReader(""), stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "cat", []string{"out"}, strings.NewReader(""), stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -889,7 +889,7 @@ func TestRunCLIHostUtilityCatCanCopyThroughSharedReadWriteTarget(t *testing.T) {
 	defer func() { _ = stdout.Close() }()
 
 	var stderr strings.Builder
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "cat", []string{"-", "fy"}, stdin, stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "cat", []string{"-", "fy"}, stdin, stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -919,7 +919,7 @@ func TestRunCLIHostUtilityPassesGBASHUmaskToRuntime(t *testing.T) {
 
 	var stdout strings.Builder
 	var stderr strings.Builder
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "chmod", []string{"a=r,=x", "file.txt"}, strings.NewReader(""), &stdout, &stderr, false, &hostUtilityOpts{gbashUmask: "0005"})
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "chmod", []string{"a=r,=x", "file.txt"}, strings.NewReader(""), &stdout, &stderr, &hostUtilityOpts{gbashUmask: "0005"})
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -954,7 +954,7 @@ func TestRunCLIHostUtilityChownNoOpOnExistingOwnership(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "chown", []string{"-R", spec, "keep"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "chown", []string{"-R", spec, "keep"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -981,7 +981,7 @@ func TestRunCLIHostUtilityChownAcceptsCurrentUsername(t *testing.T) {
 
 	var stdout strings.Builder
 	var stderr strings.Builder
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "chown", []string{current.Username, "owned.txt"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "chown", []string{current.Username, "owned.txt"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -999,7 +999,7 @@ func TestRunCLIHostUtilityUnknownCommandReturns127(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "missing-command", nil, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "missing-command", nil, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1027,7 +1027,7 @@ func TestRunCLIHostUtilityYesReportsSingleWriteErrorOnDevFull(t *testing.T) {
 	defer func() { _ = full.Close() }()
 
 	var stderr strings.Builder
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "yes", []string{"x"}, strings.NewReader(""), full, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "yes", []string{"x"}, strings.NewReader(""), full, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1046,7 +1046,7 @@ func TestRunCLIHostUtilityEnvSupportsDoubleDashCommandSeparator(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "env", []string{"--", "pwd", "-P"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "env", []string{"--", "pwd", "-P"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1076,7 +1076,7 @@ func TestRunCLIHostUtilityEnvSupportsAssignmentsAfterDoubleDash(t *testing.T) {
 
 	var stdout strings.Builder
 	var stderr strings.Builder
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "env", []string{"--", "POSIXLY_CORRECT=1", "pwd"}, strings.NewReader(""), &stdout, &stderr, false, &hostUtilityOpts{cwd: logicalDir})
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "env", []string{"--", "POSIXLY_CORRECT=1", "pwd"}, strings.NewReader(""), &stdout, &stderr, &hostUtilityOpts{cwd: logicalDir})
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1106,7 +1106,7 @@ func TestRunCLIHostUtilityStreamsOutputBeforeExit(t *testing.T) {
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "seq", []string{"999999", "inf"}, strings.NewReader(""), stdout, &stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "seq", []string{"999999", "inf"}, strings.NewReader(""), stdout, &stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1144,7 +1144,7 @@ func TestRunCLIHostUtilityTailFollowMissingFileByName(t *testing.T) {
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-F", "-s0.05", "--max-unchanged-stats=1", "missing/file"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-F", "-s0.05", "--max-unchanged-stats=1", "missing/file"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1194,7 +1194,7 @@ func TestRunCLIHostUtilityTailFollowMissingFlatFileByName(t *testing.T) {
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=name", "--retry", "-s0.05", "--max-unchanged-stats=1", "missing"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=name", "--retry", "-s0.05", "--max-unchanged-stats=1", "missing"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1245,7 +1245,7 @@ func TestRunCLIHostUtilityTailFollowUntailableByNameUntilFileAppears(t *testing.
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-F", "-s0.05", "--max-unchanged-stats=1", "untailable"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-F", "-s0.05", "--max-unchanged-stats=1", "untailable"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1306,7 +1306,7 @@ func TestRunCLIHostUtilityTailFollowDescriptorSurvivesRename(t *testing.T) {
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-f", "-s0.05", "a"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-f", "-s0.05", "a"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1370,7 +1370,7 @@ func TestRunCLIHostUtilityTailFollowByNameHandlesRenameAndReplacement(t *testing
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-F", "-s0.05", "--max-unchanged-stats=1", "a", "b"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-F", "-s0.05", "--max-unchanged-stats=1", "a", "b"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1476,7 +1476,7 @@ func TestRunCLIHostUtilityTailGroupedQuietFollowFlags(t *testing.T) {
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-qF", "-s0.05", "--max-unchanged-stats=1", "1", "2"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"-qF", "-s0.05", "--max-unchanged-stats=1", "1", "2"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1515,7 +1515,7 @@ func TestRunCLIHostUtilityTailFollowByNameWithoutRetryFailsWhenMissingInitially(
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--follow=name", "no-such"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--follow=name", "no-such"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1552,7 +1552,7 @@ func TestRunCLIHostUtilityTailFollowByNameWithoutRetryStopsWhenFileDisappears(t 
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=name", "-s0.05", "--max-unchanged-stats=1", "file"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=name", "-s0.05", "--max-unchanged-stats=1", "file"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1607,7 +1607,7 @@ func TestRunCLIHostUtilityTailFollowByNameWithoutRetryTracksReappearingFileWhile
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=name", "-s0.05", "--max-unchanged-stats=1", "a", "foo"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=name", "-s0.05", "--max-unchanged-stats=1", "a", "foo"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1665,7 +1665,7 @@ func TestRunCLIHostUtilityTailFollowPidIsUnsupported(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-s0.05", "--pid=2147483647", "--pid=" + strconv.Itoa(os.Getpid()), "here"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-s0.05", "--pid=2147483647", "--pid=" + strconv.Itoa(os.Getpid()), "here"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1691,7 +1691,7 @@ func TestRunCLIHostUtilityTailFollowPidIsUnsupportedForDeadPidToo(t *testing.T) 
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-s10", "--pid=2147483647", "empty"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-s10", "--pid=2147483647", "empty"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1717,7 +1717,7 @@ func TestRunCLIHostUtilityTailRetryWarnsWithoutFollow(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--retry", "file"}, strings.NewReader(""), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--retry", "file"}, strings.NewReader(""), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1747,7 +1747,7 @@ func TestRunCLIHostUtilityTailRetryDescriptorReportsAppearanceAndTruncation(t *t
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=descriptor", "--retry", "-s0.05", "missing"}, strings.NewReader(""), stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--follow=descriptor", "--retry", "-s0.05", "missing"}, strings.NewReader(""), stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1803,7 +1803,7 @@ func TestRunCLIHostUtilityTailRetryDescriptorGivesUpOnUntailableReplacement(t *t
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--follow=descriptor", "--retry", "-s0.05", "missing"}, strings.NewReader(""), &stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--follow=descriptor", "--retry", "-s0.05", "missing"}, strings.NewReader(""), &stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1842,7 +1842,7 @@ func TestRunCLIHostUtilityTailFollowDashReadsStandardInput(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-"}, strings.NewReader("line\n"), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-"}, strings.NewReader("line\n"), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1876,7 +1876,7 @@ func TestRunCLIHostUtilityTailFollowDashReportsClosedStdin(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-"}, stdin, &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"-f", "-"}, stdin, &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1901,7 +1901,7 @@ func TestRunCLIHostUtilityTailFollowNameRejectsDash(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--follow=name", "-"}, strings.NewReader("line\n"), &stdout, &stderr, false, nil)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "tail", []string{"--follow=name", "-"}, strings.NewReader("line\n"), &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -1935,7 +1935,7 @@ func TestRunCLIHostUtilityTailDebugReportsPollingMode(t *testing.T) {
 	}, 1)
 
 	go func() {
-		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--debug", "-n0", "-F", "-s0.05", "a"}, strings.NewReader(""), &stdout, stderr, false, nil)
+		exitCode, err := runCLIHostUtility(t, ctx, tmp, "tail", []string{"--debug", "-n0", "-F", "-s0.05", "a"}, strings.NewReader(""), &stdout, stderr, nil)
 		done <- struct {
 			exitCode int
 			err      error
@@ -1976,7 +1976,7 @@ func TestRunCLIHostUtilityPwdHonorsLogicalAndPhysicalModes(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "pwd", []string{"-L"}, strings.NewReader("ignored"), &stdout, &stderr, false, cwdOpts)
+	exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "pwd", []string{"-L"}, strings.NewReader("ignored"), &stdout, &stderr, cwdOpts)
 	if err != nil {
 		t.Fatalf("runCLI(-L) error = %v", err)
 	}
@@ -1992,7 +1992,7 @@ func TestRunCLIHostUtilityPwdHonorsLogicalAndPhysicalModes(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	exitCode, err = runCLIHostUtility(t, context.Background(), tmp, "pwd", []string{"--physical"}, strings.NewReader("ignored"), &stdout, &stderr, false, cwdOpts)
+	exitCode, err = runCLIHostUtility(t, context.Background(), tmp, "pwd", []string{"--physical"}, strings.NewReader("ignored"), &stdout, &stderr, cwdOpts)
 	if err != nil {
 		t.Fatalf("runCLI(--physical) error = %v", err)
 	}
@@ -2008,7 +2008,7 @@ func TestRunCLIHostUtilityPwdHonorsLogicalAndPhysicalModes(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	exitCode, err = runCLIHostUtility(t, context.Background(), tmp, "pwd", nil, strings.NewReader("ignored"), &stdout, &stderr, false, &hostUtilityOpts{cwd: logicalDir, posixlyCorrect: "1"})
+	exitCode, err = runCLIHostUtility(t, context.Background(), tmp, "pwd", nil, strings.NewReader("ignored"), &stdout, &stderr, &hostUtilityOpts{cwd: logicalDir, posixlyCorrect: "1"})
 	if err != nil {
 		t.Fatalf("runCLI(POSIXLY_CORRECT) error = %v", err)
 	}
@@ -2029,7 +2029,7 @@ type hostUtilityOpts struct {
 	posixlyCorrect string
 }
 
-func runCLIHostUtility(t *testing.T, ctx context.Context, root, utility string, utilityArgs []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool, opts *hostUtilityOpts) (int, error) {
+func runCLIHostUtility(t *testing.T, ctx context.Context, root, utility string, utilityArgs []string, stdin io.Reader, stdout, stderr io.Writer, opts *hostUtilityOpts) (int, error) {
 	t.Helper()
 
 	cwd := root
@@ -2057,7 +2057,7 @@ func runCLIHostUtility(t *testing.T, ctx context.Context, root, utility string, 
 		utility,
 	}
 	args = append(args, utilityArgs...)
-	return runCLI(ctx, "gbash", args, stdin, stdout, stderr, stdinTTY)
+	return runCLI(ctx, args, stdin, stdout, stderr, false)
 }
 
 func currentSandboxCwd(root, cwd string) (string, error) {

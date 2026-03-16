@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Touch struct{}
@@ -221,10 +219,7 @@ func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times to
 		if opts.noDereference && !hasTrailingSlash(name) {
 			return exitf(inv, 1, "touch: cannot touch %q: No such file or directory", name)
 		}
-		abs, err = allowPath(ctx, inv, policy.FileActionWrite, name)
-		if err != nil {
-			return err
-		}
+		abs = allowPath(inv, name)
 		if err := ensureParentDirExists(ctx, inv, abs); err != nil {
 			return err
 		}
@@ -238,10 +233,6 @@ func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times to
 		recordFileMutation(inv.TraceRecorder(), "touch", abs, "", abs)
 		info, _, err = statPath(ctx, inv, name)
 		if err != nil {
-			return err
-		}
-	} else if info.IsDir() {
-		if _, err := allowPath(ctx, inv, policy.FileActionWrite, name); err != nil {
 			return err
 		}
 	}
@@ -268,35 +259,35 @@ func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times to
 
 func touchStatMaybe(ctx context.Context, inv *Invocation, name string, noDereference bool) (info stdfs.FileInfo, abs string, exists bool, err error) {
 	if noDereference && !hasTrailingSlash(name) {
-		return lstatMaybe(ctx, inv, policy.FileActionLstat, name)
+		return lstatMaybe(ctx, inv, name)
 	}
-	return statMaybe(ctx, inv, policy.FileActionStat, name)
+	return statMaybe(ctx, inv, name)
 }
 
 func parseTouchDateValue(base time.Time, value string) (time.Time, error) {
 	if value == "now" {
 		return time.Now().UTC(), nil
 	}
-	if shifted, ok, err := parseTouchRelativeDate(base, value); ok || err != nil {
-		return shifted, err
+	if shifted, ok := parseTouchRelativeDate(base, value); ok {
+		return shifted, nil
 	}
 	return parseTouchTime(value)
 }
 
-func parseTouchRelativeDate(base time.Time, value string) (time.Time, bool, error) {
+func parseTouchRelativeDate(base time.Time, value string) (time.Time, bool) {
 	fields := strings.Fields(value)
 	if len(fields) != 2 {
-		return time.Time{}, false, nil
+		return time.Time{}, false
 	}
 	amount, err := strconv.Atoi(fields[0])
 	if err != nil {
-		return time.Time{}, false, nil //nolint:nilerr // unparseable amount means not a relative date
+		return time.Time{}, false
 	}
 	switch fields[1] {
 	case "day", "days":
-		return base.AddDate(0, 0, amount).UTC(), true, nil
+		return base.AddDate(0, 0, amount).UTC(), true
 	default:
-		return time.Time{}, false, nil
+		return time.Time{}, false
 	}
 }
 

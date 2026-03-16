@@ -17,8 +17,8 @@ import (
 	"github.com/ewhauser/gbash/contrib/extras"
 )
 
-func runCLI(ctx context.Context, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
-	return runCLIWithConfig(ctx, newCLIConfig(), argv0, args, stdin, stdout, stderr, stdinTTY)
+func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	return runCLIWithConfig(ctx, newCLIConfig(), "gbash-extras", args, stdin, stdout, stderr, false)
 }
 
 func runCLIWithConfig(ctx context.Context, cfg rootcli.Config, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
@@ -82,11 +82,11 @@ func TestCLIRegistersStableExtras(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash-extras", []string{"-c", "printf 'a,b\\n' | awk -F, '{print $2}'\n" +
+	exitCode, err := runCLI(context.Background(), []string{"-c", "printf 'a,b\\n' | awk -F, '{print $2}'\n" +
 		"printf '<h1>docs</h1>' | html-to-markdown\n" +
 		"printf '{\"name\":\"alice\"}\\n' | jq -r '.name'\n" +
 		"printf 'name: alice\\n' | yq '.name'\n" +
-		`sqlite3 :memory: "select 1;"`}, strings.NewReader(""), &stdout, &stderr, false)
+		`sqlite3 :memory: "select 1;"`}, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -106,7 +106,7 @@ func TestCLIDoesNotRegisterNodeJSByDefault(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), "gbash-extras", []string{"-c", "nodejs -e 'console.log(1)'"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"-c", "nodejs -e 'console.log(1)'"}, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestCLIServerServesStableExtrasRegistry(t *testing.T) {
 	var stderr strings.Builder
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := runCLI(ctx, "gbash-extras", []string{"--server", "--socket", socket}, strings.NewReader(""), &stdout, &stderr, false)
+		_, err := runCLI(ctx, []string{"--server", "--socket", socket}, strings.NewReader(""), &stdout, &stderr)
 		errCh <- err
 	}()
 
@@ -250,7 +250,7 @@ func TestCLIServerListensOnTCPWithStableExtrasRegistry(t *testing.T) {
 	var stderr strings.Builder
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := runCLI(ctx, "gbash-extras", []string{"--server", "--listen", addr}, strings.NewReader(""), &stdout, &stderr, false)
+		_, err := runCLI(ctx, []string{"--server", "--listen", addr}, strings.NewReader(""), &stdout, &stderr)
 		errCh <- err
 	}()
 

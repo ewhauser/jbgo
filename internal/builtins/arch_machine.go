@@ -7,13 +7,13 @@ import (
 
 const archEnvKey = "GBASH_ARCH"
 
-func archMachine(inv *Invocation) (string, error) {
+func archMachine(inv *Invocation) string {
 	if inv != nil && inv.Env != nil {
 		if machine := strings.TrimSpace(inv.Env[archEnvKey]); machine != "" {
-			return machine, nil
+			return machine
 		}
 	}
-	return archMachineFromGOARCH(), nil
+	return archMachineFromGOARCH()
 }
 
 func archMachineFromGOARCH() string {

@@ -7,8 +7,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Find struct{}
@@ -114,7 +112,7 @@ func (c *Find) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		if strings.HasPrefix(root, "/") {
 			rootAbs = root
 		}
-		if _, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, rootAbs); err != nil {
+		if _, _, exists, err := statMaybe(ctx, inv, rootAbs); err != nil {
 			return err
 		} else if !exists {
 			_, _ = fmt.Fprintf(inv.Stderr, "find: %s: No such file or directory\n", root)
@@ -173,7 +171,7 @@ func (c *Find) walk(
 	var entries []stdfs.DirEntry
 	entriesLoaded := false
 	if needsEntries {
-		entries, _, err = readDir(ctx, inv, currentAbs)
+		entries, err = readDir(ctx, inv, currentAbs)
 		if err != nil {
 			return err
 		}
@@ -206,7 +204,7 @@ func (c *Find) walk(
 
 	if info.IsDir() && (!opts.hasMaxDepth || depth < opts.maxDepth) && !eval.pruned {
 		if !entriesLoaded {
-			entries, _, err = readDir(ctx, inv, currentAbs)
+			entries, err = readDir(ctx, inv, currentAbs)
 			if err != nil {
 				return err
 			}
@@ -279,10 +277,7 @@ func (c *Find) runActions(ctx context.Context, inv *Invocation, actions []findAc
 				}
 			}
 		case *findDeleteAction:
-			deleteExitCode, err := deleteFindResults(ctx, inv, state.results)
-			if err != nil {
-				return 0, err
-			}
+			deleteExitCode := deleteFindResults(ctx, inv, state.results)
 			if deleteExitCode > exitCode {
 				exitCode = deleteExitCode
 			}
@@ -344,7 +339,7 @@ func replaceFindExecPlaceholders(parts, replacements []string) []string {
 	return argv
 }
 
-func deleteFindResults(ctx context.Context, inv *Invocation, results []string) (int, error) {
+func deleteFindResults(ctx context.Context, inv *Invocation, results []string) int {
 	exitCode := 0
 	sorted := append([]string(nil), results...)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -355,17 +350,14 @@ func deleteFindResults(ctx context.Context, inv *Invocation, results []string) (
 	})
 
 	for _, name := range sorted {
-		abs, err := allowPath(ctx, inv, policy.FileActionRemove, name)
-		if err != nil {
-			return 0, err
-		}
+		abs := allowPath(inv, name)
 		if err := inv.FS.Remove(ctx, abs, false); err != nil {
 			_, _ = fmt.Fprintf(inv.Stderr, "find: cannot delete '%s': %v\n", name, err)
 			exitCode = 1
 			continue
 		}
 	}
-	return exitCode, nil
+	return exitCode
 }
 
 func writeFindSeparated(inv *Invocation, values []string, sep string, trailing bool) error {

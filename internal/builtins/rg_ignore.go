@@ -5,8 +5,6 @@ import (
 	"path"
 	"regexp"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type rgIgnoreRule struct {
@@ -34,7 +32,7 @@ func (m *rgIgnoreMatcher) loadPath(ctx context.Context, inv *Invocation, targetA
 		return nil
 	}
 	current := targetAbs
-	info, _, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, targetAbs)
+	info, _, exists, err := lstatMaybe(ctx, inv, targetAbs)
 	if err != nil {
 		return err
 	}
@@ -180,18 +178,18 @@ func rgIgnorePatternRegexp(pattern string, rooted bool) (*regexp.Regexp, error) 
 }
 
 func (m *rgIgnoreMatcher) matches(abs string, isDir bool) bool {
-	_, ignored, _ := m.state(abs, isDir)
+	ignored, _ := m.state(abs, isDir)
 	return ignored
 }
 
 func (m *rgIgnoreMatcher) whitelisted(abs string, isDir bool) bool {
-	_, ignored, negated := m.state(abs, isDir)
+	ignored, negated := m.state(abs, isDir)
 	return !ignored && negated
 }
 
-func (m *rgIgnoreMatcher) state(abs string, isDir bool) (matched, ignored, negated bool) {
+func (m *rgIgnoreMatcher) state(abs string, isDir bool) (ignored, negated bool) {
 	if m == nil {
-		return false, false, false
+		return false, false
 	}
 	for _, rule := range m.rules {
 		if rule.base != "/" && abs != rule.base && !strings.HasPrefix(abs, rule.base+"/") {
@@ -203,10 +201,9 @@ func (m *rgIgnoreMatcher) state(abs string, isDir bool) (matched, ignored, negat
 			continue
 		}
 		if rule.regex.MatchString(rel) {
-			matched = true
 			ignored = !rule.negated
 			negated = rule.negated
 		}
 	}
-	return matched, ignored, negated
+	return ignored, negated
 }

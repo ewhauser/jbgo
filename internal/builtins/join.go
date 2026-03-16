@@ -134,8 +134,8 @@ func (c *Join) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		opts.output = joinAutoOutput(leftRecords, rightRecords, leftHeader, rightHeader)
 	}
 
-	leftDisorder := joinDetectDisorder(leftRecords, leftName, &opts)
-	rightDisorder := joinDetectDisorder(rightRecords, rightName, &opts)
+	leftDisorder := joinDetectDisorder(leftRecords, leftName)
+	rightDisorder := joinDetectDisorder(rightRecords, rightName)
 
 	if opts.header {
 		if err := writeJoinLine(inv, &opts, leftHeader, rightHeader); err != nil {
@@ -474,7 +474,7 @@ func joinAutoWidth(records []joinRecord, header *joinRecord) int {
 	return len(records[0].fields)
 }
 
-func joinDetectDisorder(records []joinRecord, fileName string, opts *joinOptions) *joinDisorder {
+func joinDetectDisorder(records []joinRecord, fileName string) *joinDisorder {
 	for i := 1; i < len(records); i++ {
 		if joinCompareKeys(records[i-1].key, records[i].key) > 0 {
 			return &joinDisorder{

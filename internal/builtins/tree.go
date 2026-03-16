@@ -111,7 +111,7 @@ func (c *Tree) renderChildren(ctx context.Context, inv *Invocation, abs string, 
 		return 0, 0, nil
 	}
 
-	entries, _, err := readDir(ctx, inv, abs)
+	entries, err := readDir(ctx, inv, abs)
 	if err != nil {
 		return 0, 0, err
 	}

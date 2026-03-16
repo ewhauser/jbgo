@@ -76,10 +76,7 @@ func (c *Uname) RunParsed(_ context.Context, inv *Invocation, matches *ParsedCom
 		processor:        matches.Has("processor"),
 		hardwarePlatform: matches.Has("hardware-platform"),
 	}
-	output, err := newUnameOutput(inv, opts)
-	if err != nil {
-		return exitf(inv, 1, "%s: cannot get system name", c.Name())
-	}
+	output := newUnameOutput(inv, opts)
 	if _, err := fmt.Fprintln(inv.Stdout, output.display()); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
@@ -138,11 +135,8 @@ type unameInfo struct {
 	operatingSystem string
 }
 
-func newUnameOutput(inv *Invocation, opts unameOptions) (unameOutput, error) {
-	info, err := currentUnameInfo(inv)
-	if err != nil {
-		return unameOutput{}, err
-	}
+func newUnameOutput(inv *Invocation, opts unameOptions) unameOutput {
+	info := currentUnameInfo(inv)
 
 	none := !opts.all &&
 		!opts.kernelName &&
@@ -179,18 +173,15 @@ func newUnameOutput(inv *Invocation, opts unameOptions) (unameOutput, error) {
 	if opts.operatingSystem || opts.all {
 		out.operatingSystem = info.operatingSystem
 	}
-	return out, nil
+	return out
 }
 
-func currentUnameInfo(inv *Invocation) (unameInfo, error) {
+func currentUnameInfo(inv *Invocation) unameInfo {
 	if info, complete := unameEnvInfo(inv); complete {
-		return info, nil
+		return info
 	}
 
-	info, err := unameHostInfo()
-	if err != nil {
-		return unameInfo{}, err
-	}
+	info := unameHostInfo()
 	applyUnameEnvOverrides(inv, &info)
 	if info.machine == "" {
 		info.machine = archMachineFromGOARCH()
@@ -198,7 +189,7 @@ func currentUnameInfo(inv *Invocation) (unameInfo, error) {
 	if info.operatingSystem == "" {
 		info.operatingSystem = unameOperatingSystemName()
 	}
-	return info, nil
+	return info
 }
 
 func unameEnvInfo(inv *Invocation) (unameInfo, bool) {
@@ -215,7 +206,7 @@ func unameEnvInfo(inv *Invocation) (unameInfo, bool) {
 		operatingSystem: unameEnvValue(inv.Env, unameOperatingSystemEnvKey),
 	}
 	if info.machine == "" {
-		if machine, err := archMachine(inv); err == nil {
+		if machine := archMachine(inv); strings.TrimSpace(machine) != "" {
 			info.machine = strings.TrimSpace(machine)
 		}
 	}
@@ -246,7 +237,7 @@ func applyUnameEnvOverrides(inv *Invocation, info *unameInfo) {
 	}
 	if value := unameEnvValue(inv.Env, unameMachineEnvKey); value != "" {
 		info.machine = value
-	} else if machine, err := archMachine(inv); err == nil && strings.TrimSpace(machine) != "" {
+	} else if machine := archMachine(inv); strings.TrimSpace(machine) != "" {
 		info.machine = strings.TrimSpace(machine)
 	}
 	if value := unameEnvValue(inv.Env, unameOperatingSystemEnvKey); value != "" {
@@ -315,7 +306,7 @@ func unameKernelName() string {
 	}
 }
 
-func unameHostInfo() (unameInfo, error) {
+func unameHostInfo() unameInfo {
 	return unameInfo{
 		kernelName:      unameKernelName(),
 		nodename:        unameDefaultNodename,
@@ -323,7 +314,7 @@ func unameHostInfo() (unameInfo, error) {
 		kernelVersion:   unameUnknown,
 		machine:         archMachineFromGOARCH(),
 		operatingSystem: unameOperatingSystemName(),
-	}, nil
+	}
 }
 
 var _ Command = (*Uname)(nil)

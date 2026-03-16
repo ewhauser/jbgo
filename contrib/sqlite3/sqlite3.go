@@ -118,7 +118,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *commands.Invocation) error {
 		_, _ = fmt.Fprintf(inv.Stdout, "sqlite3 (gbash) backed by ncruces/go-sqlite3 v0.31.1 / SQLite %s\n", version)
 		return nil
 	case parsed.database == "":
-		return exitf(inv, 1, "sqlite3: missing database argument")
+		return exitf(inv, "sqlite3: missing database argument")
 	}
 
 	if parsed.sqlText == "" {
@@ -129,7 +129,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *commands.Invocation) error {
 		parsed.sqlText = string(data)
 	}
 	if strings.TrimSpace(parsed.sqlText) == "" {
-		return exitf(inv, 1, "sqlite3: missing SQL input")
+		return exitf(inv, "sqlite3: missing SQL input")
 	}
 
 	dbPath, exists, err := resolveSQLiteDatabasePath(ctx, inv, parsed.database)
@@ -137,7 +137,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *commands.Invocation) error {
 		return err
 	}
 	if parsed.options.readonly && parsed.database != ":memory:" && !exists {
-		return exitf(inv, 1, "sqlite3: %s: No such file or directory", parsed.database)
+		return exitf(inv, "sqlite3: %s: No such file or directory", parsed.database)
 	}
 
 	conn, err := gosqlite.OpenContext(ctx, ":memory:")
@@ -156,7 +156,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *commands.Invocation) error {
 		}
 		if len(data) > 0 {
 			if err := serdes.Deserialize(conn, "main", data); err != nil {
-				return exitf(inv, 1, "sqlite3: %v", err)
+				return exitf(inv, "sqlite3: %v", err)
 			}
 		}
 	}
@@ -179,7 +179,7 @@ func (c *SQLite3) Run(ctx context.Context, inv *commands.Invocation) error {
 	if parsed.database != ":memory:" && !parsed.options.readonly && wrote {
 		data, err := serdes.Serialize(conn, "main")
 		if err != nil {
-			return exitf(inv, 1, "sqlite3: %v", err)
+			return exitf(inv, "sqlite3: %v", err)
 		}
 		if err := writeFileContents(ctx, inv, dbPath, data, 0o644); err != nil {
 			return err
@@ -210,7 +210,7 @@ func parseSQLiteArgs(inv *commands.Invocation) (parsed sqliteParsedArgs, err err
 			case parsed.sqlText == "":
 				parsed.sqlText = arg
 			default:
-				return sqliteParsedArgs{}, exitf(inv, 1, "sqlite3: unexpected extra argument %q", arg)
+				return sqliteParsedArgs{}, exitf(inv, "sqlite3: unexpected extra argument %q", arg)
 			}
 			continue
 		}
@@ -282,7 +282,7 @@ func parseSQLiteArgs(inv *commands.Invocation) (parsed sqliteParsedArgs, err err
 				if strings.HasPrefix(arg, "--") {
 					optName = arg[1:]
 				}
-				return sqliteParsedArgs{}, exitf(inv, 1, "sqlite3: unknown option: %s\nUse -help for a list of options.", optName)
+				return sqliteParsedArgs{}, exitf(inv, "sqlite3: unknown option: %s\nUse -help for a list of options.", optName)
 			}
 			switch {
 			case parsed.database == "":
@@ -290,7 +290,7 @@ func parseSQLiteArgs(inv *commands.Invocation) (parsed sqliteParsedArgs, err err
 			case parsed.sqlText == "":
 				parsed.sqlText = arg
 			default:
-				return sqliteParsedArgs{}, exitf(inv, 1, "sqlite3: unexpected extra argument %q", arg)
+				return sqliteParsedArgs{}, exitf(inv, "sqlite3: unexpected extra argument %q", arg)
 			}
 		}
 	}
@@ -300,7 +300,7 @@ func parseSQLiteArgs(inv *commands.Invocation) (parsed sqliteParsedArgs, err err
 
 func sqliteNextArg(inv *commands.Invocation, flag string, args []string) (value string, rest []string, err error) {
 	if len(args) == 0 {
-		return "", nil, exitf(inv, 1, "sqlite3: missing argument to %s", flag)
+		return "", nil, exitf(inv, "sqlite3: missing argument to %s", flag)
 	}
 	return args[0], args[1:], nil
 }
@@ -314,7 +314,7 @@ func resolveSQLiteDatabasePath(ctx context.Context, inv *commands.Invocation, da
 		return "", false, err
 	}
 	if exists && info.IsDir() {
-		return "", false, exitf(inv, 1, "sqlite3: %s: Is a directory", database)
+		return "", false, exitf(inv, "sqlite3: %s: Is a directory", database)
 	}
 	return abs, exists, nil
 }
@@ -333,8 +333,8 @@ func readSQLiteDatabase(ctx context.Context, inv *commands.Invocation, name stri
 	return data, nil
 }
 
-func exitf(inv *commands.Invocation, code int, format string, args ...any) error {
-	return commands.Exitf(inv, code, format, args...)
+func exitf(inv *commands.Invocation, format string, args ...any) error {
+	return commands.Exitf(inv, 1, format, args...)
 }
 
 func statMaybe(ctx context.Context, inv *commands.Invocation, name string) (info stdfs.FileInfo, abs string, exists bool, err error) {
@@ -496,12 +496,12 @@ func runSQLiteBatch(_ context.Context, inv *commands.Invocation, conn *gosqlite.
 
 		currentStmtText := sqliteFirstStatementText(remaining)
 		if reason := sqliteForbiddenStatement(currentStmtText); reason != "" {
-			return wrote, exitf(inv, 1, "sqlite3: %s", reason)
+			return wrote, exitf(inv, "sqlite3: %s", reason)
 		}
 
 		stmt, tail, err := conn.Prepare(remaining)
 		if err != nil {
-			return wrote, exitf(inv, 1, "sqlite3: %v", err)
+			return wrote, exitf(inv, "sqlite3: %v", err)
 		}
 		if stmt == nil {
 			if tail == remaining {
@@ -514,7 +514,7 @@ func runSQLiteBatch(_ context.Context, inv *commands.Invocation, conn *gosqlite.
 		sqlForStmt := strings.TrimSpace(stmt.SQL())
 		if reason := sqliteForbiddenStatement(sqlForStmt); reason != "" {
 			_ = stmt.Close()
-			return wrote, exitf(inv, 1, "sqlite3: %s", reason)
+			return wrote, exitf(inv, "sqlite3: %s", reason)
 		}
 		if opts.echo {
 			_, _ = io.WriteString(inv.Stdout, sqlForStmt)

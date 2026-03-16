@@ -11,7 +11,6 @@ import (
 
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/searchadapter"
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Grep struct{}
@@ -311,7 +310,7 @@ func compileGrepPattern(opts grepOptions) (*regexp.Regexp, error) {
 	return regexp.Compile(pattern)
 }
 
-func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions) (grepSearchResult, error) {
+func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions) grepSearchResult {
 	if opts.count {
 		matchCount := 0
 		countMatches := opts.onlyMatching && !opts.invert
@@ -337,7 +336,7 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 			output:     fmt.Sprintf("%s%d\n", prefix, matchCount),
 			matched:    matchCount > 0,
 			matchCount: matchCount,
-		}, nil
+		}
 	}
 
 	lines := textLines(data)
@@ -376,7 +375,7 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 			output:     grepJoinOutput(outputLines),
 			matched:    hasMatch,
 			matchCount: matchCount,
-		}, nil
+		}
 	}
 
 	matchingLines := make([]int, 0)
@@ -448,7 +447,7 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 		output:     grepJoinOutput(outputLines),
 		matched:    matchCount > 0,
 		matchCount: matchCount,
-	}, nil
+	}
 }
 
 func grepJoinOutput(lines []string) string {
@@ -477,10 +476,7 @@ func grepLinePrefix(name string, showName bool, lineNumber int, showLineNumber, 
 }
 
 func writeGrepResult(inv *Invocation, re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions, state *grepRunState) error {
-	result, err := grepSearchContent(re, data, name, showName, opts)
-	if err != nil {
-		return err
-	}
+	result := grepSearchContent(re, data, name, showName, opts)
 
 	if result.matched {
 		state.matchedAny = true
@@ -550,7 +546,7 @@ func writeGrepGuaranteedMiss(inv *Invocation, name string, showName bool, opts g
 }
 
 func (c *Grep) enumerateTopLevelPath(ctx context.Context, inv *Invocation, file string, opts grepOptions, state *grepRunState, records *[]grepFileRecord) (*grepSearchScope, error) {
-	linfo, abs, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, file)
+	linfo, abs, exists, err := lstatMaybe(ctx, inv, file)
 	if err != nil {
 		return nil, err
 	}
@@ -632,7 +628,7 @@ func (c *Grep) enumerateRecursive(ctx context.Context, inv *Invocation, currentA
 		return nil
 	}
 
-	entries, _, err := readDir(ctx, inv, currentAbs)
+	entries, err := readDir(ctx, inv, currentAbs)
 	if err != nil {
 		return err
 	}

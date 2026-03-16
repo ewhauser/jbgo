@@ -77,7 +77,7 @@ func (c *Stat) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 			exitCode = 1
 			continue
 		}
-		output, err := renderStatOutput(ctx, inv, name, abs, info, opts)
+		output, err := renderStatOutput(ctx, inv, abs, info, opts)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func hasTrailingSlash(name string) bool {
 	return len(name) > 1 && strings.HasSuffix(name, "/")
 }
 
-func renderStatOutput(ctx context.Context, inv *Invocation, rawName, abs string, info stdfs.FileInfo, opts statOptions) (string, error) {
+func renderStatOutput(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, opts statOptions) (string, error) {
 	if opts.format == "" {
 		return defaultStatOutput(abs, info), nil
 	}
@@ -129,7 +129,7 @@ func renderStatOutput(ctx context.Context, inv *Invocation, rawName, abs string,
 		}
 		format = decoded
 	}
-	rendered, err := renderStatFormat(ctx, inv, rawName, abs, info, format)
+	rendered, err := renderStatFormat(ctx, inv, abs, info, format)
 	if err != nil {
 		return "", &ExitError{Code: 1, Err: err}
 	}
@@ -150,7 +150,7 @@ func defaultStatOutput(abs string, info stdfs.FileInfo) string {
 	)
 }
 
-func renderStatFormat(ctx context.Context, inv *Invocation, rawName, abs string, info stdfs.FileInfo, format string) (string, error) {
+func renderStatFormat(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, format string) (string, error) {
 	identities := loadPermissionIdentityDB(ctx, inv)
 	owner := permissionLookupOwnership(identities, info)
 	var b strings.Builder
@@ -166,7 +166,7 @@ func renderStatFormat(ctx context.Context, inv *Invocation, rawName, abs string,
 		}
 		start := i
 		leftAlign, zeroPad, width, precision, directive := parseStatDirective(format, &i)
-		value, err := statDirectiveValue(ctx, inv, rawName, abs, info, owner, directive, precision)
+		value, err := statDirectiveValue(ctx, inv, abs, info, owner, directive, precision)
 		if err != nil {
 			return "", err
 		}
@@ -225,7 +225,7 @@ widthParse:
 	return
 }
 
-func statDirectiveValue(ctx context.Context, inv *Invocation, rawName, abs string, info stdfs.FileInfo, owner permissionOwnership, directive byte, precision int) (string, error) {
+func statDirectiveValue(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, owner permissionOwnership, directive byte, precision int) (string, error) {
 	switch directive {
 	case 'n':
 		return abs, nil

@@ -20,7 +20,7 @@ func readSingleBaseEncInput(ctx context.Context, inv *Invocation, name string, a
 		return nil, exitf(inv, 1, "%s: extra operand '%s'\nTry '%s --help' for more information.", name, args[1], name)
 	}
 
-	inputs, err := readNamedInputs(ctx, inv, args, true)
+	inputs, err := readNamedInputs(ctx, inv, args)
 	if err != nil {
 		return nil, err
 	}

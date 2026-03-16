@@ -7,8 +7,6 @@ import (
 	stdfs "io/fs"
 	"path"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type CP struct{}
@@ -96,7 +94,7 @@ func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if err != nil {
 			return err
 		}
-		destInfo, _, destExists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, destAbs)
+		destInfo, _, destExists, err := lstatMaybe(ctx, inv, destAbs)
 		if err != nil {
 			return err
 		}
@@ -107,14 +105,12 @@ func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if err != nil {
 			return err
 		}
-		if same, err := cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists); err != nil {
-			return err
-		} else if same {
+		if cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists) {
 			return exitf(inv, 1, "cp: %s and %s are the same file", quoteGNUOperand(source), quoteGNUOperand(path.Base(destAbs)))
 		}
 
 		if srcLinkInfo != nil {
-			if err := copySymlink(ctx, inv, srcAbs, destAbs, opts); err != nil {
+			if err := copySymlink(ctx, inv, srcAbs, destAbs); err != nil {
 				return err
 			}
 			continue
@@ -239,7 +235,7 @@ func cpOperands(inv *Invocation, opts cpOptions, args []string) (sources []strin
 
 func resolveCPDestination(ctx context.Context, inv *Invocation, opts cpOptions, sourceArg, destArg string, multipleSources bool) (destAbs string, destInfo stdfs.FileInfo, destExists bool, err error) {
 	if opts.noTargetDirectory {
-		info, abs, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, destArg)
+		info, abs, exists, err := lstatMaybe(ctx, inv, destArg)
 		if err != nil {
 			return "", nil, false, err
 		}
@@ -251,7 +247,7 @@ func resolveCPDestination(ctx context.Context, inv *Invocation, opts cpOptions, 
 		}
 		return abs, info, exists, nil
 	}
-	destInfo, destAbs, destExists, err = lstatMaybe(ctx, inv, policy.FileActionLstat, destArg)
+	destInfo, destAbs, destExists, err = lstatMaybe(ctx, inv, destArg)
 	if err != nil {
 		return "", nil, false, err
 	}
@@ -320,22 +316,22 @@ func resolveCPSource(ctx context.Context, inv *Invocation, source string, opts c
 	return info, abs, nil, nil
 }
 
-func cpSameFile(ctx context.Context, inv *Invocation, srcAbs string, srcInfo stdfs.FileInfo, destAbs string, destInfo stdfs.FileInfo, destExists bool) (bool, error) {
+func cpSameFile(ctx context.Context, inv *Invocation, srcAbs string, srcInfo stdfs.FileInfo, destAbs string, destInfo stdfs.FileInfo, destExists bool) bool {
 	if !destExists {
-		return false, nil
+		return false
 	}
 	if srcAbs == destAbs {
-		return true, nil
+		return true
 	}
 	if realSrc, err := inv.FS.Realpath(ctx, srcAbs); err == nil {
 		if realDst, err := inv.FS.Realpath(ctx, destAbs); err == nil && realSrc == realDst {
-			return true, nil
+			return true
 		}
 	}
 	if srcInfo != nil && destInfo != nil && testSameFile(srcInfo, destInfo) {
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func prepareCPDestination(ctx context.Context, inv *Invocation, source, srcAbs string, srcInfo stdfs.FileInfo, copyingSymlink bool, destAbs string, destInfo stdfs.FileInfo, destExists bool, opts cpOptions) (stdfs.FileInfo, bool, error) {
@@ -389,7 +385,7 @@ func cpIsSymlinkLoop(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "too many link")
 }
 
-func copySymlink(ctx context.Context, inv *Invocation, srcAbs, dstAbs string, opts cpOptions) error {
+func copySymlink(ctx context.Context, inv *Invocation, srcAbs, dstAbs string) error {
 	if err := ensureParentDirExists(ctx, inv, dstAbs); err != nil {
 		return err
 	}
@@ -397,7 +393,7 @@ func copySymlink(ctx context.Context, inv *Invocation, srcAbs, dstAbs string, op
 	if err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
-	if info, _, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, dstAbs); err != nil {
+	if info, _, exists, err := lstatMaybe(ctx, inv, dstAbs); err != nil {
 		return err
 	} else if exists {
 		if info.IsDir() {

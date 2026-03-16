@@ -13,11 +13,8 @@ type namedInput struct {
 	FromStdin bool
 }
 
-func readNamedInputs(ctx context.Context, inv *Invocation, names []string, defaultStdin bool) ([]namedInput, error) {
+func readNamedInputs(ctx context.Context, inv *Invocation, names []string) ([]namedInput, error) {
 	if len(names) == 0 {
-		if !defaultStdin {
-			return nil, nil
-		}
 		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return nil, err

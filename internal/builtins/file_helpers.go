@@ -8,13 +8,11 @@ import (
 	"os"
 	"path"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 func ensureParentDirExists(ctx context.Context, inv *Invocation, targetAbs string) error {
 	parent := path.Dir(targetAbs)
-	info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, parent)
+	info, _, exists, err := statMaybe(ctx, inv, parent)
 	if err != nil {
 		return err
 	}
@@ -73,7 +71,7 @@ func copyTree(ctx context.Context, inv *Invocation, srcAbs, dstAbs string) error
 		return &ExitError{Code: 1, Err: err}
 	}
 
-	entries, _, err := readDir(ctx, inv, srcAbs)
+	entries, err := readDir(ctx, inv, srcAbs)
 	if err != nil {
 		return err
 	}
@@ -119,7 +117,7 @@ func writeFileContents(ctx context.Context, inv *Invocation, targetAbs string, d
 }
 
 func resolveDestination(ctx context.Context, inv *Invocation, sourceAbs, destArg string, multipleSources bool) (destAbs string, destInfo stdfs.FileInfo, destExists bool, err error) {
-	destInfo, destAbs, destExists, err = statMaybe(ctx, inv, policy.FileActionStat, destArg)
+	destInfo, destAbs, destExists, err = statMaybe(ctx, inv, destArg)
 	if err != nil {
 		return "", nil, false, err
 	}

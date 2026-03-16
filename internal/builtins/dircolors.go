@@ -7,8 +7,6 @@ import (
 	"path"
 	"slices"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Dircolors struct{}
@@ -113,7 +111,7 @@ func (c *Dircolors) RunParsed(ctx context.Context, inv *Invocation, matches *Par
 		}
 		lines = textLines(data)
 	} else {
-		info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, fp)
+		info, _, exists, err := statMaybe(ctx, inv, fp)
 		if err != nil {
 			return err
 		}

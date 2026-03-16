@@ -309,10 +309,7 @@ func readNLInput(ctx context.Context, inv *Invocation, name string, stdinData *[
 		return *stdinData, false, nil
 	}
 
-	abs, err := allowPath(ctx, inv, "", name)
-	if err != nil {
-		return nil, false, err
-	}
+	abs := allowPath(inv, name)
 	info, err := inv.FS.Stat(ctx, abs)
 	if err != nil {
 		return nil, false, err

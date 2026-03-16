@@ -14,7 +14,6 @@ import (
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/policy"
 	"golang.org/x/term"
 )
 
@@ -476,7 +475,7 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 		return c.renderPathEntry(ctx, inv, target, abs, info, opts)
 	}
 
-	entries, _, err := readDir(ctx, inv, target)
+	entries, err := readDir(ctx, inv, target)
 	if err != nil {
 		return "", 0, lsRenderResult{}, err
 	}
@@ -604,11 +603,11 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 
 func lsStatMaybeForTarget(ctx context.Context, inv *Invocation, target string, opts *lsOptions) (info stdfs.FileInfo, abs string, exists bool, err error) {
 	if target != "/" && strings.HasSuffix(target, "/") {
-		return statMaybe(ctx, inv, policy.FileActionStat, target)
+		return statMaybe(ctx, inv, target)
 	}
 	switch {
 	case opts == nil || opts.dereference == lsDerefAll || opts.dereference == lsDerefArgs:
-		linfo, lAbs, lExists, lErr := lstatMaybe(ctx, inv, policy.FileActionLstat, target)
+		linfo, lAbs, lExists, lErr := lstatMaybe(ctx, inv, target)
 		if lErr != nil || !lExists {
 			return linfo, lAbs, lExists, lErr
 		}
@@ -621,7 +620,7 @@ func lsStatMaybeForTarget(ctx context.Context, inv *Invocation, target string, o
 		}
 		return targetInfo, lAbs, true, nil
 	case opts.dereference == lsDerefDirArgs:
-		linfo, lAbs, lExists, lErr := lstatMaybe(ctx, inv, policy.FileActionLstat, target)
+		linfo, lAbs, lExists, lErr := lstatMaybe(ctx, inv, target)
 		if lErr != nil || !lExists {
 			return linfo, lAbs, lExists, lErr
 		}
@@ -634,7 +633,7 @@ func lsStatMaybeForTarget(ctx context.Context, inv *Invocation, target string, o
 		}
 		return linfo, lAbs, true, nil
 	default:
-		return lstatMaybe(ctx, inv, policy.FileActionLstat, target)
+		return lstatMaybe(ctx, inv, target)
 	}
 }
 
@@ -644,7 +643,7 @@ func (c *LS) renderPathEntry(ctx context.Context, inv *Invocation, target, abs s
 		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, dired := formatLSLongLine(inv, name, info, opts, ranges)
+		line, dired := formatLSLongLine(name, info, opts, ranges)
 		if opts.dired {
 			line = "  " + line
 			for i := range dired {
@@ -694,7 +693,7 @@ func lsRenderEntries(ctx context.Context, inv *Invocation, dirAbs string, entrie
 			return lsRenderResult{}, err
 		}
 		if opts.longFormat {
-			line, dired := formatLSLongLine(inv, name, entry.info, opts, ranges)
+			line, dired := formatLSLongLine(name, entry.info, opts, ranges)
 			if opts.dired {
 				line = "  " + line
 				for i := range dired {
@@ -729,7 +728,7 @@ func lsRenderPathArgs(ctx context.Context, inv *Invocation, args []lsPathArg, op
 			return lsRenderResult{}, err
 		}
 		if opts.longFormat {
-			line, dired := formatLSLongLine(inv, name, arg.info, opts, ranges)
+			line, dired := formatLSLongLine(name, arg.info, opts, ranges)
 			if opts.dired {
 				line = "  " + line
 				for i := range dired {
@@ -1693,7 +1692,7 @@ func parseLSColorsEnv(value string) lsParsedColors {
 func lsColorIndicator(ctx context.Context, inv *Invocation, abs string, info, linfo stdfs.FileInfo, entries map[string]string) (string, error) {
 	if linfo.Mode()&stdfs.ModeSymlink != 0 {
 		if entries["ln"] == "target" {
-			targetInfo, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, abs)
+			targetInfo, _, exists, err := statMaybe(ctx, inv, abs)
 			if err != nil {
 				return "", err
 			}
@@ -2071,7 +2070,7 @@ func lsNumericChunk(value string) (chunk, rest string) {
 	return value[:index], value[index:]
 }
 
-func formatLSLongLine(inv *Invocation, name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
+func formatLSLongLine(name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
 	fields := make([]string, 0, 9)
 	userToken, groupToken, authorToken := lsIdentityTokens(info, opts.numericIDs, opts.identityDB)
 	if opts.showInode {

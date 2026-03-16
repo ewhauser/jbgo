@@ -6,8 +6,6 @@ import (
 	stdfs "io/fs"
 	"strconv"
 	"strings"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 type Dir struct{}
@@ -69,7 +67,7 @@ func (c *Dir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 }
 
 func (c *Dir) listPath(ctx context.Context, inv *Invocation, commandName, target string, opts *lsOptions, showHeader, defaultColumns bool) (output string, status int, rendered lsRenderResult, err error) {
-	info, abs, exists, err := statMaybe(ctx, inv, policy.FileActionStat, target)
+	info, abs, exists, err := statMaybe(ctx, inv, target)
 	if err != nil {
 		return "", 0, lsRenderResult{}, err
 	}
@@ -79,10 +77,11 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, commandName, target
 	}
 
 	if opts.directoryOnly || !info.IsDir() {
-		return c.renderPathEntry(ctx, inv, target, abs, info, opts, defaultColumns)
+		out, rendered, err := c.renderPathEntry(ctx, inv, target, abs, info, opts, defaultColumns)
+		return out, 0, rendered, err
 	}
 
-	entries, _, err := readDir(ctx, inv, target)
+	entries, err := readDir(ctx, inv, target)
 	if err != nil {
 		return "", 0, lsRenderResult{}, err
 	}
@@ -148,21 +147,21 @@ func (c *Dir) listPath(ctx context.Context, inv *Invocation, commandName, target
 	return out.String(), 0, lsRenderResult{text: out.String()}, nil
 }
 
-func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs string, info stdfs.FileInfo, opts *lsOptions, defaultColumns bool) (output string, status int, rendered lsRenderResult, err error) {
+func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs string, info stdfs.FileInfo, opts *lsOptions, defaultColumns bool) (output string, rendered lsRenderResult, err error) {
 	name, _, err := lsDecoratedName(ctx, inv, target, abs, info, opts, dirQuoteName)
 	if err != nil {
-		return "", 0, lsRenderResult{}, err
+		return "", lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, _ := formatLSLongLine(inv, name, info, opts, nil)
-		return line, 0, lsRenderResult{text: line}, nil
+		line, _ := formatLSLongLine(name, info, opts, nil)
+		return line, lsRenderResult{text: line}, nil
 	}
 	if defaultColumns {
 		line := name + lsTerminator(opts)
-		return line, 0, lsRenderResult{text: line}, nil
+		return line, lsRenderResult{text: line}, nil
 	}
 	line := name + lsTerminator(opts)
-	return line, 0, lsRenderResult{text: line}, nil
+	return line, lsRenderResult{text: line}, nil
 }
 
 func lsHasExplicitFormat(matches *ParsedCommand) bool {

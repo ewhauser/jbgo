@@ -46,7 +46,7 @@ func (c *AWK) Run(ctx context.Context, inv *commands.Invocation) error {
 
 	compiled, err := parser.ParseProgram([]byte(programSource), nil)
 	if err != nil {
-		return exitf(inv, 2, "awk: parse error: %v", err)
+		return exitf(inv, "awk: parse error: %v", err)
 	}
 
 	stdinData, err := loadAWKInputs(ctx, inv, inputs)
@@ -67,7 +67,7 @@ func (c *AWK) Run(ctx context.Context, inv *commands.Invocation) error {
 	}
 	status, err := interp.ExecProgram(compiled, config)
 	if err != nil {
-		return exitf(inv, 2, "awk: %v", err)
+		return exitf(inv, "awk: %v", err)
 	}
 	if status != 0 {
 		return &commands.ExitError{Code: status}
@@ -90,7 +90,7 @@ func parseAWKArgs(inv *commands.Invocation) (opts awkOptions, programText string
 		switch {
 		case arg == "-F":
 			if len(args) < 2 {
-				return awkOptions{}, "", nil, exitf(inv, 2, "awk: option requires an argument -- 'F'")
+				return awkOptions{}, "", nil, exitf(inv, "awk: option requires an argument -- 'F'")
 			}
 			opts.fieldSeparator = args[1]
 			args = args[2:]
@@ -99,7 +99,7 @@ func parseAWKArgs(inv *commands.Invocation) (opts awkOptions, programText string
 			opts.fieldSeparator = arg[2:]
 		case arg == "-f":
 			if len(args) < 2 {
-				return awkOptions{}, "", nil, exitf(inv, 2, "awk: option requires an argument -- 'f'")
+				return awkOptions{}, "", nil, exitf(inv, "awk: option requires an argument -- 'f'")
 			}
 			opts.programFiles = append(opts.programFiles, args[1])
 			args = args[2:]
@@ -108,10 +108,10 @@ func parseAWKArgs(inv *commands.Invocation) (opts awkOptions, programText string
 			opts.programFiles = append(opts.programFiles, arg[2:])
 		case arg == "-v":
 			if len(args) < 2 {
-				return awkOptions{}, "", nil, exitf(inv, 2, "awk: option requires an argument -- 'v'")
+				return awkOptions{}, "", nil, exitf(inv, "awk: option requires an argument -- 'v'")
 			}
 			if !strings.Contains(args[1], "=") {
-				return awkOptions{}, "", nil, exitf(inv, 2, "awk: expected name=value after -v")
+				return awkOptions{}, "", nil, exitf(inv, "awk: expected name=value after -v")
 			}
 			opts.vars = append(opts.vars, args[1])
 			args = args[2:]
@@ -119,18 +119,18 @@ func parseAWKArgs(inv *commands.Invocation) (opts awkOptions, programText string
 		case strings.HasPrefix(arg, "-v") && len(arg) > 2:
 			value := arg[2:]
 			if !strings.Contains(value, "=") {
-				return awkOptions{}, "", nil, exitf(inv, 2, "awk: expected name=value after -v")
+				return awkOptions{}, "", nil, exitf(inv, "awk: expected name=value after -v")
 			}
 			opts.vars = append(opts.vars, value)
 		default:
-			return awkOptions{}, "", nil, exitf(inv, 2, "awk: unsupported flag %s", arg)
+			return awkOptions{}, "", nil, exitf(inv, "awk: unsupported flag %s", arg)
 		}
 		args = args[1:]
 	}
 
 	if len(opts.programFiles) == 0 {
 		if len(args) == 0 {
-			return awkOptions{}, "", nil, exitf(inv, 2, "awk: missing program")
+			return awkOptions{}, "", nil, exitf(inv, "awk: missing program")
 		}
 		programText = args[0]
 		args = args[1:]
@@ -249,8 +249,8 @@ func readAllFile(ctx context.Context, inv *commands.Invocation, name string) ([]
 	return data, nil
 }
 
-func exitf(inv *commands.Invocation, code int, format string, args ...any) error {
-	return commands.Exitf(inv, code, format, args...)
+func exitf(inv *commands.Invocation, format string, args ...any) error {
+	return commands.Exitf(inv, 2, format, args...)
 }
 
 var _ commands.Command = (*AWK)(nil)

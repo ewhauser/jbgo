@@ -141,9 +141,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		}
 		validationProgram = parsed
 	}
-	if err := normalizeExecutionProgram(validationProgram); err != nil {
-		return nil, err
-	}
+	normalizeExecutionProgram(validationProgram)
 	if violation := validateExecutionBudgets(validationProgram, exec.Policy); violation != nil {
 		if exec.Stderr != nil {
 			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
@@ -165,9 +163,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		program = parsed
 	}
 	if program != validationProgram {
-		if err := normalizeExecutionProgram(program); err != nil {
-			return nil, err
-		}
+		normalizeExecutionProgram(program)
 	}
 
 	if exec.Stdin == nil {
@@ -237,7 +233,7 @@ func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, er
 	resolved, ok, err := lookupCommand(ctx, exec, virtualWD, env, exec.Command[0])
 	if err != nil {
 		if policy.IsDenied(err) {
-			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), "", exec.Command[0], 126, "")
+			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), "", exec.Command[0], "")
 			return &RunResult{FinalEnv: finalEnv}, shellFailureToWriter(ctx, exec.Stderr, 126, "%v", err)
 		}
 		return &RunResult{FinalEnv: finalEnv}, err
@@ -247,7 +243,7 @@ func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, er
 		return &RunResult{FinalEnv: finalEnv}, shellFailureToWriter(ctx, exec.Stderr, 127, "%s: command not found", exec.Command[0])
 	}
 	if err := allowCommand(ctx, exec.Policy, resolved.name, exec.Command); err != nil {
-		recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, 126, resolved.source)
+		recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, resolved.source)
 		return &RunResult{FinalEnv: finalEnv}, shellFailureToWriter(ctx, exec.Stderr, 126, "%v", err)
 	}
 	recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(exec.Command, false, &commandTraceResolution{
@@ -373,13 +369,13 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 
 		if canRead := flag&(os.O_WRONLY|os.O_RDWR) != os.O_WRONLY; canRead {
 			if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionRead, abs); err != nil {
-				recordPolicyDenied(exec.Trace, err, string(policy.FileActionRead), abs, "", 126, "")
+				recordPolicyDenied(exec.Trace, err, string(policy.FileActionRead), abs, "", "")
 				return nil, handlerPathError(ctx, state.Stderr, "open", abs, err)
 			}
 		}
 		if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
 			if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionWrite, abs); err != nil {
-				recordPolicyDenied(exec.Trace, err, string(policy.FileActionWrite), abs, "", 126, "")
+				recordPolicyDenied(exec.Trace, err, string(policy.FileActionWrite), abs, "", "")
 				return nil, handlerPathError(ctx, state.Stderr, "open", abs, err)
 			}
 		}
@@ -405,7 +401,7 @@ func (m *MVdan) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(virtualDir(state.Env, state.Dir), name)
 		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionReadDir, abs); err != nil {
-			recordPolicyDenied(exec.Trace, err, string(policy.FileActionReadDir), abs, "", 126, "")
+			recordPolicyDenied(exec.Trace, err, string(policy.FileActionReadDir), abs, "", "")
 			return nil, handlerPathError(ctx, state.Stderr, "readdir", abs, err)
 		}
 		recordFile(exec.Trace, string(policy.FileActionReadDir), abs)
@@ -418,7 +414,7 @@ func (m *MVdan) statHandler(exec *Execution) interp.StatHandlerFunc {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(virtualDir(state.Env, state.Dir), name)
 		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, abs); err != nil {
-			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), abs, "", 126, "")
+			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), abs, "", "")
 			return nil, handlerPathError(ctx, state.Stderr, "stat", abs, err)
 		}
 		recordFile(exec.Trace, string(policy.FileActionStat), abs)
@@ -455,12 +451,12 @@ func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.Cal
 
 		if interp.IsBuiltin(args[0]) {
 			if err := allowBuiltin(ctx, exec.Policy, args[0], args); err != nil {
-				recordPolicyDenied(exec.Trace, err, "", "", args[0], 126, "builtin")
+				recordPolicyDenied(exec.Trace, err, "", "", args[0], "builtin")
 				return nil, shellFailure(ctx, 126, "%v", err)
 			}
 			for _, invocation := range wrappedBuiltinInvocations(args) {
 				if err := allowBuiltin(ctx, exec.Policy, invocation.name, invocation.argv); err != nil {
-					recordPolicyDenied(exec.Trace, err, "", "", invocation.name, 126, "builtin")
+					recordPolicyDenied(exec.Trace, err, "", "", invocation.name, "builtin")
 					return nil, shellFailure(ctx, 126, "%v", err)
 				}
 			}
@@ -556,7 +552,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		resolved, ok, err := lookupCommand(ctx, exec, virtualWD, hc.Env, args[0])
 		if err != nil {
 			if policy.IsDenied(err) {
-				recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), "", args[0], 126, "")
+				recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), "", args[0], "")
 				return shellFailure(ctx, 126, "%v", err)
 			}
 			return err
@@ -568,7 +564,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 
 		if !internal {
 			if err := allowCommand(ctx, exec.Policy, resolved.name, args); err != nil {
-				recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, 126, resolved.source)
+				recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, resolved.source)
 				return shellFailure(ctx, 126, "%v", err)
 			}
 			recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(args, false, &commandTraceResolution{
@@ -907,7 +903,7 @@ func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.
 func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, commandName string) (_ *resolvedCommand, ok bool, err error) {
 	fullPath := gbfs.Resolve(dir, name)
 	if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, fullPath); err != nil {
-		recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), fullPath, commandName, 126, source)
+		recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), fullPath, commandName, source)
 		return nil, false, err
 	}
 	info, err := exec.FS.Stat(ctx, fullPath)
@@ -1617,7 +1613,7 @@ func recordFileMutation(rec trace.Recorder, action, filePath, fromPath, toPath s
 	})
 }
 
-func recordPolicyDenied(rec trace.Recorder, err error, action, filePath, command string, exitCode int, resolutionSource string) {
+func recordPolicyDenied(rec trace.Recorder, err error, action, filePath, command, resolutionSource string) {
 	if rec == nil || !policy.IsDenied(err) {
 		return
 	}
@@ -1635,7 +1631,7 @@ func recordPolicyDenied(rec trace.Recorder, err error, action, filePath, command
 			Action:           action,
 			Path:             filePath,
 			Command:          command,
-			ExitCode:         exitCode,
+			ExitCode:         126,
 			ResolutionSource: resolutionSource,
 		},
 		Error: err.Error(),

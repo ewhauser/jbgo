@@ -12,7 +12,6 @@ import (
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/policy"
 	"golang.org/x/term"
 )
 
@@ -180,12 +179,12 @@ func (p *testParser) peekIsBoolOp() bool {
 	return p.peek().kind == testSymbolBoolOp
 }
 
-func (p *testParser) expect(value string) error {
+func (p *testParser) expect() error {
 	symbol := p.nextToken()
-	if symbol.kind == testSymbolLiteral && symbol.token == value {
+	if symbol.kind == testSymbolLiteral && symbol.token == ")" {
 		return nil
 	}
-	return testParseExpected(value)
+	return testParseExpected(")")
 }
 
 func (p *testParser) expr() error {
@@ -229,7 +228,7 @@ func (p *testParser) lparen() error {
 	case (peek3[0].kind == testSymbolUnaryStr || peek3[0].kind == testSymbolUnaryFile) && peek3[2].kind == testSymbolLiteral && peek3[2].token == ")":
 		symbol := p.nextToken()
 		p.uop(symbol)
-		return p.expect(")")
+		return p.expect()
 	case peek3[0].isBinaryOp() && peek3[1].kind == testSymbolLiteral && peek3[1].token == ")":
 		return p.literal(testSymbol{kind: testSymbolLParen}.intoLiteral())
 	case peek3[1].kind == testSymbolLiteral && peek3[1].token == ")":
@@ -237,20 +236,20 @@ func (p *testParser) lparen() error {
 		if err := p.literal(symbol); err != nil {
 			return err
 		}
-		return p.expect(")")
+		return p.expect()
 	case peek3[0].isBinaryOp() && peek3[1].isBinaryOp():
 		symbol := p.nextToken()
 		if err := p.literal(symbol); err != nil {
 			return err
 		}
-		return p.expect(")")
+		return p.expect()
 	case peek3[0].isBinaryOp():
 		return p.literal(testSymbol{kind: testSymbolLParen}.intoLiteral())
 	default:
 		if err := p.expr(); err != nil {
 			return err
 		}
-		return p.expect(")")
+		return p.expect()
 	}
 }
 
@@ -509,11 +508,11 @@ func testCompareIntegers(a, b, op string) (bool, error) {
 }
 
 func testCompareFiles(ctx context.Context, inv *Invocation, a, b, op string) (bool, error) {
-	infoA, absA, existsA, err := statMaybe(ctx, inv, policy.FileActionStat, a)
+	infoA, absA, existsA, err := statMaybe(ctx, inv, a)
 	if err != nil {
 		return false, err
 	}
-	infoB, absB, existsB, err := statMaybe(ctx, inv, policy.FileActionStat, b)
+	infoB, absB, existsB, err := statMaybe(ctx, inv, b)
 	if err != nil {
 		return false, err
 	}
@@ -563,14 +562,14 @@ func testFilePredicate(ctx context.Context, inv *Invocation, name, op string) (b
 		return testIsTTY(inv, int(fd.Int64())), nil
 	}
 	if op == "-h" || op == "-L" {
-		info, _, exists, err := lstatMaybe(ctx, inv, policy.FileActionLstat, name)
+		info, _, exists, err := lstatMaybe(ctx, inv, name)
 		if err != nil {
 			return false, err
 		}
 		return exists && info.Mode()&stdfs.ModeSymlink != 0, nil
 	}
 
-	info, _, exists, err := statMaybe(ctx, inv, policy.FileActionStat, name)
+	info, _, exists, err := statMaybe(ctx, inv, name)
 	if err != nil {
 		return false, err
 	}

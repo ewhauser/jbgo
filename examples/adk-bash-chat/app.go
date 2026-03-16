@@ -133,7 +133,7 @@ func (a *chatApp) run(ctx context.Context, stdin io.Reader, stdout, stderr io.Wr
 			continue
 		}
 
-		if err := a.runTurn(ctx, line, stdout, stderr); err != nil {
+		if err := a.runTurn(ctx, line, stdout); err != nil {
 			_, _ = fmt.Fprintf(stderr, "turn failed: %v\n", err)
 		}
 	}
@@ -151,7 +151,7 @@ func (a *chatApp) resetChatSession(ctx context.Context) error {
 	return nil
 }
 
-func (a *chatApp) runTurn(ctx context.Context, input string, stdout, stderr io.Writer) error {
+func (a *chatApp) runTurn(ctx context.Context, input string, stdout io.Writer) error {
 	msg := genai.NewContentFromText(input, genai.RoleUser)
 
 	var firstErr error

@@ -21,10 +21,10 @@ func Run(ctx context.Context, cfg Config, argv0 string, args []string, stdin io.
 	if ttyDetector == nil {
 		ttyDetector = stdinIsTTY
 	}
-	return run(ctx, cfg, argv0, args, stdin, stdout, stderr, ttyDetector(stdin))
+	return run(ctx, cfg, args, stdin, stdout, stderr, ttyDetector(stdin))
 }
 
-func run(ctx context.Context, cfg Config, argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
+func run(ctx context.Context, cfg Config, args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY bool) (int, error) {
 	cfg = normalizeConfig(cfg)
 
 	runtimeOpts, args, err := parseRuntimeOptions(args)

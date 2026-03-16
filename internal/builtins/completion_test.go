@@ -59,10 +59,10 @@ func TestCompoptModifiesDefaultAndEmptyCompletionScopes(t *testing.T) {
 	state := shellstate.NewCompletionState()
 	ctx := shellstate.WithCompletionState(context.Background(), state)
 
-	if _, _, exitCode := runBuiltin(t, ctx, builtins.NewComplete(), "-F", "myfunc", "-D"); exitCode != 0 {
+	if exitCode := runBuiltin(t, ctx, builtins.NewComplete(), "-F", "myfunc", "-D"); exitCode != 0 {
 		t.Fatalf("complete -F myfunc -D exit code = %d, want 0", exitCode)
 	}
-	if _, _, exitCode := runBuiltin(t, ctx, builtins.NewCompopt(), "-D", "-o", "nospace", "-o", "filenames"); exitCode != 0 {
+	if exitCode := runBuiltin(t, ctx, builtins.NewCompopt(), "-D", "-o", "nospace", "-o", "filenames"); exitCode != 0 {
 		t.Fatalf("compopt -D exit code = %d, want 0", exitCode)
 	}
 	defaultSpec, ok := state.Get(shellstate.CompletionSpecDefaultKey)
@@ -79,7 +79,7 @@ func TestCompoptModifiesDefaultAndEmptyCompletionScopes(t *testing.T) {
 		t.Fatalf("default completion options = %v, want %v", got, want)
 	}
 
-	if _, _, exitCode := runBuiltin(t, ctx, builtins.NewCompopt(), "-E", "-o", "default"); exitCode != 0 {
+	if exitCode := runBuiltin(t, ctx, builtins.NewCompopt(), "-E", "-o", "default"); exitCode != 0 {
 		t.Fatalf("compopt -E exit code = %d, want 0", exitCode)
 	}
 	emptySpec, ok := state.Get(shellstate.CompletionSpecEmptyKey)
@@ -96,10 +96,10 @@ func TestCompoptPreservesExistingSpecWhileDisablingOptions(t *testing.T) {
 	state := shellstate.NewCompletionState()
 	ctx := shellstate.WithCompletionState(context.Background(), state)
 
-	if _, _, exitCode := runBuiltin(t, ctx, builtins.NewComplete(), "-o", "nospace", "-o", "filenames", "-F", "myfunc", "cmd"); exitCode != 0 {
+	if exitCode := runBuiltin(t, ctx, builtins.NewComplete(), "-o", "nospace", "-o", "filenames", "-F", "myfunc", "cmd"); exitCode != 0 {
 		t.Fatalf("complete exit code = %d, want 0", exitCode)
 	}
-	if _, _, exitCode := runBuiltin(t, ctx, builtins.NewCompopt(), "+o", "nospace", "cmd"); exitCode != 0 {
+	if exitCode := runBuiltin(t, ctx, builtins.NewCompopt(), "+o", "nospace", "cmd"); exitCode != 0 {
 		t.Fatalf("compopt exit code = %d, want 0", exitCode)
 	}
 
@@ -143,7 +143,7 @@ func TestCompoptPersistsAcrossInteractiveEntries(t *testing.T) {
 	}
 }
 
-func runBuiltin(tb testing.TB, ctx context.Context, cmd commands.Command, args ...string) (stdout, stderr string, exitCode int) {
+func runBuiltin(tb testing.TB, ctx context.Context, cmd commands.Command, args ...string) (exitCode int) {
 	tb.Helper()
 
 	var outBuf strings.Builder
@@ -166,5 +166,5 @@ func runBuiltin(tb testing.TB, ctx context.Context, cmd commands.Command, args .
 		exitCode = code
 	}
 
-	return outBuf.String(), errBuf.String(), exitCode
+	return exitCode
 }

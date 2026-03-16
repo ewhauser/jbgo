@@ -34,7 +34,7 @@ func TestTraceRecordsCommandResolutionSources(t *testing.T) {
 
 	result := mustExecSession(t, session, "echo hi\ncat note.txt\n/bin/cat note.txt\n")
 
-	echoEvent := findCommandEvent(result.Events, trace.EventCallExpanded, "echo")
+	echoEvent := findCommandEvent(result.Events)
 	if echoEvent == nil || echoEvent.Command == nil {
 		t.Fatalf("missing echo call event: %#v", result.Events)
 	}
@@ -166,9 +166,9 @@ func assertTraceMetadata(t *testing.T, events []trace.Event, schema, sessionID s
 	}
 }
 
-func findCommandEvent(events []trace.Event, kind trace.Kind, name string) *trace.Event {
+func findCommandEvent(events []trace.Event) *trace.Event {
 	for i := range events {
-		if events[i].Kind == kind && events[i].Command != nil && events[i].Command.Name == name {
+		if events[i].Kind == trace.EventCallExpanded && events[i].Command != nil && events[i].Command.Name == "echo" {
 			return &events[i]
 		}
 	}

@@ -52,12 +52,9 @@ func (c *Tac) Spec() CommandSpec {
 }
 
 func (c *Tac) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
-	opts, err := parseTacMatches(matches)
-	if err != nil {
-		return err
-	}
+	opts := parseTacMatches(matches)
 
-	inputs, err := readNamedInputs(ctx, inv, matches.Args("file"), true)
+	inputs, err := readNamedInputs(ctx, inv, matches.Args("file"))
 	if err != nil {
 		return err
 	}
@@ -84,7 +81,7 @@ func (c *Tac) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 	return nil
 }
 
-func parseTacMatches(matches *ParsedCommand) (tacOptions, error) {
+func parseTacMatches(matches *ParsedCommand) tacOptions {
 	opts := tacOptions{
 		before:    matches.Has("before"),
 		regex:     matches.Has("regex"),
@@ -98,7 +95,7 @@ func parseTacMatches(matches *ParsedCommand) (tacOptions, error) {
 			opts.separator = []byte(value)
 		}
 	}
-	return opts, nil
+	return opts
 }
 
 func tacReverseFixed(data, separator []byte, before bool) []byte {

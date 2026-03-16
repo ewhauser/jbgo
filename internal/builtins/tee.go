@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"syscall"
-
-	"github.com/ewhauser/gbash/policy"
 )
 
 const teeBufferSize = 8 * 1024
@@ -231,10 +229,7 @@ func openTeeWriters(ctx context.Context, inv *Invocation, opts teeOptions) ([]*t
 	hadOpenErrors := false
 
 	for _, name := range opts.files {
-		abs, err := allowPath(ctx, inv, policy.FileActionWrite, name)
-		if err != nil {
-			return nil, false, err
-		}
+		abs := allowPath(inv, name)
 		if err := ensureParentDirExists(ctx, inv, abs); err != nil {
 			reported := teeWriteOpenError(inv.Stderr, name, err)
 			if teeOutputErrorExitsOnOpen(opts.outputError) {
@@ -316,22 +311,14 @@ func (w *teeMultiWriter) writeAndFlush(buf []byte) error {
 	kept := w.writers[:0]
 	for _, writer := range w.writers {
 		if err := teeWriteAll(writer.writer, buf); err != nil {
-			action, actionErr := w.handleWriteError(writer, err)
-			if actionErr != nil {
+			if actionErr := w.handleWriteError(writer, err); actionErr != nil {
 				return actionErr
-			}
-			if action == "keep" {
-				kept = append(kept, writer)
 			}
 			continue
 		}
 		if err := teeFlush(writer.writer); err != nil {
-			action, actionErr := w.handleWriteError(writer, err)
-			if actionErr != nil {
+			if actionErr := w.handleWriteError(writer, err); actionErr != nil {
 				return actionErr
-			}
-			if action == "keep" {
-				kept = append(kept, writer)
 			}
 			continue
 		}
@@ -345,37 +332,37 @@ func (w *teeMultiWriter) writeAndFlush(buf []byte) error {
 	return nil
 }
 
-func (w *teeMultiWriter) handleWriteError(writer *teeWriter, err error) (string, error) {
+func (w *teeMultiWriter) handleWriteError(writer *teeWriter, err error) error {
 	switch mode := w.outputError; {
 	case mode == nil:
 		if teeIsBrokenPipe(err) {
 			w.silentWriteFail = true
-			return "drop", errTeeAbortQuiet
+			return errTeeAbortQuiet
 		}
 		teeWriteWriterError(w.stderr, writer.name, err)
 		w.ignoredErrors++
-		return "drop", nil
+		return nil
 	case *mode == teeOutputErrorWarn:
 		teeWriteWriterError(w.stderr, writer.name, err)
 		w.ignoredErrors++
-		return "drop", nil
+		return nil
 	case *mode == teeOutputErrorWarnNoPipe:
 		if !teeIsBrokenPipe(err) {
 			teeWriteWriterError(w.stderr, writer.name, err)
 			w.ignoredErrors++
 		}
-		return "drop", nil
+		return nil
 	case *mode == teeOutputErrorExit:
 		teeWriteWriterError(w.stderr, writer.name, err)
-		return "drop", errTeeAbort
+		return errTeeAbort
 	case *mode == teeOutputErrorExitNoPipe:
 		if teeIsBrokenPipe(err) {
-			return "drop", nil
+			return nil
 		}
 		teeWriteWriterError(w.stderr, writer.name, err)
-		return "drop", errTeeAbort
+		return errTeeAbort
 	default:
-		return "drop", err
+		return err
 	}
 }
 
