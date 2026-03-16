@@ -68,10 +68,9 @@ export class Bash {
     this.shellPromise = this.init(options);
   }
 
-  writeFile(path: string, content: string): void {
-    void this.shellPromise.then((shell) => {
-      shell.writeFile(path, content);
-    });
+  async writeFile(path: string, content: string): Promise<void> {
+    const shell = await this.shellPromise;
+    shell.writeFile(path, content);
   }
 
   async exec(command: string): Promise<CommandResult> {
@@ -118,7 +117,10 @@ async function loadRuntime(options: BashOptions): Promise<GBashRuntime> {
       const result = await instantiateWasm(wasmUrl, go.importObject);
       void go.run(result.instance);
       return waitForRuntime();
-    })();
+    })().catch((err) => {
+      runtimePromise = null;
+      throw err;
+    });
   }
   return runtimePromise;
 }

@@ -80,11 +80,10 @@ test("working directory persists across execs", async () => {
 // writeFile / readFile round-trip
 // ---------------------------------------------------------------------------
 
-test("writeFile then cat reads back the content", async () => {
+test("writeFile completes before subsequent exec sees the file", async () => {
   const bash = new Bash();
 
-  // writeFile is fire-and-forget, so exec after to ensure ordering.
-  bash.writeFile("/home/agent/injected.txt", "injected content\n");
+  await bash.writeFile("/home/agent/injected.txt", "injected content\n");
   const result = await bash.exec("cat /home/agent/injected.txt");
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout, "injected content\n");
