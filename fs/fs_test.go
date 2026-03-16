@@ -267,7 +267,7 @@ func TestReusableFactoryReusesBaseAndKeepsSessionsIsolated(t *testing.T) {
 	var created atomic.Int32
 	factory := Reusable(FactoryFunc(func(context.Context) (FileSystem, error) {
 		created.Add(1)
-		return seededMemory(t, map[string]string{
+		return seededMemory(t, map[string]string{ //nolint:contextcheck // test helper uses background context
 			"/seed.txt": "seed\n",
 		}), nil
 	}))

@@ -579,7 +579,7 @@ func executeSQLiteStatement(inv *commands.Invocation, stmt *gosqlite.Stmt) (*sql
 		result.Rows = append(result.Rows, row)
 	}
 	if err := stmt.Err(); err != nil {
-		sqlErr := fmt.Errorf("sqlite3: %v", err)
+		sqlErr := fmt.Errorf("sqlite3: %w", err)
 		if inv.Stderr != nil {
 			_, _ = fmt.Fprintln(inv.Stderr, sqlErr.Error())
 		}

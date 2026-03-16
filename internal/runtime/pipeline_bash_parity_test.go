@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -78,7 +79,7 @@ func runPipelineParityBash(t testing.TB, bashPath, script string) normalizedExec
 	t.Helper()
 
 	homeDir := filepath.ToSlash(t.TempDir())
-	cmd := exec.Command(bashPath, "--noprofile", "--norc", "-c", "cd \"$HOME\"\n"+script)
+	cmd := exec.Command(bashPath, "--noprofile", "--norc", "-c", "cd \"$HOME\"\n"+script) //nolint:noctx // test oracle runs real bash
 	cmd.Env = []string{
 		"HOME=" + homeDir,
 		"PWD=" + homeDir,
@@ -95,8 +96,8 @@ func runPipelineParityBash(t testing.TB, bashPath, script string) normalizedExec
 	err := cmd.Run()
 	exitCode := 0
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			t.Fatalf("bash Run() error = %v", err)
 		}
 		exitCode = exitErr.ExitCode()

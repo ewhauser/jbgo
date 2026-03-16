@@ -48,7 +48,7 @@ func newMemorySearchProvider() *memorySearchProvider {
 	}
 }
 
-func (p *memorySearchProvider) Search(ctx context.Context, query *SearchQuery) (SearchResult, error) {
+func (p *memorySearchProvider) Search(ctx context.Context, query *SearchQuery) (SearchResult, error) { //nolint:contextcheck // nil-guard replaces nil ctx with background
 	if ctx == nil {
 		ctx = context.Background()
 	}

@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	stdfs "io/fs"
@@ -1276,7 +1277,8 @@ func parseLSWidth(inv *Invocation, matches *ParsedCommand) (int, error) {
 	}
 	width, err := strconv.ParseUint(raw, 0, 64)
 	if err != nil {
-		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
 			return int(^uint(0) >> 1), nil
 		}
 		return 0, invalidWidth()
@@ -1543,7 +1545,7 @@ func lsQuotedNameWithDired(ctx context.Context, inv *Invocation, rawName, abs st
 	}
 	target, err := inv.FS.Readlink(ctx, abs)
 	if err != nil {
-		return quoted, ranges, nil
+		return quoted, ranges, nil //nolint:nilerr // readlink failure falls back to showing name without target
 	}
 	targetQuoted := target
 	if opts.quotingMode == lsQuoteLiteral && !opts.hideControlChars {

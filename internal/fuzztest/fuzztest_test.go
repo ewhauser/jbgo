@@ -61,7 +61,7 @@ func TestAssertHelperProcess(t *testing.T) {
 func runFatalHelper(t *testing.T, mode string) error {
 	t.Helper()
 
-	cmd := exec.Command(os.Args[0], "-test.run=^TestAssertHelperProcess$")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestAssertHelperProcess$") //nolint:noctx // test helper
 	cmd.Env = append(os.Environ(), "GBASH_FUZZTEST_HELPER="+mode)
 	return cmd.Run()
 }

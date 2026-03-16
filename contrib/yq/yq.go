@@ -84,7 +84,7 @@ func (c *YQ) Name() string {
 }
 
 func (c *YQ) Run(ctx context.Context, inv *commands.Invocation) error {
-	opts, expression, inputs, err := parseYQArgs(inv)
+	opts, expression, inputs, err := parseYQArgs(inv) //nolint:contextcheck // heuristic stat in arg classification uses background context
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func yqLooksLikeInput(inv *commands.Invocation, token string) bool {
 		return false
 	}
 
-	info, err := inv.FS.Stat(context.Background(), inv.FS.Resolve(token))
+	info, err := inv.FS.Stat(context.Background(), inv.FS.Resolve(token)) //nolint:contextcheck // heuristic stat check during arg parsing
 	return err == nil && !info.IsDir()
 }
 

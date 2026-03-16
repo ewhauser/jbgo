@@ -332,7 +332,7 @@ func walkSearchSnapshot(ctx context.Context, fsys FileSystem, current string, ou
 	if linfo.Mode()&stdfs.ModeSymlink != 0 {
 		info, err := fsys.Stat(ctx, current)
 		if err != nil || !searchIndexableFileInfo(info) {
-			return nil
+			return nil //nolint:nilerr // stat failure on symlink target means skip the file
 		}
 		data, err := readAllSearchFile(ctx, fsys, current)
 		if err != nil {

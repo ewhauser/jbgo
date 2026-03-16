@@ -290,7 +290,7 @@ func parseTouchRelativeDate(base time.Time, value string) (time.Time, bool, erro
 	}
 	amount, err := strconv.Atoi(fields[0])
 	if err != nil {
-		return time.Time{}, false, nil
+		return time.Time{}, false, nil //nolint:nilerr // unparseable amount means not a relative date
 	}
 	switch fields[1] {
 	case "day", "days":

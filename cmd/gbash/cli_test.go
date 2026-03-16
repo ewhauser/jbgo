@@ -345,7 +345,7 @@ func TestRunCLIServerListensOnTCP(t *testing.T) {
 			t.Fatalf("server exited before tcp listener became ready: %v", err)
 		default:
 		}
-		dialed, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+		dialed, err := net.DialTimeout("tcp", addr, 50*time.Millisecond) //nolint:noctx // test helper
 		if err == nil {
 			conn = dialed
 			break
@@ -483,7 +483,7 @@ func mustParseCLIJSONResult(t *testing.T, raw string) cliJSONResult {
 func reserveLoopbackTCPAddress(t *testing.T) string {
 	t.Helper()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test helper
 	if err != nil {
 		t.Fatalf("Listen(tcp) error = %v", err)
 	}

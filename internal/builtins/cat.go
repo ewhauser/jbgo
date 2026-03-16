@@ -235,11 +235,11 @@ func catIsUnsafeOverwrite(inputOffset int64, output catRedirectHandle) bool {
 func catIsUnsafeHostOverwrite(input, output catHostHandle) (bool, error) {
 	inputInfo, err := input.Stat()
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // stat failure means not the same file
 	}
 	outputInfo, err := output.Stat()
 	if err != nil || !testSameFile(inputInfo, outputInfo) {
-		return false, nil
+		return false, nil //nolint:nilerr // stat failure means not the same file
 	}
 	return catUnsafeByOffsets(catHostOffset(input), outputInfo.Size(), catHostAppendMode(output), catHostOffset(output)), nil
 }

@@ -186,7 +186,7 @@ func factorWriteToken(ctx context.Context, inv *Invocation, writer *bufio.Writer
 	number, err := factorParseNumber(token)
 	if err != nil {
 		factorWarnInvalid(inv, token)
-		return true, nil
+		return true, nil //nolint:nilerr // invalid number is a warning, not a fatal error
 	}
 
 	factors, err := factorPrimeFactors(ctx, number)

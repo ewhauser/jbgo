@@ -31,7 +31,7 @@ func (f symlinkFSFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
 		}
 	}
 	for linkName, target := range f.symlinks {
-		if err := mem.Symlink(context.Background(), target, linkName); err != nil {
+		if err := mem.Symlink(context.Background(), target, linkName); err != nil { //nolint:contextcheck // test setup
 			return nil, err
 		}
 	}

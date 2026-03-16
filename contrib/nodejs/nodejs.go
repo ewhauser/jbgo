@@ -44,7 +44,7 @@ type processExitSignal struct {
 }
 
 type nodeRuntime struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // intentional: runtime-scoped context
 	inv *commands.Invocation
 	vm  *goja.Runtime
 
@@ -582,7 +582,7 @@ func normalizeModuleSource(data []byte) []byte {
 }
 
 type nodeConsolePrinter struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // intentional: printer-scoped context
 	inv *commands.Invocation
 }
 

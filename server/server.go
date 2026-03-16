@@ -55,7 +55,7 @@ func ListenAndServeUnix(ctx context.Context, socketPath string, cfg Config) erro
 		return err
 	}
 
-	ln, err := net.Listen("unix", socketPath)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "unix", socketPath)
 	if err != nil {
 		return fmt.Errorf("server: listen on unix socket: %w", err)
 	}
@@ -110,7 +110,7 @@ func Serve(ctx context.Context, ln net.Listener, cfg Config) error {
 }
 
 type serverState struct {
-	ctx       context.Context
+	ctx       context.Context //nolint:containedctx // intentional: server-scoped lifetime context
 	cfg       Config
 	transport string
 
@@ -532,7 +532,7 @@ func decodeParams[T any](raw json.RawMessage) (T, error) {
 		return out, nil
 	}
 	if err := json.Unmarshal(trimmed, &out); err != nil {
-		return out, fmt.Errorf("%w: %v", errInvalidArgument, err)
+		return out, fmt.Errorf("%w: %w", errInvalidArgument, err)
 	}
 	return out, nil
 }

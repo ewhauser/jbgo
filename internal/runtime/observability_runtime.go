@@ -76,7 +76,7 @@ func newExecutionTraceRecorder(ctx context.Context, sessionID, executionID strin
 }
 
 type traceCallbackRecorder struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // intentional: recorder passes ctx to callback
 	fn  func(context.Context, trace.Event)
 }
 

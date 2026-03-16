@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -582,7 +583,7 @@ func xanParseTable(data []byte, inv *Invocation) (*xanTable, error) {
 	reader := csv.NewReader(bytes.NewReader(data))
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, exitf(inv, 1, "xan: failed to parse CSV: %v", err)
 	}
 	if len(records) == 0 {
@@ -609,7 +610,7 @@ func xanReadRawCSVRecords(ctx context.Context, inv *Invocation, name, prefix str
 	reader := csv.NewReader(bytes.NewReader(data))
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, exitf(inv, 1, "%s: failed to parse CSV: %v", prefix, err)
 	}
 

@@ -51,7 +51,7 @@ func run(ctx context.Context, telemetryOut, statusOut io.Writer) (err error) {
 	if err != nil {
 		return fmt.Errorf("create telemetry bridge: %w", err)
 	}
-	defer func() {
+	defer func() { //nolint:contextcheck // shutdown needs independent context after parent may be canceled
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err = errors.Join(err, bridge.Shutdown(shutdownCtx))
@@ -125,7 +125,7 @@ type telemetryBridge struct {
 }
 
 type executionState struct {
-	ctx       context.Context
+	ctx       context.Context //nolint:containedctx // intentional: execution-scoped context for span
 	span      oteltrace.Span
 	startedAt time.Time
 }
@@ -197,7 +197,7 @@ func (b *telemetryBridge) onLogEvent(ctx context.Context, event *gbash.LogEvent)
 	}
 
 	state := b.lookupExecution(event.ExecutionID)
-	logCtx := ctx
+	logCtx := ctx //nolint:contextcheck // selecting execution context or fallback
 	if state != nil {
 		logCtx = state.ctx
 	}

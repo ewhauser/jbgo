@@ -133,7 +133,7 @@ func serveServer(ctx context.Context, rt *gbash.Runtime, name, version string, r
 	if socketPath != "" {
 		return gbserver.ListenAndServeUnix(ctx, socketPath, cfg)
 	}
-	ln, err := net.Listen("tcp", listenAddr)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", listenAddr)
 	if err != nil {
 		return fmt.Errorf("listen on tcp address: %w", err)
 	}

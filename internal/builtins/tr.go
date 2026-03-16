@@ -375,7 +375,7 @@ func parseTRCharRange(input []byte, i int) (seq trSequence, next int, ok bool, e
 	}
 	right, end, err := parseTRByte(input, next+1)
 	if err != nil {
-		return trSequence{}, 0, false, nil
+		return trSequence{}, 0, false, nil //nolint:nilerr // parse failure means this parser doesn't match
 	}
 	if left > right {
 		return trSequence{}, 0, true, fmt.Errorf("range-endpoints of '%c-%c' are in reverse collating sequence order", left, right)
@@ -389,7 +389,7 @@ func parseTRCharStar(input []byte, i int) (seq trSequence, next int, ok bool, er
 	}
 	ch, next, err := parseTRByte(input, i+1)
 	if err != nil {
-		return trSequence{}, 0, false, nil
+		return trSequence{}, 0, false, nil //nolint:nilerr // parse failure means this parser doesn't match
 	}
 	if next+2 <= len(input) && input[next] == '*' && input[next+1] == ']' {
 		return trSequence{kind: trSequenceStar, char: ch}, next + 2, true, nil
@@ -403,7 +403,7 @@ func parseTRCharRepeat(input []byte, i int) (seq trSequence, next int, ok bool, 
 	}
 	ch, next, err := parseTRByte(input, i+1)
 	if err != nil || next >= len(input) || input[next] != '*' {
-		return trSequence{}, 0, false, nil
+		return trSequence{}, 0, false, nil //nolint:nilerr // parse failure means this parser doesn't match
 	}
 	end := next + 1
 	for end < len(input) && input[end] != ']' && input[end] != '\\' {
@@ -475,7 +475,7 @@ func parseTRCharEqual(input []byte, i int) (seq trSequence, next int, ok bool, e
 	}
 	ch, next, err := parseTRByte(input, i+2)
 	if err != nil {
-		return trSequence{}, 0, false, nil
+		return trSequence{}, 0, false, nil //nolint:nilerr // parse failure means this parser doesn't match
 	}
 	if next+1 < len(input) && input[next] == '=' && input[next+1] == ']' {
 		return trSequence{kind: trSequenceChar, char: ch}, next + 2, true, nil

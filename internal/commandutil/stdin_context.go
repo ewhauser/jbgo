@@ -6,7 +6,7 @@ import (
 )
 
 type contextReader struct {
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // intentional: reader checks ctx on every Read call
 	reader io.Reader
 }
 

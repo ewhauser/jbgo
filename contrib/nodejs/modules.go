@@ -213,7 +213,7 @@ func (rt *nodeRuntime) mkdirSync(call goja.FunctionCall) goja.Value {
 			recursive = obj.Get("recursive").ToBoolean()
 			parsed, err := parseUintMode(obj.Get("mode"))
 			if err != nil {
-				rt.throw(fmt.Errorf("nodejs: invalid mkdir mode: %v", err))
+				rt.throw(fmt.Errorf("nodejs: invalid mkdir mode: %w", err))
 			}
 			mode = parsed
 		}

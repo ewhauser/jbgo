@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,7 +118,7 @@ func runBashCompatBash(t testing.TB, bashPath, workDir, scriptPath string) norma
 		t.Fatalf("Abs(%q) error = %v", scriptPath, err)
 	}
 
-	cmd := exec.Command(bashPath, "--noprofile", "--norc", absScriptPath)
+	cmd := exec.Command(bashPath, "--noprofile", "--norc", absScriptPath) //nolint:noctx // test oracle runs real bash
 	cmd.Dir = workDir
 	cmd.Env = []string{
 		"HOME=" + workDir,
@@ -136,8 +137,8 @@ func runBashCompatBash(t testing.TB, bashPath, workDir, scriptPath string) norma
 	err = cmd.Run()
 	exitCode := 0
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			t.Fatalf("bash Run() error = %v", err)
 		}
 		exitCode = exitErr.ExitCode()

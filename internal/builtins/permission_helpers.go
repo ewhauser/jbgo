@@ -109,8 +109,8 @@ func seedPermissionIdentityDBFromEnv(db *permissionIdentityDB, inv *Invocation) 
 	if db == nil || inv == nil {
 		return
 	}
-	uid := uint32(idUintEnv(inv.Env, "UID", idDefaultUID))
-	gid := uint32(idUintEnv(inv.Env, "GID", idDefaultGID))
+	uid := idUintEnv(inv.Env, "UID", idDefaultUID)
+	gid := idUintEnv(inv.Env, "GID", idDefaultGID)
 	user := strings.TrimSpace(inv.Env["USER"])
 	if user == "" {
 		user = idDefaultUserName

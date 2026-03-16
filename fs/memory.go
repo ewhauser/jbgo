@@ -873,7 +873,7 @@ func (f *memoryFile) ReadFrom(r io.Reader) (int64, error) {
 		if err == nil {
 			continue
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return total, nil
 		}
 		return total, err
@@ -898,7 +898,7 @@ func (f *memoryFile) WriteTo(w io.Writer) (int64, error) {
 		if err == nil {
 			continue
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return total, nil
 		}
 		return total, err

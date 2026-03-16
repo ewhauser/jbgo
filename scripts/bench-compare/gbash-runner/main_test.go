@@ -54,7 +54,7 @@ func TestGbashRunnerSmoke(t *testing.T) {
 		t.Fatalf("WriteFile(b.txt) error = %v", err)
 	}
 
-	cmd := exec.Command("go", "run", "./scripts/bench-compare/gbash-runner",
+	cmd := exec.Command("go", "run", "./scripts/bench-compare/gbash-runner", //nolint:noctx // test helper
 		"--workspace", workspace,
 		"-c", "find . -type f | grep -c '^'",
 	)

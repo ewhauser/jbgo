@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -273,7 +274,7 @@ func runGBash(ctx context.Context, cfg *SuiteConfig, workspace, script string) (
 		Env:        gbashEnv(cfg),
 	})
 	if err != nil {
-		return ExecutionResult{
+		return ExecutionResult{ //nolint:nilerr // non-ExitError is mapped to exit code 2
 			ExitCode: 2,
 			Stderr:   err.Error() + "\n",
 		}, nil
@@ -300,8 +301,8 @@ func runBash(ctx context.Context, cfg *SuiteConfig, bashPath, workspace, script 
 	err := cmd.Run()
 	exitCode := 0
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			return ExecutionResult{}, err
 		}
 		exitCode = exitErr.ExitCode()

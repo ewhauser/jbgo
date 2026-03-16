@@ -117,7 +117,7 @@ func (c *Uniq) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	}
 	defer closeReader()
 
-	writer, closeWriter, err := openUniqOutput(inv, opts.output)
+	writer, closeWriter, err := openUniqOutput(ctx, inv, opts.output)
 	if err != nil {
 		return err
 	}
@@ -255,15 +255,15 @@ func openUniqInput(ctx context.Context, inv *Invocation, name string) (io.Reader
 	return handle, func() { _ = handle.Close() }, nil
 }
 
-func openUniqOutput(inv *Invocation, name string) (io.Writer, func(), error) {
+func openUniqOutput(ctx context.Context, inv *Invocation, name string) (io.Writer, func(), error) {
 	if name == "" || name == "-" {
 		return inv.Stdout, func() {}, nil
 	}
 	targetAbs := gbfs.Resolve(inv.Cwd, name)
-	if err := ensureParentDirExists(context.Background(), inv, targetAbs); err != nil {
+	if err := ensureParentDirExists(ctx, inv, targetAbs); err != nil {
 		return nil, nil, err
 	}
-	file, err := inv.FS.OpenFile(context.Background(), targetAbs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	file, err := inv.FS.OpenFile(ctx, targetAbs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return nil, nil, exitf(inv, 1, "uniq: %s: %v", name, err)
 	}

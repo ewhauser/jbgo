@@ -591,7 +591,7 @@ func runMutationRoundTrip(ctx context.Context, fsys gbfs.FileSystem, fixture *be
 		return workloadObservation{}, fmt.Errorf("rewritten file = %q, want %q", got, fixture.RewriteBody)
 	}
 	if _, err := fsys.Stat(ctx, fixture.RenameSource); !isNotExist(err) {
-		return workloadObservation{}, fmt.Errorf("stat old rename path error = %v, want not exist", err)
+		return workloadObservation{}, fmt.Errorf("stat old rename path error = %w, want not exist", err)
 	}
 	if got, err := readSandboxText(ctx, fsys, fixture.RenameTarget); err != nil || got != fixture.RenameBody {
 		if err != nil {
@@ -600,7 +600,7 @@ func runMutationRoundTrip(ctx context.Context, fsys gbfs.FileSystem, fixture *be
 		return workloadObservation{}, fmt.Errorf("renamed file = %q, want original body", got)
 	}
 	if _, err := fsys.Stat(ctx, fixture.RemoveTarget); !isNotExist(err) {
-		return workloadObservation{}, fmt.Errorf("stat removed file error = %v, want not exist", err)
+		return workloadObservation{}, fmt.Errorf("stat removed file error = %w, want not exist", err)
 	}
 
 	files, _, _, err := walkWorkspace(ctx, fsys, virtualWorkspace)

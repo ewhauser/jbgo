@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	stdfs "io/fs"
@@ -183,7 +184,7 @@ func runTarList(ctx context.Context, inv *Invocation, opts *tarOptions) error {
 
 	for {
 		header, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -215,7 +216,7 @@ func runTarExtract(ctx context.Context, inv *Invocation, opts *tarOptions) error
 
 	for {
 		header, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {

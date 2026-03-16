@@ -163,7 +163,7 @@ func (c *Split) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 
 	for _, chunk := range chunks {
 		target := gbfs.Resolve(inv.Cwd, prefix+chunk.name+opts.additionalSuffix)
-		if inputAbs != "" && sameSplitOutputPath(target, inputAbs, inv) {
+		if inputAbs != "" && sameSplitOutputPath(ctx, target, inputAbs, inv) {
 			return exitf(inv, 1, "split: %s would overwrite input; aborting", quoteGNUOperand(target))
 		}
 		if opts.verbose {
@@ -810,18 +810,18 @@ func runSplitFilter(ctx context.Context, inv *Invocation, filter, fileName strin
 	return exitForExecutionResult(result)
 }
 
-func sameSplitOutputPath(target, inputAbs string, inv *Invocation) bool {
+func sameSplitOutputPath(ctx context.Context, target, inputAbs string, inv *Invocation) bool {
 	if target == inputAbs {
 		return true
 	}
 	if inv == nil || inv.FS == nil {
 		return false
 	}
-	targetReal, err := inv.FS.Realpath(context.Background(), target)
+	targetReal, err := inv.FS.Realpath(ctx, target)
 	if err != nil {
 		return false
 	}
-	inputReal, err := inv.FS.Realpath(context.Background(), inputAbs)
+	inputReal, err := inv.FS.Realpath(ctx, inputAbs)
 	if err != nil {
 		return false
 	}

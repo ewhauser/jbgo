@@ -17,7 +17,15 @@ linters:
     - revive
     - misspell
     - modernize
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - errorlint
+    - nilerr
+    - noctx
     - paralleltest
+    - testifylint
+    - unconvert
 
   settings:
     revive:

@@ -389,7 +389,7 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 			recordFile(exec.Trace, string(policy.FileActionWrite), abs)
 		}
 
-		file, err := exec.FS.OpenFile(ctx, abs, flag, stdfs.FileMode(perm))
+		file, err := exec.FS.OpenFile(ctx, abs, flag, perm)
 		if err != nil {
 			return nil, err
 		}
@@ -852,7 +852,7 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 	}
 	info, err := exec.FS.Stat(ctx, fullPath)
 	if err != nil || info.IsDir() {
-		return nil, false, nil
+		return nil, false, nil //nolint:nilerr // stat error means the file doesn't exist as a command
 	}
 
 	resolvedName := path.Base(fullPath)

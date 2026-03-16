@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -203,7 +204,7 @@ func runDirectoryStackGBash(t testing.TB, script string) normalizedExecutionResu
 func runDirectoryStackBash(t testing.TB, bashPath, homeDir, script string) normalizedExecutionResult {
 	t.Helper()
 
-	cmd := exec.Command(bashPath, "--noprofile", "--norc", "-c", "cd \"$HOME\"\n"+script)
+	cmd := exec.Command(bashPath, "--noprofile", "--norc", "-c", "cd \"$HOME\"\n"+script) //nolint:noctx // test oracle runs real bash
 	cmd.Env = []string{
 		"HOME=" + homeDir,
 		"PWD=" + homeDir,
@@ -220,8 +221,8 @@ func runDirectoryStackBash(t testing.TB, bashPath, homeDir, script string) norma
 	err := cmd.Run()
 	exitCode := 0
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			t.Fatalf("bash Run() error = %v", err)
 		}
 		exitCode = exitErr.ExitCode()

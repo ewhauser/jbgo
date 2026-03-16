@@ -261,7 +261,7 @@ func scanPath(ctx context.Context, fsys gbfs.FileSystem, currentRoot, current st
 	if linfo.Mode()&stdfs.ModeSymlink != 0 {
 		info, err := fsys.Stat(ctx, current)
 		if err != nil || !scanIndexableFileInfo(info) {
-			return nil
+			return nil //nolint:nilerr // stat failure on symlink target means skip the file
 		}
 		return scanFile(ctx, fsys, currentRoot, current, query, verify, hits, truncated)
 	}

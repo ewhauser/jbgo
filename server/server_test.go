@@ -262,7 +262,7 @@ func TestServeTCPListenerReportsTCPTransport(t *testing.T) {
 		t.Fatalf("gbash.New() error = %v", err)
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test setup
 	if err != nil {
 		t.Fatalf("Listen(tcp) error = %v", err)
 	}
@@ -326,7 +326,7 @@ func startServer(t *testing.T, cfg gbserver.Config, opts ...gbash.Option) *serve
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", socket, 50*time.Millisecond)
+		conn, err := net.DialTimeout("unix", socket, 50*time.Millisecond) //nolint:noctx // test helper
 		if err == nil {
 			_ = conn.Close()
 			break
@@ -356,7 +356,7 @@ func startServer(t *testing.T, cfg gbserver.Config, opts ...gbash.Option) *serve
 func dialClient(t *testing.T, socket string) *testClient {
 	t.Helper()
 
-	conn, err := net.DialTimeout("unix", socket, 5*time.Second)
+	conn, err := net.DialTimeout("unix", socket, 5*time.Second) //nolint:noctx // test helper
 	if err != nil {
 		t.Fatalf("DialTimeout(%q) error = %v", socket, err)
 	}
@@ -371,7 +371,7 @@ func dialClient(t *testing.T, socket string) *testClient {
 func mustDialTCP(t *testing.T, addr string) net.Conn {
 	t.Helper()
 
-	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second) //nolint:noctx // test helper
 	if err != nil {
 		t.Fatalf("DialTimeout(%q) error = %v", addr, err)
 	}

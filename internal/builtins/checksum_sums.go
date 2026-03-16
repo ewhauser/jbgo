@@ -723,7 +723,7 @@ func parseChecksumLengthBits(value string) (int, error) {
 	bits, err := strconv.Atoi(value)
 	if err != nil {
 		var numErr *strconv.NumError
-		if errors.As(err, &numErr) && numErr.Err == strconv.ErrRange {
+		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
 			return 0, fmt.Errorf("too_large")
 		}
 		return 0, fmt.Errorf("invalid")
@@ -873,7 +873,8 @@ func errorsIsDirectory(err error) bool {
 	if err == nil {
 		return false
 	}
-	if pe, ok := err.(*stdfs.PathError); ok && pe.Err == stdfs.ErrInvalid {
+	var pe *stdfs.PathError
+	if errors.As(err, &pe) && errors.Is(pe.Err, stdfs.ErrInvalid) {
 		return true
 	}
 	return strings.Contains(err.Error(), "is a directory")

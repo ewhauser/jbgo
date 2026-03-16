@@ -418,7 +418,7 @@ func parseODOffsetOperand(value string) (uint64, error) {
 	n, err := strconv.ParseUint(value[start:end], base, 64)
 	if err != nil {
 		var numErr *strconv.NumError
-		if errors.As(err, &numErr) && numErr.Err == strconv.ErrRange {
+		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
 			return 0, errODOffsetRange
 		}
 		return 0, errODOffsetParse

@@ -118,7 +118,7 @@ func rmdirSymlinkSlashError(ctx context.Context, inv *Invocation, raw, abs strin
 
 	info, err := inv.FS.Lstat(ctx, abs)
 	if err != nil || info.Mode()&stdfs.ModeSymlink == 0 {
-		return nil
+		return nil //nolint:nilerr // lstat error on symlink means path doesn't exist
 	}
 
 	targetInfo, statErr := inv.FS.Stat(ctx, abs)
