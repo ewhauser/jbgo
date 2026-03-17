@@ -1,4 +1,4 @@
-.PHONY: lint test conformance-test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test
+.PHONY: lint test conformance-test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats
 
 GO_PACKAGES := ./... ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
 BENCH_PACKAGES := ./internal/runtime ./cmd/gbash ./contrib/jq
@@ -169,7 +169,12 @@ test:
 	go test -race $(GO_PACKAGES)
 
 conformance-test:
-	GBASH_RUN_CONFORMANCE=1 go test ./internal/conformance -run TestConformance -count=1 -timeout=20m
+	@BASH_PATH=$$(./scripts/ensure-bash.sh) || exit 1; \
+	GBASH_RUN_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
+	  go test ./internal/conformance -run TestConformance -count=1 -timeout=20m
+
+ensure-bash:
+	@./scripts/ensure-bash.sh
 
 build:
 	go build $(GO_PACKAGES)
@@ -268,5 +273,9 @@ tag-release:
 	PUSH='$(PUSH_TAGS)' REMOTE='$(TAG_REMOTE)' ./scripts/tag_release.sh $(RELEASE_VERSION)
 
 bats-test:
-	@go build -o scripts/tests/.gbash-test-bin ./cmd/gbash/
-	bats scripts/tests/
+	@BATS_PATH=$$(./scripts/ensure-bats.sh) || exit 1; \
+	go build -o scripts/tests/.gbash-test-bin ./cmd/gbash/ && \
+	"$$BATS_PATH" scripts/tests/
+
+ensure-bats:
+	@./scripts/ensure-bats.sh

@@ -31,7 +31,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: bats-core/bats-action@2.0.0
+      - uses: cachix/install-nix-action@v30
 
       - run: make bats-test
 
@@ -43,5 +43,7 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - uses: cachix/install-nix-action@v30
 
       - run: make conformance-test

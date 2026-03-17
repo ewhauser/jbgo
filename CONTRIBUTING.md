@@ -12,6 +12,32 @@ The repo uses both [`go.work`](./go.work) and committed child-module `replace` d
 
 Use `npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile` at the repo root when you need the JavaScript workspace dependencies, or `pnpm install` if you already manage pnpm locally.
 
+## Conformance Testing
+
+Conformance tests compare gbash output against a pinned bash 5.2 binary provided by Nix. This ensures consistent results across macOS and Linux regardless of the system bash version.
+
+Run the conformance suite:
+
+```bash
+make conformance-test
+```
+
+This fetches bash from the Nix binary cache automatically (a few seconds on first run; instant on subsequent runs).
+
+Nix installation:
+
+- macOS: `sh <(curl -L https://nixos.org/nix/install)`
+- Linux: `sh <(curl -L https://nixos.org/nix/install) --daemon`
+
+After installing, restart your shell or run `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh`.
+
+To skip Nix entirely, point `GBASH_CONFORMANCE_BASH` at any bash binary:
+
+```bash
+export GBASH_CONFORMANCE_BASH=/path/to/bash
+make conformance-test
+```
+
 ## Fuzzing
 
 The repo uses Go native fuzzing locally and in GitHub Actions.

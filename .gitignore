@@ -32,6 +32,7 @@ website/out/
 .vscode/
 .claude
 
+/result
 /gbash-gnu
 CONTINUITY.md
 .next
