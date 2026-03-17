@@ -590,7 +590,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r2.exit.exiting = false // subshells don't exit the parent shell
 				pw.Close()
 			})
-			r.stmt(ctx, cm.Y)
+			if stmt, ok := r.lastpipeStmt(cm.Y); ok {
+				r.stmt(ctx, stmt)
+			} else {
+				r.stmt(ctx, cm.Y)
+			}
 			pr.Close()
 			wg.Wait()
 			if r.opts[optPipeFail] && !r2.exit.ok() && r.exit.ok() {
@@ -913,6 +917,17 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	default:
 		panic(fmt.Sprintf("unhandled command node: %T", cm))
 	}
+}
+
+func (r *Runner) lastpipeStmt(stmt *syntax.Stmt) (*syntax.Stmt, bool) {
+	if !r.opts[optLastPipe] || r.interactive || stmt == nil {
+		return nil, false
+	}
+	inner, ok := r.syntheticPipelineStmts[stmt]
+	if !ok || inner == nil {
+		return nil, false
+	}
+	return inner, true
 }
 
 func (r *Runner) trapCallback(ctx context.Context, callback, name string) {

@@ -172,6 +172,9 @@ type Runner struct {
 
 	optState getopts
 
+	interactive            bool
+	syntheticPipelineStmts map[*syntax.Stmt]*syntax.Stmt
+
 	// keepRedirs is used so that "exec" can make any redirections
 	// apply to the current shell, and not just the command.
 	keepRedirs bool
@@ -360,7 +363,18 @@ func Dir(path string) RunnerOption {
 // but later on it should also change other behavior.
 func Interactive(enabled bool) RunnerOption {
 	return func(r *Runner) error {
+		r.interactive = enabled
 		r.opts[optExpandAliases] = enabled
+		return nil
+	}
+}
+
+// SyntheticPipelineSubshells marks AST statements wrapped by the caller
+// to preserve default pipeline isolation. The interpreter may unwrap these
+// nodes for features like lastpipe while leaving user-authored subshells alone.
+func SyntheticPipelineSubshells(nodes map[*syntax.Stmt]*syntax.Stmt) RunnerOption {
+	return func(r *Runner) error {
+		r.syntheticPipelineStmts = nodes
 		return nil
 	}
 }
@@ -671,6 +685,11 @@ var bashOptsTable = [...]bashOpt{
 		supported:    true,
 	},
 	{
+		name:         "lastpipe",
+		defaultState: false,
+		supported:    true,
+	},
+	{
 		name:         "nocaseglob",
 		defaultState: false,
 		supported:    true,
@@ -738,7 +757,6 @@ var bashOptsTable = [...]bashOpt{
 		name:         "interactive_comments",
 		defaultState: true,
 	},
-	{name: "lastpipe"},
 	{name: "lithist"},
 	{name: "localvar_inherit"},
 	{name: "localvar_unset"},
@@ -783,6 +801,7 @@ const (
 	optExpandAliases
 	optExtGlob
 	optGlobStar
+	optLastPipe
 	optNoCaseGlob
 	optNullGlob
 )
@@ -859,9 +878,11 @@ func (r *Runner) Reset() {
 		funcSources:   r.funcSources,
 		funcInternals: r.funcInternals,
 
-		dirStack:           r.dirStack[:0],
-		usedNew:            r.usedNew,
-		topLevelScriptPath: r.topLevelScriptPath,
+		dirStack:               r.dirStack[:0],
+		usedNew:                r.usedNew,
+		topLevelScriptPath:     r.topLevelScriptPath,
+		interactive:            r.interactive,
+		syntheticPipelineStmts: r.syntheticPipelineStmts,
 	}
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
@@ -1071,6 +1092,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		topLevelScriptPath: r.topLevelScriptPath,
 		internalRun:        r.internalRun,
 		opts:               r.opts,
+		interactive:        r.interactive,
 		usedNew:            r.usedNew,
 		exit:               r.exit,
 		lastExit:           r.lastExit,
@@ -1085,6 +1107,7 @@ func (r *Runner) subshell(background bool) *Runner {
 	r2.Vars = make(map[string]expand.Variable)
 	r2.alias = maps.Clone(r.alias)
 	r2.frames = append(r2.frames, r.frames...)
+	r2.syntheticPipelineStmts = r.syntheticPipelineStmts
 
 	r2.dirStack = append(r2.dirBootstrap[:0], r.dirStack...)
 	r2.fillExpandConfig(r.ectx)

@@ -77,7 +77,7 @@ The fork also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LI
 
 The shell adapter may pre-validate parsed AST forms that are known to trigger `mvdan/sh` interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
 
-The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in explicit subshells so parent-shell state matches Bash's default `lastpipe=off` behavior.
+The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in synthetic subshells so default parent-shell state matches Bash's `lastpipe=off` behavior while still allowing the interpreter to unwrap those specific synthetic wrappers when `shopt -s lastpipe` is enabled.
 
 Process substitution is supported as a sandbox-native shell feature. The adapter must provision runtime-owned opaque pipe paths under the sandbox namespace and must not rely on host FIFOs, host-visible `TMPDIR` paths, or host path semantics to implement `<(...)` and `>(...)`.
 
