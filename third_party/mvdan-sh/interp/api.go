@@ -375,6 +375,11 @@ func Params(args ...string) RunnerOption {
 		fp := flagParser{remaining: args}
 		for fp.more() {
 			flag := fp.flag()
+			if flag == "+" {
+				// Bash treats a lone "+" like an ignored set flag rather than
+				// an invalid option or positional argument.
+				continue
+			}
 			if flag == "-" {
 				// TODO: implement "The -x and -v options are turned off."
 				if args := fp.args(); len(args) > 0 {

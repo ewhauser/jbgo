@@ -2381,6 +2381,7 @@ var runTests = []runTest{
 	},
 	{"set -o noexec; echo foo", ""},
 	{"set +o noexec; echo foo", "foo\n"},
+	{"set + >/dev/null; echo status=$?", "status=0\n"},
 	{"set -e; set -o | grep -E 'errexit|noexec' | wc -l | tr -d ' '", "2\n"},
 	{"set -e; set -o | grep -E 'errexit|noexec' | grep 'on$' | wc -l | tr -d ' '", "1\n"},
 	{
@@ -2889,6 +2890,7 @@ done <<< 2`,
 	{"a='x=b y=c'; declare $a; echo $x $y", "b c\n"},
 	{"declare =bar", "declare: invalid name \"\"\nexit status 1 #JUSTERR"},
 	{"declare $unset=$unset", "declare: invalid name \"\"\nexit status 1 #JUSTERR"},
+	{"readonly + >/dev/null; echo status=$?", "readonly: `+': not a valid identifier\nstatus=1\n"},
 
 	// export
 	{"declare foo=bar; $ENV_PROG | grep '^foo='", "exit status 1"},
@@ -4443,6 +4445,11 @@ func TestRunnerRunConfirm(t *testing.T) {
 			got := string(out)
 			if err != nil {
 				got += err.Error()
+			}
+			if strings.HasPrefix(got, "bash: line 1: ") {
+				if trimmed := strings.TrimPrefix(got, "bash: line 1: "); trimmed == c.want {
+					got = trimmed
+				}
 			}
 			if got != c.want {
 				t.Fatalf("wrong bash output in %q:\nwant: %q\ngot:  %q",

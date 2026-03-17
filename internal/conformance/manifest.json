@@ -250,9 +250,9 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/explore-parsing.test.sh": {
+        "oils/explore-parsing.test.sh::Is \\r considered whitespace?": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "the vendored parser still treats carriage return as shell whitespace, so CR-separated tokens do not match bash command splitting yet"
         },
         "oils/extglob-files.test.sh": {
           "mode": "xfail",

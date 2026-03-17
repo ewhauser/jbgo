@@ -762,11 +762,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		var modes []string
 		valType := ""
 		declQuery := "" // "-f" or "-p" for query mode
+		allowPlusFlags := false
 		switch cm.Variant.Value {
 		case "declare":
 			// When used in a function, "declare" acts as "local"
 			// unless the "-g" option is used.
 			local = r.inFunc
+			allowPlusFlags = true
 		case "local":
 			if !r.inFunc {
 				r.errf("local: can only be used in a function\n")
@@ -780,30 +782,38 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			modes = append(modes, "-r")
 		case "nameref":
 			valType = "-n"
+		case "typeset":
+			allowPlusFlags = true
 		}
 	assignLoop:
 		for as := range r.flattenAssigns(cm.Args) {
-			fp := flagParser{remaining: []string{as.Name.Value}}
-			for fp.more() {
-				switch flag := fp.flag(); flag {
-				case "-x", "-r":
-					modes = append(modes, flag)
-				case "-a", "-A", "-n":
-					valType = flag
-				case "-g":
-					global = true
-				case "-f", "-p":
-					declQuery = flag
-				default:
-					r.errf("declare: invalid option %q\n", flag)
-					r.exit.code = 2
-					return
+			if allowPlusFlags || !strings.HasPrefix(as.Name.Value, "+") {
+				fp := flagParser{remaining: []string{as.Name.Value}}
+				for fp.more() {
+					switch flag := fp.flag(); flag {
+					case "-x", "-r":
+						modes = append(modes, flag)
+					case "-a", "-A", "-n":
+						valType = flag
+					case "-g":
+						global = true
+					case "-f", "-p":
+						declQuery = flag
+					default:
+						r.errf("declare: invalid option %q\n", flag)
+						r.exit.code = 2
+						return
+					}
+					continue assignLoop
 				}
-				continue assignLoop
 			}
 			name := as.Name.Value
 			if !syntax.ValidName(name) {
-				r.errf("declare: invalid name %q\n", name)
+				if allowPlusFlags {
+					r.errf("declare: invalid name %q\n", name)
+				} else {
+					r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, name)
+				}
 				r.exit.code = 1
 				return
 			}
