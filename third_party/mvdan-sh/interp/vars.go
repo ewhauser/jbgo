@@ -234,6 +234,26 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 	}
 }
 
+func indexedAssignPosition(list []string, raw int) (int, bool) {
+	if raw < 0 {
+		raw += len(list)
+	}
+	if raw < 0 {
+		return 0, false
+	}
+	return raw, true
+}
+
+func (r *Runner) assignIndexString(index syntax.ArithmExpr) string {
+	if index == nil {
+		return ""
+	}
+	if word, ok := index.(*syntax.Word); ok {
+		return r.literal(word)
+	}
+	return strconv.Itoa(r.arithm(index))
+}
+
 func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax.ArithmExpr, vr expand.Variable) {
 	prev.Set = true
 	if name2, var2 := prev.Resolve(r.writeEnv); name2 != "" {
@@ -257,6 +277,11 @@ func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax
 	}
 	if index == nil {
 		r.setVar(name, vr)
+		return
+	}
+	if vr.Kind != expand.String {
+		r.errf("%s[%s]: cannot assign list to array member\n", name, r.assignIndexString(index))
+		r.exit.code = 1
 		return
 	}
 
@@ -289,7 +314,12 @@ func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax
 		r.setVar(name, prev)
 		return
 	}
-	k := r.arithm(index)
+	k, ok := indexedAssignPosition(list, r.arithm(index))
+	if !ok {
+		r.errf("negative array index\n")
+		r.exit.code = 1
+		return
+	}
 	for len(list) < k+1 {
 		list = append(list, "")
 	}
@@ -330,6 +360,26 @@ func (r *Runner) assignVal(prev expand.Variable, as *syntax.Assign, valType stri
 				prev.Kind = expand.NameRef
 			}
 			prev.Str = s
+			return prev
+		}
+		if as.Index != nil {
+			base := ""
+			switch prev.Kind {
+			case expand.String:
+				if idx, ok := indexedAssignPosition([]string{prev.Str}, r.arithm(as.Index)); ok && idx == 0 {
+					base = prev.Str
+				}
+			case expand.Indexed:
+				if idx, ok := indexedAssignPosition(prev.List, r.arithm(as.Index)); ok && idx < len(prev.List) {
+					base = prev.List[idx]
+				}
+			case expand.Associative:
+				if w, ok := as.Index.(*syntax.Word); ok {
+					base = prev.Map[r.literal(w)]
+				}
+			}
+			prev.Kind = expand.String
+			prev.Str = base + s
 			return prev
 		}
 		switch prev.Kind {

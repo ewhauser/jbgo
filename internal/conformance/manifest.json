@@ -6,10 +6,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/append.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
         "oils/arg-parse.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"

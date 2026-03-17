@@ -942,6 +942,10 @@ func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] 
 			for _, field := range r.fields(as.Value) {
 				as := &syntax.Assign{}
 				name, val, ok := strings.Cut(field, "=")
+				if ok && strings.HasSuffix(name, "+") {
+					as.Append = true
+					name = strings.TrimSuffix(name, "+")
+				}
 				as.Name = &syntax.Lit{Value: name}
 				if !ok {
 					as.Naked = true

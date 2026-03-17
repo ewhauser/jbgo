@@ -818,7 +818,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				opt, supported = r.bashOptByName(arg)
 			}
 			if opt == nil {
-				return failf(1, "shopt: invalid option name %q\n", arg)
+				return failf(1, "shopt: %s: invalid shell option name\n", arg)
 			}
 
 			switch mode {
