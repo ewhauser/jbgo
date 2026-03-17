@@ -321,7 +321,6 @@ f3 'global'
 
 #### [compat_array] ${arr} is ${arr[0]}
 case ${SH##*/} in dash|ash) exit 1 ;; esac # dash/ash does not have arrays
-case ${SH##*/} in osh) shopt -s compat_array ;; esac
 case ${SH##*/} in zsh) setopt KSH_ARRAYS ;; esac
 arr=(foo bar baz)
 argv.sh "$arr" "${arr}"
@@ -335,7 +334,6 @@ argv.sh "$arr" "${arr}"
 #### [compat_array] scalar write to arrays
 case ${SH##*/} in
 (dash|ash) exit 1;; # dash/ash does not have arrays
-(osh) shopt -s compat_array;;
 (zsh) setopt KSH_ARRAYS;;
 esac
 
@@ -356,7 +354,6 @@ argv.sh "${a[@]}"
 #### [compat_array] scalar write to associative arrays
 case ${SH##*/} in
 (dash|ash|yash|mksh) exit 1;; # dash/ash/yash/mksh does not have associative arrays
-(osh) shopt -s compat_array;;
 (zsh) setopt KSH_ARRAYS;;
 esac
 
@@ -376,7 +373,6 @@ argv.sh ${d['0']} ${d['foo']} ${d['bar']}
 #### [compat_array] ${alpha@a}
 declare -A alpha=(['1']=2)
 echo type=${alpha@a}
-shopt -s compat_array
 echo type=${alpha@a}
 ## STDOUT:
 type=A

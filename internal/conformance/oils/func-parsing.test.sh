@@ -103,4 +103,3 @@ fun() {
 }
 fun
 ## stdout: nested
-

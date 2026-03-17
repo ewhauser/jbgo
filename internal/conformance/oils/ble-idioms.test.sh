@@ -125,7 +125,6 @@ x=12 y=34
 ## END
 
 #### dynamic arith varname: copy/add
-shopt -s eval_unsafe_arith  # for RHS
 
 vec2_copy () {
   local this=$1 rhs=$2

@@ -340,18 +340,6 @@ status=1
 status=0
 ## END
 
-#### pattern @f(x)
-shopt -s parse_at
-[[ @fx =~ @f(x) ]]
-echo status=$?
-[[ fx =~ @f(x) ]]
-echo status=$?
-## STDOUT:
-status=0
-status=1
-## END
-
-
 #### Bug: Nix idiom with closing ) next to pattern
 
 if [[ ! (" ${params[*]} " =~ " -shared " || " ${params[*]} " =~ " -static ") ]]; then

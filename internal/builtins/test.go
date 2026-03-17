@@ -85,262 +85,226 @@ type testSymbol struct {
 	token string
 }
 
-func newTestSymbol(token *string) testSymbol {
-	if token == nil {
-		return testSymbol{kind: testSymbolNone}
-	}
-	switch *token {
-	case "(":
-		return testSymbol{kind: testSymbolLParen, token: *token}
-	case "!":
-		return testSymbol{kind: testSymbolBang, token: *token}
-	case "-a", "-o":
-		return testSymbol{kind: testSymbolBoolOp, token: *token}
-	case "=", "==", "!=", "<", ">":
-		return testSymbol{kind: testSymbolStringOp, token: *token}
-	case "-eq", "-ge", "-gt", "-le", "-lt", "-ne":
-		return testSymbol{kind: testSymbolIntOp, token: *token}
-	case "-ef", "-nt", "-ot":
-		return testSymbol{kind: testSymbolFileOp, token: *token}
-	case "-n", "-z":
-		return testSymbol{kind: testSymbolUnaryStr, token: *token}
-	case "-b", "-c", "-d", "-e", "-f", "-g", "-G", "-h", "-k", "-L", "-N", "-O", "-p", "-r", "-s", "-S", "-t", "-u", "-w", "-x":
-		return testSymbol{kind: testSymbolUnaryFile, token: *token}
-	default:
-		return testSymbol{kind: testSymbolLiteral, token: *token}
-	}
-}
-
-func (s testSymbol) intoLiteral() testSymbol {
-	if s.kind == testSymbolNone {
-		panic("none cannot be literal")
-	}
-	switch s.kind {
-	case testSymbolLParen:
-		return testSymbol{kind: testSymbolLiteral, token: "("}
-	case testSymbolBang:
-		return testSymbol{kind: testSymbolLiteral, token: "!"}
-	default:
-		return testSymbol{kind: testSymbolLiteral, token: s.token}
-	}
-}
-
-type testParser struct {
-	tokens []string
-	pos    int
-	stack  []testSymbol
-}
-
 func parseTest(args []string) ([]testSymbol, error) {
-	p := &testParser{tokens: append([]string(nil), args...)}
-	if err := p.parse(); err != nil {
+	p := &testRPNParser{args: append([]string(nil), args...)}
+	return p.parseArgs(p.args)
+}
+
+type testRPNParser struct {
+	args []string
+}
+
+func (p *testRPNParser) parseArgs(args []string) ([]testSymbol, error) {
+	switch len(args) {
+	case 0:
+		return nil, nil
+	case 1:
+		return []testSymbol{testLiteralSymbol(args[0])}, nil
+	case 2:
+		return p.parseTwoArgs(args)
+	case 3:
+		return p.parseThreeArgs(args)
+	case 4:
+		switch {
+		case args[0] == "!":
+			stack, err := p.parseArgs(args[1:])
+			if err != nil {
+				return nil, err
+			}
+			return append(stack, testSymbol{kind: testSymbolBang, token: "!"}), nil
+		case args[0] == "(" && args[3] == ")":
+			return p.parseArgs(args[1:3])
+		}
+	}
+	stack, pos, err := p.parseOr(args, 0)
+	if err != nil {
 		return nil, err
 	}
-	return p.stack, nil
-}
-
-func (p *testParser) parse() error {
-	if err := p.expr(); err != nil {
-		return err
+	if pos != len(args) {
+		return nil, testParseExtraArgument(args[pos])
 	}
-	if p.pos < len(p.tokens) {
-		return testParseExtraArgument(p.tokens[p.pos])
-	}
-	return nil
+	return stack, nil
 }
 
-func (p *testParser) nextToken() testSymbol {
-	if p.pos >= len(p.tokens) {
-		return testSymbol{kind: testSymbolNone}
-	}
-	token := p.tokens[p.pos]
-	p.pos++
-	return newTestSymbol(&token)
-}
-
-func (p *testParser) peek() testSymbol {
-	if p.pos >= len(p.tokens) {
-		return testSymbol{kind: testSymbolNone}
-	}
-	token := p.tokens[p.pos]
-	return newTestSymbol(&token)
-}
-
-func (p *testParser) peekN(n int) testSymbol {
-	idx := p.pos + n
-	if idx >= len(p.tokens) {
-		return testSymbol{kind: testSymbolNone}
-	}
-	token := p.tokens[idx]
-	return newTestSymbol(&token)
-}
-
-func (p *testParser) peekIsBoolOp() bool {
-	return p.peek().kind == testSymbolBoolOp
-}
-
-func (p *testParser) expect() error {
-	symbol := p.nextToken()
-	if symbol.kind == testSymbolLiteral && symbol.token == ")" {
-		return nil
-	}
-	return testParseExpected(")")
-}
-
-func (p *testParser) expr() error {
-	if !p.peekIsBoolOp() {
-		if err := p.term(); err != nil {
-			return err
-		}
-	}
-	return p.maybeBoolOp()
-}
-
-func (p *testParser) term() error {
-	symbol := p.nextToken()
-	switch symbol.kind {
-	case testSymbolLParen:
-		return p.lparen()
-	case testSymbolBang:
-		return p.bang()
-	case testSymbolUnaryStr, testSymbolUnaryFile:
-		isStringCmp := p.peek().kind == testSymbolStringOp && p.peekN(1).kind != testSymbolNone
-		if isStringCmp {
-			return p.literal(symbol.intoLiteral())
-		}
-		p.uop(symbol)
-		return nil
-	case testSymbolNone:
-		p.stack = append(p.stack, symbol)
-		return nil
-	default:
-		return p.literal(symbol)
-	}
-}
-
-func (p *testParser) lparen() error {
-	peek3 := []testSymbol{p.peekN(0), p.peekN(1), p.peekN(2)}
+func (p *testRPNParser) parseTwoArgs(args []string) ([]testSymbol, error) {
 	switch {
-	case peek3[0].kind == testSymbolNone:
-		return p.literal(testSymbol{kind: testSymbolLParen}.intoLiteral())
-	case peek3[1].kind == testSymbolNone:
-		return testParseMissingArgument(peek3[0].display())
-	case (peek3[0].kind == testSymbolUnaryStr || peek3[0].kind == testSymbolUnaryFile) && peek3[2].kind == testSymbolLiteral && peek3[2].token == ")":
-		symbol := p.nextToken()
-		p.uop(symbol)
-		return p.expect()
-	case peek3[0].isBinaryOp() && peek3[1].kind == testSymbolLiteral && peek3[1].token == ")":
-		return p.literal(testSymbol{kind: testSymbolLParen}.intoLiteral())
-	case peek3[1].kind == testSymbolLiteral && peek3[1].token == ")":
-		symbol := p.nextToken()
-		if err := p.literal(symbol); err != nil {
-			return err
-		}
-		return p.expect()
-	case peek3[0].isBinaryOp() && peek3[1].isBinaryOp():
-		symbol := p.nextToken()
-		if err := p.literal(symbol); err != nil {
-			return err
-		}
-		return p.expect()
-	case peek3[0].isBinaryOp():
-		return p.literal(testSymbol{kind: testSymbolLParen}.intoLiteral())
+	case args[0] == "!":
+		return []testSymbol{
+			testLiteralSymbol(args[1]),
+			{kind: testSymbolBang, token: "!"},
+		}, nil
+	case isTestUnaryOp(args[0]):
+		return []testSymbol{
+			testLiteralSymbol(args[1]),
+			testUnarySymbol(args[0]),
+		}, nil
+	case args[1] == "-a" || args[1] == "-o":
+		return nil, testParseMissingExpression(args[1])
+	case isTestExprBinaryOp(args[1]):
+		return nil, testParseMissingArgument(quoteGNUOperand(args[1]))
 	default:
-		if err := p.expr(); err != nil {
-			return err
-		}
-		return p.expect()
+		return nil, testParseUnaryOperatorExpected(quoteGNUOperand(args[0]))
 	}
 }
 
-func (p *testParser) bang() error {
-	switch p.peek().kind {
-	case testSymbolStringOp, testSymbolIntOp, testSymbolFileOp, testSymbolBoolOp:
-		peek2 := p.peekN(1)
-		if peek2.isBinaryOp() || peek2.kind == testSymbolNone {
-			op := p.nextToken().intoLiteral()
-			if err := p.literal(op); err != nil {
-				return err
-			}
-			p.stack = append(p.stack, testSymbol{kind: testSymbolBang, token: "!"})
-			return nil
+func (p *testRPNParser) parseThreeArgs(args []string) ([]testSymbol, error) {
+	if op, ok := testBinarySymbol(args[1], true); ok {
+		return []testSymbol{
+			testLiteralSymbol(args[0]),
+			testLiteralSymbol(args[2]),
+			op,
+		}, nil
+	}
+	switch {
+	case args[0] == "!":
+		stack, err := p.parseArgs(args[1:])
+		if err != nil {
+			return nil, err
 		}
-		if err := p.literal(testSymbol{kind: testSymbolBang}.intoLiteral()); err != nil {
-			return err
-		}
-		return p.maybeBoolOp()
-	case testSymbolNone:
-		p.stack = append(p.stack, testSymbol{kind: testSymbolLiteral, token: "!"})
-		return nil
+		return append(stack, testSymbol{kind: testSymbolBang, token: "!"}), nil
+	case args[0] == "(" && args[2] == ")":
+		return []testSymbol{testLiteralSymbol(args[1])}, nil
 	default:
-		peek4 := []testSymbol{p.peekN(0), p.peekN(1), p.peekN(2), p.peekN(3)}
-		if peek4[0].kind == testSymbolLiteral && peek4[1].kind == testSymbolBoolOp && peek4[2].kind == testSymbolLiteral && peek4[3].kind == testSymbolNone {
-			if err := p.expr(); err != nil {
-				return err
-			}
-			p.stack = append(p.stack, testSymbol{kind: testSymbolBang, token: "!"})
-			return nil
-		}
-		if err := p.term(); err != nil {
-			return err
-		}
-		p.stack = append(p.stack, testSymbol{kind: testSymbolBang, token: "!"})
-		return nil
+		return nil, testParseBinaryOperatorExpected(quoteGNUOperand(args[1]))
 	}
 }
 
-func (p *testParser) maybeBoolOp() error {
-	if !p.peekIsBoolOp() {
-		return nil
+func (p *testRPNParser) parseOr(args []string, pos int) ([]testSymbol, int, error) {
+	stack, pos, err := p.parseAnd(args, pos)
+	if err != nil {
+		return nil, pos, err
 	}
-	symbol := p.nextToken()
-	if p.peek().kind == testSymbolNone {
-		if err := p.literal(symbol.intoLiteral()); err != nil {
-			return err
+	for pos < len(args) && args[pos] == "-o" {
+		if pos+1 >= len(args) {
+			return nil, pos, testParseExpectedValue()
 		}
-		return nil
+		right, next, err := p.parseAnd(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		stack = append(stack, right...)
+		stack = append(stack, testSymbol{kind: testSymbolBoolOp, token: "-o"})
+		pos = next
 	}
-	if err := p.boolOp(symbol); err != nil {
-		return err
-	}
-	return p.maybeBoolOp()
+	return stack, pos, nil
 }
 
-func (p *testParser) boolOp(op testSymbol) error {
-	if op.token == "-a" {
-		if err := p.term(); err != nil {
-			return err
-		}
-	} else {
-		if err := p.expr(); err != nil {
-			return err
-		}
+func (p *testRPNParser) parseAnd(args []string, pos int) ([]testSymbol, int, error) {
+	stack, pos, err := p.parseNot(args, pos)
+	if err != nil {
+		return nil, pos, err
 	}
-	p.stack = append(p.stack, op)
-	return nil
+	for pos < len(args) && args[pos] == "-a" {
+		if pos+1 >= len(args) {
+			return nil, pos, testParseExpectedValue()
+		}
+		right, next, err := p.parseNot(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		stack = append(stack, right...)
+		stack = append(stack, testSymbol{kind: testSymbolBoolOp, token: "-a"})
+		pos = next
+	}
+	return stack, pos, nil
 }
 
-func (p *testParser) uop(op testSymbol) {
-	symbol := p.nextToken()
-	if symbol.kind == testSymbolNone {
-		p.stack = append(p.stack, op.intoLiteral())
-		return
+func (p *testRPNParser) parseNot(args []string, pos int) ([]testSymbol, int, error) {
+	if pos >= len(args) {
+		return nil, pos, testParseExpectedValue()
 	}
-	p.stack = append(p.stack, symbol.intoLiteral(), op)
+	if args[pos] == "!" {
+		stack, next, err := p.parseNot(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		return append(stack, testSymbol{kind: testSymbolBang, token: "!"}), next, nil
+	}
+	return p.parsePrimary(args, pos)
 }
 
-func (p *testParser) literal(token testSymbol) error {
-	p.stack = append(p.stack, token.intoLiteral())
-	if !p.peek().isBinaryOp() {
-		return nil
+func (p *testRPNParser) parsePrimary(args []string, pos int) ([]testSymbol, int, error) {
+	if pos >= len(args) {
+		return nil, pos, testParseExpectedValue()
 	}
-	op := p.nextToken()
-	value := p.nextToken()
-	if value.kind == testSymbolNone {
-		return testParseMissingArgument(op.display())
+	if args[pos] == "(" {
+		stack, next, err := p.parseOr(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		if next >= len(args) || args[next] != ")" {
+			return nil, pos, testParseExpected(")")
+		}
+		return stack, next + 1, nil
 	}
-	p.stack = append(p.stack, value.intoLiteral(), op)
-	return nil
+	if pos+2 < len(args) && isTestExprBinaryOp(args[pos+1]) {
+		op, _ := testBinarySymbol(args[pos+1], false)
+		return []testSymbol{
+			testLiteralSymbol(args[pos]),
+			testLiteralSymbol(args[pos+2]),
+			op,
+		}, pos + 3, nil
+	}
+	if isTestUnaryOp(args[pos]) && pos+1 < len(args) {
+		return []testSymbol{
+			testLiteralSymbol(args[pos+1]),
+			testUnarySymbol(args[pos]),
+		}, pos + 2, nil
+	}
+	return []testSymbol{testLiteralSymbol(args[pos])}, pos + 1, nil
+}
+
+func testLiteralSymbol(token string) testSymbol {
+	return testSymbol{kind: testSymbolLiteral, token: token}
+}
+
+func isTestUnaryOp(token string) bool {
+	switch token {
+	case "-n", "-z",
+		"-a",
+		"-b", "-c", "-d", "-e", "-f", "-g", "-G", "-h", "-k", "-L", "-N", "-O", "-p", "-r", "-s", "-S", "-t", "-u", "-w", "-x":
+		return true
+	default:
+		return false
+	}
+}
+
+func testUnarySymbol(token string) testSymbol {
+	switch token {
+	case "-n", "-z":
+		return testSymbol{kind: testSymbolUnaryStr, token: token}
+	default:
+		return testSymbol{kind: testSymbolUnaryFile, token: token}
+	}
+}
+
+func isTestExprBinaryOp(token string) bool {
+	switch token {
+	case "=", "==", "!=", "<", ">",
+		"-eq", "-ge", "-gt", "-le", "-lt", "-ne",
+		"-ef", "-nt", "-ot":
+		return true
+	default:
+		return false
+	}
+}
+
+func testBinarySymbol(token string, allowBool bool) (testSymbol, bool) {
+	switch token {
+	case "-a", "-o":
+		if !allowBool {
+			return testSymbol{}, false
+		}
+		return testSymbol{kind: testSymbolBoolOp, token: token}, true
+	case "=", "==", "!=", "<", ">":
+		return testSymbol{kind: testSymbolStringOp, token: token}, true
+	case "-eq", "-ge", "-gt", "-le", "-lt", "-ne":
+		return testSymbol{kind: testSymbolIntOp, token: token}, true
+	case "-ef", "-nt", "-ot":
+		return testSymbol{kind: testSymbolFileOp, token: token}, true
+	default:
+		return testSymbol{}, false
+	}
 }
 
 func evalTest(ctx context.Context, inv *Invocation, stack []testSymbol) (bool, error) {
@@ -461,10 +425,6 @@ func testPopLiteral(stack *[]testSymbol) (string, error) {
 		return "", testParseExpectedValue()
 	}
 	return symbol.token, nil
-}
-
-func (s testSymbol) isBinaryOp() bool {
-	return s.kind == testSymbolStringOp || s.kind == testSymbolIntOp || s.kind == testSymbolFileOp
 }
 
 func (s testSymbol) display() string {
@@ -845,12 +805,20 @@ func testParseMissingArgument(argument string) error {
 	return testParseError{message: fmt.Sprintf("missing argument after %s", argument)}
 }
 
+func testParseMissingExpression(argument string) error {
+	return testParseError{message: fmt.Sprintf("%s must be followed by an expression", quoteGNUOperand(argument))}
+}
+
 func testParseUnknownOperator(operator string) error {
 	return testParseError{message: fmt.Sprintf("unknown operator %s", quoteGNUOperand(operator))}
 }
 
 func testParseInvalidInteger(value string) error {
 	return testParseError{message: fmt.Sprintf("invalid integer %s", quoteGNUOperand(value))}
+}
+
+func testParseBinaryOperatorExpected(operator string) error {
+	return testParseError{message: fmt.Sprintf("%s: binary operator expected", operator)}
 }
 
 func testParseUnaryOperatorExpected(operator string) error {

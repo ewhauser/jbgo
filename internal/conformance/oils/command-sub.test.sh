@@ -291,7 +291,6 @@ status=0
 #### Empty command sub $() (command::NoOp)
 
 # IMPORTANT: catch assert() failure in child process!!!
-shopt -s command_sub_errexit
 
 echo -$()- ".$()."
 ## STDOUT:

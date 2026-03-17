@@ -12,104 +12,189 @@ import (
 const illegalTok = 0
 
 type testParser struct {
-	eof bool
-	val string
-	rem []string
-
-	err func(err error)
+	args []string
+	err  func(err error)
 }
 
 func (p *testParser) errf(format string, a ...any) {
 	p.err(fmt.Errorf(format, a...))
 }
 
-func (p *testParser) next() {
-	if p.eof || len(p.rem) == 0 {
-		p.eof = true
-		p.val = ""
-		return
-	}
-	p.val = p.rem[0]
-	p.rem = p.rem[1:]
-}
-
-func (p *testParser) followWord(fval string) *syntax.Word {
-	if p.eof {
-		p.errf("%s must be followed by a word", fval)
-	}
-	w := &syntax.Word{Parts: []syntax.WordPart{
-		&syntax.Lit{Value: p.val},
+func testWord(val string) *syntax.Word {
+	return &syntax.Word{Parts: []syntax.WordPart{
+		&syntax.Lit{Value: val},
 	}}
-	p.next()
-	return w
 }
 
-func (p *testParser) classicTest(fval string, pastAndOr bool) syntax.TestExpr {
-	var left syntax.TestExpr
-	if pastAndOr {
-		left = p.testExprBase(fval)
-	} else {
-		left = p.classicTest(fval, true)
-	}
-	if left == nil || p.eof || p.val == ")" {
-		return left
-	}
-	opStr := p.val
-	op := testBinaryOp(p.val)
-	if op == illegalTok {
-		p.errf("not a valid test operator: %#q", p.val)
-	}
-	b := &syntax.BinaryTest{
-		Op: op,
-		X:  left,
-	}
-	p.next()
-	switch b.Op {
-	case syntax.AndTest, syntax.OrTest:
-		if b.Y = p.classicTest(opStr, false); b.Y == nil {
-			p.errf("%s must be followed by an expression", opStr)
-		}
-	default:
-		b.Y = p.followWord(opStr)
-	}
-	return b
-}
-
-func (p *testParser) testExprBase(fval string) syntax.TestExpr {
-	if p.eof || p.val == ")" {
+func (p *testParser) classicTest() syntax.TestExpr {
+	expr, err := p.parseArgs(p.args)
+	if err != nil {
+		p.err(err)
 		return nil
 	}
-	op := testUnaryOp(p.val)
-	switch op {
-	case syntax.TsNot:
-		u := &syntax.UnaryTest{Op: op}
-		p.next()
-		u.X = p.classicTest(op.String(), false)
-		return u
-	case syntax.TsParen:
-		pe := &syntax.ParenTest{}
-		p.next()
-		pe.X = p.classicTest(op.String(), false)
-		if p.val != ")" {
-			p.errf("reached %s without matching '(' with ')'", p.val)
+	return expr
+}
+
+func (p *testParser) parseArgs(args []string) (syntax.TestExpr, error) {
+	switch len(args) {
+	case 0:
+		return nil, nil
+	case 1:
+		return testWord(args[0]), nil
+	case 2:
+		return p.parseTwoArgs(args)
+	case 3:
+		return p.parseThreeArgs(args)
+	case 4:
+		switch {
+		case args[0] == "!":
+			expr, err := p.parseArgs(args[1:])
+			if err != nil {
+				return nil, err
+			}
+			return &syntax.UnaryTest{Op: syntax.TsNot, X: expr}, nil
+		case args[0] == "(" && args[3] == ")":
+			expr, err := p.parseArgs(args[1:3])
+			if err != nil {
+				return nil, err
+			}
+			return &syntax.ParenTest{X: expr}, nil
 		}
-		p.next()
-		return pe
-	case illegalTok:
-		return p.followWord(fval)
-	default:
-		u := &syntax.UnaryTest{Op: op}
-		p.next()
-		if p.eof {
-			// make [ -e ] fall back to [ -n -e ], i.e. use
-			// the operator as an argument
-			return &syntax.Word{Parts: []syntax.WordPart{
-				&syntax.Lit{Value: op.String()},
-			}}
-		}
-		u.X = p.followWord(op.String())
-		return u
 	}
+	expr, pos, err := p.parseOr(args, 0)
+	if err != nil {
+		return nil, err
+	}
+	if pos != len(args) {
+		return nil, fmt.Errorf("extra argument %q", args[pos])
+	}
+	return expr, nil
+}
+
+func (p *testParser) parseTwoArgs(args []string) (syntax.TestExpr, error) {
+	switch {
+	case args[1] == "-a" || args[1] == "-o":
+		return nil, fmt.Errorf("%s must be followed by an expression", args[1])
+	case testExprBinaryOp(args[1]) != illegalTok:
+		return nil, fmt.Errorf("%s must be followed by a word", args[1])
+	case args[0] == "!":
+		return &syntax.UnaryTest{Op: syntax.TsNot, X: testWord(args[1])}, nil
+	case isClassicUnaryOp(args[0]):
+		return &syntax.UnaryTest{Op: testUnaryOp(args[0]), X: testWord(args[1])}, nil
+	default:
+		return nil, fmt.Errorf("%s: unary operator expected", args[0])
+	}
+}
+
+func (p *testParser) parseThreeArgs(args []string) (syntax.TestExpr, error) {
+	if op := testBinaryOp(args[1]); op != illegalTok {
+		return &syntax.BinaryTest{
+			Op: op,
+			X:  testWord(args[0]),
+			Y:  testWord(args[2]),
+		}, nil
+	}
+	switch {
+	case args[0] == "!":
+		expr, err := p.parseArgs(args[1:])
+		if err != nil {
+			return nil, err
+		}
+		return &syntax.UnaryTest{Op: syntax.TsNot, X: expr}, nil
+	case args[0] == "(" && args[2] == ")":
+		return testWord(args[1]), nil
+	default:
+		return nil, fmt.Errorf("not a valid test operator: %#q", args[1])
+	}
+}
+
+func (p *testParser) parseOr(args []string, pos int) (syntax.TestExpr, int, error) {
+	expr, pos, err := p.parseAnd(args, pos)
+	if err != nil {
+		return nil, pos, err
+	}
+	for pos < len(args) && args[pos] == "-o" {
+		if pos+1 >= len(args) {
+			return nil, pos, fmt.Errorf("argument expected")
+		}
+		right, next, err := p.parseAnd(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		expr = &syntax.BinaryTest{Op: syntax.OrTest, X: expr, Y: right}
+		pos = next
+	}
+	return expr, pos, nil
+}
+
+func (p *testParser) parseAnd(args []string, pos int) (syntax.TestExpr, int, error) {
+	expr, pos, err := p.parseNot(args, pos)
+	if err != nil {
+		return nil, pos, err
+	}
+	for pos < len(args) && args[pos] == "-a" {
+		if pos+1 >= len(args) {
+			return nil, pos, fmt.Errorf("argument expected")
+		}
+		right, next, err := p.parseNot(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		expr = &syntax.BinaryTest{Op: syntax.AndTest, X: expr, Y: right}
+		pos = next
+	}
+	return expr, pos, nil
+}
+
+func (p *testParser) parseNot(args []string, pos int) (syntax.TestExpr, int, error) {
+	if pos >= len(args) {
+		return nil, pos, fmt.Errorf("argument expected")
+	}
+	if args[pos] == "!" {
+		expr, next, err := p.parseNot(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		return &syntax.UnaryTest{Op: syntax.TsNot, X: expr}, next, nil
+	}
+	return p.parsePrimary(args, pos)
+}
+
+func (p *testParser) parsePrimary(args []string, pos int) (syntax.TestExpr, int, error) {
+	if pos >= len(args) {
+		return nil, pos, fmt.Errorf("argument expected")
+	}
+	if args[pos] == "(" {
+		expr, next, err := p.parseOr(args, pos+1)
+		if err != nil {
+			return nil, pos, err
+		}
+		if next >= len(args) || args[next] != ")" {
+			return nil, pos, fmt.Errorf("reached %q without matching '(' with ')'", args[len(args)-1])
+		}
+		return &syntax.ParenTest{X: expr}, next + 1, nil
+	}
+	if pos+2 < len(args) {
+		if op := testExprBinaryOp(args[pos+1]); op != illegalTok {
+			return &syntax.BinaryTest{
+				Op: op,
+				X:  testWord(args[pos]),
+				Y:  testWord(args[pos+2]),
+			}, pos + 3, nil
+		}
+	}
+	if isClassicUnaryOp(args[pos]) && pos+1 < len(args) {
+		return &syntax.UnaryTest{
+			Op: testUnaryOp(args[pos]),
+			X:  testWord(args[pos+1]),
+		}, pos + 2, nil
+	}
+	return testWord(args[pos]), pos + 1, nil
+}
+
+func isClassicUnaryOp(val string) bool {
+	op := testUnaryOp(val)
+	return op != illegalTok && op != syntax.TsNot && op != syntax.TsParen
 }
 
 // testUnaryOp is an exact copy of syntax's.
@@ -172,17 +257,16 @@ func testUnaryOp(val string) syntax.UnTestOperator {
 	}
 }
 
-// testBinaryOp is like syntax's, but with -a and -o, and without =~.
-func testBinaryOp(val string) syntax.BinTestOperator {
+func testExprBinaryOp(val string) syntax.BinTestOperator {
 	switch val {
-	case "-a":
-		return syntax.AndTest
-	case "-o":
-		return syntax.OrTest
 	case "==", "=":
 		return syntax.TsMatch
 	case "!=":
 		return syntax.TsNoMatch
+	case "<":
+		return syntax.TsBefore
+	case ">":
+		return syntax.TsAfter
 	case "-nt":
 		return syntax.TsNewer
 	case "-ot":
@@ -203,5 +287,17 @@ func testBinaryOp(val string) syntax.BinTestOperator {
 		return syntax.TsGtr
 	default:
 		return illegalTok
+	}
+}
+
+// testBinaryOp is like syntax's, but with -a and -o, and without =~.
+func testBinaryOp(val string) syntax.BinTestOperator {
+	switch val {
+	case "-a":
+		return syntax.AndTest
+	case "-o":
+		return syntax.OrTest
+	default:
+		return testExprBinaryOp(val)
 	}
 }

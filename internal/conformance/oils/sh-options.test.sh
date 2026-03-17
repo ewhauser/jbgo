@@ -701,6 +701,7 @@ case $SH in dash|mksh) exit ;; esac
 
 shopt -s ignore_shopt_not_impl
 
+
 opt_name=xpg_echo
 
 shopt -p xpg_echo
@@ -756,5 +757,3 @@ echo --
 shopt -u xpg_echo
 --
 ## END
-
-

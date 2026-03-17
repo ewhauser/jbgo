@@ -180,13 +180,17 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		switch len(args) {
 		case 0:
 		case 1:
-			if n2, err := strconv.Atoi(args[0]); err == nil {
-				n = n2
-				break
+			n2, err := strconv.Atoi(args[0])
+			if err != nil {
+				exit = failf(2, "shift: %s: numeric argument required\n", args[0])
+				exit.exiting = true
+				return exit
 			}
-			fallthrough
+			n = n2
 		default:
-			return failf(2, "usage: shift [n]\n")
+			exit = failf(1, "shift: too many arguments\n")
+			exit.exiting = true
+			return exit
 		}
 		if n >= len(r.Params) {
 			r.Params = nil
@@ -271,13 +275,17 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		case 0:
 			*enclosing = 1
 		case 1:
-			if n, err := strconv.Atoi(args[0]); err == nil {
-				*enclosing = n
-				break
+			n, err := strconv.Atoi(args[0])
+			if err != nil {
+				exit = failf(2, "%s: %s: numeric argument required\n", name, args[0])
+				exit.exiting = true
+				return exit
 			}
-			fallthrough
+			*enclosing = n
 		default:
-			return failf(2, "usage: %s [n]\n", name)
+			exit = failf(1, "%s: too many arguments\n", name)
+			exit.exiting = true
+			return exit
 		}
 	case "pwd":
 		evalSymlinks := false
@@ -526,14 +534,13 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	case "test":
 		parseErr := false
 		p := testParser{
-			rem: args,
+			args: args,
 			err: func(err error) {
 				r.errf("%v: %v\n", pos, err)
 				parseErr = true
 			},
 		}
-		p.next()
-		expr := p.classicTest("[", false)
+		expr := p.classicTest()
 		if parseErr {
 			exit.code = 2
 			return exit

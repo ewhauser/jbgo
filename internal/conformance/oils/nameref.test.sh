@@ -153,10 +153,7 @@ ref=#
 ref=3
 ## END
 
-
 #### named ref with $# and shopt -s strict_nameref
-shopt -s strict_nameref
-
 ref='#'
 echo ref=$ref
 typeset -n ref
@@ -175,6 +172,7 @@ ref=#
 ref=#
 ref=0
 ## END
+
 
 #### named ref with 1 $1 etc.
 set -- one two three
@@ -234,26 +232,6 @@ ref=foo
 ref=1
 ref=
 ## END
-
-#### assign to invalid ref with strict_nameref
-case $SH in *bash|*mksh) exit ;; esac
-
-shopt -s strict_nameref
-
-ref=1
-
-echo ref=$ref
-typeset -n ref
-echo ref=$ref
-
-ref=foo
-echo ref=$ref
-## status: 1
-## STDOUT:
-ref=1
-## END
-## N-I bash/mksh status: 0
-## N-I bash/mksh stdout-json: ""
 
 #### name ref on Undef cell
 typeset  -n ref

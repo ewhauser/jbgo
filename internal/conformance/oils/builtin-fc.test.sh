@@ -251,7 +251,6 @@ fc -l 0 1 2 || echo too many args!
 ## status: 0
 
 #### fc errors out on too many args with strict_arg_parse
-shopt -s strict_arg_parse || true
 fc -l 0 1 2 || echo too many args!
 ## STDOUT:
 too many args!

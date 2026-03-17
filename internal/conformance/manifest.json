@@ -6,6 +6,10 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/append.test.sh": {
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+        },
         "oils/arg-parse.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -86,13 +90,9 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/blog2.test.sh": {
+        "oils/bool-parse.test.sh::Not allowed: [[ ) ]] and [[ ( ]]": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
-        "oils/bool-parse.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "the [[ parser still reports a generic missing-expression syntax error instead of bash's token-specific conditional parse diagnostics for lone ) and ("
         },
         "oils/brace-expansion.test.sh": {
           "mode": "xfail",

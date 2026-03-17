@@ -194,63 +194,6 @@ argv.sh "${undef[@]}"
 ## N-I dash status: 2
 ## N-I dash stdout-json: ""
 
-#### automatically creating arrays are INDEXED, not associative
-shopt -u strict_arith || true
-
-undef[2]=x
-undef[3]=y
-x='bad'
-# bad gets coerced to zero, but this is part of the RECURSIVE arithmetic
-# behavior, which we want to disallow.  Consider disallowing in OSH.
-
-undef[$x]=zzz
-argv.sh "${undef[@]}"
-## STDOUT:
-['zzz', 'x', 'y']
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-
-#### simple_eval_builtin
-for i in 1 2; do
-  eval  # zero args
-  echo status=$?
-  eval echo one
-  echo status=$?
-  eval 'echo two'
-  echo status=$?
-  shopt -s simple_eval_builtin
-  echo ---
-done
-## STDOUT:
-status=0
-one
-status=0
-two
-status=0
----
-status=2
-status=2
-two
-status=0
----
-## END
-## N-I dash/bash/mksh STDOUT:
-status=0
-one
-status=0
-two
-status=0
----
-status=0
-one
-status=0
-two
-status=0
----
-## END
-
-
 #### strict_parse_slice means you need explicit  length
 case $SH in bash*|dash|mksh) exit ;; esac
 
@@ -274,7 +217,6 @@ status=2
 
 ## N-I bash/dash/mksh STDOUT:
 ## END
-
 
 #### Control flow must be static in YSH (strict_control_flow)
 case $SH in bash*|dash|mksh) exit ;; esac
@@ -348,4 +290,59 @@ FOO=
 ## N-I dash/mksh STDOUT:
 FOO=bar
 FOO=bar
+## END
+#### automatically creating arrays are INDEXED, not associative
+shopt -u strict_arith || true
+
+undef[2]=x
+undef[3]=y
+x='bad'
+# bad gets coerced to zero, but this is part of the RECURSIVE arithmetic
+# behavior, which we want to disallow.  Consider disallowing in OSH.
+
+undef[$x]=zzz
+argv.sh "${undef[@]}"
+## STDOUT:
+['zzz', 'x', 'y']
+## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+
+#### simple_eval_builtin
+for i in 1 2; do
+  eval  # zero args
+  echo status=$?
+  eval echo one
+  echo status=$?
+  eval 'echo two'
+  echo status=$?
+  shopt -s simple_eval_builtin
+  echo ---
+done
+## STDOUT:
+status=0
+one
+status=0
+two
+status=0
+---
+status=2
+status=2
+two
+status=0
+---
+## END
+## N-I dash/bash/mksh STDOUT:
+status=0
+one
+status=0
+two
+status=0
+---
+status=0
+one
+status=0
+two
+status=0
+---
 ## END

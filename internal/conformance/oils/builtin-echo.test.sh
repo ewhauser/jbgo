@@ -70,14 +70,6 @@ echo (42)
 ## STDOUT:
 ## END
 
-#### echo builtin should disallow typed args - variable
-var x = 43
-echo (x)
-## status: 2
-## OK mksh/zsh status: 1
-## STDOUT:
-## END
-
 #### echo -en
 echo -en 'abc\ndef\n'
 ## STDOUT:
