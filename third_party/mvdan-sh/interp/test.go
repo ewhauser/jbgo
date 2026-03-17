@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"unicode"
 
 	"golang.org/x/term"
 
@@ -98,6 +99,10 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 	switch op {
 	case syntax.TsReMatch:
 		r.clearBASH_REMATCH()
+		if bashRegexHasInvalidBareBraces(y) {
+			r.exit.code = 2
+			return false
+		}
 		re, err := regexp.Compile(y)
 		if err != nil {
 			r.exit.code = 2
@@ -158,6 +163,52 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 	default:
 		panic(fmt.Sprintf("unsupported binary test operator: %q", op))
 	}
+}
+
+func bashRegexHasInvalidBareBraces(expr string) bool {
+	escaped := false
+	inClass := false
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		switch ch {
+		case '\\':
+			escaped = true
+		case '[':
+			if !inClass {
+				inClass = true
+			}
+		case ']':
+			if inClass {
+				inClass = false
+			}
+		case '{':
+			if inClass {
+				continue
+			}
+			j := i + 1
+			start := j
+			for j < len(expr) && unicode.IsDigit(rune(expr[j])) {
+				j++
+			}
+			if j == start {
+				return true
+			}
+			if j < len(expr) && expr[j] == ',' {
+				j++
+				for j < len(expr) && unicode.IsDigit(rune(expr[j])) {
+					j++
+				}
+			}
+			if j >= len(expr) || expr[j] != '}' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (r *Runner) statMode(ctx context.Context, name string, mode os.FileMode) bool {

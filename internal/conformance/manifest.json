@@ -362,10 +362,6 @@
           "mode": "xfail",
           "reason": "the [[ parser still rejects operator tokens like ; and & after =~ earlier than bash, so the conditional parse diagnostics and status flow diverge"
         },
-        "oils/regex.test.sh::regex with unprintable characters": {
-          "mode": "xfail",
-          "reason": "the vendored interpreter still accepts some control-byte regex escapes inside [[ =~ ]] that bash rejects"
-        },
         "oils/regex.test.sh::Fatal error inside [[ =~ ]]": {
           "mode": "xfail",
           "reason": "arithmetic expansion errors inside [[ =~ ]] now return status 1, but stderr text still differs from bash"

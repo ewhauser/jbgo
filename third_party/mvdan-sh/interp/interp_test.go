@@ -1861,6 +1861,10 @@ var runTests = []runTest{
 		"plus\nstar\nquestion\nslash\n",
 	},
 	{
+		"[[ { =~ { ]] && echo true; echo status=$?",
+		"status=2\n",
+	},
+	{
 		"[[ a =~ [ ]]",
 		"exit status 2",
 	},
