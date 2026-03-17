@@ -1025,6 +1025,10 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 			elems := cfg.sliceElems(pe, vr.List, false)
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
+		if vr.Kind == Associative {
+			elems := slices.Sorted(maps.Values(vr.Map))
+			return []string{cfg.ifsJoin(elems)}, elems, true
+		}
 	}
 	return nil, nil, false
 }
