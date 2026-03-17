@@ -385,7 +385,8 @@ func walkDisplayPath(rootArg, rootAbs, currentAbs string) string {
 		return rootArg
 	}
 
-	rel := strings.TrimPrefix(currentAbs, rootAbs+"/")
+	rel := strings.TrimPrefix(currentAbs, rootAbs)
+	rel = strings.TrimPrefix(rel, "/")
 	if strings.HasPrefix(rootArg, "/") {
 		return currentAbs
 	}

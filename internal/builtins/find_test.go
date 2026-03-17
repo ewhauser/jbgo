@@ -217,3 +217,18 @@ func TestFindSupportsExecPrint0PrintfAndDelete(t *testing.T) {
 		t.Fatalf("delete output = %q, want %q", got, want)
 	}
 }
+
+func TestFindFromRootKeepsRelativePathsNormalized(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/pkg/testdata/fuzz/FuzzFoo/corpus1", []byte("data"))
+
+	result := mustExecSession(t, session, "cd /\nfind . -type f -path '*/testdata/fuzz/Fuzz*/*'\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := strings.TrimSpace(result.Stdout), "./pkg/testdata/fuzz/FuzzFoo/corpus1"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
