@@ -15,6 +15,22 @@ func TestRedirectRegressionSupportsOverwriteAppendAndInputRedirection(t *testing
 	}
 }
 
+func TestRedirectRegressionDirectoryOpenFailureOnlyFailsTheCommand(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "mkdir dir\n echo foo > ./dir\n echo status=$?\n printf foo > ./dir\n echo status=$?\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nstatus=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "./dir: Is a directory\n./dir: Is a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestPipelineRegressionChainsShellAndRegistryCommands(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

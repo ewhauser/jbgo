@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ewhauser/gbash/commands"
@@ -426,7 +427,7 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 
 		file, err := exec.FS.OpenFile(ctx, abs, flag, perm)
 		if err != nil {
-			return nil, err
+			return nil, shellOpenPathError(ctx, state.Stderr, name, err)
 		}
 		if mutationAction := fileMutationAction(flag); mutationAction != "" {
 			recordFileMutation(exec.Trace, mutationAction, abs, "", "")
@@ -917,6 +918,65 @@ func handlerPathError(ctx context.Context, stderr io.Writer, op, name string, er
 		return shellFailureToWriter(ctx, stderr, 126, "%v", err)
 	}
 	return pathError(op, name, err)
+}
+
+func shellOpenPathError(ctx context.Context, stderr io.Writer, name string, err error) error {
+	if policy.IsDenied(err) {
+		return shellFailureToWriter(ctx, stderr, 126, "%v", err)
+	}
+	return shellWrappedOpenError(name, err)
+}
+
+func shellPathErrorText(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, syscall.EISDIR):
+		return "Is a directory"
+	case errors.Is(err, stdfs.ErrNotExist):
+		return "No such file or directory"
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		switch {
+		case errors.Is(pathErr.Err, syscall.EISDIR):
+			return "Is a directory"
+		case errors.Is(pathErr.Err, stdfs.ErrNotExist):
+			return "No such file or directory"
+		case errors.Is(pathErr.Err, stdfs.ErrInvalid):
+			return "Is a directory"
+		}
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "is a directory") {
+		return "Is a directory"
+	}
+	return err.Error()
+}
+
+type shellOpenError struct {
+	pathErr *os.PathError
+	text    string
+}
+
+func shellWrappedOpenError(name string, err error) error {
+	return &shellOpenError{
+		pathErr: &os.PathError{Op: "open", Path: name, Err: err},
+		text:    fmt.Sprintf("%s: %s", name, shellPathErrorText(err)),
+	}
+}
+
+func (e *shellOpenError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.text
+}
+
+func (e *shellOpenError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.pathErr
 }
 
 func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.Environ, name string) (_ *resolvedCommand, ok bool, err error) {

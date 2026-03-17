@@ -1352,11 +1352,11 @@ func (r *Runner) open(ctx context.Context, path string, flags int, mode os.FileM
 	}
 
 	f, err := r.openHandler(r.handlerCtx(ctx, handlerKindOpen, todoPos), path, flags, mode)
-	// TODO: support wrapped PathError returned from openHandler.
-	switch err.(type) {
-	case nil:
+	var pathErr *os.PathError
+	switch {
+	case err == nil:
 		return f, nil
-	case *os.PathError:
+	case errors.As(err, &pathErr):
 		if print {
 			r.errf("%v\n", err)
 		}
