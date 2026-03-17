@@ -121,7 +121,7 @@ while
   # a couple of <newline>s
 
   # a list
-  date && ls -d /bin || echo failed; cat tests/hello.txt
+  echo date-placeholder && ls -d /bin || echo failed; cat tests/hello.txt
   # a couple of <newline>s
 
   # another list
