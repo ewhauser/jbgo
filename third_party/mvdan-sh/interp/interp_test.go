@@ -2997,6 +2997,10 @@ done <<< 2`,
 		"declare -n foo=bar; foo=xxx; echo $foo $bar",
 		"xxx xxx\n",
 	},
+	{
+		"declare -A map=([foo]=x); declare -n ref=map; key=foo; ref[$key]+=y; echo ${map[foo]}",
+		"xy\n",
+	},
 	// TODO: figure this one out
 	//{
 	//        "declare -n foo=bar bar=baz; foo=xxx; echo $foo $bar; echo $baz",

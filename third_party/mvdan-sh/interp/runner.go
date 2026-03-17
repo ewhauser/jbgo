@@ -504,10 +504,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				// TODO: there is likely a better way to do this.
 				prev.Local = false
 
-				assign := *as
-				assign.Index = r.freezeAssignIndex(prev, as.Index)
+				_, effectivePrev := prev.Resolve(r.writeEnv)
 
-				vr := r.assignVal(prev, &assign, "")
+				assign := *as
+				// Freeze the subscript once against the final assignment target so
+				// reads and writes reuse the same element/key, including via namerefs.
+				assign.Index = r.freezeAssignIndex(effectivePrev, as.Index)
+
+				vr := r.assignVal(effectivePrev, &assign, "")
 				r.setVarWithIndex(prev, as.Name.Value, assign.Index, vr)
 
 				if !tracingEnabled {
