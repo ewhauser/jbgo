@@ -250,18 +250,30 @@ var runTests = []runTest{
 	{"break", "break is only useful in a loop\n #JUSTERR"},
 	{"continue", "continue is only useful in a loop\n #JUSTERR"},
 	{"cd a b", "usage: cd [dir]\nexit status 2 #JUSTERR"},
-	{"shift a", "usage: shift [n]\nexit status 2 #JUSTERR"},
+	{"shift a", "shift: a: numeric argument required\nexit status 2 #JUSTERR"},
 	{
 		"shouldnotexist",
 		"\"shouldnotexist\": executable file not found in $PATH\nexit status 127 #JUSTERR",
 	},
 	{
 		"for i in 1; do continue a; done",
-		"usage: continue [n]\nexit status 2 #JUSTERR",
+		"continue: a: numeric argument required\nexit status 2 #JUSTERR",
 	},
 	{
 		"for i in 1; do break a; done",
-		"usage: break [n]\nexit status 2 #JUSTERR",
+		"break: a: numeric argument required\nexit status 2 #JUSTERR",
+	},
+	{
+		"set -- a b c; shift 1 extra; echo no",
+		"shift: too many arguments\nexit status 1 #JUSTERR",
+	},
+	{
+		"for i in 1; do continue 1 extra; done; echo no",
+		"continue: too many arguments\nexit status 1 #JUSTERR",
+	},
+	{
+		"for i in 1; do break 1 extra; done; echo no",
+		"break: too many arguments\nexit status 1 #JUSTERR",
 	},
 	{"false; a=b", ""},
 	{"false; false &", ""},
