@@ -502,8 +502,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				// TODO: there is likely a better way to do this.
 				prev.Local = false
 
-				vr := r.assignVal(prev, as, "")
-				r.setVarWithIndex(prev, as.Name.Value, as.Index, vr)
+				assign := *as
+				assign.Index = r.freezeAssignIndex(prev, as.Index)
+
+				vr := r.assignVal(prev, &assign, "")
+				r.setVarWithIndex(prev, as.Name.Value, assign.Index, vr)
 
 				if !tracingEnabled {
 					continue
@@ -901,6 +904,24 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	default:
 		panic(fmt.Sprintf("unhandled command node: %T", cm))
 	}
+}
+
+func (r *Runner) freezeAssignIndex(prev expand.Variable, index syntax.ArithmExpr) syntax.ArithmExpr {
+	if index == nil {
+		return nil
+	}
+	if prev.Kind == expand.Associative {
+		word, ok := index.(*syntax.Word)
+		if !ok {
+			return index
+		}
+		return &syntax.Word{Parts: []syntax.WordPart{
+			&syntax.SglQuoted{Value: r.literal(word)},
+		}}
+	}
+	return &syntax.Word{Parts: []syntax.WordPart{
+		&syntax.Lit{Value: strconv.Itoa(r.arithm(index))},
+	}}
 }
 
 func (r *Runner) trapCallback(ctx context.Context, callback, name string) {

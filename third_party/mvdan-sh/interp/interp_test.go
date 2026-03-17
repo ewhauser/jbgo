@@ -2740,6 +2740,10 @@ done <<< 2`,
 		"<1>\n<2 3 4>\n",
 	},
 	{
+		`a=(x y); i=0; a[i++]+=z; echo "$i"; printf "<%s>\n" "${a[@]}"`,
+		"1\n<xz>\n<y>\n",
+	},
+	{
 		`a=(1 '2 3'); a[-1]+=(4 5); printf "<%s>\n" "${a[@]}"`,
 		"a[-1]: cannot assign list to array member\n<1>\n<2 3>\n",
 	},
