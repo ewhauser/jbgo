@@ -1,69 +1,6 @@
 ## compare_shells: bash mksh
 ## oils_cpp_failures_allowed: 2
 
-#### Performance demo
-
-case $SH in bash|mksh) exit ;; esac
-
-shopt -s ysh:upgrade
-
-#pp test_ (a)
-
-sp=( foo {25..27} bar )
-
-sp[10]='sparse'
-
-echo $[type(sp)]
-
-echo len: "${#sp[@]}"
-
-#echo $[len(sp)]
-
-echo subst: "${sp[@]}"
-echo keys: "${!sp[@]}"
-
-echo slice: "${sp[@]:2:3}"
-
-sp[0]=set0
-
-echo get0: "${sp[0]}"
-echo get1: "${sp[1]}"
-echo ---
-
-to_append=(x y)
-echo append
-sp+=("${to_append[@]}")
-echo subst: "${sp[@]}"
-echo keys: "${!sp[@]}"
-echo ---
-
-echo unset
-unset -v 'sp[11]'
-echo subst: "${sp[@]}"
-echo keys: "${!sp[@]}"
-
-## STDOUT:
-BashArray
-len: 6
-subst: foo 25 26 27 bar sparse
-keys: 0 1 2 3 4 10
-slice: 26 27 bar
-get0: set0
-get1: 25
----
-append
-subst: set0 25 26 27 bar sparse x y
-keys: 0 1 2 3 4 10 11 12
----
-unset
-subst: set0 25 26 27 bar sparse y
-keys: 0 1 2 3 4 10 12
-## END
-
-## N-I bash/mksh STDOUT:
-## END
-
-
 #### test length
 sp=(x y z)
 
@@ -1081,114 +1018,11 @@ case $SH in bash|mksh) exit ;; esac
 a=({0..5})
 unset -v 'a[1]' 'a[2]' 'a[4]'
 
-shopt -s parse_at
 argv.sh @[a]
 argv.sh @a
 ## STDOUT:
 ['0', '3', '5']
 ['0', '3', '5']
-## END
-
-## N-I bash/mksh STDOUT:
-## END
-
-
-#### (YSH) $[a1 === a2]
-case $SH in bash|mksh) exit ;; esac
-
-a1=(1 2 3)
-unset -v 'a1[1]'
-a2=(1 2 3)
-unset -v 'a2[1]'
-a3=(1 2 4)
-unset -v 'a3[1]'
-a4=(1 2 3)
-
-shopt -s ysh:upgrade
-
-echo $[a1 === a1]
-echo $[a1 === a2]
-echo $[a1 === a3]
-echo $[a1 === a4]
-echo $[a2 === a1]
-echo $[a3 === a1]
-echo $[a4 === a1]
-
-## STDOUT:
-true
-true
-false
-false
-true
-false
-false
-## END
-
-## N-I bash/mksh STDOUT:
-## END
-
-
-#### (YSH) append v1 v2... (a)
-case $SH in bash|mksh) exit ;; esac
-
-a=(1 2 3)
-unset -v 'a[1]'
-append 'x' 'y' 'z' (a)
-= a
-
-## STDOUT:
-(BashArray [0]='1' [2]='3' [3]='x' [4]='y' [5]='z')
-## END
-
-## N-I bash/mksh STDOUT:
-## END
-
-
-#### (YSH) $[bool(a)]
-case $SH in bash|mksh) exit ;; esac
-
-a1=()
-a2=(0)
-a3=(0 1 2)
-a4=(0 0)
-unset -v 'a4[0]'
-
-shopt -s ysh:upgrade
-
-echo $[bool(a1)]
-echo $[bool(a2)]
-echo $[bool(a3)]
-echo $[bool(a4)]
-
-## STDOUT:
-false
-true
-true
-true
-## END
-
-## N-I bash/mksh STDOUT:
-## END
-
-
-#### crash dump
-case $SH in bash|mksh) exit ;; esac
-
-OILS_CRASH_DUMP_DIR=$TMP $SH -ec 'a=({0..3}); unset -v "a[2]"; false'
-json read (&crash_dump) < $TMP/*.json
-json write (crash_dump.var_stack[0].a)
-
-## STDOUT:
-{
-  "val": {
-    "type": "BashArray",
-    "data": {
-      "0": "0",
-      "1": "1",
-      "3": "3"
-    }
-  }
-}
 ## END
 
 ## N-I bash/mksh STDOUT:

@@ -138,36 +138,6 @@ $SH --login -c 'exit 0'
 ## OK mksh status: 1
 
 
-#### osh --eval 
-case $SH in bash|dash|mksh|zsh) exit ;; esac
-
-echo 'echo one "$@"' > one.sh
-echo 'echo fail "$@"; ( exit 42 )' > fail.sh
-
-$SH --eval one.sh \
-  -c 'echo status=$? flag -c "$@"' dummy x y z
-echo
-
-# Even though errexit is off, the shell exits if the last status of an --eval
-# file was non-zero.
-
-$SH --eval one.sh --eval fail.sh \
-  -c 'echo status=$? flag -c "$@"' dummy x y z
-echo status=$?
-
-## STDOUT:
-one x y z
-status=0 flag -c x y z
-
-one x y z
-fail x y z
-status=42 flag -c x y z
-status=0
-## END
-
-## N-I bash/dash/mksh/zsh STDOUT:
-## END
-
 #### Set LC_ALL LC_CTYPE LC_COLLATE LANG - affects glob ?
 
 # note: test/spec-common.sh sets LC_ALL

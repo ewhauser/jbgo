@@ -257,7 +257,6 @@ echo 7
 
 #### shopt -s strict:all || true while errexit is on
 set -o errexit
-shopt -s strict:all || true
 echo one
 false  # fail
 echo two

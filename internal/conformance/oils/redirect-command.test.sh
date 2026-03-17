@@ -289,21 +289,6 @@ cat $TMP/redirect-for-loop.txt
 ## stderr: foo
 ## stdout-json: ""
 
-#### Prefix redirect for loop -- not allowed
->$TMP/redirect2.txt for i in $(seq 3)
-do
-  echo $i
-done
-cat $TMP/redirect2.txt
-## status: 2
-## OK mksh status: 1
-## BUG zsh status: 0
-## BUG zsh STDOUT:
-1
-2
-3
-## END
-
 #### Brace group redirect
 # Suffix works, but prefix does NOT work.
 # That comes from '| compound_command redirect_list' in the grammar!

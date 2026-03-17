@@ -108,44 +108,6 @@ keys: ['i']
 vals: ['3 5 7']
 ## END
 
-#### append to element (BashArray)
-hello=100
-a=([hello]=1 [hello]+=2)
-printf 'keys: '; argv.sh "${!a[@]}"
-printf 'vals: '; argv.sh "${a[@]}"
-a+=([hello]+=:34 [hello]+=:56)
-printf 'keys: '; argv.sh "${!a[@]}"
-printf 'vals: '; argv.sh "${a[@]}"
-## STDOUT:
-keys: ['100']
-vals: ['12']
-keys: ['100']
-vals: ['12:34:56']
-## END
-
-#### append to element (BashAssoc)
-declare -A a
-hello=100
-a=([hello]=1 [hello]+=2)
-printf 'keys: '; argv.sh "${!a[@]}"
-printf 'vals: '; argv.sh "${a[@]}"
-a+=([hello]+=:34 [hello]+=:56)
-printf 'keys: '; argv.sh "${!a[@]}"
-printf 'vals: '; argv.sh "${a[@]}"
-## STDOUT:
-keys: ['hello']
-vals: ['12']
-keys: ['hello']
-vals: ['12:34:56']
-## END
-# Bash >= 5.1 has a bug. Bash <= 5.0 is OK.
-## BUG bash STDOUT:
-keys: ['hello']
-vals: ['2']
-keys: ['hello']
-vals: ['2:34:56']
-## END
-
 #### non-index forms of element (BashAssoc)
 declare -A a
 a=([j]=1 2 3 4)

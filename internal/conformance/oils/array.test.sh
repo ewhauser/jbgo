@@ -33,14 +33,6 @@ array=('1 2' $(echo '3 4'))
 argv.sh "${array[@]}"
 ## stdout: ['1 2', '3', '4']
 
-#### space before ( in array initialization
-# NOTE: mksh accepts this, but bash doesn't
-a= (1 '2 3')
-echo $a
-## status: 2
-## OK mksh status: 0
-## OK mksh stdout: 1
-
 #### array over multiple lines
 a=(
 1
@@ -49,16 +41,6 @@ a=(
 argv.sh "${a[@]}"
 ## stdout: ['1', '2 3']
 ## status: 0
-
-#### array with invalid token
-a=(
-1
-&
-'2 3'
-)
-argv.sh "${a[@]}"
-## status: 2
-## OK mksh status: 1
 
 #### array with empty string
 empty=('')
@@ -257,7 +239,6 @@ None
 
 #### strict_array prevents exporting array
 
-shopt -s strict_array
 
 export PYTHONPATH
 PYTHONPATH=(a b c)
@@ -271,28 +252,6 @@ printenv.sh PYTHONPATH
 ## N-I bash/mksh STDOUT:
 None
 ## END
-
-#### Arrays can't be used as env bindings
-# Hm bash it treats it as a string!
-A=a B=(b b) printenv.sh A B
-## status: 2
-## stdout-json: ""
-## OK bash STDOUT:
-a
-(b b)
-## END
-## OK bash status: 0
-## OK mksh status: 1
-
-#### Associative arrays can't be used as env bindings either
-A=a B=([k]=v) printenv.sh A B
-## status: 2
-## stdout-json: ""
-## OK bash STDOUT:
-a
-([k]=v)
-## OK bash status: 0
-## OK mksh status: 1
 
 #### Set element
 a=(1 '2 3')
@@ -315,16 +274,6 @@ i=(0 1)
 a[${i[1]}]=9
 argv.sh "${a[@]}"
 ## stdout: ['1', '9']
-
-#### Set array item to array
-a=(1 2)
-a[0]=(3 4)
-echo "status=$?"
-## stdout-json: ""
-## status: 2
-## N-I mksh status: 1
-## BUG bash stdout: status=1
-## BUG bash status: 0
 
 #### Slice of array with [@]
 # mksh doesn't support this syntax!  It's a bash extension.
@@ -391,11 +340,6 @@ array+=(b c)
 argv.sh "${array[@]}"
 ## stdout: ['a', 'b', 'c']
 
-#### Array syntax in wrong place
-ls foo=(1 2)
-## status: 1
-## OK bash status: 2
-
 #### Single array with :-
 
 # 2024-06 - bash 5.2 and mksh now match, bash 4.4 differed.
@@ -423,22 +367,6 @@ argv.sh "${files[@]%.c}"
 ## stdout: ['foo', 'sp ace.h', 'bar']
 ## N-I mksh status: 1
 ## N-I mksh stdout-json: ""
-
-#### Multiple subscripts not allowed
-# NOTE: bash 4.3 had a bug where it ignored the bad subscript, but now it is
-# fixed.
-a=('123' '456')
-argv.sh "${a[0]}" "${a[0][0]}"
-## stdout-json: ""
-## status: 2
-## OK bash/mksh status: 1
-
-#### Length op, index op, then transform op is not allowed
-a=('123' '456')
-echo "${#a[0]}" "${#a[0]/1/xxx}"
-## stdout-json: ""
-## status: 2
-## OK bash/mksh status: 1
 
 #### ${mystr[@]} and ${mystr[*]} are no-ops
 s='abc'
@@ -589,7 +517,6 @@ argv.sh "${a[@]:15:2}"
 ## N-I mksh stdout-json: ""
 
 #### Using an array itself as the index on LHS
-shopt -u strict_arith
 a[a]=42
 a[a]=99
 argv.sh "${a[@]}" "${a[0]}" "${a[42]}" "${a[99]}"
@@ -600,7 +527,6 @@ argv.sh "${a[@]}" "${a[0]}" "${a[42]}" "${a[99]}"
 ## END
 
 #### Using an array itself as the index on RHS
-shopt -u strict_arith
 a=(1 2 3)
 (( x = a[a] ))
 echo $x

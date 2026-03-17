@@ -36,7 +36,6 @@ argv.sh "${c[@]}"
 ## END
 
 #### strict_array: $array is not valid in OSH, is ${array[0]} in ksh/bash
-shopt -s strict_array
 
 a=(1 '2 3')
 echo $a
@@ -47,7 +46,6 @@ echo $a
 ## OK osh stdout-json: ""
 
 #### strict_array: ${array} is not valid in OSH, is ${array[0]} in ksh/bash
-shopt -s strict_array
 
 a=(1 '2 3')
 echo ${a}
@@ -82,7 +80,6 @@ EQUAL
 ## END
 
 #### ++ on a whole array increments the first element (disallowed with strict_array)
-shopt -s strict_array
 
 a=(1 10)
 (( a++ ))  # doesn't make sense

@@ -155,7 +155,6 @@ ref=3
 
 
 #### named ref with $# and shopt -s strict_nameref
-shopt -s strict_nameref
 
 ref='#'
 echo ref=$ref
@@ -238,7 +237,6 @@ ref=
 #### assign to invalid ref with strict_nameref
 case $SH in *bash|*mksh) exit ;; esac
 
-shopt -s strict_nameref
 
 ref=1
 

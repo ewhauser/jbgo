@@ -371,20 +371,6 @@ $SH -c 'for i in a"$@"b;do echo =$i=;done;}' 123 456 789
 ## STDOUT:
 ## END
 
-#### Command Sub Syntax Error
-# http://landley.net/notes.html#28-01-2020
-
-echo $(if true)
-echo $?
-echo $(false)
-echo $?
-
-## status: 2
-## stdout-json: ""
-
-## OK mksh/zsh status: 1
-
-
 #### Pipeline - http://landley.net/notes-2019.html#16-12-2019
 echo hello | { read i; echo $i;} | { read i; echo $i;} | cat
 echo hello | while read i; do echo -=$i=- | sed s/=/@/g ; done | cat

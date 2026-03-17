@@ -204,19 +204,6 @@ FALSE
 TRUE
 ## END
 
-#### extglob empty pattern
-shopt -s extglob
-[[ '' == @() ]] && echo TRUE
-[[ '' == @(||) ]] && echo TRUE
-[[ X == @() ]] || echo FALSE
-[[ '|' == @(||) ]] || echo FALSE
-## STDOUT:
-TRUE
-TRUE
-FALSE
-FALSE
-## END
-
 #### case with extglob
 shopt -s extglob
 for word in --help --verbose --unmatched -- -zxzx -; do

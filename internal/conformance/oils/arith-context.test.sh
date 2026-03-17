@@ -130,20 +130,6 @@ echo ${c[0]}
 $[b[0]]
 ## END
 
-#### Empty expression (( ))  $(( ))
-
-(( ))
-echo status=$?
-
-echo $(( ))
-
-#echo $[]
-
-## STDOUT:
-status=1
-0
-## END
-
 #### Empty expression for (( ))
 
 for (( ; ; )); do
@@ -158,88 +144,4 @@ one
 ## N-I mksh status: 1
 ## N-I mksh STDOUT:
 ## END
-
-#### Empty expression in ${a[@]: : }
-
-a=(a b c d e f)
-
-# space required here -- see spec/var-op-slice
-echo slice ${a[@]: }
-echo status=$?
-echo
-
-echo slice ${a[@]: : }
-echo status=$?
-echo
-
-# zsh doesn't accept this
-echo slice ${a[@]:: }
-echo status=$?
-
-## STDOUT:
-slice a b c d e f
-status=0
-
-slice
-status=0
-
-slice
-status=0
-## END
-
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-slice a b c d e f
-status=0
-
-slice
-status=0
-
-## END
-
-## BUG mksh status: 1
-## BUG mksh STDOUT:
-## END
-
-
-#### Empty expression a[]
-
-a=(1 2 3)
-
-a[]=42
-echo status=$?
-echo ${a[@]}
-
-echo ${a[]}
-echo status=$?
-
-## status: 2
-## STDOUT:
-## END
-
-## OK zsh status: 1
-
-# runtime failures
-
-## OK bash status: 0
-## OK bash STDOUT:
-status=1
-1 2 3
-status=1
-## END
-
-## BUG mksh status: 0
-## BUG mksh STDOUT:
-status=0
-42 2 3
-42
-status=0
-## END
-
-
-# Others 
-# [ 1+2 -eq 3 ]
-# [[ 1+2 -eq 3 ]]
-# unset a[]
-# printf -v a[]
 

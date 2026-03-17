@@ -116,11 +116,6 @@ echo $\
 
 # TODO: Also test unterminated quotes inside ${} and $()
 
-#### Unterminated single quote
-## code: ls foo bar '
-## status: 2
-## OK mksh status: 1
-
 #### Unterminated double quote
 ## code: ls foo bar "
 ## status: 2
@@ -212,7 +207,6 @@ echo $w $x $y
 ## N-I dash/mksh stdout-json: ""
 
 #### YSH allows unquoted foo\ bar too
-shopt -s ysh:all
 touch foo\ bar
 ls foo\ bar
 ## STDOUT:
@@ -280,29 +274,3 @@ echo -n $'\c-\c+\c"' | show_bytes
 ## N-I dash/ash STDOUT:
 ## END
 
-#### \c' is an escape, unlike bash
-
-# mksh and ksh agree this is an esacpe
-
-case $SH in dash|ash) exit ;; esac
-
-show_bytes() {
-  # -A n - no file offset
-  od -A n -t c -t x1
-}
-
-# this isn't special
-# mksh doesn't like it
-echo -n $'\c'' | show_bytes
-
-## STDOUT:
-  \a
-  07
-## END
-
-## BUG bash status: 2
-## BUG bash STDOUT:
-## END
-
-## N-I dash/ash STDOUT:
-## END

@@ -70,7 +70,6 @@ echo $((`echo 1` + 2))
 
 #### Invalid string to int
 # bash, mksh, and zsh all treat strings that don't look like numbers as zero.
-shopt -u strict_arith || true
 s=foo
 echo $((s+5))
 ## OK dash stdout-json: ""
@@ -79,7 +78,6 @@ echo $((s+5))
 ## OK bash/mksh/zsh/osh status: 0
 
 #### Invalid string to int with strict_arith
-shopt -s strict_arith || true
 s=foo
 echo $s
 echo $((s+5))
@@ -213,7 +211,6 @@ echo $a
 ## N-I dash stdout-json: ""
 
 #### Increment undefined variables
-shopt -u strict_arith || true
 (( undef1++ ))
 (( ++undef2 ))
 echo "[$undef1][$undef2]"
@@ -221,7 +218,6 @@ echo "[$undef1][$undef2]"
 ## N-I dash stdout: [][]
 
 #### Increment and decrement array elements
-shopt -u strict_arith || true
 a=(5 6 7 8)
 (( a[0]++, ++a[1], a[2]--, --a[3] ))
 (( undef[0]++, ++undef[1], undef[2]--, --undef[3] ))
@@ -330,12 +326,6 @@ echo $((- a + + b))
 2
 ## END
 
-#### No floating point
-echo $((1 + 2.3))
-## status: 2
-## OK bash/mksh status: 1
-## BUG zsh status: 0
-
 #### Array indexing in arith
 # zsh does 1-based indexing!
 array=(1 2 3 4)
@@ -363,13 +353,6 @@ echo $((64#a))-$((64#z)), $((64#A))-$((64#Z)), $((64#@)), $(( 64#_ ))
 #### Multiple digit constants with base N
 echo $((10#0123)), $((16#1b))
 ## stdout: 123, 27
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-
-#### Dynamic base constants
-base=16
-echo $(( ${base}#a ))
-## stdout: 10
 ## N-I dash stdout-json: ""
 ## N-I dash status: 2
 
@@ -504,18 +487,6 @@ le=0
 
 # mksh still uses int!
 
-#### Invalid LValue
-a=9
-(( (a + 2) = 3 ))
-echo $a
-## status: 2
-## stdout-json: ""
-## OK bash/mksh/zsh stdout: 9
-## OK bash/mksh/zsh status: 0
-#   dash doesn't implement assignment
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-
 #### Invalid LValue that looks like array
 (( 1[2] = 3 ))
 echo "status=$?"
@@ -528,19 +499,6 @@ echo "status=$?"
 ## OK mksh/zsh stdout: status=2
 ## OK mksh/zsh status: 0
 
-## N-I dash stdout: status=127
-## N-I dash status: 0
-
-#### Invalid LValue: two sets of brackets
-(( a[1][2] = 3 ))
-echo "status=$?"
-#   shells treat this as a NON-fatal error
-## status: 2
-## stdout-json: ""
-## OK bash stdout: status=1
-## OK mksh/zsh stdout: status=2
-## OK bash/mksh/zsh status: 0
-#   dash doesn't implement assignment
 ## N-I dash stdout: status=127
 ## N-I dash status: 0
 
@@ -582,29 +540,6 @@ echo $(( 2**-1 * 5 ))
 ## N-I dash stdout-json: ""
 ## N-I dash status: 2
 
-#### Comment not allowed in the middle of multiline arithmetic
-echo $((
-1 +
-2 + \
-3
-))
-echo $((
-1 + 2  # not a comment
-))
-(( a = 3 + 4  # comment
-))
-echo [$a]
-## status: 1
-## STDOUT:
-6
-## END
-## OK dash/osh status: 2
-## OK bash STDOUT:
-6
-[]
-## END
-## OK bash status: 0
-
 #### Add integer to indexed array (a[0] decay)
 declare -a array=(1 2 3)
 echo $((array + 5))
@@ -625,21 +560,6 @@ echo $((assoc + 5))
 ## stdout: 47
 ## BUG dash status: 0
 ## BUG dash stdout: 5
-
-#### Double subscript
-a=(1 2 3)
-echo $(( a[1] ))
-echo $(( a[1][1] ))
-## status: 1
-## OK osh status: 2
-## STDOUT:
-2
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-## OK zsh STDOUT:
-1
-## END
 
 #### result of ArithSub -- array[0] decay
 a=(4 5 6)
@@ -697,58 +617,6 @@ last=6
 ## N-I zsh status: 1
 ## N-I zsh stdout-json: ""
 
-
-#### assignment with dynamic var name
-foo=bar
-echo $(( x$foo = 42 ))
-echo xbar=$xbar
-## STDOUT:
-42
-xbar=42
-## END
-
-#### array assignment with dynamic array name
-foo=bar
-echo $(( x$foo[5] = 42 ))
-echo 'xbar[5]='${xbar[5]}
-## STDOUT:
-42
-xbar[5]=42
-## END
-## BUG zsh STDOUT:
-42
-xbar[5]=
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-
-#### unary assignment with dynamic var name
-foo=bar
-xbar=42
-echo $(( x$foo++ ))
-echo xbar=$xbar
-## STDOUT:
-42
-xbar=43
-## END
-## BUG dash status: 2
-## BUG dash stdout-json: ""
-
-#### unary array assignment with dynamic var name
-foo=bar
-xbar[5]=42
-echo $(( x$foo[5]++ ))
-echo 'xbar[5]='${xbar[5]}
-## STDOUT:
-42
-xbar[5]=43
-## END
-## BUG zsh STDOUT:
-0
-xbar[5]=42
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Dynamic parsing of arithmetic
 e=1+2

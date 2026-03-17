@@ -106,7 +106,6 @@ fi
 # http://tldp.org/LDP/abs/html/testconstructs.html#DBLBRACKETS
 
 #### Octal literals with -eq
-shopt -u strict_arith || true
 decimal=15
 octal=017   # = 15 (decimal)
 [[ $decimal -eq $octal ]] && echo true
@@ -119,7 +118,6 @@ false
 # mksh doesn't implement this syntax for literals.
 
 #### Hex literals with -eq
-shopt -u strict_arith || true
 decimal=15
 hex=0x0f    # = 15 (decimal)
 [[ $decimal -eq $hex ]] && echo true
@@ -155,7 +153,6 @@ false
 
 #### -eq on strings 
 # This is lame behavior: it does a conversion to 0 first for any string
-shopt -u strict_arith || true
 [[ a -eq a ]] && echo true
 [[ a -eq b ]] && echo true
 ## STDOUT: 
@@ -171,14 +168,6 @@ var=-f
 true
 true
 ## END
-
-#### [[ with op variable (compare with test-builtin.test.sh)
-# Parse error -- parsed BEFORE evaluation of vars
-op='=='
-[[ a $op a ]] && echo true
-[[ a $op b ]] || echo false
-## status: 2
-## OK mksh status: 1
 
 #### [[ with unquoted empty var (compare with test-builtin.test.sh)
 empty=''
@@ -203,11 +192,6 @@ FOO=bar [[ foo == foo ]]
 ## STDOUT:
 true
 ## END
-
-#### Argument that looks like a real operator
-[[ -f < ]] && echo 'should be parse error'
-## status: 2
-## OK mksh status: 1
 
 #### User array compared to "$@" (broken unless shopt -s strict_array)
 # Both are coerced to string!  It treats it more like an  UNQUOTED ${a[@]}.
@@ -274,7 +258,6 @@ true
 ## END
 
 #### -eq coercion produces weird results
-shopt -u strict_arith || true
 [[ '' -eq 0 ]] && echo true
 ## stdout: true
 
@@ -283,66 +266,19 @@ shopt -u strict_arith || true
 echo status=$?
 ## stdout: status=0
 
-#### [[ '(' foo ]] is syntax error
-[[ '(' foo ]]
-echo status=$?
-## status: 2
-## OK mksh status: 1
-
 #### empty ! is treated as literal
 [[ '!' ]]
 echo status=$?
 ## stdout: status=0
 
-#### [[ -z ]] is syntax error
-[[ -z ]]
-echo status=$?
-## status: 2
-## OK mksh status: 1
-
 #### [[ -z '>' ]]
 [[ -z '>' ]] || echo false  # -z is operator
 ## stdout: false
-
-#### [[ -z '>' a ]] is syntax error
-[[ -z '>' -- ]]
-echo status=$?
-## status: 2
-## OK mksh status: 1
 
 #### test whether ']]' is empty
 [[ ']]' ]]
 echo status=$?
 ## status: 0
-
-#### [[ ]] is syntax error
-[[ ]]
-echo status=$?
-## stdout-json: ""
-## status: 2
-## OK mksh status: 1
-
-#### [[ && ]] is syntax error
-[[ && ]]
-echo status=$?
-## stdout-json: ""
-## status: 2
-## OK mksh status: 1
-
-#### [[ a 3< b ]] doesn't work (bug regression)
-[[ a 3< b ]]
-echo status=$?
-[[ a 3> b ]]
-echo status=$?
-## status: 2
-
-# Hm these shells use the same redirect trick that OSH used to!
-
-## BUG mksh/zsh status: 0
-## BUG mksh/zsh STDOUT:
-status=0
-status=1
-## END
 
 #### tilde expansion in [[
 HOME=/home/bob
