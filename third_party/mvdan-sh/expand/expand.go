@@ -796,26 +796,31 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 	}
 
 	hasElems := len(elems) > 0
+	isStar := pe.Param.Value == "*" || nodeLit(pe.Index) == "*"
+	null := !hasElems
+	if isStar && len(fields) == 1 && fields[0] == "" {
+		null = true
+	}
 	switch pe.Exp.Op {
 	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
-		if hasElems {
+		if pe.Exp.Op == syntax.AlternateUnset && hasElems || pe.Exp.Op == syntax.AlternateUnsetOrNull && !null {
 			word, err := cfg.quotedParamWord(pe.Exp.Word)
 			return word, true, err
 		}
 		return fields, true, nil
 	case syntax.DefaultUnset, syntax.DefaultUnsetOrNull:
-		if hasElems {
+		if pe.Exp.Op == syntax.DefaultUnset && hasElems || pe.Exp.Op == syntax.DefaultUnsetOrNull && !null {
 			return fields, true, nil
 		}
 		word, err := cfg.quotedParamWord(pe.Exp.Word)
 		return word, true, err
 	case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
-		if hasElems {
+		if pe.Exp.Op == syntax.ErrorUnset && hasElems || pe.Exp.Op == syntax.ErrorUnsetOrNull && !null {
 			return fields, true, nil
 		}
 		return nil, false, nil
 	case syntax.AssignUnset, syntax.AssignUnsetOrNull:
-		if hasElems {
+		if pe.Exp.Op == syntax.AssignUnset && hasElems || pe.Exp.Op == syntax.AssignUnsetOrNull && !null {
 			return fields, true, nil
 		}
 		return nil, false, nil

@@ -199,6 +199,60 @@ func TestFieldsQuotedAtSingleEmptyAtMatchesBash(t *testing.T) {
 	}
 }
 
+func TestFieldsQuotedStarSingleEmptyMatchesBash(t *testing.T) {
+	tests := []struct {
+		name string
+		env  testEnv
+		src  string
+		want []string
+	}{
+		{
+			name: "ArrayAlternateUnsetOrNull",
+			env: testEnv{
+				"a": {Set: true, Kind: Indexed, List: []string{""}},
+			},
+			src:  "\"${a[*]:+x}\"",
+			want: []string{""},
+		},
+		{
+			name: "ArrayDefaultUnsetOrNull",
+			env: testEnv{
+				"a": {Set: true, Kind: Indexed, List: []string{""}},
+			},
+			src:  "\"${a[*]:-fb}\"",
+			want: []string{"fb"},
+		},
+		{
+			name: "PositionalAlternateUnsetOrNull",
+			env: testEnv{
+				"*": {Set: true, Kind: Indexed, List: []string{""}},
+			},
+			src:  "\"${*:+x}\"",
+			want: []string{""},
+		},
+		{
+			name: "PositionalDefaultUnsetOrNull",
+			env: testEnv{
+				"*": {Set: true, Kind: Indexed, List: []string{""}},
+			},
+			src:  "\"${*:-fb}\"",
+			want: []string{"fb"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Fields(&Config{Env: tc.env}, word)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestFieldsQuotedArrayOperatorWordPreservesFieldBoundaries(t *testing.T) {
 	tests := []struct {
 		name string
