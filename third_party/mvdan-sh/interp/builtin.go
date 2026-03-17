@@ -10,8 +10,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -127,6 +129,171 @@ type errBuiltinExitStatus exitStatus
 
 func (e errBuiltinExitStatus) Error() string {
 	return fmt.Sprintf("builtin exit status %d", e.code)
+}
+
+const defaultCommandSearchPath = "/usr/bin:/bin"
+
+func (r *Runner) commandLookupPath(ctx context.Context, env expand.Environ, file string, execOnly bool) (string, error) {
+	find := func(candidate string) (string, error) {
+		info, err := r.statHandler(r.handlerCtx(ctx, handlerKindExec, todoPos), candidate, true)
+		if err != nil {
+			return "", err
+		}
+		if info.IsDir() {
+			return "", fs.ErrNotExist
+		}
+		if execOnly && runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+			return "", fs.ErrPermission
+		}
+		return candidate, nil
+	}
+
+	pathList := filepath.SplitList(env.Get("PATH").String())
+	if len(pathList) == 0 {
+		pathList = []string{""}
+	}
+	chars := `/`
+	if runtime.GOOS == "windows" {
+		chars = `:\/`
+	}
+	if strings.ContainsAny(file, chars) {
+		return find(file)
+	}
+	for _, elem := range pathList {
+		var candidate string
+		switch elem {
+		case "", ".":
+			candidate = "." + string(filepath.Separator) + file
+		default:
+			candidate = filepath.Join(elem, file)
+		}
+		if path, err := find(candidate); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("%q: executable file not found in $PATH", file)
+}
+
+func (r *Runner) commandLookupDefaultPath(ctx context.Context, file string, execOnly bool) (string, error) {
+	env := newOverlayEnviron(r.writeEnv, false)
+	vr := env.Get("PATH")
+	vr.Kind = expand.String
+	vr.Str = defaultCommandSearchPath
+	if err := env.Set("PATH", vr); err != nil {
+		return "", err
+	}
+	return r.commandLookupPath(ctx, env, file, execOnly)
+}
+
+func (r *Runner) withDefaultCommandPath(fn func()) {
+	env := newOverlayEnviron(r.writeEnv, false)
+	vr := env.Get("PATH")
+	vr.Kind = expand.String
+	vr.Str = defaultCommandSearchPath
+	if err := env.Set("PATH", vr); err != nil {
+		fn()
+		return
+	}
+	origEnv := r.writeEnv
+	r.writeEnv = env
+	defer func() {
+		r.writeEnv = origEnv
+	}()
+	fn()
+}
+
+func bashFunctionDescription(name string, body *syntax.Stmt) string {
+	var buf strings.Builder
+	buf.WriteString(name)
+	buf.WriteString(" () \n")
+
+	block, ok := body.Cmd.(*syntax.Block)
+	if !ok {
+		var bodyBuf bytes.Buffer
+		printer := syntax.NewPrinter(syntax.Indent(4))
+		printer.Print(&bodyBuf, body)
+		buf.WriteString(strings.TrimRight(bodyBuf.String(), "\n"))
+		return buf.String()
+	}
+
+	buf.WriteString("{ \n")
+	printer := syntax.NewPrinter(syntax.Indent(4))
+	for _, stmt := range block.Stmts {
+		var stmtBuf bytes.Buffer
+		printer.Print(&stmtBuf, stmt)
+		for _, line := range strings.Split(strings.TrimRight(stmtBuf.String(), "\n"), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			buf.WriteString("    ")
+			buf.WriteString(line)
+			buf.WriteByte('\n')
+		}
+	}
+	buf.WriteString("}")
+	return buf.String()
+}
+
+func (r *Runner) commandDescribe(ctx context.Context, arg string, verbose bool, useDefaultPath bool) (found bool) {
+	if syntax.IsKeyword(arg) {
+		if verbose {
+			r.outf("%s is a shell keyword\n", arg)
+		} else {
+			r.outf("%s\n", arg)
+		}
+		return true
+	}
+	if als, ok := r.alias[arg]; ok && r.opts[optExpandAliases] {
+		var buf bytes.Buffer
+		if len(als.args) > 0 {
+			printer := syntax.NewPrinter()
+			printer.Print(&buf, &syntax.CallExpr{Args: als.args})
+		}
+		if als.blank {
+			buf.WriteByte(' ')
+		}
+		if verbose {
+			r.outf("%s is aliased to `%s'\n", arg, &buf)
+		} else {
+			r.outf("%s\n", arg)
+		}
+		return true
+	}
+	if stmt, ok := r.Funcs[arg]; ok {
+		if verbose {
+			r.outf("%s is a function\n", arg)
+			r.outf("%s\n", bashFunctionDescription(arg, stmt))
+		} else {
+			r.outf("%s\n", arg)
+		}
+		return true
+	}
+	if IsBuiltin(arg) {
+		if verbose {
+			r.outf("%s is a shell builtin\n", arg)
+		} else {
+			r.outf("%s\n", arg)
+		}
+		return true
+	}
+	var (
+		path string
+		err  error
+	)
+	if useDefaultPath {
+		path, err = r.commandLookupDefaultPath(ctx, arg, true)
+	} else {
+		path, err = r.commandLookupPath(ctx, r.writeEnv, arg, true)
+	}
+	if err != nil {
+		return false
+	}
+	if verbose {
+		r.outf("%s is %s\n", arg, path)
+	} else {
+		r.outf("%s\n", path)
+	}
+	return true
 }
 
 // Builtin allows [ExecHandlerFunc] implementations to execute any builtin,
@@ -356,12 +523,14 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			exit = *bg.exit
 		}
 	case "builtin":
+		if len(args) > 0 && args[0] == "--" {
+			args = args[1:]
+		}
 		if len(args) < 1 {
 			break
 		}
 		if !IsBuiltin(args[0]) {
-			exit.code = 1
-			return exit
+			return failf(1, "builtin: %s: not a shell builtin\n", args[0])
 		}
 		exit = r.builtin(ctx, pos, args[0], args[1:])
 	case "type":
@@ -560,11 +729,17 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		exit = r.exit
 	case "command":
 		show := false
+		verbose := false
+		useDefaultPath := false
 		fp := flagParser{remaining: args}
 		for fp.more() {
 			switch flag := fp.flag(); flag {
 			case "-v":
 				show = true
+			case "-V":
+				verbose = true
+			case "-p":
+				useDefaultPath = true
 			default:
 				return failf(2, "command: invalid option %q\n", flag)
 			}
@@ -573,22 +748,32 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		if len(args) == 0 {
 			break
 		}
-		if !show {
+		if !show && !verbose {
 			if IsBuiltin(args[0]) {
 				return r.builtin(ctx, pos, args[0], args[1:])
 			}
-			r.exec(ctx, pos, args)
+			if useDefaultPath {
+				r.withDefaultCommandPath(func() {
+					r.exec(ctx, pos, args)
+				})
+			} else {
+				r.exec(ctx, pos, args)
+			}
 			exit = r.exit
 			return exit
 		}
 		last := uint8(0)
 		for _, arg := range args {
 			last = 0
-			if r.Funcs[arg] != nil || IsBuiltin(arg) {
-				r.outf("%s\n", arg)
-			} else if path, err := LookPathDir(r.Dir, r.writeEnv, arg); err == nil {
-				r.outf("%s\n", path)
+			if r.commandDescribe(ctx, arg, verbose, useDefaultPath) {
+				continue
+			}
+			if verbose {
+				r.errf("command: %s: not found\n", arg)
 			} else {
+				last = 1
+			}
+			if verbose {
 				last = 1
 			}
 		}
