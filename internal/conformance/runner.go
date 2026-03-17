@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,6 +20,7 @@ import (
 )
 
 var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?\w+: line \d+: `)
+var bashAnsiCQuotedCommandNotFoundPattern = regexp.MustCompile(`\$'((?:[^'\\]|\\.)*)': command not found`)
 
 func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
 	resolved := *cfg
@@ -348,7 +350,18 @@ func normalizeOutput(value, workspace string) string {
 }
 
 func normalizeBashStderr(value string) string {
-	return bashLinePrefixPattern.ReplaceAllString(filepath.ToSlash(value), "")
+	value = bashLinePrefixPattern.ReplaceAllString(filepath.ToSlash(value), "")
+	return bashAnsiCQuotedCommandNotFoundPattern.ReplaceAllStringFunc(value, func(match string) string {
+		parts := bashAnsiCQuotedCommandNotFoundPattern.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		unquoted, err := strconv.Unquote(`"` + parts[1] + `"`)
+		if err != nil {
+			return match
+		}
+		return unquoted + ": command not found"
+	})
 }
 
 func gbashEnv(cfg *SuiteConfig) map[string]string {

@@ -44,6 +44,9 @@ func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	if got, want := normalizeBashStderr("/tmp/x/bash: line 2: parse error\n"), "parse error\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
 	}
+	if got, want := normalizeBashStderr("$'echo\\rTEST': command not found\n"), "echo\rTEST: command not found\n"; got != want {
+		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
+	}
 }
 
 func TestResolvedSuiteConfigUsesPackagePaths(t *testing.T) {
