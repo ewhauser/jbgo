@@ -265,7 +265,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 	case "break", "continue":
 		if !r.inLoop {
-			return failf(0, "%s is only useful in a loop\n", name)
+			return failf(0, "%s: only meaningful in a `for', `while', or `until' loop\n", name)
 		}
 		enclosing := &r.breakEnclosing
 		if name == "continue" {
