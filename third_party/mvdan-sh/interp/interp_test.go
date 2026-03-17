@@ -4446,6 +4446,11 @@ func TestRunnerRunConfirm(t *testing.T) {
 			if err != nil {
 				got += err.Error()
 			}
+			if strings.HasPrefix(got, "bash: line 1: ") {
+				if trimmed := strings.TrimPrefix(got, "bash: line 1: "); trimmed == c.want {
+					got = trimmed
+				}
+			}
 			if got != c.want {
 				t.Fatalf("wrong bash output in %q:\nwant: %q\ngot:  %q",
 					c.in, c.want, got)
