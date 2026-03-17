@@ -13,6 +13,7 @@ type ExecutionRequest struct {
 	Name            string
 	Interpreter     string
 	PassthroughArgs []string
+	ScriptPath      string
 	Script          string
 	// Command runs an already-tokenized command argv without shell parsing.
 	// Script and Command are mutually exclusive.

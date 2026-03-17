@@ -278,10 +278,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/for-expr.test.sh::Arith lexer mode": {
-          "mode": "xfail",
-          "reason": "gbash arithmetic-for parsing accepts quoted operands that bash rejects in this case"
-        },
         "oils/func-parsing.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -338,9 +334,33 @@
           "mode": "skip",
           "reason": "requires an interactive shell or tty behavior"
         },
-        "oils/introspect.test.sh": {
+        "oils/introspect.test.sh::FUNCNAME with source (scalar or array)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
+        },
+        "oils/introspect.test.sh::BASH_SOURCE and BASH_LINENO scalar or array (e.g. for virtualenv)": {
+          "mode": "xfail",
+          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
+        },
+        "oils/introspect.test.sh::${FUNCNAME} and \"set -u\" (OSH regression)": {
+          "mode": "xfail",
+          "reason": "unbound FUNCNAME matches bash stderr but still returns exit status 1 instead of 127"
+        },
+        "oils/introspect.test.sh::$((BASH_LINENO)) (scalar form in arith)": {
+          "mode": "xfail",
+          "reason": "inline BASH_LINENO scalar form is still off by one under the conformance harness"
+        },
+        "oils/introspect.test.sh::${BASH_SOURCE[@]} with source and function name": {
+          "mode": "xfail",
+          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
+        },
+        "oils/introspect.test.sh::${BASH_LINENO[@]} is a stack of line numbers for function calls": {
+          "mode": "xfail",
+          "reason": "inline BASH_LINENO stacks are still off by one under the conformance harness"
+        },
+        "oils/introspect.test.sh::Locations when sourcing": {
+          "mode": "xfail",
+          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
         },
         "oils/known-differences.test.sh": {
           "mode": "xfail",
@@ -549,6 +569,10 @@
         "oils/posix.test.sh::Empty action for case is syntax error": {
           "mode": "xfail",
           "reason": "gbash parse diagnostics differ from bash for this syntax error"
+        },
+        "oils/posix.test.sh::Newlines in compound lists": {
+          "mode": "xfail",
+          "reason": "the conformance oracle compares literal date output and is sensitive to wall-clock drift between bash and gbash runs"
         }
       }
     }

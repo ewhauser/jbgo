@@ -184,6 +184,18 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		vr.Kind, vr.Str = expand.String, strconv.FormatUint(uint64(n), 10)
 	case "DIRSTACK":
 		vr.Kind, vr.List = expand.Indexed, r.dirStack
+	case "BASH_SOURCE":
+		if stack := r.bashSourceStack(); len(stack) > 0 {
+			vr.Kind, vr.List = expand.Indexed, stack
+		}
+	case "BASH_LINENO":
+		if stack := r.bashLineNoStack(); len(stack) > 0 {
+			vr.Kind, vr.List = expand.Indexed, stack
+		}
+	case "FUNCNAME":
+		if stack := r.funcNameStack(); len(stack) > 0 {
+			vr.Kind, vr.List = expand.Indexed, stack
+		}
 	case "0":
 		vr.Kind = expand.String
 		if r.filename != "" {
@@ -304,6 +316,7 @@ func (r *Runner) setFunc(name string, body *syntax.Stmt) {
 		r.Funcs = make(map[string]*syntax.Stmt, 4)
 	}
 	r.Funcs[name] = body
+	r.setFuncSource(name, r.currentExecFile())
 }
 
 func stringIndex(index syntax.ArithmExpr) bool {

@@ -352,13 +352,14 @@ var todoPos syntax.Pos // for handlerCtx callers where we don't yet have a posit
 
 func (r *Runner) handlerCtx(ctx context.Context, kind handlerKind, pos syntax.Pos) context.Context {
 	hc := HandlerContext{
-		runner: r,
-		kind:   kind,
-		Env:    &overlayEnviron{parent: r.writeEnv},
-		Dir:    r.Dir,
-		Pos:    pos,
-		Stdout: r.stdout,
-		Stderr: r.stderr,
+		runner:   r,
+		kind:     kind,
+		Env:      &overlayEnviron{parent: r.writeEnv},
+		Dir:      r.Dir,
+		ExecFile: r.currentExecFile(),
+		Pos:      pos,
+		Stdout:   r.stdout,
+		Stderr:   r.stderr,
 	}
 	if r.stdin != nil { // do not leave hc.Stdin as a typed nil
 		hc.Stdin = r.stdin
@@ -1158,11 +1159,23 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 	}
 	name := args[0]
 	if body := r.Funcs[name]; body != nil {
+		source := r.funcSource(name)
+		bashSource := source
+		if source == internalBootstrapSource {
+			bashSource = ""
+		}
 		// stack them to support nested func calls
 		oldParams := r.Params
 		r.Params = args[1:]
 		oldInFunc := r.inFunc
 		r.inFunc = true
+		restoreFrame := r.pushFrame(execFrame{
+			kind:       frameKindFunction,
+			label:      name,
+			execFile:   source,
+			bashSource: bashSource,
+			callLine:   r.functionCallLine(pos),
+		})
 
 		// Functions run in a nested scope.
 		// Note that [Runner.exec] below does something similar.
@@ -1172,6 +1185,7 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		r.stmt(ctx, body)
 
 		r.writeEnv = origEnv
+		restoreFrame()
 
 		r.Params = oldParams
 		r.inFunc = oldInFunc

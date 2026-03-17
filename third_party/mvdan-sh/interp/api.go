@@ -73,6 +73,8 @@ type Runner struct {
 	Vars  map[string]expand.Variable
 	Funcs map[string]*syntax.Stmt
 
+	funcSources map[string]string
+
 	alias map[string]alias
 
 	// callHandler is a function allowing to replace a simple command's
@@ -116,6 +118,9 @@ type Runner struct {
 	usedNew bool
 
 	filename string // only if Node was a File
+
+	topLevelScriptPath string
+	frames             []execFrame
 
 	// >0 to break or continue out of N enclosing loops
 	breakEnclosing, contnEnclosing int
@@ -417,6 +422,15 @@ func Params(args ...string) RunnerOption {
 				r.sourceSetParams = true
 			}
 		}
+		return nil
+	}
+}
+
+// TopLevelScriptPath marks the file path that should receive a root "main"
+// execution frame when passed to [Runner.Run] as a [*syntax.File].
+func TopLevelScriptPath(path string) RunnerOption {
+	return func(r *Runner) error {
+		r.topLevelScriptPath = path
 		return nil
 	}
 }
@@ -834,10 +848,12 @@ func (r *Runner) Reset() {
 		origStderr: r.origStderr,
 
 		// emptied below, to reuse the space
-		Vars: r.Vars,
+		Vars:        r.Vars,
+		funcSources: r.funcSources,
 
-		dirStack: r.dirStack[:0],
-		usedNew:  r.usedNew,
+		dirStack:           r.dirStack[:0],
+		usedNew:            r.usedNew,
+		topLevelScriptPath: r.topLevelScriptPath,
 	}
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
@@ -847,6 +863,11 @@ func (r *Runner) Reset() {
 		r.Vars = make(map[string]expand.Variable)
 	} else {
 		clear(r.Vars)
+	}
+	if r.funcSources == nil {
+		r.funcSources = make(map[string]string)
+	} else {
+		clear(r.funcSources)
 	}
 	// TODO(v4): Use the supplied Env directly if it implements enough methods.
 	r.writeEnv = &overlayEnviron{parent: r.Env}
@@ -934,7 +955,19 @@ func (r *Runner) Run(ctx context.Context, node syntax.Node) error {
 	switch node := node.(type) {
 	case *syntax.File:
 		r.filename = node.Name
-		r.stmts(ctx, node.Stmts)
+		if r.topLevelScriptPath != "" && node.Name == r.topLevelScriptPath {
+			restoreFrame := r.pushFrame(execFrame{
+				kind:       frameKindMain,
+				label:      "main",
+				execFile:   node.Name,
+				bashSource: node.Name,
+				callLine:   0,
+			})
+			r.stmts(ctx, node.Stmts)
+			restoreFrame()
+		} else {
+			r.stmts(ctx, node.Stmts)
+		}
 	case *syntax.Stmt:
 		r.stmt(ctx, node)
 	case syntax.Command:
@@ -993,31 +1026,34 @@ func (r *Runner) subshell(background bool) *Runner {
 	// Keep in sync with the Runner type. Manually copy fields, to not copy
 	// sensitive ones like [errgroup.Group], and to do deep copies of slices.
 	r2 := &Runner{
-		Dir:              r.Dir,
-		tempDir:          r.tempDir,
-		Params:           r.Params,
-		callHandler:      r.callHandler,
-		execHandler:      r.execHandler,
-		openHandler:      r.openHandler,
-		readDirHandler:   r.readDirHandler,
-		statHandler:      r.statHandler,
-		procSubstHandler: r.procSubstHandler,
-		stdin:            r.stdin,
-		stdout:           r.stdout,
-		stderr:           r.stderr,
-		filename:         r.filename,
-		opts:             r.opts,
-		usedNew:          r.usedNew,
-		exit:             r.exit,
-		lastExit:         r.lastExit,
+		Dir:                r.Dir,
+		tempDir:            r.tempDir,
+		Params:             r.Params,
+		callHandler:        r.callHandler,
+		execHandler:        r.execHandler,
+		openHandler:        r.openHandler,
+		readDirHandler:     r.readDirHandler,
+		statHandler:        r.statHandler,
+		procSubstHandler:   r.procSubstHandler,
+		stdin:              r.stdin,
+		stdout:             r.stdout,
+		stderr:             r.stderr,
+		filename:           r.filename,
+		topLevelScriptPath: r.topLevelScriptPath,
+		opts:               r.opts,
+		usedNew:            r.usedNew,
+		exit:               r.exit,
+		lastExit:           r.lastExit,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
 	r2.writeEnv = newOverlayEnviron(r.writeEnv, background)
 	// Funcs are copied, since they might be modified.
 	r2.Funcs = maps.Clone(r.Funcs)
+	r2.funcSources = maps.Clone(r.funcSources)
 	r2.Vars = make(map[string]expand.Variable)
 	r2.alias = maps.Clone(r.alias)
+	r2.frames = append(r2.frames, r.frames...)
 
 	r2.dirStack = append(r2.dirBootstrap[:0], r.dirStack...)
 	r2.fillExpandConfig(r.ectx)

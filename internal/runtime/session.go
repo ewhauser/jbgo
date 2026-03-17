@@ -90,7 +90,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	baseLogEvent := LogEvent{
 		SessionID:   s.id,
 		ExecutionID: executionID,
-		Name:        defaultName(req.Name),
+		Name:        executionLogName(req),
 		WorkDir:     workDir,
 	}
 	logExecutionEvent(ctx, s.cfg.Logger, &LogEvent{
@@ -102,6 +102,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	})
 	execReq := &shell.Execution{
 		Name:           baseLogEvent.Name,
+		ScriptPath:     req.ScriptPath,
 		Script:         req.Script,
 		Command:        cloneStrings(req.Command),
 		Args:           req.Args,
@@ -292,7 +293,24 @@ func validateExecutionRequest(req *ExecutionRequest) error {
 	if req.Script != "" && len(req.Command) > 0 {
 		return errors.New("execution request cannot set both Script and Command")
 	}
+	if req.ScriptPath != "" && len(req.Command) > 0 {
+		return errors.New("execution request cannot set both ScriptPath and Command")
+	}
 	return nil
+}
+
+func executionLogName(req *ExecutionRequest) string {
+	if req == nil {
+		return defaultName("")
+	}
+	switch {
+	case strings.TrimSpace(req.Name) != "":
+		return defaultName(req.Name)
+	case strings.TrimSpace(req.ScriptPath) != "":
+		return req.ScriptPath
+	default:
+		return defaultName("")
+	}
 }
 
 func runtimeVisiblePWDMatchesCurrentDir(ctx context.Context, fsys gbfs.FileSystem, candidate string) bool {
