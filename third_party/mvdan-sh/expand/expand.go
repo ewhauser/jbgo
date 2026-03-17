@@ -235,6 +235,29 @@ func Pattern(cfg *Config, word *syntax.Word) (string, error) {
 	return sb.String(), nil
 }
 
+// Regexp expands a single shell word for use as a Bash [[ =~ ]] regular
+// expression, preserving regex semantics in unquoted parts while treating
+// quoted parts as literals.
+func Regexp(cfg *Config, word *syntax.Word) (string, error) {
+	if word == nil {
+		return "", nil
+	}
+	cfg = prepareConfig(cfg)
+	field, err := cfg.wordField(word.Parts, quoteNone)
+	if err != nil {
+		return "", err
+	}
+	sb := cfg.strBuilder()
+	for _, part := range field {
+		if part.quote > quoteNone {
+			sb.WriteString(regexp.QuoteMeta(part.val))
+		} else {
+			sb.WriteString(part.val)
+		}
+	}
+	return sb.String(), nil
+}
+
 // Format expands a format string with a number of arguments, following the
 // shell's format specifications. These include printf(1), among others.
 //

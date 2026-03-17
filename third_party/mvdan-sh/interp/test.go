@@ -29,6 +29,24 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 		return r.bashTest(ctx, x.X, classic)
 	case *syntax.BinaryTest:
 		switch x.Op {
+		case syntax.TsReMatch:
+			if classic {
+				break
+			}
+			left, ok := r.testExpandWord(x.X.(*syntax.Word), expand.Literal)
+			if !ok {
+				r.clearBASH_REMATCH()
+				return ""
+			}
+			right, ok := r.testExpandWord(x.Y.(*syntax.Word), expand.Regexp)
+			if !ok {
+				r.clearBASH_REMATCH()
+				return ""
+			}
+			if r.binTest(ctx, x.Op, left, right) {
+				return "1"
+			}
+			return ""
 		case syntax.TsMatchShort, syntax.TsMatch, syntax.TsNoMatch:
 			str := r.literal(x.X.(*syntax.Word))
 			yw := x.Y.(*syntax.Word)
@@ -58,9 +76,28 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 	return ""
 }
 
+func (r *Runner) testExpandWord(word *syntax.Word, expandFunc func(*expand.Config, *syntax.Word) (string, error)) (string, bool) {
+	str, err := expandFunc(r.ecfg, word)
+	if err == nil {
+		return str, true
+	}
+	fmt.Fprintln(r.stderr, err)
+	r.exit.code = 1
+	return "", false
+}
+
+func (r *Runner) clearBASH_REMATCH() {
+	r.setVar("BASH_REMATCH", expand.Variable{
+		Set:  true,
+		Kind: expand.Indexed,
+		List: []string{},
+	})
+}
+
 func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y string) bool {
 	switch op {
 	case syntax.TsReMatch:
+		r.clearBASH_REMATCH()
 		re, err := regexp.Compile(y)
 		if err != nil {
 			r.exit.code = 2

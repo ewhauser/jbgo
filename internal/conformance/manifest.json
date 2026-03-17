@@ -358,9 +358,37 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/regex.test.sh": {
+        "oils/regex.test.sh::Operator chars ; & but not |": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "the [[ parser still rejects operator tokens like ; and & after =~ earlier than bash, so the conditional parse diagnostics and status flow diverge"
+        },
+        "oils/regex.test.sh::regex with unprintable characters": {
+          "mode": "xfail",
+          "reason": "the vendored interpreter still accepts some control-byte regex escapes inside [[ =~ ]] that bash rejects"
+        },
+        "oils/regex.test.sh::Fatal error inside [[ =~ ]]": {
+          "mode": "xfail",
+          "reason": "arithmetic expansion errors inside [[ =~ ]] now return status 1, but stderr text still differs from bash"
+        },
+        "oils/regex.test.sh::Malformed regex": {
+          "mode": "xfail",
+          "reason": "malformed regex conditionals still surface parser errors from mvdan/sh rather than bash's conditional-expression diagnostics"
+        },
+        "oils/regex.test.sh::Regex with == and not =~ is parse error, different lexer mode required": {
+          "mode": "xfail",
+          "reason": "the [[ parser still reports generic operator parsing errors instead of bash's regex-aware conditional diagnostics in this == case"
+        },
+        "oils/regex.test.sh::Parse error with 2 words": {
+          "mode": "xfail",
+          "reason": "the [[ parser still reports a generic invalid operator error instead of bash's conditional-expression syntax diagnostics when =~ is followed by two words"
+        },
+        "oils/regex.test.sh::unquoted [a  b] as pattern, [a  b|c]": {
+          "mode": "xfail",
+          "reason": "the [[ parser still tokenizes some bracket-expression forms differently from bash, causing an early operator parse error"
+        },
+        "oils/regex.test.sh::unquoted_[a__b]_as_pattern,_[a__b|c]": {
+          "mode": "xfail",
+          "reason": "the [[ parser still tokenizes some bracket-expression forms differently from bash, causing an early operator parse error"
         },
         "oils/serialize.test.sh": {
           "mode": "xfail",

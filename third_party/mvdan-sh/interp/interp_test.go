@@ -1853,12 +1853,28 @@ var runTests = []runTest{
 		"foo\n",
 	},
 	{
+		`[[ 'a b' =~ '^(a b)$' ]] || echo single; [[ 'a b' =~ "^(a b)$" ]] || echo double; pat='^(a b)$'; [[ 'a b' =~ "$pat" ]] || echo var`,
+		"single\ndouble\nvar\n",
+	},
+	{
+		`[[ + =~ "+" ]] && echo plus; [[ * =~ "*" ]] && echo star; [[ ? =~ "?" ]] && echo question; [[ '\' =~ '\' ]] && echo slash`,
+		"plus\nstar\nquestion\nslash\n",
+	},
+	{
 		"[[ a =~ [ ]]",
 		"exit status 2",
 	},
 	{
 		"[[ a__b__c =~ _*(b_*) ]]; echo ${BASH_REMATCH[0]}; echo ${BASH_REMATCH[1]}",
 		"__b__\nb__\n",
+	},
+	{
+		"[[ foo123 =~ ([a-z]+)([0-9]+) ]]; [[ failed =~ ([a-z]+)([0-9]+) ]]; echo ${#BASH_REMATCH[@]}",
+		"0\n",
+	},
+	{
+		"[[ a =~ $(( 1 / 0 )) ]]; echo status=$?",
+		"division by zero\nstatus=1\n",
 	},
 	{
 		"[[ -e a ]] && echo x; >a; [[ -e a ]] && echo y",
