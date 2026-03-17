@@ -369,6 +369,10 @@ var runTests = []runTest{
 	{`count() { echo $#; }; a=(); count "${a[@]}"`, "0\n"},
 	{`count() { echo $#; }; count "${unset_var[@]}"`, "0\n"},
 	{`count() { echo $#; }; a=(""); count "${a[@]}"`, "1\n"},
+	{`show() { echo $#; printf "<%s>\n" "$1"; }; a=(); show "${a[*]+x}"`, "1\n<>\n"},
+	{`show() { echo $#; printf "<%s>\n" "$1"; }; set --; show "${*+x}"`, "1\n<>\n"},
+	{`show() { echo $#; printf "<%s>\n" "$1"; }; a=(); show "${a[*]:+x}"`, "1\n<>\n"},
+	{`show() { echo $#; printf "<%s>\n" "$1"; }; a=(""); show "${a[@]:+x}"`, "1\n<>\n"},
 	{`echo $1 $3; set -- a b c; echo $1 $3`, "\na c\n"},
 	{`[[ $0 == "bash" || $0 == "gosh" ]]`, ""},
 
@@ -482,6 +486,22 @@ var runTests = []runTest{
 	{`a=(1 2 3 4 5); echo "${a[@]:3}"`, "4 5\n"},
 	{`a=(1 2 3 4 5); echo "${a[@]: -2}"`, "4 5\n"},
 	{`a=(1 2 3 4 5); echo "${a[@]: -99}"`, "\n"},
+	{
+		`show() { echo $#; for x in "$@"; do printf "<%s>\n" "$x"; done; }; empty=(); show "${empty[@]:-not one}"`,
+		"1\n<not one>\n",
+	},
+	{
+		`show() { echo $#; for x in "$@"; do printf "<%s>\n" "$x"; done; }; a=(""); show "${a[@]:-with-colon}"`,
+		"1\n<with-colon>\n",
+	},
+	{
+		`show() { echo $#; for x in "$@"; do printf "<%s>\n" "$x"; done; }; a=("" ""); show "${a[@]:-with-colon}"`,
+		"2\n<>\n<>\n",
+	},
+	{
+		`show() { echo $#; for x in "$@"; do printf "<%s>\n" "$x"; done; }; a=("" ""); show "${a[*]:-with-colon}"`,
+		"1\n< >\n",
+	},
 
 	// positional parameter slicing (1-based offset, $0 at offset 0)
 	{`f() { echo "${@:2:2}"; }; f a b c d e`, "b c\n"},

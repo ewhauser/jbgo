@@ -685,7 +685,9 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		case *syntax.DblQuoted:
 			if len(wp.Parts) == 1 {
 				pe, _ := wp.Parts[0].(*syntax.ParamExp)
-				if elems := cfg.quotedElemFields(pe); elems != nil {
+				if elems, ok, err := cfg.quotedElemFields(pe); err != nil {
+					return nil, err
+				} else if ok {
 					for i, elem := range elems {
 						if i > 0 {
 							flush()
@@ -756,17 +758,17 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 
 // quotedElemFields returns the list of elements resulting from a quoted
 // parameter expansion that should be treated especially, like "${foo[@]}".
-func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
+func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error) {
 	if pe == nil || pe.Length || pe.Width || pe.IsSet {
-		return nil
+		return nil, false, nil
 	}
 	name := pe.Param.Value
 	if pe.Excl {
 		switch pe.Names {
 		case syntax.NamesPrefixWords: // "${!prefix@}"
-			return cfg.namesByPrefix(pe.Param.Value)
+			return cfg.namesByPrefix(pe.Param.Value), true, nil
 		case syntax.NamesPrefix: // "${!prefix*}"
-			return nil
+			return nil, false, nil
 		}
 		switch nodeLit(pe.Index) {
 		case "@": // "${!name[@]}"
@@ -778,40 +780,111 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) []string {
 				for key := range vr.List {
 					keys = append(keys, strconv.Itoa(key))
 				}
-				return keys
+				return keys, true, nil
 			case Associative:
-				return slices.Collect(maps.Keys(vr.Map))
+				return slices.Collect(maps.Keys(vr.Map)), true, nil
 			}
 		}
-		return nil
+		return nil, false, nil
 	}
-	switch name {
+	fields, elems, ok := cfg.quotedArrayFields(pe)
+	if !ok {
+		return nil, false, nil
+	}
+	if pe.Exp == nil {
+		return fields, true, nil
+	}
+
+	hasElems := len(elems) > 0
+	isAt := pe.Param.Value == "@" || nodeLit(pe.Index) == "@"
+	isStar := pe.Param.Value == "*" || nodeLit(pe.Index) == "*"
+	null := !hasElems
+	if isAt && len(elems) == 1 && elems[0] == "" {
+		null = true
+	}
+	if isStar && len(fields) == 1 && fields[0] == "" {
+		null = true
+	}
+	switch pe.Exp.Op {
+	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
+		if pe.Exp.Op == syntax.AlternateUnset && hasElems || pe.Exp.Op == syntax.AlternateUnsetOrNull && !null {
+			word, err := cfg.quotedParamWord(pe.Exp.Word)
+			return word, true, err
+		}
+		return fields, true, nil
+	case syntax.DefaultUnset, syntax.DefaultUnsetOrNull:
+		if pe.Exp.Op == syntax.DefaultUnset && hasElems || pe.Exp.Op == syntax.DefaultUnsetOrNull && !null {
+			return fields, true, nil
+		}
+		word, err := cfg.quotedParamWord(pe.Exp.Word)
+		return word, true, err
+	case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+		if pe.Exp.Op == syntax.ErrorUnset && hasElems || pe.Exp.Op == syntax.ErrorUnsetOrNull && !null {
+			return fields, true, nil
+		}
+		return nil, false, nil
+	case syntax.AssignUnset, syntax.AssignUnsetOrNull:
+		if pe.Exp.Op == syntax.AssignUnset && hasElems || pe.Exp.Op == syntax.AssignUnsetOrNull && !null {
+			return fields, true, nil
+		}
+		return nil, false, nil
+	default:
+		return fields, true, nil
+	}
+}
+
+func (cfg *Config) quotedParamWord(word *syntax.Word) ([]string, error) {
+	var parts []syntax.WordPart
+	if word != nil {
+		parts = word.Parts
+	}
+	fields, err := cfg.wordFields([]syntax.WordPart{&syntax.DblQuoted{Parts: parts}})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(fields))
+	for i, field := range fields {
+		out[i] = cfg.fieldJoin(field)
+	}
+	return out, nil
+}
+
+func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, bool) {
+	switch name := pe.Param.Value; name {
 	case "*": // "${*}" or "${*:offset:length}"
-		return []string{cfg.ifsJoin(cfg.sliceElems(pe, cfg.Env.Get(name).List, true))}
+		elems := cfg.sliceElems(pe, cfg.Env.Get(name).List, true)
+		return []string{cfg.ifsJoin(elems)}, elems, true
 	case "@": // "${@}" or "${@:offset:length}"
-		return cfg.sliceElems(pe, cfg.Env.Get(name).List, true)
+		elems := cfg.sliceElems(pe, cfg.Env.Get(name).List, true)
+		return elems, elems, true
 	}
+
+	name := pe.Param.Value
+	vr := cfg.Env.Get(name)
+	_, vr = vr.Resolve(cfg.Env)
 	switch nodeLit(pe.Index) {
 	case "@": // "${name[@]}"
-		vr := cfg.Env.Get(name)
 		switch vr.Kind {
 		case Indexed:
-			return cfg.sliceElems(pe, vr.List, false)
+			elems := cfg.sliceElems(pe, vr.List, false)
+			return elems, elems, true
 		case Associative:
-			return slices.Collect(maps.Values(vr.Map))
+			elems := slices.Collect(maps.Values(vr.Map))
+			return elems, elems, true
 		case Unknown:
 			if !vr.IsSet() {
 				// An unset variable expanded as "${name[@]}" produces
 				// zero fields, just like an empty array.
-				return []string{}
+				return []string{}, nil, true
 			}
 		}
 	case "*": // "${name[*]}"
-		if vr := cfg.Env.Get(name); vr.Kind == Indexed {
-			return []string{cfg.ifsJoin(cfg.sliceElems(pe, vr.List, false))}
+		if vr.Kind == Indexed {
+			elems := cfg.sliceElems(pe, vr.List, false)
+			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 	}
-	return nil
+	return nil, nil, false
 }
 
 // sliceElems applies ${var:offset:length} slicing to a list of elements.
