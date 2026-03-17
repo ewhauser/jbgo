@@ -513,6 +513,41 @@ func (cfg *Config) fieldJoin(parts []fieldPart) string {
 	return sb.String()
 }
 
+func (cfg *Config) splitFieldParts(parts []fieldPart) [][]fieldPart {
+	fields := cfg.fieldsAlloc[:0]
+	curField := cfg.fieldAlloc[:0]
+	flush := func() {
+		if len(curField) == 0 {
+			return
+		}
+		fields = append(fields, curField)
+		curField = nil
+	}
+	for _, part := range parts {
+		if part.quote > quoteNone {
+			curField = append(curField, part)
+			continue
+		}
+		fieldStart := -1
+		for i, r := range part.val {
+			if cfg.ifsRune(r) {
+				if fieldStart >= 0 {
+					curField = append(curField, fieldPart{val: part.val[fieldStart:i]})
+					fieldStart = -1
+				}
+				flush()
+			} else if fieldStart < 0 {
+				fieldStart = i
+			}
+		}
+		if fieldStart >= 0 {
+			curField = append(curField, fieldPart{val: part.val[fieldStart:]})
+		}
+	}
+	flush()
+	return fields
+}
+
 func (cfg *Config) escapedGlobField(parts []fieldPart) (escaped string, glob bool) {
 	sb := cfg.strBuilder()
 	for _, part := range parts {
@@ -659,11 +694,17 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 				field = append(field, part)
 			}
 		case *syntax.ParamExp:
-			val, err := cfg.paramExp(wp)
-			if err != nil {
+			if parts, ok, err := cfg.paramExpWordField(wp, ql); err != nil {
 				return nil, err
+			} else if ok {
+				field = append(field, parts...)
+			} else {
+				val, err := cfg.paramExp(wp, ql)
+				if err != nil {
+					return nil, err
+				}
+				field = append(field, fieldPart{val: val})
 			}
-			field = append(field, fieldPart{val: val})
 		case *syntax.CmdSubst:
 			val, err := cfg.cmdSubst(wp)
 			if err != nil {
@@ -800,11 +841,22 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				curField = append(curField, part)
 			}
 		case *syntax.ParamExp:
-			val, err := cfg.paramExp(wp)
-			if err != nil {
+			if fields2, ok, err := cfg.paramExpFields(wp); err != nil {
 				return nil, err
+			} else if ok {
+				for i, field2 := range fields2 {
+					if i > 0 {
+						flush()
+					}
+					curField = append(curField, field2...)
+				}
+			} else {
+				val, err := cfg.paramExp(wp, quoteNone)
+				if err != nil {
+					return nil, err
+				}
+				splitAdd(val)
 			}
-			splitAdd(val)
 		case *syntax.CmdSubst:
 			val, err := cfg.cmdSubst(wp)
 			if err != nil {

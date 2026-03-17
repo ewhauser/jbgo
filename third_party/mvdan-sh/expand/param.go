@@ -49,41 +49,326 @@ func overridingUnset(pe *syntax.ParamExp) bool {
 	return false
 }
 
-func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
-	oldParam := cfg.curParam
-	cfg.curParam = pe
-	defer func() { cfg.curParam = oldParam }()
+type paramExpState struct {
+	name             string
+	orig             Variable
+	vr               Variable
+	str              string
+	elems            []string
+	indexAllElements bool
+	callVarInd       bool
+}
 
-	name := pe.Param.Value
+func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
+	state := paramExpState{
+		name:       pe.Param.Value,
+		callVarInd: true,
+	}
+
 	index := pe.Index
-	switch name {
+	switch state.name {
 	case "@", "*":
 		index = &syntax.Word{Parts: []syntax.WordPart{
-			&syntax.Lit{Value: name},
+			&syntax.Lit{Value: state.name},
 		}}
 	}
-	var vr Variable
-	switch name {
+
+	switch state.name {
 	case "LINENO":
 		// This is the only parameter expansion that the environment
 		// interface cannot satisfy.
 		line := uint64(cfg.curParam.Pos().Line())
-		vr = Variable{Set: true, Kind: String, Str: strconv.FormatUint(line, 10)}
+		state.vr = Variable{Set: true, Kind: String, Str: strconv.FormatUint(line, 10)}
 	default:
-		vr = cfg.Env.Get(name)
+		state.vr = cfg.Env.Get(state.name)
 	}
-	orig := vr
-	_, vr = vr.Resolve(cfg.Env)
-	if cfg.NoUnset && !vr.IsSet() && !overridingUnset(pe) {
-		return "", UnsetParameterError{
+	state.orig = state.vr
+	_, state.vr = state.vr.Resolve(cfg.Env)
+	if cfg.NoUnset && !state.vr.IsSet() && !overridingUnset(pe) {
+		return state, UnsetParameterError{
 			Node:    pe,
 			Message: "unbound variable",
 		}
 	}
 
+	switch nodeLit(index) {
+	case "@", "*":
+		switch state.vr.Kind {
+		case Unknown:
+			state.indexAllElements = true
+		case Indexed:
+			state.indexAllElements = true
+			state.callVarInd = false
+			state.elems = cfg.sliceElems(pe, state.vr.List, state.name == "@" || state.name == "*")
+			state.str = strings.Join(state.elems, " ")
+		}
+	}
+	if state.callVarInd {
+		var err error
+		state.str, err = cfg.varInd(state.vr, index)
+		if err != nil {
+			return state, err
+		}
+	}
+	if !state.indexAllElements {
+		state.elems = []string{state.str}
+	}
+	return state, nil
+}
+
+func (cfg *Config) paramArgField(word *syntax.Word, ql quoteLevel) ([]fieldPart, error) {
+	if word == nil {
+		return nil, nil
+	}
+	var field []fieldPart
+	for i, wp := range word.Parts {
+		switch wp := wp.(type) {
+		case *syntax.Lit:
+			s := wp.Value
+			if i == 0 && ql == quoteNone {
+				if prefix, rest := cfg.expandUser(s, len(word.Parts) > 1); prefix != "" {
+					s = prefix + rest
+				}
+			}
+			if (ql == quoteDouble || ql == quoteHeredoc) && strings.Contains(s, "\\") {
+				sb := cfg.strBuilder()
+				for i := 0; i < len(s); i++ {
+					b := s[i]
+					if b == '\\' && i+1 < len(s) {
+						switch s[i+1] {
+						case '"':
+							if ql != quoteDouble {
+								break
+							}
+							fallthrough
+						case '\\', '$', '`':
+							i++
+							b = s[i]
+						}
+					}
+					sb.WriteByte(b)
+				}
+				s = sb.String()
+			}
+			s, _, _ = strings.Cut(s, "\x00")
+			field = append(field, fieldPart{val: s})
+		case *syntax.SglQuoted:
+			if ql == quoteDouble && !wp.Dollar {
+				field = append(field, fieldPart{quote: quoteDouble, val: "'" + wp.Value + "'"})
+				continue
+			}
+			fp := fieldPart{quote: quoteSingle, val: wp.Value}
+			if wp.Dollar {
+				fp.val, _, _ = Format(cfg, fp.val, nil)
+				fp.val, _, _ = strings.Cut(fp.val, "\x00")
+			}
+			field = append(field, fp)
+		case *syntax.DblQuoted:
+			wfield, err := cfg.paramArgField(&syntax.Word{Parts: wp.Parts}, quoteDouble)
+			if err != nil {
+				return nil, err
+			}
+			for _, part := range wfield {
+				part.quote = quoteDouble
+				field = append(field, part)
+			}
+			continue
+		case *syntax.ParamExp:
+			if parts, ok, err := cfg.paramExpWordField(wp, ql); err != nil {
+				return nil, err
+			} else if ok {
+				field = append(field, parts...)
+				continue
+			}
+			val, err := cfg.paramExp(wp, ql)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: val})
+			continue
+		case *syntax.CmdSubst:
+			val, err := cfg.cmdSubst(wp)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: val})
+		case *syntax.ArithmExp:
+			n, err := Arithm(cfg, wp.X)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: strconv.Itoa(n)})
+		case *syntax.ProcSubst:
+			path, err := cfg.ProcSubst(wp)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: path})
+		case *syntax.ExtGlob:
+			field = append(field, fieldPart{val: wp.Op.String() + wp.Pattern.Value + ")"})
+		default:
+			panic(fmt.Sprintf("unhandled word part: %T", wp))
+		}
+	}
+	return field, nil
+}
+
+func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fieldPart, bool, error) {
+	if pe.Exp == nil || pe.Excl || pe.Length || pe.Width || pe.IsSet || pe.Repl != nil || pe.Slice != nil {
+		return nil, false, nil
+	}
+	oldParam := cfg.curParam
+	cfg.curParam = pe
+	defer func() { cfg.curParam = oldParam }()
+	state, err := cfg.paramExpState(pe)
+	if err != nil {
+		return nil, false, err
+	}
+	argField := func() ([]fieldPart, string, error) {
+		var parts []fieldPart
+		if pe.Exp.Word != nil {
+			parts, err = cfg.paramArgField(pe.Exp.Word, ql)
+			if err != nil {
+				return nil, "", err
+			}
+		}
+		return parts, cfg.fieldJoin(parts), nil
+	}
+
+	switch op := pe.Exp.Op; op {
+	case syntax.AlternateUnset:
+		if state.vr.IsSet() {
+			parts, _, err := argField()
+			return parts, true, err
+		}
+	case syntax.AlternateUnsetOrNull:
+		if state.str != "" {
+			parts, _, err := argField()
+			return parts, true, err
+		}
+	case syntax.DefaultUnset:
+		if !state.vr.IsSet() {
+			parts, _, err := argField()
+			return parts, true, err
+		}
+	case syntax.DefaultUnsetOrNull:
+		if state.str == "" {
+			parts, _, err := argField()
+			return parts, true, err
+		}
+	case syntax.AssignUnset:
+		if !state.vr.IsSet() {
+			parts, arg, err := argField()
+			if err != nil {
+				return nil, false, err
+			}
+			if err := cfg.envSet(state.name, arg); err != nil {
+				return nil, false, err
+			}
+			return parts, true, nil
+		}
+	case syntax.AssignUnsetOrNull:
+		if state.str == "" {
+			parts, arg, err := argField()
+			if err != nil {
+				return nil, false, err
+			}
+			if err := cfg.envSet(state.name, arg); err != nil {
+				return nil, false, err
+			}
+			return parts, true, nil
+		}
+	}
+	return nil, false, nil
+}
+
+func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, error) {
+	if pe.Exp == nil || pe.Excl || pe.Length || pe.Width || pe.IsSet || pe.Repl != nil || pe.Slice != nil {
+		return nil, false, nil
+	}
+	oldParam := cfg.curParam
+	cfg.curParam = pe
+	defer func() { cfg.curParam = oldParam }()
+	state, err := cfg.paramExpState(pe)
+	if err != nil {
+		return nil, false, err
+	}
+	argFields := func() ([][]fieldPart, string, error) {
+		var fields [][]fieldPart
+		arg := ""
+		if pe.Exp.Word != nil {
+			parts, err := cfg.paramArgField(pe.Exp.Word, quoteNone)
+			if err != nil {
+				return nil, "", err
+			}
+			arg = cfg.fieldJoin(parts)
+			fields = cfg.splitFieldParts(parts)
+		}
+		return fields, arg, nil
+	}
+
+	switch op := pe.Exp.Op; op {
+	case syntax.AlternateUnset:
+		if state.vr.IsSet() {
+			fields, _, err := argFields()
+			return fields, true, err
+		}
+	case syntax.AlternateUnsetOrNull:
+		if state.str != "" {
+			fields, _, err := argFields()
+			return fields, true, err
+		}
+	case syntax.DefaultUnset:
+		if !state.vr.IsSet() {
+			fields, _, err := argFields()
+			return fields, true, err
+		}
+	case syntax.DefaultUnsetOrNull:
+		if state.str == "" {
+			fields, _, err := argFields()
+			return fields, true, err
+		}
+	case syntax.AssignUnset:
+		if !state.vr.IsSet() {
+			fields, arg, err := argFields()
+			if err != nil {
+				return nil, false, err
+			}
+			if err := cfg.envSet(state.name, arg); err != nil {
+				return nil, false, err
+			}
+			return fields, true, nil
+		}
+	case syntax.AssignUnsetOrNull:
+		if state.str == "" {
+			fields, arg, err := argFields()
+			if err != nil {
+				return nil, false, err
+			}
+			if err := cfg.envSet(state.name, arg); err != nil {
+				return nil, false, err
+			}
+			return fields, true, nil
+		}
+	}
+	return nil, false, nil
+}
+
+func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) {
+	oldParam := cfg.curParam
+	cfg.curParam = pe
+	defer func() { cfg.curParam = oldParam }()
+
+	state, err := cfg.paramExpState(pe)
+	if err != nil {
+		return "", err
+	}
+	name := state.name
+	orig := state.orig
+	vr := state.vr
+
 	var sliceOffset, sliceLen int
 	if pe.Slice != nil {
-		var err error
 		if pe.Slice.Offset != nil {
 			sliceOffset, err = Arithm(cfg, pe.Slice.Offset)
 			if err != nil {
@@ -99,42 +384,16 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
 	}
 
 	var (
-		str   string
-		elems []string
-
-		indexAllElements bool // true if var has been accessed with * or @ index
-		callVarInd       = true
+		str        = state.str
+		elems      = state.elems
+		callVarInd = state.callVarInd
 	)
-
-	switch nodeLit(index) {
-	case "@", "*":
-		switch vr.Kind {
-		case Unknown:
-			elems = nil
-			indexAllElements = true
-		case Indexed:
-			indexAllElements = true
-			callVarInd = false
-			elems = cfg.sliceElems(pe, vr.List, name == "@" || name == "*")
-			str = strings.Join(elems, " ")
-		}
-	}
-	if callVarInd {
-		var err error
-		str, err = cfg.varInd(vr, index)
-		if err != nil {
-			return "", err
-		}
-	}
-	if !indexAllElements {
-		elems = []string{str}
-	}
 
 	switch {
 	case pe.Length:
 		n := len(elems)
-		switch nodeLit(index) {
-		case "@", "*":
+		switch {
+		case name == "@", name == "*", nodeLit(pe.Index) == "@", nodeLit(pe.Index) == "*":
 		default:
 			n = utf8.RuneCountInString(str)
 		}
@@ -215,128 +474,139 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
 		sb.WriteString(str[last:])
 		str = sb.String()
 	case pe.Exp != nil:
-		arg, err := Literal(cfg, pe.Exp.Word)
-		if err != nil {
-			return "", err
-		}
 		switch op := pe.Exp.Op; op {
-		case syntax.AlternateUnsetOrNull:
-			if str == "" {
-				break
-			}
-			fallthrough
-		case syntax.AlternateUnset:
-			if vr.IsSet() {
-				str = arg
-			}
-		case syntax.DefaultUnset:
-			if vr.IsSet() {
-				break
-			}
-			fallthrough
-		case syntax.DefaultUnsetOrNull:
-			if str == "" {
-				str = arg
-			}
-		case syntax.ErrorUnset:
-			if vr.IsSet() {
-				break
-			}
-			fallthrough
-		case syntax.ErrorUnsetOrNull:
-			if str == "" {
-				return "", UnsetParameterError{
-					Node:    pe,
-					Message: arg,
-				}
-			}
-		case syntax.AssignUnset:
-			if vr.IsSet() {
-				break
-			}
-			fallthrough
-		case syntax.AssignUnsetOrNull:
-			if str == "" {
-				if err := cfg.envSet(name, arg); err != nil {
+		case syntax.AlternateUnsetOrNull, syntax.AlternateUnset,
+			syntax.DefaultUnset, syntax.DefaultUnsetOrNull,
+			syntax.AssignUnset, syntax.AssignUnsetOrNull:
+			var argField []fieldPart
+			if pe.Exp.Word != nil {
+				argField, err = cfg.paramArgField(pe.Exp.Word, ql)
+				if err != nil {
 					return "", err
 				}
-				str = arg
 			}
-		case syntax.RemSmallPrefix, syntax.RemLargePrefix,
-			syntax.RemSmallSuffix, syntax.RemLargeSuffix:
-			suffix := op == syntax.RemSmallSuffix || op == syntax.RemLargeSuffix
-			small := op == syntax.RemSmallPrefix || op == syntax.RemSmallSuffix
-			for i, elem := range elems {
-				elems[i] = removePattern(elem, arg, suffix, small)
+			arg := cfg.fieldJoin(argField)
+			switch op {
+			case syntax.AlternateUnsetOrNull:
+				if str == "" {
+					break
+				}
+				fallthrough
+			case syntax.AlternateUnset:
+				if vr.IsSet() {
+					str = arg
+				}
+			case syntax.DefaultUnset:
+				if vr.IsSet() {
+					break
+				}
+				fallthrough
+			case syntax.DefaultUnsetOrNull:
+				if str == "" {
+					str = arg
+				}
+			case syntax.AssignUnset:
+				if vr.IsSet() {
+					break
+				}
+				fallthrough
+			case syntax.AssignUnsetOrNull:
+				if str == "" {
+					if err := cfg.envSet(name, arg); err != nil {
+						return "", err
+					}
+					str = arg
+				}
 			}
-			str = strings.Join(elems, " ")
-		case syntax.UpperFirst, syntax.UpperAll,
-			syntax.LowerFirst, syntax.LowerAll:
-
-			caseFunc := unicode.ToLower
-			if op == syntax.UpperFirst || op == syntax.UpperAll {
-				caseFunc = unicode.ToUpper
-			}
-			all := op == syntax.UpperAll || op == syntax.LowerAll
-
-			// empty string means '?'; nothing to do there
-			expr, err := pattern.Regexp(arg, 0)
+		default:
+			arg, err := Literal(cfg, pe.Exp.Word)
 			if err != nil {
-				return str, nil
+				return "", err
 			}
-			rx := regexp.MustCompile(expr)
-
-			for i, elem := range elems {
-				rs := []rune(elem)
-				for ri, r := range rs {
-					if rx.MatchString(string(r)) {
-						rs[ri] = caseFunc(r)
-						if !all {
-							break
-						}
+			switch op {
+			case syntax.ErrorUnset:
+				if vr.IsSet() {
+					break
+				}
+				fallthrough
+			case syntax.ErrorUnsetOrNull:
+				if str == "" {
+					return "", UnsetParameterError{
+						Node:    pe,
+						Message: arg,
 					}
 				}
-				elems[i] = string(rs)
-			}
-			str = strings.Join(elems, " ")
-		case syntax.OtherParamOps:
-			switch arg {
-			case "Q":
-				str, err = syntax.Quote(str, syntax.LangBash)
+			case syntax.RemSmallPrefix, syntax.RemLargePrefix,
+				syntax.RemSmallSuffix, syntax.RemLargeSuffix:
+				suffix := op == syntax.RemSmallSuffix || op == syntax.RemLargeSuffix
+				small := op == syntax.RemSmallPrefix || op == syntax.RemSmallSuffix
+				for i, elem := range elems {
+					elems[i] = removePattern(elem, arg, suffix, small)
+				}
+				str = strings.Join(elems, " ")
+			case syntax.UpperFirst, syntax.UpperAll,
+				syntax.LowerFirst, syntax.LowerAll:
+
+				caseFunc := unicode.ToLower
+				if op == syntax.UpperFirst || op == syntax.UpperAll {
+					caseFunc = unicode.ToUpper
+				}
+				all := op == syntax.UpperAll || op == syntax.LowerAll
+
+				// empty string means '?'; nothing to do there
+				expr, err := pattern.Regexp(arg, 0)
 				if err != nil {
-					// Is this even possible? If a user runs into this panic,
-					// it's most likely a bug we need to fix.
-					panic(err)
+					return str, nil
 				}
-			case "E":
-				tail := str
-				var rns []rune
-				for tail != "" {
-					var rn rune
-					rn, _, tail, _ = strconv.UnquoteChar(tail, 0)
-					rns = append(rns, rn)
+				rx := regexp.MustCompile(expr)
+
+				for i, elem := range elems {
+					rs := []rune(elem)
+					for ri, r := range rs {
+						if rx.MatchString(string(r)) {
+							rs[ri] = caseFunc(r)
+							if !all {
+								break
+							}
+						}
+					}
+					elems[i] = string(rs)
 				}
-				str = string(rns)
-			case "a":
-				// ${var@a} returns variable attribute flags.
-				// We use orig (before nameref resolve) for the attributes.
-				str = orig.Flags()
-			case "A":
-				// ${var@A} returns a declare statement that recreates the variable.
-				flags := orig.Flags()
-				quoted, err := syntax.Quote(str, syntax.LangBash)
-				if err != nil {
-					return "", err
+				str = strings.Join(elems, " ")
+			case syntax.OtherParamOps:
+				switch arg {
+				case "Q":
+					str, err = syntax.Quote(str, syntax.LangBash)
+					if err != nil {
+						panic(err)
+					}
+				case "E":
+					tail := str
+					var rns []rune
+					for tail != "" {
+						var rn rune
+						rn, _, tail, _ = strconv.UnquoteChar(tail, 0)
+						rns = append(rns, rn)
+					}
+					str = string(rns)
+				case "a":
+					str = orig.Flags()
+				case "A":
+					flags := orig.Flags()
+					quoted, err := syntax.Quote(str, syntax.LangBash)
+					if err != nil {
+						return "", err
+					}
+					if flags == "" {
+						str = fmt.Sprintf("%s=%s", name, quoted)
+					} else {
+						str = fmt.Sprintf("declare -%s %s=%s", flags, name, quoted)
+					}
+				case "P":
+					// TODO: implement prompt expansion (\u, \h, \w, etc.).
+				default:
+					panic(fmt.Sprintf("unexpected @%s param expansion", arg))
 				}
-				if flags == "" {
-					str = fmt.Sprintf("%s=%s", name, quoted)
-				} else {
-					str = fmt.Sprintf("declare -%s %s=%s", flags, name, quoted)
-				}
-			case "P":
-				// TODO: implement prompt expansion (\u, \h, \w, etc.).
-			default:
-				panic(fmt.Sprintf("unexpected @%s param expansion", arg))
 			}
 		}
 	}
