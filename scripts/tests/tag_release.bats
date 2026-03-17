@@ -124,6 +124,15 @@ teardown() {
 	[[ "$output" == *"contrib/jq/v1.0.0"* ]]
 }
 
+@test "preserves contrib paths with spaces" {
+	mkdir -p "${SANDBOX}/contrib/space dir"
+	create_stub find 'printf "contrib/awk\ncontrib/space dir\n"'
+
+	run_gbash "scripts/tag_release.sh v1.0.0"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"contrib/space dir/v1.0.0"* ]]
+}
+
 @test "is idempotent when tags exist on same commit" {
 	head_commit="$(cat "${SANDBOX}/state/head")"
 	mkdir -p "${SANDBOX}/state/tags/contrib/awk" "${SANDBOX}/state/tags/contrib/jq"

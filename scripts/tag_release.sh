@@ -35,9 +35,9 @@ fi
 
 HEAD_COMMIT="$(git rev-parse HEAD)"
 tags=("${VERSION}")
-for module_dir in $(find contrib -mindepth 1 -maxdepth 1 -type d | sort); do
+while IFS= read -r module_dir; do
 	tags+=("${module_dir}/${VERSION}")
-done
+done < <(find contrib -mindepth 1 -maxdepth 1 -type d | sort)
 
 created_tags=()
 for tag in "${tags[@]}"; do
