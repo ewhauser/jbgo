@@ -22,6 +22,19 @@ jobs:
 
       - run: make test
 
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        with:
+          go-version-file: go.mod
+
+      - uses: bats-core/bats-action@2.0.0
+
+      - run: make bats-test
+
   conformance:
     runs-on: ubuntu-latest
     steps:
