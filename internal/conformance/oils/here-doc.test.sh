@@ -26,25 +26,6 @@ one
 EOF
 ## stdout: one
 
-#### Here doc from another input file descriptor
-# NOTE: OSH fails on descriptor 9, but not descriptor 8?  Is this because of
-# the Python VM?  How  to inspect state?
-read_from_fd.sh 8  8<<EOF
-here doc on descriptor
-EOF
-## stdout: 8: here doc on descriptor
-
-#### Multiple here docs with different descriptors
-read_from_fd.sh 0 3 <<EOF 3<<EOF3
-fd0
-EOF
-fd3
-EOF3
-## STDOUT:
-0: fd0
-3: fd3
-## END
-
 #### Here doc with bad var delimiter
 # Most shells accept this, but OSH is stricter.
 cat <<${a}
@@ -369,44 +350,6 @@ EOF
 ## STDOUT:
 outside
 inside
-## END
-
-#### Multiple here docs in pipeline
-case $SH in *osh) exit ;; esac
-
-# The second instance reads its stdin from the pipe, and fd 5 from a here doc.
-read_from_fd.sh 3 3<<EOF3 | read_from_fd.sh 0 5 5<<EOF5
-fd3
-EOF3
-fd5
-EOF5
-
-echo ok
-
-## STDOUT:
-0: 3: fd3
-5: fd5
-ok
-## END
-
-#### Multiple here docs in pipeline on multiple lines
-case $SH in *osh) exit ;; esac
-
-# SKIPPED: hangs with osh on Debian
-# The second instance reads its stdin from the pipe, and fd 5 from a here doc.
-read_from_fd.sh 3 3<<EOF3 |
-fd3
-EOF3
-read_from_fd.sh 0 5 5<<EOF5
-fd5
-EOF5
-
-echo ok
-
-## STDOUT:
-0: 3: fd3
-5: fd5
-ok
 ## END
 
 #### Here doc and backslash double quote

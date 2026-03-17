@@ -4,10 +4,10 @@
 
 # frontend/lexer_def.py has rules for this
 
-tab=$(python2 -c 'print "argv.sh -\t-"')
-cr=$(python2 -c 'print "argv.sh -\r-"')
-vert=$(python2 -c 'print "argv.sh -\v-"')
-ff=$(python2 -c 'print "argv.sh -\f-"')
+tab=$(printf 'argv.sh -\t-')
+cr=$(printf 'argv.sh -\r-')
+vert=$(printf 'argv.sh -\v-')
+ff=$(printf 'argv.sh -\f-')
 
 $SH -c "$tab"
 $SH -c "$cr"
@@ -23,8 +23,8 @@ $SH -c "$ff"
 
 #### \r in arith expression is allowed by some shells, but not most!
 
-arith=$(python2 -c 'print "argv.sh $(( 1 +\n2))"')
-arith_cr=$(python2 -c 'print "argv.sh $(( 1 +\r\n2))"')
+arith=$(printf 'argv.sh $(( 1 +\n2))')
+arith_cr=$(printf 'argv.sh $(( 1 +\r\n2))')
 
 $SH -c "$arith"
 if test $? -ne 0; then
@@ -48,8 +48,8 @@ failed
 
 #### whitespace in string to integer conversion
 
-tab=$(python2 -c 'print "\t42\t"')
-cr=$(python2 -c 'print "\r42\r"')
+tab=$(printf '\t42\t')
+cr=$(printf '\r42\r')
 
 $SH -c 'echo $(( $1 + 1 ))' dummy0 "$tab"
 if test $? -ne 0; then
@@ -75,7 +75,7 @@ failed
 
 # hm I wonder if Windows ports have rules for this?
 
-cr=$(python2 -c 'print "argv.sh -\r"')
+cr=$(printf 'argv.sh -\r')
 
 $SH -c "$cr"
 
@@ -86,10 +86,10 @@ $SH -c "$cr"
 #### Default IFS does not include \r \v \f
 
 # dash and zsh don't have echo -e
-tab=$(python2 -c 'print "-\t-"')
-cr=$(python2 -c 'print "-\r-"')
-vert=$(python2 -c 'print "-\v-"')
-ff=$(python2 -c 'print "-\f-"')
+tab=$(printf -- '-\t-')
+cr=$(printf -- '-\r-')
+vert=$(printf -- '-\v-')
+ff=$(printf -- '-\f-')
 
 $SH -c 'argv.sh $1' dummy0 "$tab"
 $SH -c 'argv.sh $1' dummy0 "$cr"
