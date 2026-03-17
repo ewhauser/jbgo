@@ -2570,6 +2570,19 @@ func TestPosEdgeCases(t *testing.T) {
 	qt.Check(t, qt.Equals(f.Stmts[1].End().String(), "2:9"))
 }
 
+func TestBareCarriageReturnIsNotWhitespace(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser()
+	f, err := p.Parse(strings.NewReader("echo\rTEST\n"), "")
+	qt.Assert(t, qt.IsNil(err))
+
+	call := f.Stmts[0].Cmd.(*CallExpr)
+	qt.Check(t, qt.HasLen(call.Args, 1))
+	lit := call.Args[0].Parts[0].(*Lit)
+	qt.Check(t, qt.Equals(lit.Value, "echo\rTEST"))
+}
+
 func TestParseRecoverErrors(t *testing.T) {
 	t.Parallel()
 

@@ -179,8 +179,12 @@ func langErr2(wantErr string, langSets ...LangVariant) func(*fileTestCase) {
 
 var fileTests = []fileTestCase{
 	fileTest(
-		[]string{"", " ", "\t", "\n \n", "\r \r\n"},
+		[]string{"", " ", "\t", "\n \n"},
 		langFile(&File{}),
+	),
+	fileTest(
+		[]string{"\r \r\n"},
+		langFile(litWord("\r")),
 	),
 	fileTest(
 		[]string{"", "# foo", "# foo ( bar", "# foo'bar"},

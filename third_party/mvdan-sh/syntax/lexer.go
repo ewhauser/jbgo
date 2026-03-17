@@ -253,7 +253,7 @@ skipSpace:
 			return
 		case escNewl:
 			r = p.rune()
-		case ' ', '\t', '\r':
+		case ' ', '\t':
 			p.spaced = true
 			r = p.rune()
 		case '\n':
@@ -1065,7 +1065,7 @@ func (p *Parser) advanceLitNone(r rune) {
 loop:
 	for p.newLit(r); r != utf8.RuneSelf; r = p.rune() {
 		switch r {
-		case ' ', '\t', '\n', '\r', '&', '|', ';', ')':
+		case ' ', '\t', '\n', '&', '|', ';', ')':
 			break loop
 		case '(':
 			break loop
