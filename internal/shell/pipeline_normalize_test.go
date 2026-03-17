@@ -82,6 +82,35 @@ func TestRewritePipelineSubshellsSkipsExistingSubshell(t *testing.T) {
 	}
 }
 
+func TestNormalizeExecutionProgramReusesSyntheticMetadataForSameProgram(t *testing.T) {
+	t.Parallel()
+
+	program := parseShellTestProgram(t, "printf 'hello\\n' | read -r value\n")
+
+	first := normalizeExecutionProgram(program)
+	second := normalizeExecutionProgram(program)
+
+	if len(first) != 1 {
+		t.Fatalf("len(first) = %d, want 1", len(first))
+	}
+	if len(second) != 1 {
+		t.Fatalf("len(second) = %d, want 1", len(second))
+	}
+	if first == nil || second == nil {
+		t.Fatalf("expected non-nil synthetic metadata")
+	}
+	if len(program.Stmts) != 1 {
+		t.Fatalf("len(program.Stmts) = %d, want 1", len(program.Stmts))
+	}
+	pipeline, ok := program.Stmts[0].Cmd.(*syntax.BinaryCmd)
+	if !ok {
+		t.Fatalf("Cmd = %T, want *syntax.BinaryCmd", program.Stmts[0].Cmd)
+	}
+	if got, ok := second[pipeline.Y]; !ok || got == nil {
+		t.Fatalf("second normalization lost synthetic metadata for reused program")
+	}
+}
+
 func parseShellTestProgram(t testing.TB, script string) *syntax.File {
 	t.Helper()
 

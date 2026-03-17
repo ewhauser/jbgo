@@ -1,9 +1,24 @@
 package shell
 
-import "github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
+import (
+	"sync"
+
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
+)
+
+var pipelineSyntheticCache sync.Map // map[*syntax.File]map[*syntax.Stmt]*syntax.Stmt
 
 func normalizeExecutionProgram(program *syntax.File) map[*syntax.Stmt]*syntax.Stmt {
-	return rewritePipelineSubshells(program)
+	if program != nil {
+		if cached, ok := pipelineSyntheticCache.Load(program); ok {
+			return cached.(map[*syntax.Stmt]*syntax.Stmt)
+		}
+	}
+	synthetic := rewritePipelineSubshells(program)
+	if program != nil {
+		pipelineSyntheticCache.Store(program, synthetic)
+	}
+	return synthetic
 }
 
 func rewritePipelineSubshells(program *syntax.File) map[*syntax.Stmt]*syntax.Stmt {
