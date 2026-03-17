@@ -22,7 +22,7 @@ func TestEchoSupportsGNUEscapeDecoding(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 
-	want := "\x1b\n\x1b\n\x1b\n\x1b\n\x1b\n\\x\n"
+	want := "\x1b\n\\e\n\\33\n\x1b\n\x1b\n\\x\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
@@ -103,7 +103,7 @@ func TestEchoSupportsGNUOctalWrapping(t *testing.T) {
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "echo -ne '\\0501\\777\\08'\n",
+		Script: "echo -ne '\\0501\\0777\\08\\1'\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -112,7 +112,7 @@ func TestEchoSupportsGNUOctalWrapping(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 
-	want := []byte{'A', 0xff, 0x00, '8'}
+	want := []byte{'A', 0xff, 0x00, '8', '\\', '1'}
 	if got := []byte(result.Stdout); !bytes.Equal(got, want) {
 		t.Fatalf("Stdout bytes = %v, want %v", got, want)
 	}

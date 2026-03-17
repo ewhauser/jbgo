@@ -217,7 +217,7 @@ func decodeEchoEscapes(value string) (decoded []byte, stop bool) {
 		case 'c':
 			return decoded, true
 		case 'e':
-			decoded = append(decoded, 0x1b)
+			decoded = append(decoded, '\\', 'e')
 		case 'f':
 			decoded = append(decoded, '\f')
 		case 'n':
@@ -247,9 +247,7 @@ func decodeEchoEscapes(value string) (decoded []byte, stop bool) {
 			decoded = append(decoded, byte(octal))
 			i = advance
 		case '1', '2', '3', '4', '5', '6', '7':
-			octal, advance := decodeEchoOctal(value, i)
-			decoded = append(decoded, byte(octal))
-			i = advance
+			decoded = append(decoded, '\\', value[i])
 		default:
 			decoded = append(decoded, '\\', value[i])
 		}
@@ -305,7 +303,6 @@ If -e is in effect, the following sequences are recognized:
   \a      alert (BEL)
   \b      backspace
   \c      produce no further output
-  \e      escape
   \f      form feed
   \n      new line
   \r      carriage return
