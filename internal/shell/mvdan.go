@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -91,6 +92,7 @@ type MVdan struct {
 
 const hostRunnerDir = "/"
 const bootstrapProgramName = "<gbash-prelude>"
+const virtualCommandStubPrefix = "# gbash virtual command stub: "
 
 var internalHelperCommands = map[string]struct{}{
 	"__jb_activate_new_top":  {},
@@ -1022,23 +1024,40 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 	resolvedName := path.Base(fullPath)
 	cmd, ok := exec.Registry.Lookup(resolvedName)
 	if ok {
-		return &resolvedCommand{
-			command: cmd,
-			name:    resolvedName,
-			path:    fullPath,
-			source:  source,
-		}, true, nil
+		stub, err := isVirtualCommandStub(ctx, exec, fullPath, resolvedName)
+		if err != nil {
+			return nil, false, err
+		}
+		if stub {
+			return &resolvedCommand{
+				command: cmd,
+				name:    resolvedName,
+				path:    fullPath,
+				source:  source,
+			}, true, nil
+		}
 	}
 
 	script, ok, err := resolveShebangCommand(ctx, exec, fullPath)
 	if err != nil {
 		return nil, false, err
 	}
+	if ok {
+		script.path = fullPath
+		script.source = "shebang"
+		return script, true, nil
+	}
+
+	if !isScriptFallbackEligible(ctx, exec, info, fullPath) {
+		return nil, false, nil
+	}
+
+	script, ok = resolveScriptCommand(exec, fullPath)
 	if !ok {
 		return nil, false, nil
 	}
 	script.path = fullPath
-	script.source = "shebang"
+	script.source = "shell-script"
 	return script, true, nil
 }
 
@@ -1057,6 +1076,22 @@ func pathDirs(env expand.Environ, dir string) []string {
 		dirs = append(dirs, gbfs.Resolve(dir, entry))
 	}
 	return dirs
+}
+
+func isVirtualCommandStub(ctx context.Context, exec *Execution, fullPath, name string) (bool, error) {
+	file, err := exec.FS.Open(ctx, fullPath)
+	if err != nil {
+		return false, nil
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	line, ok, err := readFirstLine(file)
+	if err != nil || !ok {
+		return false, err
+	}
+	return line == virtualCommandStubPrefix+name, nil
 }
 
 func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath string) (_ *resolvedCommand, ok bool, err error) {
@@ -1087,7 +1122,58 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath string
 	}, true, nil
 }
 
+func resolveScriptCommand(exec *Execution, fullPath string) (_ *resolvedCommand, ok bool) {
+	cmd, ok := exec.Registry.Lookup("sh")
+	if !ok {
+		return nil, false
+	}
+	return &resolvedCommand{
+		command: cmd,
+		name:    "sh",
+		args:    []string{fullPath},
+	}, true
+}
+
+func isScriptFallbackEligible(ctx context.Context, exec *Execution, info stdfs.FileInfo, fullPath string) bool {
+	if info == nil || info.IsDir() {
+		return false
+	}
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+		return false
+	}
+	return !hasShebangPrefix(ctx, exec, fullPath)
+}
+
+func hasShebangPrefix(ctx context.Context, exec *Execution, fullPath string) bool {
+	if exec == nil || exec.FS == nil {
+		return false
+	}
+	file, err := exec.FS.Open(ctx, fullPath)
+	if err != nil {
+		return false
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	line, ok, err := readFirstLine(file)
+	if err != nil || !ok {
+		return false
+	}
+	return strings.HasPrefix(line, "#!")
+}
+
 func readShebangLine(r io.Reader) (line string, ok bool, err error) {
+	line, ok, err = readFirstLine(r)
+	if err != nil || !ok {
+		return "", ok, err
+	}
+	if len(line) < 2 || line[:2] != "#!" {
+		return "", false, nil
+	}
+	return strings.TrimSpace(line[2:]), true, nil
+}
+
+func readFirstLine(r io.Reader) (line string, ok bool, err error) {
 	var data [256]byte
 	n, err := r.Read(data[:])
 	switch {
@@ -1096,14 +1182,14 @@ func readShebangLine(r io.Reader) (line string, ok bool, err error) {
 	default:
 		return "", false, err
 	}
-	if n < 2 || string(data[:2]) != "#!" {
+	if n == 0 {
 		return "", false, nil
 	}
 	line = string(data[:n])
 	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
 		line = line[:idx]
 	}
-	return strings.TrimSpace(line[2:]), true, nil
+	return line, true, nil
 }
 
 func parseShebangInterpreter(line string) (name string, args []string, ok bool) {

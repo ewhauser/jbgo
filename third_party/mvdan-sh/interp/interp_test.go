@@ -2594,7 +2594,7 @@ done <<< 2`,
 
 	// builtin
 	{"builtin", ""},
-	{"builtin noexist", "exit status 1 #JUSTERR"},
+	{"builtin noexist", "builtin: noexist: not a shell builtin\nexit status 1 #JUSTERR"},
 	{"builtin echo foo", "foo\n"},
 	{
 		"echo() { printf 'bar\n'; }; echo foo; builtin echo foo",
