@@ -64,12 +64,12 @@ argv.sh $(echo 'hi there') "$(echo 'hi there')"
 ## stdout: ['hi', 'there', 'hi there']
 
 #### Command Sub trailing newline removed
-s=$(python2 -c 'print("ab\ncd\n")')
+s=$(printf 'ab\ncd\n')
 argv.sh "$s"
 ## stdout: ['ab\ncd']
 
 #### Command Sub trailing whitespace not removed
-s=$(python2 -c 'print("ab\ncd\n ")')
+s=$(printf 'ab\ncd\n ')
 argv.sh "$s"
 ## stdout: ['ab\ncd\n ']
 

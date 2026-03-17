@@ -500,7 +500,7 @@ weird bug
 #### Invalid UTF-8
 
 echo bytes1
-not_utf8=$(python2 -c 'print("\xce\xce")')
+not_utf8=$(printf '\xce\xce')
 
 printf '%x\n' \'$not_utf8
 printf '%u\n' \'$not_utf8
@@ -508,7 +508,7 @@ printf '%o\n' \'$not_utf8
 echo
 
 echo bytes2
-not_utf8=$(python2 -c 'print("\xbc\xbc")')
+not_utf8=$(printf '\xbc\xbc')
 printf '%x\n' \'$not_utf8
 printf '%u\n' \'$not_utf8
 printf '%o\n' \'$not_utf8
@@ -517,14 +517,14 @@ echo
 # Copied from data_lang/utf8_test.cc
 
 echo overlong2
-overlong2=$(python2 -c 'print("\xC1\x81")')
+overlong2=$(printf '\xC1\x81')
 printf '%x\n' \'$overlong2
 printf '%u\n' \'$overlong2
 printf '%o\n' \'$overlong2
 echo
 
 echo overlong3
-overlong3=$(python2 -c 'print("\xE0\x81\x81")')
+overlong3=$(printf '\xE0\x81\x81')
 printf '%x\n' \'$overlong3
 printf '%u\n' \'$overlong3
 printf '%o\n' \'$overlong3
@@ -558,7 +558,7 @@ e0
 case $SH in mksh) echo 'weird bug'; exit ;; esac
 
 echo too large
-too_large=$(python2 -c 'print("\xF4\x91\x84\x91")')
+too_large=$(printf '\xF4\x91\x84\x91')
 printf '%x\n' \'$too_large
 printf '%u\n' \'$too_large
 printf '%o\n' \'$too_large

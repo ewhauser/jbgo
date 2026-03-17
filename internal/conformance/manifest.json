@@ -107,8 +107,8 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/builtin-cd.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/builtin-completion.test.sh": {
           "mode": "xfail",
@@ -155,12 +155,12 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/builtin-printf.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/builtin-process.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/builtin-read.test.sh": {
           "mode": "xfail",
@@ -215,8 +215,8 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/command-sub.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/command_.test.sh": {
           "mode": "xfail",
@@ -375,8 +375,8 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/parse-errors.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/pipeline.test.sh": {
           "mode": "xfail",
@@ -463,16 +463,16 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/unicode.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/var-num.test.sh": {
           "mode": "skip",
           "reason": "requires an interactive shell or tty behavior"
         },
         "oils/var-op-bash.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/var-op-len.test.sh": {
           "mode": "xfail",
@@ -511,20 +511,20 @@
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/vars-special.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/whitespace.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/word-eval.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/word-split.test.sh": {
-          "mode": "skip",
-          "reason": "uses inline python2 snippets that are not available in the conformance sandbox"
+          "mode": "xfail",
+          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
         "oils/xtrace.test.sh": {
           "mode": "xfail",
