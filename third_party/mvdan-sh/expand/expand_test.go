@@ -199,6 +199,62 @@ func TestFieldsQuotedAtSingleEmptyAtMatchesBash(t *testing.T) {
 	}
 }
 
+func TestFieldsQuotedArrayOperatorWordPreservesFieldBoundaries(t *testing.T) {
+	tests := []struct {
+		name string
+		env  testEnv
+		src  string
+		want []string
+	}{
+		{
+			name: "DefaultUnset",
+			env: testEnv{
+				"@": {Set: true, Kind: Indexed, List: []string{"a", "b"}},
+			},
+			src:  "\"${arr[@]-$@}\"",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "DefaultUnsetOrNull",
+			env: testEnv{
+				"@": {Set: true, Kind: Indexed, List: []string{"a", "b"}},
+			},
+			src:  "\"${arr[@]:-$@}\"",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "AlternateUnset",
+			env: testEnv{
+				"@":   {Set: true, Kind: Indexed, List: []string{"a", "b"}},
+				"arr": {Set: true, Kind: Indexed, List: []string{"x"}},
+			},
+			src:  "\"${arr[@]+$@}\"",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "AlternateUnsetOrNull",
+			env: testEnv{
+				"@":   {Set: true, Kind: Indexed, List: []string{"a", "b"}},
+				"arr": {Set: true, Kind: Indexed, List: []string{"x"}},
+			},
+			src:  "\"${arr[@]:+$@}\"",
+			want: []string{"a", "b"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Fields(&Config{Env: tc.env}, word)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 type mockFileInfo struct {
 	name        string
 	typ         fs.FileMode

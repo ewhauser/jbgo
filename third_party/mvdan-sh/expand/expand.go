@@ -825,11 +825,15 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 }
 
 func (cfg *Config) quotedParamWord(word *syntax.Word) ([]string, error) {
-	arg, err := Literal(cfg, word)
+	fields, err := cfg.wordFields(word.Parts)
 	if err != nil {
 		return nil, err
 	}
-	return []string{arg}, nil
+	out := make([]string, len(fields))
+	for i, field := range fields {
+		out[i] = cfg.fieldJoin(field)
+	}
+	return out, nil
 }
 
 func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, bool) {
