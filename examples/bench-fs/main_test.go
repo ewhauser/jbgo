@@ -92,32 +92,6 @@ func TestWorkloadsPassOnMemoryBackend(t *testing.T) {
 	}
 }
 
-func TestFTSUsesIndexedSearch(t *testing.T) {
-	t.Parallel()
-	fixture := buildBenchmarkFixture()
-	factory, cleanup, err := benchmarkBackends()[3].Prepare(context.Background(), &benchmarkEnv{fixture: fixture})
-	if err != nil {
-		t.Fatalf("fts Prepare() error = %v", err)
-	}
-	defer func() {
-		if err := cleanup(); err != nil {
-			t.Fatalf("cleanup() error = %v", err)
-		}
-	}()
-
-	fsys, err := factory.New(context.Background())
-	if err != nil {
-		t.Fatalf("factory.New() error = %v", err)
-	}
-	observation, err := runLiteralSearch(context.Background(), fsys, &fixture)
-	if err != nil {
-		t.Fatalf("runLiteralSearch() error = %v", err)
-	}
-	if observation.SearchMode != "index" {
-		t.Fatalf("SearchMode = %q, want index", observation.SearchMode)
-	}
-}
-
 func TestRunMainWritesJSONReport(t *testing.T) {
 	t.Parallel()
 	jsonPath := filepath.Join(t.TempDir(), "filesystem-bench.json")
@@ -133,8 +107,8 @@ func TestRunMainWritesJSONReport(t *testing.T) {
 	if err := json.Unmarshal(data, &report); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if len(report.Backends) != 4 {
-		t.Fatalf("backend count = %d, want 4", len(report.Backends))
+	if len(report.Backends) != 3 {
+		t.Fatalf("backend count = %d, want 3", len(report.Backends))
 	}
 	if len(report.Scenarios) != 4 {
 		t.Fatalf("scenario count = %d, want 4", len(report.Scenarios))

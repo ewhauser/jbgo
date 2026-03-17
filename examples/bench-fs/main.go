@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ewhauser/gbash/examples/internal/ftsfs"
 	"github.com/ewhauser/gbash/examples/internal/sqlitefs"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/searchadapter"
@@ -279,18 +278,6 @@ func benchmarkBackends() []backendConfig {
 				return sqlitefs.Factory{DBPath: dbPath}, func() error { return os.Remove(dbPath) }, nil
 			},
 		},
-		{
-			Info: backendInfo{
-				Name:         "fts",
-				Label:        "fts",
-				Description:  "Experimental full-text-search example filesystem over seeded in-memory data.",
-				Experimental: true,
-			},
-			ExpectIndexedMode: true,
-			Prepare: func(context.Context, *benchmarkEnv) (gbfs.Factory, func() error, error) {
-				return ftsfs.NewFactory(seededFactory), noopCleanup, nil
-			},
-		},
 	}
 }
 
@@ -313,7 +300,7 @@ func benchmarkScenarios() []workloadConfig {
 		},
 		{
 			Name:        "literal_search",
-			Description: "Indexed-or-scan literal search over /workspace using the full-text example path when available.",
+			Description: "Literal search over /workspace, using indexed search when a backend provides it.",
 			Run:         runLiteralSearch,
 		},
 	}
