@@ -283,6 +283,19 @@ l o c a
 ## N-I zsh status: 1
 ## N-I zsh stdout-json: ""
 
+#### export+=array disallowed (strict_array)
+
+export e+=(e x)
+echo "${e[@]}"
+
+## status: 1
+## STDOUT:
+## END
+## N-I bash status: 0
+## N-I bash STDOUT:
+e x
+## END
+
 #### Type mismatching of lhs+=rhs should not cause a crash
 case $SH in mksh|zsh) exit ;; esac
 s=

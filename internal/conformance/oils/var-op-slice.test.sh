@@ -121,6 +121,20 @@ echo -${s:1:3}-
 ## BUG bash/mksh/zsh stderr-json: ""
 
 
+#### Slice string with invalid UTF-8 with strict_word_eval
+echo slice
+s=$(echo -e "\xFF")bcdef
+echo -${s:1:3}-
+## status: 1
+## STDOUT: 
+slice
+## END
+## N-I bash/mksh/zsh status: 0
+## N-I bash/mksh/zsh STDOUT:
+slice
+-bcd-
+## END
+
 #### Slice with an index that's an array -- silent a[0] decay
 i=(3 4 5)
 mystr=abcdefg

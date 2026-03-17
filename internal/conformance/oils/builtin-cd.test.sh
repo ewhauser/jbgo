@@ -23,6 +23,31 @@ status=1
 status=0
 ## END
 
+#### cd with 2 or more args - with strict_arg_parse
+
+mkdir -p foo
+cd foo
+echo status=$?
+cd ..
+echo status=$?
+
+cd foo bar
+st=$?
+if test $st -ne 0; then
+  echo 'failed with multiple args'
+fi
+
+## STDOUT:
+status=0
+status=0
+failed with multiple args
+## END
+
+## N-I dash/ash STDOUT:
+status=0
+status=0
+## END
+
 #### cd with 2 or more args is allowed (strict_arg_parse disabled)
 
 mkdir -p foo
@@ -484,3 +509,11 @@ fail
 pwd /
 ## status: 0
 ## OK zsh/mksh status: 1
+
+#### pwd errors out on args with strict_arg_parse
+pwd / >/dev/null || echo 'too many args!'
+## N-I bash/dash/ash STDOUT:
+## END
+## STDOUT:
+too many args!
+## END

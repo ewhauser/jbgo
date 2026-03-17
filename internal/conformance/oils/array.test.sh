@@ -257,7 +257,6 @@ None
 
 #### strict_array prevents exporting array
 
-
 export PYTHONPATH
 PYTHONPATH=(a b c)
 printenv.sh PYTHONPATH

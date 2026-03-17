@@ -77,6 +77,23 @@ echo $((s+5))
 ## OK bash/mksh/zsh/osh stdout: 5
 ## OK bash/mksh/zsh/osh status: 0
 
+#### Invalid string to int with strict_arith
+s=foo
+echo $s
+echo $((s+5))
+echo 'should not get here'
+## status: 1
+## STDOUT:
+foo
+## END
+## OK dash status: 2
+## N-I bash/mksh/zsh STDOUT:
+foo
+5
+should not get here
+## END
+## N-I bash/mksh/zsh status: 0
+
 #### Integer constant parsing
 echo $(( 0x12A ))
 echo $(( 0x0A ))
