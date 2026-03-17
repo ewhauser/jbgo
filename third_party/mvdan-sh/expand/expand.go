@@ -834,7 +834,11 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 }
 
 func (cfg *Config) quotedParamWord(word *syntax.Word) ([]string, error) {
-	fields, err := cfg.wordFields(word.Parts)
+	var parts []syntax.WordPart
+	if word != nil {
+		parts = word.Parts
+	}
+	fields, err := cfg.wordFields([]syntax.WordPart{&syntax.DblQuoted{Parts: parts}})
 	if err != nil {
 		return nil, err
 	}

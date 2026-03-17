@@ -294,6 +294,20 @@ func TestFieldsQuotedArrayOperatorWordPreservesFieldBoundaries(t *testing.T) {
 			src:  "\"${arr[@]:+$@}\"",
 			want: []string{"a", "b"},
 		},
+		{
+			name: "QuotedScalarStaysSingleField",
+			env: testEnv{
+				"x": {Set: true, Kind: String, Str: "a b"},
+			},
+			src:  "\"${arr[@]-$x}\"",
+			want: []string{"a b"},
+		},
+		{
+			name: "EmptyOperatorWordYieldsEmptyField",
+			env:  testEnv{},
+			src:  "\"${arr[@]-}\"",
+			want: []string{""},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
