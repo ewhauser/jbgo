@@ -281,7 +281,7 @@ func (f *TrieFS) Open(ctx context.Context, name string) (File, error) {
 
 func (f *TrieFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (File, error) {
 	if (flag&os.O_TRUNC == 0 || !canWrite(flag)) && flag&(os.O_CREATE|os.O_EXCL) != (os.O_CREATE|os.O_EXCL) {
-		if _, _, err := f.materializePath(ctx, name, true); err != nil {
+		if _, err := f.materializePath(ctx, name, true); err != nil {
 			if flag&os.O_CREATE == 0 || !errors.Is(err, stdfs.ErrNotExist) {
 				return nil, &os.PathError{Op: "open", Path: Resolve(f.Getwd(), name), Err: err}
 			}
@@ -364,7 +364,7 @@ func (f *TrieFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs
 
 func (f *TrieFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	requested := Resolve(f.Getwd(), name)
-	abs, _, err := f.materializePath(ctx, name, true)
+	abs, err := f.materializePath(ctx, name, true)
 	if err != nil {
 		return nil, &os.PathError{Op: "stat", Path: requested, Err: err}
 	}
@@ -382,7 +382,7 @@ func (f *TrieFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, error) 
 
 func (f *TrieFS) Lstat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	requested := Resolve(f.Getwd(), name)
-	abs, _, err := f.materializePath(ctx, name, false)
+	abs, err := f.materializePath(ctx, name, false)
 	if err != nil {
 		return nil, &os.PathError{Op: "lstat", Path: requested, Err: err}
 	}
@@ -672,17 +672,17 @@ func (f *TrieFS) Chdir(name string) error {
 	return nil
 }
 
-func (f *TrieFS) materializePath(ctx context.Context, name string, followFinal bool) (string, *trieDentry, error) {
+func (f *TrieFS) materializePath(ctx context.Context, name string, followFinal bool) (string, error) {
 	for {
 		f.mu.RLock()
 		abs, entry, err := f.resolvePathLocked(name, followFinal, false)
 		if err != nil {
 			f.mu.RUnlock()
-			return "", nil, err
+			return "", err
 		}
 		if !isLazyTrieFileNode(entry.inode) {
 			f.mu.RUnlock()
-			return abs, entry, nil
+			return abs, nil
 		}
 		lazy := entry.inode.lazy
 		inodeRef := entry.inode
@@ -690,7 +690,7 @@ func (f *TrieFS) materializePath(ctx context.Context, name string, followFinal b
 
 		data, err := lazy(ctx)
 		if err != nil {
-			return "", nil, err
+			return "", err
 		}
 		buf := append([]byte(nil), data...)
 
@@ -700,7 +700,7 @@ func (f *TrieFS) materializePath(ctx context.Context, name string, followFinal b
 			current.inode.data = buf
 			current.inode.lazy = nil
 			f.mu.Unlock()
-			return abs, current, nil
+			return abs, nil
 		}
 		f.mu.Unlock()
 	}

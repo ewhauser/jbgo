@@ -151,24 +151,24 @@ func isLazyFileNode(node *memoryNode) bool {
 	return node != nil && node.lazy != nil && !node.mode.IsDir() && node.mode&stdfs.ModeSymlink == 0
 }
 
-func (m *MemoryFS) materializePath(ctx context.Context, name string, followFinal bool) (string, *memoryNode, error) {
+func (m *MemoryFS) materializePath(ctx context.Context, name string, followFinal bool) (string, error) {
 	for {
 		m.mu.RLock()
 		abs, node, err := m.resolvePathLocked(name, followFinal, false)
 		if err != nil {
 			m.mu.RUnlock()
-			return "", nil, err
+			return "", err
 		}
 		if !isLazyFileNode(node) {
 			m.mu.RUnlock()
-			return abs, node, nil
+			return abs, nil
 		}
 		lazy := node.lazy
 		m.mu.RUnlock()
 
 		data, err := lazy(ctx)
 		if err != nil {
-			return "", nil, err
+			return "", err
 		}
 		buf := append([]byte(nil), data...)
 
@@ -178,7 +178,7 @@ func (m *MemoryFS) materializePath(ctx context.Context, name string, followFinal
 			current.data = buf
 			current.lazy = nil
 			m.mu.Unlock()
-			return abs, current, nil
+			return abs, nil
 		}
 		m.mu.Unlock()
 	}
@@ -289,7 +289,7 @@ func (m *MemoryFS) Open(ctx context.Context, name string) (File, error) {
 
 func (m *MemoryFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (File, error) {
 	if (flag&os.O_TRUNC == 0 || !canWrite(flag)) && flag&(os.O_CREATE|os.O_EXCL) != (os.O_CREATE|os.O_EXCL) {
-		if _, _, err := m.materializePath(ctx, name, true); err != nil {
+		if _, err := m.materializePath(ctx, name, true); err != nil {
 			if flag&os.O_CREATE == 0 || !errors.Is(err, stdfs.ErrNotExist) {
 				return nil, &os.PathError{Op: "open", Path: Resolve(m.Getwd(), name), Err: err}
 			}
@@ -366,7 +366,7 @@ func (m *MemoryFS) OpenFile(ctx context.Context, name string, flag int, perm std
 
 func (m *MemoryFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	requested := Resolve(m.Getwd(), name)
-	abs, _, err := m.materializePath(ctx, name, true)
+	abs, err := m.materializePath(ctx, name, true)
 	if err != nil {
 		return nil, &os.PathError{Op: "stat", Path: requested, Err: err}
 	}
@@ -384,7 +384,7 @@ func (m *MemoryFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, error
 
 func (m *MemoryFS) Lstat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	requested := Resolve(m.Getwd(), name)
-	abs, _, err := m.materializePath(ctx, name, false)
+	abs, err := m.materializePath(ctx, name, false)
 	if err != nil {
 		return nil, &os.PathError{Op: "lstat", Path: requested, Err: err}
 	}

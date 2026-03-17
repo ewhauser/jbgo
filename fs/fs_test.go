@@ -356,7 +356,7 @@ func assertStatConcurrentWithWrite(t *testing.T, fsys FileSystem) {
 	go func() {
 		defer wg.Done()
 		<-start
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			if _, err := file.Write([]byte("x")); err != nil {
 				errs <- fmt.Errorf("Write() error: %w", err)
 				return
@@ -368,7 +368,7 @@ func assertStatConcurrentWithWrite(t *testing.T, fsys FileSystem) {
 	go func() {
 		defer wg.Done()
 		<-start
-		for i := 0; i < iterations; i++ {
+		for i := range iterations {
 			var (
 				info stdfs.FileInfo
 				err  error
