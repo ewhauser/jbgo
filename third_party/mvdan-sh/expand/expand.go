@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ewhauser/gbash/third_party/mvdan-sh/internal"
 	"github.com/ewhauser/gbash/third_party/mvdan-sh/pattern"
@@ -254,6 +255,95 @@ func Format(cfg *Config, format string, args []string) (string, int, error) {
 	}
 
 	return sb.String(), consumed, err
+}
+
+func decodeANSICString(src string) string {
+	var sb strings.Builder
+	sb.Grow(len(src))
+
+	for i := 0; i < len(src); i++ {
+		if src[i] != '\\' {
+			sb.WriteByte(src[i])
+			continue
+		}
+		if i+1 >= len(src) {
+			sb.WriteByte('\\')
+			break
+		}
+
+		i++
+		switch c := src[i]; c {
+		case 'a':
+			sb.WriteByte('\a')
+		case 'b':
+			sb.WriteByte('\b')
+		case 'e', 'E':
+			sb.WriteByte('\x1b')
+		case 'f':
+			sb.WriteByte('\f')
+		case 'n':
+			sb.WriteByte('\n')
+		case 'r':
+			sb.WriteByte('\r')
+		case 't':
+			sb.WriteByte('\t')
+		case 'v':
+			sb.WriteByte('\v')
+		case '\\', '\'', '"', '?':
+			sb.WriteByte(c)
+		case 'c':
+			if i+1 >= len(src) {
+				sb.WriteString(`\c`)
+				break
+			}
+			i++
+			sb.WriteByte(src[i] & 0x1f)
+		case '0', '1', '2', '3', '4', '5', '6', '7':
+			start := i
+			for i+1 < len(src) && i-start < 2 && src[i+1] >= '0' && src[i+1] <= '7' {
+				i++
+			}
+			n, _ := strconv.ParseUint(src[start:i+1], 8, 8)
+			sb.WriteByte(byte(n))
+		case 'x', 'u', 'U':
+			maxDigits := 2
+			if c == 'u' {
+				maxDigits = 4
+			} else if c == 'U' {
+				maxDigits = 8
+			}
+			start := i + 1
+			end := start
+			for end < len(src) && end-start < maxDigits && isHex(src[end]) {
+				end++
+			}
+			if start == end {
+				sb.WriteByte('\\')
+				sb.WriteByte(c)
+				break
+			}
+			i = end - 1
+			n, _ := strconv.ParseUint(src[start:end], 16, 32)
+			if c == 'x' {
+				sb.WriteByte(byte(n))
+				break
+			}
+			r := rune(n)
+			if !utf8.ValidRune(r) {
+				sb.WriteString(src[start-2 : end])
+				break
+			}
+			sb.WriteRune(r)
+		default:
+			sb.WriteByte('\\')
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
+}
+
+func isHex(b byte) bool {
+	return '0' <= b && b <= '9' || 'a' <= b && b <= 'f' || 'A' <= b && b <= 'F'
 }
 
 func formatInto(sb *strings.Builder, format string, args []string) (int, error) {
@@ -555,7 +645,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 		case *syntax.SglQuoted:
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}
 			if wp.Dollar {
-				fp.val, _, _ = Format(cfg, fp.val, nil)
+				fp.val = decodeANSICString(fp.val)
 				fp.val, _, _ = strings.Cut(fp.val, "\x00") // cut the string if format included \x00
 			}
 			field = append(field, fp)
@@ -678,7 +768,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			allowEmpty = true
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}
 			if wp.Dollar {
-				fp.val, _, _ = Format(cfg, fp.val, nil)
+				fp.val = decodeANSICString(fp.val)
 				fp.val, _, _ = strings.Cut(fp.val, "\x00") // cut the string if format included \x00
 			}
 			curField = append(curField, fp)

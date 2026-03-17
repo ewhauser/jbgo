@@ -323,6 +323,47 @@ func TestFieldsQuotedArrayOperatorWordPreservesFieldBoundaries(t *testing.T) {
 	}
 }
 
+func TestLiteralDecodesDollarSingleQuotedANSICEscapes(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "NewlinesAndQuotes",
+			src:  `$'line1\nline2\'\"\\'`,
+			want: "line1\nline2'\"\\",
+		},
+		{
+			name: "OctalEscapes",
+			src:  `$'\1 \11 \111'`,
+			want: "\x01 \t I",
+		},
+		{
+			name: "ControlEscapes",
+			src:  `$'\c0\c9-\ca\cz\cA\cZ\c-\c+\c"'`,
+			want: "\x10\x19-\x01\x1a\x01\x1a\r\v\x02",
+		},
+		{
+			name: "InvalidEscapesRemainLiteral",
+			src:  `$'\uZ \u{03bc \z \x'`,
+			want: `\uZ \u{03bc \z \x`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Literal(nil, word)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 type mockFileInfo struct {
 	name        string
 	typ         fs.FileMode
