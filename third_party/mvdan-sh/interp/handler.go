@@ -60,6 +60,14 @@ type HandlerContext struct {
 	// Dir is the interpreter's current directory.
 	Dir string
 
+	// ExecFile is the file currently executing in the runner's active frame stack.
+	// It is empty for inline code that is not executing from a file-backed context.
+	ExecFile string
+
+	// Internal reports whether this handler invocation is executing trusted
+	// interpreter bootstrap code rather than user-supplied shell code.
+	Internal bool
+
 	// Pos is the source position which relates to the operation,
 	// such as a [syntax.CallExpr] when calling an [ExecHandlerFunc].
 	// It may be invalid if the operation has no relevant position information.

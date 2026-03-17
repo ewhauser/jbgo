@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-14
+Last updated: 2026-03-16
 
 ## 1. Purpose
 
@@ -72,6 +72,8 @@ There is no runtime mode where command execution falls back to `exec.Command`, `
 We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch. Those responsibilities stay in `mvdan/sh/v3`.
 
 The `mvdan/sh` integration is currently vendored in-tree under `third_party/mvdan-sh` and compiled as part of the `github.com/ewhauser/gbash` module so `gbash` remains importable as a library without consumer-side `replace` directives.
+
+The fork also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the forked interpreter rather than synthesized in a shell prelude.
 
 The shell adapter may pre-validate parsed AST forms that are known to trigger `mvdan/sh` interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
 
@@ -228,7 +230,7 @@ Ownership name resolution for commands such as `ls`, `chown`, and `chgrp` must c
 
 The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` are guaranteed by default.
 
-Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesystem, the runtime treats `PWD` as the authoritative virtual working directory and injects a small shell prelude that preserves virtual `cd` and `pwd` behavior without host directory access.
+Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesystem, the runtime treats `PWD` as the authoritative virtual working directory and bootstraps helper functions in a separate trusted program. User scripts are parsed without prepended blank lines so syntax errors, traces, and `BASH_LINENO` all use real user line numbers.
 
 ## 7. Proposed Package Layout
 
@@ -311,14 +313,22 @@ type Session struct {
 }
 
 type ExecutionRequest struct {
-    Name    string
-    Script  string
-    Command []string
-    Args    []string
-    Env     map[string]string
-    WorkDir string
+    Name          string
+    ScriptPath    string
+    Script        string
+    Command       []string
+    Interpreter   string
+    PassthroughArgs []string
+    Args          []string
+    StartupOptions []string
+    Env           map[string]string
+    WorkDir       string
+    Timeout       time.Duration
     ReplaceEnv bool
-    Stdin   io.Reader
+    Interactive bool
+    Stdin       io.Reader
+    Stdout      io.Writer
+    Stderr      io.Writer
 }
 
 type ExecutionResult struct {
@@ -512,7 +522,8 @@ We keep parsing separate from execution so we can:
 
 - cache ASTs
 - expose syntax errors clearly
-- add trace/source references later
+- choose parser/source names from request provenance (`ScriptPath` when present, otherwise `Name`)
+- keep bootstrap helper code out of user line numbers and source positions
 
 ### 9.2 Runner construction
 
@@ -521,6 +532,7 @@ For each execution, build a fresh `interp.Runner` with:
 - `interp.Env(...)`
 - `interp.Dir(...)`
 - `interp.Params("--", args...)`
+- `interp.TopLevelScriptPath(...)` when the request is file-backed
 - `interp.StdIO(stdin, stdout, stderr)`
 - `interp.OpenHandler(...)`
 - `interp.ReadDirHandler2(...)`
@@ -537,11 +549,12 @@ Any middleware chain must remain closed over Go-native command execution. It mus
 Implementation detail for MVP:
 
 - `interp.Dir(...)` is set to a host-safe existing directory such as `/`, not the virtual sandbox cwd
-- the runtime prepends a shell shim that initializes `PWD` and `OLDPWD`
-- the shim owns virtual `cd`, `pushd`, `popd`, and `dirs`, and it keeps a shell-local directory stack aligned with virtual `PWD`
-- the shim wraps shell-visible `pwd` to the Go `pwd` command so `-L` / `-P` still honor virtual `PWD`
+- the runtime runs a separate trusted bootstrap program that initializes `PWD`, `OLDPWD`, and helper shell functions
+- the bootstrap owns virtual `cd`, `pushd`, `popd`, and `dirs`, and it keeps a shell-local directory stack aligned with virtual `PWD`
+- the bootstrap wraps shell-visible `pwd` to the Go `pwd` command so `-L` / `-P` still honor virtual `PWD`
 - `let` is handled natively by `mvdan/sh`'s `LetClause` AST node
 - all project path handlers resolve relative paths from virtual `PWD`, not from `HandlerContext.Dir`
+- the forked runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, and `caller` from that stack
 
 ### 9.3 Stdio
 
@@ -579,9 +592,9 @@ Implementation detail for the current runtime:
 - the default `MaxCommandCount` is `10000` per execution
 - the counter resets on each `Session.Exec` or `Runtime.Run`
 - commands inside subshells and pipelines count toward the same execution budget
-- runtime-injected prelude commands for virtual `cd` and `pwd` must not consume the user-visible command budget
+- trusted bootstrap commands for virtual `cd` and `pwd` must not consume the user-visible command budget or user-visible trace positions
 - loop iteration limits are enforced by AST instrumentation that prepends an internal guard command to loop bodies before execution
-- command substitution depth and glob-operation budgets are validated against the parsed user program before runtime prelude injection
+- command substitution depth and glob-operation budgets are validated against the parsed user program before the trusted bootstrap runs
 - request-level timeouts and caller cancellation are enforced via execution contexts and normalized into shell-style exit codes
 
 ### 9.6 Command execution

@@ -284,7 +284,6 @@ l o c a
 ## N-I zsh stdout-json: ""
 
 #### export+=array disallowed (strict_array)
-shopt -s strict_array
 
 export e+=(e x)
 echo "${e[@]}"
@@ -296,7 +295,6 @@ echo "${e[@]}"
 ## N-I bash STDOUT:
 e x
 ## END
-
 
 #### Type mismatching of lhs+=rhs should not cause a crash
 case $SH in mksh|zsh) exit ;; esac

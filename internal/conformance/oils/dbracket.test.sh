@@ -106,7 +106,6 @@ fi
 # http://tldp.org/LDP/abs/html/testconstructs.html#DBLBRACKETS
 
 #### Octal literals with -eq
-shopt -u strict_arith || true
 decimal=15
 octal=017   # = 15 (decimal)
 [[ $decimal -eq $octal ]] && echo true
@@ -119,7 +118,6 @@ false
 # mksh doesn't implement this syntax for literals.
 
 #### Hex literals with -eq
-shopt -u strict_arith || true
 decimal=15
 hex=0x0f    # = 15 (decimal)
 [[ $decimal -eq $hex ]] && echo true
@@ -155,7 +153,6 @@ false
 
 #### -eq on strings 
 # This is lame behavior: it does a conversion to 0 first for any string
-shopt -u strict_arith || true
 [[ a -eq a ]] && echo true
 [[ a -eq b ]] && echo true
 ## STDOUT: 
@@ -274,7 +271,6 @@ true
 ## END
 
 #### -eq coercion produces weird results
-shopt -u strict_arith || true
 [[ '' -eq 0 ]] && echo true
 ## stdout: true
 

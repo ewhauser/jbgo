@@ -65,7 +65,8 @@ The `Script` field is the primary input. Additional fields are available for adv
 | Field | Type | Description |
 |-------|------|-------------|
 | `Script` | `string` | The bash script to execute. |
-| `Name` | `string` | Optional name for the execution (appears in traces). |
+| `Name` | `string` | Optional execution label used for traces and logs. When `ScriptPath` is empty, it is also used as the parser filename and `$0`. |
+| `ScriptPath` | `string` | Optional source path for a script payload that came from a file. When set, gbash treats the execution as file-backed and uses it for the parser filename, `$0`, and `BASH_SOURCE[0]`. |
 | `Interpreter` | `string` | Override the shell name used for this execution (`bash`, `sh`, or a wrapper name). |
 | `PassthroughArgs` | `[]string` | Shell argv forwarded into nested invocations and CLI-style wrappers. |
 | `Args` | `[]string` | Positional arguments (`$1`, `$2`, ...). |
@@ -78,6 +79,8 @@ The `Script` field is the primary input. Additional fields are available for adv
 | `Stdin` | `io.Reader` | Standard input for the script. |
 | `Stdout` | `io.Writer` | Direct stdout to a writer instead of capturing it. |
 | `Stderr` | `io.Writer` | Direct stderr to a writer instead of capturing it. |
+
+`ScriptPath` only affects file provenance. Inline `-c` and stdin-style executions should leave it empty so `BASH_SOURCE` stays unset, matching bash.
 
 ## ExecutionResult
 

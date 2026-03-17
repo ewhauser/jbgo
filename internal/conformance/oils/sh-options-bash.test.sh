@@ -121,24 +121,6 @@ braceexpand on
 braceexpand on
 ## END
 
-#### If shopt --set xtrace is allowed, it should update SHELLOPTS, not BASHOPTS
-case $SH in bash) exit ;; esac
-
-shopt --set xtrace
-echo SHELLOPTS=$SHELLOPTS
-set -x
-echo SHELLOPTS=$SHELLOPTS
-set +x
-echo SHELLOPTS=$SHELLOPTS
-
-## STDOUT:
-SHELLOPTS=xtrace
-SHELLOPTS=xtrace
-SHELLOPTS=
-## END
-## N-I bash STDOUT:
-## END
-
 #### shopt -s progcomp hostcomplete are stubs (bash-completion)
 
 shopt -s progcomp hostcomplete

@@ -1721,6 +1721,22 @@ var runTests = []runTest{
 		"",
 	},
 	{
+		"[ -a -a -a ]; echo $?",
+		"0\n",
+	},
+	{
+		"[ -a -a -a -a -a ]; echo $?",
+		"1\n",
+	},
+	{
+		"test 0 -eq 0 -a '(' = ')'; echo $?",
+		"0\n",
+	},
+	{
+		"set -- -o; test $# -ne 0 -a \"$1\" != \"--\"; echo $?",
+		"0\n",
+	},
+	{
 		"[[ a -ef b ]]",
 		"exit status 1",
 	},

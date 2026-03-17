@@ -67,8 +67,9 @@ alternative that still works under regular bash.
 
 Known limitations:
 
-- `BASH_SOURCE` is not set when gbash runs a script file. Use
-  `${BASH_SOURCE[0]:-$0}` as a fallback.
+- `BASH_SOURCE[0]` is available for file-backed scripts and sourced files, but
+  `${BASH_SOURCE[0]:-$0}` remains the safest bash-compatible fallback when a
+  script might also run via `-c` or stdin.
 - The default PATH inside gbash is `/usr/bin:/bin`. External tools like git,
   docker, and curl are not available unless stubbed into `/bin/` via the
   sandbox. This is intentional -- tests should not depend on host tools.
