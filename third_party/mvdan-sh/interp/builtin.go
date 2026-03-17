@@ -213,7 +213,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			if vars && r.lookupVar(arg).IsSet() {
 				r.delVar(arg)
 			} else if _, ok := r.Funcs[arg]; ok && funcs {
-				delete(r.Funcs, arg)
+				r.delFunc(arg)
 			}
 		}
 	case "echo":
@@ -453,6 +453,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		if len(args) < 1 {
 			return failf(2, "%v: source: need filename\n", pos)
 		}
+		sourceName := args[0]
 		path, err := scriptFromPathDir(r.Dir, r.writeEnv, args[0])
 		if err != nil {
 			// If the script was not found in PATH or there was any error, pass
@@ -460,6 +461,8 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			// at files it manages (eg: virtual filesystem), and also allow
 			// it to look for the sourced script in the current directory.
 			path = args[0]
+		} else if !strings.ContainsAny(args[0], `/\`) {
+			sourceName = path
 		}
 		f, err := r.open(ctx, path, os.O_RDONLY, 0, false)
 		if err != nil {
@@ -467,7 +470,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 		defer f.Close()
 		p := syntax.NewParser()
-		file, err := p.Parse(f, path)
+		file, err := p.Parse(f, sourceName)
 		if err != nil {
 			return failf(1, "source: %v\n", err)
 		}
@@ -487,8 +490,22 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		// We want to track if the sourced file explicitly sets the
 		// parameters.
 		r.sourceSetParams = false
+		internal := r.currentInternal()
+		bashSource := sourceName
+		if internal {
+			bashSource = ""
+		}
+		restoreFrame := r.pushFrame(execFrame{
+			kind:       frameKindSource,
+			label:      "source",
+			execFile:   sourceName,
+			bashSource: bashSource,
+			callLine:   r.sourceCallLine(pos),
+			internal:   internal,
+		})
 		r.inSource = true // know that we're inside a sourced script.
 		r.stmts(ctx, file.Stmts)
+		restoreFrame()
 
 		// If we modified the parameters and the sourced file didn't
 		// explicitly set them, we restore the old ones.

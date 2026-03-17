@@ -351,6 +351,7 @@ func gbashEnv(cfg *SuiteConfig) map[string]string {
 		"LC_ALL": "C",
 		"PWD":    "/",
 		"SH":     "bash",
+		"TZ":     "UTC",
 		"TMP":    "/tmp",
 		"TMPDIR": "/tmp",
 	}
@@ -368,6 +369,7 @@ func bashEnv(cfg *SuiteConfig, workspace string) []string {
 		"LANG=C",
 		"LC_ALL=C",
 		"SH=bash",
+		"TZ=UTC",
 		"TMP=" + filepath.Join(workspace, "tmp"),
 		"TMPDIR=" + filepath.Join(workspace, "tmp"),
 	}

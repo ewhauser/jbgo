@@ -13,6 +13,7 @@ type ExecutionRequest struct {
 	Name            string
 	Interpreter     string
 	PassthroughArgs []string
+	ScriptPath      string
 	Script          string
 	Command         []string
 	Args            []string
@@ -66,6 +67,7 @@ func executionRequestFromCommand(req *commands.ExecutionRequest) *ExecutionReque
 		Name:            req.Name,
 		Interpreter:     req.Interpreter,
 		PassthroughArgs: cloneStrings(req.PassthroughArgs),
+		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
 		Command:         cloneStrings(req.Command),
 		Args:            cloneStrings(req.Args),

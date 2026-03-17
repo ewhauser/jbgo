@@ -2,12 +2,11 @@
 
 load test_helper
 
-# fix_modules.sh uses BASH_SOURCE[0] with set -u, which fails in gbash
-# because BASH_SOURCE is never set. These tests are blocked until gbash
-# supports BASH_SOURCE (or the script is updated to use ${BASH_SOURCE[0]:-$0}).
+# These source-based script harness tests are still skipped.
 #
-# The tests below are written and ready to run once that issue is resolved.
-# To unblock them, remove the skip lines.
+# BASH_SOURCE parity removed the original blocker, but the scripts still hit
+# broader compatibility gaps under gbash's sourced-script execution path. Keep
+# the skips until that follow-up work is done.
 
 setup() {
 	TEST_TEMP_DIR="$(mktemp -d)"
