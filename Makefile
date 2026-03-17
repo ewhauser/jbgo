@@ -169,8 +169,8 @@ test:
 	go test -race $(GO_PACKAGES)
 
 conformance-test:
-	$(eval BASH_PATH := $(shell ./scripts/ensure-bash.sh))
-	GBASH_RUN_CONFORMANCE=1 GBASH_CONFORMANCE_BASH='$(BASH_PATH)' \
+	@BASH_PATH=$$(./scripts/ensure-bash.sh) || exit 1; \
+	GBASH_RUN_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
 	  go test ./internal/conformance -run TestConformance -count=1 -timeout=20m
 
 ensure-bash:
@@ -273,9 +273,9 @@ tag-release:
 	PUSH='$(PUSH_TAGS)' REMOTE='$(TAG_REMOTE)' ./scripts/tag_release.sh $(RELEASE_VERSION)
 
 bats-test:
-	$(eval BATS_PATH := $(shell ./scripts/ensure-bats.sh))
-	@go build -o scripts/tests/.gbash-test-bin ./cmd/gbash/
-	'$(BATS_PATH)' scripts/tests/
+	@BATS_PATH=$$(./scripts/ensure-bats.sh) || exit 1; \
+	go build -o scripts/tests/.gbash-test-bin ./cmd/gbash/ && \
+	"$$BATS_PATH" scripts/tests/
 
 ensure-bats:
 	@./scripts/ensure-bats.sh
