@@ -19,10 +19,12 @@ require (
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/benhoyt/goawk v1.31.0 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/go-quicktest/qt v1.101.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -51,7 +53,6 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473 // indirect
-	mvdan.cc/sh/v3 v3.13.0 // indirect
 )
 
 replace github.com/ewhauser/gbash => ../..

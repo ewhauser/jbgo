@@ -18,7 +18,6 @@ require (
 	golang.org/x/term v0.40.0
 	google.golang.org/adk v0.6.0
 	google.golang.org/genai v1.49.0
-	mvdan.cc/sh/v3 v3.13.0
 )
 
 require (
@@ -26,9 +25,11 @@ require (
 	cloud.google.com/go/auth v0.17.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-quicktest/qt v1.101.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect

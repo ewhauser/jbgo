@@ -1,6 +1,6 @@
 package shell
 
-import "mvdan.cc/sh/v3/syntax"
+import "github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 
 func normalizeExecutionProgram(program *syntax.File) {
 	rewritePipelineSubshells(program)

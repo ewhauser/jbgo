@@ -51,6 +51,7 @@ type lsOptions struct {
 	showOwner             bool
 	numericIDs            bool
 	identityDB            *permissionIdentityDB
+	identityDBLoader      func(context.Context, *Invocation) *permissionIdentityDB
 	timeStyle             string
 	dereference           lsDereferenceMode
 	dired                 bool
@@ -439,8 +440,6 @@ func renderStaticHelp(text string) func(io.Writer, CommandSpec) error {
 	}
 }
 
-var lsIdentityDBLoader = loadPermissionIdentityDB
-
 func primeLSIdentityDB(ctx context.Context, inv *Invocation, opts *lsOptions) {
 	if opts == nil || opts.identityDB != nil {
 		return
@@ -451,7 +450,11 @@ func primeLSIdentityDB(ctx context.Context, inv *Invocation, opts *lsOptions) {
 	if !opts.showOwner && !opts.showGroup && !opts.showAuthor {
 		return
 	}
-	opts.identityDB = lsIdentityDBLoader(ctx, inv)
+	loader := opts.identityDBLoader
+	if loader == nil {
+		loader = loadPermissionIdentityDB
+	}
+	opts.identityDB = loader(ctx, inv)
 }
 
 func renderStaticVersion(text string) func(io.Writer, CommandSpec) error {

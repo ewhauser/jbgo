@@ -71,9 +71,13 @@ There is no runtime mode where command execution falls back to `exec.Command`, `
 
 We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch. Those responsibilities stay in `mvdan/sh/v3`.
 
+The `mvdan/sh` integration is currently vendored in-tree under `third_party/mvdan-sh` and compiled as part of the `github.com/ewhauser/gbash` module so `gbash` remains importable as a library without consumer-side `replace` directives.
+
 The shell adapter may pre-validate parsed AST forms that are known to trigger `mvdan/sh` interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
 
 The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in explicit subshells so parent-shell state matches Bash's default `lastpipe=off` behavior.
+
+Process substitution is supported as a sandbox-native shell feature. The adapter must provision runtime-owned opaque pipe paths under the sandbox namespace and must not rely on host FIFOs, host-visible `TMPDIR` paths, or host path semantics to implement `<(...)` and `>(...)`.
 
 Registry-backed replacements for Bash builtins should preserve shell-visible Bash coercions when practical. One compatibility requirement is that numeric `printf` conversions accept quoted character constants such as `"'A"` and `"\"B"`.
 

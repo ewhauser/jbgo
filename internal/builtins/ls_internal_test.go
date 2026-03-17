@@ -5,23 +5,20 @@ import (
 	"testing"
 )
 
+//nolint:paralleltest // Mutates the package-global identity DB loader.
 func TestPrimeLSIdentityDBCachesPerInvocation(t *testing.T) {
 	t.Parallel()
-	original := lsIdentityDBLoader
-	t.Cleanup(func() {
-		lsIdentityDBLoader = original
-	})
 
 	calls := 0
-	lsIdentityDBLoader = func(context.Context, *Invocation) *permissionIdentityDB {
-		calls++
-		return &permissionIdentityDB{}
-	}
 
 	opts := &lsOptions{
 		longFormat: true,
 		showOwner:  true,
 		showGroup:  true,
+		identityDBLoader: func(context.Context, *Invocation) *permissionIdentityDB {
+			calls++
+			return &permissionIdentityDB{}
+		},
 	}
 
 	primeLSIdentityDB(context.Background(), &Invocation{}, opts)
@@ -37,22 +34,18 @@ func TestPrimeLSIdentityDBCachesPerInvocation(t *testing.T) {
 
 func TestPrimeLSIdentityDBSkipsNumericIDs(t *testing.T) {
 	t.Parallel()
-	original := lsIdentityDBLoader
-	t.Cleanup(func() {
-		lsIdentityDBLoader = original
-	})
 
 	calls := 0
-	lsIdentityDBLoader = func(context.Context, *Invocation) *permissionIdentityDB {
-		calls++
-		return &permissionIdentityDB{}
-	}
 
 	opts := &lsOptions{
 		longFormat: true,
 		showOwner:  true,
 		showGroup:  true,
 		numericIDs: true,
+		identityDBLoader: func(context.Context, *Invocation) *permissionIdentityDB {
+			calls++
+			return &permissionIdentityDB{}
+		},
 	}
 
 	primeLSIdentityDB(context.Background(), &Invocation{}, opts)

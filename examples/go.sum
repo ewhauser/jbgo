@@ -121,8 +121,6 @@ google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBN
 google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-mvdan.cc/sh/v3 v3.13.0 h1:dSfq/MVsY4w0Vsi6Lbs0IcQquMVqLdKLESAOZjuHdLg=
-mvdan.cc/sh/v3 v3.13.0/go.mod h1:KV1GByGPc/Ho0X1E6Uz9euhsIQEj4hwyKnodLlFLoDM=
 rsc.io/omap v1.2.0 h1:c1M8jchnHbzmJALzGLclfH3xDWXrPxSUHXzH5C+8Kdw=
 rsc.io/omap v1.2.0/go.mod h1:C8pkI0AWexHopQtZX+qiUeJGzvc8HkdgnsWK4/mAa00=
 rsc.io/ordered v1.1.1 h1:1kZM6RkTmceJgsFH/8DLQvkCVEYomVDJfBRLT595Uak=

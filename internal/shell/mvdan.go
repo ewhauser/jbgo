@@ -21,10 +21,10 @@ import (
 	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/expand"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 	"github.com/ewhauser/gbash/trace"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 type Engine interface {
@@ -61,6 +61,7 @@ type Execution struct {
 	Trace             trace.Recorder
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
 	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
+	procSubst         *procSubstManager
 }
 
 type RunResult struct {
@@ -186,14 +187,18 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		return nil, err
 	}
 
-	runner, err := interp.New(m.runnerOptions(exec, budget)...)
+	effectiveExec := *exec
+	cleanupProcSubst := withProcSubstScope(&effectiveExec)
+	defer cleanupProcSubst()
+
+	runner, err := interp.New(m.runnerOptions(&effectiveExec, budget)...)
 	if err != nil {
 		return nil, err
 	}
-	if err := m.bootstrapRunner(ctx, runner, exec); err != nil {
+	if err := m.bootstrapRunner(ctx, runner, &effectiveExec); err != nil {
 		return &RunResult{FinalEnv: envMapFromVars(runner.Vars), ShellExited: runner.Exited()}, err
 	}
-	if err := applyRunnerParams(runner, exec.StartupOptions, exec.Args); err != nil {
+	if err := applyRunnerParams(runner, effectiveExec.StartupOptions, effectiveExec.Args); err != nil {
 		return &RunResult{FinalEnv: envMapFromVars(runner.Vars), ShellExited: runner.Exited()}, err
 	}
 	runErr = runner.Run(ctx, program)
@@ -303,11 +308,21 @@ func (m *MVdan) runnerOptions(exec *Execution, budget *executionBudget) []interp
 		interp.ExecHandlers(func(_ interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			return m.execHandler(exec, budget)
 		}),
+		interp.ProcSubstHandler(m.procSubstHandler(exec)),
 	}
 	if exec.Interactive {
 		options = append(options, interp.Interactive(true))
 	}
 	return options
+}
+
+func (m *MVdan) procSubstHandler(exec *Execution) interp.ProcSubstHandlerFunc {
+	return func(ctx context.Context, ps *syntax.ProcSubst) (*interp.ProcSubstEndpoint, error) {
+		if exec == nil || exec.procSubst == nil {
+			return nil, fmt.Errorf("process substitution unavailable")
+		}
+		return exec.procSubst.endpoint(ctx, ps)
+	}
 }
 
 func runnerParamArgs(startupOptions, args []string) []string {
@@ -697,11 +712,8 @@ func interactiveInvoker(interactFn func(context.Context, *commands.InteractiveRe
 }
 
 func completionStateForExecution(exec *Execution) *shellstate.CompletionState {
-	if exec == nil {
+	if exec == nil || exec.CompletionState == nil {
 		return shellstate.NewCompletionState()
-	}
-	if exec.CompletionState == nil {
-		exec.CompletionState = shellstate.NewCompletionState()
 	}
 	return exec.CompletionState
 }

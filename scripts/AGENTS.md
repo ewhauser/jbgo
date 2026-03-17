@@ -67,10 +67,6 @@ alternative that still works under regular bash.
 
 Known limitations:
 
-- Process substitution (`< <(cmd)`, `>(cmd)`) is not supported. It fails at
-  parse time with "invalid redirection". Use `for x in $(cmd)` when the loop
-  variable does not need to survive a subshell, or capture into a variable
-  first.
 - `BASH_SOURCE` is not set when gbash runs a script file. Use
   `${BASH_SOURCE[0]:-$0}` as a fallback.
 - The default PATH inside gbash is `/usr/bin:/bin`. External tools like git,

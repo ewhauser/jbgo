@@ -119,3 +119,27 @@ func TestLetRegressionSupportsLiteralArithmeticExpressions(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestProcessSubstitutionRegressionSupportsInputOutputAndPipePredicates(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"cat <(echo hello)\n"+
+		"while IFS= read -r line; do printf 'loop:%s\\n' \"$line\"; done < <(printf 'a\\nb\\n')\n"+
+		"printf 'hello-out\\n' > >(cat > /tmp/out)\n"+
+		"while [ ! -s /tmp/out ]; do sleep 0.01; done\n"+
+		"p=<(echo hi)\n"+
+		"[ -p \"$p\" ] && cat \"$p\"\n"+
+		"q=>(cat > /tmp/out2)\n"+
+		"[ -p \"$q\" ] && printf 'write-side\\n' > \"$q\"\n"+
+		"while [ ! -s /tmp/out2 ]; do sleep 0.01; done\n"+
+		"cat /tmp/out\n"+
+		"cat /tmp/out2\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "hello\nloop:a\nloop:b\nhi\nhello-out\nwrite-side\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

@@ -16,7 +16,6 @@ func TestMalformedRedirectionDoesNotPanic(t *testing.T) {
 		">&0&0000000000000000\n",
 		"0|0|>|0|0\n",
 		"0|0|5>5|0\n",
-		"<(0)\n",
 	}
 	for _, script := range cases {
 		t.Run(strings.TrimSpace(script), func(t *testing.T) {

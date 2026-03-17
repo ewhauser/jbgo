@@ -11,6 +11,7 @@ GOLANGCI_LINT_VERSION ?= v2.11.3
 GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 # Discover every main module in the active go.work so local lint matches CI.
 LINT_MODULE_DIRS_CMD = go list -m -f '{{if .Main}}{{.Dir}}{{end}}' all
+LINT_DIR_FILTER = grep -v '/third_party/mvdan-sh\(/.*\)\?$$'
 GH ?= gh
 MODULE_VERSION ?=
 RELEASE_VERSION ?=
@@ -154,14 +155,14 @@ lint:
 	@set -eu; \
 	for dir in $$($(LINT_MODULE_DIRS_CMD)); do \
 		echo "==> lint $$dir"; \
-		( cd "$$dir" && $(GOLANGCI_LINT) run ./... ); \
+		( cd "$$dir" && dirs=$$(go list -f '{{.Dir}}' ./... | $(LINT_DIR_FILTER)) && $(GOLANGCI_LINT) run $$dirs ); \
 	done
 
 lint-new:
 	@set -eu; \
 	for dir in $$($(LINT_MODULE_DIRS_CMD)); do \
 		echo "==> lint-new $$dir"; \
-		( cd "$$dir" && $(GOLANGCI_LINT) run --new-from-rev=HEAD ./... ); \
+		( cd "$$dir" && dirs=$$(go list -f '{{.Dir}}' ./... | $(LINT_DIR_FILTER)) && $(GOLANGCI_LINT) run --new-from-rev=HEAD $$dirs ); \
 	done
 
 test:

@@ -7,8 +7,9 @@ import (
 	"io"
 	"strings"
 
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
+	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 )
 
 const (
@@ -32,19 +33,25 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 	if exec.Stderr == nil {
 		exec.Stderr = io.Discard
 	}
+	if exec.CompletionState == nil {
+		exec.CompletionState = shellstate.NewCompletionState()
+	}
 	exec.Interactive = true
 	input := bufio.NewReader(exec.Stdin)
 	exec.Stdin = strings.NewReader("")
+	runnerExec := *exec
+	cleanupProcSubst := withProcSubstScope(&runnerExec)
+	defer cleanupProcSubst()
 
 	budget := newExecutionBudget(exec.Policy, runtimePreludeLineCount())
-	runner, err := interp.New(m.runnerOptions(exec, budget)...)
+	runner, err := interp.New(m.runnerOptions(&runnerExec, budget)...)
 	if err != nil {
 		return nil, err
 	}
-	if err := m.bootstrapRunner(ctx, runner, exec); err != nil {
+	if err := m.bootstrapRunner(ctx, runner, &runnerExec); err != nil {
 		return &InteractiveResult{ExitCode: ExitCode(err)}, normalizeInteractiveRunError(err)
 	}
-	if err := applyRunnerParams(runner, exec.StartupOptions, exec.Args); err != nil {
+	if err := applyRunnerParams(runner, runnerExec.StartupOptions, runnerExec.Args); err != nil {
 		return nil, err
 	}
 

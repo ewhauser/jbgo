@@ -237,3 +237,24 @@ func TestRestrictivePolicyXArgsRespectsCommandAllowlist(t *testing.T) {
 		t.Fatalf("Stderr = %q, want xargs child denial", result.Stderr)
 	}
 }
+
+func TestRestrictivePolicyAllowsProcessSubstitutionWithinSandboxRoots(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime(t, &Config{
+		Policy: restrictivePolicy([]string{"cat", "printf"}, []string{"cd"}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cat <(printf 'policy-ok\\n')\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stdout != "policy-ok\n" {
+		t.Fatalf("Stdout = %q, want %q", result.Stdout, "policy-ok\n")
+	}
+}
