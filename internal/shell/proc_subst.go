@@ -184,13 +184,18 @@ func (m *procSubstManager) entry(name string, includeHidden bool) (*procSubstEnt
 	}
 	abs := gbfs.Clean(name)
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	entry, ok := m.entries[abs]
+	m.mu.Unlock()
 	if !ok {
 		return nil, false
 	}
-	if !includeHidden && entry.hidden {
-		return nil, false
+	if !includeHidden {
+		entry.mu.Lock()
+		hidden := entry.hidden
+		entry.mu.Unlock()
+		if hidden {
+			return nil, false
+		}
 	}
 	return entry, true
 }
