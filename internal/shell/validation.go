@@ -99,10 +99,6 @@ func validateSupportedRedirections(program *syntax.File) error {
 
 		redir, ok := node.(*syntax.Redirect)
 		if !ok {
-			if _, ok := node.(*syntax.ProcSubst); ok {
-				walkErr = &shellValidationError{message: "invalid redirection"}
-				return false
-			}
 			return true
 		}
 		if redir.N != nil && !isSupportedRedirectFD(redir.N.Value) {

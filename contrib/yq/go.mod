@@ -42,3 +42,5 @@ require (
 )
 
 replace github.com/ewhauser/gbash => ../..
+
+replace mvdan.cc/sh/v3 => ../../third_party/mvdan-sh

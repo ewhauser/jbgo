@@ -65,3 +65,5 @@ replace github.com/ewhauser/gbash/contrib/jq => ../jq
 replace github.com/ewhauser/gbash/contrib/sqlite3 => ../sqlite3
 
 replace github.com/ewhauser/gbash/contrib/yq => ../yq
+
+replace mvdan.cc/sh/v3 => ../../third_party/mvdan-sh

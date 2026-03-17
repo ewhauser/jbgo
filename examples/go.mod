@@ -60,3 +60,5 @@ require (
 replace github.com/ewhauser/gbash => ../
 
 replace github.com/ewhauser/gbash/contrib/sqlite3 => ../contrib/sqlite3
+
+replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh

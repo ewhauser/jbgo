@@ -35,16 +35,17 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 	exec.Interactive = true
 	input := bufio.NewReader(exec.Stdin)
 	exec.Stdin = strings.NewReader("")
+	runnerExec := *exec
 
 	budget := newExecutionBudget(exec.Policy, runtimePreludeLineCount())
-	runner, err := interp.New(m.runnerOptions(exec, budget)...)
+	runner, err := interp.New(m.runnerOptions(&runnerExec, budget)...)
 	if err != nil {
 		return nil, err
 	}
-	if err := m.bootstrapRunner(ctx, runner, exec); err != nil {
+	if err := m.bootstrapRunner(ctx, runner, &runnerExec); err != nil {
 		return &InteractiveResult{ExitCode: ExitCode(err)}, normalizeInteractiveRunError(err)
 	}
-	if err := applyRunnerParams(runner, exec.StartupOptions, exec.Args); err != nil {
+	if err := applyRunnerParams(runner, runnerExec.StartupOptions, runnerExec.Args); err != nil {
 		return nil, err
 	}
 
@@ -116,7 +117,11 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 		if err := instrumentLoopBudgets(executionFile, exec.Policy); err != nil {
 			return &InteractiveResult{ExitCode: exitCode}, err
 		}
-		runErr := runner.Run(ctx, executionFile)
+		runErr := func() error {
+			cleanupProcSubst := withProcSubstScope(&runnerExec)
+			defer cleanupProcSubst()
+			return runner.Run(ctx, executionFile)
+		}()
 		exitCode = ExitCode(runErr)
 		pending.Reset()
 		if runner.Exited() {

@@ -11,3 +11,5 @@ use (
 	./contrib/yq
 	./examples
 )
+
+replace mvdan.cc/sh/v3 => ./third_party/mvdan-sh

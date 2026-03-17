@@ -9,3 +9,5 @@ require (
 )
 
 require golang.org/x/sys v0.42.0
+
+replace mvdan.cc/sh/v3 => ./third_party/mvdan-sh
