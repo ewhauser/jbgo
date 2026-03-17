@@ -113,6 +113,7 @@ linters:
             - trace/**/*.go
             - policy/**/*.go
             - network/**/*.go
+            - third_party/mvdan-sh/**/*.go
             - "!**/*_test.go"
           deny:
             - pkg: os/exec$
@@ -141,6 +142,7 @@ linters:
             - trace/**/*.go
             - policy/**/*.go
             - network/**/*.go
+            - third_party/mvdan-sh/**/*.go
             - "!**/*_test.go"
             - "!internal/builtins/basenc.go"
             - "!internal/builtins/basenc_formats.go"
@@ -162,6 +164,7 @@ linters:
             - trace/**/*.go
             - policy/**/*.go
             - network/**/*.go
+            - third_party/mvdan-sh/**/*.go
             - "!**/*_test.go"
             - "!internal/builtins/cat_appendmode_unix.go"
             - "!internal/runtime/arch_default_unix.go"
@@ -176,6 +179,7 @@ linters:
             - trace/**/*.go
             - policy/**/*.go
             - network/**/*.go
+            - third_party/mvdan-sh/**/*.go
             - "!**/*_test.go"
             - "!internal/builtins/ls.go"
             - "!internal/builtins/test.go"
@@ -190,6 +194,7 @@ linters:
             - trace/**/*.go
             - policy/**/*.go
             - network/**/*.go
+            - third_party/mvdan-sh/**/*.go
             - "!**/*_test.go"
             - "!network/network.go"
           deny:
@@ -203,6 +208,7 @@ linters:
             - trace/**/*.go
             - policy/**/*.go
             - network/**/*.go
+            - third_party/mvdan-sh/**/*.go
             - "!**/*_test.go"
             - "!internal/builtins/curl.go"
             - "!internal/builtins/file.go"
@@ -252,13 +258,11 @@ linters:
           msg: Use fmt.Fprint with inv.Stdout/inv.Stderr instead of writing to host stdout.
 
   exclusions:
-    paths:
-      - ^third_party/mvdan-sh/
     rules:
-      - path-except: (commands|internal|trace|policy|network|contrib)/
+      - path-except: (commands|internal|trace|policy|network|contrib|third_party)/
         linters:
           - depguard
-      - path-except: (commands|internal|trace|policy|network|contrib)/
+      - path-except: (commands|internal|trace|policy|network|contrib|third_party)/
         linters:
           - forbidigo
       - path: _test\.go$
@@ -291,6 +295,31 @@ linters:
       - path: network/network\.go$
         linters:
           - forbidigo
+      - path: ^third_party/mvdan-sh/internal/testing\.go$
+        linters:
+          - forbidigo
+          - depguard
+      - path: ^third_party/mvdan-sh/
+        linters:
+          - gocritic
+          - revive
+          - staticcheck
+          - govet
+          - errcheck
+          - ineffassign
+          - unused
+          - misspell
+          - modernize
+          - bodyclose
+          - containedctx
+          - contextcheck
+          - errorlint
+          - nilerr
+          - noctx
+          - paralleltest
+          - testifylint
+          - unconvert
+          - unparam
 
 issues:
   max-issues-per-linter: 50
