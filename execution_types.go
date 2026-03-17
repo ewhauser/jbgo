@@ -16,6 +16,7 @@ type ExecutionRequest struct {
 	Name            string
 	Interpreter     string
 	PassthroughArgs []string
+	ScriptPath      string
 	Script          string
 	Args            []string
 	StartupOptions  []string
@@ -74,6 +75,7 @@ func (req *ExecutionRequest) runtimeRequest() *internalruntime.ExecutionRequest 
 		Name:            req.Name,
 		Interpreter:     req.Interpreter,
 		PassthroughArgs: cloneStrings(req.PassthroughArgs),
+		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
 		Args:            cloneStrings(req.Args),
 		StartupOptions:  cloneStrings(req.StartupOptions),

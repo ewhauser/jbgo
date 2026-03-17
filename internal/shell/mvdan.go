@@ -39,6 +39,7 @@ type InteractiveEngine interface {
 
 type Execution struct {
 	Name              string
+	ScriptPath        string
 	Script            string
 	Command           []string
 	Program           *syntax.File
@@ -87,6 +88,7 @@ type MVdan struct {
 }
 
 const hostRunnerDir = "/"
+const bootstrapProgramName = "<gbash-prelude>"
 
 var internalHelperCommands = map[string]struct{}{
 	"__jb_activate_new_top":  {},
@@ -114,7 +116,7 @@ func (m *MVdan) Parse(name, script string) (*syntax.File, error) {
 }
 
 func (m *MVdan) parseUserProgram(name, script string) (*syntax.File, error) {
-	return m.Parse(name, prependRuntimePreludeLines(script))
+	return m.Parse(name, script)
 }
 
 func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
@@ -136,7 +138,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 
 	validationProgram := exec.Program
 	if validationProgram == nil {
-		parsed, err := m.parseUserProgram(exec.Name, exec.Script)
+		parsed, err := m.parseUserProgram(executionSourceName(exec), exec.Script)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +159,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 	}
 	program := exec.Program
 	if program == nil {
-		parsed, err := m.parseUserProgram(exec.Name, exec.Script)
+		parsed, err := m.parseUserProgram(executionSourceName(exec), exec.Script)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +184,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 	if exec.CompletionState == nil {
 		exec.CompletionState = shellstate.NewCompletionState()
 	}
-	budget := newExecutionBudget(exec.Policy, runtimePreludeLineCount())
+	budget := newExecutionBudget(exec.Policy)
 	if err := instrumentLoopBudgets(program, exec.Policy); err != nil {
 		return nil, err
 	}
@@ -195,7 +197,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 	if err != nil {
 		return nil, err
 	}
-	if err := m.bootstrapRunner(ctx, runner, &effectiveExec); err != nil {
+	if err := m.bootstrapRunner(ctx, runner, &effectiveExec, budget); err != nil {
 		return &RunResult{FinalEnv: envMapFromVars(runner.Vars), ShellExited: runner.Exited()}, err
 	}
 	if err := applyRunnerParams(runner, effectiveExec.StartupOptions, effectiveExec.Args); err != nil {
@@ -310,6 +312,9 @@ func (m *MVdan) runnerOptions(exec *Execution, budget *executionBudget) []interp
 		}),
 		interp.ProcSubstHandler(m.procSubstHandler(exec)),
 	}
+	if exec != nil && strings.TrimSpace(exec.ScriptPath) != "" {
+		options = append(options, interp.TopLevelScriptPath(exec.ScriptPath))
+	}
 	if exec.Interactive {
 		options = append(options, interp.Interactive(true))
 	}
@@ -355,6 +360,20 @@ func sanitizeRunnerPanic(recovered any) string {
 		return "invalid redirection"
 	default:
 		return "shell execution failed"
+	}
+}
+
+func executionSourceName(exec *Execution) string {
+	if exec == nil {
+		return "stdin"
+	}
+	switch {
+	case strings.TrimSpace(exec.ScriptPath) != "":
+		return exec.ScriptPath
+	case strings.TrimSpace(exec.Name) != "":
+		return exec.Name
+	default:
+		return "stdin"
 	}
 }
 
@@ -446,14 +465,19 @@ func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.Cal
 			return args, nil
 		}
 		hc := interp.HandlerCtx(ctx)
-		if err := budget.beforeCommand(ctx, hc.Pos); err != nil {
-			return nil, err
+		fromBootstrap := hc.Internal
+		if !fromBootstrap {
+			if err := budget.beforeCommand(ctx); err != nil {
+				return nil, err
+			}
 		}
-		commandInfo := traceCommandInfo(args, interp.IsBuiltin(args[0]), &commandTraceResolution{
-			Dir:      virtualDir(hc.Env, hc.Dir),
-			Position: hc.Pos.String(),
-		})
-		recordCommand(exec.Trace, trace.EventCallExpanded, commandInfo)
+		if !fromBootstrap {
+			commandInfo := traceCommandInfo(args, interp.IsBuiltin(args[0]), &commandTraceResolution{
+				Dir:      virtualDir(hc.Env, hc.Dir),
+				Position: hc.Pos.String(),
+			})
+			recordCommand(exec.Trace, trace.EventCallExpanded, commandInfo)
+		}
 
 		if interp.IsBuiltin(args[0]) && shouldRewriteBuiltin(args[0]) {
 			if _, ok := exec.Registry.Lookup(args[0]); ok {
@@ -564,6 +588,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		virtualWD := virtualDir(hc.Env, hc.Dir)
 		currentEnv := envMap(hc.Env)
 		internal := isInternalHelperCommand(args[0])
+		fromBootstrap := hc.Internal
 		resolved, ok, err := lookupCommand(ctx, exec, virtualWD, hc.Env, args[0])
 		if err != nil {
 			if policy.IsDenied(err) {
@@ -582,13 +607,15 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 				recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, resolved.source)
 				return shellFailure(ctx, 126, "%v", err)
 			}
-			recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(args, false, &commandTraceResolution{
-				Dir:              virtualWD,
-				Position:         hc.Pos.String(),
-				ResolvedName:     resolved.name,
-				ResolvedPath:     resolved.path,
-				ResolutionSource: resolved.source,
-			}))
+			if !fromBootstrap {
+				recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(args, false, &commandTraceResolution{
+					Dir:              virtualWD,
+					Position:         hc.Pos.String(),
+					ResolvedName:     resolved.name,
+					ResolvedPath:     resolved.path,
+					ResolutionSource: resolved.source,
+				}))
+			}
 		}
 
 		shellVars := shellstate.NewShellVarAssignments()
@@ -605,7 +632,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		}
 
 		if err == nil {
-			if !internal {
+			if !internal && !fromBootstrap {
 				recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(args, false, &commandTraceResolution{
 					Dir:              virtualWD,
 					Position:         hc.Pos.String(),
@@ -623,7 +650,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			if message, ok := commands.DiagnosticMessage(err); ok && hc.Stderr != nil {
 				_, _ = fmt.Fprintln(hc.Stderr, message)
 			}
-			if !internal {
+			if !internal && !fromBootstrap {
 				recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(args, false, &commandTraceResolution{
 					Dir:              virtualWD,
 					Position:         hc.Pos.String(),
@@ -637,7 +664,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 			return interp.ExitStatus(code)
 		}
 
-		if !internal {
+		if !internal && !fromBootstrap {
 			recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(args, false, &commandTraceResolution{
 				Dir:              virtualWD,
 				Position:         hc.Pos.String(),
@@ -727,6 +754,7 @@ func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[stri
 		Name:            req.Name,
 		Interpreter:     req.Interpreter,
 		PassthroughArgs: append([]string(nil), req.PassthroughArgs...),
+		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
 		Command:         append([]string(nil), req.Command...),
 		Args:            append([]string(nil), req.Args...),
@@ -781,11 +809,11 @@ func applyRunnerParams(runner *interp.Runner, startupOptions, args []string) err
 	return interp.Params(params...)(runner)
 }
 
-func (m *MVdan) bootstrapRunner(ctx context.Context, runner *interp.Runner, exec *Execution) error {
+func (m *MVdan) bootstrapRunner(ctx context.Context, runner *interp.Runner, exec *Execution, budget *executionBudget) error {
 	if runner == nil {
 		return nil
 	}
-	bootstrap, err := m.Parse(exec.Name, withRuntimePrelude(exec.Dir, exec.VisiblePWD, exec.HasVisiblePWD, ""))
+	bootstrap, err := m.Parse(bootstrapProgramName, withRuntimePrelude(exec.Dir, exec.VisiblePWD, exec.HasVisiblePWD, ""))
 	if err != nil {
 		return err
 	}
@@ -800,7 +828,12 @@ func (m *MVdan) bootstrapRunner(ctx context.Context, runner *interp.Runner, exec
 	if err := instrumentLoopBudgets(bootstrap, exec.Policy); err != nil {
 		return err
 	}
-	return runner.Run(ctx, bootstrap)
+	if budget == nil {
+		return runner.RunInternal(ctx, bootstrap)
+	}
+	budget.disable()
+	defer budget.enable()
+	return runner.RunInternal(ctx, bootstrap)
 }
 
 func mergeEnv(base, override map[string]string) map[string]string {
@@ -1679,13 +1712,13 @@ func shellSingleQuote(value string) string {
 type executionBudget struct {
 	maxCommandCount   int64
 	maxLoopIterations int64
-	preludeLines      uint
 	count             atomic.Int64
+	disabled          atomic.Int32
 	mu                sync.Mutex
 	loopCounts        map[string]int64
 }
 
-func newExecutionBudget(pol policy.Policy, preludeLines uint) *executionBudget {
+func newExecutionBudget(pol policy.Policy) *executionBudget {
 	if pol == nil {
 		return &executionBudget{}
 	}
@@ -1693,16 +1726,15 @@ func newExecutionBudget(pol policy.Policy, preludeLines uint) *executionBudget {
 	return &executionBudget{
 		maxCommandCount:   pol.Limits().MaxCommandCount,
 		maxLoopIterations: pol.Limits().MaxLoopIterations,
-		preludeLines:      preludeLines,
 		loopCounts:        make(map[string]int64),
 	}
 }
 
-func (b *executionBudget) beforeCommand(ctx context.Context, pos syntax.Pos) error {
+func (b *executionBudget) beforeCommand(ctx context.Context) error {
 	if b == nil || b.maxCommandCount <= 0 {
 		return nil
 	}
-	if pos.IsValid() && pos.Line() <= b.preludeLines {
+	if b.disabled.Load() > 0 {
 		return nil
 	}
 	if b.count.Add(1) <= b.maxCommandCount {
@@ -1716,6 +1748,9 @@ func (b *executionBudget) beforeLoopIteration(ctx context.Context, args []string
 		return shellFailure(ctx, 2, "%s: invalid invocation", loopIterCommandName)
 	}
 	if b == nil || b.maxLoopIterations <= 0 {
+		return nil
+	}
+	if b.disabled.Load() > 0 {
 		return nil
 	}
 
@@ -1733,16 +1768,18 @@ func (b *executionBudget) beforeLoopIteration(ctx context.Context, args []string
 	return shellFailure(ctx, 126, "%s loop: too many iterations (%d), increase policy.Limits.MaxLoopIterations", loopKind, b.maxLoopIterations)
 }
 
-func runtimePreludeLineCount() uint {
-	return uint(strings.Count(withRuntimePrelude("/", "", false, ""), "\n"))
+func (b *executionBudget) disable() {
+	if b == nil {
+		return
+	}
+	b.disabled.Add(1)
 }
 
-func prependRuntimePreludeLines(script string) string {
-	count := runtimePreludeLineCount()
-	if count == 0 || script == "" {
-		return script
+func (b *executionBudget) enable() {
+	if b == nil {
+		return
 	}
-	return strings.Repeat("\n", int(count)) + script
+	b.disabled.Add(-1)
 }
 
 func isInternalHelperCommand(name string) bool {

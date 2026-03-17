@@ -91,6 +91,7 @@ func (inv *BashInvocation) BuildExecutionRequest(env map[string]string, cwd stri
 		Name:            inv.ExecutionName,
 		Interpreter:     inv.Name,
 		PassthroughArgs: append([]string(nil), inv.RawArgs...),
+		ScriptPath:      inv.ScriptPath,
 		Script:          script,
 		Args:            append([]string(nil), inv.Args...),
 		StartupOptions:  append([]string(nil), inv.StartupOptions...),
