@@ -11,14 +11,18 @@ func TestRewritePipelineSubshellsWrapsFinalPipelineStage(t *testing.T) {
 	t.Parallel()
 
 	program := parseShellTestProgram(t, "printf 'hello\\n' | read -r value\n")
-	rewritePipelineSubshells(program)
+	synthetic := rewritePipelineSubshells(program)
 
 	pipeline, ok := program.Stmts[0].Cmd.(*syntax.BinaryCmd)
 	if !ok {
 		t.Fatalf("Cmd = %T, want *syntax.BinaryCmd", program.Stmts[0].Cmd)
 	}
-	if _, ok := pipeline.Y.Cmd.(*syntax.Subshell); !ok {
+	sub, ok := pipeline.Y.Cmd.(*syntax.Subshell)
+	if !ok {
 		t.Fatalf("pipeline.Y.Cmd = %T, want *syntax.Subshell", pipeline.Y.Cmd)
+	}
+	if got, ok := synthetic[pipeline.Y]; !ok || got != sub.Stmts[0] {
+		t.Fatalf("synthetic metadata missing wrapped stmt")
 	}
 }
 
@@ -26,22 +30,30 @@ func TestRewritePipelineSubshellsWrapsNestedRightHandStages(t *testing.T) {
 	t.Parallel()
 
 	program := parseShellTestProgram(t, "printf a | tr a b | wc -c\n")
-	rewritePipelineSubshells(program)
+	synthetic := rewritePipelineSubshells(program)
 
 	outer, ok := program.Stmts[0].Cmd.(*syntax.BinaryCmd)
 	if !ok {
 		t.Fatalf("outer Cmd = %T, want *syntax.BinaryCmd", program.Stmts[0].Cmd)
 	}
-	if _, ok := outer.Y.Cmd.(*syntax.Subshell); !ok {
+	outerSub, ok := outer.Y.Cmd.(*syntax.Subshell)
+	if !ok {
 		t.Fatalf("outer Y.Cmd = %T, want *syntax.Subshell", outer.Y.Cmd)
+	}
+	if got, ok := synthetic[outer.Y]; !ok || got != outerSub.Stmts[0] {
+		t.Fatalf("synthetic metadata missing outer wrapped stmt")
 	}
 
 	inner, ok := outer.X.Cmd.(*syntax.BinaryCmd)
 	if !ok {
 		t.Fatalf("outer X.Cmd = %T, want nested *syntax.BinaryCmd", outer.X.Cmd)
 	}
-	if _, ok := inner.Y.Cmd.(*syntax.Subshell); !ok {
+	innerSub, ok := inner.Y.Cmd.(*syntax.Subshell)
+	if !ok {
 		t.Fatalf("inner Y.Cmd = %T, want *syntax.Subshell", inner.Y.Cmd)
+	}
+	if got, ok := synthetic[inner.Y]; !ok || got != innerSub.Stmts[0] {
+		t.Fatalf("synthetic metadata missing inner wrapped stmt")
 	}
 }
 
@@ -49,7 +61,7 @@ func TestRewritePipelineSubshellsSkipsExistingSubshell(t *testing.T) {
 	t.Parallel()
 
 	program := parseShellTestProgram(t, "printf a | (read -r value)\n")
-	rewritePipelineSubshells(program)
+	synthetic := rewritePipelineSubshells(program)
 
 	pipeline, ok := program.Stmts[0].Cmd.(*syntax.BinaryCmd)
 	if !ok {
@@ -64,6 +76,9 @@ func TestRewritePipelineSubshellsSkipsExistingSubshell(t *testing.T) {
 	}
 	if _, ok := right.Stmts[0].Cmd.(*syntax.Subshell); ok {
 		t.Fatalf("existing subshell was wrapped twice")
+	}
+	if len(synthetic) != 0 {
+		t.Fatalf("len(synthetic) = %d, want 0", len(synthetic))
 	}
 }
 

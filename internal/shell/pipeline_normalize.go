@@ -2,14 +2,15 @@ package shell
 
 import "github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 
-func normalizeExecutionProgram(program *syntax.File) {
-	rewritePipelineSubshells(program)
+func normalizeExecutionProgram(program *syntax.File) map[*syntax.Stmt]*syntax.Stmt {
+	return rewritePipelineSubshells(program)
 }
 
-func rewritePipelineSubshells(program *syntax.File) {
+func rewritePipelineSubshells(program *syntax.File) map[*syntax.Stmt]*syntax.Stmt {
 	if program == nil {
-		return
+		return nil
 	}
+	synthetic := make(map[*syntax.Stmt]*syntax.Stmt)
 
 	syntax.Walk(program, func(node syntax.Node) bool {
 		cmd, ok := node.(*syntax.BinaryCmd)
@@ -26,21 +27,27 @@ func rewritePipelineSubshells(program *syntax.File) {
 			return true
 		}
 
-		cmd.Y = wrapStmtInSubshell(cmd.Y)
+		cmd.Y = wrapStmtInSubshell(cmd.Y, synthetic)
 		return true
 	})
+	return synthetic
 }
 
-func wrapStmtInSubshell(stmt *syntax.Stmt) *syntax.Stmt {
+func wrapStmtInSubshell(stmt *syntax.Stmt, synthetic map[*syntax.Stmt]*syntax.Stmt) *syntax.Stmt {
 	if stmt == nil {
 		return nil
 	}
-	return &syntax.Stmt{
-		Position: stmt.Pos(),
-		Cmd: &syntax.Subshell{
-			Lparen: stmt.Pos(),
-			Rparen: stmt.End(),
-			Stmts:  []*syntax.Stmt{stmt},
-		},
+	sub := &syntax.Subshell{
+		Lparen: stmt.Pos(),
+		Rparen: stmt.End(),
+		Stmts:  []*syntax.Stmt{stmt},
 	}
+	wrapped := &syntax.Stmt{
+		Position: stmt.Pos(),
+		Cmd:      sub,
+	}
+	if synthetic != nil {
+		synthetic[wrapped] = stmt
+	}
+	return wrapped
 }

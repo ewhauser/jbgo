@@ -65,6 +65,59 @@ func TestPipelineRegressionDoesNotPersistFinalStageReadVariable(t *testing.T) {
 	}
 }
 
+func TestPipelineRegressionLastpipePersistsFinalStageReadVariable(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"shopt -s lastpipe\n"+
+		"unset value\n"+
+		"printf 'hello\\n' | read -r value\n"+
+		"printf 'value:<%s>\\n' \"${value-}\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "value:<hello>\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPipelineRegressionLastpipePersistsMapfileAndLoopState(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"shopt -s lastpipe\n"+
+		"seq 2 | mapfile m\n"+
+		"seq 3 | readarray r\n"+
+		"i=0\n"+
+		"seq 3 | while read -r _; do (( i++ )); done\n"+
+		"printf 'm=%s r=%s i=%s\\n' \"${#m[@]}\" \"${#r[@]}\" \"$i\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "m=2 r=3 i=3\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPipelineRegressionLastpipeDoesNotUnwrapUserSubshellTail(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"shopt -s lastpipe\n"+
+		"unset v\n"+
+		"printf 'x\\n' | (read -r v; echo \"inner:$v\")\n"+
+		"printf 'outer:<%s>\\n' \"${v-}\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "inner:x\nouter:<>\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCommandSubstitutionRegressionFeedsExpandedArgs(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

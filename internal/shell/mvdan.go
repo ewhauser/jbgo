@@ -63,6 +63,7 @@ type Execution struct {
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
 	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
 	procSubst         *procSubstManager
+	pipelineSubshells map[*syntax.Stmt]*syntax.Stmt
 }
 
 type RunResult struct {
@@ -144,7 +145,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		}
 		validationProgram = parsed
 	}
-	normalizeExecutionProgram(validationProgram)
+	validationPipelineSubshells := normalizeExecutionProgram(validationProgram)
 	if violation := validateExecutionBudgets(validationProgram, exec.Policy); violation != nil {
 		if exec.Stderr != nil {
 			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
@@ -166,7 +167,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		program = parsed
 	}
 	if program != validationProgram {
-		normalizeExecutionProgram(program)
+		validationPipelineSubshells = normalizeExecutionProgram(program)
 	}
 
 	if exec.Stdin == nil {
@@ -190,6 +191,7 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 	}
 
 	effectiveExec := *exec
+	effectiveExec.pipelineSubshells = validationPipelineSubshells
 	cleanupProcSubst := withProcSubstScope(&effectiveExec)
 	defer cleanupProcSubst()
 
@@ -311,6 +313,7 @@ func (m *MVdan) runnerOptions(exec *Execution, budget *executionBudget) []interp
 			return m.execHandler(exec, budget)
 		}),
 		interp.ProcSubstHandler(m.procSubstHandler(exec)),
+		interp.SyntheticPipelineSubshells(exec.pipelineSubshells),
 	}
 	if exec != nil && strings.TrimSpace(exec.ScriptPath) != "" {
 		options = append(options, interp.TopLevelScriptPath(exec.ScriptPath))
