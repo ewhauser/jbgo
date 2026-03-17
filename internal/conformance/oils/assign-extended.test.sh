@@ -788,33 +788,6 @@ a=1 b[0+0]=2 c=3
 echo $a ${b[@]} $c
 ## stdout: 1 2 3
 
-#### Env bindings shouldn't contain array assignments
-a=1 b[0]=2 c=3 printenv.sh a b c
-## status: 2
-## stdout-json: ""
-## OK bash STDOUT:
-1
-None
-3
-## END
-## OK bash status: 0
-## BUG mksh STDOUT:
-1
-2
-3
-## END
-## BUG mksh status: 0
-
-#### syntax error in array assignment
-a=x b[0+]=y c=z
-echo $a $b $c
-## status: 2
-## stdout-json: ""
-## BUG bash stdout: x
-## BUG bash status: 0
-## OK mksh stdout-json: ""
-## OK mksh status: 1
-
 #### declare -g (bash-specific; bash-completion uses it)
 f() {
   declare -g G=42

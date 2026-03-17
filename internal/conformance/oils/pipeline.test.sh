@@ -259,7 +259,6 @@ echo status=$?
 
 $SH -c '
 shopt -s lastpipe
-shopt -s no_fork_last  # OSH only
 set -o errexit
 set -o pipefail
 

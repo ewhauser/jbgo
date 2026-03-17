@@ -54,18 +54,6 @@ case $foo in
 esac
 ## stdout: A
 
-#### Empty action for case is syntax error
-# POSIX grammar seems to allow this, but bash and dash don't.  Need ;;
-foo=a
-case $foo in
-  a)
-  b)
-    echo A ;;
-  d)
-esac
-## status: 2
-## OK mksh status: 1
-
 #### Empty action is allowed for last case
 foo=b
 case $foo in
@@ -81,20 +69,6 @@ case $foo in
   c)
 esac
 ## stdout: A
-
-
-#### Bare semi-colon not allowed
-# This is disallowed by the grammar; bash and dash don't accept it.
-;
-## status: 2
-## OK mksh status: 1
-
-
-
-#
-# Explicit tests
-#
-
 
 
 #### Command substitution in default

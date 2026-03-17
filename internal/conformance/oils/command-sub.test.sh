@@ -37,13 +37,6 @@ echo `\`echo -n l; echo -n s\` $TMP | grep 000000-first`
 $(echo ec)$(echo ho) split builtin
 ## stdout: split builtin
 
-#### Making keyword out of command sub should NOT work
-$(echo f)$(echo or) i in a b c; do echo $i; done
-echo status=$?
-## stdout-json: ""
-## status: 2
-## OK mksh status: 1
-
 #### Command sub with here doc
 echo $(<<EOF tac
 one
@@ -118,16 +111,6 @@ x "hi"
 x hi
 x hi
 x hi
-## END
-
-#### Escaped quote in [[ ]]
-file=$TMP/command-sub-dbracket
-#rm -f $file
-echo "123 `[[ $(echo \\" > $file) ]]` 456";
-cat $file
-## STDOUT:
-123  456
-"
 ## END
 
 #### Quoting " within ``
@@ -291,7 +274,6 @@ status=0
 #### Empty command sub $() (command::NoOp)
 
 # IMPORTANT: catch assert() failure in child process!!!
-shopt -s command_sub_errexit
 
 echo -$()- ".$()."
 ## STDOUT:

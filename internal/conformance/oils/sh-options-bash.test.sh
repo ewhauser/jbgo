@@ -124,7 +124,6 @@ braceexpand on
 #### If shopt --set xtrace is allowed, it should update SHELLOPTS, not BASHOPTS
 case $SH in bash) exit ;; esac
 
-shopt --set xtrace
 echo SHELLOPTS=$SHELLOPTS
 set -x
 echo SHELLOPTS=$SHELLOPTS

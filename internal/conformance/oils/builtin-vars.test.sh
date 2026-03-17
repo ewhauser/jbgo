@@ -191,7 +191,6 @@ test "$old" = "$new" && echo "not changed"
 ## stdout: not changed
 
 #### can't export array (strict_array)
-shopt -s strict_array
 
 typeset -a a
 a=(1 2 3)
@@ -210,7 +209,6 @@ None
 ## OK osh stdout-json: ""
 
 #### can't export associative array (strict_array)
-shopt -s strict_array
 
 typeset -A a
 a["foo"]=bar

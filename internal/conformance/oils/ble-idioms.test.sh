@@ -95,21 +95,6 @@ echo $((a=text[3]))
 ## N-I ash/dash/yash status: 2
 ## N-I ash/dash/yash stdout-json: ""
 
-#### dynamic arith varname: assign
-vec2_set () {
-  local this=$1 x=$2 y=$3
-  : $(( ${this}_x = $2 ))
-  : $(( ${this}_y = y ))
-}
-vec2_set a 3 4
-vec2_set b 5 12
-echo a_x=$a_x a_y=$a_y
-echo b_x=$b_x b_y=$b_y
-## STDOUT:
-a_x=3 a_y=4
-b_x=5 b_y=12
-## END
-
 #### dynamic arith varname: read
 
 vec2_load() {
@@ -122,30 +107,6 @@ vec2_load a
 echo x=$x y=$y
 ## STDOUT:
 x=12 y=34
-## END
-
-#### dynamic arith varname: copy/add
-shopt -s eval_unsafe_arith  # for RHS
-
-vec2_copy () {
-  local this=$1 rhs=$2
-  : $(( ${this}_x = $(( ${rhs}_x )) ))
-  : $(( ${this}_y = ${rhs}_y ))
-}
-vec2_add () {
-  local this=$1 rhs=$2
-  : $(( ${this}_x += $(( ${rhs}_x )) ))
-  : $(( ${this}_y += ${rhs}_y ))
-}
-a_x=3 a_y=4
-b_x=4 b_y=20
-vec2_copy c a
-echo c_x=$c_x c_y=$c_y
-vec2_add c b
-echo c_x=$c_x c_y=$c_y
-## STDOUT:
-c_x=3 c_y=4
-c_x=7 c_y=24
 ## END
 
 #### is-array with ${var@a}

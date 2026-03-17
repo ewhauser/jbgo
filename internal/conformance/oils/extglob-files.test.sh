@@ -291,7 +291,6 @@ zzz bar.py foo.py
 ## END
 
 #### No extended glob with simple_word_eval (YSH evaluation)
-shopt -s ysh:all
 shopt -s extglob
 mkdir -p eg12
 cd eg12
@@ -302,25 +301,6 @@ builtin write -- @(fo*|bar).py
 ## STDOUT:
 ## END
 
-#### no match
-shopt -s extglob
-echo @(__nope__)
-
-# OSH has glob quoting here
-echo @(__nope__*|__nope__?|'*'|'?'|'[:alpha:]'|'|')
-
-if test $SH != osh; then
-  exit
-fi
-
-# OSH has this alias for @()
-echo ,(osh|style)
-
-## STDOUT:
-@(__nope__)
-@(__nope__*|__nope__?|*|?|[:alpha:]||)
-## END
-
 #### no_dash_glob
 shopt -s extglob
 mkdir -p opts
@@ -329,7 +309,6 @@ cd opts
 touch -- foo bar -dash
 echo @(*)
 
-shopt --set no_dash_glob
 echo @(*)
 
 

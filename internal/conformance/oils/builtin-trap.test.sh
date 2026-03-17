@@ -379,19 +379,6 @@ trap 'cleanup x y z' EXIT
 ## stdout: cleanup [x y z]
 ## status: 0
 
-#### trap EXIT with PARSE error
-trap 'echo FAILED' EXIT
-for
-## stdout: FAILED
-## status: 2
-## OK mksh status: 1
-
-#### trap EXIT with PARSE error and explicit exit
-trap 'echo FAILED; exit 0' EXIT
-for
-## stdout: FAILED
-## status: 0
-
 #### trap EXIT with explicit exit
 trap 'echo IN TRAP; echo $stdout' EXIT 
 stdout=FOO

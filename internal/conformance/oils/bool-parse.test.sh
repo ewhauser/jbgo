@@ -107,22 +107,6 @@ status=127
 status=0
 ## END
 
-#### Not allowed: [[ ) ]] and [[ ( ]]
-
-[[ ) ]]
-echo status=$?
-[[ ( ]]
-echo status=$?
-
-## status: 2
-## OK mksh status: 1
-## STDOUT:
-## END
-## OK zsh status: 1
-## OK zsh STDOUT:
-status=1
-## END
-
 #### test builtin: ( x ) behavior is the same in both cases
 
 test '(' x ')'

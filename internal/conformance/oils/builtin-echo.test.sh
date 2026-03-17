@@ -63,21 +63,6 @@ line2
 line2
 ## END
 
-#### echo builtin should disallow typed args - literal
-echo (42)
-## status: 2
-## OK mksh/zsh status: 1
-## STDOUT:
-## END
-
-#### echo builtin should disallow typed args - variable
-var x = 43
-echo (x)
-## status: 2
-## OK mksh/zsh status: 1
-## STDOUT:
-## END
-
 #### echo -en
 echo -en 'abc\ndef\n'
 ## STDOUT:

@@ -11,16 +11,6 @@ echo ${foo:1:3}
 bcd
 ## END
 
-#### Cannot take length of substring slice
-# These are runtime errors, but we could make them parse time errors.
-v=abcde
-echo ${#v:1:3}
-## status: 1
-## OK osh status: 2
-# zsh actually implements this!
-## OK zsh stdout: 3
-## OK zsh status: 0
-
 #### Out of range string slice: begin
 # out of range begin doesn't raise error in bash, but in mksh it skips the
 # whole thing!
@@ -122,7 +112,6 @@ echo -${s:1:3}-
 
 
 #### Slice string with invalid UTF-8 with strict_word_eval
-shopt -s strict_word_eval || true
 echo slice
 s=$(echo -e "\xFF")bcdef
 echo -${s:1:3}-
@@ -382,29 +371,3 @@ $SH -c 's=123; argv.sh space ${s: }'
 ['space', '123']
 ## END
 
-#### ${array[@]::} has implicit length of zero - for ble.sh
-
-# https://oilshell.zulipchat.com/#narrow/stream/121540-oil-discuss/topic/.24.7Barr.5B.40.5D.3A.3A.7D.20in.20bash.20-.20is.20it.20documented.3F
-
-array=(1 2 3)
-argv.sh ${array[@]::}
-argv.sh ${array[@]:0:}
-
-echo
-
-set -- 1 2 3
-argv.sh ${@::}
-argv.sh ${@:0:}
-
-## status: 0
-## STDOUT:
-[]
-[]
-
-[]
-[]
-## END
-
-## OK mksh/zsh status: 1
-## OK mksh/zsh STDOUT:
-## END

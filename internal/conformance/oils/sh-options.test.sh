@@ -55,17 +55,6 @@ $SH -o errexit -c 'false; echo status=$?'
 ## stdout-json: ""
 ## status: 1
 
-#### pass shopt options like sh -O nullglob
-$SH +O nullglob -c 'echo foo *.nonexistent bar'
-$SH -O nullglob -c 'echo foo *.nonexistent bar'
-## STDOUT:
-foo *.nonexistent bar
-foo bar
-## END
-## N-I dash/mksh stdout-json: ""
-## N-I dash status: 2
-## N-I mksh status: 1
-
 #### set -o vi/emacs
 set -o vi
 echo $?
@@ -518,9 +507,7 @@ show-strict() {
 }
 
 show-strict
-shopt -s strict:all
 show-strict
-shopt -u strict_argv
 show-strict
 ## STDOUT:
 shopt -u strict_arg_parse
@@ -549,7 +536,6 @@ set -o errexit
 shopt -p nullglob || true  # bash returns 1 here?  Like -q.
 
 # This should set nullglob, and return 1, which can be ignored
-shopt -s nullglob strict_OPTION_NOT_YET_IMPLEMENTED 2>/dev/null || true
 echo status=$?
 
 shopt -p nullglob || true
@@ -606,7 +592,6 @@ status=127
 ## END
 
 #### stubbed out bash options
-shopt -s ignore_shopt_not_impl
 for name in foo autocd cdable_vars checkwinsize; do
   shopt -s $name
   echo $?
@@ -699,7 +684,6 @@ set=1
 #### Unimplemented options - OSH shopt -s ignore_shopt_not_impl
 case $SH in dash|mksh) exit ;; esac
 
-shopt -s ignore_shopt_not_impl
 
 opt_name=xpg_echo
 

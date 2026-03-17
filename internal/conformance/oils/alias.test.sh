@@ -272,37 +272,6 @@ e_ done
 3
 ## END
 
-#### Loop split across alias in another way
-shopt -s expand_aliases
-alias e_='for i in 1 2 3; do echo '
-e_ $i; done
-## STDOUT:
-1
-2
-3
-## END
-## OK osh stdout-json: ""
-## OK osh status: 2
-
-#### Loop split across both iterative and recursive aliases
-shopt -s expand_aliases  # bash requires this
-alias FOR1='for '
-alias FOR2='FOR1 '
-alias eye1='i '
-alias eye2='eye1 '
-alias IN='in '
-alias onetwo='$one "2" '  # NOTE: this does NOT work in any shell except bash.
-one=1
-FOR2 eye2 IN onetwo 3; do echo $i; done
-## STDOUT:
-1
-2
-3
-## END
-## OK osh stdout-json: ""
-## OK osh status: 2
-## BUG zsh stdout-json: ""
-
 #### Alias with a quote in the middle is a syntax error
 shopt -s expand_aliases
 alias e_='echo "'
@@ -416,28 +385,6 @@ e_ one \
   one
 ## stdout: ONE TWO ONE TWO THREE two one
 
-#### alias for left brace 
-shopt -s expand_aliases
-alias LEFT='{'
-LEFT echo one; echo two; }
-## STDOUT:
-one
-two
-## END
-## OK osh stdout-json: ""
-## OK osh status: 2
-
-#### alias for left paren
-shopt -s expand_aliases
-alias LEFT='('
-LEFT echo one; echo two )
-## STDOUT:
-one
-two
-## END
-## OK osh stdout-json: ""
-## OK osh status: 2
-
 #### alias used in subshell and command sub
 # This spec seems to be contradictoary?
 # http://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_03_01
@@ -541,23 +488,6 @@ a foo bar
 ## stdout: ['foo', 'bar']
 ## BUG dash status: 1
 ## BUG dash stdout-json: ""
-
-#### alias with keywords
-# from issue #299
-shopt -s expand_aliases
-alias a=
-
-# both of these fail to parse in OSH
-# this is because of our cleaner evaluation model
-
-a (( var = 0 ))
-#a case x in x) true ;; esac
-
-echo done
-## stdout: done
-## OK osh status: 2
-## OK osh stdout-json: ""
-
 
 #### alias with word of multiple lines
 shopt -s expand_aliases

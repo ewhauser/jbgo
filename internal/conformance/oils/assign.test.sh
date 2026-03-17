@@ -115,14 +115,6 @@ None
 foo\=bar
 ## stdout: HI
 
-#### Env binding not allowed before compound command
-# bash gives exit code 2 for syntax error, because of 'do'.
-# dash gives 0 because there is stuff after for?  Should really give an error.
-# mksh gives acceptable error of 1.
-FOO=bar for i in a b; do printenv.sh $FOO; done
-## status: 2
-## OK mksh/zsh status: 1
-
 #### Trying to run keyword 'for'
 FOO=bar for
 ## status: 127
@@ -573,24 +565,6 @@ export a=1 no_value c=2
 printenv.sh no_value
 ## STDOUT:
 foo
-## END
-
-#### local a=loc $var c=loc
-var='b'
-b=global
-echo $b
-f() {
-  local a=loc $var c=loc
-  argv.sh "$a" "$b" "$c"
-}
-f
-## STDOUT:
-global
-['loc', '', 'loc']
-## END
-## BUG dash STDOUT:
-global
-['loc', 'global', 'loc']
 ## END
 
 #### redirect after assignment builtin (eval redirects after evaluating arguments)

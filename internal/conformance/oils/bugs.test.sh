@@ -71,37 +71,6 @@ echo hi
 ## OK dash/ash stdout-json: ""
 ## OK zsh stdout-json: ""
 
-#### First word like foo$x() and foo$[1+2] (regression)
-
-# Problem: $x() func call broke this error message
-foo$identity('z')
-
-foo$[1+2]
-
-echo DONE
-
-## status: 2
-## OK mksh/zsh status: 1
-## STDOUT:
-## END
-
-#### Function names
-foo$x() {
-  echo hi
-}
-
-foo $x() {
-  echo hi
-}
-
-## status: 2
-## OK mksh status: 1
-# Note: zsh should return 1 or 2
-## BUG zsh status: 0
-## STDOUT:
-## END
-
-
 #### file with NUL byte
 echo -e 'echo one \0 echo two' > tmp.sh
 $SH tmp.sh

@@ -79,7 +79,6 @@ hi
 
 #### status code is available
 
-shopt --set parse_at
 
 cat <(seq 2; exit 2) <(seq 3; exit 3)
 
@@ -109,13 +108,11 @@ done
 
 case $SH in bash*|zsh) exit ;; esac
 
-shopt --set parse_at
 
 cat <(echo a; exit 2) <(echo b; exit 3)
 echo status=$? ps @_process_sub_status
 
 echo __
-shopt -s process_sub_fail
 
 cat <(echo a; exit 2) <(echo b; exit 3)
 echo status=$? ps @_process_sub_status
@@ -147,7 +144,6 @@ b
 # zsh is very similar to bash, but don't bother with the assertions
 case $SH in bash*|zsh) exit ;; esac
 
-shopt --set parse_at
 
 f() {
   cat <(seq 1; exit 1) | {

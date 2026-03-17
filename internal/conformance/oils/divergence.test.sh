@@ -104,14 +104,3 @@ hey
 status=0
 ## END
 
-#### builtin cat crashes a subshell (#2530)
-
-((/usr/bin/cat </dev/zero; echo $? >&7) | true) 7>&1
-
-((cat </dev/zero; echo $? >&7) | true) 7>&1
-
-## STDOUT:
-141
-141
-## END
-

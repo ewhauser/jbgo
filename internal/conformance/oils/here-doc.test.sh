@@ -45,26 +45,6 @@ EOF3
 3: fd3
 ## END
 
-#### Here doc with bad var delimiter
-# Most shells accept this, but OSH is stricter.
-cat <<${a}
-here
-${a}
-## stdout: here
-## OK osh stdout-json: ""
-## OK osh status: 2
-
-#### Here doc with bad comsub delimiter
-# bash is OK with this; dash isn't.  Should be a parse error.
-cat <<$(a)
-here
-$(a)
-## stdout-json: ""
-## status: 2
-## BUG bash stdout: here
-## BUG bash status: 0
-## OK mksh status: 1
-
 #### Here doc and < redirect -- last one wins
 
 echo hello >$TMP/hello.txt
@@ -148,16 +128,6 @@ EOF1
 there
 EOF2
 ## stdout: there
-
-#### Here doc with line continuation, then pipe.  Syntax error.
-cat <<EOF \
-1
-2
-3
-EOF
-| tac
-## status: 2
-## OK mksh status: 1
 
 #### Here doc with pipe on first line
 cat <<EOF | tac

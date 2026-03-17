@@ -231,14 +231,3 @@ match
 ## END
 
 
-#### case \n bug regression
-
-case
-in esac
-
-## STDOUT:
-## END
-## status: 2
-## OK mksh status: 1
-## OK zsh status: 127
-

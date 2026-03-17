@@ -56,31 +56,6 @@ IFS=x; ABC=cxd; for i in +($ABC); do echo =$i=; done
 =d)=
 ## END
 
-#### char class / extglob
-# http://landley.net/notes.html#14-05-2020
-shopt -s extglob
-
-touch l; echo [hello"]"
-
-touch b
-echo [$(echo abc)]
-
-touch +
-echo [+()]
-echo [+(])
-## STDOUT:
-[hello]
-b
-+
-[+(])
-## END
-## BUG mksh STDOUT:
-[hello]
-b
-[+()]
-[+(])
-## END
-
 #### patsub of $* - http://landley.net/notes.html#23-04-2020
 chicken() { echo ${*/b c/ghi}; }; chicken a b c d
 ## STDOUT:

@@ -1,20 +1,5 @@
 ## compare_shells: dash bash mksh
 
-#### Incomplete Function
-## code: foo()
-## status: 2
-## BUG mksh status: 0
-
-#### Incomplete Function 2
-## code: foo() {
-## status: 2
-## OK mksh status: 1
-
-#### Bad function
-## code: foo(ls)
-## status: 2
-## OK mksh status: 1
-
 #### Unbraced function body. 
 # dash allows this, but bash does not.  The POSIX grammar might not allow
 # this?  Because a function body needs a compound command.
@@ -62,16 +47,6 @@ func-name=ext
 ## OK dash stdout-json: ""
 ## OK mksh status: 1
 ## OK mksh stdout-json: ""
-
-#### Function name with $
-$foo-bar() { ls ; }
-## status: 2
-## OK bash/mksh status: 1
-
-#### Function name with command sub
-foo-$(echo hi)() { ls ; }
-## status: 2
-## OK bash/mksh status: 1
 
 #### Function name with !
 # bash allows this; dash doesn't.

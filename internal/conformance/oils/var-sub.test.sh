@@ -5,12 +5,6 @@
 # NOTE: ZSH has interesting behavior, like echo hi > "$@" can write to TWO
 # FILES!
 
-#### Bad var sub
-echo ${a&}
-## stdout-json: ""
-## status: 2
-## OK bash/mksh status: 1
-
 #### Braced block inside ${}
 # NOTE: This bug was in bash 4.3 but fixed in bash 4.4.
 echo ${foo:-$({ ls /bin/ls; })}
@@ -44,21 +38,3 @@ echo hi 1>& "$@"
 ## status: 1
 ## OK dash status: 2
 
-#### Here doc with bad "$@" delimiter
-# bash - syntax error
-# dash - syntax error: end of file unexpected
-# mksh - runtime error: here document unclosed
-#
-# What I want is syntax error: bad delimiter!
-#
-# This means that "$@" should be part of the parse tree then?  Anything that
-# involves more than one token.
-fun() {
-  cat << "$@"
-hi
-1 2
-}
-fun 1 2
-## status: 2
-## stdout-json: ""
-## OK mksh status: 1

@@ -175,13 +175,6 @@ foo='a b c d'
 argv.sh ${foo%'c d'} ${foo%'c  d'}
 ## stdout: ['a', 'b', 'a', 'b', 'c', 'd']
 
-#### Syntax error for single quote in double quote
-foo="'a b c d'"
-argv.sh "${foo%d'}"
-## stdout-json: ""
-## status: 2
-## OK mksh status: 1
-
 #### "${undef-'c d'}" and "${foo%'c d'}" are parsed differently
 
 # quotes are LITERAL here

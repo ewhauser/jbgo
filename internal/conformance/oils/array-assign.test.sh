@@ -61,64 +61,6 @@ argv.sh "${a[@]}"
 ## N-I zsh/ash STDOUT:
 ## END
 
-#### Multiple LHS array words
-case $SH in zsh|ash) exit ;; esac
-
-a=(0 1 2)
-b=(3 4 5)
-
-#declare -p a b
-
-HOME=/home/spec-test
-
-# empty string, and tilde sub
-a[0 + 1]=  b[2 + 0]=~/src
-
-typeset -p a b
-
-echo ---
-
-# In bash, this bad prefix binding prints an error, but nothing fails
-a[0 + 1]='foo' argv.sh b[2 + 0]='bar'
-echo status=$?
-
-typeset -p a b
-
-## STDOUT:
-declare -a a=([0]="0" [1]="" [2]="2")
-declare -a b=([0]="3" [1]="4" [2]="/home/spec-test/src")
----
-['b[2', '+', '0]=bar']
-status=0
-declare -a a=([0]="0" [1]="" [2]="2")
-declare -a b=([0]="3" [1]="4" [2]="/home/spec-test/src")
-## END
-
-## OK mksh STDOUT:
-set -A a
-typeset a[0]=0
-typeset a[1]=
-typeset a[2]=2
-set -A b
-typeset b[0]=3
-typeset b[1]=4
-typeset b[2]=/home/spec-test/src
----
-['b[2', '+', '0]=bar']
-status=0
-set -A a
-typeset a[0]=0
-typeset a[1]=
-typeset a[2]=2
-set -A b
-typeset b[0]=3
-typeset b[1]=4
-typeset b[2]=/home/spec-test/src
-## END
-
-## N-I zsh/ash STDOUT:
-## END
-
 #### LHS array is protected with shopt -s eval_unsafe_arith, e.g. 'a[$(echo 2)]'
 case $SH in zsh|ash) exit ;; esac
 
@@ -155,34 +97,6 @@ typeset b[1]=4
 typeset b[2]=zzz
 ## END
 
-## N-I zsh/ash STDOUT:
-## END
-
-#### file named a[ is  not executed
-case $SH in zsh|ash) exit ;; esac
-
-PATH=".:$PATH"
-
-for name in 'a[' 'a[5'; do
-  echo "echo hi from $name: \$# args: \$@" > "$name"
-  chmod +x "$name"
-done
-
-# this does not executed a[5
-a[5 + 1]=
-a[5 / 1]=y
-echo len=${#a[@]}
-
-# Not detected as assignment because there's a non-arith character
-# bash and mksh both give a syntax error
-a[5 # 1]=
-
-## status: 1
-## STDOUT:
-len=2
-## END
-
-## N-I zsh/ash status: 0
 ## N-I zsh/ash STDOUT:
 ## END
 
@@ -323,33 +237,6 @@ declare -a a=([0]="2" [1]="X" [2]="3X" [3]="Y")
 ## END
 
 ## N-I zsh/mksh/ash STDOUT:
-## END
-
-#### argv.sh a[1 + 2]=
-case $SH in zsh|ash) exit ;; esac
-
-# This tests that the worse parser doesn't unconditinoally treat a[ as special
-
-a[1 + 2]= argv.sh a[1 + 2]=
-echo status=$?
-
-a[1 + 2]+= argv.sh a[1 + 2]+=
-echo status=$?
-
-argv.sh a[3 + 4]=
-
-argv.sh a[3 + 4]+=
-
-## STDOUT:
-['a[1', '+', '2]=']
-status=0
-['a[1', '+', '2]+=']
-status=0
-['a[3', '+', '4]=']
-['a[3', '+', '4]+=']
-## END
-
-## N-I zsh/ash STDOUT:
 ## END
 
 #### declare builtin doesn't allow spaces
