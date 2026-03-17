@@ -459,7 +459,7 @@ ERROR: echo failed with status 1
 
 { echo 'ulimit -f 1'
   # More than 8 KiB may cause a flush()
-  python2 -c 'print("echo " + "X"*9000 + " >out.txt")'
+  printf 'echo %09000s >out.txt\n' | tr ' ' X
   echo 'echo inner=$?'
 } > big.sh
 

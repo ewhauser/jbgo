@@ -62,7 +62,9 @@ printf '\u03bc \U000003bc\n'
 case $SH in dash|ash) exit ;; esac
 
 py-repr() {
-  python2 -c 'import sys; print repr(sys.argv[1])'  "$@"
+  printf "'"
+  printf '%s' "$1" | od -A n -t x1 | tr -d ' \n' | sed 's/\(..\)/\\x\1/g'
+  printf "'\n"
 }
 
 py-repr $'\U0010ffff'
@@ -89,7 +91,9 @@ py-repr $(printf '\U0010ffff')
 #### $'' does NOT check that 0x110000 is too big at parse time
 
 py-repr() {
-  python2 -c 'import sys; print repr(sys.argv[1])'  "$@"
+  printf "'"
+  printf '%s' "$1" | od -A n -t x1 | tr -d ' \n' | sed 's/\(..\)/\\x\1/g'
+  printf "'\n"
 }
 
 py-repr $'\U00110000'
@@ -105,7 +109,9 @@ py-repr $'\U00110000'
 #### $'' does not check for surrogate range at parse time
 
 py-repr() {
-  python2 -c 'import sys; print repr(sys.argv[1])'  "$@"
+  printf "'"
+  printf '%s' "$1" | od -A n -t x1 | tr -d ' \n' | sed 's/\(..\)/\\x\1/g'
+  printf "'\n"
 }
 
 py-repr $'\udc00'
@@ -126,7 +132,9 @@ py-repr $'\U0000dc00'
 case $SH in mksh) exit ;; esac
 
 py-repr() {
-  python2 -c 'import sys; print repr(sys.argv[1])'  "$@"
+  printf "'"
+  printf '%s' "$1" | od -A n -t x1 | tr -d ' \n' | sed 's/\(..\)/\\x\1/g'
+  printf "'\n"
 }
 
 e="$(echo -e '\U00110000')"
@@ -151,7 +159,9 @@ status=0
 case $SH in mksh) exit ;; esac
 
 py-repr() {
-  python2 -c 'import sys; print repr(sys.argv[1])'  "$@"
+  printf "'"
+  printf '%s' "$1" | od -A n -t x1 | tr -d ' \n' | sed 's/\(..\)/\\x\1/g'
+  printf "'\n"
 }
 
 e="$(echo -e '\udc00')"

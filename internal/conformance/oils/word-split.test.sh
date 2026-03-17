@@ -180,7 +180,7 @@ argv.sh 1${undefined:-"2_3"x_x"4_5"}6
 
 #### IFS empty doesn't do splitting
 IFS=''
-x=$(python2 -c 'print(" a b\tc\n")')
+x=$(printf ' a b\tc\n')
 argv.sh $x
 ## STDOUT:
 [' a b\tc']
@@ -188,7 +188,7 @@ argv.sh $x
 
 #### IFS unset behaves like $' \t\n'
 unset IFS
-x=$(python2 -c 'print(" a b\tc\n")')
+x=$(printf ' a b\tc\n')
 argv.sh $x
 ## STDOUT:
 ['a', 'b', 'c']
