@@ -414,10 +414,6 @@
           "mode": "xfail",
           "reason": "cat error message format differs: 'file does not exist' vs 'No such file or directory'"
         },
-        "oils/var-op-len.test.sh::${#s} respects LC_ALL - length in bytes or code points": {
-          "mode": "xfail",
-          "reason": "gbash follows POSIX locale semantics but Linux bash ignores LANG when en_US.UTF-8 locale is unavailable"
-        },
         "oils/var-op-patsub.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
