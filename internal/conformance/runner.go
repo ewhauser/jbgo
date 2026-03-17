@@ -52,7 +52,7 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 	resolvedCfg := resolvedSuiteConfig(cfg)
 	cfg = &resolvedCfg
 
-	bashPath := os.Getenv("GBASH_CONFORMANCE_BASH")
+	bashPath := os.Getenv("GBASH_CONFORMANCE_BASH") //nolint:forbidigo // Test harness reads host env to locate the oracle bash binary.
 	if bashPath == "" {
 		var err error
 		bashPath, err = exec.LookPath("bash")
@@ -60,7 +60,7 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 			t.Skip("bash not available")
 		}
 	}
-	if out, err := exec.Command(bashPath, "--version").Output(); err == nil {
+	if out, err := exec.CommandContext(t.Context(), bashPath, "--version").Output(); err == nil { //nolint:forbidigo // Logging oracle version for diagnostics.
 		firstLine, _, _ := strings.Cut(string(out), "\n")
 		t.Logf("bash oracle: %s (%s)", firstLine, bashPath)
 	}
