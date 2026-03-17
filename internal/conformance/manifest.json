@@ -94,10 +94,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/builtin-bind.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
-        },
         "oils/builtin-bracket.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -133,10 +129,6 @@
         "oils/builtin-history.test.sh": {
           "mode": "skip",
           "reason": "requires an interactive shell or tty behavior"
-        },
-        "oils/builtin-kill.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
         },
         "oils/builtin-meta-assign.test.sh": {
           "mode": "xfail",
@@ -381,14 +373,6 @@
         "oils/posix.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
-        "oils/process-sub.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
-        },
-        "oils/prompt.test.sh": {
-          "mode": "skip",
-          "reason": "exercises host process or terminal behavior outside the gbash sandbox contract"
         },
         "oils/quote.test.sh": {
           "mode": "xfail",
