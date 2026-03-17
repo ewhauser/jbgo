@@ -98,6 +98,9 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 		vr.Str = prev.Str
 		vr.List = prev.List
 		vr.Map = prev.Map
+		vr.Integer = prev.Integer || vr.Integer
+		vr.Lower = prev.Lower || vr.Lower
+		vr.Upper = prev.Upper || vr.Upper
 	} else if prev.ReadOnly {
 		return fmt.Errorf("readonly variable")
 	}
@@ -244,6 +247,40 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.exit.code = 1
 		return
 	}
+}
+
+// applyVarAttrs transforms the variable's value based on its attributes
+// (integer, lowercase, uppercase).
+func (r *Runner) applyVarAttrs(vr *expand.Variable) {
+	if !vr.IsSet() {
+		return
+	}
+	if vr.Integer && vr.Kind == expand.String {
+		vr.Str = strconv.Itoa(r.evalIntegerAttr(vr.Str))
+	}
+	if vr.Lower && vr.Kind == expand.String {
+		vr.Str = strings.ToLower(vr.Str)
+	}
+	if vr.Upper && vr.Kind == expand.String {
+		vr.Str = strings.ToUpper(vr.Str)
+	}
+}
+
+// evalIntegerAttr evaluates a string as a shell arithmetic expression,
+// used for the -i variable attribute.
+func (r *Runner) evalIntegerAttr(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	p := syntax.NewParser()
+	expr, err := p.Arithmetic(strings.NewReader(s))
+	if err != nil {
+		// Fall back to simple integer parsing on syntax error.
+		n, _ := strconv.ParseInt(s, 10, 64)
+		return int(n)
+	}
+	return r.arithm(expr)
 }
 
 func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax.ArithmExpr, vr expand.Variable) {

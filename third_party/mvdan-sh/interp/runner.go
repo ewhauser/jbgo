@@ -505,6 +505,18 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				prev.Local = false
 
 				vr := r.assignVal(prev, as, "")
+				// Preserve and apply variable attributes from the previous declaration.
+				vr.Integer = prev.Integer
+				vr.Lower = prev.Lower
+				vr.Upper = prev.Upper
+				if prev.Integer && as.Append && vr.Kind == expand.String {
+					// For -i with +=, do arithmetic addition instead of string concat.
+					oldVal := r.evalIntegerAttr(prev.String())
+					newVal := r.evalIntegerAttr(r.literal(as.Value))
+					vr.Str = strconv.Itoa(oldVal + newVal)
+				} else {
+					r.applyVarAttrs(&vr)
+				}
 				r.setVarWithIndex(prev, as.Name.Value, as.Index, vr)
 
 				if !tracingEnabled {
@@ -795,9 +807,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				fp := flagParser{remaining: []string{as.Name.Value}}
 				for fp.more() {
 					switch flag := fp.flag(); flag {
-					case "-x", "-r":
+					case "-x", "-r", "-i", "-l", "-u":
+						modes = append(modes, flag)
+					case "+i", "+l", "+u":
 						modes = append(modes, flag)
 					case "-a", "-A", "-n":
+						valType = flag
+					case "+a", "+A":
 						valType = flag
 					case "-g":
 						global = true
@@ -877,11 +893,69 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if as.Naked {
 				if valType == "-A" {
 					vr.Kind = expand.Associative
+				} else if valType == "+a" || valType == "+A" {
+					// Remove array/assoc attribute, convert to string.
+					if vr.Kind == expand.Indexed || vr.Kind == expand.Associative {
+						vr.Kind = expand.String
+						vr.Str = vr.String()
+						vr.List = nil
+						vr.Map = nil
+					}
 				} else {
 					vr.Kind = expand.KeepValue
 				}
 			} else {
-				vr = r.assignVal(vr, as, valType)
+				// When -a/-A is in effect and the value looks like a compound
+				// assignment "(elem ...)", reparse it as an array.
+				if (valType == "-a" || valType == "-A") && as.Array == nil && as.Value != nil {
+					if reparsed := r.reparseCompoundAssign(as); reparsed != nil {
+						as = reparsed
+					}
+				}
+				if valType == "+a" || valType == "+A" {
+					// +a/+A with a value: treat as string assignment.
+					vr = r.assignVal(vr, as, "")
+				} else {
+					vr = r.assignVal(vr, as, valType)
+				}
+				// For integer append in declare context, redo as arithmetic addition.
+				if as.Append && as.Value != nil && vr.Kind == expand.String {
+					isInt := vr.Integer
+					if !isInt {
+						for _, mode := range modes {
+							if mode == "-i" {
+								isInt = true
+							} else if mode == "+i" {
+								isInt = false
+							}
+						}
+					}
+					if isInt {
+						oldVal := r.evalIntegerAttr(r.lookupVar(as.Name.Value).String())
+						newVal := r.evalIntegerAttr(r.literal(as.Value))
+						vr.Str = strconv.Itoa(oldVal + newVal)
+					}
+				}
+			}
+			// Apply attribute modes before transforming the value,
+			// so that "declare -i foo=2+3" evaluates arithmetic.
+			for _, mode := range modes {
+				switch mode {
+				case "-i":
+					vr.Integer = true
+				case "+i":
+					vr.Integer = false
+				case "-l":
+					vr.Lower = true
+					vr.Upper = false // -l and -u are mutually exclusive
+				case "+l":
+					vr.Lower = false
+				case "-u":
+					vr.Upper = true
+					vr.Lower = false // -l and -u are mutually exclusive
+				case "+u":
+					vr.Upper = false
+				}
 			}
 			if global {
 				vr.Local = false
@@ -896,6 +970,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					vr.ReadOnly = true
 				}
 			}
+			r.applyVarAttrs(&vr)
 			r.setVar(name, vr)
 		}
 	case *syntax.TimeClause:
@@ -983,6 +1058,37 @@ func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] 
 			}
 		}
 	}
+}
+
+// reparseCompoundAssign checks if an assign's value looks like a compound
+// assignment "(elem ...)" and reparses it so that as.Array is populated.
+// This is needed for "declare -a 'var=(1 2 3)'" where the value came from
+// a dynamically expanded string. Returns nil if the value is not a compound
+// assignment.
+func (r *Runner) reparseCompoundAssign(as *syntax.Assign) *syntax.Assign {
+	val := r.literal(as.Value)
+	if !strings.HasPrefix(val, "(") || !strings.HasSuffix(val, ")") {
+		return nil
+	}
+	// Parse "name=(elems)" to get a proper Assign with Array populated.
+	src := as.Name.Value + "=" + val
+	p := syntax.NewParser()
+	file, err := p.Parse(strings.NewReader(src), "")
+	if err != nil || len(file.Stmts) != 1 {
+		return nil
+	}
+	stmt := file.Stmts[0]
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) != 1 {
+		return nil
+	}
+	reparsed := call.Assigns[0]
+	if reparsed.Array == nil {
+		return nil
+	}
+	// Preserve the append flag from the original assign.
+	reparsed.Append = as.Append
+	return reparsed
 }
 
 func match(pat, name string) bool {
