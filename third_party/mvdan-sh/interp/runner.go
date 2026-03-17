@@ -493,6 +493,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			i += len(als.args)
 		}
+		if decl := prefixAssignDeclClause(args, cm.Assigns); decl != nil {
+			r.cmd(ctx, decl)
+			return
+		}
 		r.lastExpandExit = exitStatus{}
 		fields := r.fields(args...)
 		if len(fields) == 0 {
@@ -991,6 +995,32 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.outf(format, "sys", elapsedString(0, cm.PosixFormat))
 	default:
 		panic(fmt.Sprintf("unhandled command node: %T", cm))
+	}
+}
+
+func prefixAssignDeclClause(args []*syntax.Word, assigns []*syntax.Assign) *syntax.DeclClause {
+	if len(assigns) == 0 || len(args) == 0 {
+		return nil
+	}
+	variant := args[0].Lit()
+	switch variant {
+	case "declare", "local", "export", "readonly", "typeset", "nameref":
+	default:
+		return nil
+	}
+	declArgs := make([]*syntax.Assign, 0, len(args)-1)
+	for _, arg := range args[1:] {
+		if arg == nil {
+			continue
+		}
+		declArgs = append(declArgs, &syntax.Assign{
+			Naked: true,
+			Value: arg,
+		})
+	}
+	return &syntax.DeclClause{
+		Variant: &syntax.Lit{Value: variant},
+		Args:    declArgs,
 	}
 }
 
