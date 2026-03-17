@@ -257,6 +257,8 @@ None
 
 #### strict_array prevents exporting array
 
+shopt -s strict_array
+
 export PYTHONPATH
 PYTHONPATH=(a b c)
 printenv.sh PYTHONPATH
@@ -587,6 +589,7 @@ argv.sh "${a[@]:15:2}"
 ## N-I mksh stdout-json: ""
 
 #### Using an array itself as the index on LHS
+shopt -u strict_arith
 a[a]=42
 a[a]=99
 argv.sh "${a[@]}" "${a[0]}" "${a[42]}" "${a[99]}"
@@ -597,6 +600,7 @@ argv.sh "${a[@]}" "${a[0]}" "${a[42]}" "${a[99]}"
 ## END
 
 #### Using an array itself as the index on RHS
+shopt -u strict_arith
 a=(1 2 3)
 (( x = a[a] ))
 echo $x
