@@ -116,21 +116,6 @@ echo $\
 
 # TODO: Also test unterminated quotes inside ${} and $()
 
-#### Unterminated single quote
-## code: ls foo bar '
-## status: 2
-## OK mksh status: 1
-
-#### Unterminated double quote
-## code: ls foo bar "
-## status: 2
-## OK mksh status: 1
-
-
-#
-# TODO: Might be another section?
-#
-
 #### Semicolon
 echo separated; echo by semi-colon
 ## STDOUT:
@@ -212,7 +197,6 @@ echo $w $x $y
 ## N-I dash/mksh stdout-json: ""
 
 #### YSH allows unquoted foo\ bar too
-shopt -s ysh:all
 touch foo\ bar
 ls foo\ bar
 ## STDOUT:

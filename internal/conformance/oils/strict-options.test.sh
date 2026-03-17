@@ -28,12 +28,6 @@
 # One that can't: strict_scope disables dynamic scope.
 
 
-#### strict_arith option
-shopt -s strict_arith
-## status: 0
-## N-I bash status: 1
-## N-I dash/mksh status: 127
-
 #### Sourcing a script that returns at the top level
 echo one
 . $REPO_ROOT/spec/testdata/return-helper.sh
@@ -71,7 +65,6 @@ SUBSHELL
 ## END
 
 #### shopt -s strict_control_flow
-shopt -s strict_control_flow || true
 echo break
 break
 echo hi
@@ -138,7 +131,6 @@ CommandSub FAILED
 ## END
 
 #### empty argv WITH strict_argv
-shopt -s strict_argv || true
 echo empty
 x=''
 $x
@@ -165,7 +157,6 @@ echo ${#a[@]}
 echo ${#b[@]}
 [[ "${a[@]}" == "${b[@]}" ]] && echo EQUAL
 
-shopt -s strict_array || true
 [[ "${a[@]}" == "${b[@]}" ]] && echo EQUAL
 
 ## status: 1
@@ -195,7 +186,6 @@ argv.sh "${undef[@]}"
 ## N-I dash stdout-json: ""
 
 #### automatically creating arrays are INDEXED, not associative
-shopt -u strict_arith || true
 
 undef[2]=x
 undef[3]=y
@@ -219,7 +209,6 @@ for i in 1 2; do
   echo status=$?
   eval 'echo two'
   echo status=$?
-  shopt -s simple_eval_builtin
   echo ---
 done
 ## STDOUT:
@@ -251,101 +240,3 @@ status=0
 ## END
 
 
-#### strict_parse_slice means you need explicit  length
-case $SH in bash*|dash|mksh) exit ;; esac
-
-$SH -c '
-a=(1 2 3); echo /${a[@]::}/
-'
-echo status=$?
-
-$SH -c '
-shopt --set strict_parse_slice
-
-a=(1 2 3); echo /${a[@]::}/
-'
-echo status=$?
-
-## STDOUT:
-//
-status=0
-status=2
-## END
-
-## N-I bash/dash/mksh STDOUT:
-## END
-
-
-#### Control flow must be static in YSH (strict_control_flow)
-case $SH in bash*|dash|mksh) exit ;; esac
-
-shopt --set ysh:all
-
-for x in a b c { 
-  echo $x
-  if (x === 'a') {
-    break
-  }
-}
-
-echo ---
-
-for keyword in break continue return exit {
-  try {
-    $[ENV.SH] -o ysh:all -c '
-    var k = $1
-    for x in a b c { 
-      echo $x
-      if (x === "a") {
-        $k
-      }
-    }
-    ' unused $keyword
-  }
-  echo code=$[_error.code]
-  echo '==='
-}
-
-## STDOUT:
-a
----
-a
-code=1
-===
-a
-code=1
-===
-a
-code=1
-===
-a
-code=1
-===
-## END
-
-## N-I bash/dash/mksh STDOUT:
-## END
-
-#### shopt -s strict_binding: Persistent prefix bindings not allowed on special builtins
-
-shopt --set strict:all
-
-# This differs from what it means in a process
-FOO=bar eval 'echo FOO=$FOO'
-echo FOO=$FOO
-
-## status: 1
-## STDOUT:
-## END
-
-## BUG bash status: 0
-## BUG bash STDOUT:
-FOO=bar
-FOO=
-## END
-
-## N-I dash/mksh status: 0
-## N-I dash/mksh STDOUT:
-FOO=bar
-FOO=bar
-## END

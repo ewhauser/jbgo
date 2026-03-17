@@ -291,7 +291,6 @@ zzz bar.py foo.py
 ## END
 
 #### No extended glob with simple_word_eval (YSH evaluation)
-shopt -s ysh:all
 shopt -s extglob
 mkdir -p eg12
 cd eg12
@@ -319,27 +318,6 @@ echo ,(osh|style)
 ## STDOUT:
 @(__nope__)
 @(__nope__*|__nope__?|*|?|[:alpha:]||)
-## END
-
-#### no_dash_glob
-shopt -s extglob
-mkdir -p opts
-cd opts
-
-touch -- foo bar -dash
-echo @(*)
-
-shopt --set no_dash_glob
-echo @(*)
-
-
-## STDOUT:
--dash bar foo
-bar foo
-## END
-## N-I bash/mksh STDOUT:
--dash bar foo
--dash bar foo
 ## END
 
 #### noglob

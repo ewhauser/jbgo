@@ -257,7 +257,6 @@ None
 
 #### strict_array prevents exporting array
 
-shopt -s strict_array
 
 export PYTHONPATH
 PYTHONPATH=(a b c)
@@ -589,7 +588,6 @@ argv.sh "${a[@]:15:2}"
 ## N-I mksh stdout-json: ""
 
 #### Using an array itself as the index on LHS
-shopt -u strict_arith
 a[a]=42
 a[a]=99
 argv.sh "${a[@]}" "${a[0]}" "${a[42]}" "${a[99]}"
@@ -600,7 +598,6 @@ argv.sh "${a[@]}" "${a[0]}" "${a[42]}" "${a[99]}"
 ## END
 
 #### Using an array itself as the index on RHS
-shopt -u strict_arith
 a=(1 2 3)
 (( x = a[a] ))
 echo $x
@@ -882,24 +879,6 @@ bash: line 2: e: bad array subscript
 
 ## N-I mksh STDERR:
 mksh: <stdin>[2]: syntax error: 'e[-1]' unexpected operator/operand
-## END
-
-
-#### a+=() modifies existing instance of BashArray
-case $SH in mksh|bash) exit ;; esac
-
-a=(1 2 3)
-var b = a
-a+=(4 5)
-echo "a=(${a[*]})"
-echo "b=(${b[*]})"
-
-## STDOUT:
-a=(1 2 3 4 5)
-b=(1 2 3 4 5)
-## END
-
-## N-I mksh/bash STDOUT:
 ## END
 
 

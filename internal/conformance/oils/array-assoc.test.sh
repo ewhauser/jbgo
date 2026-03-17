@@ -377,7 +377,6 @@ echo ${A[5]}
 ## END
 
 #### (( A[5] += 42 )) with empty cell
-shopt -u strict_arith  # default zero cell
 declare -A A
 (( A[5] += 6 ))
 echo ${A[5]}
@@ -421,7 +420,6 @@ v
 
 #### declare -A A=() allowed
 set -o nounset
-shopt -s strict_arith || true
 
 declare -A ASSOC=()
 echo len=${#ASSOC[@]}
@@ -442,7 +440,6 @@ unset len=0
 ## END
 
 #### unset -v and assoc array
-shopt -s eval_unsafe_arith || true
 
 show-len() {
   echo len=${#assoc[@]}

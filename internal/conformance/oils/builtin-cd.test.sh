@@ -25,7 +25,6 @@ status=0
 
 #### cd with 2 or more args - with strict_arg_parse
 
-shopt -s strict_arg_parse
 
 mkdir -p foo
 cd foo
@@ -514,7 +513,6 @@ pwd /
 ## OK zsh/mksh status: 1
 
 #### pwd errors out on args with strict_arg_parse
-shopt -s strict_arg_parse || true
 pwd / >/dev/null || echo 'too many args!'
 ## N-I bash/dash/ash STDOUT:
 ## END

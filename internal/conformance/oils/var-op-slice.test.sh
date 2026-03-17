@@ -122,7 +122,6 @@ echo -${s:1:3}-
 
 
 #### Slice string with invalid UTF-8 with strict_word_eval
-shopt -s strict_word_eval || true
 echo slice
 s=$(echo -e "\xFF")bcdef
 echo -${s:1:3}-

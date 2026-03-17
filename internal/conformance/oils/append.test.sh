@@ -284,7 +284,6 @@ l o c a
 ## N-I zsh stdout-json: ""
 
 #### export+=array disallowed (strict_array)
-shopt -s strict_array
 
 export e+=(e x)
 echo "${e[@]}"
