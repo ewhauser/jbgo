@@ -507,6 +507,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				_, effectivePrev := prev.Resolve(r.writeEnv)
 
 				assign := *as
+				if as.Value != nil {
+					// Bash expands the RHS before evaluating the assignment subscript.
+					assign.Value = &syntax.Word{Parts: []syntax.WordPart{
+						&syntax.Lit{Value: r.literal(as.Value)},
+					}}
+				}
 				// Freeze the subscript once against the final assignment target so
 				// reads and writes reuse the same element/key, including via namerefs.
 				assign.Index = r.freezeAssignIndex(effectivePrev, as.Index)
