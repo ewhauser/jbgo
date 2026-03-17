@@ -1877,6 +1877,18 @@ var runTests = []runTest{
 		"0\n",
 	},
 	{
+		"[[ foo123 =~ ([a-z]+)([0-9]+) ]]; [[ foo =~ [ ]]; printf '%s\\n' \"${BASH_REMATCH[*]}\"",
+		"foo123 foo 123\n",
+	},
+	{
+		"set -u; [[ foo123 =~ ([a-z]+)([0-9]+) ]]; [[ a =~ $unset ]]; echo no",
+		"unset: unbound variable\nexit status 1",
+	},
+	{
+		"[[ aa =~ a{,2} ]]; echo lower:$?; [[ aa =~ a{,} ]]; echo open:$?",
+		"lower:1\nopen:1\n",
+	},
+	{
 		"[[ a =~ $(( 1 / 0 )) ]]; echo status=$?",
 		"division by zero\nstatus=1\n",
 	},

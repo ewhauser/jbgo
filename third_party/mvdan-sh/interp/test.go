@@ -5,6 +5,7 @@ package interp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -83,7 +84,12 @@ func (r *Runner) testExpandWord(word *syntax.Word, expandFunc func(*expand.Confi
 		return str, true
 	}
 	fmt.Fprintln(r.stderr, err)
-	r.exit.code = 1
+	if testExpandErrFatal(err) {
+		r.exit.code = 1
+		r.exit.exiting = true
+	} else {
+		r.exit.code = 1
+	}
 	return "", false
 }
 
@@ -95,10 +101,24 @@ func (r *Runner) clearBASH_REMATCH() {
 	})
 }
 
+func testExpandErrFatal(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	switch {
+	case errors.As(err, &expand.UnsetParameterError{}):
+		return true
+	case errMsg == "invalid indirect expansion":
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y string) bool {
 	switch op {
 	case syntax.TsReMatch:
-		r.clearBASH_REMATCH()
 		if bashRegexHasInvalidBareBraces(y) {
 			r.exit.code = 2
 			return false
@@ -110,6 +130,7 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 		}
 		m := re.FindStringSubmatch(x)
 		if m == nil {
+			r.clearBASH_REMATCH()
 			return false
 		}
 		vr := expand.Variable{
@@ -195,9 +216,15 @@ func bashRegexHasInvalidBareBraces(expr string) bool {
 				j++
 			}
 			if j == start {
-				return true
-			}
-			if j < len(expr) && expr[j] == ',' {
+				if j < len(expr) && expr[j] == ',' {
+					j++
+					for j < len(expr) && unicode.IsDigit(rune(expr[j])) {
+						j++
+					}
+				} else {
+					return true
+				}
+			} else if j < len(expr) && expr[j] == ',' {
 				j++
 				for j < len(expr) && unicode.IsDigit(rune(expr[j])) {
 					j++
