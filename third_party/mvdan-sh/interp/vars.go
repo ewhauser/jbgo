@@ -246,6 +246,40 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 	}
 }
 
+// applyVarAttrs transforms the variable's value based on its attributes
+// (integer, lowercase, uppercase).
+func (r *Runner) applyVarAttrs(vr *expand.Variable) {
+	if !vr.IsSet() {
+		return
+	}
+	if vr.Integer && vr.Kind == expand.String {
+		vr.Str = strconv.Itoa(r.evalIntegerAttr(vr.Str))
+	}
+	if vr.Lower && vr.Kind == expand.String {
+		vr.Str = strings.ToLower(vr.Str)
+	}
+	if vr.Upper && vr.Kind == expand.String {
+		vr.Str = strings.ToUpper(vr.Str)
+	}
+}
+
+// evalIntegerAttr evaluates a string as a shell arithmetic expression,
+// used for the -i variable attribute.
+func (r *Runner) evalIntegerAttr(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	p := syntax.NewParser()
+	expr, err := p.Arithmetic(strings.NewReader(s))
+	if err != nil {
+		// Fall back to simple integer parsing on syntax error.
+		n, _ := strconv.ParseInt(s, 10, 64)
+		return int(n)
+	}
+	return r.arithm(expr)
+}
+
 func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax.ArithmExpr, vr expand.Variable) {
 	prev.Set = true
 	if name2, var2 := prev.Resolve(r.writeEnv); name2 != "" {

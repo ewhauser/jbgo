@@ -101,6 +101,11 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 			state.callVarInd = false
 			state.elems = cfg.sliceElems(pe, state.vr.List, state.name == "@" || state.name == "*")
 			state.str = strings.Join(state.elems, " ")
+		case Associative:
+			state.indexAllElements = true
+			state.callVarInd = false
+			state.elems = slices.Sorted(maps.Values(state.vr.Map))
+			state.str = strings.Join(state.elems, " ")
 		}
 	}
 	if state.callVarInd {

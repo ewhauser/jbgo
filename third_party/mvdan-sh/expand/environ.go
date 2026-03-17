@@ -94,6 +94,9 @@ type Variable struct {
 	Local    bool
 	Exported bool
 	ReadOnly bool
+	Integer  bool // -i: evaluate as arithmetic on assignment
+	Lower    bool // -l: convert to lowercase on assignment
+	Upper    bool // -u: convert to uppercase on assignment
 
 	// Kind defines which of the value fields below should be used.
 	Kind ValueKind
@@ -113,11 +116,12 @@ func (v Variable) IsSet() bool {
 // Declared variables may not be set; `export foo` is exported but not set to a value,
 // and `declare -a foo` is an indexed array but not set to a value.
 func (v Variable) Declared() bool {
-	return v.Set || v.Local || v.Exported || v.ReadOnly || v.Kind != Unknown
+	return v.Set || v.Local || v.Exported || v.ReadOnly || v.Integer || v.Lower || v.Upper || v.Kind != Unknown
 }
 
 // Flags returns the variable's attribute flags in the order used by bash's
-// declare builtin and ${var@a}: type (a/A/n), readonly (r), exported (x).
+// declare builtin and ${var@a}: type (a/A/n), integer (i), lower (l),
+// readonly (r), upper (u), exported (x).
 func (v Variable) Flags() string {
 	var flags []byte
 	switch v.Kind {
@@ -128,8 +132,17 @@ func (v Variable) Flags() string {
 	case NameRef:
 		flags = append(flags, 'n')
 	}
+	if v.Integer {
+		flags = append(flags, 'i')
+	}
+	if v.Lower {
+		flags = append(flags, 'l')
+	}
 	if v.ReadOnly {
 		flags = append(flags, 'r')
+	}
+	if v.Upper {
+		flags = append(flags, 'u')
 	}
 	if v.Exported {
 		flags = append(flags, 'x')
