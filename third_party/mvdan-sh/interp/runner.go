@@ -293,6 +293,7 @@ func (r *Runner) expandErr(err error) {
 		r.exit.exiting = true
 	case errors.As(err, &expand.BadSubstitutionError{}):
 		// Bad substitution - set exit code 1 but continue execution
+		// (bash continues to next command, using last command's exit code)
 		r.exit.code = 1
 	case errMsg == "invalid indirect expansion":
 		// TODO: These errors are treated as fatal by bash.
