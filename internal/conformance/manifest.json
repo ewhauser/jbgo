@@ -278,6 +278,10 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
+        "oils/for-expr.test.sh::Arith lexer mode": {
+          "mode": "xfail",
+          "reason": "gbash arithmetic-for parsing accepts quoted operands that bash rejects in this case"
+        },
         "oils/func-parsing.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -346,17 +350,9 @@
           "mode": "xfail",
           "reason": "unbound FUNCNAME matches bash stderr but still returns exit status 1 instead of 127"
         },
-        "oils/introspect.test.sh::$((BASH_LINENO)) (scalar form in arith)": {
-          "mode": "xfail",
-          "reason": "inline BASH_LINENO scalar form is still off by one under the conformance harness"
-        },
         "oils/introspect.test.sh::${BASH_SOURCE[@]} with source and function name": {
           "mode": "xfail",
           "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
-        },
-        "oils/introspect.test.sh::${BASH_LINENO[@]} is a stack of line numbers for function calls": {
-          "mode": "xfail",
-          "reason": "inline BASH_LINENO stacks are still off by one under the conformance harness"
         },
         "oils/introspect.test.sh::Locations when sourcing": {
           "mode": "xfail",
