@@ -922,7 +922,7 @@ func shellOpenPathError(ctx context.Context, stderr io.Writer, name string, err 
 	if policy.IsDenied(err) {
 		return shellFailureToWriter(ctx, stderr, 126, "%v", err)
 	}
-	return errors.New(fmt.Sprintf("%s: %s", name, shellPathErrorText(err)))
+	return fmt.Errorf("%s: %s", name, shellPathErrorText(err))
 }
 
 func shellPathErrorText(err error) string {
