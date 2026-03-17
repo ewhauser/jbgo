@@ -18,7 +18,7 @@ import (
 	"github.com/ewhauser/gbash"
 )
 
-var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?bash: line \d+: `)
+var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?\w+: line \d+: `)
 
 func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
 	resolved := *cfg

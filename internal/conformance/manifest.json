@@ -318,10 +318,6 @@
           "mode": "skip",
           "reason": "gbash helper scripts cannot read arbitrary file descriptors without shell features that are not implemented yet"
         },
-        "oils/if_.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
         "oils/interactive.test.sh": {
           "mode": "skip",
           "reason": "requires an interactive shell or tty behavior"

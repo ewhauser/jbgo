@@ -247,8 +247,8 @@ var runTests = []runTest{
 	{"exit; echo foo", ""},
 	{"exit 0; echo foo", ""},
 	{"printf", "usage: printf format [arguments]\nexit status 2 #JUSTERR"},
-	{"break", "break is only useful in a loop\n #JUSTERR"},
-	{"continue", "continue is only useful in a loop\n #JUSTERR"},
+	{"break", "break: only meaningful in a `for', `while', or `until' loop\n #JUSTERR"},
+	{"continue", "continue: only meaningful in a `for', `while', or `until' loop\n #JUSTERR"},
 	{"cd a b", "usage: cd [dir]\nexit status 2 #JUSTERR"},
 	{"shift a", "shift: a: numeric argument required\nexit status 2 #JUSTERR"},
 	{
