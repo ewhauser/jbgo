@@ -612,6 +612,8 @@ User-visible command lookup rules for MVP:
 - changing `PATH` can intentionally disable bare-name resolution
 - explicit virtual paths such as `/bin/ls` bypass `PATH`
 - there is no direct registry fallback for user-visible commands
+- shell meta-builtins such as `command`, `builtin`, and `type` report shell keywords, aliases, functions, builtins, and virtual command paths using the same sandboxed lookup rules
+- `command -p` performs lookup against the fixed default virtual search path `/usr/bin:/bin`, without reopening host command execution
 
 ## 10. Filesystem Model
 
