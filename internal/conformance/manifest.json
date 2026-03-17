@@ -378,9 +378,25 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/strict-options.test.sh": {
+        "oils/strict-options.test.sh::Sourcing a script that returns at the top level": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash still differs from bash in source-missing diagnostics for this vendored helper path"
+        },
+        "oils/strict-options.test.sh::errexit and top-level control flow": {
+          "mode": "xfail",
+          "reason": "gbash returns 127 instead of bash's exit 1 when the vendored helper path is missing under errexit"
+        },
+        "oils/strict-options.test.sh::return at top level is an error": {
+          "mode": "xfail",
+          "reason": "gbash still formats the top-level return error message differently from bash"
+        },
+        "oils/strict-options.test.sh::automatically creating arrays by sparse assignment": {
+          "mode": "xfail",
+          "reason": "gbash currently materializes sparse indexed arrays with empty leading elements instead of bash's compact expansion"
+        },
+        "oils/strict-options.test.sh::automatically creating arrays are indexed, not associative": {
+          "mode": "xfail",
+          "reason": "gbash currently materializes sparse indexed arrays with empty leading elements instead of bash's compact expansion"
         },
         "oils/temp-binding.test.sh": {
           "mode": "xfail",
