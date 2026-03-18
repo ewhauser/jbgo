@@ -9,8 +9,9 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
-// InteractiveParser exposes shell-owned interactive parsing without leaking
-// syntax parser/printer setup into non-shell packages.
+// InteractiveParser is the shell-owned frontend helper for interactive parsing.
+// It assembles complete script chunks for REPL-style callers, but it does not
+// execute them or provide a second shell engine.
 type InteractiveParser struct {
 	name    string
 	parser  *syntax.Parser
@@ -29,7 +30,8 @@ func (p *InteractiveParser) ensureInitialized() {
 	}
 }
 
-// NewInteractiveParser builds a shell-owned interactive parser/printer pair.
+// NewInteractiveParser builds the shell-owned parser/printer pair used by repo
+// REPL frontends and tests.
 func NewInteractiveParser(name string) *InteractiveParser {
 	return &InteractiveParser{
 		name:    name,
@@ -83,7 +85,8 @@ func (p *InteractiveParser) render(stmts []*syntax.Stmt) (string, error) {
 	return buf.String(), nil
 }
 
-// IsUserSyntaxError reports whether err is a user-facing shell syntax error.
+// IsUserSyntaxError reports whether err is a user-facing shell syntax error
+// suitable for REPL and fuzz-test classification.
 func IsUserSyntaxError(err error) bool {
 	if err == nil {
 		return false

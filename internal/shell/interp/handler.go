@@ -45,7 +45,7 @@ const (
 // HandlerContext is the data passed to all the handler functions via [context.WithValue].
 // It contains some of the current state of the [Runner].
 type HandlerContext struct {
-	runner *Runner // for internal use only, e.g. [HandlerContext.Builtin]
+	runner *Runner // for internal use only, e.g. shell state mutation helpers
 
 	// kind records which type of handler this context was built for.
 	kind handlerKind

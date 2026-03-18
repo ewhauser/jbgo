@@ -2,7 +2,7 @@
 
 A deterministic, sandbox-only, bash-like runtime for AI agents, implemented in Go.
 
-Shell parsing is delegated to [`mvdan/sh`](https://github.com/mvdan/sh), with project-owned virtual filesystem, registry-backed command execution, policy enforcement, and structured tracing layers around it. Commands never fall through to host binaries, and network access is off by default. Originally inspired by [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash).
+Shell parsing and execution are owned in-tree under `internal/shell`, with a project-owned virtual filesystem, registry-backed command execution, policy enforcement, and structured tracing around that shell core. Commands never fall through to host binaries, and network access is off by default. Originally inspired by [Vercel's `just-bash`](https://github.com/vercel-labs/just-bash).
 
 > [!WARNING]
 > This is alpha software. It is likely that additional security hardening is needed. Use with care.
@@ -431,14 +431,14 @@ See the [`custom-zstd`](./examples/custom-zstd/) example for how to register cus
 
 ## Shell Features
 
-Shell parsing and execution are delegated to `mvdan/sh/v3`, with project-owned filesystem, command, policy, and observability layers around it.
+Shell parsing and execution are provided by the project-owned shell core under `internal/shell`, with project-owned filesystem, command, policy, and observability layers around it.
 
 The runtime supports a practical shell subset for agent workflows, including:
 
 - pipelines and redirections
 - variable expansion and command substitution
 - conditionals and loops
-- shell functions and common builtins handled by `mvdan/sh`
+- shell functions and common builtins handled by the in-tree shell core
 - virtual `cd` and `pwd` behavior against the sandbox filesystem
 - nested `bash` and `sh` execution inside the same sandbox session
 

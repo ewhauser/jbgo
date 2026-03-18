@@ -26,7 +26,7 @@ import (
 )
 
 // A Runner interprets shell programs. It can be reused, but it is not safe for
-// concurrent use. Use [NewVirtual] to build a new Runner.
+// concurrent use. Use [NewRunner] to build a new Runner.
 //
 // Note that writes to Stdout and Stderr may be concurrent if background
 // commands are used. If you plan on using an [io.Writer] implementation that
@@ -53,8 +53,8 @@ type Runner struct {
 	// absolute path.
 	Dir string
 
-	// tempDir is either [VirtualConfig.TempDir], $TMPDIR from [Runner.Env],
-	// or a deterministic virtual default.
+	// tempDir is either $TMPDIR from [Runner.Env] or a deterministic virtual
+	// default.
 	tempDir string
 
 	// Params are the current shell parameters, e.g. from running a shell
@@ -277,22 +277,19 @@ const (
 	defaultVirtualPPID    = 0
 )
 
-// VirtualConfig defines the virtual runtime boundary for a Runner.
-type VirtualConfig struct {
+// RunnerConfig defines the runtime boundary for a Runner.
+type RunnerConfig struct {
 	Env expand.Environ
 
 	// Dir is the authoritative virtual current directory.
 	Dir string
 
-	// TempDir is the virtual temporary directory used by the interpreter.
-	TempDir string
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+	Params []string
 
-	UID  int
-	EUID int
-	GID  int
-	EGID int
-	PID  int
-	PPID int
+	Interactive bool
 
 	CallHandler      CallHandlerFunc
 	ExecHandler      ExecHandlerFunc
@@ -381,16 +378,15 @@ func firstVirtualInt(current int, env expand.Environ, name string, fallback int)
 	return fallback
 }
 
-// NewVirtual creates a new Runner configured with an explicit virtual runtime
-// boundary.
-func NewVirtual(cfg *VirtualConfig) (*Runner, error) {
+// NewRunner creates a new Runner configured with the explicit gbash runtime
+// boundary used by the shell core.
+func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	if cfg == nil {
-		cfg = &VirtualConfig{}
+		cfg = &RunnerConfig{}
 	}
 	r := newRunnerBase()
 	r.Env = cfg.Env
 	r.Dir = cfg.Dir
-	r.tempDir = cfg.TempDir
 	r.callHandler = cfg.CallHandler
 	r.execHandler = cfg.ExecHandler
 	r.openHandler = cfg.OpenHandler
@@ -398,12 +394,13 @@ func NewVirtual(cfg *VirtualConfig) (*Runner, error) {
 	r.statHandler = cfg.StatHandler
 	r.realpathHandler = cfg.RealpathHandler
 	r.procSubstHandler = cfg.ProcSubstHandler
-	r.uid = cfg.UID
-	r.euid = cfg.EUID
-	r.gid = cfg.GID
-	r.egid = cfg.EGID
-	r.pid = cfg.PID
-	r.ppid = cfg.PPID
+	if err := r.setStdIO(cfg.Stdin, cfg.Stdout, cfg.Stderr); err != nil {
+		return nil, err
+	}
+	if err := r.setParams(cfg.Params...); err != nil {
+		return nil, err
+	}
+	r.setInteractive(cfg.Interactive)
 	return r, r.applyConstructorDefaults()
 }
 
@@ -846,17 +843,6 @@ func (r *Runner) run(ctx context.Context, node syntax.Node) error {
 // checked immediately after each Run call.
 func (r *Runner) Exited() bool {
 	return r.exit.exiting
-}
-
-// Subshell makes a copy of the given [Runner], suitable for use concurrently
-// with the original. The copy will have the same environment, including
-// variables and functions, but they can all be modified without affecting the
-// original.
-//
-// Subshell is not safe to use concurrently with [Run]. Orchestrating this is
-// left up to the caller; no locking is performed.
-func (r *Runner) Subshell() *Runner {
-	return r.subshell(true)
 }
 
 // subshell is like [Runner.subshell], but allows skipping some allocations and copies

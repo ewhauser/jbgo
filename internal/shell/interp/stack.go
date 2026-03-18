@@ -111,11 +111,6 @@ func (r *Runner) setFuncInternal(name string, internal bool) {
 	r.funcInternals[name] = true
 }
 
-// SetFuncSource overrides the execution source tracked for a declared shell function.
-func (r *Runner) SetFuncSource(name, source string) {
-	r.setFuncSource(name, source)
-}
-
 func (r *Runner) delFunc(name string) {
 	if r.Funcs != nil {
 		delete(r.Funcs, name)

@@ -44,7 +44,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 	defer cleanupProcSubst()
 
 	budget := newExecutionBudget(exec.Policy)
-	runner, err := m.newRunner(m.runnerConfig(&runnerExec, budget), m.runnerGBashConfig(&runnerExec))
+	runner, err := m.newRunner(&runnerExec, budget)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +94,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 			continue
 		}
 		rememberInteractiveHistory(runner, rawScript) //nolint:contextcheck // interactive history is stored by direct runner state mutation
-		applyRunnerPipelineSubshells(runner, compiled.pipelineSubshells)
-		runErr := runner.Run(ctx, compiled.program)
+		runErr := runner.RunWithMetadata(ctx, compiled.program, "", compiled.pipelineSubshells)
 		exitCode = ExitCode(runErr)
 		pending.Reset()
 		if runner.Exited() {

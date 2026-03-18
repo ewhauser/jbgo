@@ -206,7 +206,7 @@ type Option func(*Config) error
 //
 //   - an isolated in-memory filesystem rooted at /home/agent
 //   - the built-in command registry
-//   - the default mvdan/sh-backed shell engine
+//   - the default in-tree shell core
 //   - the default static policy and resource limits
 //   - no network access
 //

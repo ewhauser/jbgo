@@ -67,11 +67,10 @@ func (p *virtualPipe) checkDeadline() error {
 
 // NewVirtualPipe creates a new buffered virtual pipe with the default buffer size.
 func NewVirtualPipe() (*VirtualPipeReader, *VirtualPipeWriter) {
-	return NewVirtualPipeSize(defaultPipeBufferSize)
+	return newVirtualPipeSize(defaultPipeBufferSize)
 }
 
-// NewVirtualPipeSize creates a new buffered virtual pipe with the specified buffer size.
-func NewVirtualPipeSize(size int) (*VirtualPipeReader, *VirtualPipeWriter) {
+func newVirtualPipeSize(size int) (*VirtualPipeReader, *VirtualPipeWriter) {
 	if size <= 0 {
 		size = defaultPipeBufferSize
 	}

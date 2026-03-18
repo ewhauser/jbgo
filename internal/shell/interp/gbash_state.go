@@ -1,22 +1,13 @@
 package interp
 
 import (
+	"context"
 	"fmt"
 	"io"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
-
-type GBashConfig struct {
-	Stdin                      io.Reader
-	Stdout                     io.Writer
-	Stderr                     io.Writer
-	Params                     []string
-	Interactive                bool
-	TopLevelScriptPath         string
-	SyntheticPipelineSubshells map[*syntax.Stmt]*syntax.Stmt
-}
 
 func (r *Runner) setStdIO(in io.Reader, out, err io.Writer) error {
 	r.stdin = stdinReader(in)
@@ -93,33 +84,21 @@ func (r *Runner) setParams(args ...string) error {
 	return nil
 }
 
-func (r *Runner) ApplyGBashConfig(cfg *GBashConfig) error {
-	if cfg == nil {
-		return nil
-	}
-	if err := r.setStdIO(cfg.Stdin, cfg.Stdout, cfg.Stderr); err != nil {
-		return err
-	}
-	if err := r.setParams(cfg.Params...); err != nil {
-		return err
-	}
-	r.SetInteractiveMode(cfg.Interactive)
-	r.SetTopLevelScriptPath(cfg.TopLevelScriptPath)
-	r.SetSyntheticPipelineSubshells(cfg.SyntheticPipelineSubshells)
-	return nil
-}
-
-func (r *Runner) SetInteractiveMode(enabled bool) {
+func (r *Runner) setInteractive(enabled bool) {
 	r.interactive = enabled
 	r.opts[optExpandAliases] = enabled
 }
 
-func (r *Runner) SetTopLevelScriptPath(scriptPath string) {
-	r.topLevelScriptPath = scriptPath
-}
-
-func (r *Runner) SetSyntheticPipelineSubshells(nodes map[*syntax.Stmt]*syntax.Stmt) {
-	r.syntheticPipelineStmts = nodes
+func (r *Runner) RunWithMetadata(ctx context.Context, node syntax.Node, topLevelScriptPath string, syntheticPipelineSubshells map[*syntax.Stmt]*syntax.Stmt) error {
+	prevTopLevelScriptPath := r.topLevelScriptPath
+	prevSyntheticPipelineStmts := r.syntheticPipelineStmts
+	r.topLevelScriptPath = topLevelScriptPath
+	r.syntheticPipelineStmts = syntheticPipelineSubshells
+	defer func() {
+		r.topLevelScriptPath = prevTopLevelScriptPath
+		r.syntheticPipelineStmts = prevSyntheticPipelineStmts
+	}()
+	return r.Run(ctx, node)
 }
 
 func (r *Runner) SetShellVar(name string, vr expand.Variable) error {
@@ -134,23 +113,6 @@ func (r *Runner) SetShellVar(name string, vr expand.Variable) error {
 	}
 	r.syncVarSnapshot(name, vr)
 	return nil
-}
-
-func (r *Runner) SetShellString(name, value string) error {
-	return r.SetShellVar(name, expand.Variable{
-		Set:  true,
-		Kind: expand.String,
-		Str:  value,
-	})
-}
-
-func (r *Runner) SetExportedString(name, value string) error {
-	return r.SetShellVar(name, expand.Variable{
-		Set:      true,
-		Kind:     expand.String,
-		Str:      value,
-		Exported: true,
-	})
 }
 
 func (r *Runner) UnsetShellVar(name string) error {
@@ -182,20 +144,6 @@ func (hc *HandlerContext) SetShellVar(name string, vr expand.Variable) error {
 		return nil
 	}
 	return hc.runner.SetShellVar(name, vr)
-}
-
-func (hc *HandlerContext) SetShellString(name, value string) error {
-	if hc == nil || hc.runner == nil {
-		return nil
-	}
-	return hc.runner.SetShellString(name, value)
-}
-
-func (hc *HandlerContext) SetExportedString(name, value string) error {
-	if hc == nil || hc.runner == nil {
-		return nil
-	}
-	return hc.runner.SetExportedString(name, value)
 }
 
 func (hc *HandlerContext) UnsetShellVar(name string) error {

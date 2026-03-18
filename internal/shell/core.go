@@ -53,7 +53,6 @@ type Execution struct {
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
 	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
 	procSubst         *procSubstManager
-	pipelineSubshells map[*syntax.Stmt]*syntax.Stmt
 }
 
 type RunResult struct {
@@ -155,15 +154,14 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	budget := newExecutionBudget(exec.Policy)
 
 	effectiveExec := *exec
-	effectiveExec.pipelineSubshells = compiled.pipelineSubshells
 	cleanupProcSubst := withProcSubstScope(&effectiveExec)
 	defer cleanupProcSubst()
 
-	runner, err := m.newRunner(m.runnerConfig(&effectiveExec, budget), m.runnerGBashConfig(&effectiveExec))
+	runner, err := m.newRunner(&effectiveExec, budget)
 	if err != nil {
 		return nil, err
 	}
-	runErr = runner.Run(ctx, compiled.program)
+	runErr = runner.RunWithMetadata(ctx, compiled.program, effectiveExec.ScriptPath, compiled.pipelineSubshells)
 	return &RunResult{
 		FinalEnv:    envMapFromVars(runner.Vars),
 		ShellExited: runner.Exited(),
@@ -195,7 +193,7 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 		return &RunResult{FinalEnv: finalEnv}, nil
 	}
 
-	finalEnv, err := m.commandFacade(exec).Execute(ctx, &commandExecuteRequest{
+	finalEnv, err := m.executeCommand(ctx, exec, &commandExecuteRequest{
 		Argv:       exec.Command,
 		VirtualWD:  gbfs.Clean(exec.Dir),
 		Env:        expand.ListEnviron(envPairs(finalEnv)...),
@@ -207,10 +205,15 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 	return &RunResult{FinalEnv: finalEnv}, err
 }
 
-func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.VirtualConfig {
-	return &interp.VirtualConfig{
+func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.RunnerConfig {
+	return &interp.RunnerConfig{
 		Env:              expand.ListEnviron(envPairs(m.runnerEnv(exec))...),
 		Dir:              exec.Dir,
+		Stdin:            exec.Stdin,
+		Stdout:           exec.Stdout,
+		Stderr:           exec.Stderr,
+		Params:           runnerParamArgs(exec.StartupOptions, exec.Args),
+		Interactive:      exec.Interactive,
 		CallHandler:      m.callHandler(exec, budget),
 		ExecHandler:      m.execHandler(exec, budget),
 		OpenHandler:      m.openHandler(exec),
@@ -517,7 +520,7 @@ func (m *core) execHandler(exec *Execution, budget *executionBudget) interp.Exec
 		internal := isInternalHelperCommand(args[0])
 		fromBootstrap := hc.Internal
 		shellVars := shellstate.NewShellVarAssignments()
-		_, err := m.commandFacade(exec).Execute(ctx, &commandExecuteRequest{
+		_, err := m.executeCommand(ctx, exec, &commandExecuteRequest{
 			Argv:          args,
 			VirtualWD:     virtualWD,
 			Env:           hc.Env,
@@ -665,21 +668,6 @@ func normalizeInteractiveRequest(req *commands.InteractiveRequest, currentEnv ma
 		out.WorkDir = currentDir
 	}
 	return out
-}
-
-func (m *core) runnerGBashConfig(exec *Execution) *interp.GBashConfig {
-	if exec == nil {
-		return nil
-	}
-	return &interp.GBashConfig{
-		Stdin:                      exec.Stdin,
-		Stdout:                     exec.Stdout,
-		Stderr:                     exec.Stderr,
-		Params:                     runnerParamArgs(exec.StartupOptions, exec.Args),
-		Interactive:                exec.Interactive,
-		TopLevelScriptPath:         exec.ScriptPath,
-		SyntheticPipelineSubshells: exec.pipelineSubshells,
-	}
 }
 
 func mergeEnv(base, override map[string]string) map[string]string {
@@ -1195,7 +1183,12 @@ func syncUmaskEnv(hc *interp.HandlerContext, before, after map[string]string) er
 	if !afterOK {
 		return hc.UnsetShellVar(umaskEnvVar)
 	}
-	return hc.SetExportedString(umaskEnvVar, afterValue)
+	return hc.SetShellVar(umaskEnvVar, expand.Variable{
+		Set:      true,
+		Kind:     expand.String,
+		Str:      afterValue,
+		Exported: true,
+	})
 }
 
 func syncShellVarAssignments(hc *interp.HandlerContext, assignments *shellstate.ShellVarAssignments) error {
@@ -1219,7 +1212,11 @@ func syncShellVarAssignments(hc *interp.HandlerContext, assignments *shellstate.
 			}
 			continue
 		}
-		if err := hc.SetShellString(name, update.Value); err != nil {
+		if err := hc.SetShellVar(name, expand.Variable{
+			Set:  true,
+			Kind: expand.String,
+			Str:  update.Value,
+		}); err != nil {
 			return err
 		}
 	}

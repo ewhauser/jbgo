@@ -1,19 +1,11 @@
 package shell
 
 import (
-	"github.com/ewhauser/gbash/internal/shell/interp"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
 func normalizeExecutionProgram(program *syntax.File) map[*syntax.Stmt]*syntax.Stmt {
 	return rewritePipelineSubshells(program)
-}
-
-func applyRunnerPipelineSubshells(runner *interp.Runner, nodes map[*syntax.Stmt]*syntax.Stmt) {
-	if runner == nil {
-		return
-	}
-	runner.SetSyntheticPipelineSubshells(nodes)
 }
 
 func rewritePipelineSubshells(program *syntax.File) map[*syntax.Stmt]*syntax.Stmt {

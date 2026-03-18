@@ -526,21 +526,16 @@ The runtime request boundary carries only script text or tokenized command input
 
 ### 9.2 Runner construction
 
-For each execution, build a fresh `interp.Runner` from concrete shell-owned config objects rather than ad hoc option hooks.
+For each execution, build a fresh `interp.Runner` through one shell-owned constructor path rather than ad hoc option hooks or split config layers.
 
-`interp.VirtualConfig` carries the fixed runtime boundary:
+That runner construction path carries:
 
 - explicit environment and virtual directory
+- stdio, startup options, positional parameters, and interactive mode
 - call and exec handlers
 - file, stat, readdir, realpath, and process-substitution handlers
 
-`interp.GBashConfig` carries gbash-specific runner state:
-
-- stdio
-- startup options and positional parameters
-- interactive mode
-- top-level script path for file-backed `$0`/`main` stack frames
-- synthetic pipeline metadata for `lastpipe`
+Per-run metadata such as the top-level script path for file-backed `$0`/`main` stack frames and synthetic pipeline metadata for `lastpipe` is applied through one shell-owned run-preparation path.
 
 The runtime never inherits the host process environment by default, and the command execution path never falls through to host subprocess execution.
 
@@ -550,7 +545,7 @@ Implementation detail for the current runtime:
 - shell-visible `PWD` may differ from the cleaned virtual directory when a visible logical path is still valid
 - `let` is handled natively by the in-tree `syntax.LetClause` AST node
 - all project path handlers resolve relative paths from virtual `PWD`, not from host cwd
-- the forked runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, and `caller` from that stack
+- the in-tree runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, and `caller` from that stack
 - shell vars, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized through direct runner mutation APIs rather than bootstrap `eval` calls
 
 ### 9.3 Stdio

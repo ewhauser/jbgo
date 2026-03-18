@@ -1,6 +1,6 @@
 # Commands
 
-gbash ships with a large default registry of file, text, archive, and system commands. That registry-backed surface is complemented by shell builtins handled by the `mvdan/sh` execution layer.
+gbash ships with a large default registry of file, text, archive, and system commands. That registry-backed surface is complemented by shell builtins handled by the in-tree shell core.
 
 Unknown commands never fall through to host binaries. If a name is not registered or implemented by the shell engine, it fails with a normal shell-style error instead of executing anything on the host.
 

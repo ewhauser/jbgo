@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
 )
 
@@ -23,7 +24,11 @@ func rememberInteractiveHistory(runner *interp.Runner, script string) {
 	if err != nil {
 		return
 	}
-	_ = runner.SetShellString(shellHistoryEnvVar, string(raw))
+	_ = runner.SetShellVar(shellHistoryEnvVar, expand.Variable{
+		Set:  true,
+		Kind: expand.String,
+		Str:  string(raw),
+	})
 }
 
 func syncCommandHistory(hc *interp.HandlerContext, before, after map[string]string) error {
@@ -38,7 +43,11 @@ func syncCommandHistory(hc *interp.HandlerContext, before, after map[string]stri
 	if !afterOK {
 		return hc.UnsetShellVar(shellHistoryEnvVar)
 	}
-	return hc.SetShellString(shellHistoryEnvVar, afterValue)
+	return hc.SetShellVar(shellHistoryEnvVar, expand.Variable{
+		Set:  true,
+		Kind: expand.String,
+		Str:  afterValue,
+	})
 }
 
 func historyEntriesFromRunner(runner *interp.Runner) []string {
