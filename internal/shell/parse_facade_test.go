@@ -33,6 +33,32 @@ func TestInteractiveParserSeqRendersCompleteInput(t *testing.T) {
 	}
 }
 
+func TestInteractiveParserSeqInitializesZeroValue(t *testing.T) {
+	t.Parallel()
+
+	var parser InteractiveParser
+	var got []string
+	var incomplete []bool
+
+	for script, err := range parser.Seq(strings.NewReader("echo hi\n")) {
+		if err != nil {
+			t.Fatalf("Seq() error = %v", err)
+		}
+		got = append(got, script)
+		incomplete = append(incomplete, parser.Incomplete())
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("Seq() yielded %d scripts, want 1", len(got))
+	}
+	if got[0] != "echo hi\n" {
+		t.Fatalf("script = %q, want %q", got[0], "echo hi\n")
+	}
+	if incomplete[0] {
+		t.Fatalf("Incomplete() = true, want false")
+	}
+}
+
 func TestInteractiveParserSeqTracksIncompleteInput(t *testing.T) {
 	t.Parallel()
 

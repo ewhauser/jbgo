@@ -17,6 +17,18 @@ type InteractiveParser struct {
 	printer *syntax.Printer
 }
 
+func (p *InteractiveParser) ensureInitialized() {
+	if p == nil {
+		return
+	}
+	if p.parser == nil {
+		p.parser = syntax.NewParser()
+	}
+	if p.printer == nil {
+		p.printer = syntax.NewPrinter()
+	}
+}
+
 // NewInteractiveParser builds a shell-owned interactive parser/printer pair.
 func NewInteractiveParser(name string) *InteractiveParser {
 	return &InteractiveParser{
@@ -35,8 +47,9 @@ func (p *InteractiveParser) Incomplete() bool {
 func (p *InteractiveParser) Seq(r io.Reader) iter.Seq2[string, error] {
 	parser := p
 	if parser == nil {
-		parser = NewInteractiveParser("")
+		parser = &InteractiveParser{}
 	}
+	parser.ensureInitialized()
 	return func(yield func(string, error) bool) {
 		parser.parser.InteractiveSeq(r)(func(stmts []*syntax.Stmt, err error) bool {
 			if err != nil || parser.parser.Incomplete() || len(stmts) == 0 {
