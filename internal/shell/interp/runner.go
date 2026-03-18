@@ -247,7 +247,8 @@ func (r *Runner) arithmCmd(expr syntax.ArithmExpr) int {
 
 func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool) int {
 	n, err := expand.Arithm(r.ecfg, expr)
-	if command && err != nil {
+	var syntaxErr expand.ArithmSyntaxError
+	if command && errors.As(err, &syntaxErr) {
 		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)

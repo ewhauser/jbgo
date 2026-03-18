@@ -53,3 +53,29 @@ func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForPost(t *testing.T)
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestArithmCommandRegressionPreservesReadonlyVariableError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "readonly x=1\n((x=2))\n")
+	if got, want := result.ExitCode, 1; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "x: readonly variable\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmForLoopRegressionPreservesReadonlyVariableError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "readonly x=1\nfor ((x=2; 0; x++)); do :; done\n")
+	if got, want := result.ExitCode, 1; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "x: readonly variable\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
