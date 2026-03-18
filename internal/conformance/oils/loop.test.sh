@@ -1,4 +1,4 @@
-## compare_shells: dash bash mksh zsh
+## compare_shells: bash
 ## oils_failures_allowed: 0
 
 #### implicit for loop
@@ -32,9 +32,6 @@ for - in a b c; do
 done
 ## stdout-json: ""
 ## status: 2
-## OK bash/mksh status: 1
-## BUG zsh stdout: hi
-## BUG zsh status: 1
 
 #### the word 'in' can be the loop variable
 
@@ -68,10 +65,6 @@ for i in -{a,b} {c,d}-; do
 -b
 c-
 d-
-## END
-## N-I dash STDOUT:
--{a,b}
-{c,d}-
 ## END
 
 #### using loop var outside loop
@@ -170,11 +163,6 @@ fi
 one
 two
 ## END
-# zsh behaves like strict_control_flow!
-## OK zsh status: 1
-## OK zsh STDOUT:
-one
-## END
 
 #### continue in subshell
 for i in $(seq 2); do
@@ -184,30 +172,11 @@ for i in $(seq 2); do
   echo ". $i"
 done
 ## STDOUT:
-# osh lets you fail
 > 1
 subshell status=1
 . 1
 > 2
 subshell status=1
-. 2
-## END
-## OK dash/zsh STDOUT:
-> 1
-subshell status=0
-. 1
-> 2
-subshell status=0
-. 2
-## END
-## BUG mksh/bash STDOUT:
-> 1
-Should not print
-subshell status=0
-. 1
-> 2
-Should not print
-subshell status=0
 . 2
 ## END
 
@@ -226,28 +195,6 @@ done
 ## END
 ## status: 1
 
-## BUG-2 dash/zsh STDOUT:
-> 1
-should fail after subshell
-. 1
-> 2
-should fail after subshell
-. 2
-## END
-## BUG-2 dash/zsh status: 0
-
-## BUG mksh/bash STDOUT:
-> 1
-Should not print
-should fail after subshell
-. 1
-> 2
-Should not print
-should fail after subshell
-. 2
-## END
-## BUG mksh/bash status: 0
-
 #### bad arg to break
 x=oops
 while true; do 
@@ -257,11 +204,9 @@ while true; do
 done
 ## stdout: hi
 ## status: 1
-## OK dash status: 2
 ## OK bash status: 128
 
 #### too many args to continue
-# OSH treats this as a parse error
 for x in a b c; do
   echo $x
   # bash breaks rather than continue or fatal error!!!
@@ -275,13 +220,6 @@ a
 --
 ## END
 ## BUG bash status: 0
-## BUG-2 dash/mksh/zsh STDOUT:
-a
-b
-c
---
-## END
-## BUG-2 dash/mksh/zsh status: 0
 
 #### break in condition of loop
 while break; do
@@ -291,7 +229,6 @@ echo done
 ## STDOUT:
 done
 ## END
-
 
 #### break in condition of nested loop
 for i in 1 2 3; do
@@ -341,13 +278,6 @@ f
 1
 3
 ## END
-## BUG mksh STDOUT:
-1
-2
-3
-4
-5
-## END
 
 #### break/continue within source
 # NOTE: This changes things
@@ -375,14 +305,6 @@ f
 3
 done
 ## END
-## BUG zsh/mksh STDOUT:
-1
-2
-3
-4
-5
-done
-## END
 
 #### top-level break/continue/return (without strict_control_flow)
 $SH -c 'break; echo break=$?'
@@ -392,14 +314,11 @@ $SH -c 'return; echo return=$?'
 break=0
 continue=0
 ## END
-## BUG-2 zsh STDOUT:
-## END
 ## BUG bash STDOUT:
 break=0
 continue=0
 return=2
 ## END
-
 
 #### multi-level break with argument 
 
@@ -428,7 +347,6 @@ echo "$counterB"
 99
 50
 ## END
-
 
 #### multi-level continue
 
@@ -562,7 +480,6 @@ status=99
 ## END
 
 #### builtin,command break,continue,return,exit
-case $SH in dash|zsh) exit ;; esac
 
 echo '- break'
 for i in 1 2 3; do
@@ -607,9 +524,4 @@ echo 'not executed'
 status=99
 - exit
 ## END
-
-## N-I dash/zsh status: 0
-## N-I dash/zsh STDOUT:
-## END
-
 

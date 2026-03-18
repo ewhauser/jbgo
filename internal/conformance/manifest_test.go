@@ -42,7 +42,7 @@ func TestLoadManifestAndLookup(t *testing.T) {
 	if _, ok := manifest.LookupCase("bash", "oils/example.test.sh", "missing"); ok {
 		t.Fatalf("LookupCase(missing) = true, want false")
 	}
-	if _, ok := manifest.Lookup("posix", "oils/example.test.sh", ""); ok {
+	if _, ok := manifest.Lookup("other", "oils/example.test.sh", ""); ok {
 		t.Fatalf("Lookup(other suite) = true, want false")
 	}
 }

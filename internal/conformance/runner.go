@@ -145,7 +145,7 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath string, specCase Sp
 	if err != nil {
 		return ComparisonResult{}, err
 	}
-	gbashResult, err := runGBash(ctx, cfg, gbashWorkspace, script)
+	gbashResult, err := runGBash(ctx, gbashWorkspace, script)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
@@ -262,7 +262,7 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-func runGBash(ctx context.Context, cfg *SuiteConfig, workspace, script string) (ExecutionResult, error) {
+func runGBash(ctx context.Context, workspace, script string) (ExecutionResult, error) {
 	rt, err := gbash.New(gbash.WithFileSystem(virtualWorkspaceFileSystem(workspace)))
 	if err != nil {
 		return ExecutionResult{}, err
@@ -275,7 +275,7 @@ func runGBash(ctx context.Context, cfg *SuiteConfig, workspace, script string) (
 		Script:     script,
 		WorkDir:    "/",
 		ReplaceEnv: true,
-		Env:        gbashEnv(cfg),
+		Env:        gbashEnv(),
 	})
 	if err != nil {
 		errMsg := err.Error()
@@ -402,7 +402,7 @@ func runBash(ctx context.Context, cfg *SuiteConfig, bashPath, workspace, script 
 	args := OracleCommandArgs(cfg.OracleMode, script)
 	cmd := exec.CommandContext(ctx, bashPath, args...)
 	cmd.Dir = workspace
-	cmd.Env = bashEnv(cfg, workspace)
+	cmd.Env = bashEnv(workspace)
 
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -429,8 +429,6 @@ func OracleCommandArgs(mode OracleMode, script string) []string {
 	switch mode {
 	case OracleBash:
 		return []string{"--noprofile", "--norc", "-c", script}
-	case OracleBashPosix:
-		return []string{"--posix", "--noprofile", "--norc", "-c", script}
 	default:
 		return []string{"--noprofile", "--norc", "-c", script}
 	}
@@ -465,7 +463,7 @@ func normalizeBashStderr(value string) string {
 	})
 }
 
-func gbashEnv(cfg *SuiteConfig) map[string]string {
+func gbashEnv() map[string]string {
 	env := map[string]string{
 		"HOME":                  "/",
 		"PATH":                  "/bin:/usr/bin",
@@ -478,13 +476,10 @@ func gbashEnv(cfg *SuiteConfig) map[string]string {
 		"TMPDIR":                "/tmp",
 		"GBASH_CONFORMANCE_SED": "sed",
 	}
-	if cfg.OracleMode == OracleBashPosix {
-		env["POSIXLY_CORRECT"] = "1"
-	}
 	return env
 }
 
-func bashEnv(cfg *SuiteConfig, workspace string) []string {
+func bashEnv(workspace string) []string {
 	values := []string{
 		"HOME=" + workspace,
 		"PWD=" + workspace,
@@ -496,9 +491,6 @@ func bashEnv(cfg *SuiteConfig, workspace string) []string {
 		"TMP=" + filepath.Join(workspace, "tmp"),
 		"TMPDIR=" + filepath.Join(workspace, "tmp"),
 		"GBASH_CONFORMANCE_SED=" + conformanceToolPath("sed"),
-	}
-	if cfg.OracleMode == OracleBashPosix {
-		values = append(values, "POSIXLY_CORRECT=1")
 	}
 	slices.Sort(values)
 	return values

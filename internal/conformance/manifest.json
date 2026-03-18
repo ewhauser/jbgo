@@ -210,10 +210,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/errexit-osh.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
         "oils/errexit.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -310,10 +306,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/posix.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
         "oils/quote.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -394,14 +386,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/toysh-posix.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
-        "oils/toysh.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
         "oils/type-compat.test.sh::append in arith context": {
           "mode": "xfail",
           "reason": "gbash does not error on single-quoted strings inside (( )) like bash does"
@@ -469,19 +453,8 @@
         "oils/xtrace.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
-        "oils/ysh-builtin-private.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
-        "oils/zsh-idioms.test.sh": {
-          "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
         }
       }
-    },
-    "posix": {
-      "entries": {}
     }
   }
 }

@@ -1,6 +1,4 @@
-## compare_shells: bash zsh
-
-# dash and mksh don't implement 'dirs'
+## compare_shells: bash
 
 #### pushd/popd
 set -o errexit
@@ -16,12 +14,6 @@ pwd=/tmp
 /
 pwd=/
 ## END
-## OK zsh STDOUT:
-pwd=/tmp
-pwd=/
-## END
-## N-I dash/mksh status: 127
-## N-I dash/mksh stdout-json: ""
 
 #### pushd usage
 pushd -z
@@ -32,11 +24,6 @@ pushd -- /tmp >/dev/null
 echo status=$?
 ## STDOUT:
 status=2
-status=0
-status=0
-## END
-## OK zsh STDOUT:
-status=1
 status=0
 status=0
 ## END
@@ -55,11 +42,6 @@ echo status=$?
 status=2
 status=0
 status=2
-## END
-## BUG zsh STDOUT:
-status=0
-status=0
-status=0
 ## END
 
 #### popd returns error on empty directory stack
@@ -115,7 +97,7 @@ dirs
 #### dirs -c to clear the stack
 set -o errexit
 cd /
-pushd /tmp >/dev/null  # zsh pushd doesn't print anything, but bash does
+pushd /tmp >/dev/null
 echo --
 dirs
 dirs -c
@@ -149,8 +131,6 @@ dirs -v
  2  /
 ## END
 #
-#  zsh uses tabs
-## OK zsh stdout-json: "--\n0\t/tmp\n1\t/\n--\n0\t/dev\n1\t/tmp\n2\t/\n"
 
 #### dirs -p to print one entry per line
 set -o errexit
@@ -172,7 +152,6 @@ dirs -p
 ## END
 
 #### dirs -l to print in long format, no tilde prefix
-# Can't use the OSH test harness for this because
 # /home/<username> may be included in a path.
 cd /
 HOME=/tmp
@@ -219,10 +198,6 @@ HOME=/tmp/oil_test
 pushd $HOME
 dirs
 ## status: 0
-# zsh doesn't duplicate the stack I guess.
-## OK zsh STDOUT:
-~ /
-## END
 ## STDOUT:
 ~ /
 ~ /
@@ -244,8 +219,6 @@ dirs
 
 #### pushd does not take more than one argument
 pushd . . >/dev/null || echo too many args!
-## N-I zsh STDOUT:
-## END
 ## STDOUT:
 too many args!
 ## END
@@ -256,6 +229,4 @@ dirs -l a || echo failed
 ## STDOUT:
 failed
 failed
-## END
-## BUG zsh STDOUT:
 ## END

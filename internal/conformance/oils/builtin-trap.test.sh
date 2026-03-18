@@ -1,9 +1,7 @@
-## compare_shells: dash bash mksh ash
+## compare_shells: bash
 ## oils_failures_allowed: 2
 
 #### traps are not active inside subshells $() ()  trap | cat
-
-# TODO: should we change this?  We're not compatible with bash or busybox ash
 
 trap 'echo bye' EXIT
 
@@ -38,15 +36,6 @@ trap | cat
 trap -- 'echo bye' EXIT
 bye
 ## END
-## BUG-2 ash STDOUT:
-1 traps.txt
-( )
-$(trap)
-trap -- 'echo bye' EXIT
-trap | cat
-bye
-## END
-
 
 #### trap accepts/ignores --
 trap -- 'echo hi' EXIT
@@ -80,8 +69,6 @@ fi
 ## STDOUT:
 ok
 ## END
-## BUG mksh STDOUT:
-## END
 
 #### SIGINT and INT are aliases
 trap - SIGINT
@@ -90,10 +77,6 @@ trap - INT
 echo $?
 ## STDOUT:
 0
-0
-## END
-## N-I dash STDOUT:
-1
 0
 ## END
 
@@ -122,17 +105,8 @@ trap -- 'echo 1
 echo 2
 echo 3' SIGINT
 ## END
-## OK dash/ash STDOUT:
-trap -- 'echo 1
-echo 2
-echo 3' INT
-## END
-## OK mksh STDOUT:
-trap -- $'echo 1\necho 2\necho 3' INT
-## END
 
 #### trap -p is like trap: it prints the handlers and full signal names
-case $SH in dash) exit ;; esac
 trap "echo INT" INT
 trap "echo EXIT" EXIT
 trap -p
@@ -140,13 +114,6 @@ trap -p
 trap -- 'echo EXIT' EXIT
 trap -- 'echo INT' SIGINT
 EXIT
-## END
-## N-I mksh status: 1
-## N-I ash status: 2
-## N-I mksh/ash STDOUT:
-EXIT
-## END
-## N-I dash STDOUT:
 ## END
 
 #### Register the same handler for multiple signals
@@ -156,12 +123,6 @@ trap
 trap -- 'echo test' EXIT
 trap -- 'echo test' SIGINT
 trap -- 'echo test' SIGTERM
-test
-## END
-## OK dash/mksh/ash STDOUT:
-trap -- 'echo test' EXIT
-trap -- 'echo test' INT
-trap -- 'echo test' TERM
 test
 ## END
 
@@ -200,24 +161,6 @@ trap -- 'echo INT' SIGINT
 trap -- 'echo INT' SIGINT
 ---
 ## END
-## OK dash/ash STDOUT:
-trap -- 'echo EXIT' EXIT
-trap -- 'echo INT' INT
----
-trap -- 'echo INT' INT
----
-## END
-## BUG mksh STDOUT:
-trap -- 'echo EXIT' EXIT
-trap -- 'echo INT' INT
----
-trap -- 'echo EXIT' EXIT
-trap -- 'echo INT' INT
----
-trap -- 'echo EXIT' EXIT
-trap -- 'echo INT' INT
-EXIT
-## END
 
 #### trap 0 is equivalent to trap EXIT
 trap "echo INT" INT
@@ -232,12 +175,6 @@ trap -- 'echo INT' SIGINT
 ---
 trap -- 'echo INT' SIGINT
 ## END
-## OK dash/ash/mksh STDOUT:
-trap -- 'echo EXIT' EXIT
-trap -- 'echo INT' INT
----
-trap -- 'echo INT' INT
-## END
 
 #### trap 1 is equivalent to SIGHUP; HUP is equivalent to SIGHUP
 trap 'echo HUP' SIGHUP
@@ -251,12 +188,6 @@ echo status=$?
 ## status: 0
 ## STDOUT:
 status=0
-status=0
-status=0
-status=0
-## END
-## N-I dash STDOUT:
-status=1
 status=0
 status=0
 status=0
@@ -303,13 +234,6 @@ trap -- '' EXIT
 
 trap -- '# comment' EXIT
 ## END
-## BUG mksh STDOUT:
-trap -- 'echo exit' EXIT
-
-trap --  EXIT
-
-trap -- '# comment' EXIT
-## END
 
 #### trap 'echo hi' KILL (regression test, caught by smoosh suite)
 trap 'echo hi' 9
@@ -330,12 +254,6 @@ status=0
 status=0
 status=0
 ## END
-## OK osh STDOUT:
-status=2
-status=2
-status=2
-status=0
-## END
 
 #### exit 1 when trap code string is invalid
 # All shells spew warnings to stderr, but don't actually exit!  Bad!
@@ -344,22 +262,6 @@ echo status=$?
 ## STDOUT:
 status=1
 ## END
-
-## BUG mksh status: 1
-## BUG mksh STDOUT:
-status=0
-## END
-
-## BUG ash status: 2
-## BUG ash STDOUT:
-status=0
-## END
-
-## BUG dash/bash status: 0
-## BUG dash/bash STDOUT:
-status=0
-## END
-
 
 #### trap EXIT calling exit
 cleanup() {
@@ -384,7 +286,6 @@ trap 'echo FAILED' EXIT
 for
 ## stdout: FAILED
 ## status: 2
-## OK mksh status: 1
 
 #### trap EXIT with PARSE error and explicit exit
 trap 'echo FAILED; exit 0' EXIT
@@ -425,14 +326,12 @@ trap 'eval "echo hi"' 0
 hi
 ## END
 
-
 #### exit codes for traps are isolated
 
 trap 'echo USR1 trap status=$?; ( exit 42 )' USR1
 
 echo before=$?
 
-# Equivalent to 'kill -USR1 $$' except OSH doesn't have "kill" yet.
 # /bin/kill doesn't exist on Debian unless 'procps' is installed.
 sh -c "kill -USR1 $$"
 echo after=$?
@@ -461,7 +360,6 @@ kill -URG $!
 wait
 echo "wait status $?"
 
-# In the CI, mksh sometimes gives:
 #
 # USR1
 # begin child
@@ -487,9 +385,7 @@ status=0
 
 #### trap INT, sleep, SIGINT: non-interactively
 
-# mksh behaves differently in CI -- maybe when it's not connected to a
 # terminal?
-case $SH in mksh) echo mksh; exit ;; esac
 
 $REPO_ROOT/spec/testdata/builtin-trap-int.sh
 
@@ -497,17 +393,8 @@ $REPO_ROOT/spec/testdata/builtin-trap-int.sh
 status=0
 ## END
 
-## OK mksh STDOUT:
-mksh
-## END
-
 # Not sure why other shells differ here, but running the trap is consistent
 # with interactive cases in test/bugs.sh
-
-## OK osh STDOUT:
-int
-status=0
-## END
 
 #### trap EXIT, sleep, SIGINT: non-interactively
 
@@ -572,12 +459,6 @@ trap
 ## STDOUT:
 trap -- '' SIGUSR1
 ## END
-## OK dash/ash STDOUT:
-trap -- '' USR1
-## END
-## OK mksh STDOUT:
-trap --  USR1
-## END
 
 #### trap '' with multiple signals
 
@@ -587,14 +468,6 @@ trap
 ## STDOUT:
 trap -- '' SIGUSR1
 trap -- '' SIGUSR2
-## END
-## OK dash/ash STDOUT:
-trap -- '' USR1
-trap -- '' USR2
-## END
-## OK mksh STDOUT:
-trap --  USR1
-trap --  USR2
 ## END
 
 #### trap with command.NoOp - check internal invariant

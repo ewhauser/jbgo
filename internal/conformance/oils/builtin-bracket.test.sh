@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 0
-## compare_shells: dash bash mksh
+## compare_shells: bash
 
 #### zero args: [ ]
 [ ] || echo false
@@ -30,7 +30,6 @@ false
 ## END
 
 #### -a as unary operator (alias of -e)
-# NOT IMPLEMENTED FOR OSH, but could be later.  See comment in core/id_kind.py.
 [ -a / ]
 echo status=$?
 [ -a /nonexistent ]
@@ -38,10 +37,6 @@ echo status=$?
 ## STDOUT:
 status=0
 status=1
-## END
-## N-I dash STDOUT:
-status=2
-status=2
 ## END
 
 #### two args: -z with = ! ( ]
@@ -153,10 +148,6 @@ command [ -z '' -a '(' ! -z x ')' ] && echo true
 true
 true
 ## END
-## BUG dash STDOUT: 
-true
-## END
-## BUG dash status: 2
 
 #### == and = does not do glob
 [ abc = 'a*' ]
@@ -166,10 +157,6 @@ echo status=$?
 ## STDOUT:
 status=1
 status=1
-## END
-## N-I dash STDOUT:
-status=1
-status=2
 ## END
 
 #### [ with op variable
@@ -215,21 +202,14 @@ true
 
 #### operator/operand ambiguity with ]
 # bash parses this as '-z' AND ']', which is true.  It's a syntax error in
-# dash/mksh.
 [ -z -a ] ]
 echo status=$?
 ## stdout: status=0
-## OK mksh stdout: status=2
-## OK dash stdout: status=2
 
 #### operator/operand ambiguity with -a
-# bash parses it as '-z' AND '-a'.  It's a syntax error in mksh but somehow a
-# runtime error in dash.
 [ -z -a -a ]
 echo status=$?
 ## stdout: status=0
-## OK mksh stdout: status=2
-## OK dash stdout: status=1
 
 #### -d
 test -d $TMP
@@ -348,9 +328,6 @@ echo status=$?
 ## STDOUT:
 status=2
 ## END
-## BUG mksh STDOUT:
-status=0
-## END
 
 #### test -s
 test -s __nonexistent
@@ -402,7 +379,6 @@ status=1
 status=1
 status=1
 ## END
-
 
 #### test -p named pipe
 mkfifo $TMP/fifo
@@ -456,7 +432,6 @@ echo status=$?
 test -g $TMP/setgid
 echo status=$?
 
-
 ## STDOUT:
 status=0
 status=1
@@ -494,14 +469,6 @@ dynamic=0
 dynamic=0
 dynamic=1
 ## END
-## N-I dash/mksh STDOUT:
-global=2
-global=2
-dynamic=2
-dynamic=2
-dynamic=2
-## END
-
 
 #### test -o for options
 # note: it's lame that the 'false' case is confused with the 'typo' case.
@@ -519,11 +486,6 @@ echo status=$?
 status=1
 status=0
 status=1
-## END
-## N-I dash STDOUT:
-status=2
-status=2
-status=2
 ## END
 
 #### -nt -ot
@@ -557,9 +519,6 @@ echo status=$?
 ## STDOUT:
 status=2
 ## END
-## OK dash/bash STDOUT:
-status=1
-## END
 
 #### Bug regression
 test "$ipv6" = "yes" -a "$ipv6lib" != "none"
@@ -567,7 +526,6 @@ echo status=$?
 ## STDOUT:
 status=1
 ## END
-
 
 #### test -c 
 test -c /dev/zero
@@ -646,7 +604,6 @@ baseN=2
 ## END
 
 #### More negative numbers
-case $SH in dash) exit ;; esac
 
 [[ -1 -le 0 ]]
 echo status=$?
@@ -657,9 +614,6 @@ echo status=$?
 ## STDOUT:
 status=0
 status=0
-## END
-
-## N-I dash STDOUT:
 ## END
 
 #### No octal, hex, base N conversion - leading 0 is a regular decimal
@@ -695,17 +649,6 @@ hex=2
 baseN=2
 ## END
 
-## BUG mksh STDOUT:
-73
--73
-
-status=0
-status=0
-
-hex=2
-baseN=2
-## END
-
 #### Looks like octal, but digit is too big
 
 # arithmetic has octal conversion
@@ -728,23 +671,10 @@ echo status=$?
 ## STDOUT:
 ## END
 
-## OK dash status: 2
-
 ## OK bash status: 0
 ## OK bash STDOUT:
 status=1
 status=1
-
-status=0
-status=0
-## END
-
-## OK mksh status: 0
-## OK mksh STDOUT:
-83
-status=0
--83
-status=0
 
 status=0
 status=0
@@ -764,7 +694,3 @@ status=2
 status=2
 ## END
 
-## BUG mksh STDOUT:
-status=0
-status=0
-## END

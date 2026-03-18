@@ -1,4 +1,4 @@
-## compare_shells: dash bash-4.4 mksh
+## compare_shells: bash
 
 #### Sourcing a script that returns at the top level
 echo one
@@ -45,7 +45,6 @@ status=1
 ## END
 
 #### continue at top level is NOT an error
-# NOTE: bash and mksh both print warnings, but don't exit with an error.
 continue
 echo status=$?
 ## stdout: status=0
@@ -95,8 +94,6 @@ argv.sh "${undef[@]}"
 ## STDOUT:
 ['x', 'y']
 ## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### automatically creating arrays are indexed, not associative
 undef[2]=x
@@ -108,5 +105,3 @@ argv.sh "${undef[@]}"
 ## STDOUT:
 ['zzz', 'x', 'y']
 ## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""

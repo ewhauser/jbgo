@@ -1,4 +1,4 @@
-## compare_shells: dash bash mksh
+## compare_shells: bash
 
 #### case
 foo=a; case $foo in [0-9]) echo number;; [a-z]) echo letter ;; esac
@@ -33,7 +33,6 @@ echo `\`echo -n l; echo -n s\` $TMP | grep 000000-first`
 ## stdout: 000000-first
 
 #### Making command out of command sub should work
-# Works in bash and dash!
 $(echo ec)$(echo ho) split builtin
 ## stdout: split builtin
 
@@ -42,7 +41,6 @@ $(echo f)$(echo or) i in a b c; do echo $i; done
 echo status=$?
 ## stdout-json: ""
 ## status: 2
-## OK mksh status: 1
 
 #### Command sub with here doc
 echo $(<<EOF tac
@@ -261,8 +259,6 @@ echo `echo \\\\\"foo\\\\\"` -
 \"foo\" -
 ## END
 
-## BUG dash/mksh stdout-json: "\u000coo\\ -\n\u000coo\\ -\n\\\"foo\\\" -\n"
-
 #### Syntax errors with double quotes within backticks
 
 # bash does print syntax errors but somehow it exits 0
@@ -276,17 +272,12 @@ echo status=$?
 status=2
 status=2
 ## END
-## OK mksh STDOUT:
-status=1
-status=1
-## END
 ## OK bash STDOUT:
 
 status=0
 
 status=0
 ## END
-
 
 #### Empty command sub $() (command::NoOp)
 

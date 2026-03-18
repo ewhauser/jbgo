@@ -1,12 +1,8 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash mksh zsh
+## compare_shells: bash
 
-#### OSH source code doesn't have to be valid Unicode (like other shells)
-
-# Should YSH be different?  It would be nice.
 # We would have to validate all Lit_Chars tokens, and the like.
 #
-# The logical place to put that would be in osh/word_parse.py where we read
 # single and double quoted strings.  Although there might be a global lexer
 # hack for Id.Lit_Chars tokens.  Would that catch here docs though?
 
@@ -35,12 +31,7 @@ $SH not-unicode.sh | od -A n -t x1
  bc 20 bc 20 bc 20 bc 0a
 ## END
 
-
-# dash and ash don't support $''
-
 #### Unicode escapes \u03bc \U000003bc in $'', echo -e, printf
-
-case $SH in dash|ash) exit ;; esac
 
 echo $'\u03bc \U000003bc'
 
@@ -54,12 +45,7 @@ printf '\u03bc \U000003bc\n'
 μ μ
 ## END
 
-## N-I dash/ash STDOUT:
-## END
-
 #### Max code point U+10ffff can escaped with $''  printf  echo -e
-
-case $SH in dash|ash) exit ;; esac
 
 py-repr() {
   printf "'"
@@ -77,16 +63,7 @@ py-repr $(printf '\U0010ffff')
 '\xf4\x8f\xbf\xbf'
 ## END
 
-## N-I dash/ash STDOUT:
-## END
-
 # Unicode replacement char 
-
-## BUG mksh STDOUT:
-'\xef\xbf\xbd'
-'\xef\xbf\xbd'
-'\xf4\x8f\xbf\xbf'
-## END
 
 #### $'' does NOT check that 0x110000 is too big at parse time
 
@@ -100,10 +77,6 @@ py-repr $'\U00110000'
 
 ## STDOUT:
 '\xf4\x90\x80\x80'
-## END
-
-## BUG mksh STDOUT:
-'\xef\xbf\xbd'
 ## END
 
 #### $'' does not check for surrogate range at parse time
@@ -123,13 +96,7 @@ py-repr $'\U0000dc00'
 '\xed\xb0\x80'
 ## END
 
-## OK zsh status: 1
-## OK zsh STDOUT:
-## END
-
-
 #### printf / echo -e do NOT check max code point at runtime
-case $SH in mksh) exit ;; esac
 
 py-repr() {
   printf "'"
@@ -152,11 +119,7 @@ status=0
 '\xf4\x90\x80\x80'
 ## END
 
-## BUG mksh STDOUT:
-## END
-
 #### printf / echo -e do NOT check surrogates at runtime
-case $SH in mksh) exit ;; esac
 
 py-repr() {
   printf "'"
@@ -189,19 +152,5 @@ status=0
 '\xed\xb0\x80'
 status=0
 '\xed\xb0\x80'
-## END
-
-## BUG zsh STDOUT:
-status=0
-''
-status=0
-''
-status=0
-''
-status=0
-''
-## END
-
-## BUG mksh STDOUT:
 ## END
 

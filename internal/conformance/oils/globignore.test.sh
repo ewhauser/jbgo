@@ -10,7 +10,6 @@ echo -* hello zzzz?
 ## STDOUT:
 -* hello zzzz?
 ## END
-## N-I dash/mksh/ash stdout-json: "hello zzzzz"
 ## status: 0
 
 #### Ignore *.txt
@@ -197,10 +196,9 @@ nullglob
 ## END
 
 #### When GLOBIGNORE is set, no_dash_glob isn't respected
-case $SH in bash) exit ;; esac
+exit
 
 touch -- foo.txt -foo.txt
-
 
 echo *  # expansion does NOT include -foo.txt
 

@@ -1,4 +1,4 @@
-## compare_shells: bash-4.4 mksh zsh
+## compare_shells: bash
 
 #### (( )) result
 (( 1 )) && echo True
@@ -30,7 +30,6 @@ a=(4 5 6)
 (( sum = a[0] + a[1] + a[2] ))
 echo $sum
 ## stdout: 15
-## OK zsh stdout: 9
 
 #### (( )) with error
 (( a = 0 )) || echo false
@@ -44,8 +43,6 @@ true
 0
 ## END
 
-
-#### bash and mksh: V in (( a[K] = V )) gets coerced to integer 
 K=key
 V=value
 typeset -a a
@@ -61,8 +58,6 @@ a["key"]=0
 keys = 0
 values = 0
 ## END
-## N-I zsh status: 1
-## N-I zsh stdout-json: ""
 
 #### bash: K in (( A[K] = V )) is a constant string
 K=5
@@ -78,12 +73,6 @@ A[5]=
 keys = K
 values = 42
 ## END
-## OK osh status: 1
-## OK osh stdout-json: ""
-## N-I zsh status: 1
-## N-I zsh stdout-json: ""
-## N-I mksh status: 1
-## N-I mksh stdout-json: ""
 
 #### BUG: (( V = A[K] )) doesn't retrieve the right value
 typeset -A A
@@ -99,10 +88,6 @@ A[K]=oops2
 echo V=$V
 ## status: 1
 ## stdout-json: ""
-## BUG bash/zsh status: 0
-## BUG bash/zsh STDOUT:
-V=0
-## END
 
 #### bash: V in (( A["K"] = V )) gets coerced to integer
 K=key
@@ -120,10 +105,6 @@ A["key"]=
 keys = K
 values = 0
 ## END
-## N-I zsh stdout-json: ""
-## N-I zsh status: 1
-## N-I mksh stdout-json: ""
-## N-I mksh status: 1
 
 #### literal strings inside (( ))
 declare -A A
@@ -133,14 +114,6 @@ A['x']=42
 echo $x ${A['y']}
 ## STDOUT:
 42 0
-## END
-## N-I mksh status: 0
-## N-I mksh STDOUT:
-0
-## END
-## N-I zsh status: 0
-## N-I zsh STDOUT:
-42
 ## END
 
 #### (( )) with redirect
@@ -160,18 +133,12 @@ a=(4 5 6)
 
 echo "${a[@]}"
 
-# OSH doesn't like this
 echo "${b[@]}"
 
 ## status: 0
 ## STDOUT:
 4 5 6
 4
-## END
-## BUG zsh status: 0
-## BUG zsh STDOUT:
-4 5 6
-
 ## END
 
 #### set associative array
@@ -180,11 +147,6 @@ declare -A A=(['foo']=bar ['spam']=42)
 echo $x
 ## STDOUT:
 42
-## END
-## N-I mksh status: 1
-## N-I mksh stdout-json: ""
-## N-I zsh STDOUT:
-0
 ## END
 
 #### Example of incrementing associative array entry with var key (ble.sh)
@@ -201,6 +163,4 @@ echo foo=${A['foo']}
 ## STDOUT:
 foo=44
 ## END
-## N-I mksh/zsh status: 1
-## N-I mksh/zsh stdout-json: ""
 

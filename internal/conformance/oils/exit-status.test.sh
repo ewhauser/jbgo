@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash dash mksh
+## compare_shells: bash
 
 # Test numbers bigger than 255 (2^8 - 1) and bigger than 2^31 - 1
 # Shells differ in their behavior here.  bash silently converts.
@@ -34,14 +34,6 @@ status=1
 status=255
 status=254
 ## END
-## OK dash STDOUT:
-status=255
-status=0
-status=1
-===
-status=2
-status=2
-## END
 
 #### Truncating 'return' status
 f() { return 255; }; f
@@ -70,22 +62,11 @@ status=255
 status=254
 ## END
 
-# dash aborts on bad exit code
-## OK dash status: 2
-## OK dash STDOUT:
-status=255
-status=256
-status=257
-===
-## END
-
-
 #### subshell OverflowError https://github.com/oilshell/oil/issues/996
 
 # We have to capture stderr here 
 
 filter_err() {
-  # check for bash/dash/mksh messages, and unwanted Python OverflowError
   egrep -o 'Illegal number|bad number|return: can only|expected a small integer|OverflowError'
   return 0
 }
@@ -123,8 +104,6 @@ cat err.txt | filter_err
 ## STDOUT:
 ## END
 
-# osh-cpp checks overflow, but osh-py doesn't
-
 ## STDOUT:
 status=255
 status=1
@@ -136,37 +115,6 @@ expected a small integer
 status=0
 status=1
 expected a small integer
-## END
-
-# mksh behaves similarly, uses '1' as its "bad status" status!
-
-## OK mksh STDOUT:
-status=255
-status=1
-bad number
-status=1
-bad number
-
---- negative ---
-status=0
-status=1
-bad number
-## END
-
-# dash is similar, but seems to reject negative numbers
-
-## OK dash STDOUT:
-status=255
-status=2
-Illegal number
-status=2
-Illegal number
-
---- negative ---
-status=2
-Illegal number
-status=2
-Illegal number
 ## END
 
 # bash disallows return at top level
@@ -185,13 +133,11 @@ status=2
 return: can only
 ## END
 
-
 #### func subshell OverflowError https://github.com/oilshell/oil/issues/996
 
 # We have to capture stderr here 
 
 filter_err() {
-  # check for bash/dash/mksh messages, and unwanted Python OverflowError
   egrep -o 'Illegal number|bad number|return: can only|expected a small integer|OverflowError'
   return 0
 }
@@ -219,14 +165,6 @@ status=1
 expected a small integer
 ## END
 
-## OK dash STDOUT:
-status=255
-status=2
-Illegal number
-status=2
-Illegal number
-## END
-
 # bash truncates it to 0 here, I guess it's using 64 bit integers
 ## OK bash STDOUT:
 status=255
@@ -234,24 +172,13 @@ status=0
 status=1
 ## END
 
-## OK mksh STDOUT:
-status=255
-status=1
-bad number
-status=1
-bad number
-## END
-
-
 # Weird case from bash-help mailing list.
 #
 # "Evaluations of backticks in if statements".  It doesn't relate to if
 # statements but to $?, since && and || behave the same way.
 
-# POSIX has a special rule for this.  In OSH strict_argv is preferred so it
 # becomes a moot point.  I think this is an artifact of the
 # "stateful"/imperative nature of $? -- it can be "left over" from a prior
-# command, and sometimes the prior argv is [].  OSH has a more "functional"
 # implementation so it doesn't have this weirdness.
 
 #### If empty command
@@ -281,14 +208,12 @@ if `false`; then echo TRUE; else echo FALSE; fi
 
 #### Exit code when command sub evaluates to empty str, e.g. `false` (#2416)
 
-# OSH had a bug here
 `true`; echo $?
 `false`; echo $?
 $(true); echo $?
 $(false); echo $?
 echo ---
 
-# OSH and others agree on these
 eval true; echo $?
 eval false; echo $?
 `echo true`; echo $?

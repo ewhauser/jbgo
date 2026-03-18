@@ -1,4 +1,4 @@
-## compare_shells: bash mksh
+## compare_shells: bash
 ## oils_failures_allowed: 3
 
 # TODO: can also run against ksh, brush, sush
@@ -27,7 +27,6 @@ FALSE
 shopt -s extglob
 
 # this syntax requires extglob in bash!!
-# OSH never allows it
 g=--@(help|verbose)
 
 quoted='--@(help|verbose)'
@@ -44,15 +43,9 @@ FALSE
 FALSE
 FALSE
 ## END
-## N-I mksh STDOUT:
-FALSE
-FALSE
-FALSE
-## END
 
 #### Matching literal '@(cc)'
 
-# extglob is OFF.  Doesn't affect bash or mksh!
 [[ cc == @(cc) ]] 
 echo status=$?
 [[ cc == '@(cc)' ]]
@@ -83,9 +76,6 @@ pat='--@(help|verbose|no-@(long|short)-option)'
 TRUE
 TRUE
 TRUE
-FALSE
-## END
-## BUG mksh STDOUT:
 FALSE
 ## END
 
@@ -268,17 +258,12 @@ empty=''
 str='x'
 [[ !($empty) ]]  && echo TRUE   # test if $empty is empty
 [[ !($str) ]]    || echo FALSE  # test if $str is empty
-shopt -s extglob  # mksh doesn't have this
+shopt -s extglob
 [[ !($empty) ]]  && echo TRUE   # negated glob
 [[ !($str) ]]    && echo TRUE   # negated glob
 ## STDOUT:
 TRUE
 FALSE
-TRUE
-TRUE
-## END
-## N-I mksh/ksh STDOUT:
-TRUE
 TRUE
 TRUE
 ## END
@@ -302,10 +287,6 @@ rhs
 rhs arg
 nope
 ## END
-## BUG mksh/ksh STDOUT:
-rhs
-nope
-## END
 
 #### extglob is not detected in regex!
 shopt -s extglob
@@ -313,8 +294,6 @@ shopt -s extglob
 ## STDOUT:
 FALSE
 ## END
-## N-I mksh/ksh stdout-json: ""
-## N-I mksh/ksh status: 1
 
 #### regular glob of single unicode char
 shopt -s extglob
@@ -325,10 +304,6 @@ echo $?
 ## STDOUT:
 0
 0
-## END
-## BUG mksh STDOUT:
-0
-1
 ## END
 
 #### extended glob of single unicode char
@@ -341,13 +316,8 @@ echo $?
 0
 0
 ## END
-## BUG mksh STDOUT:
-0
-1
-## END
 
 #### Extended glob in ${x//pat/replace}
-# not supported in OSH due to GlobToERE() strategy for positional info
 
 shopt -s extglob
 x=foo.py
@@ -355,8 +325,6 @@ echo ${x//@(?.py)/Z}
 ## STDOUT:
 foZ
 ## END
-## N-I osh status: 1
-## N-I osh stdout-json: ""
 
 #### Extended glob in ${x%PATTERN}
 

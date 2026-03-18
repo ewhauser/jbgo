@@ -16,7 +16,6 @@
 trap -l | grep INT >/dev/null
 ## status: 0
 
-
 #### trap -p
 
 trap 'echo exit' EXIT
@@ -136,13 +135,6 @@ B
 status=0
 ## END
 
-# OSH doesn't ignore this
-
-## OK osh status: 42
-## OK osh STDOUT:
-  [7]
-## END
-
 #### trap DEBUG with 'exit'
 debuglog() {
   echo "  [$@]"
@@ -161,10 +153,7 @@ echo status=$?
   [7]
 ## END
 
-
-
 #### trap DEBUG with non-compound commands
-case $SH in dash|mksh) exit ;; esac
 
 debuglog() {
   echo "  [$@]"
@@ -229,7 +218,6 @@ hello
 ## END
 
 #### trap DEBUG and command sub / subshell
-case $SH in dash|mksh) exit ;; esac
 
 debuglog() {
   echo "  [$@]"
@@ -275,7 +263,6 @@ ok
 
 #### One 'echo' in first pipeline part - why does bash behave differently from case above?
 
-# TODO: bash runs the trap 3 times, and osh only twice.  I don't see why.  Is
 # it because Process::Run() does trap_state.ClearForSubProgram()?  Probably
 #echo top PID=$$ BASHPID=$BASHPID
 #shopt -s lastpipe
@@ -300,12 +287,6 @@ pipeline
   LINENO=8
 ok
 ## END
-## OK osh STDOUT:
-  LINENO=7
-pipeline
-  LINENO=8
-ok
-## END
 
 #### trap DEBUG and pipeline (lastpipe difference)
 debuglog() {
@@ -319,7 +300,6 @@ trap 'debuglog $LINENO' DEBUG
 # only run for the last one, maybe I guess because traps aren't inherited?
 { echo x; echo y; } | wc -l
 
-# bash runs for all of these, but OSH doesn't because we have SubProgramThunk
 # Hm.
 date | cat | wc -l
 
@@ -345,19 +325,6 @@ b
 ## END
 
 # Marking OK due to lastpipe execution difference
-
-## OK osh STDOUT:
-  [6]
-a
-  [6]
-b
-  [8]
-2
-  [10]
-1
-  [14]
-1
-## END
 
 #### trap DEBUG function call
 debuglog() {
@@ -450,15 +417,6 @@ ok
 # What we really need is a trap that runs in the main loop and TELLS you what
 # kind of node it is?
 
-## N-I osh STDOUT:
-  [7]
-x=1
-  [7]
-x=2
-  [10]
-ok
-## END
-
 #### trap DEBUG for expr
 debuglog() {
   echo "  [$@]"
@@ -485,14 +443,6 @@ i=4
   [10]
 ok
 ## END
-## N-I osh STDOUT:
-  [7]
-i=3
-  [7]
-i=4
-  [10]
-ok
-## END
 
 #### trap DEBUG if while
 debuglog() {
@@ -514,7 +464,6 @@ done
 if
   [10]
 ## END
-
 
 #### trap RETURN
 profile() {
@@ -564,7 +513,6 @@ false || false || false
 
 trap - DEBUG
 
-
 # ONE EACH
 trap 'echo err $LINENO' ERR
 
@@ -590,10 +538,7 @@ err 16
 ok
 ## END
 
-
 #### Combine DEBUG trap and USR1 trap
-
-case $SH in dash|mksh|ash) exit ;; esac
 
 trap 'false; echo $LINENO usr1' USR1
 trap 'false; echo $LINENO dbg' DEBUG
@@ -610,12 +555,7 @@ echo after=$?
 after=0
 ## END
 
-## N-I dash/mksh/ash STDOUT:
-## END
-
 #### Combine ERR trap and USR1 trap
-
-case $SH in dash|mksh|ash) exit ;; esac
 
 trap 'false; echo $LINENO usr1' USR1
 trap 'false; echo $LINENO err' ERR
@@ -629,12 +569,7 @@ echo after=$?
 after=0
 ## END
 
-## N-I dash/mksh/ash STDOUT:
-## END
-
 #### Combine DEBUG trap and ERR trap 
-
-case $SH in dash|mksh|ash) exit ;; esac
 
 trap 'false; echo $LINENO err' ERR
 trap 'false; echo $LINENO debug' DEBUG
@@ -653,5 +588,3 @@ echo after=$?
 after=1
 ## END
 
-## N-I dash/mksh/ash STDOUT:
-## END

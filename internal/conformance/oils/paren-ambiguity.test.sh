@@ -1,4 +1,4 @@
-## compare_shells: bash dash mksh zsh ash
+## compare_shells: bash
 ## oils_failures_allowed: 3
 
 #### (( closed with ) ) after multiple lines is command - #2337
@@ -29,10 +29,6 @@ echo 3
 1 2 3
 ## END
 
-## BUG dash/ash status: 2
-## BUG dash/ash STDOUT:
-## END
-
 #### (( closed with )) after multiple lines is parse error - #2337
 
 $SH -c '
@@ -49,11 +45,6 @@ fi
 
 ## STDOUT:
 ok
-## END
-## OK dash/ash STDOUT:
-1
-2
-3
 ## END
 
 #### $(( closed with )) after multiple lines is parse error - #2337
@@ -75,8 +66,6 @@ ok
 ## END
 
 #### (((grep example - 4+ instances in regtest/aports - #2337
-
-# https://oilshell.zulipchat.com/#narrow/channel/502349-osh/topic/.28.28.28.20not.20parsed.20like.20bash/with/518874141
 
 # spaces help
 good() {
@@ -144,6 +133,3 @@ echo bye
 bye
 ## END
 
-## N-I dash/ash status: 2
-## N-I dash/ash STDOUT:
-## END

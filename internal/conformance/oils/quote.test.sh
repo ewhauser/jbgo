@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 2
-## compare_shells: dash bash mksh ash
+## compare_shells: bash
 
 #### Unquoted words
 echo unquoted    words
@@ -63,10 +63,6 @@ echo "$one" "$two"
 \ \\
 \ \\
 ## END
-## BUG dash/mksh STDOUT:
-\ \
-\ \
-## END
 
 #### Backslash escapes
 echo \$ \| \a \b \c \d \\
@@ -77,11 +73,9 @@ echo "\$ \\ \\ \p \q"
 ## stdout: $ \ \ \p \q
 
 #### C-style backslash escapes inside double quoted string
-# mksh and dash implement POSIX incompatible extensions.  $ ` " \ <newline>
 # are the only special ones
 echo "\a \b"
 ## stdout: \a \b
-## BUG dash/mksh stdout-json: "\u0007 \u0008\n"
 
 # BUG
 
@@ -104,11 +98,9 @@ $"
 ## stdout: foo$
 
 #### $? split over multiple lines
-# Same with $$, etc.  OSH won't do this because $? is a single token.
 echo $\
 ?
 ## stdout: $?
-## OK dash/bash/mksh/ash stdout: 0
 
 #
 # Bad quotes
@@ -119,13 +111,10 @@ echo $\
 #### Unterminated single quote
 ## code: ls foo bar '
 ## status: 2
-## OK mksh status: 1
 
 #### Unterminated double quote
 ## code: ls foo bar "
 ## status: 2
-## OK mksh status: 1
-
 
 #
 # TODO: Might be another section?
@@ -143,38 +132,24 @@ by semi-colon
 #
 
 #### No tab escapes within single quotes
-# dash and mksh allow this, which is a BUG.
 # POSIX says: "Enclosing characters in single-quotes ( '' ) shall preserve the
 # literal value of each character within the single-quotes. A single-quote
 # cannot occur within single-quotes"
 echo 'a\tb'
 ## stdout: a\tb
-## BUG dash/mksh stdout-json: "a\tb\n"
-
-# See if it supports ANSI C escapes.  Bash supports this, but dash does NOT.  I
-# guess dash you would do IFS=$(printf '\n\t')
 
 #### $''
 echo $'foo'
 ## stdout: foo
-## N-I dash stdout: $foo
 
 #### $'' with quotes
 echo $'single \' double \"'
 ## stdout: single ' double "
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### $'' with newlines
 echo $'col1\ncol2\ncol3'
 ## STDOUT:
 col1
-col2
-col3
-## END
-# In dash, \n is special within single quotes
-## N-I dash STDOUT:
-$col1
 col2
 col3
 ## END
@@ -185,22 +160,12 @@ echo -n $'\001' $'\377' | od -A n -c | sed 's/ \+/ /g'
 ## STDOUT:
  001 377
 ## END
-## N-I dash STDOUT:
- $ 001 $ 377
-## END
 
 #### $'' octal escapes with fewer than 3 chars
 echo $'\1 \11 \11 \111' | od -A n -c | sed 's/ \+/ /g'
 ## STDOUT:
  001 \t \t I \n
 ## END
-## N-I dash STDOUT:
- $ 001 \t \t I \n
-## END
-
-
-#### OSH allows invalid backslashes
-case $SH in dash|mksh) exit ;; esac
 
 w=$'\uZ'
 x=$'\u{03bc'
@@ -209,10 +174,7 @@ echo $w $x $y
 ## STDOUT:
 \uZ \u{03bc \z
 ## END
-## N-I dash/mksh stdout-json: ""
 
-#### YSH allows unquoted foo\ bar too
-shopt -s ysh:all
 touch foo\ bar
 ls foo\ bar
 ## STDOUT:
@@ -227,10 +189,6 @@ echo $"foo $x"
 foo
 foo x
 ## END
-## N-I dash/ash STDOUT:
-$foo
-$foo x
-## END
 
 #### printf supports tabs
 # This accepts \t by itself, hm.
@@ -241,15 +199,12 @@ printf "c1\tc2\nc3\tc4\n"
 
 # note: AT&T ksh supports this too
 
-case $SH in dash|ash) exit ;; esac
-
 show_bytes() {
   # -A n - no file offset
   od -A n -t c -t x1
 }
 
 # this isn't special
-# mksh doesn't like it
 #echo -n $'\c' | show_bytes
 
 echo -n $'\c0\c9-' | show_bytes
@@ -277,14 +232,8 @@ echo -n $'\c-\c+\c"' | show_bytes
   \r  \v 002
   0d  0b  02
 ## END
-## N-I dash/ash STDOUT:
-## END
 
 #### \c' is an escape, unlike bash
-
-# mksh and ksh agree this is an esacpe
-
-case $SH in dash|ash) exit ;; esac
 
 show_bytes() {
   # -A n - no file offset
@@ -292,7 +241,6 @@ show_bytes() {
 }
 
 # this isn't special
-# mksh doesn't like it
 echo -n $'\c'' | show_bytes
 
 ## STDOUT:
@@ -302,7 +250,4 @@ echo -n $'\c'' | show_bytes
 
 ## BUG bash status: 2
 ## BUG bash STDOUT:
-## END
-
-## N-I dash/ash STDOUT:
 ## END

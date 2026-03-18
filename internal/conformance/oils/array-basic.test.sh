@@ -1,6 +1,4 @@
-## compare_shells: bash mksh zsh
-
-# Common between bash/zsh
+## compare_shells: bash
 
 #### "${a[@]}" and "${a[*]}"
 a=(1 '2 3')
@@ -13,18 +11,11 @@ argv.sh ${a[@]} ${a[*]}
 ## STDOUT:
 ['1', '2', '3', '1', '2', '3']
 ## END
-## BUG zsh STDOUT:
-['1', '2 3', '1', '2 3']
-## END
 
 #### 4 ways to interpolate empty array
 argv.sh 1 "${a[@]}" 2 ${a[@]} 3 "${a[*]}" 4 ${a[*]} 5
 ## STDOUT:
 ['1', '2', '3', '', '4', '5']
-## END
-
-## BUG zsh STDOUT:
-['1', '', '2', '3', '', '4', '5']
 ## END
 
 #### empty array
@@ -39,7 +30,4 @@ empty=()
 argv.sh ${empty[@]:-not one} "${empty[@]:-not one}"
 ## STDOUT:
 ['not', 'one', 'not one']
-## END
-## BUG zsh STDOUT:
-['not one', 'not one']
 ## END

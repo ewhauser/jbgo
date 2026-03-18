@@ -1,4 +1,4 @@
-## compare_shells: dash bash mksh zsh
+## compare_shells: bash
 
 # Miscellaneous tests for the command language.
 
@@ -20,7 +20,6 @@ $TMP/not-a-dir/text-file
 #### Name too long
 ./0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
 ## status: 127
-## OK dash status: 2
 ## OK bash status: 126
 
 #### External programs don't have _OVM in environment
@@ -91,13 +90,6 @@ two
 one
 ## END
 
-# zsh doesn't do caching!
-## OK zsh STDOUT:
-two
-one
-one
-## END
-
 #### filling $PATH cache, then deleting command
 cd $TMP
 PATH="one:two:$PATH"
@@ -120,14 +112,6 @@ echo status=$?
 two
 status=0
 status=127
-## END
-
-# mksh and zsh correctly searches for the executable again!
-## OK zsh/mksh STDOUT:
-two
-status=0
-one
-status=0
 ## END
 
 #### Non-executable on $PATH
@@ -163,11 +147,6 @@ status=0
 # bash uses a weird table.  Although we could use TSV2.
 ## OK bash stdout-json: "hits\tcommand\n   1\t/usr/bin/whoami\nstatus=0\n"
 
-## OK mksh/zsh STDOUT:
-whoami=/usr/bin/whoami
-status=0
-## END
-
 #### hash with args
 hash whoami
 echo status=$?
@@ -180,19 +159,10 @@ status=0
 status=1
 ## END
 
-# mksh doesn't fail
-## BUG mksh STDOUT:
-status=0
-/whoami
-status=0
-## END
-
 #### hash -r doesn't allow additional args
-hash -r whoami >/dev/null  # avoid weird output with mksh
+hash -r whoami >/dev/null
 echo status=$?
 ## stdout: status=1
-## OK osh stdout: status=2
-## BUG dash/bash stdout: status=0
 
 #### Executing command with same name as directory in PATH (#2429)
 

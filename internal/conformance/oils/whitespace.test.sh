@@ -1,4 +1,4 @@
-## compare_shells: dash bash mksh zsh ash
+## compare_shells: bash
 
 #### Parsing shell words \r \v
 
@@ -41,11 +41,6 @@ fi
 failed
 ## END
 
-## OK mksh/ash/osh STDOUT:
-['3']
-['3']
-## END
-
 #### whitespace in string to integer conversion
 
 tab=$(printf '\t42\t')
@@ -66,11 +61,6 @@ fi
 failed
 ## END
 
-## OK mksh/ash/osh STDOUT:
-43
-43
-## END
-
 #### \r at end of line is not special
 
 # hm I wonder if Windows ports have rules for this?
@@ -85,7 +75,6 @@ $SH -c "$cr"
 
 #### Default IFS does not include \r \v \f
 
-# dash and zsh don't have echo -e
 tab=$(printf -- '-\t-')
 cr=$(printf -- '-\r-')
 vert=$(printf -- '-\v-')
@@ -98,15 +87,6 @@ $SH -c 'argv.sh $1' dummy0 "$ff"
 
 ## STDOUT:
 ['-', '-']
-['-\r-']
-['-\x0b-']
-['-\x0c-']
-## END
-
-# No word splitting in zsh
-
-## OK zsh STDOUT:
-['-\t-']
 ['-\r-']
 ['-\x0b-']
 ['-\x0c-']

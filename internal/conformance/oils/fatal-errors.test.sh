@@ -1,9 +1,8 @@
-## compare_shells: dash bash mksh zsh
+## compare_shells: bash
 
 # Some shell errors are unrecoverable!  Like divide by zero (except in bash.
 #
 # Any others?
-
 
 #### Unrecoverable: divide by zero in redirect word
 
@@ -17,16 +16,11 @@ echo outside=$?
 outside=1
 ## END
 
-## OK dash/ash STDOUT:
-outside=2
-## END
-
 # bash makes the command fail
 ## OK bash STDOUT:
 inside=1
 outside=0
 ## END:
-
 
 #### Unrecoverable: divide by zero in conditional word
 
@@ -56,12 +50,6 @@ outside=1
 outside=1
 ## END
 
-## OK dash/ash STDOUT:
-outside=2
----
-outside=2
-## END
-
 # bash makes the command fail
 ## OK bash STDOUT:
 inside=1
@@ -70,15 +58,6 @@ outside=0
 inside=1
 outside=0
 ## END:
-
-# weird difference in zsh!
-
-## BUG zsh STDOUT:
-outside=1
----
-outside=0
-## END
-
 
 #### Unrecoverable: divide by zero in case
 
@@ -108,12 +87,6 @@ outside=1
 outside=1
 ## END
 
-## OK dash/ash STDOUT:
-outside=2
----
-outside=2
-## END
-
 ## OK bash STDOUT:
 inside=1
 outside=0
@@ -121,13 +94,6 @@ outside=0
 inside=1
 outside=0
 ## END:
-
-## BUG zsh STDOUT:
-outside=0
----
-outside=0
-## END
-
 
 #### Unrecoverable: ${undef?message}
 
@@ -149,10 +115,6 @@ echo outside=$?
 outside=1
 outside=1
 ## END
-## OK dash STDOUT:
-outside=2
-outside=2
-## END
 ## OK bash STDOUT:
 outside=127
 outside=127
@@ -173,15 +135,7 @@ echo outside=$?
 outside=1
 ## END
 
-## OK dash STDOUT:
-outside=2
-## END
-
 ## OK bash STDOUT:
 outside=127
-## END
-
-## BUG zsh STDOUT:
-outside=0
 ## END
 

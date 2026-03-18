@@ -93,13 +93,6 @@ echo U ${x^^}
 echo l ${x,}
 echo L ${x,,}
 
-## OK bash/osh STDOUT:
-u I
-U I
-l i
-L i
-## END
-
 #### Lower Case with constant string (VERY WEIRD)
 x='AAA ABC DEF'
 echo ${x,A}
@@ -140,7 +133,6 @@ ABC DEF
 abc def
 ## END
 
-
 #### ${x@Q}
 x="FOO'BAR spam\"eggs"
 eval "new=${x@Q}"
@@ -158,11 +150,6 @@ echo ${array@Q}
 'x' 'y\nz'
 'x'
 'x'
-## END
-## OK osh STDOUT:
-x $'y\\nz'
-x
-x
 ## END
 
 #### ${!prefix@} ${!prefix*} yields sorted array of var names
@@ -214,7 +201,6 @@ echo ${array@a}
 declare -rx PYTHONPATH=hi
 echo ${PYTHONPATH@a}
 
-# bash and osh differ here
 #declare -rxn x=z
 #echo ${x@a}
 ## STDOUT:
@@ -244,7 +230,6 @@ status=0
 
 status=0
 ## END
-
 
 #### argv array and @P @Q @a
 $SH -c 'echo ${@@P}' dummy a b c
@@ -296,8 +281,6 @@ $SH -c 'declare -A A=(["x"]=y); echo ${!A[@]@a}'
 if test $? -ne 0; then echo fail; fi
 # STDOUT:
 
-
-
 # END
 
 #### ${#var@X} is a parse error
@@ -322,7 +305,6 @@ declare -A A=(["x"]=y)
 echo x=${!A[@]@a}
 echo invalid=${!A@a}
 
-# OSH prints 'a' for indexed array because the AssocArray with ! turns into
 # it.  Disallowing it would be the other reasonable behavior.
 
 ## status: 1
@@ -382,7 +364,6 @@ stat: 1
 stat: 1
 ## END
 
-
 #### ${a[0]@a} and ${a@a}
 
 a=(1 2 3)
@@ -393,7 +374,6 @@ echo "attr = '${a@a}'"
 attr = 'a'
 attr = 'a'
 ## END
-
 
 #### ${!r@a} with r='a[0]' (attribute for indirect expansion of an array element)
 
@@ -416,10 +396,9 @@ A
 A
 ## END
 
-
 #### Array expansion with nullary var op @Q
 declare -a a=({1..9})
-declare -A A=(['a']=hello ['b']=world ['c']=osh ['d']=ysh)
+declare -A A=(['a']=hello ['b']=world ['c']=third ['d']=fourth)
 
 argv.sh "${a[@]@Q}"
 argv.sh "${a[*]@Q}"
@@ -431,8 +410,8 @@ argv.sh "${u[*]@Q}"
 ## STDOUT:
 ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 ['1 2 3 4 5 6 7 8 9']
-['hello', 'world', 'osh', 'ysh']
-['hello world osh ysh']
+['hello', 'world', 'third', 'fourth']
+['hello world third fourth']
 []
 ['']
 ## END
@@ -440,16 +419,15 @@ argv.sh "${u[*]@Q}"
 ## OK bash STDOUT:
 ["'1'", "'2'", "'3'", "'4'", "'5'", "'6'", "'7'", "'8'", "'9'"]
 ["'1' '2' '3' '4' '5' '6' '7' '8' '9'"]
-["'ysh'", "'osh'", "'world'", "'hello'"]
-["'ysh' 'osh' 'world' 'hello'"]
+["'fourth'", "'third'", "'world'", "'hello'"]
+["'fourth' 'third' 'world' 'hello'"]
 []
 ['']
 ## END
 
-
 #### Array expansion with nullary var op @P
 declare -a a=({1..9})
-declare -A A=(['a']=hello ['b']=world ['c']=osh ['d']=ysh)
+declare -A A=(['a']=hello ['b']=world ['c']=third ['d']=fourth)
 
 argv.sh "${a[@]@P}"
 argv.sh "${a[*]@P}"
@@ -461,8 +439,8 @@ argv.sh "${u[*]@P}"
 ## STDOUT:
 ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 ['1 2 3 4 5 6 7 8 9']
-['hello', 'world', 'osh', 'ysh']
-['hello world osh ysh']
+['hello', 'world', 'third', 'fourth']
+['hello world third fourth']
 []
 ['']
 ## END
@@ -470,16 +448,15 @@ argv.sh "${u[*]@P}"
 ## OK bash STDOUT:
 ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 ['1 2 3 4 5 6 7 8 9']
-['ysh', 'osh', 'world', 'hello']
-['ysh osh world hello']
+['fourth', 'third', 'world', 'hello']
+['fourth third world hello']
 []
 ['']
 ## END
 
-
 #### Array expansion with nullary var op @a
 declare -a a=({1..9})
-declare -A A=(['a']=hello ['b']=world ['c']=osh ['d']=ysh)
+declare -A A=(['a']=hello ['b']=world ['c']=third ['d']=fourth)
 
 argv.sh "${a[@]@a}"
 argv.sh "${a[*]@a}"

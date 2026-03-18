@@ -1,4 +1,4 @@
-## compare_shells: bash dash mksh zsh
+## compare_shells: bash
 
 #### ~ expansion in assignment
 HOME=/home/bob
@@ -7,13 +7,11 @@ echo $a
 ## stdout: /home/bob/src
 
 #### ~ expansion in readonly assignment
-# dash fails here!
 # http://stackoverflow.com/questions/8441473/tilde-expansion-doesnt-work-when-i-logged-into-gui
 HOME=/home/bob
 readonly const=~/src
 echo $const
 ## stdout: /home/bob/src
-## BUG dash stdout: ~/src
 
 #### No ~ expansion in dynamic assignment
 HOME=/home/bob
@@ -23,13 +21,11 @@ echo $const
 ## stdout: ~/src
 
 #### No tilde expansion in word that looks like assignment but isn't
-# bash and mksh mistakenly expand here!
 # bash fixes this in POSIX mode (gah).
 # http://lists.gnu.org/archive/html/bug-bash/2016-06/msg00001.html
 HOME=/home/bob
 echo x=~
 ## stdout: x=~
-## BUG bash/mksh stdout: x=/home/bob
 
 #### tilde expansion of word after redirect
 HOME=$TMP
@@ -41,9 +37,6 @@ cat $HOME/tilde1.txt | wc -c
 #### other user
 echo ~nonexistent
 ## stdout: ~nonexistent
-# zsh doesn't like nonexistent
-## OK zsh stdout-json: ""
-## OK zsh status: 1
 
 #### ${undef:-~}
 HOME=/home/bar
@@ -74,8 +67,6 @@ echo ${x//~/~root}
 /root
 [/root]
 ## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### x=foo:~ has tilde expansion
 HOME=/home/bar
@@ -103,7 +94,6 @@ foo:~
 ## END
 
 #### a[x]=foo:~ has tilde expansion
-case $SH in dash|zsh) exit ;; esac
 
 HOME=/home/bar
 declare -a a
@@ -118,7 +108,6 @@ echo ${A['x']}
 foo:/home/bar
 foo:/home/bar
 ## END
-## N-I dash/zsh stdout-json: ""
 
 #### tilde expansion an assignment keyword
 HOME=/home/bar
@@ -130,9 +119,6 @@ f
 ## STDOUT:
 foo:/home/bar
 ## END
-## BUG dash STDOUT:
-foo:~
-## END
 
 #### x=${undef-~:~}
 HOME=/home/bar
@@ -140,14 +126,8 @@ HOME=/home/bar
 x=~:${undef-~:~}
 echo $x
 
-# Most shells agree on a different behavior, but with the OSH parsing model,
-# it's easier to agree with yash.  bash disagrees in a different way
-
 ## STDOUT:
 /home/bar:/home/bar:/home/bar
-## END
-## OK osh/yash STDOUT:
-/home/bar:~:~
 ## END
 
 #### strict tilde
@@ -160,13 +140,6 @@ echo status=$?
 ## STDOUT:
 ~nonexistent
 ## END
-## N-I bash/dash/mksh status: 0
-## N-I bash/dash/mksh STDOUT:
-~nonexistent
-~nonexistent
-status=0
-## END
-## OK zsh stdout-json: ""
 
 #### temp assignment x=~ env
 

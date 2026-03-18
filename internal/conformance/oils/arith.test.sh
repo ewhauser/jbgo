@@ -1,5 +1,4 @@
-## compare_shells: bash dash mksh zsh
-
+## compare_shells: bash
 
 # Interesting interpretation of constants.
 #
@@ -18,9 +17,6 @@
 a=(4 5 6)
 echo "${a[b=2]} b=$b"
 ## stdout: 6 b=2
-## OK zsh stdout: 5 b=2
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### Add one to var
 i=1
@@ -55,8 +51,6 @@ echo $((1 + $(echo 1)${undefined:-3}))
 # WORD level expression.
 echo $(('1' + 2))
 ## status: 0
-## N-I bash/zsh status: 1
-## N-I dash status: 2
 
 #### Arith sub within arith sub
 # This is unnecessary but works in all shells.
@@ -69,13 +63,8 @@ echo $((`echo 1` + 2))
 ## stdout: 3
 
 #### Invalid string to int
-# bash, mksh, and zsh all treat strings that don't look like numbers as zero.
 s=foo
 echo $((s+5))
-## OK dash stdout-json: ""
-## OK dash status: 2
-## OK bash/mksh/zsh/osh stdout: 5
-## OK bash/mksh/zsh/osh status: 0
 
 #### Invalid string to int with strict_arith
 s=foo
@@ -86,13 +75,6 @@ echo 'should not get here'
 ## STDOUT:
 foo
 ## END
-## OK dash status: 2
-## N-I bash/mksh/zsh STDOUT:
-foo
-5
-should not get here
-## END
-## N-I bash/mksh/zsh status: 0
 
 #### Integer constant parsing
 echo $(( 0x12A ))
@@ -105,30 +87,6 @@ echo $(( 24#ag7 ))
 10
 511
 8
-6151
-## END
-
-## N-I dash status: 2
-## N-I dash STDOUT:
-298
-10
-511
-8
-## END
-
-## BUG zsh STDOUT:
-298
-10
-777
-10
-6151
-## END
-
-## BUG mksh STDOUT:
-298
-10
-777
-10
 6151
 ## END
 
@@ -147,31 +105,6 @@ status=1
 status=1
 status=1
 status=1
-## END
-
-## OK dash STDOUT:
-status=2
-status=2
-status=2
-status=2
-## END
-
-## BUG zsh STDOUT:
-status=1
-9
-status=0
-status=1
-6
-status=0
-## END
-
-## BUG mksh STDOUT:
-status=1
-9
-status=0
-status=1
-6
-status=0
 ## END
 
 #### Newline in the middle of expression
@@ -193,11 +126,6 @@ echo $a
 5
 5
 ## END
-## N-I dash status: 0
-## N-I dash STDOUT:
-4
-4
-## END
 
 #### Postincrement
 a=4
@@ -207,15 +135,12 @@ echo $a
 4
 5
 ## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Increment undefined variables
 (( undef1++ ))
 (( ++undef2 ))
 echo "[$undef1][$undef2]"
 ## stdout: [1][1]
-## N-I dash stdout: [][]
 
 #### Increment and decrement array elements
 a=(5 6 7 8)
@@ -223,9 +148,6 @@ a=(5 6 7 8)
 (( undef[0]++, ++undef[1], undef[2]--, --undef[3] ))
 echo "${a[@]}" - "${undef[@]}"
 ## stdout: 6 7 6 7 - 1 1 -1 -1
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-## BUG zsh stdout: 5 6 7 8 -
 
 #### Increment undefined variables with nounset
 set -o nounset
@@ -234,19 +156,12 @@ set -o nounset
 echo "[$undef1][$undef2]"
 ## stdout-json: ""
 ## status: 1
-## OK dash status: 2
-## BUG mksh/zsh status: 0
-## BUG mksh/zsh STDOUT:
-[1][1]
-## END
 
 #### Comma operator (borrowed from C)
 a=1
 b=2
 echo $((a,(b+1)))
 ## stdout: 3
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Augmented assignment
 a=4
@@ -299,12 +214,6 @@ echo $x
 33
 55
 ## END
-## N-I dash STDOUT:
-11
-11
-11
-11
-## END
 
 #### Bitwise ops
 echo $((1|2))
@@ -329,56 +238,37 @@ echo $((- a + + b))
 #### No floating point
 echo $((1 + 2.3))
 ## status: 2
-## OK bash/mksh status: 1
-## BUG zsh status: 0
 
 #### Array indexing in arith
-# zsh does 1-based indexing!
 array=(1 2 3 4)
 echo $((array[1] + array[2]*3))
 ## stdout: 11
-## OK zsh stdout: 7
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Constants in base 36
 echo $((36#a))-$((36#z))
 ## stdout: 10-35
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### Constants in bases 2 to 64
-# This is a truly bizarre syntax.  Oh it comes from zsh... which allows 36.
 echo $((64#a))-$((64#z)), $((64#A))-$((64#Z)), $((64#@)), $(( 64#_ ))
 ## stdout: 10-35, 36-61, 62, 63
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-## N-I mksh/zsh stdout-json: ""
-## N-I mksh/zsh status: 1
 
 #### Multiple digit constants with base N
 echo $((10#0123)), $((16#1b))
 ## stdout: 123, 27
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### Dynamic base constants
 base=16
 echo $(( ${base}#a ))
 ## stdout: 10
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### Octal constant
 echo $(( 011 ))
 ## stdout: 9
-## N-I mksh/zsh stdout: 11
 
 #### Dynamic octal constant
 zero=0
 echo $(( ${zero}11 ))
 ## stdout: 9
-## N-I mksh/zsh stdout: 11
 
 #### Dynamic hex constants
 zero=0
@@ -402,8 +292,6 @@ spam=bar
 eggs=spam
 echo $((foo+1)) $((bar+1)) $((spam+1)) $((eggs+1))
 ## stdout: 6 6 6 6
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### nounset with arithmetic
 set -o nounset
@@ -411,8 +299,6 @@ x=$(( y + 5 ))
 echo "should not get here: x=${x:-<unset>}"
 ## stdout-json: ""
 ## status: 1
-## BUG dash/mksh/zsh stdout: should not get here: x=5
-## BUG dash/mksh/zsh status: 0
 
 #### 64-bit integer doesn't overflow
 
@@ -438,16 +324,7 @@ echo "max positive = $(( x + y ))"
 max positive = 9223372036854775807
 ## END
 
-# mksh still uses int!
-## BUG mksh STDOUT:
--2147483648
-0
--2147483648
-max positive = 2147483647
-## END
-
 #### More 64-bit ops
-case $SH in dash) exit ;; esac
 
 #shopt -s strict_arith
 
@@ -485,20 +362,6 @@ ge=0
 le=1
 le=0
 ## END
-## N-I dash STDOUT:
-## END
-## BUG mksh STDOUT:
-eq=1
-eq=0
-greater=1
-greater=1
-ge=1
-ge=0
-le=0
-le=0
-## END
-
-# mksh still uses int!
 
 #### Invalid LValue
 a=9
@@ -506,11 +369,6 @@ a=9
 echo $a
 ## status: 2
 ## stdout-json: ""
-## OK bash/mksh/zsh stdout: 9
-## OK bash/mksh/zsh status: 0
-#   dash doesn't implement assignment
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Invalid LValue that looks like array
 (( 1[2] = 3 ))
@@ -521,12 +379,6 @@ echo "status=$?"
 ## OK bash stdout: status=1
 ## OK bash status: 0
 
-## OK mksh/zsh stdout: status=2
-## OK mksh/zsh status: 0
-
-## N-I dash stdout: status=127
-## N-I dash status: 0
-
 #### Invalid LValue: two sets of brackets
 (( a[1][2] = 3 ))
 echo "status=$?"
@@ -534,11 +386,6 @@ echo "status=$?"
 ## status: 2
 ## stdout-json: ""
 ## OK bash stdout: status=1
-## OK mksh/zsh stdout: status=2
-## OK bash/mksh/zsh status: 0
-#   dash doesn't implement assignment
-## N-I dash stdout: status=127
-## N-I dash status: 0
 
 #### Operator Precedence
 echo $(( 1 + 2*3 - 8/2 ))
@@ -553,30 +400,18 @@ echo $(( 3 ** 2 ))
 3
 9
 ## END
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-## N-I mksh stdout-json: ""
-## N-I mksh status: 1
 
 #### Exponentiation operator has buggy precedence
 # NOTE: All shells agree on this, but R and Python give -9, which is more
 # mathematically correct.
 echo $(( -3 ** 2 ))
 ## stdout: 9
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-## N-I mksh stdout-json: ""
-## N-I mksh status: 1
 
 #### Negative exponent
 # bash explicitly disallows negative exponents!
 echo $(( 2**-1 * 5 ))
 ## stdout-json: ""
 ## status: 1
-## OK zsh stdout: 2.5
-## OK zsh status: 0
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### Comment not allowed in the middle of multiline arithmetic
 echo $((
@@ -594,7 +429,6 @@ echo [$a]
 ## STDOUT:
 6
 ## END
-## OK dash/osh status: 2
 ## OK bash STDOUT:
 6
 []
@@ -608,10 +442,6 @@ echo $((array + 5))
 ## STDOUT:
 6
 ## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-## N-I mksh/zsh status: 1
-## N-I mksh/zsh stdout-json: ""
 
 #### Add integer to associative array (a[0] decay)
 typeset -A assoc
@@ -619,22 +449,14 @@ assoc[0]=42
 echo $((assoc + 5))
 ## status: 0
 ## stdout: 47
-## BUG dash status: 0
-## BUG dash stdout: 5
 
 #### Double subscript
 a=(1 2 3)
 echo $(( a[1] ))
 echo $(( a[1][1] ))
 ## status: 1
-## OK osh status: 2
 ## STDOUT:
 2
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-## OK zsh STDOUT:
-1
 ## END
 
 #### result of ArithSub -- array[0] decay
@@ -647,12 +469,6 @@ echo $b
 ## STDOUT:
 declared
 4
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-## N-I zsh status: 1
-## N-I zsh STDOUT:
-declared
 ## END
 
 #### result of ArithSub -- assoc[0] decay
@@ -667,17 +483,9 @@ declared
 0
 ## END
 
-## N-I mksh status: 1
-## N-I mksh stdout-json: ""
-
-
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-
 #### comma operator
 a=(4 5 6)
 
-# zsh and osh can't evaluate the array like that
 # which is consistent with their behavior on $(( a ))
 
 echo $(( a, last = a[2], 42 ))
@@ -688,11 +496,6 @@ echo last=$last
 42
 last=6
 ## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-## N-I zsh status: 1
-## N-I zsh stdout-json: ""
-
 
 #### assignment with dynamic var name
 foo=bar
@@ -711,12 +514,6 @@ echo 'xbar[5]='${xbar[5]}
 42
 xbar[5]=42
 ## END
-## BUG zsh STDOUT:
-42
-xbar[5]=
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### unary assignment with dynamic var name
 foo=bar
@@ -727,8 +524,6 @@ echo xbar=$xbar
 42
 xbar=43
 ## END
-## BUG dash status: 2
-## BUG dash stdout-json: ""
 
 #### unary array assignment with dynamic var name
 foo=bar
@@ -739,12 +534,6 @@ echo 'xbar[5]='${xbar[5]}
 42
 xbar[5]=43
 ## END
-## BUG zsh STDOUT:
-0
-xbar[5]=42
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Dynamic parsing of arithmetic
 e=1+2
@@ -757,13 +546,6 @@ echo status=$?
 true
 status=2
 ## END
-## BUG mksh STDOUT:
-6
-true
-status=0
-## END
-## N-I dash status: 2
-## N-I dash stdout-json: ""
 
 #### Dynamic parsing on empty string
 a=''
@@ -793,8 +575,6 @@ echo a=$a
 1
 a=1
 ## END
-## BUG zsh stdout-json: ""
-## BUG zsh status: 1
 
 #### Invalid constant
 
@@ -813,12 +593,6 @@ echo status=$?
 0
 status=0
 status=1
-## END
-## OK dash status: 2
-## OK dash STDOUT:
-0
-status=0
-status=2
 ## END
 ## BUG bash status: 0
 ## BUG bash STDOUT:
@@ -883,7 +657,7 @@ echo $((-10 % -3))
 
 echo $(( 5 << 1 ))
 echo $(( 5 << 0 ))
-$SH -c 'echo $(( 5 << -1 ))'  # implementation defined - OSH fails
+$SH -c 'echo $(( 5 << -1 ))'
 echo ---
 
 echo $(( 16 >> 1 ))
@@ -901,32 +675,7 @@ echo ---
 ---
 ## END
 
-## OK bash/dash/zsh STDOUT:
-10
-5
--9223372036854775808
----
-8
-16
-0
-0
----
-## END
-
-## BUG mksh STDOUT:
-10
-5
--2147483648
----
-8
-16
-0
-0
----
-## END
-
 #### undef[0]
-case $SH in dash) exit ;; esac
 
 echo ARITH $(( undef[0] ))
 echo status=$?
@@ -948,11 +697,8 @@ status=1
 UNDEF
 status=0
 ## END
-## N-I dash STDOUT:
-## END
 
 #### undef[0] with nounset
-case $SH in dash) exit ;; esac
 
 set -o nounset
 echo UNSET $(( undef[0] ))
@@ -962,19 +708,7 @@ echo status=$?
 ## STDOUT:
 ## END
 
-## N-I dash status: 0
-
-## BUG mksh/zsh status: 0
-## BUG mksh/zsh STDOUT:
-UNSET 0
-status=0
-## END
-
-## N-I dash STDOUT:
-## END
-
 #### s[0] with string abc
-case $SH in dash) exit ;; esac
 
 s='abc'
 echo abc $(( s[0] )) $(( s[1] ))
@@ -992,11 +726,8 @@ status=0
 status=1
 
 ## END
-## N-I dash STDOUT:
-## END
 
 #### s[0] with string 42 
-case $SH in dash) exit ;; esac
 
 s='42'
 echo 42 $(( s[0] )) $(( s[1] ))
@@ -1004,13 +735,6 @@ echo status=$?
 
 ## STDOUT:
 42 42 0
-status=0
-## END
-## N-I dash STDOUT:
-## END
-
-## BUG zsh STDOUT:
-42 0 4
 status=0
 ## END
 
@@ -1022,14 +746,6 @@ echo status=$?
 
 ## status: 1
 ## STDOUT:
-## END
-
-## OK dash status: 2
-
-## BUG zsh status: 0
-## BUG zsh STDOUT:
-12 34 0 1
-status=0
 ## END
 
 # bash prints an error, but doesn't fail

@@ -1,5 +1,4 @@
-## compare_shells: bash dash mksh zsh
-
+## compare_shells: bash
 
 # Alias is in POSIX.
 #
@@ -17,11 +16,6 @@ foo x
 ## status: 127
 ## STDOUT:
 status=0
-x
-## END
-# dash doesn't accept --
-## BUG dash STDOUT:
-status=1
 x
 ## END
 
@@ -79,10 +73,6 @@ echo status=$?
 ## STDOUT:
 status=1
 ## END
-## OK mksh STDOUT:
-nonexistentZ alias not found
-status=1
-## END
 
 #### unalias not defined
 alias e=echo ll='ls -l'
@@ -118,32 +108,14 @@ alias e ll
 alias e='echo'
 alias ll='ls -l'
 ## END
-## OK mksh/zsh STDOUT:
-e=echo
-ll='ls -l'
-## END
-## OK dash STDOUT:
-e='echo'
-ll='ls -l'
-## END
 
 #### alias without args lists all aliases
 alias ex=exit ll='ls -l'
-alias | grep -E 'ex=|ll='  # need to grep because mksh/zsh have builtin aliases
+alias | grep -E 'ex=|ll='
 echo status=$?
 ## STDOUT:
 alias ex='exit'
 alias ll='ls -l'
-status=0
-## END
-## OK dash STDOUT:
-ex='exit'
-ll='ls -l'
-status=0
-## END
-## OK mksh/zsh STDOUT:
-ex=exit
-ll='ls -l'
 status=0
 ## END
 
@@ -152,8 +124,6 @@ unalias
 if test "$?" != 0; then echo usage-error; fi
 ## STDOUT:
 usage-error
-## END
-## BUG mksh/dash STDOUT: 
 ## END
 
 #### alias with trailing space causes alias expansion on second word
@@ -260,7 +230,6 @@ shopt -s expand_aliases  # bash requires this
 alias e_=';; oops'
 e_ x
 ## status: 2
-## OK mksh/zsh status: 1
 
 #### Loop split across alias and arg works
 shopt -s expand_aliases  # bash requires this
@@ -281,8 +250,6 @@ e_ $i; done
 2
 3
 ## END
-## OK osh stdout-json: ""
-## OK osh status: 2
 
 #### Loop split across both iterative and recursive aliases
 shopt -s expand_aliases  # bash requires this
@@ -299,9 +266,6 @@ FOR2 eye2 IN onetwo 3; do echo $i; done
 2
 3
 ## END
-## OK osh stdout-json: ""
-## OK osh status: 2
-## BUG zsh stdout-json: ""
 
 #### Alias with a quote in the middle is a syntax error
 shopt -s expand_aliases
@@ -309,7 +273,6 @@ alias e_='echo "'
 var=x
 e_ '${var}"'
 ## status: 2
-## OK mksh/zsh status: 1
 
 #### Alias with internal newlines
 shopt -s expand_aliases
@@ -338,12 +301,6 @@ e_ ${var}
 3
 foo
 ## END
-## OK zsh STDOUT:
-1
-2
-3
-## END
-## OK zsh status: 127
 
 #### Two aliases in pipeline
 shopt -s expand_aliases
@@ -375,9 +332,6 @@ sayhi inside"
 sayhi outside
 ## STDOUT:
 hello inside
-hello outside
-## END
-## BUG zsh STDOUT:
 hello outside
 ## END
 
@@ -424,8 +378,6 @@ LEFT echo one; echo two; }
 one
 two
 ## END
-## OK osh stdout-json: ""
-## OK osh status: 2
 
 #### alias for left paren
 shopt -s expand_aliases
@@ -435,8 +387,6 @@ LEFT echo one; echo two )
 one
 two
 ## END
-## OK osh stdout-json: ""
-## OK osh status: 2
 
 #### alias used in subshell and command sub
 # This spec seems to be contradictoary?
@@ -486,10 +436,6 @@ argv.sh "${a[@]}"
 ## STDOUT:
 ['ZERO', 'ONE']
 ## END
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-## N-I zsh stdout-json: ""
-## N-I zsh status: 1
 
 #### Alias that is pipeline
 shopt -s expand_aliases
@@ -526,12 +472,6 @@ a $((1 + 2))
 ## stdout: ['3']
 
 #### Alias and PS4
-# dash enters an infinite loop!
-case $SH in
-  dash)
-    exit 1
-    ;;
-esac
 
 set -x
 PS4='+$(echo trace) '
@@ -539,15 +479,12 @@ shopt -s expand_aliases
 alias a=argv.sh
 a foo bar
 ## stdout: ['foo', 'bar']
-## BUG dash status: 1
-## BUG dash stdout-json: ""
 
 #### alias with keywords
 # from issue #299
 shopt -s expand_aliases
 alias a=
 
-# both of these fail to parse in OSH
 # this is because of our cleaner evaluation model
 
 a (( var = 0 ))
@@ -555,9 +492,6 @@ a (( var = 0 ))
 
 echo done
 ## stdout: done
-## OK osh status: 2
-## OK osh stdout-json: ""
-
 
 #### alias with word of multiple lines
 shopt -s expand_aliases

@@ -1,4 +1,4 @@
-## compare_shells: dash bash mksh
+## compare_shells: bash
 
 # Tests that explore parsing corner cases.
 
@@ -25,8 +25,6 @@ $'echo\rTEST': command not found
 
 #### readonly +
 
-# dash and bash validate this!  But not set +
-
 readonly + >/dev/null
 echo status=$?
 ## STDOUT:
@@ -35,8 +33,6 @@ status=0
 ## OK bash STDOUT:
 status=1
 ## END
-## OK dash status: 2
-## OK dash stdout-json: ""
 
 #### set +
 set + >/dev/null

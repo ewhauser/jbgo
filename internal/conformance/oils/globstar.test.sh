@@ -1,8 +1,7 @@
 ## oils_failures_allowed: 4
-## compare_shells: bash zsh
+## compare_shells: bash
 
 #### globstar is off -> ** is treated like *
-case $SH in zsh) exit ;; esac
 
 shopt -u globstar
 
@@ -12,8 +11,6 @@ touch {leaf.md,c/leaf.md,c/subdir/leaf.md}
 echo **/*.* | sort
 ## STDOUT:
 c/leaf.md
-## END
-## N-I zsh STDOUT:
 ## END
 
 #### each occurrence of ** recurses through all depths
@@ -31,19 +28,6 @@ c/subdir/leaf.md
 leaf.md
 
 c/leaf.md
-c/subdir/leaf.md
-leaf.md
-## END
-
-## BUG zsh STDOUT:
-c/leaf.md
-c/subdir/leaf.md
-leaf.md
-
-c/leaf.md
-c/leaf.md
-c/subdir/leaf.md
-c/subdir/leaf.md
 c/subdir/leaf.md
 leaf.md
 ## END
@@ -79,8 +63,7 @@ directory/leaf.md
 directory/leaf.md
 ## END
 
-#### in zsh, ***/ follows symlinked directories, while **/ does not
-case $SH in bash) exit ;; esac
+exit
 
 mkdir directory-1
 mkdir directory-2

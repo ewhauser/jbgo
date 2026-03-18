@@ -1,7 +1,5 @@
 ## compare_shells: bash
 
-# mksh has completely different behavior for this syntax.  Not worth testing.
-
 # Var refs are done with ${!a}
 #
 # local/declare -n is tested in spec/named-ref.test.sh.
@@ -98,7 +96,6 @@ A_nobrackets=0
 #### ${!a[@]-'default'} is legal but fails with more than one element
 
 # bash allows this construct, but the indirection fails when the array has more
-# than one element because the variable name contains a space.  OSH originally
 # made it an error unconditionally because [@] implies it's an array, so the
 # behavior has been different from Bash when the array has a single element.
 # We now changed it to follow Bash even when the array has a single element.
@@ -124,7 +121,6 @@ status=1
 # status=0
 # status=1
 # ## END
-
 
 #### var ref to $@ with @
 set -- one two
@@ -176,7 +172,6 @@ myfunc '?'
 myfunc
 0
 ## END
-
 
 #### Var ref, then assignment with ${ := }
 z=zz
@@ -251,7 +246,6 @@ check_expand '${!x#*a}' aabcc
 check_expand '${!x%%c*}' aaab
 check_expand '${!x/a*b/d}' dcc
 
-# ^ operator not fully implemented in OSH
 #check_expand '${!x^a}' Aaabcc
 
 p=pp; pp='\$ '
@@ -334,7 +328,6 @@ declare -A assoc=([ale]=bean [corn]=dip)
 ref=assoc
 #ref_AT='assoc[@]'
 
-# UNQUOTED doesn't work with the OSH parser
 #ref_SUB='assoc[ale]'
 ref_SUB='assoc["ale"]'
 

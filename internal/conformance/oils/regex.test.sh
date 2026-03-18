@@ -1,14 +1,12 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash-4.4 zsh
+## compare_shells: bash
 
 #
-# Only bash and zsh seem to implement [[ foo =~ '' ]]
 #
 # ^(a b)$ is a regex that should match 'a b' in a group.
 #
 # Not sure what bash is doing here... I think I have to just be empirical.
 # Might need "compat" switch for parsing the regex.  It should be an opaque
-# string like zsh, not sure why it isn't.
 #
 # I think this is just papering over bugs...
 # https://www.gnu.org/software/bash/manual/bash.html#Conditional-Constructs
@@ -51,12 +49,6 @@ status=0
 status=1
 []
 ## END
-## N-I zsh STDOUT:
-status=0
-['']
-status=1
-['']
-## END
 
 #### Match is unanchored at both ends
 [[ 'bar' =~ a ]] && echo true
@@ -76,16 +68,12 @@ status=1
 [[ 'a b' =~ '^(a b)$' ]] && echo true
 ## stdout-json: ""
 ## status: 1
-## OK zsh stdout: true
-## OK zsh status: 0
 
 #### Regex quoted with double quotes
 # bash doesn't like the quotes
 [[ 'a b' =~ "^(a b)$" ]] && echo true
 ## stdout-json: ""
 ## status: 1
-## OK zsh stdout: true
-## OK zsh status: 0
 
 #### Fix single quotes by storing in variable
 pat='^(a b)$'
@@ -102,8 +90,6 @@ pat="^(a b)$"
 [[ 'a b' =~ "$pat" ]] && echo true
 ## stdout-json: ""
 ## status: 1
-## OK zsh stdout: true
-## OK zsh status: 0
 
 #### Mixing quoted and unquoted parts
 [[ 'a b' =~ 'a 'b ]] && echo true
@@ -117,7 +103,6 @@ true
 # They both give a syntax error.  This is lame.
 [[ '^(a b)$' == ^(a\ b)$ ]] && echo true
 ## status: 2
-## OK zsh status: 1
 
 #### Omitting ( )
 [[ '^a b$' == ^a\ b$ ]] && echo true
@@ -129,18 +114,14 @@ true
 [[ 'a b' =~ ^)a\ b($ ]] && echo true
 ## stdout-json: ""
 ## status: 2
-## OK zsh status: 1
 
 #### Regex with |
 [[ 'bar' =~ foo|bar ]] && echo true
 ## stdout: true
-## N-I zsh stdout-json: ""
-## N-I zsh status: 1
 
 #### Regex to match literal brackets []
 
 # bash-completion relies on this, so we're making it match bash.
-# zsh understandably differs.
 [[ '[]' =~ \[\] ]] && echo true
 
 # Another way to write this.
@@ -148,9 +129,6 @@ pat='\[\]'
 [[ '[]' =~ $pat ]] && echo true
 ## STDOUT:
 true
-true
-## END
-## OK zsh STDOUT:
 true
 ## END
 
@@ -176,13 +154,6 @@ true
 false
 true
 ## END
-## BUG zsh STDOUT:
-true
-false
-false
-false
-## END
-## BUG zsh status: 1
 
 #### Unquoted { is a regex parse error
 [[ { =~ { ]] && echo true
@@ -193,14 +164,8 @@ echo status=$?
 status=2
 ## END
 ## BUG bash status: 0
-## BUG zsh STDOUT:
-status=1
-## END
-## BUG zsh status: 0
 
 #### Fatal error inside [[ =~ ]]
-
-# zsh and osh are stricter than bash.  bash treats [[ like a command.
 
 [[ a =~ $(( 1 / 0 )) ]]
 echo status=$?
@@ -255,20 +220,6 @@ b 0
 z 0
 status=0
 ## END
-## N-I zsh STDOUT:
-yes ^
-yes $
-yes )
-yes |
----
-yes .
----
-a 0
-- 1
-b 0
-z 0
-status=0
-## END
 
 #### Escaped {
 # from bash-completion
@@ -276,8 +227,6 @@ status=0
 ## STDOUT:
 ['$PA', '$', 'PA']
 ## END
-## BUG zsh stdout-json: ""
-## BUG zsh status: 1
 
 #### Escaped { stored in variable first
 # from bash-completion
@@ -285,9 +234,6 @@ pat='^(\$\{?)([A-Za-z0-9_]*)$'
 [[ '$PA' =~ $pat ]] && argv.sh "${BASH_REMATCH[@]}"
 ## STDOUT:
 ['$PA', '$', 'PA']
-## END
-## BUG zsh STDOUT:
-['']
 ## END
 
 #### regex with ?
@@ -334,10 +280,6 @@ echo status=$?
 ## STDOUT:
 status=0
 status=1
-## END
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-status=0
 ## END
 
 #### Bug: Nix idiom with closing ) next to pattern
@@ -410,14 +352,6 @@ fi
 ['zz', 'z', 'z', '']
 ## END
 
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-['']
-['']
-['']
-['']
-## END
-
 #### unquoted [a  b] as pattern, [a  b|c]
 
 $SH <<'EOF'
@@ -443,14 +377,6 @@ yes
 [a b]=0
 ## END
 
-## OK zsh STDOUT:
-yes
-[ab]=0
-[a b]=1
-yes
-[a b]=0
-## END
-
 #### c|a unquoted
 
 if [[ a =~ c|a ]]; then
@@ -460,7 +386,6 @@ fi
 ## STDOUT:
 one
 ## END
-## N-I zsh status: 1
 
 #### Operator chars ; & but not |
 
@@ -500,7 +425,6 @@ $SH <<'EOF'
 EOF
 echo angle=$?
 
-# Bug: OSH allowed this!
 $SH <<'EOF'
 [[ $'a\nb' =~ a
 b ]] && echo newline
@@ -521,19 +445,6 @@ pipe=0
 angle=2
 newline=2
 ## END
-
-## BUG zsh STDOUT:
-semi=1
-semi paren=1
-
-amp=1
-pipe=1
-pipe=1
-angle=1
-newline=1
-## END
-
-
 
 #### Quotes '' "" $'' $"" in pattern
 
@@ -568,7 +479,6 @@ dollar-dq
 dollar-dq=0
 ## END
 
-
 #### Unicode in pattern
 
 $SH <<'EOF'
@@ -591,11 +501,6 @@ fi
 ## STDOUT:
 ## END
 
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-one
-## END
-
 #### make a lisp example
 
 str='(hi)'
@@ -610,14 +515,7 @@ status=0
 m=(
 ## END
 
-## BUG zsh STDOUT:
-status=1
-m=
-## END
-
 #### Operators and space lose meaning inside ()
 [[ '< >' =~ (< >) ]] && echo true
 ## stdout: true
-## N-I zsh stdout-json: ""
-## N-I zsh status: 1
 

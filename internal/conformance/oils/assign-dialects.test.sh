@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 3
-## compare_shells: bash mksh
+## compare_shells: bash
 
 # TODO: compare with AT&T ksh - it has this feature
 
@@ -30,10 +30,6 @@ echo str=$?
 ## STDOUT:
 str=1
 str=0
-## END
-## BUG mksh STDOUT:
-str=2
-str=2
 ## END
 
 #### test -v with arrays
@@ -71,18 +67,6 @@ a[0]=0
 
 a[1]=1
 a[x]=0
-
-## END
-
-## BUG mksh STDOUT:
-a=2
-a[0]=2
-
-a=2
-a[0]=2
-
-a[1]=2
-a[x]=2
 
 ## END
 
@@ -136,14 +120,3 @@ A[x]=1
 
 ## END
 
-## BUG mksh STDOUT:
-A=2
-A[0]=2
-
-A=2
-A[0]=2
-
-A[1]=2
-A[x]=2
-
-## END

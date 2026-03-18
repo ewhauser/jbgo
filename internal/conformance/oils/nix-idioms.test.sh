@@ -58,7 +58,6 @@ show() {
   echo show
 
   # bash gives an error here - !hookSlice unbound, even though preHooks exists
-  # OSH currently does the "logical" thing
 
   # NOT testing this -- I think this is WHAT NIX WORKS AROUND WITH
   #argv.sh ${!hooksSlice}
@@ -148,9 +147,6 @@ declare -p NIX_LDFLAGS_foo  # inspect it
 declare -x NIX_LDFLAGS_foo=" -Lone/lib64"
 declare -x NIX_LDFLAGS_foo=" -Lone/lib64"
 ## END
-## OK osh STDOUT:
-declare -x NIX_LDFLAGS_foo=' -Lone/lib64'
-## END
 
 #### let idiom can be written in POSIX shell - eval ": \$(( ))"
 
@@ -167,7 +163,6 @@ for i in 0 1 2; do
   if test -n "$BASH_VERSION"; then
     let "${outputVar} |= ${!inputVar:-0}" "1"
   else
-    # OSH alternative
     eval ": \$(( ${outputVar} |= ${!inputVar:-0} ))"
   fi
 
@@ -176,7 +171,6 @@ for i in 0 1 2; do
   echo
 
 done
-
 
 ## STDOUT:
 i=0

@@ -1,8 +1,7 @@
 # For testing the Python sketch
 
-
 ## tags: dev-minimal
-## compare_shells: bash dash mksh
+## compare_shells: bash
 
 #### builtin
 echo hi

@@ -1,4 +1,4 @@
-## compare_shells: bash mksh
+## compare_shells: bash
 ## oils_cpp_failures_allowed: 2
 
 #### test length
@@ -17,7 +17,6 @@ len=4
 len=5
 ## END
 
-
 #### test "declare -p sp"
 a0=()
 a1=(1)
@@ -26,11 +25,8 @@ a=(x y z w)
 a[500]=100
 a[1000]=100
 
-case $SH in
-bash|mksh)
   typeset -p a0 a1 a2 a
-  exit ;;
-esac
+  exit
 
 declare -p a0 a1 a2 a
 
@@ -48,21 +44,6 @@ declare -a a2=([0]="1" [1]="2")
 declare -a a=([0]="x" [1]="y" [2]="z" [3]="w" [500]="100" [1000]="100")
 ## END
 
-## OK mksh STDOUT:
-set -A a1
-typeset a1[0]=1
-set -A a2
-typeset a2[0]=1
-typeset a2[1]=2
-set -A a
-typeset a[0]=x
-typeset a[1]=y
-typeset a[2]=z
-typeset a[3]=w
-typeset a[500]=100
-typeset a[1000]=100
-## END
-
 #### +=
 sp1[10]=a
 sp1[20]=b
@@ -75,22 +56,6 @@ typeset -p sp1 | sed 's/"//g'
 declare -a sp1=([10]=a [20]=b [99]=c)
 declare -a sp1=([10]=a [20]=b [99]=c [100]=1 [101]=2 [102]=3)
 ## END
-
-
-## OK mksh STDOUT:
-set -A sp1
-typeset sp1[10]=a
-typeset sp1[20]=b
-typeset sp1[99]=c
-set -A sp1
-typeset sp1[10]=a
-typeset sp1[20]=b
-typeset sp1[99]=c
-typeset sp1[100]=1
-typeset sp1[101]=2
-typeset sp1[102]=3
-## END
-
 
 #### a[i]=v
 sp1[10]=a
@@ -107,22 +72,7 @@ declare -a sp1=([10]=a [20]=b [30]=c)
 declare -a sp1=([10]=X [20]=b [25]=Y [30]=c [90]=Z)
 ## END
 
-## OK mksh STDOUT:
-set -A sp1
-typeset sp1[10]=a
-typeset sp1[20]=b
-typeset sp1[30]=c
-set -A sp1
-typeset sp1[10]=X
-typeset sp1[20]=b
-typeset sp1[25]=Y
-typeset sp1[30]=c
-typeset sp1[90]=Z
-## END
-
-
 #### Negative index with a[i]=v
-case $SH in mksh) exit ;; esac
 
 sp1[9]=x
 typeset -p sp1 | sed 's/"//g'
@@ -138,12 +88,7 @@ declare -a sp1=([9]=x)
 declare -a sp1=([0]=D [2]=C [6]=B [9]=A)
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### a[i]=v with BigInt
-case $SH in mksh) exit ;; esac
 
 sp1[1]=x
 sp1[5]=y
@@ -164,12 +109,7 @@ echo "${#sp1[@]}"
 6
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### Negative out-of-bound index with a[i]=v (1/2)
-case $SH in mksh) exit ;; esac
 
 sp1[9]=x
 sp1[-11]=E
@@ -192,13 +132,7 @@ declare -a sp1=([9]="x")
 bash: line 4: sp1[-11]: bad array subscript
 ## END
 
-## N-I mksh status: 0
-## N-I mksh stdout-json: ""
-## N-I mksh stderr-json: ""
-
-
 #### Negative out-of-bound index with a[i]=v (2/2)
-case $SH in mksh) exit ;; esac
 
 sp1[9]=x
 
@@ -222,13 +156,7 @@ declare -a sp1=([9]="x")
 bash: line 5: sp1[-21]: bad array subscript
 ## END
 
-## N-I mksh status: 0
-## N-I mksh stdout-json: ""
-## N-I mksh stderr-json: ""
-
-
 #### xtrace a+=()
-#case $SH in mksh) exit ;; esac
 
 sp1=(1)
 set -x
@@ -237,11 +165,6 @@ sp1+=(2)
 ## STDERR:
 + sp1+=(2)
 ## END
-
-## OK mksh STDERR:
-+ set -A sp1+ -- 2
-## END
-
 
 #### unset -v a[i]
 a=(1 2 3 4 5 6 7 8 9)
@@ -267,48 +190,7 @@ declare -a a=([0]="1" [2]="3" [3]="4" [4]="5" [5]="6" [6]="7" [7]="8" [8]="9")
 declare -a a=([2]="3" [3]="4" [4]="5" [5]="6" [6]="7" [7]="8" [8]="9")
 ## END
 
-## OK mksh STDOUT:
-set -A a
-typeset a[0]=1
-typeset a[1]=2
-typeset a[2]=3
-typeset a[3]=4
-typeset a[4]=5
-typeset a[5]=6
-typeset a[6]=7
-typeset a[7]=8
-typeset a[8]=9
-set -A a
-typeset a[0]=1
-typeset a[2]=3
-typeset a[3]=4
-typeset a[4]=5
-typeset a[5]=6
-typeset a[6]=7
-typeset a[7]=8
-typeset a[8]=9
-set -A a
-typeset a[0]=1
-typeset a[2]=3
-typeset a[3]=4
-typeset a[4]=5
-typeset a[5]=6
-typeset a[6]=7
-typeset a[7]=8
-typeset a[8]=9
-set -A a
-typeset a[2]=3
-typeset a[3]=4
-typeset a[4]=5
-typeset a[5]=6
-typeset a[6]=7
-typeset a[7]=8
-typeset a[8]=9
-## END
-
-
 #### unset -v a[i] with out-of-bound negative index
-case $SH in mksh) exit ;; esac
 
 a=(1)
 
@@ -332,13 +214,7 @@ bash: line 5: unset: [-2]: bad array subscript
 bash: line 6: unset: [-3]: bad array subscript
 ## END
 
-## N-I mksh status: 0
-## N-I mksh STDERR:
-## END
-
-
 #### unset -v a[i] for max index
-case $SH in mksh) exit ;; esac
 
 a=({1..9})
 unset -v 'a[-1]'
@@ -358,12 +234,7 @@ declare -a a=([0]="1" [1]="2" [2]="3" [3]="4" [4]="5" [5]="6" [6]="7" [7]="x")
 declare -a a=([0]="1" [1]="2" [2]="3" [3]="4" [4]="5" [5]="6" [6]="x")
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### [[ -v a[i] ]]
-case $SH in mksh) exit ;; esac
 
 sp1=()
 [[ -v sp1[0] ]]; echo "$? (expect 1)"
@@ -407,12 +278,7 @@ unset -v 'sp3[4]'
 0 (expect 0)
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### [[ -v a[i] ]] with invalid negative index
-case $SH in mksh) exit ;; esac
 
 sp1=()
 ([[ -v sp1[-1] ]]; echo "$? (expect 1)")
@@ -448,11 +314,6 @@ bash: line 4: sp1: bad array subscript
 bash: line 6: sp2: bad array subscript
 bash: line 9: sp3: bad array subscript
 ## END
-
-## N-I mksh status: 0
-## N-I mksh stdout-json: ""
-## N-I mksh stderr-json: ""
-
 
 #### ((sp[i])) and ((sp[i]++))
 a=(1 2 3 4 5 6 7 8 9)
@@ -499,9 +360,7 @@ echo $((a[7] = 100, a[7]))
 100
 ## END
 
-
 #### ((sp[i])) and ((sp[i]++)) with invalid negative index
-case $SH in mksh) exit ;; esac
 
 a=({1..9})
 unset -v 'a[2]' 'a[3]' 'a[7]'
@@ -521,14 +380,7 @@ echo $((a[-10]))
 bash: line 6: a: bad array subscript
 ## END
 
-## N-I mksh STDOUT:
-## END
-## N-I mksh STDERR:
-## END
-
-
 #### ${sp[i]}
-case $SH in mksh) exit ;; esac
 
 sp=({1..9})
 unset -v 'sp[2]'
@@ -562,12 +414,7 @@ sp[-4]: '6'.
 sp[-9]: '1'.
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${sp[i]} with negative invalid index
-case $SH in mksh) exit ;; esac
 
 sp=({1..9})
 unset -v 'sp[2]'
@@ -601,14 +448,7 @@ bash: line 9: sp: bad array subscript
 bash: line 10: sp: bad array subscript
 ## END
 
-## N-I mksh STDOUT:
-## END
-## N-I mksh STDERR:
-## END
-
-
 #### ${a[@]:offset:length}
-case $SH in mksh) exit ;; esac
 
 a=(v{0..9})
 unset -v 'a[2]' 'a[3]' 'a[4]' 'a[7]'
@@ -675,12 +515,7 @@ echo "[${a[@]:10:1}][${a[*]:10:1}]"
 [][]
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${@:offset:length}
-case $SH in mksh) exit ;; esac
 
 set -- v{1..9}
 
@@ -721,15 +556,8 @@ set -- v{1..9}
 [][]
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${a[@]:BigInt}
-case $SH in mksh) exit ;; esac
 
-case $SH in
-  bash)
     # disabled with soil-ovm-tarball image 2025-04-30b - the CI runs on Debian 12
     # now
     exit
@@ -753,8 +581,6 @@ EOF
     # [][]
     # [][]
     # [][]
-    ;;
-esac
 
 a=(1 2 3)
 a[0x7FFFFFFFFFFFFFFF]=x
@@ -773,12 +599,8 @@ echo "[${a[@]: -4}][${a[*]: -4}]"
 [z y x][z y x]
 ## END
 
-## N-I mksh STDOUT:
-## END
-
 ## BUG bash STDOUT:
 ## END
-
 
 #### ${a[@]}
 a=(v{0,1,2,3,4,5,6,7,8,9})
@@ -792,9 +614,7 @@ argv.sh "abc${a[@]}xyz"
 ['abcv0', 'v1', 'v5', 'v6', 'v8', 'v9xyz']
 ## END
 
-
 #### ${a[@]#...}
-case $SH in mksh) exit ;; esac
 
 a=(v{0..9})
 unset -v 'a[2]' 'a[3]' 'a[4]' 'a[7]'
@@ -813,13 +633,7 @@ argv.sh "${a[@]#v?}"
 ['', '', '', '', '', '']
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${a[@]/pat/rep}
-
-case $SH in mksh) exit ;; esac
 
 a=(v{0..9})
 unset -v 'a[2]' 'a[3]' 'a[4]' 'a[7]'
@@ -845,12 +659,7 @@ argv.sh "${a[@]//[!0-5]/_}"
 ['_0', '_1', '_5', '__', '__', '__']
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${a[@]@P}, ${a[@]@Q}, and ${a[@]@a}
-case $SH in mksh) exit ;; esac
 
 a=(v{0..9})
 unset -v 'a[2]' 'a[3]' 'a[4]' 'a[7]'
@@ -880,10 +689,6 @@ argv.sh "${a[*]@a}"
 ['a a a a a a']
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${a[@]-unset}, ${a[@]:-empty}, etc.
 a1=()
 a2=("")
@@ -905,7 +710,6 @@ a3 unset: [ ]
 a3 empty: [ ]
 ## END
 
-
 #### ${a-}
 a1=()
 a2=("" "")
@@ -921,9 +725,7 @@ echo "$a3, ${a3-(unset)}, ${a3:-(empty)};"
 foo, foo, foo;
 ## END
 
-
 #### ${!a[0]}
-case $SH in mksh) exit ;; esac
 
 v1=hello v2=world
 a=(v1 v2)
@@ -934,12 +736,7 @@ echo "${!a[0]}, ${!a[1]}"
 hello, world
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### ${!a[@]}
-case $SH in mksh) exit ;; esac
 
 a=(v{0..9})
 unset -v 'a[3]' 'a[4]' 'a[7]' 'a[9]'
@@ -949,10 +746,6 @@ argv.sh "${!a[@]}"
 ## STDOUT:
 ['0', '1', '2', '5', '6', '8']
 ## END
-
-## N-I mksh STDOUT:
-## END
-
 
 #### "${a[*]}"
 a=(v{0,1,2,3,4,5,6,7,8,9})
@@ -970,9 +763,7 @@ v0v1v2v5v6v8
 v0/v1/v2/v5/v6/v8
 ## END
 
-
 #### compgen -F _set_COMPREPLY
-case $SH in mksh) exit ;; esac
 
 _set_COMPREPLY() {
   COMPREPLY=({0..9})
@@ -991,12 +782,8 @@ compgen -F _set_COMPREPLY
 9
 ## END
 
-## N-I mksh STDOUT:
-## END
-
-
 #### compadjust
-case $SH in bash|mksh) exit ;; esac
+exit
 
 COMP_ARGV=(echo 'Hello,' 'Bash' 'world!')
 compadjust cur prev words cword
@@ -1008,12 +795,8 @@ argv.sh "${words[@]}"
 ['echo', 'Hello,', 'Bash', 'world!']
 ## END
 
-## N-I bash/mksh STDOUT:
-## END
-
-
 #### crash dump
-case $SH in bash|mksh) exit ;; esac
+exit
 
 OILS_CRASH_DUMP_DIR=$TMP $SH -ec 'a=({0..3}); unset -v "a[2]"; false'
 json read (&crash_dump) < $TMP/*.json
@@ -1032,12 +815,7 @@ json write (crash_dump.var_stack[0].a)
 }
 ## END
 
-## N-I bash/mksh STDOUT:
-## END
-
-
 #### Regression: a[-1]=1
-case $SH in mksh) exit 99 ;; esac
 
 a[-1]=1
 
@@ -1052,12 +830,8 @@ a[-1]=1
 ## OK bash STDERR:
 bash: line 3: a[-1]: bad array subscript
 ## END
-## N-I mksh status: 99
-## N-I mksh stderr-json: ""
-
 
 #### Initializing indexed array with ([index]=value)
-case $SH in mksh) exit 99 ;; esac
 declare -a a=([xx]=1 [yy]=2 [zz]=3)
 echo status=$?
 argv.sh "${a[@]}"
@@ -1065,5 +839,3 @@ argv.sh "${a[@]}"
 status=0
 ['3']
 ## END
-## N-I mksh status: 99
-## N-I mksh stdout-json: ""

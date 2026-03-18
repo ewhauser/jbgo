@@ -1,4 +1,4 @@
-## compare_shells: bash mksh
+## compare_shells: bash
 ## oils_failures_allowed: 2
 
 # Arrays decay upon assignment (without splicing) and equality.
@@ -35,25 +35,17 @@ argv.sh "${c[@]}"
 ['x', 'YYY', 'z']
 ## END
 
-#### strict_array: $array is not valid in OSH, is ${array[0]} in ksh/bash
-
 a=(1 '2 3')
 echo $a
 ## STDOUT:
 1
 ## END
-## OK osh status: 1
-## OK osh stdout-json: ""
-
-#### strict_array: ${array} is not valid in OSH, is ${array[0]} in ksh/bash
 
 a=(1 '2 3')
 echo ${a}
 ## STDOUT:
 1
 ## END
-## OK osh status: 1
-## OK osh stdout-json: ""
 
 #### Assign to array index without initialization
 a[5]=5
@@ -85,8 +77,6 @@ a=(1 10)
 (( a++ ))  # doesn't make sense
 echo "${a[@]}"
 ## stdout: 2 10
-## OK osh status: 1
-## OK osh stdout-json: ""
 
 #### Apply vectorized operations on ${a[*]}
 a=('-x-' 'y-y' '-z-')
@@ -96,12 +86,8 @@ argv.sh "${a[*]#-}"
 ## STDOUT:
 ['x- y-y z-']
 ## END
-## N-I mksh status: 1
-## N-I mksh stdout-json: ""
 
 #### value.BashArray internal representation - Indexed
-
-case $SH in mksh) exit ;; esac
 
 z=()
 declare -a | grep z=
@@ -149,12 +135,7 @@ declare -a z=([0]="b-mystr" [1]="ZZZ-append" [5]="d" [6]="f" [7]="g")
 status=1
 ## END
 
-## N-I mksh STDOUT:
-## END
-
 #### value.BashArray internal representation - Assoc (ordering is a problem)
-
-case $SH in mksh) exit ;; esac
 
 declare -A A=([k]=v)
 declare -A | grep A=
@@ -181,5 +162,3 @@ declare -A A=([k]="v" )
 ['values', 'v']
 ## END
 
-## N-I mksh STDOUT:
-## END

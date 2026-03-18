@@ -1,10 +1,9 @@
 # xtrace test.  Test PS4 and line numbers, etc.
 
 ## oils_failures_allowed: 1
-## compare_shells: bash dash mksh
+## compare_shells: bash
 
 #### unset PS4
-case $SH in dash) echo 'weird bug'; exit ;; esac
 
 set -x
 echo 1
@@ -17,12 +16,6 @@ echo 2
 + echo 1
 + unset PS4
 echo 2
-## END
-
-## BUG dash STDOUT:
-weird bug
-## END
-## BUG dash STDERR:
 ## END
 
 #### set -o verbose prints unevaluated code
@@ -47,7 +40,6 @@ echo $(echo $y)
 ## END
 
 #### xtrace with unprintable chars
-case $SH in dash) exit ;; esac
 
 $SH >stdout 2>stderr <<'EOF'
 
@@ -83,19 +75,7 @@ STDERR
 + echo $'a\003b\004c'
 ## END
 
-## BUG mksh STDOUT:
-STDOUT
-   a   ; 004   c  \r  \n
-  61  3b  04  63  0d  0a
-
-STDERR
-+ echo $'a;\004c\r'
-## END
-
-## N-I dash stdout-json: ""
-
 #### xtrace with unicode chars
-case $SH in dash) exit ;; esac
 
 mu1='[μ]'
 mu2=$'[\u03bc]'
@@ -109,8 +89,6 @@ echo "$mu1" "$mu2"
 ## STDERR:
 + echo '[μ]' '[μ]'
 ## END
-## N-I dash stdout-json: ""
-## N-I dash stderr-json: ""
 
 #### xtrace with paths
 set -o xtrace
@@ -123,7 +101,6 @@ my-dir/my_file.cc
 ## END
 
 #### xtrace with tabs
-case $SH in dash) exit ;; esac
 
 set -o xtrace
 echo $'[\t]'
@@ -133,8 +110,6 @@ echo $'[\t]'
 ## END
 # this is a bug because it's hard to see
 ## BUG bash stderr-json: "+ echo '[\t]'\n"
-## N-I dash stdout-json: ""
-## N-I dash stderr-json: ""
 
 #### xtrace with whitespace, quotes, and backslash
 set -o xtrace
@@ -143,21 +118,11 @@ echo '1 2' \' \" \\
 1 2 ' " \
 ## END
 
-# YSH is different because backslashes require $'\\' and not '\', but that's OK
 ## STDERR:
 + echo '1 2' $'\'' '"' $'\\'
 ## END
 
-## OK bash/mksh STDERR:
-+ echo '1 2' \' '"' '\'
-## END
-
-## BUG dash STDERR:
-+ echo 1 2 ' " \
-## END
-
 #### xtrace with newlines
-# bash and dash trace this badly.  They print literal newlines, which I don't
 # want.
 set -x
 echo $'[\n]'
@@ -172,13 +137,6 @@ echo $'[\n]'
 + echo '[
 ]'
 ## END
-## N-I dash STDOUT:
-$[
-]
-## END
-## N-I dash STDERR:
-+ echo $[\n]
-## END
 
 #### xtrace written before command executes
 set -x
@@ -190,15 +148,6 @@ echo two >&2
 one
 + echo two
 two
-## OK mksh STDERR:
-# mksh traces redirects!
-+ >&2 
-+ echo one
-one
-+ >&2 
-+ echo two
-two
-## END
 
 #### Assignments and assign builtins
 set -x
@@ -212,11 +161,6 @@ x=1 x=2; echo $x; readonly x=3
 + echo 2
 + readonly x=3
 ## END
-## OK dash STDERR:
-+ x=1 x=2
-+ echo 2
-+ readonly x=3
-## END
 ## OK bash STDERR:
 + x=1
 + x=2
@@ -224,14 +168,8 @@ x=1 x=2; echo $x; readonly x=3
 + readonly x=3
 + x=3
 ## END
-## OK mksh STDERR:
-+ x=1 x=2 
-+ echo 2
-+ readonly 'x=3'
-## END
 
 #### [[ ]]
-case $SH in dash|mksh) exit ;; esac
 
 set -x
 
@@ -250,7 +188,6 @@ fi
 + [[ -d / ]]
 + ((  a = 42  ))
 ## END
-## N-I dash/mksh stderr-json: ""
 
 #### PS4 is scoped
 set -x
@@ -265,30 +202,6 @@ echo two
 + echo one
 + f
 + local 'PS4=- '
-- echo func
-+ echo two
-## END
-## OK osh STDERR:
-+ echo one
-+ f
-+ local PS4='- '
-- echo func
-+ echo two
-## END
-## OK dash STDERR:
-# dash loses information about spaces!  There is a trailing space, but you
-# can't see it.
-+ echo one
-+ f
-+ local PS4=- 
-- echo func
-+ echo two
-## END
-## OK mksh STDERR:
-# local gets turned into typeset
-+ echo one
-+ f
-+ typeset 'PS4=- '
 - echo func
 + echo two
 ## END
@@ -312,24 +225,7 @@ two
 +2:echo two
 ## END
 
-## OK mksh STDERR:
-# mksh has trailing spaces
-+:x=1 
-+1:echo one
-+1:x=2 
-+2:echo two
-## END
-
-## OK osh/dash STDERR:
-# the PS4 string is evaluated AFTER the variable is set.  That's OK
-+1:x=1
-+1:echo one
-+2:x=2
-+2:echo two
-## END
-
 #### PS4 with unterminated ${
-# osh shows inline error; maybe fail like dash/mksh?
 x=1
 PS4='+${x'
 set -o xtrace
@@ -339,14 +235,8 @@ echo status=$?
 one
 status=0
 ## END
-# mksh and dash both fail.  bash prints errors to stderr.
-## OK dash stdout-json: ""
-## OK dash status: 2
-## OK mksh stdout-json: ""
-## OK mksh status: 1
 
 #### PS4 with unterminated $(
-# osh shows inline error; maybe fail like dash/mksh?
 x=1
 PS4='+$(x'
 set -o xtrace
@@ -356,14 +246,8 @@ echo status=$?
 one
 status=0
 ## END
-# mksh and dash both fail.  bash prints errors to stderr.
-## OK dash stdout-json: ""
-## OK dash status: 2
-## OK mksh stdout-json: ""
-## OK mksh status: 1
 
 #### PS4 with runtime error
-# osh shows inline error; maybe fail like dash/mksh?
 x=1
 PS4='+oops $(( 1 / 0 )) \$'
 set -o xtrace
@@ -373,12 +257,6 @@ echo status=$?
 one
 status=0
 ## END
-# mksh and dash both fail.  bash prints errors to stderr.
-## OK dash stdout-json: ""
-## OK dash status: 2
-## OK mksh stdout-json: ""
-## OK mksh status: 1
-
 
 #### Reading $? in PS4
 PS4='[last=$?] '
@@ -392,14 +270,8 @@ ok
 [last=0] false
 [last=1] echo ok
 ## END
-## OK osh STDERR:
-[last=0] 'false'
-[last=1] echo ok
-## END
-
 
 #### Regression: xtrace for "declare -a a+=(v)"
-case $SH in dash|mksh) exit ;; esac
 
 a=(1)
 set -x
@@ -411,18 +283,12 @@ declare a+=(2)
 + a+=('2')
 + declare a
 ## END
-## N-I dash/mksh STDERR:
-## END
-
 
 #### Regression: xtrace for "a+=(v)"
-case $SH in dash|mksh) exit ;; esac
 
 a=(1)
 set -x
 a+=(2)
 ## STDERR:
 + a+=(2)
-## END
-## N-I dash/mksh STDERR:
 ## END

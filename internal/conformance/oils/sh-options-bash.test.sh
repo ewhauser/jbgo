@@ -15,21 +15,11 @@ echo $?
 0
 1
 ## END
-## N-I dash/mksh STDOUT:
-1
-1
-1
-## END
 
 #### SHELLOPTS is readonly
 SHELLOPTS=x
 echo status=$?
 ## stdout: status=1
-## N-I dash/mksh stdout: status=0
-
-# Setting a readonly variable in osh is a hard failure.
-## OK osh status: 1
-## OK osh stdout-json: ""
 
 #### SHELLOPTS and BASHOPTS are non-empty
 
@@ -51,9 +41,6 @@ echo bashopts ${BASHOPTS:?} > /dev/null
 shellopts is set
 bashopts is set
 ## END
-
-## N-I dash status: 2
-## N-I mksh status: 1
 
 #### SHELLOPTS reflects flags like sh -x
 
@@ -98,8 +85,6 @@ sh -c 'echo 2'
 + echo 2
 2
 ## END
-
-#### OSH calling bash with SHELLOPTS does not change braceexpand
 
 #echo outside=$SHELLOPTS
 

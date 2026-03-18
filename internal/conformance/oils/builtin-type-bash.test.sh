@@ -45,17 +45,7 @@ builtin
 builtin
 ## END
 
-# In OSH, tye are now keywords AND dynamic builtins
 #
-# We MAY make them builtins in OSH, and keywords in YSH
-
-## OK osh STDOUT:
-keyword
-keyword
-keyword
-keyword
-## END
-
 
 #### type -t -> file
 type -t find xargs
@@ -196,13 +186,6 @@ f ()
     echo
 }
 ## END
-## OK osh STDOUT:
-f is a shell function
-f () { echo; }
-
-f is a shell function
-f () { echo; }
-## END
 
 #### type -ap -> function
 f () { :; }
@@ -285,14 +268,14 @@ pwd ()
     echo function-too
 }
 
-osh-normalize() {
+type-normalize() {
   "${GBASH_CONFORMANCE_SED:-sed}" 's/shell function/function/'
 }
 
-type -a pwd | osh-normalize
+type -a pwd | type-normalize
 echo ---
 
-type -a -f pwd | osh-normalize
+type -a -f pwd | type-normalize
 
 ## STDOUT:
 pwd is a shell builtin
@@ -351,19 +334,6 @@ echo status=$?
 
 ## STDOUT:
 status=1
-/usr/bin/cat
-status=0
-## END
-
-## BUG mksh STDOUT:
-status=1
-cat
-status=0
-## END
-
-## BUG ash/dash STDOUT:
-_tmp/cat
-status=0
 /usr/bin/cat
 status=0
 ## END

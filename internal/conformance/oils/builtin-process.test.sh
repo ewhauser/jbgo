@@ -1,4 +1,4 @@
-## compare_shells: dash bash mksh zsh
+## compare_shells: bash
 ## oils_failures_allowed: 1
 ## oils_cpp_failures_allowed: 2
 # case #24 with ulimit -f 1 is different under C++ for some reason - could be due to the python2
@@ -29,8 +29,6 @@ exec -- echo hi
 ## STDOUT:
 hi
 ## END
-## BUG dash status: 127
-## BUG dash stdout-json: ""
 
 #### exec -- 2>&1
 exec -- 3>&1
@@ -38,18 +36,12 @@ echo stdout 1>&3
 ## STDOUT:
 stdout
 ## END
-## BUG dash status: 127
-## BUG dash stdout-json: ""
-## BUG mksh status: -11
-## BUG mksh stdout-json: ""
 
 #### exec -a sets argv[0]
 exec -a FOOPROC sh -c 'echo $0'
 ## STDOUT:
 FOOPROC
 ## END
-## N-I dash status: 127
-## N-I dash stdout-json: ""
 
 #### Exit out of function
 f() { exit 3; }
@@ -61,21 +53,12 @@ exit 4
 exit invalid
 # Rationale: runtime errors are 1
 ## status: 1
-## OK dash/bash status: 2
-## BUG zsh status: 0
 
 #### Exit builtin with too many args
-# This is a parse error in OSH.
 exit 7 8 9
 echo status=$?
 ## status: 2
 ## stdout-json: ""
-## BUG bash/zsh status: 0
-## BUG bash/zsh stdout: status=1
-## BUG dash status: 7
-## BUG dash stdout-json: ""
-## OK mksh status: 1
-## OK mksh stdout-json: ""
 
 #### time with brace group argument
 
@@ -109,15 +92,6 @@ non-zero
 ## END
 
 # time doesn't accept a block?
-## BUG zsh STDOUT:
-result=1
-## END
-
-# dash doesn't have time keyword
-## N-I dash status: 2
-## N-I dash stdout-json: ""
-
-
 
 #### ulimit with no flags is like -f
 
@@ -139,7 +113,6 @@ status=0
 diff=0
 ## END
 
-
 #### ulimit too many args
 
 ulimit 1 2
@@ -154,11 +127,6 @@ fi
 ## STDOUT:
 pass
 ## END
-
-## BUG bash/zsh STDOUT:
-fail
-## END
-
 
 #### ulimit negative flag
 
@@ -194,14 +162,8 @@ unlimited
 pass
 ## END
 
-## BUG mksh STDOUT:
-unlimited
-fail
-## END
-
-
 #### ulimit -a doesn't take arg
-case $SH in bash) exit ;; esac
+exit
 
 ulimit -a 42
 if test $? -ne 0; then
@@ -214,16 +176,13 @@ failure that was expected
 ## BUG bash STDOUT:
 ## END
 
-
 #### ulimit doesn't accept multiple flags - reduce confusion between shells
 
-# - bash, zsh, busybox ash accept multiple "commands", which requires custom
 #   flag parsing, like
 
 #   ulimit -f 999 -n
 #   ulimit -f 999 -n 888
 #
-# - dash and mksh accept a single ARG
 #
 # we want to make it clear we're like the latter
 
@@ -243,24 +202,7 @@ status=2
 status=2
 ## END
 
-## BUG dash/bash/mksh STDOUT:
-status=0
-status=0
-status=0
-## END
-
-# zsh is better - it checks that -a and -f are exclusive
-
-## BUG zsh STDOUT:
-status=1
-status=0
-status=0
-## END
-
-
-#### YSH readability: ulimit --all the same as ulimit -a
-
-case $SH in bash|dash|mksh|zsh) exit ;; esac
+exit
 
 ulimit -a > short.txt
 ulimit --all > long.txt
@@ -275,9 +217,6 @@ echo status=$?
   8 long.txt
  16 total
 status=0
-## END
-
-## N-I bash/dash/mksh/zsh STDOUT:
 ## END
 
 #### ulimit accepts 'unlimited'
@@ -304,18 +243,14 @@ status=0
 
 ## END
 
-
 #### ulimit of 2**32, 2**31 (int overflow)
 
 echo -n 'one '; ulimit -f
-
 
 ulimit -f $(( 1 << 32 ))
 
 echo -n 'two '; ulimit -f
 
-
-# mksh fails because it overflows signed int, turning into negative number
 ulimit -f $(( 1 << 31 ))
 
 echo -n 'three '; ulimit -f
@@ -325,17 +260,10 @@ one unlimited
 two 4294967296
 three 2147483648
 ## END
-## BUG mksh STDOUT:
-one unlimited
-two 1
-three 1
-## END
-
 
 #### ulimit that is 64 bits
 
 # no 64-bit integers
-case $SH in mksh) exit ;; esac
 
 echo -n 'before '; ulimit -f
 
@@ -356,14 +284,9 @@ before unlimited
 after 9007199254740992
 ## END
 
-## BUG mksh STDOUT:
-## END
-
-
 #### arg that would overflow 64 bits is detected
 
 # no 64-bit integers
-case $SH in mksh) exit ;; esac
 
 echo -n 'before '; ulimit -f
 
@@ -373,7 +296,6 @@ lim=$(( (1 << 62) + 1 ))
 #echo lim=$lim
 
 # bash detects that this is out of range
-# so does osh-cpp, but not osh-cpython
 
 ulimit -f $lim
 echo -n 'after '; ulimit -f
@@ -382,15 +304,6 @@ echo -n 'after '; ulimit -f
 before unlimited
 after unlimited
 ## END
-
-## BUG dash/zsh STDOUT:
-before unlimited
-after 1
-## END
-
-## BUG mksh STDOUT:
-## END
-
 
 #### ulimit -f 1 prevents files larger 512 bytes
 trap - XFSZ  # don't handle this
@@ -471,16 +384,9 @@ outer=153
 ## END
 
 # not sure why this is different
-## OK osh STDOUT:
-inner=1
-outer=0
-## END
-
 
 #### ulimit -S for soft limit (default), -H for hard limit
-case $SH in dash|zsh) exit ;; esac
 
-# Note: ulimit -n -S 1111 is OK in osh/dash/mksh, but not bash/zsh
 # Mus be ulimit -S -n 1111
 
 show_state() {
@@ -532,14 +438,9 @@ GET
   123455
 ## END
 
-## BUG dash/zsh STDOUT:
-## END
-
 #### Changing resource limit is denied
 
 # Not sure why these don't work
-case $SH in dash|mksh) exit ;; esac
-
 
 flag=-t
 
@@ -574,13 +475,7 @@ soft OK
 hard OK
 ## END
 
-## BUG dash/mksh STDOUT:
-## END
-
 #### ulimit -n limits file descriptors
-
-# OSH bug
-# https://oilshell.zulipchat.com/#narrow/channel/502349-osh/topic/alpine.20build.20failures.20-.20make.20-.20ulimit.20-n.2064/with/519691301
 
 $SH -c 'ulimit -n 64; echo hi >out'
 echo status=$?
@@ -593,7 +488,3 @@ status=0
 status=1
 ## END
 
-## OK dash STDOUT:
-status=0
-status=2
-## END

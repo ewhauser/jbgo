@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 1
-## compare_shells: bash dash mksh zsh ash
+## compare_shells: bash
 
 # spec/bool-parse.test.sh
 #
@@ -56,11 +56,6 @@ status=1
 status=0
 ## END
 
-## BUG zsh STDOUT:
-status=0
-status=1
-## END
-
 #### test builtin: ( == ) is confusing: equality test or non-empty string test
 
 # here it's equality
@@ -76,15 +71,6 @@ status=1
 status=0
 ## END
 
-## BUG dash STDOUT:
-status=0
-status=0
-## END
-
-## BUG-2 zsh status: 1
-## BUG-2 zsh STDOUT:
-## END
-
 #### Allowed: [[ = ]] and [[ == ]]
 
 [[ = ]]
@@ -97,16 +83,6 @@ status=0
 status=0
 ## END
 
-## N-I dash STDOUT:
-status=127
-status=127
-## END
-
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-status=0
-## END
-
 #### Not allowed: [[ ) ]] and [[ ( ]]
 
 [[ ) ]]
@@ -115,12 +91,7 @@ echo status=$?
 echo status=$?
 
 ## status: 2
-## OK mksh status: 1
 ## STDOUT:
-## END
-## OK zsh status: 1
-## OK zsh STDOUT:
-status=1
 ## END
 
 #### test builtin: ( x ) behavior is the same in both cases
@@ -148,11 +119,6 @@ status=1
 status=1
 ## END
 
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-status=1
-## END
-
 #### [[ -f -f ]] and [[ -f == ]]
 [[ -f -f ]]
 echo status=$?
@@ -165,12 +131,3 @@ status=1
 status=1
 ## END
 
-## N-I dash STDOUT:
-status=127
-status=127
-## END
-
-## BUG zsh status: 1
-## BUG zsh STDOUT:
-status=1
-## END

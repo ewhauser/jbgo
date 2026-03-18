@@ -9,6 +9,15 @@ import (
 	"strings"
 )
 
+var excludedSpecFiles = map[string]struct{}{
+	"errexit-osh.test.sh":         {},
+	"posix.test.sh":               {},
+	"toysh-posix.test.sh":         {},
+	"toysh.test.sh":               {},
+	"ysh-builtin-private.test.sh": {},
+	"zsh-idioms.test.sh":          {},
+}
+
 //nolint:forbidigo // Conformance specs are vendored host files read directly by the test harness.
 func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
 	matches := make([]string, 0, len(specNames))
@@ -27,6 +36,13 @@ func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
 			matches = append(matches, filepath.Join(specDir, filepath.Base(specName)))
 		}
 	}
+	filtered := matches[:0]
+	for _, match := range matches {
+		if isBashSpecFile(match) {
+			filtered = append(filtered, match)
+		}
+	}
+	matches = filtered
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("no OILS spec files found in %s", specDir)
 	}
@@ -46,6 +62,11 @@ func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
 		files = append(files, specFile)
 	}
 	return files, nil
+}
+
+func isBashSpecFile(path string) bool {
+	_, excluded := excludedSpecFiles[filepath.Base(path)]
+	return !excluded
 }
 
 func ParseSpecFile(relPath, content string) (SpecFile, error) {

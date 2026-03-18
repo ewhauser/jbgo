@@ -1,7 +1,6 @@
 ## oils_failures_allowed: 4
 ## compare_shells: bash
 
-
 #### help
 help
 echo status=$? >&2
@@ -41,8 +40,6 @@ n=3
 [5
 ]
 ## END
-## N-I dash/mksh/zsh/ash STDOUT:
-## END
 
 #### readarray (synonym for mapfile)
 type readarray >/dev/null 2>&1 || exit 0
@@ -59,8 +56,6 @@ n=3
 ]
 [5
 ]
-## END
-## N-I dash/mksh/zsh/ash STDOUT:
 ## END
 
 #### mapfile (array name): arr
@@ -79,8 +74,6 @@ n=3
 [5
 ]
 ## END
-## N-I dash/mksh/zsh/ash STDOUT:
-## END
 
 #### mapfile (delimiter): -d delim
 # Note: Bash-4.4+
@@ -95,8 +88,6 @@ n=3
 [1:]
 [3:]
 [5:]
-## END
-## N-I dash/mksh/zsh/ash STDOUT:
 ## END
 
 #### mapfile (delimiter): -d '' (null-separated)
@@ -113,8 +104,6 @@ n=3
 [3]
 [5]
 ## END
-## N-I dash/mksh/zsh/ash STDOUT:
-## END
 
 #### mapfile (truncate delim): -t
 type mapfile >/dev/null 2>&1 || exit 0
@@ -129,8 +118,6 @@ n=3
 [3]
 [5]
 ## END
-## N-I dash/mksh/zsh/ash STDOUT:
-## END
 
 #### mapfile -t doesn't remove \r
 type mapfile >/dev/null 2>&1 || exit 0
@@ -140,8 +127,6 @@ printf '%s\r\n' {1..5..2} | {
 }
 ## STDOUT:
 ['1\r', '3\r', '5\r']
-## END
-## N-I dash/mksh/zsh/ash STDOUT:
 ## END
 
 #### mapfile -t bugs (ble.sh)
@@ -183,8 +168,6 @@ n=5
 [a1]
 [a2]
 ## END
-## N-I dash/mksh/zsh/ash STDOUT:
-## END
 
 #### mapfile (input range): -s start -n count
 type mapfile >/dev/null 2>&1 || exit 0
@@ -198,8 +181,6 @@ n=3
 [a5]
 [a6]
 [a7]
-## END
-## N-I dash/mksh/zsh/ash STDOUT:
 ## END
 
 #### mapfile / readarray stdin  TODO: Fix me.

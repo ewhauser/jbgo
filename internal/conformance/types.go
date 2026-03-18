@@ -38,8 +38,7 @@ type ManifestSuite struct {
 type OracleMode string
 
 const (
-	OracleBash      OracleMode = "bash"
-	OracleBashPosix OracleMode = "bash-posix"
+	OracleBash OracleMode = "bash"
 )
 
 type SuiteConfig struct {

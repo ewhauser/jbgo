@@ -24,7 +24,6 @@
 # In other words, BASH_SOURCE is about the DEFINITION.  While FUNCNAME and
 # BASH_LINENO are about the CALL.
 
-
 #### ${FUNCNAME[@]} array
 g() {
   argv.sh "${FUNCNAME[@]}"
@@ -63,16 +62,12 @@ echo -----
 argv.sh "${FUNCNAME[@]}"
 
 # Show bash inconsistency.  FUNCNAME doesn't behave like a normal array.
-case $SH in 
-  (bash)
     echo -----
     a=('A')
     argv.sh '  @' "${a[@]}"
     argv.sh '  0' "${a[0]}"
     argv.sh '${}' "${a}"
     argv.sh '  $' "$a"
-    ;;
-esac
 
 ## STDOUT:
 ['  @', 'source', 'f', 'g']
@@ -105,7 +100,6 @@ esac
 ['${}', 'A']
 ['  $', 'A']
 ## END
-
 
 #### BASH_SOURCE and BASH_LINENO scalar or array (e.g. for virtualenv)
 cd $REPO_ROOT
@@ -141,7 +135,6 @@ ____
 ['11']
 ## END
 
-
 #### ${FUNCNAME} with prefix/suffix operators
 
 check() {
@@ -172,7 +165,6 @@ check
 ['heck']
 ## END
 
-#### ${FUNCNAME} and "set -u" (OSH regression)
 set -u
 argv.sh "$FUNCNAME"
 ## status: 1

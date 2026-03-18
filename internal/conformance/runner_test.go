@@ -31,9 +31,6 @@ func TestOracleCommandArgs(t *testing.T) {
 	if got, want := OracleCommandArgs(OracleBash, "echo hi"), []string{"--noprofile", "--norc", "-c", "echo hi"}; !equalStrings(got, want) {
 		t.Fatalf("OracleCommandArgs(bash) = %#v, want %#v", got, want)
 	}
-	if got, want := OracleCommandArgs(OracleBashPosix, "echo hi"), []string{"--posix", "--noprofile", "--norc", "-c", "echo hi"}; !equalStrings(got, want) {
-		t.Fatalf("OracleCommandArgs(posix) = %#v, want %#v", got, want)
-	}
 }
 
 func TestNormalizeOutputAndBashStderr(t *testing.T) {

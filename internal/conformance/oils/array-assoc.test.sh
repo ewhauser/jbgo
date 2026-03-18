@@ -1,6 +1,5 @@
-## compare_shells: bash-4.4
+## compare_shells: bash
 ## oils_failures_allowed: 2
-
 
 # NOTE:
 # -declare -A is required.
@@ -9,7 +8,6 @@
 # a=([aa]=b [foo]=bar ['a+1']=c)
 # gets utterly bizarre behavior.
 #
-# Associtative Arrays are COMPLETELY bash-specific.  mksh doesn't even come
 # close.  So I will probably not implement them, or implement something
 # slightly different, because the semantics are just weird.
 
@@ -218,13 +216,12 @@ A["foo"]=bar
 key=foo
 echo ${A[$key]}
 i=a
-echo ${A["$i$i"]}   # note: ${A[$i$i]} doesn't work in OSH
+echo ${A["$i$i"]}
 ## STDOUT:
 bar
 b
 ## END
 
-#### lookup by unquoted string doesn't work in OSH because it's a variable
 declare -A a
 a["aa"]=b
 a["foo"]=bar
@@ -349,11 +346,6 @@ echo ${assoc[1]} ${assoc[2]} ${assoc}
 1 2 zero
 1 2 string
 ## END
-## N-I osh status: 1
-## N-I osh STDOUT:
-1 2
-1 2 zero
-## END
 
 #### Associative array expressions inside (( )) with keys that look like numbers
 declare -A assoc
@@ -403,8 +395,6 @@ value2
 declare -Ar A
 A['x']=1
 echo status=$?
-## OK osh status: 1
-## OK osh stdout-json: ""
 ## STDOUT:
 status=1
 ## END
@@ -428,7 +418,6 @@ echo len=${#ASSOC[@]}
 ASSOC['k']='32'
 echo len=${#ASSOC[@]}
 
-# bash allows a variable to be an associative array AND unset, while OSH
 # doesn't
 set +o nounset
 declare -A u
@@ -585,7 +574,6 @@ argv.sh "${A[@]}"
 []
 ## END
 
-
 #### Implicit increment of keys
 declare -a arr=( [30]=a b [40]=x y)
 argv.sh "${!arr[@]}"
@@ -724,10 +712,6 @@ k=0
 nonexistent=1
 ## END
 
-## N-I mksh status: 1
-## N-I mksh STDOUT:
-## END
-
 #### [[ -v assoc[key] ]] syntax errors
 
 typeset -A assoc
@@ -748,7 +732,6 @@ k=0
 typo=1
 ## END
 
-
 #### BashAssoc a+=()
 
 declare -A a=([apple]=red [orange]=orange)
@@ -764,7 +747,6 @@ orange is orange
 lemon is yellow
 banana is yellow
 ## END
-
 
 #### BashAssoc ${a[@]@Q}
 

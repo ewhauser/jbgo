@@ -26,7 +26,7 @@ complete -F myfunc other
 #complete -F f cmd
 
 # Alias for complete -p
-complete > /dev/null  # ignore OSH output for now
+complete > /dev/null
 echo status=$?
 
 # But this is an error
@@ -241,11 +241,9 @@ cpp
 
 #### compgen -A file
 cd $REPO_ROOT
-compgen -A file o | sort
+compgen -A file sc | sort
 ## STDOUT:
-oils-version.txt
-opy
-osh
+scripts
 ## END
 
 #### compgen -A user
@@ -308,7 +306,6 @@ status=0
 # Use bash as an oracle
 bash -c 'compgen -k' | sort > bash.txt
 
-# osh vs. bash, or bash vs. bash
 $SH -c 'compgen -k' | sort > this-shell.txt
 
 #comm bash.txt this-shell.txt
@@ -341,7 +338,6 @@ while
 
 #### compgen -k shows Oils keywords too
 
-# YSH has a superset of keywords:
 # const var
 # setvar setglobal
 # proc func typed
@@ -415,16 +411,12 @@ compgen -o default spec/t | sort
 spec/temp-binding.test.sh
 spec/testdata
 spec/tilde.test.sh
-spec/toysh-posix.test.sh
-spec/toysh.test.sh
 spec/type-compat.test.sh
 ## END
 
 #### compgen doesn't respect -X for user-defined functions
 # WORKAROUND: wrap in bash -i -c because non-interactive bash behaves
 # differently!
-case $SH in
-  *bash|*osh)
     $SH --rcfile /dev/null -i -c '
 shopt -s extglob
 fun() {
@@ -434,7 +426,6 @@ compgen -X "@(two|bin)" -F fun
 echo --
 compgen -X "!@(two|bin)" -F fun
 '
-esac
 ## STDOUT:
 one
 three
@@ -446,10 +437,7 @@ bin
 #### compgen -W words -X filter
 # WORKAROUND: wrap in bash -i -c because non-interactive bash behaves
 # differently!
-case $SH in
-  *bash|*osh)
       $SH --rcfile /dev/null -i -c 'shopt -s extglob; compgen -X "@(two|bin)" -W "one two three bin"'
-esac
 ## STDOUT:
 one
 three
@@ -462,10 +450,7 @@ compgen -f -- sp | sort
 echo --
 # WORKAROUND: wrap in bash -i -c because non-interactive bash behaves
 # differently!
-case $SH in
-  *bash|*osh)
       $SH --rcfile /dev/null -i -c 'shopt -s extglob; compgen -f -X "!*.@(py)" -- sp'
-esac
 ## STDOUT:
 spam.py
 spam.sh
@@ -596,9 +581,8 @@ compgen=0
 complete=0
 ## END
 
-
 #### compadjust with empty COMP_ARGV
-case $SH in bash) exit ;; esac
+exit
 
 COMP_ARGV=()
 compadjust words
@@ -611,9 +595,8 @@ argv.sh "${words[@]}"
 ## N-I bash STDOUT:
 ## END
 
-
 #### compadjust with sparse COMP_ARGV
-case $SH in bash) exit ;; esac
+exit
 
 COMP_ARGV=({0..9})
 unset -v 'COMP_ARGV['{1,3,4,6,7,8}']'
@@ -626,7 +609,6 @@ argv.sh "${words[@]}"
 
 ## N-I bash STDOUT:
 ## END
-
 
 #### compgen -F with scalar COMPREPLY
 

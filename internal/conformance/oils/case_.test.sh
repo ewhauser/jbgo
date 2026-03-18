@@ -1,7 +1,5 @@
-## compare_shells: bash dash mksh zsh
+## compare_shells: bash
 ## oils_failures_allowed: 0
-
-# Note: zsh passes most of these tests too
 
 #### Case statement
 case a in
@@ -36,10 +34,6 @@ A
 star
 star2
 ## END
-## N-I dash stdout-json: ""
-## N-I dash status: 2
-## N-I zsh stdout-json: ""
-## N-I zsh status: 1
 
 #### Case statement with ;&
 # ;& ignores the next condition.  Why would that be useful?
@@ -69,8 +63,6 @@ dd
 --
 --
 ## END
-## N-I dash stdout-json: ""
-## N-I dash status: 2
 
 #### Case with empty condition
 case $empty in
@@ -93,7 +85,6 @@ case "$x" in
   $pat) echo match ;;
 esac
 ## stdout: match
-## BUG zsh stdout-json: ""
 
 #### Quoted literal in glob pattern
 x='[ab].py'
@@ -121,7 +112,6 @@ two_code_points="__$(echo $'\u0061\u0300')__"
 #
 # (Example taken from # https://blog.golang.org/strings)
 #
-# However ? in bash/zsh only counts CODE POINTS.  They do NOT take into account
 # this case.
 
 for s in '__a__' '__μ__' "$two_code_points"; do
@@ -138,15 +128,8 @@ yes
 yes
 no
 ## END
-## BUG dash/mksh STDOUT:
-yes
-no
-no
-## END
 
 #### matching the byte 0xff against empty string - DISABLED - CI only bug?
-
-case $SH in *osh) echo soil-ci-buster-slim-bug; exit ;; esac
 
 # This doesn't make a difference on my local machine?
 # Is the underlying issue how libc fnmatch() respects Unicode?
@@ -156,7 +139,6 @@ case $SH in *osh) echo soil-ci-buster-slim-bug; exit ;; esac
 
 c=$(printf \\377)
 
-# OSH prints -1 here
 #echo "${#c}"
 
 case $c in
@@ -174,18 +156,12 @@ b
 b
 ## END
 
-## OK osh STDOUT:
-soil-ci-buster-slim-bug
-## END
-
 #### matching every byte against itself
 
-# Why does OSH on the CI machine behave differently?  Probably a libc bug fix
 # I'd guess?
 
 sum=0
 
-# note: NUL byte crashes OSH!
 for i in $(seq 1 255); do
   hex=$(printf '%x' "$i")
   c="$(printf "\\x$hex")"  # command sub quirk: \n or \x0a turns into empty string
@@ -215,8 +191,6 @@ case $s in
   *\(\)) echo 'match'
 esac
 
-case $SH in dash) exit ;; esac  # not implemented
-
 shopt -s extglob
 
 case $s in
@@ -226,10 +200,6 @@ esac
 match
 extglob
 ## END
-## N-I dash STDOUT:
-match
-## END
-
 
 #### case \n bug regression
 
@@ -239,6 +209,4 @@ in esac
 ## STDOUT:
 ## END
 ## status: 2
-## OK mksh status: 1
-## OK zsh status: 127
 
