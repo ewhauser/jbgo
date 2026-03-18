@@ -4,12 +4,82 @@
 package expand
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
+
+// arithExprSource returns the source text representation of an arithmetic expression.
+func arithExprSource(expr syntax.ArithmExpr) string {
+	var buf bytes.Buffer
+	writeArithExpr(&buf, expr)
+	return buf.String()
+}
+
+// writeArithExpr writes the source representation of an arithmetic expression to buf.
+func writeArithExpr(buf *bytes.Buffer, expr syntax.ArithmExpr) {
+	switch expr := expr.(type) {
+	case *syntax.Word:
+		// For a Word, concatenate all its parts
+		for _, part := range expr.Parts {
+			writeLiteral(buf, part)
+		}
+	case *syntax.BinaryArithm:
+		writeArithExpr(buf, expr.X)
+		buf.WriteString(expr.Op.String())
+		writeArithExpr(buf, expr.Y)
+	case *syntax.UnaryArithm:
+		if expr.Post {
+			writeArithExpr(buf, expr.X)
+			buf.WriteString(expr.Op.String())
+		} else {
+			buf.WriteString(expr.Op.String())
+			writeArithExpr(buf, expr.X)
+		}
+	case *syntax.ParenArithm:
+		buf.WriteByte('(')
+		writeArithExpr(buf, expr.X)
+		buf.WriteByte(')')
+	}
+}
+
+// writeLiteral writes a word part's literal representation.
+func writeLiteral(buf *bytes.Buffer, part syntax.WordPart) {
+	switch p := part.(type) {
+	case *syntax.Lit:
+		buf.WriteString(p.Value)
+	case *syntax.SglQuoted:
+		buf.WriteByte('\'')
+		buf.WriteString(p.Value)
+		buf.WriteByte('\'')
+	case *syntax.DblQuoted:
+		buf.WriteByte('"')
+		for _, inner := range p.Parts {
+			writeLiteral(buf, inner)
+		}
+		buf.WriteByte('"')
+	case *syntax.ParamExp:
+		buf.WriteByte('$')
+		if p.Short {
+			buf.WriteString(p.Param.Value)
+		} else {
+			buf.WriteByte('{')
+			buf.WriteString(p.Param.Value)
+			buf.WriteByte('}')
+		}
+	case *syntax.CmdSubst:
+		buf.WriteString("$(")
+		buf.WriteString("...") // simplified
+		buf.WriteByte(')')
+	case *syntax.ArithmExp:
+		buf.WriteString("$((")
+		writeArithExpr(buf, p.X)
+		buf.WriteString("))")
+	}
+}
 
 // TODO(v4): the arithmetic APIs should return int64 for portability with 32-bit systems,
 // even if Bash only supports native int sizes.
@@ -132,6 +202,10 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		// Check for division by zero with source tokens
+		if right == 0 && (expr.Op == syntax.Quo || expr.Op == syntax.Rem) {
+			return 0, divByZeroError(expr)
+		}
 		return binArit(expr.Op, left, right)
 	default:
 		panic(fmt.Sprintf("unexpected arithm expr: %T", expr))
@@ -150,6 +224,20 @@ func atoi(s string) int64 {
 	s = strings.TrimSpace(s)
 	n, _ := strconv.ParseInt(s, 10, 64)
 	return n
+}
+
+// divByZeroError creates a division-by-zero error with source tokens matching bash's format.
+func divByZeroError(expr *syntax.BinaryArithm) error {
+	fullExpr := arithExprSource(expr)
+	divisor := arithExprSource(expr.Y)
+	return fmt.Errorf("%s: division by 0 (error token is \"%s\")", fullExpr, divisor)
+}
+
+// divByZeroErrorAssgn creates a division-by-zero error for assignment operators.
+func divByZeroErrorAssgn(b *syntax.BinaryArithm, op string) error {
+	lhs := arithExprSource(b.X)
+	rhs := arithExprSource(b.Y)
+	return fmt.Errorf("%s%s=%s: division by 0 (error token is \"%s\")", lhs, op, rhs, rhs)
 }
 
 func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (int, error) {
@@ -171,12 +259,12 @@ func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (in
 		val *= arg
 	case syntax.QuoAssgn:
 		if arg == 0 {
-			return 0, fmt.Errorf("%d / %d : division by 0 (error token is \"%d \")", val, arg, arg)
+			return 0, divByZeroErrorAssgn(b, "/")
 		}
 		val /= arg
 	case syntax.RemAssgn:
 		if arg == 0 {
-			return 0, fmt.Errorf("%d %% %d : division by 0 (error token is \"%d \")", val, arg, arg)
+			return 0, divByZeroErrorAssgn(b, "%")
 		}
 		val %= arg
 	case syntax.AndAssgn:
@@ -217,14 +305,10 @@ func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
 	case syntax.Mul:
 		return x * y, nil
 	case syntax.Quo:
-		if y == 0 {
-			return 0, fmt.Errorf("%d / %d : division by 0 (error token is \"%d \")", x, y, y)
-		}
+		// Division by zero is checked before calling binArit with source tokens
 		return x / y, nil
 	case syntax.Rem:
-		if y == 0 {
-			return 0, fmt.Errorf("%d %% %d : division by 0 (error token is \"%d \")", x, y, y)
-		}
+		// Division by zero is checked before calling binArit with source tokens
 		return x % y, nil
 	case syntax.Pow:
 		return intPow(x, y), nil
