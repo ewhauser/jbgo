@@ -7,7 +7,13 @@ type manifest struct {
 	UtilityOverrides    []utilityAttribution  `json:"utility_overrides"`
 	UtilityDisplayNames []utilityNameAlias    `json:"utility_display_names,omitempty"`
 	AttributionRules    []testAttributionRule `json:"attribution_rules,omitempty"`
+	ExpectedFailures    map[string]xfailEntry `json:"expected_failures,omitempty"`
 	SkipPatterns        []skipPattern         `json:"skip_patterns"`
+}
+
+type xfailEntry struct {
+	Reason string   `json:"reason"`
+	GOOS   []string `json:"goos,omitempty"`
 }
 
 type utilityAttribution struct {
@@ -43,9 +49,10 @@ type options struct {
 }
 
 type testResult struct {
-	Name       string   `json:"name"`
-	Status     string   `json:"status"`
-	ReportedAs []string `json:"reported_as,omitempty"`
+	Name                  string   `json:"name"`
+	Status                string   `json:"status"`
+	ReportedAs            []string `json:"reported_as,omitempty"`
+	ExpectedFailureReason string   `json:"expected_failure_reason,omitempty"`
 }
 
 type testSummary struct {
@@ -118,13 +125,14 @@ type suiteSummary struct {
 }
 
 type suiteTest struct {
-	Path         string            `json:"path"`
-	Category     string            `json:"category"`
-	Status       string            `json:"status"`
-	Filtered     bool              `json:"filtered,omitempty"`
-	FilterReason string            `json:"filter_reason,omitempty"`
-	ReportedAs   []string          `json:"reported_as,omitempty"`
-	Attributions []testAttribution `json:"attributions,omitempty"`
+	Path                  string            `json:"path"`
+	Category              string            `json:"category"`
+	Status                string            `json:"status"`
+	Filtered              bool              `json:"filtered,omitempty"`
+	FilterReason          string            `json:"filter_reason,omitempty"`
+	ReportedAs            []string          `json:"reported_as,omitempty"`
+	ExpectedFailureReason string            `json:"expected_failure_reason,omitempty"`
+	Attributions          []testAttribution `json:"attributions,omitempty"`
 }
 
 type testAttribution struct {

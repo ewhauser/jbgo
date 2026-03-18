@@ -3,73 +3,1283 @@
   "tarball_url": "https://ftp.gnu.org/gnu/coreutils/coreutils-9.10.tar.gz",
   "tarball_sha256": "e0bde1fb68509447fc723cf2517e8a8c7fa46769919bb7490ed350a2e9238562",
   "utility_display_names": [
-    { "name": "install", "alias": "ginstall" }
+    {
+      "name": "install",
+      "alias": "ginstall"
+    }
   ],
   "utility_overrides": [
-    { "name": "[", "patterns": ["tests/test/*", "tests/misc/invalid-opt.pl"] },
-    { "name": "arch", "patterns": ["tests/misc/arch.sh"] },
-    { "name": "b2sum", "patterns": ["tests/cksum/b2sum.sh"] },
-    { "name": "base32", "patterns": ["tests/basenc/bounded-memory.sh", "tests/basenc/large-input.sh"] },
-    { "name": "base64", "patterns": ["tests/basenc/base64.pl", "tests/basenc/bounded-memory.sh", "tests/basenc/large-input.sh"] },
-    { "name": "basename", "patterns": ["tests/misc/basename*"] },
-    { "name": "basenc", "patterns": ["tests/basenc/basenc.pl", "tests/basenc/bounded-memory.sh", "tests/basenc/large-input.sh"] },
-    { "name": "cksum", "patterns": ["tests/cksum/cksum*"] },
-    { "name": "comm", "patterns": ["tests/misc/comm*"] },
-    { "name": "coreutils", "patterns": ["tests/misc/coreutils.sh"] },
-    { "name": "dir", "patterns": ["tests/ls/*", "tests/misc/invalid-opt.pl"] },
-    { "name": "dircolors", "patterns": ["tests/misc/dircolors.pl"] },
-    { "name": "dirname", "patterns": ["tests/misc/dirname*"] },
-    { "name": "echo", "patterns": ["tests/misc/echo*"] },
-    { "name": "false", "patterns": ["tests/misc/false-status.sh"] },
-    { "name": "ginstall", "patterns": ["tests/install/*"] },
-    { "name": "kill", "patterns": ["tests/misc/kill.sh"] },
-    { "name": "link", "patterns": ["tests/misc/invalid-opt.pl"] },
-    { "name": "md5sum", "patterns": ["tests/cksum/md5sum*"] },
-    { "name": "mkfifo", "patterns": ["tests/misc/mknod.sh"] },
-    { "name": "mknod", "patterns": ["tests/misc/mknod.sh"] },
-    { "name": "nl", "patterns": ["tests/misc/nl*"] },
-    { "name": "nohup", "patterns": ["tests/misc/nohup.sh"] },
-    { "name": "pathchk", "patterns": ["tests/misc/pathchk.sh"] },
-    { "name": "printenv", "patterns": ["tests/misc/printenv.sh"] },
-    { "name": "realpath", "patterns": ["tests/misc/realpath.sh"] },
-    { "name": "sha1sum", "patterns": ["tests/cksum/sha1sum*"] },
-    { "name": "sha224sum", "patterns": ["tests/cksum/sha224sum*"] },
-    { "name": "sha256sum", "patterns": ["tests/cksum/sha256sum*"] },
-    { "name": "sha384sum", "patterns": ["tests/cksum/sha384sum*"] },
-    { "name": "sha512sum", "patterns": ["tests/cksum/sha512sum*"] },
-    { "name": "sleep", "patterns": ["tests/misc/sleep*"] },
-    { "name": "stdbuf", "patterns": ["tests/misc/stdbuf.sh"] },
-    { "name": "sum", "patterns": ["tests/cksum/sum*"] },
-    { "name": "sync", "patterns": ["tests/misc/sync.sh"] },
-    { "name": "tsort", "patterns": ["tests/misc/tsort.pl"] },
-    { "name": "vdir", "patterns": ["tests/ls/*"] },
-    { "name": "whoami", "patterns": ["tests/chroot/chroot-credentials.sh"] },
-    { "name": "yes", "patterns": ["tests/misc/yes.sh"] }
+    {
+      "name": "[",
+      "patterns": [
+        "tests/test/*",
+        "tests/misc/invalid-opt.pl"
+      ]
+    },
+    {
+      "name": "arch",
+      "patterns": [
+        "tests/misc/arch.sh"
+      ]
+    },
+    {
+      "name": "b2sum",
+      "patterns": [
+        "tests/cksum/b2sum.sh"
+      ]
+    },
+    {
+      "name": "base32",
+      "patterns": [
+        "tests/basenc/bounded-memory.sh",
+        "tests/basenc/large-input.sh"
+      ]
+    },
+    {
+      "name": "base64",
+      "patterns": [
+        "tests/basenc/base64.pl",
+        "tests/basenc/bounded-memory.sh",
+        "tests/basenc/large-input.sh"
+      ]
+    },
+    {
+      "name": "basename",
+      "patterns": [
+        "tests/misc/basename*"
+      ]
+    },
+    {
+      "name": "basenc",
+      "patterns": [
+        "tests/basenc/basenc.pl",
+        "tests/basenc/bounded-memory.sh",
+        "tests/basenc/large-input.sh"
+      ]
+    },
+    {
+      "name": "cksum",
+      "patterns": [
+        "tests/cksum/cksum*"
+      ]
+    },
+    {
+      "name": "comm",
+      "patterns": [
+        "tests/misc/comm*"
+      ]
+    },
+    {
+      "name": "coreutils",
+      "patterns": [
+        "tests/misc/coreutils.sh"
+      ]
+    },
+    {
+      "name": "dir",
+      "patterns": [
+        "tests/ls/*",
+        "tests/misc/invalid-opt.pl"
+      ]
+    },
+    {
+      "name": "dircolors",
+      "patterns": [
+        "tests/misc/dircolors.pl"
+      ]
+    },
+    {
+      "name": "dirname",
+      "patterns": [
+        "tests/misc/dirname*"
+      ]
+    },
+    {
+      "name": "echo",
+      "patterns": [
+        "tests/misc/echo*"
+      ]
+    },
+    {
+      "name": "false",
+      "patterns": [
+        "tests/misc/false-status.sh"
+      ]
+    },
+    {
+      "name": "ginstall",
+      "patterns": [
+        "tests/install/*"
+      ]
+    },
+    {
+      "name": "kill",
+      "patterns": [
+        "tests/misc/kill.sh"
+      ]
+    },
+    {
+      "name": "link",
+      "patterns": [
+        "tests/misc/invalid-opt.pl"
+      ]
+    },
+    {
+      "name": "md5sum",
+      "patterns": [
+        "tests/cksum/md5sum*"
+      ]
+    },
+    {
+      "name": "mkfifo",
+      "patterns": [
+        "tests/misc/mknod.sh"
+      ]
+    },
+    {
+      "name": "mknod",
+      "patterns": [
+        "tests/misc/mknod.sh"
+      ]
+    },
+    {
+      "name": "nl",
+      "patterns": [
+        "tests/misc/nl*"
+      ]
+    },
+    {
+      "name": "nohup",
+      "patterns": [
+        "tests/misc/nohup.sh"
+      ]
+    },
+    {
+      "name": "pathchk",
+      "patterns": [
+        "tests/misc/pathchk.sh"
+      ]
+    },
+    {
+      "name": "printenv",
+      "patterns": [
+        "tests/misc/printenv.sh"
+      ]
+    },
+    {
+      "name": "realpath",
+      "patterns": [
+        "tests/misc/realpath.sh"
+      ]
+    },
+    {
+      "name": "sha1sum",
+      "patterns": [
+        "tests/cksum/sha1sum*"
+      ]
+    },
+    {
+      "name": "sha224sum",
+      "patterns": [
+        "tests/cksum/sha224sum*"
+      ]
+    },
+    {
+      "name": "sha256sum",
+      "patterns": [
+        "tests/cksum/sha256sum*"
+      ]
+    },
+    {
+      "name": "sha384sum",
+      "patterns": [
+        "tests/cksum/sha384sum*"
+      ]
+    },
+    {
+      "name": "sha512sum",
+      "patterns": [
+        "tests/cksum/sha512sum*"
+      ]
+    },
+    {
+      "name": "sleep",
+      "patterns": [
+        "tests/misc/sleep*"
+      ]
+    },
+    {
+      "name": "stdbuf",
+      "patterns": [
+        "tests/misc/stdbuf.sh"
+      ]
+    },
+    {
+      "name": "sum",
+      "patterns": [
+        "tests/cksum/sum*"
+      ]
+    },
+    {
+      "name": "sync",
+      "patterns": [
+        "tests/misc/sync.sh"
+      ]
+    },
+    {
+      "name": "tsort",
+      "patterns": [
+        "tests/misc/tsort.pl"
+      ]
+    },
+    {
+      "name": "vdir",
+      "patterns": [
+        "tests/ls/*"
+      ]
+    },
+    {
+      "name": "whoami",
+      "patterns": [
+        "tests/chroot/chroot-credentials.sh"
+      ]
+    },
+    {
+      "name": "yes",
+      "patterns": [
+        "tests/misc/yes.sh"
+      ]
+    }
   ],
   "attribution_rules": [
-    { "patterns": ["tests/test/*"], "commands": ["test"], "kind": "direct" },
-    { "patterns": ["tests/test/*"], "commands": ["["], "kind": "alias" },
-    { "patterns": ["tests/ls/*"], "commands": ["dir", "vdir"], "kind": "alias" },
-    { "patterns": ["tests/misc/mknod.sh"], "commands": ["mkfifo"], "kind": "shared" },
-    { "patterns": ["tests/chroot/chroot-credentials.sh"], "commands": ["whoami"], "kind": "shared" },
-    { "patterns": ["tests/basenc/base64.pl"], "commands": ["base64"], "kind": "direct" },
-    { "patterns": ["tests/basenc/basenc.pl"], "commands": ["basenc"], "kind": "direct" },
-    { "patterns": ["tests/basenc/bounded-memory.sh", "tests/basenc/large-input.sh"], "commands": ["base32", "base64"], "kind": "shared" },
-    { "patterns": ["tests/cksum/b2sum.sh"], "commands": ["b2sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/md5sum*"], "commands": ["md5sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/sha1sum*"], "commands": ["sha1sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/sha224sum*"], "commands": ["sha224sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/sha256sum*"], "commands": ["sha256sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/sha384sum*"], "commands": ["sha384sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/sha512sum*"], "commands": ["sha512sum"], "kind": "direct" },
-    { "patterns": ["tests/cksum/sum*"], "commands": ["sum"], "kind": "direct" },
-    { "patterns": ["tests/misc/false-status.sh"], "commands": ["false"], "kind": "direct" }
+    {
+      "patterns": [
+        "tests/test/*"
+      ],
+      "commands": [
+        "test"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/test/*"
+      ],
+      "commands": [
+        "["
+      ],
+      "kind": "alias"
+    },
+    {
+      "patterns": [
+        "tests/ls/*"
+      ],
+      "commands": [
+        "dir",
+        "vdir"
+      ],
+      "kind": "alias"
+    },
+    {
+      "patterns": [
+        "tests/misc/mknod.sh"
+      ],
+      "commands": [
+        "mkfifo"
+      ],
+      "kind": "shared"
+    },
+    {
+      "patterns": [
+        "tests/chroot/chroot-credentials.sh"
+      ],
+      "commands": [
+        "whoami"
+      ],
+      "kind": "shared"
+    },
+    {
+      "patterns": [
+        "tests/basenc/base64.pl"
+      ],
+      "commands": [
+        "base64"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/basenc/basenc.pl"
+      ],
+      "commands": [
+        "basenc"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/basenc/bounded-memory.sh",
+        "tests/basenc/large-input.sh"
+      ],
+      "commands": [
+        "base32",
+        "base64"
+      ],
+      "kind": "shared"
+    },
+    {
+      "patterns": [
+        "tests/cksum/b2sum.sh"
+      ],
+      "commands": [
+        "b2sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/md5sum*"
+      ],
+      "commands": [
+        "md5sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/sha1sum*"
+      ],
+      "commands": [
+        "sha1sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/sha224sum*"
+      ],
+      "commands": [
+        "sha224sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/sha256sum*"
+      ],
+      "commands": [
+        "sha256sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/sha384sum*"
+      ],
+      "commands": [
+        "sha384sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/sha512sum*"
+      ],
+      "commands": [
+        "sha512sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/cksum/sum*"
+      ],
+      "commands": [
+        "sum"
+      ],
+      "kind": "direct"
+    },
+    {
+      "patterns": [
+        "tests/misc/false-status.sh"
+      ],
+      "commands": [
+        "false"
+      ],
+      "kind": "direct"
+    }
   ],
   "skip_patterns": [
-    { "pattern": "tests/chcon/*", "reason": "SELinux command tests are out of scope in v1" },
-    { "pattern": "tests/help/*", "reason": "help/version tests are skipped in v1" },
-    { "pattern": "tests/runcon/*", "reason": "SELinux command tests are out of scope in v1" },
-    { "pattern": "tests/*/selinux*", "reason": "SELinux tests are out of scope in v1" },
-    { "pattern": "tests/shred/*", "reason": "shred command tests are out of scope in v1" }
-  ]
+    {
+      "pattern": "tests/chcon/*",
+      "reason": "SELinux command tests are out of scope in v1"
+    },
+    {
+      "pattern": "tests/help/*",
+      "reason": "help/version tests are skipped in v1"
+    },
+    {
+      "pattern": "tests/runcon/*",
+      "reason": "SELinux command tests are out of scope in v1"
+    },
+    {
+      "pattern": "tests/*/selinux*",
+      "reason": "SELinux tests are out of scope in v1"
+    },
+    {
+      "pattern": "tests/shred/*",
+      "reason": "shred command tests are out of scope in v1"
+    }
+  ],
+  "expected_failures": {
+    "tests/basenc/basenc.pl": {
+      "reason": "FAIL: basenc: invalid input"
+    },
+    "tests/basenc/large-input.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/chmod/symlinks.sh": {
+      "reason": "FAIL: stat \"/gt-symlinks.sh.XXXX/a/c/link\" denied: symlink traversal denied"
+    },
+    "tests/chown/preserve-root.sh": {
+      "reason": "FAIL: write \"/gt-preserve-root.sh.XXXX/d/slink-to-root\" denied: symlink traversal denied"
+    },
+    "tests/chroot/chroot-fail.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/cksum/cksum-base64.pl": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/cksum/cksum-c.sh": {
+      "reason": "ERROR: setup failure: shuf: not implemented"
+    },
+    "tests/cksum/cksum-raw.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/cksum/sm3sum.pl": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/cp/abuse.sh": {
+      "reason": "FAIL: stat \"/gt-abuse.sh.XXXX/a/1\" denied: symlink traversal denied"
+    },
+    "tests/cp/attr-existing.sh": {
+      "reason": "FAIL: stat \"/gt-attr-existing.sh.XXXX/sym1\" denied: symlink traversal denied"
+    },
+    "tests/cp/backup-1.sh": {
+      "reason": "FAIL: diff: F.b: No such file or directory"
+    },
+    "tests/cp/backup-is-src.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/cp/cp-deref.sh": {
+      "reason": "FAIL: stat \"/gt-cp-deref.sh.XXXX/a/c\" denied: symlink traversal denied"
+    },
+    "tests/cp/cp-HL.sh": {
+      "reason": "FAIL: stat \"/gt-cp-HL.sh.XXXX/slink\" denied: symlink traversal denied"
+    },
+    "tests/cp/cp-i.sh": {
+      "reason": "ERROR: setup failure: touch: invalid date format \"yesterday\""
+    },
+    "tests/cp/cp-mv-backup.sh": {
+      "reason": "FAIL: mv: unrecognized option '--backup=none'"
+    },
+    "tests/cp/cp-parents.sh": {
+      "reason": "ERROR: setup failure: chmod: cannot access 'd/a': No such file or directory"
+    },
+    "tests/cp/debug.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/cp/deref-slink.sh": {
+      "reason": "FAIL: stat \"/gt-deref-slink.sh.XXXX/slink\" denied: symlink traversal denied"
+    },
+    "tests/cp/fail-perm.sh": {
+      "reason": "FAIL: cp: cannot stat 'symlink': Permission denied"
+    },
+    "tests/cp/into-self.sh": {
+      "reason": "FAIL: cp: cannot copy a directory, 'dir', into itself, 'dir/dir'"
+    },
+    "tests/cp/link-deref.sh": {
+      "reason": "ERROR: setup failure: ln: failed to create hard link 'test_sl' => 'test_hl_sl': No such file or directory"
+    },
+    "tests/cp/link-no-deref.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/cp/link-preserve.sh": {
+      "reason": "FAIL: ls: c/a: No such file or directory"
+    },
+    "tests/cp/link.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/cp/preserve-link.sh": {
+      "reason": "ERROR: setup failure: touch: invalid date format \"-1 hour\""
+    },
+    "tests/cp/preserve-mode.sh": {
+      "reason": "ERROR: setup failure: chmod: cannot access 'c': No such file or directory"
+    },
+    "tests/cp/preserve-slink-time.sh": {
+      "reason": "ERROR: setup failure in GNU compat run"
+    },
+    "tests/cp/proc-short-read.sh": {
+      "reason": "ERROR: setup failure: sed: can't read 1: No such file or directory"
+    },
+    "tests/cp/proc-zero-len.sh": {
+      "reason": "FAIL: diff: exp: No such file or directory"
+    },
+    "tests/cp/reflink-perm.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/cp/same-file.sh": {
+      "reason": "FAIL: stat \"/gt-same-file.sh.XXXX/dir/symlink\" denied: symlink traversal denied"
+    },
+    "tests/cp/slink-2-slink.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/cp/sparse.sh": {
+      "reason": "ERROR: setup failure: /tmp/gbash-gnu-work-XXXX/init.cfg: line 631: test: -ge: unary operator expected"
+    },
+    "tests/cp/symlink-slash.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/cp/thru-dangling.sh": {
+      "reason": "FAIL: realpath /gt-thru-dangling.sh.XXXX/loop: EvalSymlinks: too many links"
+    },
+    "tests/csplit/csplit-1000.sh": {
+      "reason": "FAIL: csplit: '{*}': invalid pattern"
+    },
+    "tests/csplit/csplit-suppress-matched.pl": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/csplit/csplit.sh": {
+      "reason": "FAIL: csplit: '{*}': invalid pattern"
+    },
+    "tests/date/date-ethiopia.sh": {
+      "reason": "FAIL: date: unrecognized option '--rfc-3339=date'"
+    },
+    "tests/date/date-iran.sh": {
+      "reason": "FAIL: date: unrecognized option '--rfc-3339=date'"
+    },
+    "tests/date/date-locale-hour.sh": {
+      "reason": "FAIL: date: invalid date \"2025-10-11T13:00\""
+    },
+    "tests/date/date-next-dow.pl": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/date/date-sec.sh": {
+      "reason": "FAIL: date: invalid date \"21:04 +0100\""
+    },
+    "tests/date/date.pl": {
+      "reason": "FAIL: date: invalid date '\\260'"
+    },
+    "tests/date/resolution.sh": {
+      "reason": "FAIL: date: unrecognized option '--resolution'"
+    },
+    "tests/dd/ascii.sh": {
+      "reason": "ERROR: setup failure: od: out: No such file or directory"
+    },
+    "tests/dd/bytes.sh": {
+      "reason": "FAIL: diff: out2: No such file or directory"
+    },
+    "tests/dd/conv-case.sh": {
+      "reason": "FAIL: dd: not implemented"
+    },
+    "tests/dd/misc.sh": {
+      "reason": "FAIL: dd: not implemented"
+    },
+    "tests/dd/nocache.sh": {
+      "reason": "ERROR: setup failure: dd: not implemented"
+    },
+    "tests/dd/not-rewound.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/dd/skip-seek-past-file.sh": {
+      "reason": "FAIL: du: invalid option -- 'k'"
+    },
+    "tests/dd/skip-seek.pl": {
+      "reason": "FAIL: dd: not implemented"
+    },
+    "tests/dd/skip-seek2.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/dd/stderr.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/dd/unblock-sync.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/dd/unblock.pl": {
+      "reason": "FAIL: dd: not implemented"
+    },
+    "tests/df/df-output.sh": {
+      "reason": "FAIL: df: not implemented"
+    },
+    "tests/df/df-P.sh": {
+      "reason": "FAIL: df: not implemented"
+    },
+    "tests/df/df-symlink.sh": {
+      "reason": "ERROR: setup failure: ln: failed to create symbolic link 'symlink': No such file or directory"
+    },
+    "tests/df/header.sh": {
+      "reason": "FAIL: df: not implemented"
+    },
+    "tests/df/total-unprocessed.sh": {
+      "reason": "FAIL: df: not implemented"
+    },
+    "tests/du/apparent.sh": {
+      "reason": "FAIL: du: invalid option -- 'b'"
+    },
+    "tests/du/basic.sh": {
+      "reason": "FAIL: du: unrecognized option '--block-size='"
+    },
+    "tests/du/deref-args.sh": {
+      "reason": "FAIL: du: invalid option -- 'D'"
+    },
+    "tests/du/deref.sh": {
+      "reason": "FAIL: du: invalid option -- 'L'"
+    },
+    "tests/du/exclude.sh": {
+      "reason": "FAIL: du: unrecognized option '--exclude=x'"
+    },
+    "tests/du/files0-from-dir.sh": {
+      "reason": "FAIL: du: unrecognized option '--files0-from=dir'"
+    },
+    "tests/du/files0-from.pl": {
+      "reason": "FAIL: file operands cannot be combined with --files0-from"
+    },
+    "tests/du/hard-link.sh": {
+      "reason": "FAIL: du: invalid option -- 'L'"
+    },
+    "tests/du/inacc-dest.sh": {
+      "reason": "FAIL: du: cannot read directory './c': Permission denied"
+    },
+    "tests/du/inacc-dir.sh": {
+      "reason": "FAIL: du: invalid option -- 'k'"
+    },
+    "tests/du/inaccessible-cwd.sh": {
+      "reason": "FAIL: du: cannot access \"/tmp/gbash-gnu-work-XXXX/gt-inaccessible-cwd.sh.XXXX/a\": No such file or directory"
+    },
+    "tests/du/inodes.sh": {
+      "reason": "FAIL: du: unrecognized option '--inodes'"
+    },
+    "tests/du/long-sloop.sh": {
+      "reason": "FAIL: du: cannot access: too many links"
+    },
+    "tests/du/max-depth.sh": {
+      "reason": "FAIL: du: invalid option -- 'd'"
+    },
+    "tests/du/no-deref.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/du/no-x.sh": {
+      "reason": "FAIL: du: 'd/no-x': Permission denied"
+    },
+    "tests/du/slash.sh": {
+      "reason": "FAIL: du: unrecognized option '--exclude=[^/]*'"
+    },
+    "tests/du/trailing-slash.sh": {
+      "reason": "FAIL: du: invalid option -- 'L'"
+    },
+    "tests/env/env-null.sh": {
+      "reason": "FAIL: env: invalid option -- '0'"
+    },
+    "tests/env/env-S-script.sh": {
+      "reason": "FAIL: env: invalid option -- 'S'"
+    },
+    "tests/env/env-S.pl": {
+      "reason": "FAIL: env: 'cat -n': No such file or directory"
+    },
+    "tests/env/env.sh": {
+      "reason": "FAIL: env: unrecognized option '---'"
+    },
+    "tests/expand/expand.pl": {
+      "reason": "FAIL: expand: not implemented"
+    },
+    "tests/expr/expr-multibyte.pl": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/expr/expr.pl": {
+      "reason": "FAIL: expr: invalid regular expression"
+    },
+    "tests/factor/factor-parallel.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/fmt/base.pl": {
+      "reason": "FAIL: fmt: not implemented"
+    },
+    "tests/fmt/goal-option.sh": {
+      "reason": "FAIL: fmt: not implemented"
+    },
+    "tests/fmt/long-line.sh": {
+      "reason": "FAIL: fmt: not implemented"
+    },
+    "tests/fmt/non-space.sh": {
+      "reason": "FAIL: fmt: not implemented"
+    },
+    "tests/fmt/width.sh": {
+      "reason": "FAIL: fmt: not implemented"
+    },
+    "tests/fold/fold-nbsp.sh": {
+      "reason": "FAIL: fold: not implemented"
+    },
+    "tests/fold/fold.pl": {
+      "reason": "FAIL: fold: not implemented"
+    },
+    "tests/groups/groups-dash.sh": {
+      "reason": "FAIL: groups: ':invalid': no such user"
+    },
+    "tests/groups/groups-process-all.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/groups/groups-version.sh": {
+      "reason": "FAIL: groups: not implemented"
+    },
+    "tests/head/head-c.sh": {
+      "reason": "ERROR: setup failure: cp: cannot stat \"/proc/version\": No such file or directory"
+    },
+    "tests/head/head-elide-tail.pl": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/head/head-pos.sh": {
+      "reason": "FAIL: head: invalid number of lines"
+    },
+    "tests/head/head-write-error.sh": {
+      "reason": "FAIL: head: invalid number of lines"
+    },
+    "tests/head/head.pl": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/id/uid.sh": {
+      "reason": "FAIL: id: +1000: no such user"
+    },
+    "tests/id/zero.sh": {
+      "reason": "ERROR: setup failure: head: invalid number of bytes"
+    },
+    "tests/install/basic-1.sh": {
+      "reason": "ERROR: setup failure: install: not implemented"
+    },
+    "tests/install/create-leading.sh": {
+      "reason": "FAIL: install: not implemented"
+    },
+    "tests/install/d-slashdot.sh": {
+      "reason": "FAIL: install: not implemented"
+    },
+    "tests/install/strip-program.sh": {
+      "reason": "FAIL: install: not implemented"
+    },
+    "tests/join/join-utf8.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/join/join.pl": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ln/backup-1.sh": {
+      "reason": "FAIL: ln: unrecognized option '--b=simple'"
+    },
+    "tests/ln/hard-backup.sh": {
+      "reason": "FAIL: ln: unrecognized option '--backup'"
+    },
+    "tests/ln/hard-to-sym.sh": {
+      "reason": "FAIL: read \"/gt-hard-to-sym.sh.XXXX/symlink3\" denied: symlink traversal denied"
+    },
+    "tests/ln/misc.sh": {
+      "reason": "FAIL: stat \"/gt-misc.sh.XXXX/tln-symlink-to-subdir\" denied: symlink traversal denied"
+    },
+    "tests/ln/relative.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/ln/sf-1.sh": {
+      "reason": "FAIL: realpath /gt-sf-1.sh.XXXX/ELOOP_link: EvalSymlinks: too many links"
+    },
+    "tests/ln/slash-decorated-nonexistent-dest.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/ls/abmon-align.sh": {
+      "reason": "ERROR: setup failure: touch: invalid date format \"2026-03-15 +01 month\""
+    },
+    "tests/ls/acl.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/ls/birthtime.sh": {
+      "reason": "FAIL: ls: invalid argument 'birth' for 'time style'"
+    },
+    "tests/ls/block-size.sh": {
+      "reason": "ERROR: setup failure: dd: not implemented"
+    },
+    "tests/ls/color-clear-to-eol.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ls/color-dtype-dir.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ls/color-ext.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ls/color-norm.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ls/color-term.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ls/dangle.sh": {
+      "reason": "FAIL: readdir \"/gt-dangle.sh.XXXX/slink-to-dir\" denied: symlink traversal denied"
+    },
+    "tests/ls/follow-slink.sh": {
+      "reason": "FAIL: readdir \"/gt-follow-slink.sh.XXXX/dir/sub/link-to-dir\" denied: symlink traversal denied"
+    },
+    "tests/ls/hyperlink.sh": {
+      "reason": "FAIL: readdir \"/gt-hyperlink.sh.XXXX/testdirl\" denied: symlink traversal denied"
+    },
+    "tests/ls/multihardlink.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ls/removed-directory.sh": {
+      "reason": "FAIL: sh: 0: getcwd() failed: No such file or directory"
+    },
+    "tests/ls/size-align.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/ls/symlink-slash.sh": {
+      "reason": "FAIL: stat \"/gt-symlink-slash.sh.XXXX/symlink\" denied: symlink traversal denied"
+    },
+    "tests/misc/dircolors.pl": {
+      "reason": "FAIL: dircolors: k:1: invalid line; missing second token"
+    },
+    "tests/misc/echo.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/misc/false-status.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/misc/getopt_vs_usage.sh": {
+      "reason": "FAIL: df: not implemented"
+    },
+    "tests/misc/invalid-opt.pl": {
+      "reason": "FAIL: dd: not implemented"
+    },
+    "tests/misc/io-errors.sh": {
+      "reason": "ERROR: setup failure: sort: invalid field specification \"1b,1\""
+    },
+    "tests/misc/nohup.sh": {
+      "reason": "FAIL: nohup: not implemented"
+    },
+    "tests/misc/option-aliases.sh": {
+      "reason": "FAIL: date: unrecognized option '--rfc-822'"
+    },
+    "tests/misc/printenv.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/misc/read-errors.sh": {
+      "reason": "ERROR: setup failure: sort: invalid field specification \"1b,1\""
+    },
+    "tests/misc/realpath.sh": {
+      "reason": "FAIL: realpath: invalid operand: empty string"
+    },
+    "tests/misc/sleep.sh": {
+      "reason": "FAIL: sleep: invalid time interval \"invalid\""
+    },
+    "tests/misc/sync.sh": {
+      "reason": "FAIL: sync: error opening 'nofile1': No such file or directory"
+    },
+    "tests/misc/time-style.sh": {
+      "reason": "FAIL: du: unrecognized option '--time'"
+    },
+    "tests/misc/usage_vs_getopt.sh": {
+      "reason": "ERROR: setup failure: -help"
+    },
+    "tests/misc/usage_vs_refs.sh": {
+      "reason": "FAIL: dd: not implemented"
+    },
+    "tests/misc/write-errors.sh": {
+      "reason": "ERROR: setup failure: sort: invalid field specification \"1b,1\""
+    },
+    "tests/misc/xstrtol.pl": {
+      "reason": "FAIL: pr: not implemented"
+    },
+    "tests/misc/yes.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/mkdir/p-1.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mkdir/p-2.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mkdir/p-3.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mkdir/p-acl.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mkdir/p-slashdot.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mkdir/p-thru-slink.sh": {
+      "reason": "FAIL: lstat \"/gt-p-thru-slink.sh.XXXX/slink/x\" denied: symlink traversal denied"
+    },
+    "tests/mkdir/p-v.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/mkdir/perm.sh": {
+      "reason": "FAIL: mkdir: invalid mode \"=+x\""
+    },
+    "tests/mktemp/bad-unicode.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/mktemp/mktemp.pl": {
+      "reason": "FAIL: mktemp: failed to create file via template 'no/such/dir/..."
+    },
+    "tests/mv/backup-dir.sh": {
+      "reason": "FAIL: mv: unrecognized option '--backup=numbered'"
+    },
+    "tests/mv/childproof.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/mv/diag.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/mv/dir-file.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mv/dir2dir.sh": {
+      "reason": "FAIL: mv: cannot overwrite 'a/t': Directory not empty"
+    },
+    "tests/mv/dup-source.sh": {
+      "reason": "FAIL: cp: cannot copy a directory, './b', into itself, 'b/b'"
+    },
+    "tests/mv/force.sh": {
+      "reason": "FAIL: mv: cannot stat \"mvforce\": No such file or directory"
+    },
+    "tests/mv/hard-2.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/mv/hard-3.sh": {
+      "reason": "FAIL: ls: a: No such file or directory"
+    },
+    "tests/mv/hard-4.sh": {
+      "reason": "FAIL: mv: unrecognized option '--backup=simple'"
+    },
+    "tests/mv/i-1.pl": {
+      "reason": "FAIL: mv: invalid option -- 'i'"
+    },
+    "tests/mv/i-2.sh": {
+      "reason": "FAIL: mv: invalid option -- 'i'"
+    },
+    "tests/mv/i-4.sh": {
+      "reason": "FAIL: mv: invalid option -- 'i'"
+    },
+    "tests/mv/into-self-3.sh": {
+      "reason": "FAIL: XXX: cannot move 'ZZZ' to a subdirectory of itself, 'ZZZ/ZZZ'"
+    },
+    "tests/mv/into-self.sh": {
+      "reason": "FAIL: XXX: cannot move 'SRC' to a subdirectory of itself, 'DEST'"
+    },
+    "tests/mv/mv-exchange.sh": {
+      "reason": "FAIL: mv: unrecognized option '--exchange'"
+    },
+    "tests/mv/mv-n.sh": {
+      "reason": "FAIL: mv: invalid option -- 'i'"
+    },
+    "tests/mv/no-target-dir.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/mv/perm-1.sh": {
+      "reason": "FAIL: mv: cannot move 'no-write/dir' to './dir': Permission denied"
+    },
+    "tests/mv/symlink-onto-hardlink-to-self.sh": {
+      "reason": "ERROR: setup failure: ln: failed to create hard link 's2' => 's1': read \"/gt-symlink-onto-hardlink-to-self.sh.XXXX/s2\" denied: symlink traversal denied"
+    },
+    "tests/mv/symlink-onto-hardlink.sh": {
+      "reason": "FAIL: stat \"/gt-symlink-onto-hardlink.sh.XXXX/s\" denied: symlink traversal denied"
+    },
+    "tests/mv/trailing-slash.sh": {
+      "reason": "FAIL: mv: invalid option -- 'u'"
+    },
+    "tests/mv/update.sh": {
+      "reason": "ERROR: setup failure: touch: invalid date format \"yesterday\""
+    },
+    "tests/nice/nice-fail.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/nproc/nproc-override.sh": {
+      "reason": "FAIL: nproc: not implemented"
+    },
+    "tests/nproc/nproc-positive.sh": {
+      "reason": "FAIL: nproc: not implemented"
+    },
+    "tests/numfmt/numfmt.pl": {
+      "reason": "FAIL: numfmt: invalid number: '-0.-1'"
+    },
+    "tests/od/od-j.sh": {
+      "reason": "ERROR: setup failure: cp: cannot stat \"/tmp/gbash-gnu-work-XXXX/tests/init.sh\": No such file or directory"
+    },
+    "tests/od/od-multiple-t.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/od/od-N.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/od/od-x8.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/od/od.pl": {
+      "reason": "FAIL: overflow-off-1..."
+    },
+    "tests/paste/multi-byte.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/pr/pr-tests.pl": {
+      "reason": "FAIL: pr: not implemented"
+    },
+    "tests/printf/printf-cov.pl": {
+      "reason": "FAIL: printf: invalid hex escape"
+    },
+    "tests/printf/printf-indexed.sh": {
+      "reason": "FAIL: printf: %-2$: invalid conversion specification"
+    },
+    "tests/printf/printf-mb.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/printf/printf-quote.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/printf/printf.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/ptx/ptx-overrun.sh": {
+      "reason": "FAIL: ptx: not implemented"
+    },
+    "tests/ptx/ptx.pl": {
+      "reason": "FAIL: ptx: not implemented"
+    },
+    "tests/pwd/pwd-long.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/pwd/pwd-option.sh": {
+      "reason": "ERROR: setup failure: ./tests/pwd/pwd-option.sh: line 27: cd: /gt-pwd-option.sh.XXXX: No such file or directory"
+    },
+    "tests/readlink/can-e.sh": {
+      "reason": "FAIL: sh: 0: getcwd() failed: No such file or directory"
+    },
+    "tests/readlink/can-f.sh": {
+      "reason": "FAIL: sh: 0: getcwd() failed: No such file or directory"
+    },
+    "tests/readlink/can-m.sh": {
+      "reason": "FAIL: sh: 0: getcwd() failed: No such file or directory"
+    },
+    "tests/readlink/readlink-fp-loop.sh": {
+      "reason": "ERROR: setup failure: realpath /gt-readlink-fp-loop.sh.XXXX/d/2: EvalSymlinks: too many links"
+    },
+    "tests/rm/cycle.sh": {
+      "reason": "FAIL: rm: cannot remove 'a/b/file'"
+    },
+    "tests/rm/d-1.sh": {
+      "reason": "FAIL: rm: unrecognized option '--verbose'"
+    },
+    "tests/rm/d-2.sh": {
+      "reason": "FAIL: rm: cannot remove 'd': Directory not empty"
+    },
+    "tests/rm/d-3.sh": {
+      "reason": "FAIL: rm: invalid option -- 'i'"
+    },
+    "tests/rm/dangling-symlink.sh": {
+      "reason": "FAIL: rm: unrecognized option '---presume-input-tty'"
+    },
+    "tests/rm/dir-no-w.sh": {
+      "reason": "FAIL: rm: cannot remove 'unwritable-dir': Is a directory"
+    },
+    "tests/rm/empty-inacc.sh": {
+      "reason": "FAIL: rm: unrecognized option '---presume-input-tty'"
+    },
+    "tests/rm/empty-name.pl": {
+      "reason": "FAIL: rm: unrecognized option '--version'"
+    },
+    "tests/rm/fail-eacces.sh": {
+      "reason": "FAIL: rm: cannot remove 'd/f': Permission denied"
+    },
+    "tests/rm/i-1.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/rm/i-never.sh": {
+      "reason": "FAIL: rm: unrecognized option '--interactive=never'"
+    },
+    "tests/rm/ignorable.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/rm/inaccessible.sh": {
+      "reason": "FAIL: rm: cannot remove 'rel': Permission denied"
+    },
+    "tests/rm/interactive-always.sh": {
+      "reason": "FAIL: rm: unrecognized option '--interactive'"
+    },
+    "tests/rm/interactive-once.sh": {
+      "reason": "FAIL: rm: invalid option -- 'I'"
+    },
+    "tests/rm/ir-1.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/rm/one-file-system2.sh": {
+      "reason": "FAIL: rm: unrecognized option '--one-file-system'"
+    },
+    "tests/rm/r-1.sh": {
+      "reason": "FAIL: rm: unrecognized option '--verbose'"
+    },
+    "tests/rm/r-2.sh": {
+      "reason": "FAIL: rm: unrecognized option '--verbose'"
+    },
+    "tests/rm/r-4.sh": {
+      "reason": "FAIL: grep: err: No such file or directory"
+    },
+    "tests/rm/rm1.sh": {
+      "reason": "FAIL: rm: cannot remove directory 'b/a/p': Permission denied"
+    },
+    "tests/rm/rm2.sh": {
+      "reason": "FAIL: rm: cannot remove 'a/1': Permission denied"
+    },
+    "tests/rm/rm3.sh": {
+      "reason": "FAIL: head: invalid number of bytes"
+    },
+    "tests/rm/rm5.sh": {
+      "reason": "FAIL: head: invalid number of bytes"
+    },
+    "tests/rm/sunos-1.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/rm/unread2.sh": {
+      "reason": "FAIL: rm: cannot remove 'a': Permission denied"
+    },
+    "tests/rm/unread3.sh": {
+      "reason": "FAIL: empty compat test log"
+    },
+    "tests/rm/unreadable.pl": {
+      "reason": "FAIL: rm: unrecognized option '--version'"
+    },
+    "tests/rm/v-slash.sh": {
+      "reason": "FAIL: rm: unrecognized option '--verbose'"
+    },
+    "tests/rmdir/ignore.sh": {
+      "reason": "FAIL: rmdir: failed to remove 'x/y': permission denied"
+    },
+    "tests/rmdir/symlink-errors.sh": {
+      "reason": "FAIL: rmdir: failed to remove 'fl/': Not a directory"
+    },
+    "tests/shuf/shuf-reservoir.sh": {
+      "reason": "FAIL: shuf: not implemented"
+    },
+    "tests/shuf/shuf.sh": {
+      "reason": "ERROR: setup failure: shuf: not implemented"
+    },
+    "tests/sort/sort-compress-proc.sh": {
+      "reason": "ERROR: setup failure: stat: cannot stat \"-\": No such file or directory"
+    },
+    "tests/sort/sort-compress.sh": {
+      "reason": "FAIL: sort: could not run compress program 'missing': No such file or directory"
+    },
+    "tests/sort/sort-debug-keys.sh": {
+      "reason": "FAIL: sort: invalid field specification \"2b,2\""
+    },
+    "tests/sort/sort-debug-warn.sh": {
+      "reason": "FAIL: sort: invalid field specification \"1b,1bn\""
+    },
+    "tests/sort/sort-discrim.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/sort/sort-exit-early.sh": {
+      "reason": "FAIL: sort: output: open /gt-sort-exit-early.sh.XXXX/output: permission denied"
+    },
+    "tests/sort/sort-float.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/sort/sort-h-thousands-sep.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/sort/sort-merge-fdlimit.sh": {
+      "reason": "FAIL: /bin/sh: 0: 3: Invalid argument"
+    },
+    "tests/sort/sort-merge.pl": {
+      "reason": "FAIL: sort: invalid --batch-size argument '0'"
+    },
+    "tests/sort/sort-month.sh": {
+      "reason": "FAIL: shuf: not implemented"
+    },
+    "tests/sort/sort-rand.sh": {
+      "reason": "FAIL: unexpected output in GNU compat run"
+    },
+    "tests/sort/sort-u-FMR.sh": {
+      "reason": "FAIL: sort: unrecognized option '--p=1'"
+    },
+    "tests/sort/sort-version.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/sort/sort.pl": {
+      "reason": "FAIL: sort: -: invalid field specification '0'"
+    },
+    "tests/split/b-chunk.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/split/fail.sh": {
+      "reason": "FAIL: split: invalid number of lines \"18446744073709551615\""
+    },
+    "tests/split/filter.sh": {
+      "reason": "ERROR: setup failure: stat: cannot stat \"x??.n\": No such file or directory"
+    },
+    "tests/split/guard-input.sh": {
+      "reason": "FAIL: read \"/gt-guard-input.sh.XXXX/in2\" denied: symlink traversal denied"
+    },
+    "tests/split/l-chunk.sh": {
+      "reason": "FAIL: split: invalid number of chunks: '1o'"
+    },
+    "tests/split/line-bytes.sh": {
+      "reason": "ERROR: setup failure: Try 'split --help' for more information."
+    },
+    "tests/split/suffix-auto-length.sh": {
+      "reason": "FAIL: ls: x*: No such file or directory"
+    },
+    "tests/split/suffix-length.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/stat/stat-fmt.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/stat/stat-hyphen.sh": {
+      "reason": "FAIL: stat: cannot stat \"-\": No such file or directory"
+    },
+    "tests/stat/stat-printf.pl": {
+      "reason": "FAIL: stat: warning: unrecognized escape '\\x'"
+    },
+    "tests/stat/stat-slash.sh": {
+      "reason": "FAIL: stat \"/gt-stat-slash.sh.XXXX/link1\" denied: symlink traversal denied"
+    },
+    "tests/tac/tac-2-nonseekable.sh": {
+      "reason": "ERROR: setup failure: cp: cannot stat \"/proc/version\": No such file or directory"
+    },
+    "tests/tac/tac.pl": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/tail/pid.sh": {
+      "reason": "FAIL: tail: --pid is unsupported in this sandbox"
+    },
+    "tests/tail/start-middle.sh": {
+      "reason": "FAIL: output mismatch in GNU compat run"
+    },
+    "tests/tail/symlink.sh": {
+      "reason": "ERROR: setup failure: stat \"/gt-symlink.sh.XXXX/symlink\" denied: symlink traversal denied"
+    },
+    "tests/tail/tail-c.sh": {
+      "reason": "ERROR: setup failure: cp: cannot stat \"/proc/version\": No such file or directory"
+    },
+    "tests/tail/tail-n0f.sh": {
+      "reason": "FAIL: tail: error reading 'unreadable': open /gt-tail-n0f.sh.XXXX/unreadable: permission denied"
+    },
+    "tests/tail/tail-sysfs.sh": {
+      "reason": "ERROR: setup failure: cp: cannot stat \"/sys/kernel/profiling\": No such file or directory"
+    },
+    "tests/tail/tail.pl": {
+      "reason": "FAIL: tail: invalid number of bytes: 'l'"
+    },
+    "tests/tail/wait.sh": {
+      "reason": "FAIL: tail: cannot open 'not_here' for reading: No such file or directory"
+    },
+    "tests/tee/tee.sh": {
+      "reason": "ERROR: setup failure: execution timed out after 10s"
+    }
+  }
 }

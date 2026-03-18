@@ -53,6 +53,29 @@ func parseReportedTestResults(logData []byte, selectedTests []string) (selectedR
 	return results, extras
 }
 
+func applyExpectedFailures(results []testResult, mf *manifest) []testResult {
+	if mf == nil || len(mf.ExpectedFailures) == 0 {
+		return results
+	}
+
+	out := make([]testResult, len(results))
+	for i, result := range results {
+		out[i] = result
+		entry, ok := lookupExpectedFailure(mf, result.Name)
+		if !ok {
+			continue
+		}
+		out[i].ExpectedFailureReason = entry.Reason
+		switch result.Status {
+		case "pass":
+			out[i].Status = "xpass"
+		case "fail", "error":
+			out[i].Status = "xfail"
+		}
+	}
+	return out
+}
+
 func buildTestAliases(selectedTests []string) map[string]string {
 	candidates := make(map[string][]string, len(selectedTests)*2)
 	for _, selectedTest := range selectedTests {
@@ -258,6 +281,7 @@ func buildCoverageArtifacts(selectedTests []string, filteredByPath map[string]st
 		} else if result, ok := resultByPath[path]; ok {
 			test.Status = result.Status
 			test.ReportedAs = append([]string(nil), result.ReportedAs...)
+			test.ExpectedFailureReason = result.ExpectedFailureReason
 		}
 		tests = append(tests, test)
 	}
@@ -439,7 +463,8 @@ func summarizeSuiteTests(tests []suiteTest) suiteSummary {
 		SelectedTotal: len(tests),
 		Tests:         append([]suiteTest(nil), tests...),
 	}
-	for _, test := range tests {
+	for i := range tests {
+		test := &tests[i]
 		if test.Filtered {
 			summary.FilteredTotal++
 			continue
@@ -469,8 +494,9 @@ func summarizeSuiteTests(tests []suiteTest) suiteSummary {
 
 func buildCategoryResults(tests []suiteTest) []categoryResult {
 	byName := make(map[string][]suiteTest)
-	for _, test := range tests {
-		byName[test.Category] = append(byName[test.Category], test)
+	for i := range tests {
+		test := &tests[i]
+		byName[test.Category] = append(byName[test.Category], *test)
 	}
 	names := make([]string, 0, len(byName))
 	for name := range byName {
@@ -497,7 +523,8 @@ func buildCommandCoverage(commandNames []string, tests []suiteTest) []commandCov
 		coverage := commandCoverage{Name: command}
 		primaryTests := make([]suiteTest, 0)
 		sharedTests := make([]suiteTest, 0)
-		for _, test := range tests {
+		for i := range tests {
+			test := &tests[i]
 			for _, attribution := range test.Attributions {
 				if attribution.Command != command {
 					continue
@@ -509,9 +536,9 @@ func buildCommandCoverage(commandNames []string, tests []suiteTest) []commandCov
 					Filtered: test.Filtered,
 				})
 				if attribution.Kind == "shared" {
-					sharedTests = append(sharedTests, test)
+					sharedTests = append(sharedTests, *test)
 				} else {
-					primaryTests = append(primaryTests, test)
+					primaryTests = append(primaryTests, *test)
 				}
 			}
 		}
@@ -544,7 +571,8 @@ func summarizeCoverageBucket(tests []suiteTest) coverageBucket {
 	bucket := coverageBucket{
 		SelectedTotal: len(tests),
 	}
-	for _, test := range tests {
+	for i := range tests {
+		test := &tests[i]
 		if test.Filtered {
 			bucket.FilteredTotal++
 			continue
@@ -605,7 +633,8 @@ func summarizeCoverageDebt(commands []commandCoverage, tests []suiteTest, extras
 	}
 	debt.PrimaryPassPct = percentage(debt.PrimaryPassingCommands, primaryRunnableCommands)
 
-	for _, test := range tests {
+	for i := range tests {
+		test := &tests[i]
 		directOwners := 0
 		for _, attribution := range test.Attributions {
 			if attribution.Kind == "direct" {

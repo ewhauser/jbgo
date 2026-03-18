@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"encoding/json"
 )
 
 //go:embed manifest.json
@@ -13,9 +12,5 @@ func loadManifest() (*manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out manifest
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
+	return decodeManifest(data)
 }

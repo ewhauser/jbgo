@@ -220,7 +220,7 @@ details.group summary::-webkit-details-marker {
 
     <section class="panel">
       <h2>Coverage per category</h2>
-      <p class="section-copy">Click categories to see the names of the tests. Green indicates a passing test, yellow indicates a skipped test, grey indicates an out-of-scope test excluded from the overall pass rate, and red indicates a failed, errored, or unreported test.</p>
+      <p class="section-copy">Click categories to see the names of the tests. Green indicates a passing test, yellow indicates a skipped or expected-failure test, grey indicates an out-of-scope test excluded from the overall pass rate, and red indicates a failed, errored, unexpected-pass, or unreported test.</p>
 
       <div class="details-list">
         {{- range .Summary.Categories }}
@@ -248,7 +248,7 @@ details.group summary::-webkit-details-marker {
               <tbody>
                 {{- range .Tests }}
                 <tr>
-                  <td class="mono">{{ .Path }}{{ if .Filtered }}<div class="test-note">{{ .FilterReason }}</div>{{ end }}</td>
+                  <td class="mono">{{ .Path }}{{ if .Filtered }}<div class="test-note">{{ .FilterReason }}</div>{{ end }}{{ if .ExpectedFailureReason }}<div class="test-note">expected failure: {{ .ExpectedFailureReason }}</div>{{ end }}</td>
                   <td><span class="pill {{ testStatusClass .Status .Filtered }}">{{ if .Filtered }}out of scope{{ else }}{{ .Status }}{{ end }}</span></td>
                 </tr>
                 {{- end }}
