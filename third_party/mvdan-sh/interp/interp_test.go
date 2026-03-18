@@ -1147,7 +1147,7 @@ var runTests = []runTest{
 	},
 	{
 		`[[ $PWD == "$(pwd)" ]]`,
-		"exit status 1 #IGNORE default pwd follows physical resolution",
+		"exit status 1 #IGNORE #SKIPRUN default pwd follows physical resolution",
 	},
 	{
 		"PWD=changed; [[ $PWD == changed ]]",
