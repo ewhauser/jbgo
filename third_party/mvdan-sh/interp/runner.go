@@ -494,20 +494,25 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			i += len(als.args)
 		}
 		if decl := prefixAssignDeclClause(args, cm.Assigns); decl != nil {
+			r.expandAssignsForSideEffects(cm.Assigns)
+			if r.exit.fatalExit || r.exit.exiting {
+				return
+			}
+			r.cmd(ctx, decl)
+			return
+		}
+		// Check for declaration builtins before expanding args to avoid
+		// double expansion of command substitutions in decl arguments.
+		if decl := callExprDeclClause(args); decl != nil {
+			r.expandAssignsForSideEffects(cm.Assigns)
+			if r.exit.fatalExit || r.exit.exiting {
+				return
+			}
 			r.cmd(ctx, decl)
 			return
 		}
 		r.lastExpandExit = exitStatus{}
 		fields := r.fields(args...)
-		if decl := callExprDeclClause(args); decl != nil {
-			r.runCallAssigns(cm.Assigns)
-			if r.exit.fatalExit || r.exit.exiting {
-				return
-			}
-			r.exit.clear()
-			r.cmd(ctx, decl)
-			return
-		}
 		if len(fields) == 0 {
 			for _, as := range cm.Assigns {
 				prev := r.lookupVar(as.Name.Value)
@@ -1085,6 +1090,17 @@ func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] 
 type restoreVar struct {
 	name string
 	vr   expand.Variable
+}
+
+// expandAssignsForSideEffects expands assignment values to trigger side effects
+// (like command substitutions) without persisting the assignments. This is used
+// for prefix assignments before declaration builtins, where bash runs command
+// substitutions but does not actually set the variables.
+func (r *Runner) expandAssignsForSideEffects(assigns []*syntax.Assign) {
+	for _, as := range assigns {
+		// Just expand the value to trigger side effects; don't set the variable.
+		r.assignVal(r.lookupVar(as.Name.Value), as, "")
+	}
 }
 
 func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
