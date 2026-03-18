@@ -20,6 +20,9 @@ Conformance tests compare gbash behavior against a pinned version of bash. Bats 
 ```sh
 make conformance-test   # compares gbash vs pinned bash
 make bats-test          # scripts/ test suite
+
+# Run a single conformance test file
+make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/append.test.sh'
 ```
 
 ## Key Project Rules

@@ -59,16 +59,17 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 
 	bashPath := os.Getenv("GBASH_CONFORMANCE_BASH") //nolint:forbidigo // Test harness reads host env to locate the oracle bash binary.
 	if bashPath == "" {
-		var err error
-		bashPath, err = exec.LookPath("bash")
-		if err != nil {
-			t.Skip("bash not available")
-		}
+		t.Fatal("GBASH_CONFORMANCE_BASH is not set.\n\nRun conformance tests via:\n  make conformance-test\n\nTo run a single test file:\n  make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/append.test.sh'")
 	}
-	if out, err := exec.CommandContext(t.Context(), bashPath, "--version").Output(); err == nil { //nolint:forbidigo // Logging oracle version for diagnostics.
-		firstLine, _, _ := strings.Cut(string(out), "\n")
-		t.Logf("bash oracle: %s (%s)", firstLine, bashPath)
+	out, err := exec.CommandContext(t.Context(), bashPath, "--version").Output() //nolint:forbidigo // Validate oracle version matches pinned Nix bash.
+	if err != nil {
+		t.Fatalf("failed to get bash version: %v", err)
 	}
+	firstLine, _, _ := strings.Cut(string(out), "\n")
+	if !strings.Contains(firstLine, "version 5.2.37") {
+		t.Fatalf("conformance tests require bash 5.2.37 (pinned via Nix), got: %s\n\nRun conformance tests via:\n  make conformance-test\n\nTo run a single test file:\n  make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/append.test.sh'", firstLine)
+	}
+	t.Logf("bash oracle: %s (%s)", firstLine, bashPath)
 
 	manifest, err := LoadManifest(cfg.ManifestPath)
 	if err != nil {

@@ -166,10 +166,12 @@ lint-new:
 test:
 	go test -race $(GO_PACKAGES)
 
+CONFORMANCE_RUN ?= TestConformance
+
 conformance-test:
 	@BASH_PATH=$$(./scripts/ensure-bash.sh) || exit 1; \
 	GBASH_RUN_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
-	  go test ./internal/conformance -run TestConformance -count=1 -timeout=20m
+	  go test ./internal/conformance -run "$(CONFORMANCE_RUN)" -count=1 -timeout=20m
 
 ensure-bash:
 	@./scripts/ensure-bash.sh
