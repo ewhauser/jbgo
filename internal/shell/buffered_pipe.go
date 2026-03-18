@@ -131,6 +131,9 @@ func (w *bufferedPipeWriter) Write(p []byte) (int, error) {
 			if w.pipe.closed {
 				return written, w.pipe.err
 			}
+			if w.pipe.wrClosed {
+				return written, io.ErrClosedPipe
+			}
 			w.pipe.cond.Wait()
 		}
 

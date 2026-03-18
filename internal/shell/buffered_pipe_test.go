@@ -144,3 +144,36 @@ func TestBufferedPipeCloseUnblocksWriter(t *testing.T) {
 		t.Fatal("Write did not unblock after reader close")
 	}
 }
+
+func TestBufferedPipeWriterCloseUnblocksOwnWrite(t *testing.T) {
+	t.Parallel()
+
+	reader, writer := newBufferedPipeSize(10)
+	defer func() { _ = reader.Close() }()
+
+	// Fill buffer
+	_, _ = writer.Write([]byte("0123456789"))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, err := writer.Write([]byte("x"))
+		// Should get ErrClosedPipe after writer closes
+		if err == nil {
+			t.Error("Write should have returned error after writer close")
+		}
+	}()
+
+	// Give the goroutine time to block on full buffer
+	time.Sleep(10 * time.Millisecond)
+
+	// Close writer should unblock the blocked write
+	_ = writer.Close()
+
+	select {
+	case <-done:
+		// Write unblocked as expected
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Blocked write did not unblock after writer close")
+	}
+}
