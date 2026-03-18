@@ -7,14 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/ewhauser/gbash/internal/testutil"
 )
 
 func TestPipelineStateMatchesBashBehavior(t *testing.T) {
 	t.Parallel()
-	bashPath, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash not available")
-	}
+	bashPath := testutil.RequireConformanceBashOrSkip(t)
 
 	testCases := []struct {
 		name   string

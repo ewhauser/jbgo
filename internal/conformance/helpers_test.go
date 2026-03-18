@@ -2,8 +2,9 @@ package conformance
 
 import (
 	"context"
-	"os/exec"
 	"testing"
+
+	"github.com/ewhauser/gbash/internal/testutil"
 )
 
 func TestArgvHelperScript(t *testing.T) {
@@ -85,10 +86,7 @@ func TestTacHelperScript(t *testing.T) {
 func runHelperCase(t *testing.T, specCase SpecCase) ComparisonResult {
 	t.Helper()
 
-	bashPath, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash not available")
-	}
+	bashPath := testutil.RequireConformanceBashOrSkip(t)
 	result, err := RunCase(context.Background(), &SuiteConfig{
 		Name:       "bash",
 		BinDir:     "bin",

@@ -9,13 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ewhauser/gbash/internal/testutil"
 	"github.com/go-quicktest/qt"
 )
 
 func FuzzQuote(f *testing.F) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		f.Skipf("requires bash to verify quoted strings")
-	}
+	bashPath := testutil.RequireConformanceBashOrSkip(f)
 
 	// Keep in sync with ExampleQuote.
 	f.Add("foo", uint8(LangBash))
@@ -67,7 +66,11 @@ func FuzzQuote(f *testing.F) {
 		// The process below shouldn't run arbitrary code,
 		// since our parser checks above should catch the use of ';' or '$',
 		// in the case that Quote were too naive to quote them.
-		out, err := exec.Command(external.cmd, "-c", "printf %s "+quoted).CombinedOutput()
+		externalCmd := external.cmd
+		if lang == LangBash {
+			externalCmd = bashPath
+		}
+		out, err := exec.Command(externalCmd, "-c", "printf %s "+quoted).CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s error on %q quoted as %s: %v: %s", external.cmd, s, quoted, err, out)
 		}
