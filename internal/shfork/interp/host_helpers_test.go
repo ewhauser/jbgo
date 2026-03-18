@@ -24,6 +24,17 @@ import (
 
 const hostTestExecKillTimeout = 2 * time.Second
 
+// hostTestPipeFunc creates os.Pipe for use with external commands.
+// This is needed because exec.Cmd requires *os.File stdin to avoid
+// consuming all input data in a copy goroutine.
+func hostTestPipeFunc() (interp.StdinReader, io.WriteCloser) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+	return pr, pw
+}
+
 func hostTestRunnerOptions(dir string, killTimeout time.Duration, opts ...interp.RunnerOption) []interp.RunnerOption {
 	if dir == "" {
 		dir = hostTestWorkingDir()
@@ -35,6 +46,7 @@ func hostTestRunnerOptions(dir string, killTimeout time.Duration, opts ...interp
 		interp.ReadDirHandler2(hostTestReadDirHandler),
 		interp.StatHandler(hostTestStatHandler),
 		interp.RealpathHandler(hostTestRealpathHandler),
+		interp.Pipe(hostTestPipeFunc), // Use os.Pipe for external commands
 	}
 	all = append(all, opts...)
 	all = append(all, interp.ExecHandlers(hostTestExecMiddleware(killTimeout)))
@@ -126,10 +138,9 @@ func hostTestExecMiddleware(killTimeout time.Duration) func(interp.ExecHandlerFu
 				fmt.Fprintln(hc.Stderr, err)
 				return interp.ExitStatus(127)
 			}
-			// When stdin is not *os.File, exec.Cmd will spawn a goroutine to copy
-			// all data from the reader to a pipe. This consumes all stdin, breaking
-			// the semantics for commands that don't read stdin (like 'env').
-			// To preserve the correct behavior, only pass *os.File stdin to the command.
+			// Pass stdin to the command. Only pass *os.File stdin directly to avoid
+			// exec.Cmd spawning a copy goroutine that consumes all stdin data.
+			// When using os.Pipe (via hostTestPipeFunc), hc.Stdin is *os.File.
 			var stdin *os.File
 			if f, ok := hc.Stdin.(*os.File); ok {
 				stdin = f

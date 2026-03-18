@@ -264,6 +264,12 @@ type ProcSubstEndpoint struct {
 // The context includes a [HandlerContext] value.
 type ProcSubstHandlerFunc func(ctx context.Context, ps *syntax.ProcSubst) (*ProcSubstEndpoint, error)
 
+// PipeFunc creates a connected reader/writer pair for shell pipes and heredocs.
+// The reader should implement StdinReader (io.ReadCloser + SetReadDeadline).
+// The writer should implement io.WriteCloser.
+// If nil, the default virtual pipe implementation is used.
+type PipeFunc func() (StdinReader, io.WriteCloser)
+
 // TODO: paths passed to [OpenHandlerFunc] should be cleaned.
 
 func closedOpenHandler() OpenHandlerFunc {

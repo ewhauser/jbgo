@@ -36,6 +36,15 @@ const (
 	shellReplyVar = "REPLY"
 )
 
+// newPipe creates a pipe using the runner's pipeFunc if set,
+// otherwise uses the default virtual pipe.
+func (r *Runner) newPipe() (StdinReader, io.WriteCloser) {
+	if r.pipeFunc != nil {
+		return r.pipeFunc()
+	}
+	return NewVirtualPipe()
+}
+
 func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ectx = ctx
 	r.ecfg = &expand.Config{
@@ -519,7 +528,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.stmt(ctx, cm.Y)
 			}
 		case syntax.Pipe, syntax.PipeAll:
-			pr, pw := NewVirtualPipe()
+			pr, pw := r.newPipe()
 			r2 := r.subshell(true)
 			r2.stdout = pw
 			if cm.Op == syntax.PipeAll {
@@ -1129,7 +1138,7 @@ func (r *Runner) stmts(ctx context.Context, stmts []*syntax.Stmt) {
 }
 
 func (r *Runner) hdocReader(rd *syntax.Redirect) (StdinReader, error) {
-	pr, pw := NewVirtualPipe()
+	pr, pw := r.newPipe()
 	// We write to the pipe in a new goroutine,
 	// as pipe writes may block once the buffer gets full.
 	// We still construct and buffer the entire heredoc first,
@@ -1203,7 +1212,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	arg := r.literal(rd.Word)
 	switch rd.Op {
 	case syntax.WordHdoc:
-		pr, pw := NewVirtualPipe()
+		pr, pw := r.newPipe()
 		r.stdin = pr
 		// We write to the pipe in a new goroutine,
 		// as pipe writes may block once the buffer gets full.

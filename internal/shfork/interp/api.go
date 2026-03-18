@@ -106,6 +106,10 @@ type Runner struct {
 	// process substitutions.
 	procSubstHandler ProcSubstHandlerFunc
 
+	// pipeFunc creates pipes for shell pipelines and heredocs.
+	// If nil, the default virtual pipe is used.
+	pipeFunc PipeFunc
+
 	uid  int
 	euid int
 	gid  int
@@ -677,6 +681,15 @@ func ProcSubstHandler(f ProcSubstHandlerFunc) RunnerOption {
 	}
 }
 
+// Pipe sets the pipe creation function. See [PipeFunc] for more info.
+// If not set, the default virtual pipe implementation is used.
+func Pipe(f PipeFunc) RunnerOption {
+	return func(r *Runner) error {
+		r.pipeFunc = f
+		return nil
+	}
+}
+
 func stdinReader(r io.Reader) StdinReader {
 	switch r := r.(type) {
 	case StdinReader:
@@ -957,6 +970,7 @@ func (r *Runner) Reset() {
 		statHandler:      r.statHandler,
 		realpathHandler:  r.realpathHandler,
 		procSubstHandler: r.procSubstHandler,
+		pipeFunc:         r.pipeFunc,
 		uid:              r.uid,
 		euid:             r.euid,
 		gid:              r.gid,
@@ -1200,6 +1214,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		statHandler:        r.statHandler,
 		realpathHandler:    r.realpathHandler,
 		procSubstHandler:   r.procSubstHandler,
+		pipeFunc:           r.pipeFunc,
 		uid:                r.uid,
 		euid:               r.euid,
 		gid:                r.gid,
