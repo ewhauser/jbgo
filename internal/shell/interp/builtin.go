@@ -300,6 +300,35 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			<-bg.done
 			exit = *bg.exit
 		}
+	case "caller":
+		depth := 0
+		switch len(args) {
+		case 0:
+		case 1:
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 0 {
+				return failf(2, "caller: %s: numeric argument required\n", args[0])
+			}
+			depth = n
+		default:
+			return failf(2, "caller: too many arguments\n")
+		}
+		lines := r.bashLineNoStack()
+		funcs := r.funcNameStack()
+		sources := r.bashSourceStack()
+		if depth >= len(lines) || depth+1 >= len(funcs) {
+			exit.code = 1
+			return exit
+		}
+		file := ""
+		if depth+1 < len(sources) {
+			file = sources[depth+1]
+		}
+		if file != "" {
+			fmt.Fprintf(r.stdout, "%s %s %s\n", lines[depth], funcs[depth+1], file)
+		} else {
+			fmt.Fprintf(r.stdout, "%s %s\n", lines[depth], funcs[depth+1])
+		}
 	case "builtin":
 		if len(args) < 1 {
 			break

@@ -91,6 +91,42 @@ cat $TMP/named-fd.txt
 ## stdout: named-fd-contents
 ## status: 0
 
+#### Named file descriptor for input
+case $SH in mksh|dash) exit 1 ;; esac
+
+printf '%s\n' one two > "$TMP/named-fd-input.txt"
+exec {myfd}< "$TMP/named-fd-input.txt"
+read -u "$myfd" first
+read -u "$myfd" second
+printf '%s,%s\n' "$first" "$second"
+## N-I dash/mksh stdout-json: ""
+## N-I dash/mksh status: 1
+
+#### Duplicated named file descriptor shares file position
+case $SH in mksh|dash) exit 1 ;; esac
+
+printf '%s\n' one two > "$TMP/dup-named-fd.txt"
+exec {src}< "$TMP/dup-named-fd.txt"
+exec {dup}<&$src
+read -u "$src" first
+read -u "$dup" second
+printf '%s,%s\n' "$first" "$second"
+## N-I dash/mksh stdout-json: ""
+## N-I dash/mksh status: 1
+
+#### Named read-write file descriptor
+case $SH in mksh|dash) exit 1 ;; esac
+
+printf '%s\n' alpha beta > "$TMP/named-fd-rw.txt"
+exec {rw}<> "$TMP/named-fd-rw.txt"
+read -u "$rw" line
+printf 'gamma\n' >&$rw
+exec {rw}>&-
+printf 'line=%s\n' "$line"
+cat "$TMP/named-fd-rw.txt"
+## N-I dash/mksh stdout-json: ""
+## N-I dash/mksh status: 1
+
 #### Double digit fd (20> file)
 exec 20> "$TMP/double-digit-fd.txt"
 echo hello20 >&20

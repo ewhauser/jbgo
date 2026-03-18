@@ -94,3 +94,26 @@ other
 .foorc other
 ## END
 
+#### shopt -s nocaseglob matches bracket patterns
+mkdir -p $TMP/nocaseglob
+cd $TMP/nocaseglob
+touch Alpha.TXT beta.txt Gamma.TxT
+
+printf '%s\n' [a-z]*.txt | sort
+shopt -s nocaseglob
+printf '%s\n' [a-z]*.txt | sort
+
+#### nocaseglob with nullglob and failglob
+mkdir -p $TMP/nocaseglob-modes
+cd $TMP/nocaseglob-modes
+touch DATA.LOG
+
+shopt -s nocaseglob nullglob
+argv.sh *.log
+rm DATA.LOG
+argv.sh *.log
+
+shopt -u nullglob
+shopt -s failglob
+echo *.log
+echo status=$?

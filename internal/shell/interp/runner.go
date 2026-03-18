@@ -145,8 +145,9 @@ func (r *Runner) runProcSubst(ctx context.Context, ps *syntax.ProcSubst, path st
 	// TODO: note that `man bash` mentions that `wait` only waits for the last
 	// process substitution as long as it is $!; the logic here would mean we wait for all of them.
 	bg := bgProc{
-		done: make(chan struct{}),
-		exit: new(exitStatus),
+		done:      make(chan struct{}),
+		exit:      new(exitStatus),
+		procSubst: true,
 	}
 	r.bgProcs = append(r.bgProcs, bg)
 	go func() {
@@ -373,6 +374,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 
 func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	oldIn, oldOut, oldErr := r.stdin, r.stdout, r.stderr
+	closers := make([]io.Closer, 0, len(st.Redirs))
 	for _, rd := range st.Redirs {
 		cls, err := r.redir(ctx, rd)
 		if err != nil {
@@ -380,11 +382,14 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			break
 		}
 		if cls != nil {
-			defer cls.Close()
+			closers = append(closers, cls)
 		}
 	}
 	if r.exit.ok() && st.Cmd != nil {
 		r.cmd(ctx, st.Cmd)
+	}
+	for i := len(closers) - 1; i >= 0; i-- {
+		_ = closers[i].Close()
 	}
 	if st.Negated {
 		if r.exit.ok() {
@@ -406,6 +411,19 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	}
 	if !r.keepRedirs {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
+	}
+}
+
+func (r *Runner) waitProcSubsts(start int) {
+	if start < 0 || start >= len(r.bgProcs) {
+		return
+	}
+	for i := start; i < len(r.bgProcs); i++ {
+		bg := r.bgProcs[i]
+		if !bg.procSubst {
+			continue
+		}
+		<-bg.done
 	}
 }
 

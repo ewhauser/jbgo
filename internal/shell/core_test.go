@@ -91,6 +91,92 @@ func TestCoreRunPreservesLastpipeBehavior(t *testing.T) {
 	}
 }
 
+func TestCoreRunWaitsForOutputProcessSubstitution(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "printf", "sed")
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script:   "printf '%s\\n' alpha beta > >(sed 's/^/ps:/')\n",
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "ps:alpha\nps:beta\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCoreRunCallerBuiltin(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "cat", "echo")
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			`cat > caller-lib.sh <<'EOF'`,
+			`inner() {`,
+			`  caller 0`,
+			`  echo "status=$?"`,
+			`  caller 1`,
+			`  echo "status=$?"`,
+			`  caller 2`,
+			`  echo "status=$?"`,
+			`}`,
+			`outer() {`,
+			`  inner`,
+			`}`,
+			`EOF`,
+			`. ./caller-lib.sh`,
+			`outer`,
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if got, want := len(lines), 4; got != want {
+		t.Fatalf("output lines = %d, want %d: %q", got, want, stdout.String())
+	}
+	fields := strings.Fields(lines[0])
+	if len(fields) != 3 {
+		t.Fatalf("caller output fields = %q, want 3 fields", lines[0])
+	}
+	if got, want := fields[1], "outer"; got != want {
+		t.Fatalf("caller function = %q, want %q", got, want)
+	}
+	if !strings.HasSuffix(fields[2], "caller-lib.sh") {
+		t.Fatalf("caller source = %q, want suffix %q", fields[2], "caller-lib.sh")
+	}
+	if got, want := lines[1], "status=0"; got != want {
+		t.Fatalf("first caller status = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "status=1"; got != want {
+		t.Fatalf("second caller status = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "status=1"; got != want {
+		t.Fatalf("third caller status = %q, want %q", got, want)
+	}
+}
+
 func TestCoreRunSyncsShellStateWithoutBootstrapEval(t *testing.T) {
 	t.Parallel()
 
