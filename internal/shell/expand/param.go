@@ -695,9 +695,16 @@ func (cfg *Config) varInd(vr Variable, idx syntax.ArithmExpr) (string, error) {
 
 func (cfg *Config) namesByPrefix(prefix string) []string {
 	var names []string
+	seen := make(map[string]struct{})
 	for name := range cfg.Env.Each {
 		if strings.HasPrefix(name, prefix) {
-			names = append(names, name)
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			if cfg.Env.Get(name).IsSet() {
+				names = append(names, name)
+			}
 		}
 	}
 	return names

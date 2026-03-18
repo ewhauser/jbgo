@@ -25,6 +25,26 @@ func (e testEnv) Each(fn func(name string, vr Variable) bool) {
 	}
 }
 
+type testEnvEntry struct {
+	name string
+	vr   Variable
+}
+
+type layeredTestEnv struct {
+	values  map[string]Variable
+	entries []testEnvEntry
+}
+
+func (e layeredTestEnv) Get(name string) Variable { return e.values[name] }
+
+func (e layeredTestEnv) Each(fn func(name string, vr Variable) bool) {
+	for _, entry := range e.entries {
+		if !fn(entry.name, entry.vr) {
+			return
+		}
+	}
+}
+
 func parseWord(t *testing.T, src string) *syntax.Word {
 	t.Helper()
 	p := syntax.NewParser()
@@ -250,6 +270,31 @@ func TestFieldsQuotedStarSingleEmptyMatchesBash(t *testing.T) {
 				t.Fatalf("wanted %q, got %q", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestNamesByPrefixSkipsShadowedUnsetVariables(t *testing.T) {
+	cfg := &Config{
+		Env: layeredTestEnv{
+			values: map[string]Variable{
+				"foo":    {},
+				"foobar": {Set: true, Kind: String, Str: "visible"},
+				"fooz":   {Set: true, Kind: String, Str: "newer"},
+			},
+			entries: []testEnvEntry{
+				{name: "foo", vr: Variable{Set: true, Kind: String, Str: "old"}},
+				{name: "foobar", vr: Variable{Set: true, Kind: String, Str: "visible"}},
+				{name: "fooz", vr: Variable{Set: true, Kind: String, Str: "old"}},
+				{name: "foo", vr: Variable{}},
+				{name: "fooz", vr: Variable{Set: true, Kind: String, Str: "newer"}},
+			},
+		},
+	}
+
+	got := cfg.namesByPrefix("foo")
+	want := []string{"foobar", "fooz"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("namesByPrefix(%q) = %q, want %q", "foo", got, want)
 	}
 }
 
