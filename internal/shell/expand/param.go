@@ -62,7 +62,8 @@ func sortedMapKeys(m map[string]string) []string {
 		if ha > hb {
 			return 1
 		}
-		return 0
+		// Hash collision: fall back to lexicographic order for determinism.
+		return strings.Compare(a, b)
 	})
 	return keys
 }
