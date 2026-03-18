@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/fs"
 	"iter"
-	"maps"
 	"os"
 	"path"
 	"regexp"
@@ -923,7 +922,7 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 				}
 				return keys, true, nil
 			case Associative:
-				return slices.Collect(maps.Keys(vr.Map)), true, nil
+				return sortedMapKeys(vr.Map), true, nil
 			}
 		}
 		return nil, false, nil
@@ -1010,7 +1009,7 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 			elems := cfg.sliceElems(pe, vr.List, false)
 			return elems, elems, true
 		case Associative:
-			elems := slices.Collect(maps.Values(vr.Map))
+			elems := sortedMapValues(vr.Map)
 			return elems, elems, true
 		case Unknown:
 			if !vr.IsSet() {
@@ -1025,7 +1024,7 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 		if vr.Kind == Associative {
-			elems := slices.Sorted(maps.Values(vr.Map))
+			elems := sortedMapValues(vr.Map)
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 	}

@@ -5,7 +5,6 @@ package expand
 
 import (
 	"fmt"
-	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -22,6 +21,61 @@ func nodeLit(node syntax.Node) string {
 		return word.Lit()
 	}
 	return ""
+}
+
+// fnv1Hash computes the FNV-1 hash for a string.
+// This matches bash's internal hash function for associative arrays.
+func fnv1Hash(s string) uint32 {
+	const (
+		fnvOffsetBasis = 2166136261
+		fnvPrime       = 16777619
+	)
+	h := uint32(fnvOffsetBasis)
+	for i := 0; i < len(s); i++ {
+		h *= fnvPrime
+		h ^= uint32(s[i])
+	}
+	return h
+}
+
+// sortedMapKeys returns the keys of an associative array in bash-compatible order.
+// Bash uses FNV-1 hash with 1024 buckets, iterating buckets in ascending order
+// and keys within each bucket by ascending hash value.
+func sortedMapKeys(m map[string]string) []string {
+	const bucketCount = 1024
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.SortFunc(keys, func(a, b string) int {
+		ha, hb := fnv1Hash(a), fnv1Hash(b)
+		ba, bb := ha%bucketCount, hb%bucketCount
+		if ba != bb {
+			if ba < bb {
+				return -1
+			}
+			return 1
+		}
+		if ha < hb {
+			return -1
+		}
+		if ha > hb {
+			return 1
+		}
+		return 0
+	})
+	return keys
+}
+
+// sortedMapValues returns the values of an associative array in bash-compatible order,
+// matching the key order from sortedMapKeys.
+func sortedMapValues(m map[string]string) []string {
+	keys := sortedMapKeys(m)
+	vals := make([]string, len(keys))
+	for i, k := range keys {
+		vals[i] = m[k]
+	}
+	return vals
 }
 
 // UnsetParameterError is returned when a parameter expansion encounters an
@@ -104,7 +158,7 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 		case Associative:
 			state.indexAllElements = true
 			state.callVarInd = false
-			state.elems = slices.Sorted(maps.Values(state.vr.Map))
+			state.elems = sortedMapValues(state.vr.Map)
 			state.str = strings.Join(state.elems, " ")
 		}
 	}
@@ -405,6 +459,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		str = strconv.Itoa(n)
 	case pe.Excl:
 		var strs []string
+		assocKeys := false
 		switch {
 		case pe.Names != 0:
 			strs = cfg.namesByPrefix(pe.Param.Value)
@@ -417,7 +472,8 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 				}
 			}
 		case pe.Index != nil && vr.Kind == Associative:
-			strs = slices.AppendSeq(strs, maps.Keys(vr.Map))
+			strs = sortedMapKeys(vr.Map)
+			assocKeys = true
 		case !vr.IsSet():
 			return "", fmt.Errorf("invalid indirect expansion")
 		case str == "":
@@ -426,7 +482,9 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 			vr = cfg.Env.Get(str)
 			strs = append(strs, vr.String())
 		}
-		slices.Sort(strs)
+		if !assocKeys {
+			slices.Sort(strs)
+		}
 		str = strings.Join(strs, " ")
 	case pe.Width:
 		return "", fmt.Errorf("unsupported")
@@ -678,7 +736,12 @@ func (cfg *Config) varInd(vr Variable, idx syntax.ArithmExpr) (string, error) {
 	case Associative:
 		switch lit := nodeLit(idx); lit {
 		case "@", "*":
-			strs := slices.Sorted(maps.Values(vr.Map))
+			// Iterate values in bash-compatible key order.
+			keys := sortedMapKeys(vr.Map)
+			strs := make([]string, len(keys))
+			for i, k := range keys {
+				strs[i] = vr.Map[k]
+			}
 			if lit == "*" {
 				return cfg.ifsJoin(strs), nil
 			}

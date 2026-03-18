@@ -410,10 +410,6 @@
           "mode": "xfail",
           "reason": "gbash does not error on single-quoted strings inside (( )) like bash does"
         },
-        "oils/type-compat.test.sh::declare array vs. associative array": {
-          "mode": "xfail",
-          "reason": "gbash sorts associative array keys/values alphabetically, bash uses hash order"
-        },
         "oils/unicode.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
