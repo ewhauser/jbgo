@@ -13,6 +13,15 @@ go test ./... ./contrib/extras/... ./contrib/sqlite3/... ./contrib/jq/... ./cont
 
 Before submitting or updating a PR, run `make lint` from the repo root and fix any reported issues.
 
+## Conformance & Bats Tests
+
+Conformance tests compare gbash behavior against a pinned version of bash. Bats tests validate shell scripts in `scripts/`. Both require Nix installed to fetch pinned binaries.
+
+```sh
+make conformance-test   # compares gbash vs pinned bash
+make bats-test          # scripts/ test suite
+```
+
 ## Key Project Rules
 - Unknown commands must never fall through to the host OS.
 - Match the registry pattern in `commands/` when adding new built-in commands.
