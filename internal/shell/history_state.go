@@ -51,10 +51,14 @@ func syncCommandHistory(hc *interp.HandlerContext, before, after map[string]stri
 }
 
 func historyEntriesFromRunner(runner *interp.Runner) []string {
-	if runner == nil || runner.Vars == nil {
+	if runner == nil {
 		return nil
 	}
-	return parseHistoryEntries(runner.Vars[shellHistoryEnvVar].String())
+	raw, ok := runner.ShellVarString(shellHistoryEnvVar)
+	if !ok {
+		return nil
+	}
+	return parseHistoryEntries(raw)
 }
 
 func parseHistoryEntries(raw string) []string {

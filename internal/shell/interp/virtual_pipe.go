@@ -17,8 +17,8 @@ type StdinReader interface {
 // Ensure *os.File implements StdinReader (it does via net.Conn-like interface).
 var _ StdinReader = (*os.File)(nil)
 
-// Ensure *VirtualPipeReader implements StdinReader.
-var _ StdinReader = (*VirtualPipeReader)(nil)
+// Ensure *virtualPipeReader implements StdinReader.
+var _ StdinReader = (*virtualPipeReader)(nil)
 
 // defaultPipeBufferSize is the default buffer size for virtual pipes.
 // This matches typical Linux pipe buffer size for consistent behavior.
@@ -42,15 +42,15 @@ type virtualPipe struct {
 	readDeadline time.Time
 }
 
-// VirtualPipeReader is the read end of a virtualPipe.
+// virtualPipeReader is the read end of a virtualPipe.
 // It implements io.ReadCloser and supports SetReadDeadline for
 // compatibility with context cancellation in the read builtin.
-type VirtualPipeReader struct {
+type virtualPipeReader struct {
 	pipe *virtualPipe
 }
 
-// VirtualPipeWriter is the write end of a virtualPipe.
-type VirtualPipeWriter struct {
+// virtualPipeWriter is the write end of a virtualPipe.
+type virtualPipeWriter struct {
 	pipe *virtualPipe
 }
 
@@ -66,11 +66,11 @@ func (p *virtualPipe) checkDeadline() error {
 }
 
 // NewVirtualPipe creates a new buffered virtual pipe with the default buffer size.
-func NewVirtualPipe() (*VirtualPipeReader, *VirtualPipeWriter) {
+func NewVirtualPipe() (StdinReader, io.WriteCloser) {
 	return newVirtualPipeSize(defaultPipeBufferSize)
 }
 
-func newVirtualPipeSize(size int) (*VirtualPipeReader, *VirtualPipeWriter) {
+func newVirtualPipeSize(size int) (StdinReader, io.WriteCloser) {
 	if size <= 0 {
 		size = defaultPipeBufferSize
 	}
@@ -79,12 +79,12 @@ func newVirtualPipeSize(size int) (*VirtualPipeReader, *VirtualPipeWriter) {
 		bufSize: size,
 	}
 	p.cond = sync.NewCond(&p.mu)
-	return &VirtualPipeReader{pipe: p}, &VirtualPipeWriter{pipe: p}
+	return &virtualPipeReader{pipe: p}, &virtualPipeWriter{pipe: p}
 }
 
 // Read reads data from the pipe. It blocks until data is available,
 // the write end is closed, the pipe is closed, or the read deadline is exceeded.
-func (r *VirtualPipeReader) Read(p []byte) (int, error) {
+func (r *virtualPipeReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -121,7 +121,7 @@ func (r *VirtualPipeReader) Read(p []byte) (int, error) {
 // SetReadDeadline sets the deadline for future Read calls.
 // A zero value for t means Read will not time out.
 // This is compatible with the os.File.SetReadDeadline interface.
-func (r *VirtualPipeReader) SetReadDeadline(t time.Time) error {
+func (r *virtualPipeReader) SetReadDeadline(t time.Time) error {
 	r.pipe.mu.Lock()
 	r.pipe.readDeadline = t
 	r.pipe.cond.Broadcast() // Wake up any blocked readers to check deadline
@@ -141,13 +141,13 @@ func (r *VirtualPipeReader) SetReadDeadline(t time.Time) error {
 
 // Close closes the read end of the pipe. Subsequent writes will fail
 // with io.ErrClosedPipe (broken pipe semantics).
-func (r *VirtualPipeReader) Close() error {
+func (r *virtualPipeReader) Close() error {
 	return r.CloseWithError(io.ErrClosedPipe)
 }
 
 // CloseWithError closes the read end with the given error.
 // Subsequent writes will return this error.
-func (r *VirtualPipeReader) CloseWithError(err error) error {
+func (r *virtualPipeReader) CloseWithError(err error) error {
 	r.pipe.mu.Lock()
 	defer r.pipe.mu.Unlock()
 
@@ -165,7 +165,7 @@ func (r *VirtualPipeReader) CloseWithError(err error) error {
 
 // Write writes data to the pipe. It blocks if the buffer is full
 // until space is available or the pipe is closed.
-func (w *VirtualPipeWriter) Write(p []byte) (int, error) {
+func (w *virtualPipeWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -213,14 +213,14 @@ func (w *VirtualPipeWriter) Write(p []byte) (int, error) {
 
 // Close closes the write end of the pipe. Subsequent reads will
 // return io.EOF once the buffer is drained.
-func (w *VirtualPipeWriter) Close() error {
+func (w *virtualPipeWriter) Close() error {
 	return w.CloseWithError(nil)
 }
 
 // CloseWithError closes the write end with the given error.
 // If err is nil, subsequent reads return io.EOF after draining the buffer.
 // If err is non-nil, subsequent reads return the error immediately.
-func (w *VirtualPipeWriter) CloseWithError(err error) error {
+func (w *virtualPipeWriter) CloseWithError(err error) error {
 	w.pipe.mu.Lock()
 	defer w.pipe.mu.Unlock()
 

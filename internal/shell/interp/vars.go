@@ -106,7 +106,8 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 			o.values[normalized] = namedVariable{name, vr}
 			return nil
 		}
-		delete(o.values, normalized)
+		o.values[normalized] = namedVariable{name, vr}
+		return nil
 	}
 	// modifying the entire variable
 	vr.Local = prev.Local || vr.Local
@@ -345,10 +346,10 @@ func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax
 }
 
 func (r *Runner) setFunc(name string, body *syntax.Stmt) {
-	if r.Funcs == nil {
-		r.Funcs = make(map[string]*syntax.Stmt, 4)
+	if r.funcs == nil {
+		r.funcs = make(map[string]*syntax.Stmt, 4)
 	}
-	r.Funcs[name] = body
+	r.funcs[name] = body
 	r.setFuncSource(name, r.currentDefinitionSource())
 	r.setFuncInternal(name, r.currentInternal())
 }

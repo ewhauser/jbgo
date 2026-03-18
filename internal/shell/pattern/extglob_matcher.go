@@ -1,33 +1,31 @@
 // Copyright (c) 2026, Daniel Martí <mvdan@mvdan.cc>
 // See LICENSE for licensing information
 
-package internal
+package pattern
 
 import (
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/ewhauser/gbash/internal/shell/pattern"
 )
 
 // ExtendedPatternMatcher returns a [regexp.Regexp.MatchString]-like function
 // to support !(pattern-list) extended patterns where possible.
-// It can be used instead of [pattern.Regexp] for narrow use cases.
-func ExtendedPatternMatcher(pat string, mode pattern.Mode) (func(string) bool, error) {
-	if mode&pattern.ExtendedOperators != 0 && mode&pattern.EntireString == 0 {
+// It can be used instead of [Regexp] for narrow use cases.
+func ExtendedPatternMatcher(pat string, mode Mode) (func(string) bool, error) {
+	if mode&ExtendedOperators != 0 && mode&EntireString == 0 {
 		// In the future we could try to support !(pattern) without matching
 		// the entire input, ensuring we add enough test cases.
 		panic("ExtendedOperators is only supported with EntireString")
 	}
 
 	// Extended pattern matching operators are always on outside of pathname expansion.
-	expr, err := pattern.Regexp(pat, mode)
+	expr, err := Regexp(pat, mode)
 	if err != nil {
 		// Handle !(pattern-list) negation: when Regexp returns NegExtglobError,
 		// match the inner pattern and negate the result.
-		var negErr *pattern.NegExtGlobError
+		var negErr *NegExtGlobError
 		if !errors.As(err, &negErr) {
 			return nil, err
 		}
@@ -39,7 +37,7 @@ func ExtendedPatternMatcher(pat string, mode pattern.Mode) (func(string) bool, e
 
 // extNegatedMatcher handles !(pattern-list) extglob negation.
 // Only a single !(...) group with fixed-string prefix and suffix is supported.
-func extNegatedMatcher(pat string, groups []pattern.NegExtGlobGroup) (func(string) bool, error) {
+func extNegatedMatcher(pat string, groups []NegExtGlobGroup) (func(string) bool, error) {
 	if len(groups) != 1 {
 		return nil, fmt.Errorf("multiple extglob !(...) groups are not supported yet")
 	}
@@ -47,13 +45,13 @@ func extNegatedMatcher(pat string, groups []pattern.NegExtGlobGroup) (func(strin
 	prefix := pat[:g.Start]
 	suffix := pat[g.End:]
 
-	if pattern.HasMeta(prefix, 0) || pattern.HasMeta(suffix, 0) {
+	if HasMeta(prefix, 0) || HasMeta(suffix, 0) {
 		return nil, fmt.Errorf("extglob !(...) is only supported with a fixed prefix and suffix")
 	}
 
 	// Use @(inner) to compile the pattern list, then negate the match.
 	inner := pat[g.Start+len("!(") : g.End-len(")")]
-	expr, err := pattern.Regexp("@("+inner+")", pattern.EntireString|pattern.ExtendedOperators)
+	expr, err := Regexp("@("+inner+")", EntireString|ExtendedOperators)
 	if err != nil {
 		return nil, err
 	}

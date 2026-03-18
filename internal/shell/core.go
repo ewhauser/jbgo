@@ -120,7 +120,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 			if exec.Stderr != nil {
 				_, _ = fmt.Fprintln(exec.Stderr, sanitizeRunnerPanic(recovered))
 			}
-			result = &RunResult{FinalEnv: envMapFromVars(nil)}
+			result = &RunResult{FinalEnv: nil}
 			runErr = interp.ExitStatus(2)
 		}
 	}()
@@ -131,7 +131,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	if err != nil {
 		if code, ok := compilationExitStatus(err); ok {
 			writeCompilationError(exec.Stderr, err)
-			return &RunResult{FinalEnv: envMapFromVars(nil)}, interp.ExitStatus(code)
+			return &RunResult{FinalEnv: nil}, interp.ExitStatus(code)
 		}
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	}
 	runErr = runner.RunWithMetadata(ctx, compiled.program, effectiveExec.ScriptPath, compiled.pipelineSubshells)
 	return &RunResult{
-		FinalEnv:    envMapFromVars(runner.Vars),
+		FinalEnv:    runner.ShellEnv(),
 		ShellExited: runner.Exited(),
 	}, runErr
 }
@@ -217,7 +217,7 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 		CallHandler:      m.callHandler(exec, budget),
 		ExecHandler:      m.execHandler(exec, budget),
 		OpenHandler:      m.openHandler(exec),
-		ReadDirHandler2:  m.readDirHandler(exec),
+		ReadDirHandler:   m.readDirHandler(exec),
 		StatHandler:      m.statHandler(exec),
 		RealpathHandler:  m.realpathHandler(exec),
 		ProcSubstHandler: m.procSubstHandler(exec),
@@ -344,7 +344,7 @@ func (m *core) openHandler(exec *Execution) interp.OpenHandlerFunc {
 	}
 }
 
-func (m *core) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
+func (m *core) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc {
 	return func(ctx context.Context, name string) ([]stdfs.DirEntry, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
@@ -394,7 +394,10 @@ func (m *core) callHandler(exec *Execution, budget *executionBudget) interp.Call
 		if isInternalHelperCommand(args[0]) {
 			return args, nil
 		}
-		hc := interp.HandlerCtx(ctx)
+		hc, ok := interp.LookupHandlerContext(ctx)
+		if !ok {
+			return nil, fmt.Errorf("missing handler context")
+		}
 		fromBootstrap := hc.Internal
 		if !fromBootstrap {
 			if err := budget.beforeCommand(ctx); err != nil {
@@ -514,7 +517,10 @@ func (m *core) execHandler(exec *Execution, budget *executionBudget) interp.Exec
 			return budget.beforeLoopIteration(ctx, args[1:])
 		}
 
-		hc := interp.HandlerCtx(ctx)
+		hc, ok := interp.LookupHandlerContext(ctx)
+		if !ok {
+			return fmt.Errorf("missing handler context")
+		}
 		virtualWD := hc.Dir
 		currentEnv := envMap(hc.Env)
 		internal := isInternalHelperCommand(args[0])
@@ -720,20 +726,6 @@ func envMap(env expand.Environ) map[string]string {
 		}
 		return true
 	})
-	return out
-}
-
-func envMapFromVars(vars map[string]expand.Variable) map[string]string {
-	if len(vars) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(vars))
-	for name, vr := range vars {
-		if !vr.IsSet() {
-			continue
-		}
-		out[name] = vr.String()
-	}
 	return out
 }
 
@@ -952,8 +944,10 @@ func parseShebangInterpreter(line string) (name string, args []string, ok bool) 
 }
 
 func shellFailure(ctx context.Context, code int, format string, args ...any) error {
-	hc := interp.HandlerCtx(ctx)
-	return shellFailureToWriter(ctx, hc.Stderr, code, format, args...)
+	if hc, ok := interp.LookupHandlerContext(ctx); ok {
+		return shellFailureToWriter(ctx, hc.Stderr, code, format, args...)
+	}
+	return shellFailureToWriter(ctx, nil, code, format, args...)
 }
 
 func shellFailureToWriter(_ context.Context, stderr io.Writer, code int, format string, args ...any) error {
@@ -985,12 +979,7 @@ func handlerState(ctx context.Context, exec *Execution) resolvedHandlerState {
 }
 
 func optionalHandlerCtx(ctx context.Context) (_ interp.HandlerContext, ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-	return interp.HandlerCtx(ctx), true
+	return interp.LookupHandlerContext(ctx)
 }
 
 type commandTraceResolution struct {

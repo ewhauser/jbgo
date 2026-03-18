@@ -120,7 +120,7 @@ func TestFieldsIdempotency(t *testing.T) {
 
 func Test_glob(t *testing.T) {
 	cfg := &Config{
-		ReadDir2: func(string) ([]fs.DirEntry, error) {
+		ReadDir: func(string) ([]fs.DirEntry, error) {
 			return []fs.DirEntry{
 				// The filenames here are sorted, just like [io/fs.ReadDirFS].
 				&mockFileInfo{name: "A"},

@@ -5,6 +5,7 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	stdfs "io/fs"
 	"os"
 	"path"
@@ -48,8 +49,8 @@ type procSubstEntry struct {
 	// pipeReader and pipeWriter form a buffered in-memory virtual pipe.
 	// For CmdIn (read): consumer reads from pipeReader, subprocess writes to pipeWriter.
 	// For CmdOut (write): consumer writes to pipeWriter, subprocess reads from pipeReader.
-	pipeReader *interp.VirtualPipeReader
-	pipeWriter *interp.VirtualPipeWriter
+	pipeReader io.ReadCloser
+	pipeWriter io.WriteCloser
 	manager    *procSubstManager
 
 	mu     sync.Mutex
@@ -63,8 +64,8 @@ type procSubstFS struct {
 
 type procSubstFile struct {
 	entry  *procSubstEntry
-	reader *interp.VirtualPipeReader
-	writer *interp.VirtualPipeWriter
+	reader io.ReadCloser
+	writer io.WriteCloser
 	closed atomic.Bool
 }
 
@@ -599,13 +600,5 @@ func procSubstHandlerContext(ctx context.Context) (hc interp.HandlerContext, ok 
 	if ctx == nil {
 		return interp.HandlerContext{}, false
 	}
-	defer func() {
-		if recover() != nil {
-			hc = interp.HandlerContext{}
-			ok = false
-		}
-	}()
-	hc = interp.HandlerCtx(ctx)
-	ok = true
-	return hc, ok
+	return interp.LookupHandlerContext(ctx)
 }

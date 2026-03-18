@@ -7,9 +7,8 @@
 // The interpreter generally aims to behave like Bash,
 // but it does not support all of its features.
 //
-// The interpreter currently aims to behave like a non-interactive shell,
-// which is how most shells run scripts, and is more useful to machines.
-// In the future, it may gain an option to behave like an interactive shell.
+// The interpreter powers both the non-interactive and interactive shell paths
+// owned by the gbash shell core.
 package interp
 
 import (
@@ -32,9 +31,6 @@ import (
 // commands are used. If you plan on using an [io.Writer] implementation that
 // isn't safe for concurrent use, consider a workaround like hiding writes
 // behind a mutex.
-//
-// Runner's exported fields are constructor-owned; once a Runner has been
-// created, the fields should be treated as read-only.
 type Runner struct {
 	// Env specifies the initial environment for the interpreter, which must
 	// not be nil.
@@ -63,11 +59,7 @@ type Runner struct {
 
 	// Separate maps - note that bash allows a name to be both a var and a
 	// func simultaneously.
-	// Vars is mostly superseded by Env at this point.
-	// TODO(v4): remove these
-
-	Vars  map[string]expand.Variable
-	Funcs map[string]*syntax.Stmt
+	funcs map[string]*syntax.Stmt
 
 	funcSources   map[string]string
 	funcInternals map[string]bool
@@ -86,7 +78,7 @@ type Runner struct {
 
 	// readDirHandler is a function responsible for reading directories during
 	// glob expansion. It must be non-nil.
-	readDirHandler ReadDirHandlerFunc2
+	readDirHandler ReadDirHandlerFunc
 
 	// statHandler is a function responsible for getting file stat. It must be non-nil.
 	statHandler StatHandlerFunc
@@ -202,7 +194,7 @@ type exitStatus struct {
 
 	// err holds the error information for a non-zero exit status code or fatal error.
 	// Used so that running a single statement with a custom handler
-	// which returns a non-fatal Go error, such as a Go error wrapping [NewExitStatus],
+	// which returns a non-fatal Go error such as [ExitStatus],
 	// can be returned by [Runner.Run] without being lost entirely.
 	err error
 }
@@ -294,7 +286,7 @@ type RunnerConfig struct {
 	CallHandler      CallHandlerFunc
 	ExecHandler      ExecHandlerFunc
 	OpenHandler      OpenHandlerFunc
-	ReadDirHandler2  ReadDirHandlerFunc2
+	ReadDirHandler   ReadDirHandlerFunc
 	StatHandler      StatHandlerFunc
 	RealpathHandler  RealpathHandlerFunc
 	ProcSubstHandler ProcSubstHandlerFunc
@@ -390,7 +382,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.callHandler = cfg.CallHandler
 	r.execHandler = cfg.ExecHandler
 	r.openHandler = cfg.OpenHandler
-	r.readDirHandler = cfg.ReadDirHandler2
+	r.readDirHandler = cfg.ReadDirHandler
 	r.statHandler = cfg.StatHandler
 	r.realpathHandler = cfg.RealpathHandler
 	r.procSubstHandler = cfg.ProcSubstHandler
@@ -672,10 +664,9 @@ func (r *Runner) Reset() {
 		origStdout: r.origStdout,
 		origStderr: r.origStderr,
 
-		// emptied below, to reuse the space
-		Vars:          r.Vars,
 		funcSources:   r.funcSources,
 		funcInternals: r.funcInternals,
+		funcs:         r.funcs,
 
 		dirStack:               r.dirStack[:0],
 		topLevelScriptPath:     r.topLevelScriptPath,
@@ -686,11 +677,6 @@ func (r *Runner) Reset() {
 	clear(r.bgProcs)
 	r.bgProcs = r.bgProcs[:0]
 
-	if r.Vars == nil {
-		r.Vars = make(map[string]expand.Variable)
-	} else {
-		clear(r.Vars)
-	}
 	if r.funcSources == nil {
 		r.funcSources = make(map[string]string)
 	} else {
@@ -700,6 +686,11 @@ func (r *Runner) Reset() {
 		r.funcInternals = make(map[string]bool)
 	} else {
 		clear(r.funcInternals)
+	}
+	if r.funcs == nil {
+		r.funcs = make(map[string]*syntax.Stmt, 4)
+	} else {
+		clear(r.funcs)
 	}
 	// TODO(v4): Use the supplied Env directly if it implements enough methods.
 	r.writeEnv = &overlayEnviron{parent: r.Env}
@@ -751,31 +742,9 @@ type ExitStatus uint8
 
 func (s ExitStatus) Error() string { return fmt.Sprintf("exit status %d", s) }
 
-// NewExitStatus creates an error which contains the specified exit status code.
-//
-// Deprecated: use [ExitStatus] directly.
-//
-//go:fix inline
-func NewExitStatus(status uint8) error {
-	return ExitStatus(status)
-}
-
-// IsExitStatus checks whether error contains an exit status and returns it.
-//
-// Deprecated: use [errors.As] with [ExitStatus] directly.
-//
-//go:fix inline
-func IsExitStatus(err error) (status uint8, ok bool) {
-	var es ExitStatus
-	if errors.As(err, &es) {
-		return uint8(es), true
-	}
-	return 0, false
-}
-
 // Run interprets a node, which can be a [*File], [*Stmt], or [Command]. If a non-nil
 // error is returned, it will typically contain a command's exit status, which
-// can be retrieved with [IsExitStatus].
+// can be retrieved with [errors.As] and [ExitStatus].
 //
 // Run can be called multiple times synchronously to interpret programs
 // incrementally. To reuse a [Runner] without keeping the internal shell state,
@@ -819,7 +788,6 @@ func (r *Runner) run(ctx context.Context, node syntax.Node) error {
 		return fmt.Errorf("node can only be File, Stmt, or Command: %T", node)
 	}
 	r.trapCallback(ctx, r.callbackExit, "exit")
-	maps.Insert(r.Vars, r.writeEnv.Each)
 	// Return the first of: a fatal error, a non-fatal handler error, or the exit code.
 	if err := r.exit.err; err != nil {
 		if r.exit.code == 0 {
@@ -886,10 +854,9 @@ func (r *Runner) subshell(background bool) *Runner {
 	}
 	r2.writeEnv = newOverlayEnviron(r.writeEnv, background)
 	// Funcs are copied, since they might be modified.
-	r2.Funcs = maps.Clone(r.Funcs)
+	r2.funcs = maps.Clone(r.funcs)
 	r2.funcSources = maps.Clone(r.funcSources)
 	r2.funcInternals = maps.Clone(r.funcInternals)
-	r2.Vars = make(map[string]expand.Variable)
 	r2.alias = maps.Clone(r.alias)
 	r2.frames = append(r2.frames, r.frames...)
 	r2.syntheticPipelineStmts = r.syntheticPipelineStmts

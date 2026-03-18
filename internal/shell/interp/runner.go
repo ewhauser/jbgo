@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/internal"
 	"github.com/ewhauser/gbash/internal/shell/pattern"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -206,9 +205,9 @@ func catShortcutArg(stmt *syntax.Stmt) *syntax.Word {
 
 func (r *Runner) updateExpandOpts() {
 	if r.opts[optNoGlob] {
-		r.ecfg.ReadDir2 = nil
+		r.ecfg.ReadDir = nil
 	} else {
-		r.ecfg.ReadDir2 = func(s string) ([]fs.DirEntry, error) {
+		r.ecfg.ReadDir = func(s string) ([]fs.DirEntry, error) {
 			return r.readDirHandler(r.handlerCtx(r.ectx, handlerKindReadDir, todoPos), s)
 		}
 	}
@@ -777,7 +776,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if declQuery == "-f" {
 				// declare -f name: print function definition.
 				// Bash silently returns exit 1 for missing functions.
-				if body := r.Funcs[name]; body != nil {
+				if body := r.funcs[name]; body != nil {
 					r.outf("%s()\n", name)
 					printer := syntax.NewPrinter()
 					var buf bytes.Buffer
@@ -1113,7 +1112,7 @@ func (r *Runner) reparseCompoundAssign(as *syntax.Assign) *syntax.Assign {
 }
 
 func match(pat, name string) bool {
-	matcher, err := internal.ExtendedPatternMatcher(pat, pattern.EntireString|pattern.ExtendedOperators)
+	matcher, err := pattern.ExtendedPatternMatcher(pat, pattern.EntireString|pattern.ExtendedOperators)
 	_ = err // TODO: report these errors
 	return matcher != nil && matcher(name)
 }
@@ -1301,7 +1300,7 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		}
 	}
 	name := args[0]
-	if body := r.Funcs[name]; body != nil {
+	if body := r.funcs[name]; body != nil {
 		source := r.funcSource(name)
 		isInternal := r.funcInternal(name)
 		bashSource := source

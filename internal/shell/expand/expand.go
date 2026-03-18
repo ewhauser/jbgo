@@ -20,7 +20,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ewhauser/gbash/internal/shell/internal"
 	"github.com/ewhauser/gbash/internal/shell/pattern"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -51,16 +50,9 @@ type Config struct {
 	// ProcSubst expands a process substitution node.
 	ProcSubst func(*syntax.ProcSubst) (string, error)
 
-	// TODO(v4): replace ReadDir with ReadDir2.
-
-	// ReadDir is the older form of [ReadDir2], before io/fs.
-	//
-	// Deprecated: use ReadDir2 instead.
-	ReadDir func(string) ([]fs.FileInfo, error)
-
-	// ReadDir2 is used for file path globbing.
-	// If nil, and [ReadDir] is nil as well, globbing is disabled.
-	ReadDir2 func(string) ([]fs.DirEntry, error)
+	// ReadDir is used for file path globbing.
+	// If nil, globbing is disabled.
+	ReadDir func(string) ([]fs.DirEntry, error)
 
 	// GlobStar corresponds to the shell option which allows globbing with "**".
 	GlobStar bool
@@ -119,19 +111,6 @@ func prepareConfig(cfg *Config) *Config {
 		cfg.ifs = vr.String()
 	}
 
-	if cfg.ReadDir != nil && cfg.ReadDir2 == nil {
-		cfg.ReadDir2 = func(path string) ([]fs.DirEntry, error) {
-			infos, err := cfg.ReadDir(path)
-			if err != nil {
-				return nil, err
-			}
-			entries := make([]fs.DirEntry, len(infos))
-			for i, info := range infos {
-				entries[i] = fs.FileInfoToDirEntry(info)
-			}
-			return entries, nil
-		}
-	}
 	return cfg
 }
 
@@ -619,7 +598,7 @@ func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 				}
 				for _, field := range wfields {
 					globPath, doGlob := cfg.escapedGlobField(field)
-					if doGlob && cfg.ReadDir2 != nil {
+					if doGlob && cfg.ReadDir != nil {
 						// Note that globbing requires keeping a slice state, so it doesn't
 						// really benefit from using an iterator.
 						matches, err := cfg.glob(dir, globPath)
@@ -1174,11 +1153,11 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 	// TODO: as an optimization, we could do chunks of the path all at once,
 	// like doing a single stat for "/foo/bar" in "/foo/bar/*".
 
-	// TODO: Another optimization would be to reduce the number of ReadDir2 calls.
+	// TODO: Another optimization would be to reduce the number of ReadDir calls.
 	// For example, /foo/* can end up doing one duplicate call:
 	//
-	//    ReadDir2("/foo") to ensure that "/foo/" exists and only matches a directory
-	//    ReadDir2("/foo") glob "*"
+	//    ReadDir("/foo") to ensure that "/foo/" exists and only matches a directory
+	//    ReadDir("/foo") glob "*"
 
 	for i, part := range parts {
 		// Keep around for debugging.
@@ -1199,12 +1178,12 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 					match = path.Join(base, match)
 				}
 				match = pathJoin2(match, part)
-				// We can't use [Config.ReadDir2] on the parent and match the directory
+				// We can't use [Config.ReadDir] on the parent and match the directory
 				// entry by name, because short paths on Windows break that.
-				// Our only option is to [Config.ReadDir2] on the directory entry itself,
+				// Our only option is to [Config.ReadDir] on the directory entry itself,
 				// which can be wasteful if we only want to see if it exists,
 				// but at least it's correct in all scenarios.
-				if _, err := cfg.ReadDir2(match); err != nil {
+				if _, err := cfg.ReadDir(match); err != nil {
 					if isWindowsErrPathNotFound(err) {
 						// Unfortunately, [os.File.Readdir] on a regular file on
 						// Windows returns an error that satisfies [fs.ErrNotExist].
@@ -1265,7 +1244,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 		if cfg.ExtGlob {
 			mode |= pattern.ExtendedOperators
 		}
-		matcher, err := internal.ExtendedPatternMatcher(part, mode)
+		matcher, err := pattern.ExtendedPatternMatcher(part, mode)
 		if err != nil {
 			return nil, err
 		}
@@ -1293,7 +1272,7 @@ func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir 
 	if !path.IsAbs(dir) {
 		fullDir = path.Join(base, dir)
 	}
-	infos, err := cfg.ReadDir2(fullDir)
+	infos, err := cfg.ReadDir(fullDir)
 	if err != nil {
 		// We still want to return matches, for the sake of reusing slices.
 		return matches, err
@@ -1308,7 +1287,7 @@ func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir 
 			// does not follow symlinks for each of the directory entries.
 			// ReadDir is somewhat wasteful here, as we only want its error result,
 			// but we could try to reuse its result as per the TODO in [Config.glob].
-			if _, err := cfg.ReadDir2(path.Join(fullDir, info.Name())); err != nil {
+			if _, err := cfg.ReadDir(path.Join(fullDir, info.Name())); err != nil {
 				continue
 			}
 		} else if !mode.IsDir() {

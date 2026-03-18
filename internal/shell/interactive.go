@@ -113,7 +113,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 
 func interactiveEnv(exec *Execution, runner *interp.Runner) map[string]string {
 	if runner != nil {
-		if env := envMapFromVars(runner.Vars); len(env) > 0 {
+		if env := runner.ShellEnv(); len(env) > 0 {
 			return env
 		}
 	}
