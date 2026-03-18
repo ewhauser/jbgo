@@ -967,6 +967,10 @@ type ParseError struct {
 	Text     string
 
 	Incomplete bool
+
+	// SourceLine is the content of the source line where the error occurred.
+	// When set, BashError includes it as a second diagnostic line.
+	SourceLine string
 }
 
 func (e ParseError) Error() string {
@@ -974,6 +978,26 @@ func (e ParseError) Error() string {
 		return fmt.Sprintf("%s: %s", e.Pos, e.Text)
 	}
 	return fmt.Sprintf("%s:%s: %s", e.Filename, e.Pos, e.Text)
+}
+
+// BashError returns the error message formatted like bash does.
+func (e ParseError) BashError() string {
+	var first string
+	if e.Filename == "" {
+		first = fmt.Sprintf("line %d: %s", e.Pos.Line(), e.Text)
+	} else {
+		first = fmt.Sprintf("%s: line %d: %s", e.Filename, e.Pos.Line(), e.Text)
+	}
+	if e.SourceLine == "" {
+		return first
+	}
+	var second string
+	if e.Filename == "" {
+		second = fmt.Sprintf("line %d: `%s'", e.Pos.Line(), e.SourceLine)
+	} else {
+		second = fmt.Sprintf("%s: line %d: `%s'", e.Filename, e.Pos.Line(), e.SourceLine)
+	}
+	return first + "\n" + second
 }
 
 // LangError is returned when the parser encounters code that is only valid in
@@ -1138,14 +1162,7 @@ func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
 }
 
 func (p *Parser) invalidStmtStart() {
-	switch p.tok {
-	case semicolon, and, or, andAnd, orOr, andPipe, andBang:
-		p.curErr("%#q can only immediately follow a statement", p.tok)
-	case rightParen:
-		p.curErr("%#q can only be used to close a subshell", p.tok)
-	default:
-		p.curErr("%#q is not a valid start for a statement", p.tok)
-	}
+	p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
 }
 
 func (p *Parser) getWord() *Word {
@@ -2878,7 +2895,7 @@ loop:
 					p.checkLang(p.pos, langBashLike, "the %#q builtin", cmd)
 				}
 			}
-			p.curErr("a command can only contain words and redirects; encountered %#q", p.tok)
+			p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
 		}
 	}
 	if len(ce.Args) == 0 {

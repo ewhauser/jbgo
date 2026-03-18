@@ -233,7 +233,7 @@ func (r *Runner) expandErr(err error) {
 	default:
 		return // other cases do not exit
 	}
-	r.exit.code = 1
+	r.exit.code = 127
 	r.exit.exiting = true
 }
 

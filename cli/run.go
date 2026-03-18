@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/internal/builtins"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	gbserver "github.com/ewhauser/gbash/server"
 	"golang.org/x/term"
 )
@@ -191,6 +193,10 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.
 		_, _ = io.WriteString(stderr, result.ControlStderr+"\n")
 	}
 	if err != nil {
+		var parseErr syntax.ParseError
+		if errors.As(err, &parseErr) {
+			return 2, errors.New(parseErr.BashError())
+		}
 		return 1, fmt.Errorf("runtime error: %w", err)
 	}
 	if result == nil {
@@ -236,6 +242,14 @@ func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, 
 
 	result, err := session.Exec(ctx, req)
 	if err != nil {
+		var parseErr syntax.ParseError
+		if errors.As(err, &parseErr) {
+			errMsg := formatCLIError(name, errors.New(parseErr.BashError()))
+			if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(2, result, errMsg)); jsonErr != nil {
+				return 1, jsonErr
+			}
+			return 2, nil
+		}
 		if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(1, result, formatCLIError(name, fmt.Errorf("runtime error: %w", err)))); jsonErr != nil {
 			return 1, jsonErr
 		}

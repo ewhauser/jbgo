@@ -1722,8 +1722,8 @@ func TestBashGroupedShortFlagsSetShellOptionsForCommandString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 1 {
-		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	if result.ExitCode != 127 {
+		t.Fatalf("ExitCode = %d, want 127; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got := result.Stdout; got != "" {
 		t.Fatalf("Stdout = %q, want empty", got)

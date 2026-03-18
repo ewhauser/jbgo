@@ -20,10 +20,11 @@ import (
 
 	"github.com/ewhauser/gbash"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/testutil"
 )
 
-var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?\w+: line \d+: `)
+var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?\w+:(?:[^:\n]+:)* line \d+: `)
 var bashAnsiCQuotedCommandNotFoundPattern = regexp.MustCompile(`\$'((?:[^'\\]|\\.)*)': command not found`)
 
 func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
@@ -277,9 +278,15 @@ func runGBash(ctx context.Context, cfg *SuiteConfig, workspace, script string) (
 		Env:        gbashEnv(cfg),
 	})
 	if err != nil {
+		errMsg := err.Error()
+		var parseErr syntax.ParseError
+		if errors.As(err, &parseErr) {
+			parseErr.SourceLine = extractSourceLine(script, parseErr.Pos.Line())
+			errMsg = parseErr.BashError()
+		}
 		return ExecutionResult{ //nolint:nilerr // non-ExitError is mapped to exit code 2
 			ExitCode: 2,
-			Stderr:   err.Error() + "\n",
+			Stderr:   errMsg + "\n",
 		}, nil
 	}
 	return ExecutionResult{
@@ -533,4 +540,17 @@ func removeAll(target string) {
 
 func closeIgnoringError(closer io.Closer) {
 	_ = closer.Close()
+}
+
+// extractSourceLine returns the content of the given line number (1-indexed) from the script.
+func extractSourceLine(script string, lineNum uint) string {
+	if lineNum == 0 {
+		return ""
+	}
+	lines := strings.Split(script, "\n")
+	idx := int(lineNum) - 1
+	if idx < 0 || idx >= len(lines) {
+		return ""
+	}
+	return lines[idx]
 }

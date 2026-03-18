@@ -50,6 +50,11 @@ func writeCompilationError(stderr io.Writer, err error) {
 	if stderr == nil || err == nil {
 		return
 	}
-	_, _ = io.WriteString(stderr, err.Error())
+	var parseErr syntax.ParseError
+	if errors.As(err, &parseErr) {
+		_, _ = io.WriteString(stderr, parseErr.BashError())
+	} else {
+		_, _ = io.WriteString(stderr, err.Error())
+	}
 	_, _ = io.WriteString(stderr, "\n")
 }

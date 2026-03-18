@@ -278,10 +278,6 @@
           "mode": "xfail",
           "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
         },
-        "oils/introspect.test.sh::${FUNCNAME} and \"set -u\" (OSH regression)": {
-          "mode": "xfail",
-          "reason": "unbound FUNCNAME matches bash stderr but still returns exit status 1 instead of 127"
-        },
         "oils/introspect.test.sh::${BASH_SOURCE[@]} with source and function name": {
           "mode": "xfail",
           "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
@@ -406,10 +402,6 @@
           "mode": "xfail",
           "reason": "gbash returns 127 instead of bash's exit 1 when the vendored helper path is missing under errexit"
         },
-        "oils/strict-options.test.sh::return at top level is an error": {
-          "mode": "xfail",
-          "reason": "gbash still formats the top-level return error message differently from bash"
-        },
         "oils/strict-options.test.sh::automatically creating arrays by sparse assignment": {
           "mode": "xfail",
           "reason": "gbash currently materializes sparse indexed arrays with empty leading elements instead of bash's compact expansion"
@@ -513,16 +505,7 @@
       }
     },
     "posix": {
-      "entries": {
-        "oils/posix.test.sh::Bare semi-colon not allowed": {
-          "mode": "xfail",
-          "reason": "gbash parse diagnostics differ from bash for this syntax error"
-        },
-        "oils/posix.test.sh::Empty action for case is syntax error": {
-          "mode": "xfail",
-          "reason": "gbash parse diagnostics differ from bash for this syntax error"
-        }
-      }
+      "entries": {}
     }
   }
 }
