@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/internal/shell"
 	"golang.org/x/term"
 )
 
@@ -27,15 +26,14 @@ func runInteractiveShell(ctx context.Context, gb *gbash.Runtime, stdin io.Reader
 		return 1, fmt.Errorf("init session: %w", err)
 	}
 
-	parser := syntax.NewParser()
-	printer := syntax.NewPrinter()
+	parser := shell.NewInteractiveParser("sqlite-backed-fs-repl")
 	state := interactiveState{
 		workDir: workDir,
 	}
 	exitCode := 0
 
 	_, _ = io.WriteString(stdout, promptForState(state))
-	for stmts, err := range parser.InteractiveSeq(stdin) {
+	for script, err := range parser.Seq(stdin) {
 		if err != nil {
 			exitCode = 1
 			_, _ = fmt.Fprintln(stderr, err)
@@ -46,14 +44,9 @@ func runInteractiveShell(ctx context.Context, gb *gbash.Runtime, stdin io.Reader
 			_, _ = io.WriteString(stdout, sqliteContinuationPrompt)
 			continue
 		}
-		if len(stmts) == 0 {
+		if script == "" {
 			_, _ = io.WriteString(stdout, promptForState(state))
 			continue
-		}
-
-		script, err := renderStatements(printer, stmts)
-		if err != nil {
-			return 1, fmt.Errorf("render interactive statements: %w", err)
 		}
 
 		result, err := session.Exec(ctx, &gbash.ExecutionRequest{
@@ -79,22 +72,6 @@ func runInteractiveShell(ctx context.Context, gb *gbash.Runtime, stdin io.Reader
 	}
 
 	return exitCode, nil
-}
-
-func renderStatements(printer *syntax.Printer, stmts []*syntax.Stmt) (string, error) {
-	if printer == nil {
-		printer = syntax.NewPrinter()
-	}
-
-	var buf bytes.Buffer
-	file := &syntax.File{
-		Name:  "sqlite-backed-fs-repl",
-		Stmts: stmts,
-	}
-	if err := printer.Print(&buf, file); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 func promptForState(state interactiveState) string {

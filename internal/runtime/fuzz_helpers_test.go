@@ -3,7 +3,6 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path"
 	"strings"
@@ -11,7 +10,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -112,22 +111,7 @@ func assertBaseFuzzOutcome(t *testing.T, script []byte, result *ExecutionResult,
 }
 
 func isExpectedFuzzError(err error) bool {
-	if err == nil {
-		return true
-	}
-
-	var parseErr syntax.ParseError
-	if errors.As(err, &parseErr) {
-		return true
-	}
-
-	var quoteErr syntax.QuoteError
-	if errors.As(err, &quoteErr) {
-		return true
-	}
-
-	var langErr syntax.LangError
-	return errors.As(err, &langErr)
+	return err == nil || shell.IsUserSyntaxError(err)
 }
 
 func assertNoHostPathLeak(t *testing.T, script []byte, result *ExecutionResult, err error) {
