@@ -112,8 +112,8 @@ func (r *Runner) setFuncInternal(name string, internal bool) {
 }
 
 func (r *Runner) delFunc(name string) {
-	if r.Funcs != nil {
-		delete(r.Funcs, name)
+	if r.funcs != nil {
+		delete(r.funcs, name)
 	}
 	if r.funcSources != nil {
 		delete(r.funcSources, name)

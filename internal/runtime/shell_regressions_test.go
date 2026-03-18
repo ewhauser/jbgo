@@ -214,6 +214,47 @@ func TestDeclarationRegressionIgnoresPrefixEnvAssignments(t *testing.T) {
 	}
 }
 
+func TestUnsetRegressionExcludesVariablesFromPrefixExpansion(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"foo=1\n"+
+		"foobar=2\n"+
+		"unset foo\n"+
+		"star=${!foo*}\n"+
+		"at=${!foo@}\n"+
+		"printf 'star:%s\\nat:%s\\n' \"$star\" \"$at\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "star:foobar\nat:foobar\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestUnsetRegressionDoesNotLeakVarsIntoCommandEnv(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"FOO=bar\n"+
+		"unset FOO\n"+
+		"printenv FOO || echo missing\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "missing\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestProcessSubstitutionRegressionSupportsInputOutputAndPipePredicates(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

@@ -197,7 +197,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		for _, arg := range args {
 			if vars && r.lookupVar(arg).IsSet() {
 				r.delVar(arg)
-			} else if _, ok := r.Funcs[arg]; ok && funcs {
+			} else if _, ok := r.funcs[arg]; ok && funcs {
 				r.delFunc(arg)
 			}
 		}
@@ -1043,7 +1043,7 @@ func (r *Runner) commandBuiltin(ctx context.Context, pos syntax.Pos, args []stri
 		for _, arg := range args {
 			last = 0
 			if !forcePath && !useDefaultPath {
-				if r.Funcs[arg] != nil || IsBuiltin(arg) {
+				if r.funcs[arg] != nil || IsBuiltin(arg) {
 					r.outf("%s\n", arg)
 					continue
 				}
@@ -1550,7 +1550,7 @@ func (r *Runner) typeMatches(ctx context.Context, name string, mode shellTypeMod
 		}
 	}
 	if !mode.suppressFuncs {
-		if body := r.Funcs[name]; body != nil && !r.funcInternal(name) {
+		if body := r.funcs[name]; body != nil && !r.funcInternal(name) {
 			if !appendMatch(shellTypeMatch{kind: shellTypeFunction, body: body}) {
 				if mode.output == shellTypeOutputPath {
 					return nil, true

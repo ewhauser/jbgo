@@ -17,13 +17,17 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
-// HandlerCtx returns the [HandlerContext] value stored in ctx,
+// LookupHandlerContext returns the [HandlerContext] value stored in ctx,
 // which is used when calling handler functions.
-// It panics if ctx has no HandlerContext stored.
-func HandlerCtx(ctx context.Context) HandlerContext {
+func LookupHandlerContext(ctx context.Context) (HandlerContext, bool) {
 	hc, ok := ctx.Value(handlerCtxKey{}).(HandlerContext)
+	return hc, ok
+}
+
+func mustHandlerCtx(ctx context.Context) HandlerContext {
+	hc, ok := LookupHandlerContext(ctx)
 	if !ok {
-		panic("interp.HandlerCtx: no HandlerContext in ctx")
+		panic("interp: missing HandlerContext in context")
 	}
 	return hc
 }
@@ -37,7 +41,7 @@ const (
 	handlerKindExec                  // [ExecHandlerFunc]
 	handlerKindCall                  // [CallHandlerFunc]
 	handlerKindOpen                  // [OpenHandlerFunc]
-	handlerKindReadDir               // [ReadDirHandlerFunc2]
+	handlerKindReadDir               // [ReadDirHandlerFunc]
 	handlerKindRealpath              // [RealpathHandlerFunc]
 	handlerKindProcSubst             // [ProcSubstHandlerFunc]
 )
@@ -72,9 +76,7 @@ type HandlerContext struct {
 	Pos syntax.Pos
 
 	// Stdin is the interpreter's current standard input reader.
-	// It is always a [StdinReader], but the type here remains an [io.Reader]
-	// due to backwards compatibility.
-	Stdin io.Reader
+	Stdin StdinReader
 	// Stdout is the interpreter's current standard output writer.
 	Stdout io.Writer
 	// Stderr is the interpreter's current standard error writer.
@@ -112,7 +114,7 @@ type CallHandlerFunc func(ctx context.Context, args []string) ([]string, error)
 // The context includes a [HandlerContext] value.
 //
 // Returning a nil error means a zero exit status.
-// Other exit statuses can be set by returning or wrapping a [NewExitStatus] error,
+// Other exit statuses can be set by returning an [ExitStatus] error,
 // and such an error is returned via the API if it is the last statement executed.
 // Any other error will halt the [Runner] and will be returned via the API.
 type ExecHandlerFunc func(ctx context.Context, args []string) error
@@ -121,7 +123,7 @@ const defaultExecPath = "/usr/bin:/bin"
 
 func closedExecHandler() ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
-		hc := HandlerCtx(ctx)
+		hc := mustHandlerCtx(ctx)
 		path, err := hc.runner.lookPath(ctx, hc.Dir, hc.Env, args[0], true, false)
 		if err != nil {
 			fmt.Fprintln(hc.Stderr, err)
@@ -234,7 +236,7 @@ func isLookupNotFound(err error, file string) bool {
 // Files opened by executed programs are not included.
 //
 // The path parameter may be relative to the current directory,
-// which can be fetched via [HandlerCtx].
+// which is available via the [HandlerContext] stored in ctx.
 //
 // Use a return error of type [*os.PathError] to have the error printed to
 // stderr and the exit status set to 1.
@@ -272,12 +274,12 @@ func closedOpenHandler() OpenHandlerFunc {
 	}
 }
 
-// ReadDirHandlerFunc2 is a handler which reads directories. It is called during
+// ReadDirHandlerFunc is a handler which reads directories. It is called during
 // shell globbing, if enabled.
 // The context includes a [HandlerContext] value.
-type ReadDirHandlerFunc2 func(ctx context.Context, path string) ([]fs.DirEntry, error)
+type ReadDirHandlerFunc func(ctx context.Context, path string) ([]fs.DirEntry, error)
 
-func closedReadDirHandler() ReadDirHandlerFunc2 {
+func closedReadDirHandler() ReadDirHandlerFunc {
 	return func(ctx context.Context, path string) ([]fs.DirEntry, error) {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: fs.ErrNotExist}
 	}
@@ -303,7 +305,7 @@ type RealpathHandlerFunc func(ctx context.Context, name string) (string, error)
 
 func defaultRealpathHandler() RealpathHandlerFunc {
 	return func(ctx context.Context, name string) (string, error) {
-		hc := HandlerCtx(ctx)
+		hc := mustHandlerCtx(ctx)
 		return absPath(hc.Dir, name), nil
 	}
 }

@@ -111,7 +111,6 @@ func (r *Runner) SetShellVar(name string, vr expand.Variable) error {
 	if err := r.writeEnv.Set(name, vr); err != nil {
 		return err
 	}
-	r.syncVarSnapshot(name, vr)
 	return nil
 }
 
@@ -122,21 +121,37 @@ func (r *Runner) UnsetShellVar(name string) error {
 	if err := r.writeEnv.Set(name, expand.Variable{}); err != nil {
 		return err
 	}
-	if r.Vars != nil {
-		delete(r.Vars, name)
-	}
 	return nil
 }
 
-func (r *Runner) syncVarSnapshot(name string, vr expand.Variable) {
-	if r.Vars == nil {
-		r.Vars = make(map[string]expand.Variable)
+func (r *Runner) ShellEnv() map[string]string {
+	if !r.didReset || r.writeEnv == nil {
+		return nil
 	}
+	out := make(map[string]string)
+	r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+		if !vr.IsSet() {
+			delete(out, name)
+			return true
+		}
+		out[name] = vr.String()
+		return true
+	})
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (r *Runner) ShellVarString(name string) (string, bool) {
+	if !r.didReset || r.writeEnv == nil {
+		return "", false
+	}
+	vr := r.writeEnv.Get(name)
 	if !vr.IsSet() {
-		delete(r.Vars, name)
-		return
+		return "", false
 	}
-	r.Vars[name] = vr
+	return vr.String(), true
 }
 
 func (hc *HandlerContext) SetShellVar(name string, vr expand.Variable) error {
