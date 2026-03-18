@@ -24,6 +24,7 @@ const (
 type ManifestEntry struct {
 	Mode   EntryMode `json:"mode"`
 	Reason string    `json:"reason"`
+	GOOS   []string  `json:"goos,omitempty"`
 }
 
 type Manifest struct {

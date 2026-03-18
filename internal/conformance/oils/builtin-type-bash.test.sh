@@ -286,7 +286,7 @@ pwd ()
 }
 
 osh-normalize() {
-  sed 's/shell function/function/'
+  "${GBASH_CONFORMANCE_SED:-sed}" 's/shell function/function/'
 }
 
 type -a pwd | osh-normalize

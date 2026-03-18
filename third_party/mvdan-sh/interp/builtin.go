@@ -918,16 +918,24 @@ func (r *Runner) cdBuiltin(ctx context.Context, args []string) uint8 {
 
 func (r *Runner) typeBuiltin(ctx context.Context, args []string) (exit exitStatus) {
 	anyNotFound := false
-	mode := ""
+	mode := shellTypeMode{}
 	fp := flagParser{remaining: args}
 	for fp.more() {
 		switch flag := fp.flag(); flag {
-		case "-a", "-f", "--help":
+		case "-a":
+			mode.all = true
+		case "-f":
+			mode.suppressFuncs = true
+		case "-p":
+			mode.output = shellTypeOutputPath
+		case "-P":
+			mode.output = shellTypeOutputForcePath
+		case "-t":
+			mode.output = shellTypeOutputKind
+		case "--help":
 			r.errf("command: NOT IMPLEMENTED\n")
 			exit.code = 3
 			return exit
-		case "-p", "-P", "-t":
-			mode = flag
 		default:
 			r.errf("command: invalid option %q\n", flag)
 			exit.code = 2
@@ -935,66 +943,21 @@ func (r *Runner) typeBuiltin(ctx context.Context, args []string) (exit exitStatu
 		}
 	}
 	for _, arg := range fp.args() {
-		if mode == "-p" || mode == "-P" {
-			if path, err := r.lookPath(ctx, r.Dir, r.writeEnv, arg, true, false); err == nil {
-				r.outf("%s\n", path)
-			} else {
-				anyNotFound = true
+		matches, found := r.typeMatches(ctx, arg, mode)
+		if !found {
+			if mode.output == shellTypeOutputVerbose {
+				r.errf("type: %s: not found\n", arg)
 			}
+			anyNotFound = true
 			continue
 		}
-		if syntax.IsKeyword(arg) {
-			if mode == "-t" {
-				r.out("keyword\n")
-			} else {
-				r.outf("%s is a shell keyword\n", arg)
-			}
-			continue
+		for _, match := range matches {
+			r.printTypeMatch(arg, match, mode)
 		}
-		if als, ok := r.alias[arg]; ok && r.opts[optExpandAliases] {
-			var buf bytes.Buffer
-			if len(als.args) > 0 {
-				printer := syntax.NewPrinter()
-				printer.Print(&buf, &syntax.CallExpr{Args: als.args})
-			}
-			if als.blank {
-				buf.WriteByte(' ')
-			}
-			if mode == "-t" {
-				r.out("alias\n")
-			} else {
-				r.outf("%s is aliased to `%s'\n", arg, &buf)
-			}
-			continue
-		}
-		if _, ok := r.Funcs[arg]; ok && mode != "-P" {
-			if mode == "-t" {
-				r.out("function\n")
-			} else {
-				r.outf("%s is a function\n", arg)
-			}
-			continue
-		}
-		if IsBuiltin(arg) && mode != "-P" {
-			if mode == "-t" {
-				r.out("builtin\n")
-			} else {
-				r.outf("%s is a shell builtin\n", arg)
-			}
-			continue
-		}
-		if path, err := r.lookPath(ctx, r.Dir, r.writeEnv, arg, true, false); err == nil {
-			if mode == "-t" {
-				r.out("file\n")
-			} else {
-				r.outf("%s is %s\n", arg, path)
-			}
-			continue
-		}
-		if mode != "-t" {
+		if len(matches) == 0 && mode.output == shellTypeOutputKind {
 			r.errf("type: %s: not found\n", arg)
+			anyNotFound = true
 		}
-		anyNotFound = true
 	}
 	if anyNotFound {
 		exit.code = 1

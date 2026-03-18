@@ -29,7 +29,7 @@ normalize() {
   # ignore quotes and backticks
   # bash prints a left backtick
   quotes='"`'\'
-  sed \
+  "${GBASH_CONFORMANCE_SED:-sed}" \
     -e "s/[$quotes]//g" \
     -e 's/shell function/function/' \
     -e 's/is aliased to/is an alias for/'

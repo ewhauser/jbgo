@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -41,6 +43,16 @@ func LoadManifest(path string) (*Manifest, error) {
 			if strings.TrimSpace(entry.Reason) == "" {
 				return nil, fmt.Errorf("manifest reason must not be empty for suite %s key %s", suiteName, key)
 			}
+			if len(entry.GOOS) > 0 {
+				for i, goos := range entry.GOOS {
+					goos = strings.TrimSpace(strings.ToLower(goos))
+					if goos == "" {
+						return nil, fmt.Errorf("manifest goos must not be empty for suite %s key %s", suiteName, key)
+					}
+					entry.GOOS[i] = goos
+				}
+			}
+			suite.Entries[key] = entry
 		}
 		manifest.Suites[suiteName] = suite
 	}
@@ -64,6 +76,9 @@ func (m *Manifest) LookupFile(suiteName, filePath string) (ManifestEntry, bool) 
 	}
 	filePath = normalizeKey(filePath)
 	entry, ok := suite.Entries[filePath]
+	if ok && !entryMatchesGOOS(entry) {
+		return ManifestEntry{}, false
+	}
 	return entry, ok
 }
 
@@ -78,7 +93,17 @@ func (m *Manifest) LookupCase(suiteName, filePath, caseName string) (ManifestEnt
 	filePath = normalizeKey(filePath)
 	caseKey := filePath + "::" + strings.TrimSpace(caseName)
 	entry, ok := suite.Entries[caseKey]
+	if ok && !entryMatchesGOOS(entry) {
+		return ManifestEntry{}, false
+	}
 	return entry, ok
+}
+
+func entryMatchesGOOS(entry ManifestEntry) bool {
+	if len(entry.GOOS) == 0 {
+		return true
+	}
+	return slices.Contains(entry.GOOS, runtime.GOOS)
 }
 
 func DetermineCaseOutcome(fileEntry ManifestEntry, hasFileEntry bool, caseEntry ManifestEntry, hasCaseEntry, matched bool) CaseOutcome {

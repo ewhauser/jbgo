@@ -470,15 +470,16 @@ func normalizeBashStderr(value string) string {
 
 func gbashEnv(cfg *SuiteConfig) map[string]string {
 	env := map[string]string{
-		"HOME":   "/",
-		"PATH":   "/bin:/usr/bin",
-		"LANG":   "C",
-		"LC_ALL": "C",
-		"PWD":    "/",
-		"SH":     "bash",
-		"TZ":     "UTC",
-		"TMP":    "/tmp",
-		"TMPDIR": "/tmp",
+		"HOME":                  "/",
+		"PATH":                  "/bin:/usr/bin",
+		"LANG":                  "C",
+		"LC_ALL":                "C",
+		"PWD":                   "/",
+		"SH":                    "bash",
+		"TZ":                    "UTC",
+		"TMP":                   "/tmp",
+		"TMPDIR":                "/tmp",
+		"GBASH_CONFORMANCE_SED": "sed",
 	}
 	if cfg.OracleMode == OracleBashPosix {
 		env["POSIXLY_CORRECT"] = "1"
@@ -497,12 +498,21 @@ func bashEnv(cfg *SuiteConfig, workspace string) []string {
 		"TZ=UTC",
 		"TMP=" + filepath.Join(workspace, "tmp"),
 		"TMPDIR=" + filepath.Join(workspace, "tmp"),
+		"GBASH_CONFORMANCE_SED=" + conformanceToolPath("sed"),
 	}
 	if cfg.OracleMode == OracleBashPosix {
 		values = append(values, "POSIXLY_CORRECT=1")
 	}
 	slices.Sort(values)
 	return values
+}
+
+func conformanceToolPath(name string) string {
+	toolPath, err := exec.LookPath(name)
+	if err != nil {
+		return name
+	}
+	return toolPath
 }
 
 func expectedFailureReason(fileEntry ManifestEntry, hasFileEntry bool, caseEntry ManifestEntry, hasCaseEntry bool) string {
