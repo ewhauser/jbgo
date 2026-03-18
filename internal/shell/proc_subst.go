@@ -48,8 +48,8 @@ type procSubstEntry struct {
 	// pipeReader and pipeWriter form a buffered in-memory virtual pipe.
 	// For CmdIn (read): consumer reads from pipeReader, subprocess writes to pipeWriter.
 	// For CmdOut (write): consumer writes to pipeWriter, subprocess reads from pipeReader.
-	pipeReader *bufferedPipeReader
-	pipeWriter *bufferedPipeWriter
+	pipeReader *interp.VirtualPipeReader
+	pipeWriter *interp.VirtualPipeWriter
 	manager    *procSubstManager
 
 	mu     sync.Mutex
@@ -63,8 +63,8 @@ type procSubstFS struct {
 
 type procSubstFile struct {
 	entry  *procSubstEntry
-	reader *bufferedPipeReader
-	writer *bufferedPipeWriter
+	reader *interp.VirtualPipeReader
+	writer *interp.VirtualPipeWriter
 	closed atomic.Bool
 }
 
@@ -119,7 +119,7 @@ func (m *procSubstManager) endpoint(ctx context.Context, ps *syntax.ProcSubst) (
 	// Create a buffered in-memory virtual pipe instead of an OS pipe.
 	// The buffer allows writes to proceed without blocking (up to buffer size),
 	// matching OS pipe semantics while avoiding host kernel resources.
-	pipeReader, pipeWriter := newBufferedPipe()
+	pipeReader, pipeWriter := interp.NewVirtualPipe()
 
 	entry := &procSubstEntry{
 		path:       procSubstPath,

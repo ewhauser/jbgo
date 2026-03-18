@@ -1,7 +1,6 @@
 package interp
 
 import (
-	"errors"
 	"io"
 	"os"
 	"sync"
@@ -139,9 +138,10 @@ func (r *VirtualPipeReader) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// Close closes the read end of the pipe. Subsequent writes will fail.
+// Close closes the read end of the pipe. Subsequent writes will fail
+// with io.ErrClosedPipe (broken pipe semantics).
 func (r *VirtualPipeReader) Close() error {
-	return r.CloseWithError(errors.New("read end closed"))
+	return r.CloseWithError(io.ErrClosedPipe)
 }
 
 // CloseWithError closes the read end with the given error.
