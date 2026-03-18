@@ -1,34 +1,32 @@
 package shell
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shfork/interp"
+	"github.com/ewhauser/gbash/internal/shell/interp"
 )
 
 const shellHistoryEnvVar = "BASH_HISTORY"
 
-func withInteractiveHistory(runner *interp.Runner, script string) string {
+func rememberInteractiveHistory(runner *interp.Runner, script string) {
 	if runner == nil {
-		return script
+		return
 	}
 	entry := strings.TrimRight(script, "\n")
 	if strings.TrimSpace(entry) == "" {
-		return script
+		return
 	}
 	history := historyEntriesFromRunner(runner)
 	history = append(history, entry)
 	raw, err := json.Marshal(history)
 	if err != nil {
-		return script
+		return
 	}
-	return fmt.Sprintf("%s='%s'\n%s", shellHistoryEnvVar, shellSingleQuote(string(raw)), script)
+	_ = runner.SetShellString(shellHistoryEnvVar, string(raw))
 }
 
-func syncCommandHistory(ctx context.Context, hc *interp.HandlerContext, before, after map[string]string) error {
+func syncCommandHistory(hc *interp.HandlerContext, before, after map[string]string) error {
 	if hc == nil {
 		return nil
 	}
@@ -38,9 +36,9 @@ func syncCommandHistory(ctx context.Context, hc *interp.HandlerContext, before, 
 		return nil
 	}
 	if !afterOK {
-		return hc.Builtin(ctx, []string{"unset", shellHistoryEnvVar})
+		return hc.UnsetShellVar(shellHistoryEnvVar)
 	}
-	return hc.Builtin(ctx, []string{"eval", fmt.Sprintf("%s='%s'", shellHistoryEnvVar, shellSingleQuote(afterValue))})
+	return hc.SetShellString(shellHistoryEnvVar, afterValue)
 }
 
 func historyEntriesFromRunner(runner *interp.Runner) []string {

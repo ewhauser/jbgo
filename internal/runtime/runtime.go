@@ -11,7 +11,6 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/builtins"
-	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 )
@@ -20,7 +19,6 @@ type Config struct {
 	FileSystem    FileSystemConfig
 	Registry      commands.CommandRegistry
 	Policy        policy.Policy
-	Engine        shell.Engine
 	BaseEnv       map[string]string
 	Network       *network.Config
 	NetworkClient network.Client
@@ -51,9 +49,6 @@ func New(opts ...Option) (*Runtime, error) {
 	resolved.FileSystem = resolved.FileSystem.resolved()
 	if resolved.Registry == nil {
 		resolved.Registry = builtins.DefaultRegistry()
-	}
-	if resolved.Engine == nil {
-		resolved.Engine = shell.New()
 	}
 	if resolved.NetworkClient == nil && resolved.Network != nil {
 		client, err := network.New(resolved.Network)

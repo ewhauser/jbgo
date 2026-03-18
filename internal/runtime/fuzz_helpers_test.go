@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/policy"
 )
 

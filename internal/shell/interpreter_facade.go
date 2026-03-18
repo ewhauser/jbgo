@@ -4,21 +4,20 @@ import (
 	"context"
 	"io"
 
-	"github.com/ewhauser/gbash/internal/interpreter"
-	"github.com/ewhauser/gbash/internal/shfork/expand"
-	"github.com/ewhauser/gbash/internal/shfork/interp"
+	"github.com/ewhauser/gbash/internal/shell/expand"
+	"github.com/ewhauser/gbash/internal/shell/interp"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
 )
 
-func (m *MVdan) commandFacade(exec *Execution) *interpreter.Facade {
-	return interpreter.New(interpreter.Deps{
-		Resolve: func(ctx context.Context, dir string, env expand.Environ, name string) (*interpreter.ResolvedCommand, bool, error) {
+func (m *core) commandFacade(exec *Execution) *commandFacade {
+	return newCommandFacade(commandFacadeDeps{
+		Resolve: func(ctx context.Context, dir string, env expand.Environ, name string) (*facadeResolvedCommand, bool, error) {
 			resolved, ok, err := lookupCommand(ctx, exec, dir, env, name)
 			if err != nil || !ok {
 				return nil, ok, err
 			}
-			return &interpreter.ResolvedCommand{
+			return &facadeResolvedCommand{
 				Name:    resolved.name,
 				Path:    resolved.path,
 				Source:  resolved.source,
@@ -28,7 +27,7 @@ func (m *MVdan) commandFacade(exec *Execution) *interpreter.Facade {
 		Allow: func(ctx context.Context, name string, argv []string) error {
 			return allowCommand(ctx, exec.Policy, name, argv)
 		},
-		Invoke: func(ctx context.Context, resolved *interpreter.ResolvedCommand, argv []string, currentEnv map[string]string, virtualWD string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (map[string]string, error) {
+		Invoke: func(ctx context.Context, resolved *facadeResolvedCommand, argv []string, currentEnv map[string]string, virtualWD string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (map[string]string, error) {
 			runtimeResolved, _ := resolved.Payload.(*resolvedCommand)
 			return invokeResolvedCommand(ctx, exec, runtimeResolved, argv, currentEnv, virtualWD, stdin, stdout, stderr)
 		},
@@ -42,7 +41,7 @@ func (m *MVdan) commandFacade(exec *Execution) *interpreter.Facade {
 		RecordDenied: func(err error, action, path, name, source string) {
 			recordPolicyDenied(exec.Trace, err, action, path, name, source)
 		},
-		RecordStart: func(argv []string, info interpreter.CommandTrace) {
+		RecordStart: func(argv []string, info facadeCommandTrace) {
 			recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(argv, false, &commandTraceResolution{
 				Dir:              info.Dir,
 				Position:         info.Position,
@@ -51,7 +50,7 @@ func (m *MVdan) commandFacade(exec *Execution) *interpreter.Facade {
 				ResolutionSource: info.ResolutionSource,
 			}))
 		},
-		RecordExit: func(argv []string, info interpreter.CommandTrace) {
+		RecordExit: func(argv []string, info facadeCommandTrace) {
 			recordCommand(exec.Trace, trace.EventCommandExit, traceCommandInfo(argv, false, &commandTraceResolution{
 				Dir:              info.Dir,
 				Position:         info.Position,
@@ -65,6 +64,6 @@ func (m *MVdan) commandFacade(exec *Execution) *interpreter.Facade {
 	})
 }
 
-func (m *MVdan) newRunner(config *interp.VirtualConfig, options ...interp.RunnerOption) (*interp.Runner, error) {
-	return m.commandFacade(&Execution{}).NewRunner(config, options...)
+func (m *core) newRunner(config *interp.VirtualConfig, gbash *interp.GBashConfig) (*interp.Runner, error) {
+	return m.commandFacade(&Execution{}).NewRunner(config, gbash)
 }

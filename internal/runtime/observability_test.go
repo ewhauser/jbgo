@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ewhauser/gbash/internal/shell"
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
+	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
 )
@@ -319,13 +318,15 @@ func TestExecutionLoggerReportsUnexpectedErrors(t *testing.T) {
 	t.Parallel()
 	var events []LogEvent
 	rt := newRuntime(t, &Config{
-		Engine: failingEngine{err: errors.New("engine boom")},
+		Registry: registryWithCommands(t, commands.DefineCommand("boom", func(context.Context, *commands.Invocation) error {
+			return errors.New("engine boom")
+		})),
 		Logger: func(_ context.Context, event LogEvent) {
 			events = append(events, event)
 		},
 	})
 
-	result, err := rt.Run(context.Background(), &ExecutionRequest{Script: "echo hi\n"})
+	result, err := rt.Run(context.Background(), &ExecutionRequest{Script: "boom\n"})
 	if err == nil {
 		t.Fatal("Run() error = nil, want engine error")
 	}
@@ -364,22 +365,6 @@ func TestObservabilityCallbackPanicsAreRecovered(t *testing.T) {
 	if len(result.Events) == 0 {
 		t.Fatal("expected trace events despite callback panic")
 	}
-}
-
-type failingEngine struct {
-	err error
-}
-
-func (f failingEngine) Parse(string, string) (*syntax.File, error) {
-	return nil, nil
-}
-
-func (f failingEngine) Run(context.Context, *shell.Execution) (*shell.RunResult, error) {
-	return nil, f.err
-}
-
-func (f failingEngine) RunCommand(context.Context, *shell.Execution) (*shell.RunResult, error) {
-	return nil, f.err
 }
 
 func collectExecutionIDs(ids []string, events []trace.Event) []string {

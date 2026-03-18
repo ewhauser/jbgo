@@ -125,9 +125,9 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		runErr    error
 	)
 	if len(req.Command) > 0 {
-		runResult, runErr = s.cfg.Engine.RunCommand(ctx, execReq)
+		runResult, runErr = shell.RunCommand(ctx, execReq)
 	} else {
-		runResult, runErr = s.cfg.Engine.Run(ctx, execReq)
+		runResult, runErr = shell.Run(ctx, execReq)
 	}
 	finished := time.Now().UTC()
 
@@ -198,11 +198,6 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 		hasVisiblePWD = false
 	}
 
-	engine, ok := s.cfg.Engine.(shell.InteractiveEngine)
-	if !ok {
-		return nil, fmt.Errorf("shell engine does not support interactive execution")
-	}
-
 	executionID := nextTraceID("exec")
 	recorder, _ := newExecutionTraceRecorder(ctx, s.id, executionID, s.cfg.Tracing, false)
 	if s.layout != nil {
@@ -213,7 +208,7 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 			recorder = trace.NewFanout(recorder, layoutRecorder)
 		}
 	}
-	result, err := engine.Interact(ctx, &shell.Execution{
+	result, err := shell.Interact(ctx, &shell.Execution{
 		Name:           defaultName(req.Name),
 		Args:           req.Args,
 		StartupOptions: req.StartupOptions,

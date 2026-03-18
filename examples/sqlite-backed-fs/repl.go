@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"golang.org/x/term"
 )
 

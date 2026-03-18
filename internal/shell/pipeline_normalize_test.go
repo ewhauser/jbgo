@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
 func TestRewritePipelineSubshellsWrapsFinalPipelineStage(t *testing.T) {

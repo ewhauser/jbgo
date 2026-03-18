@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shfork/pattern"
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
+	"github.com/ewhauser/gbash/internal/shell/pattern"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/policy"
 )
 

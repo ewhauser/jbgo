@@ -71,15 +71,15 @@ There is no runtime mode where command execution falls back to `exec.Command`, `
 
 We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch. Those responsibilities stay in `mvdan/sh/v3`.
 
-The `mvdan/sh` integration is currently vendored in-tree under `internal/shfork` and compiled as part of the `github.com/ewhauser/gbash` module so `gbash` remains importable as a library without consumer-side `replace` directives.
+`mvdan/sh` is now treated as gbash-owned code under `internal/shell`. The parser, expansion, pattern, and interpreter packages live in-tree as `internal/shell/syntax`, `internal/shell/expand`, `internal/shell/pattern`, and `internal/shell/interp`, and `internal/runtime` only calls the concrete `internal/shell` entrypoints.
 
 The fork also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the forked interpreter rather than synthesized in a shell prelude.
 
-The shell adapter may pre-validate parsed AST forms that are known to trigger `mvdan/sh` interpreter panics and convert them into normal shell errors instead. Unsupported descriptor-dup redirections are one example: they should surface as `invalid redirection`, not crash the runtime.
+The shell core compiles each user script once before execution. That compile pipeline parses the script, validates unsupported constructs that would otherwise panic the interpreter, checks substitution and glob budgets, applies pipeline rewriting, and instruments loop guards before the runner sees the AST.
 
-The shell adapter may also apply small AST normalizations before execution when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in synthetic subshells so default parent-shell state matches Bash's `lastpipe=off` behavior while still allowing the interpreter to unwrap those specific synthetic wrappers when `shopt -s lastpipe` is enabled.
+The shell core may also apply small AST normalizations when `mvdan/sh` behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in synthetic subshells so default parent-shell state matches Bash's `lastpipe=off` behavior while still allowing the interpreter to unwrap those specific synthetic wrappers when `shopt -s lastpipe` is enabled.
 
-Process substitution is supported as a sandbox-native shell feature. The adapter must provision runtime-owned opaque pipe paths under the sandbox namespace and must not rely on host FIFOs, host-visible `TMPDIR` paths, or host path semantics to implement `<(...)` and `>(...)`.
+Process substitution is supported as a sandbox-native shell feature. The shell core must provision runtime-owned opaque pipe paths under the sandbox namespace and must not rely on host FIFOs, host-visible `TMPDIR` paths, or host path semantics to implement `<(...)` and `>(...)`.
 
 Registry-backed replacements for Bash builtins should preserve shell-visible Bash coercions when practical. One compatibility requirement is that numeric `printf` conversions accept quoted character constants such as `"'A"` and `"\"B"`.
 
@@ -109,7 +109,7 @@ Every major subsystem should have a narrow interface. Callers should be able to 
 The runtime is composed of five layers:
 
 1. `syntax` parser layer from `mvdan/sh/v3`
-2. shell execution adapter around `interp.Runner`
+2. project-owned shell core around `interp.Runner`
 3. sandboxed project-owned filesystem abstraction
 4. Go command registry
 5. policy and trace layers
@@ -232,7 +232,7 @@ Ownership name resolution for commands such as `ls`, `chown`, and `chgrp` must c
 
 The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` are guaranteed by default.
 
-Because `mvdan/sh` currently validates `interp.Dir(...)` against the host filesystem, the runtime treats `PWD` as the authoritative virtual working directory and bootstraps helper functions in a separate trusted program. User scripts are parsed without prepended blank lines so syntax errors, traces, and `BASH_LINENO` all use real user line numbers.
+The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
 
 ## 7. Proposed Package Layout
 
@@ -241,7 +241,7 @@ cli/                   reusable CLI frontend shared by shipped binaries
 cmd/gbash/             CLI entrypoint for local execution
 server/                public JSON-RPC server surface shared by wrapper binaries
 internal/runtime/      internal runtime implementation and execution orchestration
-shell/                mvdan/sh integration and handler wiring
+internal/shell/       project-owned shell core plus parser/expand/interpreter packages
 fs/                   project-owned filesystem interfaces and virtual backends
 network/              sandboxed HTTP client, allowlist matching, redirect checks
 commands/             command registry, invocation context, core Go commands
@@ -258,7 +258,7 @@ Package responsibilities:
 - `cli/`: reusable CLI frontend that parses shell flags, renders help/version output, handles interactive mode, and provisions runtimes for thin wrapper binaries
 - `server/`: public shared server implementation that owns JSON-RPC framing and session registries for both shipped CLIs and external hosts, plus Unix-socket listener helpers
 - `internal/runtime/`: internal runtime/session creation, run configuration, result collection, output capture
-- `shell/`: parser and runner adapter; no product policy lives here
+- `internal/shell/`: concrete shell core entrypoints plus the in-tree `syntax`, `expand`, `pattern`, and `interp` packages; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with origin- and path-boundary-aware allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `clear`, `complete`, `compopt`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `pwd`, `strings`, and `xan`
@@ -510,51 +510,52 @@ Key design decisions:
 
 ## 9. `mvdan/sh` Integration Plan
 
-### 9.1 Parser
+### 9.1 Compile pipeline
 
-Use `syntax.NewParser()` to parse the script into a `*syntax.File`.
+`internal/shell` owns one compile pipeline shared by interactive and non-interactive execution.
 
-We keep parsing separate from execution so we can:
+For script execution, that pipeline:
 
-- cache ASTs
-- expose syntax errors clearly
-- choose parser/source names from request provenance (`ScriptPath` when present, otherwise `Name`)
-- keep bootstrap helper code out of user line numbers and source positions
+1. parses the request text into a `*syntax.File`
+2. validates unsupported constructs such as descriptor-dup redirections that would otherwise panic the interpreter
+3. checks command-substitution depth and glob-operation budgets against the parsed user program
+4. rewrites pipeline right-hand sides into synthetic subshells where needed to preserve default `lastpipe=off` behavior
+5. instruments loop guards for `MaxLoopIterations`
+
+The runtime request boundary carries only script text or tokenized command input. Parsing is a private shell-core concern.
 
 ### 9.2 Runner construction
 
-For each execution, build a fresh `interp.Runner` with:
+For each execution, build a fresh `interp.Runner` from concrete shell-owned config objects rather than ad hoc option hooks.
 
-- `interp.Env(...)`
-- `interp.Dir(...)`
-- `interp.Params("--", args...)`
-- `interp.TopLevelScriptPath(...)` when the request is file-backed
-- `interp.StdIO(stdin, stdout, stderr)`
-- `interp.OpenHandler(...)`
-- `interp.ReadDirHandler2(...)`
-- `interp.StatHandler(...)`
-- `interp.CallHandler(...)`
-- `interp.ExecHandlers(...)`
+`interp.VirtualConfig` carries the fixed runtime boundary:
 
-We intentionally use `interp.ExecHandlers` with a middleware that never falls through to `DefaultExecHandler`. That preserves the sandbox-only contract while staying on the current `mvdan/sh` API.
+- explicit environment and virtual directory
+- call and exec handlers
+- file, stat, readdir, realpath, and process-substitution handlers
 
-We also always install an explicit environment with `interp.Env(...)`. The runtime must not inherit the host process environment by default, because that would weaken determinism and leak ambient state into agent execution.
+`interp.GBashConfig` carries gbash-specific runner state:
 
-Any middleware chain must remain closed over Go-native command execution. It must never delegate to `DefaultExecHandler`.
+- stdio
+- startup options and positional parameters
+- interactive mode
+- top-level script path for file-backed `$0`/`main` stack frames
+- synthetic pipeline metadata for `lastpipe`
 
-Implementation detail for MVP:
+The runtime never inherits the host process environment by default, and the command execution path never falls through to host subprocess execution.
 
-- `interp.Dir(...)` is set to a host-safe existing directory such as `/`, not the virtual sandbox cwd
-- the runtime runs a separate trusted bootstrap program that initializes `PWD`, `OLDPWD`, and helper shell functions
-- the bootstrap owns virtual `cd`, `pushd`, `popd`, and `dirs`, and it keeps a shell-local directory stack aligned with virtual `PWD`
-- the bootstrap wraps shell-visible `pwd` to the Go `pwd` command so `-L` / `-P` still honor virtual `PWD`
+Implementation detail for the current runtime:
+
+- the runner's virtual directory is authoritative for filesystem behavior
+- shell-visible `PWD` may differ from the cleaned virtual directory when a visible logical path is still valid
 - `let` is handled natively by `mvdan/sh`'s `LetClause` AST node
-- all project path handlers resolve relative paths from virtual `PWD`, not from `HandlerContext.Dir`
+- all project path handlers resolve relative paths from virtual `PWD`, not from host cwd
 - the forked runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, and `caller` from that stack
+- shell vars, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized through direct runner mutation APIs rather than bootstrap `eval` calls
 
 ### 9.3 Stdio
 
-`StdIO` is wired to bounded buffers owned by `internal/runtime/`. This gives us:
+Runner stdio is wired to bounded buffers owned by `internal/runtime/`. This gives us:
 
 - deterministic capture for agent frameworks
 - policy-controlled output limits
@@ -562,7 +563,7 @@ Implementation detail for MVP:
 
 ### 9.4 File handlers
 
-`OpenHandler`, `StatHandler`, and `ReadDirHandler2` bridge `mvdan/sh` into the project filesystem.
+The shell-core file handlers bridge `mvdan/sh` into the project filesystem.
 
 Responsibilities:
 
@@ -574,28 +575,27 @@ Responsibilities:
 
 ### 9.5 Call interception
 
-`CallHandler` runs for every simple command, including builtins and functions. We use it for:
+The runner call handler runs for every simple command, including builtins and functions. We use it for:
 
 - recording expanded argv after shell expansion
 - enforcing builtin allow/deny policy
 - enforcing the per-execution command-count budget before dispatch
 - optionally canonicalizing argv in future features
 
-`CallHandler` does not execute commands. It is a pre-execution interception point.
+The call handler does not execute commands. It is a pre-execution interception point.
 
 Implementation detail for the current runtime:
 
 - the default `MaxCommandCount` is `10000` per execution
 - the counter resets on each `Session.Exec` or `Runtime.Run`
 - commands inside subshells and pipelines count toward the same execution budget
-- trusted bootstrap commands for virtual `cd` and `pwd` must not consume the user-visible command budget or user-visible trace positions
 - loop iteration limits are enforced by AST instrumentation that prepends an internal guard command to loop bodies before execution
-- command substitution depth and glob-operation budgets are validated against the parsed user program before the trusted bootstrap runs
+- command substitution depth and glob-operation budgets are validated against the parsed user program during the shell-core compile pipeline
 - request-level timeouts and caller cancellation are enforced via execution contexts and normalized into shell-style exit codes
 
 ### 9.6 Command execution
 
-Our `ExecHandlers` middleware is the command dispatch path for non-builtin, non-function calls.
+The runner exec handler is the command dispatch path for non-builtin, non-function calls.
 
 Flow:
 

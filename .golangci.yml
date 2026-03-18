@@ -330,11 +330,11 @@ linters:
       - path: network/network\.go$
         linters:
           - forbidigo
-      - path: ^internal/shfork/internal/testing\.go$
+      - path: ^internal/shell/internal/testing\.go$
         linters:
           - forbidigo
           - depguard
-      - path: ^internal/shfork/
+      - path: ^internal/shell/(expand|fileutil|internal|interp|pattern|shell|syntax)/
         linters:
           - containedctx
           - contextcheck

@@ -19,32 +19,20 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/commandutil"
-	"github.com/ewhauser/gbash/internal/interpreter"
+	"github.com/ewhauser/gbash/internal/shell/expand"
+	"github.com/ewhauser/gbash/internal/shell/interp"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
-	"github.com/ewhauser/gbash/internal/shfork/expand"
-	"github.com/ewhauser/gbash/internal/shfork/interp"
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
 )
-
-type Engine interface {
-	Parse(name, script string) (*syntax.File, error)
-	Run(ctx context.Context, exec *Execution) (*RunResult, error)
-	RunCommand(ctx context.Context, exec *Execution) (*RunResult, error)
-}
-
-type InteractiveEngine interface {
-	Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error)
-}
 
 type Execution struct {
 	Name              string
 	ScriptPath        string
 	Script            string
 	Command           []string
-	Program           *syntax.File
 	Args              []string
 	StartupOptions    []string
 	Interactive       bool
@@ -85,32 +73,46 @@ type resolvedCommand struct {
 	args    []string
 }
 
-type MVdan struct {
-	parser   *syntax.Parser
-	parserMu sync.Mutex
+type core struct {
+	parser    *syntax.Parser
+	parserMu  sync.Mutex
+	parseFunc func(string, string) (*syntax.File, error)
 }
+
+var defaultCore = newCore()
 
 var internalHelperCommands = map[string]struct{}{
 	loopIterCommandName: {},
 }
 
-func New() *MVdan {
-	return &MVdan{
+func newCore() *core {
+	return &core{
 		parser: syntax.NewParser(),
 	}
 }
 
-func (m *MVdan) Parse(name, script string) (*syntax.File, error) {
+func Run(ctx context.Context, exec *Execution) (*RunResult, error) {
+	return defaultCore.Run(ctx, exec)
+}
+
+func RunCommand(ctx context.Context, exec *Execution) (*RunResult, error) {
+	return defaultCore.RunCommand(ctx, exec)
+}
+
+func Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error) {
+	return defaultCore.Interact(ctx, exec)
+}
+
+func (m *core) parseUserProgram(name, script string) (*syntax.File, error) {
+	if m.parseFunc != nil {
+		return m.parseFunc(name, script)
+	}
 	m.parserMu.Lock()
 	defer m.parserMu.Unlock()
 	return m.parser.Parse(strings.NewReader(script), name)
 }
 
-func (m *MVdan) parseUserProgram(name, script string) (*syntax.File, error) {
-	return m.Parse(name, script)
-}
-
-func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
+func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
 	if exec == nil {
 		exec = &Execution{}
 	}
@@ -126,38 +128,13 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 	if exec.Dir == "" {
 		exec.Dir = "/"
 	}
-
-	validationProgram := exec.Program
-	if validationProgram == nil {
-		parsed, err := m.parseUserProgram(executionSourceName(exec), exec.Script)
-		if err != nil {
-			return nil, err
+	compiled, err := m.compileProgram(executionSourceName(exec), exec.Script, exec.Policy)
+	if err != nil {
+		if code, ok := compilationExitStatus(err); ok {
+			writeCompilationError(exec.Stderr, err)
+			return &RunResult{FinalEnv: envMapFromVars(nil)}, interp.ExitStatus(code)
 		}
-		validationProgram = parsed
-	}
-	validationPipelineSubshells := normalizeExecutionProgram(validationProgram)
-	if violation := validateExecutionBudgets(validationProgram, exec.Policy); violation != nil {
-		if exec.Stderr != nil {
-			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
-		}
-		return &RunResult{FinalEnv: envMapFromVars(nil)}, interp.ExitStatus(126)
-	}
-	if invalid := validateInterpreterSafety(validationProgram); invalid != nil {
-		if exec.Stderr != nil {
-			_, _ = fmt.Fprintln(exec.Stderr, invalid.Error())
-		}
-		return &RunResult{FinalEnv: envMapFromVars(nil)}, interp.ExitStatus(2)
-	}
-	program := exec.Program
-	if program == nil {
-		parsed, err := m.parseUserProgram(executionSourceName(exec), exec.Script)
-		if err != nil {
-			return nil, err
-		}
-		program = parsed
-	}
-	if program != validationProgram {
-		validationPipelineSubshells = normalizeExecutionProgram(program)
+		return nil, err
 	}
 
 	if exec.Stdin == nil {
@@ -176,30 +153,24 @@ func (m *MVdan) Run(ctx context.Context, exec *Execution) (result *RunResult, ru
 		exec.CompletionState = shellstate.NewCompletionState()
 	}
 	budget := newExecutionBudget(exec.Policy)
-	if err := instrumentLoopBudgets(program, exec.Policy); err != nil {
-		return nil, err
-	}
 
 	effectiveExec := *exec
-	effectiveExec.pipelineSubshells = validationPipelineSubshells
+	effectiveExec.pipelineSubshells = compiled.pipelineSubshells
 	cleanupProcSubst := withProcSubstScope(&effectiveExec)
 	defer cleanupProcSubst()
 
-	runner, err := m.newRunner(m.runnerConfig(&effectiveExec, budget), m.runnerOptions(&effectiveExec, budget)...)
+	runner, err := m.newRunner(m.runnerConfig(&effectiveExec, budget), m.runnerGBashConfig(&effectiveExec))
 	if err != nil {
 		return nil, err
 	}
-	if err := applyRunnerParams(runner, effectiveExec.StartupOptions, effectiveExec.Args); err != nil {
-		return &RunResult{FinalEnv: envMapFromVars(runner.Vars), ShellExited: runner.Exited()}, err
-	}
-	runErr = runner.Run(ctx, program)
+	runErr = runner.Run(ctx, compiled.program)
 	return &RunResult{
 		FinalEnv:    envMapFromVars(runner.Vars),
 		ShellExited: runner.Exited(),
 	}, runErr
 }
 
-func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, error) {
+func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, error) {
 	if exec == nil {
 		exec = &Execution{}
 	}
@@ -224,7 +195,7 @@ func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, er
 		return &RunResult{FinalEnv: finalEnv}, nil
 	}
 
-	finalEnv, err := m.commandFacade(exec).Execute(ctx, &interpreter.ExecuteRequest{
+	finalEnv, err := m.commandFacade(exec).Execute(ctx, &commandExecuteRequest{
 		Argv:       exec.Command,
 		VirtualWD:  gbfs.Clean(exec.Dir),
 		Env:        expand.ListEnviron(envPairs(finalEnv)...),
@@ -236,10 +207,11 @@ func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, er
 	return &RunResult{FinalEnv: finalEnv}, err
 }
 
-func (m *MVdan) runnerConfig(exec *Execution, budget *executionBudget) *interp.VirtualConfig {
+func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.VirtualConfig {
 	return &interp.VirtualConfig{
 		Env:              expand.ListEnviron(envPairs(m.runnerEnv(exec))...),
 		Dir:              exec.Dir,
+		CallHandler:      m.callHandler(exec, budget),
 		ExecHandler:      m.execHandler(exec, budget),
 		OpenHandler:      m.openHandler(exec),
 		ReadDirHandler2:  m.readDirHandler(exec),
@@ -249,25 +221,7 @@ func (m *MVdan) runnerConfig(exec *Execution, budget *executionBudget) *interp.V
 	}
 }
 
-func (m *MVdan) runnerOptions(exec *Execution, budget *executionBudget) []interp.RunnerOption {
-	if exec == nil {
-		exec = &Execution{}
-	}
-	options := []interp.RunnerOption{
-		interp.StdIO(exec.Stdin, exec.Stdout, exec.Stderr),
-		interp.CallHandler(m.callHandler(exec, budget)),
-		interp.SyntheticPipelineSubshells(exec.pipelineSubshells),
-	}
-	if strings.TrimSpace(exec.ScriptPath) != "" {
-		options = append(options, interp.TopLevelScriptPath(exec.ScriptPath))
-	}
-	if exec.Interactive {
-		options = append(options, interp.Interactive(true))
-	}
-	return options
-}
-
-func (m *MVdan) runnerEnv(exec *Execution) map[string]string {
+func (m *core) runnerEnv(exec *Execution) map[string]string {
 	if exec == nil {
 		return nil
 	}
@@ -278,7 +232,7 @@ func (m *MVdan) runnerEnv(exec *Execution) map[string]string {
 	return env
 }
 
-func (m *MVdan) procSubstHandler(exec *Execution) interp.ProcSubstHandlerFunc {
+func (m *core) procSubstHandler(exec *Execution) interp.ProcSubstHandlerFunc {
 	return func(ctx context.Context, ps *syntax.ProcSubst) (*interp.ProcSubstEndpoint, error) {
 		if exec == nil || exec.procSubst == nil {
 			return nil, fmt.Errorf("process substitution unavailable")
@@ -353,7 +307,7 @@ func IsExitStatus(err error) bool {
 	return errors.As(err, &status)
 }
 
-func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
+func (m *core) openHandler(exec *Execution) interp.OpenHandlerFunc {
 	return func(ctx context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
@@ -387,7 +341,7 @@ func (m *MVdan) openHandler(exec *Execution) interp.OpenHandlerFunc {
 	}
 }
 
-func (m *MVdan) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
+func (m *core) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
 	return func(ctx context.Context, name string) ([]stdfs.DirEntry, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
@@ -400,7 +354,7 @@ func (m *MVdan) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc2 {
 	}
 }
 
-func (m *MVdan) statHandler(exec *Execution) interp.StatHandlerFunc {
+func (m *core) statHandler(exec *Execution) interp.StatHandlerFunc {
 	return func(ctx context.Context, name string, followSymlinks bool) (stdfs.FileInfo, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
@@ -416,7 +370,7 @@ func (m *MVdan) statHandler(exec *Execution) interp.StatHandlerFunc {
 	}
 }
 
-func (m *MVdan) realpathHandler(exec *Execution) interp.RealpathHandlerFunc {
+func (m *core) realpathHandler(exec *Execution) interp.RealpathHandlerFunc {
 	return func(ctx context.Context, name string) (string, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
@@ -429,7 +383,7 @@ func (m *MVdan) realpathHandler(exec *Execution) interp.RealpathHandlerFunc {
 	}
 }
 
-func (m *MVdan) callHandler(exec *Execution, budget *executionBudget) interp.CallHandlerFunc {
+func (m *core) callHandler(exec *Execution, budget *executionBudget) interp.CallHandlerFunc {
 	return func(ctx context.Context, args []string) ([]string, error) {
 		if len(args) == 0 {
 			return args, nil
@@ -548,7 +502,7 @@ func builtinCommandDir(exec *Execution) string {
 	return gbfs.Clean(exec.BuiltinCommandDir)
 }
 
-func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.ExecHandlerFunc {
+func (m *core) execHandler(exec *Execution, budget *executionBudget) interp.ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
 		if len(args) == 0 {
 			return nil
@@ -563,7 +517,7 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 		internal := isInternalHelperCommand(args[0])
 		fromBootstrap := hc.Internal
 		shellVars := shellstate.NewShellVarAssignments()
-		_, err := m.commandFacade(exec).Execute(ctx, &interpreter.ExecuteRequest{
+		_, err := m.commandFacade(exec).Execute(ctx, &commandExecuteRequest{
 			Argv:          args,
 			VirtualWD:     virtualWD,
 			Env:           hc.Env,
@@ -578,13 +532,13 @@ func (m *MVdan) execHandler(exec *Execution, budget *executionBudget) interp.Exe
 				return shellstate.WithShellVarAssignments(callCtx, shellVars)
 			},
 			SyncEnv: func(callCtx context.Context, before, after map[string]string) error {
-				if syncErr := syncShellVarAssignments(callCtx, &hc, shellVars); syncErr != nil {
+				if syncErr := syncShellVarAssignments(&hc, shellVars); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
 					return syncErr
 				}
-				if syncErr := syncCommandHistory(callCtx, &hc, before, after); syncErr != nil {
+				if syncErr := syncCommandHistory(&hc, before, after); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
 					return syncErr
 				}
-				return syncUmaskEnv(callCtx, &hc, before, after)
+				return syncUmaskEnv(&hc, before, after) //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
 			},
 		})
 		return err
@@ -713,12 +667,19 @@ func normalizeInteractiveRequest(req *commands.InteractiveRequest, currentEnv ma
 	return out
 }
 
-func applyRunnerParams(runner *interp.Runner, startupOptions, args []string) error {
-	params := runnerParamArgs(startupOptions, args)
-	if len(params) == 0 {
+func (m *core) runnerGBashConfig(exec *Execution) *interp.GBashConfig {
+	if exec == nil {
 		return nil
 	}
-	return interp.Params(params...)(runner)
+	return &interp.GBashConfig{
+		Stdin:                      exec.Stdin,
+		Stdout:                     exec.Stdout,
+		Stderr:                     exec.Stderr,
+		Params:                     runnerParamArgs(exec.StartupOptions, exec.Args),
+		Interactive:                exec.Interactive,
+		TopLevelScriptPath:         exec.ScriptPath,
+		SyntheticPipelineSubshells: exec.pipelineSubshells,
+	}
 }
 
 func mergeEnv(base, override map[string]string) map[string]string {
@@ -1156,10 +1117,6 @@ func fileMutationAction(flag int) string {
 	return "write"
 }
 
-func shellSingleQuote(value string) string {
-	return strings.ReplaceAll(value, `'`, `'"'"'`)
-}
-
 type executionBudget struct {
 	maxCommandCount   int64
 	maxLoopIterations int64
@@ -1226,7 +1183,7 @@ func isInternalHelperCommand(name string) bool {
 
 const umaskEnvVar = "GBASH_UMASK"
 
-func syncUmaskEnv(ctx context.Context, hc *interp.HandlerContext, before, after map[string]string) error {
+func syncUmaskEnv(hc *interp.HandlerContext, before, after map[string]string) error {
 	if hc == nil {
 		return nil
 	}
@@ -1236,12 +1193,12 @@ func syncUmaskEnv(ctx context.Context, hc *interp.HandlerContext, before, after 
 		return nil
 	}
 	if !afterOK {
-		return hc.Builtin(ctx, []string{"unset", umaskEnvVar})
+		return hc.UnsetShellVar(umaskEnvVar)
 	}
-	return hc.Builtin(ctx, []string{"eval", fmt.Sprintf("%s='%s'; export %s", umaskEnvVar, shellSingleQuote(afterValue), umaskEnvVar)})
+	return hc.SetExportedString(umaskEnvVar, afterValue)
 }
 
-func syncShellVarAssignments(ctx context.Context, hc *interp.HandlerContext, assignments *shellstate.ShellVarAssignments) error {
+func syncShellVarAssignments(hc *interp.HandlerContext, assignments *shellstate.ShellVarAssignments) error {
 	if hc == nil || assignments == nil {
 		return nil
 	}
@@ -1257,16 +1214,14 @@ func syncShellVarAssignments(ctx context.Context, hc *interp.HandlerContext, ass
 	for _, name := range names {
 		update := updates[name]
 		if update.Unset {
-			if err := hc.Builtin(ctx, []string{"unset", name}); err != nil {
+			if err := hc.UnsetShellVar(name); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := hc.Builtin(ctx, []string{"eval", fmt.Sprintf("%s='%s'", name, shellSingleQuote(update.Value))}); err != nil {
+		if err := hc.SetShellString(name, update.Value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-
-var _ Engine = (*MVdan)(nil)

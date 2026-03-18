@@ -7,9 +7,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/shell/interp"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
-	"github.com/ewhauser/gbash/internal/shfork/interp"
-	"github.com/ewhauser/gbash/internal/shfork/syntax"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 	continuationPrompt    = "> "
 )
 
-func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error) {
+func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error) {
 	if exec == nil {
 		exec = &Execution{}
 	}
@@ -44,11 +44,8 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 	defer cleanupProcSubst()
 
 	budget := newExecutionBudget(exec.Policy)
-	runner, err := m.newRunner(m.runnerConfig(&runnerExec, budget), m.runnerOptions(&runnerExec, budget)...)
+	runner, err := m.newRunner(m.runnerConfig(&runnerExec, budget), m.runnerGBashConfig(&runnerExec))
 	if err != nil {
-		return nil, err
-	}
-	if err := applyRunnerParams(runner, runnerExec.StartupOptions, runnerExec.Args); err != nil {
 		return nil, err
 	}
 
@@ -68,14 +65,19 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 		pending.WriteString(line)
 		rawScript := pending.String()
 
-		file, err := m.parseUserProgram(exec.Name, rawScript)
+		compiled, err := m.compileProgram(exec.Name, rawScript, exec.Policy)
 		if err != nil {
 			if syntax.IsIncomplete(err) && readErr != io.EOF {
 				_, _ = io.WriteString(exec.Stdout, continuationPrompt)
 				continue
 			}
-			exitCode = 1
-			_, _ = fmt.Fprintln(exec.Stderr, err)
+			if code, ok := compilationExitStatus(err); ok {
+				exitCode = code
+				writeCompilationError(exec.Stderr, err)
+			} else {
+				exitCode = 1
+				_, _ = fmt.Fprintln(exec.Stderr, err)
+			}
 			pending.Reset()
 			if readErr == io.EOF {
 				break
@@ -83,7 +85,7 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 			continue
 		}
-		if len(file.Stmts) == 0 {
+		if len(compiled.program.Stmts) == 0 {
 			pending.Reset()
 			if readErr == io.EOF {
 				break
@@ -91,36 +93,9 @@ func (m *MVdan) Interact(ctx context.Context, exec *Execution) (*InteractiveResu
 			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 			continue
 		}
-
-		executionFile, err := m.parseUserProgram(exec.Name, withInteractiveHistory(runner, rawScript))
-		if err != nil {
-			return &InteractiveResult{ExitCode: exitCode}, err
-		}
-		normalizeExecutionProgram(executionFile)
-		if violation := validateExecutionBudgets(executionFile, exec.Policy); violation != nil {
-			exitCode = 126
-			_, _ = fmt.Fprintln(exec.Stderr, violation.Error())
-			pending.Reset()
-			if readErr == io.EOF {
-				break
-			}
-			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
-			continue
-		}
-		if invalid := validateInterpreterSafety(executionFile); invalid != nil {
-			exitCode = 2
-			_, _ = fmt.Fprintln(exec.Stderr, invalid.Error())
-			pending.Reset()
-			if readErr == io.EOF {
-				break
-			}
-			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
-			continue
-		}
-		if err := instrumentLoopBudgets(executionFile, exec.Policy); err != nil {
-			return &InteractiveResult{ExitCode: exitCode}, err
-		}
-		runErr := runner.Run(ctx, executionFile)
+		rememberInteractiveHistory(runner, rawScript) //nolint:contextcheck // interactive history is stored by direct runner state mutation
+		applyRunnerPipelineSubshells(runner, compiled.pipelineSubshells)
+		runErr := runner.Run(ctx, compiled.program)
 		exitCode = ExitCode(runErr)
 		pending.Reset()
 		if runner.Exited() {

@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"github.com/ewhauser/gbash/commands"
-	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 )
@@ -24,9 +23,6 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.Policy != nil {
 			target.Policy = cfg.Policy
-		}
-		if cfg.Engine != nil {
-			target.Engine = cfg.Engine
 		}
 		if cfg.BaseEnv != nil {
 			target.BaseEnv = cfg.BaseEnv
@@ -64,13 +60,6 @@ func WithRegistry(registry commands.CommandRegistry) Option {
 func WithPolicy(p policy.Policy) Option {
 	return func(target *Config) error {
 		target.Policy = p
-		return nil
-	}
-}
-
-func WithEngine(engine shell.Engine) Option {
-	return func(target *Config) error {
-		target.Engine = engine
 		return nil
 	}
 }
