@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/internal/shell/internal"
+	"github.com/ewhauser/gbash/internal/testutil"
 	"github.com/go-quicktest/qt"
 	"github.com/google/go-cmp/cmp"
 )
@@ -95,6 +96,10 @@ func TestParseConfirm(t *testing.T) {
 			if !ok {
 				t.Skip("no external shell to check against")
 			}
+			cmd := external.cmd
+			if lang == LangBash {
+				cmd = testutil.RequireNixBashOrSkip(t)
+			}
 			if external.require != nil {
 				external.require(t)
 			}
@@ -106,12 +111,12 @@ func TestParseConfirm(t *testing.T) {
 				case *File:
 					for j, in := range c.inputs {
 						wantErr := lang.in(c.flipConfirmSet)
-						t.Run(fmt.Sprintf("OK/%03d-%d", i, j), confirmParse(in, external.cmd, wantErr))
+						t.Run(fmt.Sprintf("OK/%03d-%d", i, j), confirmParse(in, cmd, wantErr))
 					}
 				case string:
 					for j, in := range c.inputs {
 						wantErr := !lang.in(c.flipConfirmSet)
-						t.Run(fmt.Sprintf("Err/%03d-%d", i, j), confirmParse(in, external.cmd, wantErr))
+						t.Run(fmt.Sprintf("Err/%03d-%d", i, j), confirmParse(in, cmd, wantErr))
 					}
 				}
 			}
@@ -124,7 +129,7 @@ func TestParseConfirm(t *testing.T) {
 					continue
 				}
 				wantErr := !lang.in(c.flipConfirmSet)
-				t.Run(fmt.Sprintf("ErrOld/%03d", i), confirmParse(c.in, external.cmd, wantErr))
+				t.Run(fmt.Sprintf("ErrOld/%03d", i), confirmParse(c.in, cmd, wantErr))
 			}
 		})
 	}
@@ -212,10 +217,6 @@ func TestMain(m *testing.M) {
 }
 
 var (
-	onceHasBash52 = sync.OnceValue(func() bool {
-		return cmdContains("version 5.3", "bash", "--version")
-	})
-
 	onceHasDash059 = sync.OnceValue(func() bool {
 		// dash provides no way to check its version, so we have to
 		// check if it's new enough as to not have the bug that breaks
@@ -258,11 +259,7 @@ func skipExternal(tb testing.TB, message string) {
 // because [LangVariant.index] is not a constant expression.
 // This seems fine; this table is only for the sake of testing.
 var externalShells = map[LangVariant]externalShell{
-	LangBash: {"bash", func(tb testing.TB) {
-		if !onceHasBash52() {
-			skipExternal(tb, "bash 5.2 required to run")
-		}
-	}},
+	LangBash: {"bash", nil},
 	LangPOSIX: {"dash", func(tb testing.TB) {
 		if !onceHasDash059() {
 			skipExternal(tb, "dash 0.5.9+ required to run")

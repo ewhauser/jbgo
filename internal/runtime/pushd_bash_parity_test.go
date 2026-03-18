@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/ewhauser/gbash/internal/testutil"
 )
 
 var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?bash: line \d+: `)
@@ -20,10 +22,7 @@ var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?bash: line \d+
 // cases to the newer Bash form used in CI.
 func TestDirectoryStackMatchesBashBehavior(t *testing.T) {
 	t.Parallel()
-	bashPath, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash not available")
-	}
+	bashPath := testutil.RequireNixBashOrSkip(t)
 
 	testCases := []struct {
 		name   string

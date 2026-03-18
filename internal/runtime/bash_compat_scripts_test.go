@@ -11,14 +11,13 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/ewhauser/gbash/internal/testutil"
 )
 
 func TestShellScriptsMatchBashBehavior(t *testing.T) {
 	t.Parallel()
-	bashPath, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skip("bash not available")
-	}
+	bashPath := testutil.RequireNixBashOrSkip(t)
 
 	scripts := loadBashCompatScripts(t)
 	// Keep each allowlisted divergence in its own single-purpose fixture so a
