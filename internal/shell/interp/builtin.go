@@ -964,7 +964,7 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 	}
 	f, err := r.open(ctx, sourcePath, os.O_RDONLY, 0, false)
 	if err != nil {
-		r.errf("source: %v\n", err)
+		r.errf("%v\n", err)
 		exit.code = 1
 		return exit
 	}

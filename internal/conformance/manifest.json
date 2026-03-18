@@ -270,22 +270,6 @@
           "mode": "xfail",
           "reason": "gbash reports a different heredoc syntax failure than bash for this malformed pipeline"
         },
-        "oils/introspect.test.sh::FUNCNAME with source (scalar or array)": {
-          "mode": "xfail",
-          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
-        },
-        "oils/introspect.test.sh::BASH_SOURCE and BASH_LINENO scalar or array (e.g. for virtualenv)": {
-          "mode": "xfail",
-          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
-        },
-        "oils/introspect.test.sh::${BASH_SOURCE[@]} with source and function name": {
-          "mode": "xfail",
-          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
-        },
-        "oils/introspect.test.sh::Locations when sourcing": {
-          "mode": "xfail",
-          "reason": "sourced-file lookup failures still format stderr differently from bash for missing fixture paths"
-        },
         "oils/known-differences.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -393,10 +377,6 @@
         "oils/smoke.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
-        "oils/strict-options.test.sh::Sourcing a script that returns at the top level": {
-          "mode": "xfail",
-          "reason": "gbash still differs from bash in source-missing diagnostics for this vendored helper path"
         },
         "oils/strict-options.test.sh::errexit and top-level control flow": {
           "mode": "xfail",
