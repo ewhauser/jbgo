@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
+	"github.com/ewhauser/gbash/internal/shfork/syntax"
 	"golang.org/x/term"
 )
 

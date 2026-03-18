@@ -11,7 +11,7 @@ GOLANGCI_LINT_VERSION ?= v2.11.3
 GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 # Discover every main module in the active go.work so local lint matches CI.
 LINT_MODULE_DIRS_CMD = go list -m -f '{{if .Main}}{{.Dir}}{{end}}' all
-LINT_DIR_FILTER = grep -v '/third_party/mvdan-sh\(/.*\)\?$$'
+LINT_DIR_FILTER = grep -v '/internal/shfork\(/.*\)\?$$'
 GH ?= gh
 MODULE_VERSION ?=
 RELEASE_VERSION ?=

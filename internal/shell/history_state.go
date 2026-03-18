@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
+	"github.com/ewhauser/gbash/internal/shfork/interp"
 )
 
 const shellHistoryEnvVar = "BASH_HISTORY"
