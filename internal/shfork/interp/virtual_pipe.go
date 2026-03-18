@@ -57,7 +57,9 @@ type VirtualPipeWriter struct {
 // checkDeadline checks if the read deadline has been exceeded.
 // Must be called with the mutex held.
 func (p *virtualPipe) checkDeadline() error {
-	if !p.readDeadline.IsZero() && time.Now().After(p.readDeadline) {
+	// Use !Before instead of After so that equality (same clock tick) also expires.
+	// This prevents flaky cancellation when deadline == time.Now().
+	if !p.readDeadline.IsZero() && !time.Now().Before(p.readDeadline) {
 		return errDeadlineExceeded
 	}
 	return nil
