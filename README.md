@@ -475,3 +475,10 @@ For the documentation site, run `make website-dev` to start a local Next.js serv
 
 This project is licensed under the [Apache License 2.0](./LICENSE). Copyright
 2026 Eric Hauser.
+
+## Acknowledgements
+
+- [`just-bash`](https://github.com/vercel-labs/just-bash) sparked the idea for `gbash` and provided the starting point for the initial port.
+- [`mvdan/sh`](https://github.com/mvdan/sh) provides the shell parser and interpreter foundation that `gbash` forks and builds on in-tree.
+- [`uutils/coreutils`](https://github.com/uutils/coreutils) provides the baseline behavior and implementations behind many of the command ports.
+- [`bashkit`](https://github.com/everruns/bashkit) contributed strong ideas for structuring shell conformance testing well.
