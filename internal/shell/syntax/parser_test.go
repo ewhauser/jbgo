@@ -164,37 +164,37 @@ func TestParsePosOverflow(t *testing.T) {
 		{
 			"LineOverflowPosString",
 			strings.Repeat("\n", lineMax) + ")",
-			"?:1: `)` can only be used to close a subshell",
+			"?:1: syntax error near unexpected token `)'",
 		},
 		{
 			"LineOverflowExtraPosString",
 			strings.Repeat("\n", lineMax+5) + ")",
-			"?:1: `)` can only be used to close a subshell",
+			"?:1: syntax error near unexpected token `)'",
 		},
 		{
 			"ColOverflowPosString",
 			strings.Repeat(" ", colMax) + ")",
-			"1:?: `)` can only be used to close a subshell",
+			"1:?: syntax error near unexpected token `)'",
 		},
 		{
 			"ColOverflowExtraPosString",
 			strings.Repeat(" ", colMax) + ")",
-			"1:?: `)` can only be used to close a subshell",
+			"1:?: syntax error near unexpected token `)'",
 		},
 		{
 			"ColOverflowSkippedPosString",
 			strings.Repeat(" ", colMax+5) + "\n)",
-			"2:1: `)` can only be used to close a subshell",
+			"2:1: syntax error near unexpected token `)'",
 		},
 		{
 			"LargestLineNumber",
 			strings.Repeat("\n", lineMax-1) + ")",
-			"262143:1: `)` can only be used to close a subshell",
+			"262143:1: syntax error near unexpected token `)'",
 		},
 		{
 			"LargestColNumber",
 			strings.Repeat(" ", colMax-1) + ")",
-			"1:16383: `)` can only be used to close a subshell",
+			"1:16383: syntax error near unexpected token `)'",
 		},
 	}
 	for _, test := range tests {
@@ -614,7 +614,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"a=b foo() { bar; }",
-		langErr("1:8: a command can only contain words and redirects; encountered `(`"),
+		langErr("1:8: syntax error near unexpected token `('"),
 	),
 	errCase(
 		"a=b if foo; then bar; fi",
@@ -653,7 +653,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		";",
-		langErr("1:1: `;` can only immediately follow a statement"),
+		langErr("1:1: syntax error near unexpected token `;'"),
 	),
 	errCase(
 		"{ ; }",
@@ -688,7 +688,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		")",
-		langErr("1:1: `)` can only be used to close a subshell"),
+		langErr("1:1: syntax error near unexpected token `)'"),
 	),
 	errCase(
 		"`",
@@ -704,31 +704,31 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"&",
-		langErr("1:1: `&` can only immediately follow a statement"),
+		langErr("1:1: syntax error near unexpected token `&'"),
 	),
 	errCase(
 		"|",
-		langErr("1:1: `|` can only immediately follow a statement"),
+		langErr("1:1: syntax error near unexpected token `|'"),
 	),
 	errCase(
 		"&&",
-		langErr("1:1: `&&` can only immediately follow a statement"),
+		langErr("1:1: syntax error near unexpected token `&&'"),
 	),
 	errCase(
 		"||",
-		langErr("1:1: `||` can only immediately follow a statement"),
+		langErr("1:1: syntax error near unexpected token `||'"),
 	),
 	errCase(
 		"foo; || bar",
-		langErr("1:6: `||` can only immediately follow a statement"),
+		langErr("1:6: syntax error near unexpected token `||'"),
 	),
 	errCase(
 		"echo & || bar",
-		langErr("1:8: `||` can only immediately follow a statement"),
+		langErr("1:8: syntax error near unexpected token `||'"),
 	),
 	errCase(
 		"echo & ; bar",
-		langErr("1:8: `;` can only immediately follow a statement"),
+		langErr("1:8: syntax error near unexpected token `;'"),
 	),
 	errCase(
 		"foo;;",
@@ -793,7 +793,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo foo(",
-		langErr("1:9: a command can only contain words and redirects; encountered `(`", LangPOSIX|LangBash|LangMirBSDKorn|LangBats),
+		langErr("1:9: syntax error near unexpected token `('", LangPOSIX|LangBash|LangMirBSDKorn|LangBats),
 		langErr("1:9: reached EOF without matching `(` with `)`", LangZsh),
 	),
 	errCase(
@@ -1081,7 +1081,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo foo &\n;",
-		langErr("2:1: `;` can only immediately follow a statement"),
+		langErr("2:1: syntax error near unexpected token `;'"),
 	),
 	errCase(
 		"echo $(foo",
@@ -1211,7 +1211,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"<<EOF\n`))",
-		langErr("2:2: `)` can only be used to close a subshell"),
+		langErr("2:2: syntax error near unexpected token `)'"),
 	),
 	errCase(
 		"echo ${foo",
@@ -1268,7 +1268,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo $$(foo)",
-		langErr("1:8: a command can only contain words and redirects; encountered `(`", LangPOSIX|LangBash|LangMirBSDKorn|LangBats),
+		langErr("1:8: syntax error near unexpected token `('", LangPOSIX|LangBash|LangMirBSDKorn|LangBats),
 	),
 	errCase(
 		"echo ${##",
@@ -1376,7 +1376,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo foo\n;",
-		langErr("2:1: `;` can only immediately follow a statement"),
+		langErr("2:1: syntax error near unexpected token `;'"),
 	),
 	errCase(
 		"<<$ <<0\n$(<<$<<",
@@ -1408,7 +1408,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"case i in 3) foo; 4) bar; esac",
-		langErr("1:20: a command can only contain words and redirects; encountered `)`"),
+		langErr("1:20: syntax error near unexpected token `)'"),
 	),
 	errCase(
 		"case i in 3&) foo;",
@@ -1445,7 +1445,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo \"`)`\"",
-		langErr("1:8: `)` can only be used to close a subshell"),
+		langErr("1:8: syntax error near unexpected token `)'"),
 		flipConfirm(LangPOSIX), // dash bug?
 	),
 	errCase(
@@ -1491,7 +1491,7 @@ var errorCases = []errorCase{
 	errCase(
 		"]] )",
 		langErr("1:1: `]]` can only be used to close a test"),
-		langErr("1:4: a command can only contain words and redirects; encountered `)`", LangPOSIX),
+		langErr("1:4: syntax error near unexpected token `)'", LangPOSIX),
 	),
 	errCase(
 		"((foo",
@@ -1514,7 +1514,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"|& a",
-		langErr("1:1: `|&` is not a valid start for a statement", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: syntax error near unexpected token `|&'", LangBash|LangMirBSDKorn|LangZsh),
 	),
 	errCase(
 		"foo |& bar",
@@ -1866,7 +1866,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo @([abc)])",
-		langErr("1:14: a command can only contain words and redirects; encountered `)`", LangBash|LangMirBSDKorn),
+		langErr("1:14: syntax error near unexpected token `)'", LangBash|LangMirBSDKorn),
 	),
 	errCase(
 		"((@(",
@@ -2005,7 +2005,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ;&",
-		langErr("1:7: `&` can only immediately follow a statement", LangPOSIX),
+		langErr("1:7: syntax error near unexpected token `&'", LangPOSIX),
 		langErr("1:6: `;&` can only be used in a case clause", LangBash|LangMirBSDKorn|LangZsh),
 	),
 	errCase(
@@ -2014,7 +2014,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ;|",
-		langErr("1:7: `|` can only immediately follow a statement", LangPOSIX|LangBash),
+		langErr("1:7: syntax error near unexpected token `|'", LangPOSIX|LangBash),
 	),
 	errCase(
 		"for i in 1 2 3; { echo; }",

@@ -386,3 +386,8 @@ func (o UnAritOperator) String() string   { return token(o).String() }
 func (o BinAritOperator) String() string  { return token(o).String() }
 func (o UnTestOperator) String() string   { return token(o).String() }
 func (o BinTestOperator) String() string  { return token(o).String() }
+
+// bashQuote returns the token formatted with single quotes like bash does in error messages.
+func (t token) bashQuote() string {
+	return "`" + t.String() + "'"
+}
