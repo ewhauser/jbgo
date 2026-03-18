@@ -364,8 +364,7 @@
         },
         "oils/regex.test.sh::Unquoted { is a regex parse error": {
           "mode": "xfail",
-          "reason": "darwin bash uses libc regex parsing here and still diverges from the Linux bash behavior that CI compares against",
-          "goos": ["darwin"]
+          "reason": "gbash does not emit the stderr diagnostic that bash outputs for invalid regex in [[ =~ ]]"
         },
         "oils/regex.test.sh::Regex with == and not =~ is parse error, different lexer mode required": {
           "mode": "xfail",
