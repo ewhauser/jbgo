@@ -1,6 +1,7 @@
 package builtins_test
 
 import (
+	sha30 "crypto/sha3"
 	"encoding/base64"
 	"fmt"
 	"testing"
@@ -161,6 +162,6 @@ func TestCksumZeroAndRawModes(t *testing.T) {
 }
 
 func sha3Hex(data []byte) string {
-	sum := sha3.Sum256(data)
+	sum := sha30.Sum256(data)
 	return fmt.Sprintf("%x", sum)
 }

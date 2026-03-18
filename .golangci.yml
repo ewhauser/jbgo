@@ -38,6 +38,12 @@ linters:
         - diagnostic
         - style
         - performance
+      disabled-checks:
+        - typeDefFirst
+        - todoCommentWithoutDetail
+        - unnamedResult
+        - initClause
+        - commentedOutCode
 
     misspell:
       locale: US
@@ -295,31 +301,25 @@ linters:
       - path: network/network\.go$
         linters:
           - forbidigo
-      - path: ^third_party/mvdan-sh/internal/testing\.go$
+      - path: ^internal/shfork/internal/testing\.go$
         linters:
           - forbidigo
           - depguard
-      - path: ^third_party/mvdan-sh/
+      - path: ^internal/shfork/
         linters:
-          - gocritic
-          - revive
-          - staticcheck
-          - govet
-          - errcheck
-          - ineffassign
-          - unused
-          - misspell
-          - modernize
-          - bodyclose
           - containedctx
           - contextcheck
-          - errorlint
-          - nilerr
           - noctx
           - paralleltest
-          - testifylint
-          - unconvert
+          - errcheck
+          - errorlint
+          - gocritic
+          - ineffassign
+          - misspell
+          - modernize
+          - staticcheck
           - unparam
+          - unused
 
 issues:
   max-issues-per-linter: 50

@@ -14,9 +14,9 @@ import (
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/shfork/interp"
+	"github.com/ewhauser/gbash/internal/shfork/syntax"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 )
 
 const procSubstProbeName = ".gbash-procsub-probe"

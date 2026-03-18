@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	sha30 "crypto/sha3"
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/binary"
@@ -682,16 +683,16 @@ func computeCksumDigest(algo cksumAlgorithm, data []byte) (digest []byte, size i
 	case cksumSHA3:
 		switch algo.bits {
 		case 224:
-			sum := sha3.Sum224(data)
+			sum := sha30.Sum224(data)
 			return sum[:], len(data), nil
 		case 256:
-			sum := sha3.Sum256(data)
+			sum := sha30.Sum256(data)
 			return sum[:], len(data), nil
 		case 384:
-			sum := sha3.Sum384(data)
+			sum := sha30.Sum384(data)
 			return sum[:], len(data), nil
 		case 512:
-			sum := sha3.Sum512(data)
+			sum := sha30.Sum512(data)
 			return sum[:], len(data), nil
 		}
 	case cksumBlake2b:

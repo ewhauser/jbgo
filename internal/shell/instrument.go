@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/shfork/syntax"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 )
 
 const loopIterCommandName = "__jb_loop_iter"

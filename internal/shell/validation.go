@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/shfork/pattern"
+	"github.com/ewhauser/gbash/internal/shfork/syntax"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/pattern"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 )
 
 type budgetViolation struct {

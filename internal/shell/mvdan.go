@@ -20,11 +20,11 @@ import (
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/internal/shfork/expand"
+	"github.com/ewhauser/gbash/internal/shfork/interp"
+	"github.com/ewhauser/gbash/internal/shfork/syntax"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/expand"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
 	"github.com/ewhauser/gbash/trace"
 )
 
@@ -286,8 +286,8 @@ func (m *MVdan) RunCommand(ctx context.Context, exec *Execution) (*RunResult, er
 	return result, err
 }
 
-func (m *MVdan) runnerConfig(exec *Execution, budget *executionBudget) interp.VirtualConfig {
-	return interp.VirtualConfig{
+func (m *MVdan) runnerConfig(exec *Execution, budget *executionBudget) *interp.VirtualConfig {
+	return &interp.VirtualConfig{
 		Env:              expand.ListEnviron(envPairs(m.runnerEnv(exec))...),
 		Dir:              exec.Dir,
 		ExecHandler:      m.execHandler(exec, budget),

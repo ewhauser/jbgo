@@ -683,15 +683,15 @@ parseWidth:
 			}
 		}
 
-		precisionRaw := ""
+		var precisionRaw strings.Builder
 		for i < len(runes) && runes[i] >= '0' && runes[i] <= '9' {
-			precisionRaw += string(runes[i])
+			precisionRaw.WriteString(string(runes[i]))
 			i++
 		}
 
 		precisionValue := 0
-		if precisionRaw != "" {
-			parsed, err := strconv.ParseInt(precisionRaw, 10, 0)
+		if precisionRaw.String() != "" {
+			parsed, err := strconv.ParseInt(precisionRaw.String(), 10, 0)
 			if err != nil {
 				return numfmtFormatOptions{}, numfmtIllegalf("invalid precision in format %s", quoteGNUOperand(value))
 			}

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shellstate"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/interp"
-	"github.com/ewhauser/gbash/third_party/mvdan-sh/syntax"
+	"github.com/ewhauser/gbash/internal/shfork/interp"
+	"github.com/ewhauser/gbash/internal/shfork/syntax"
 )
 
 const (

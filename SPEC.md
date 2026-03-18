@@ -71,7 +71,7 @@ There is no runtime mode where command execution falls back to `exec.Command`, `
 
 We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch. Those responsibilities stay in `mvdan/sh/v3`.
 
-The `mvdan/sh` integration is currently vendored in-tree under `third_party/mvdan-sh` and compiled as part of the `github.com/ewhauser/gbash` module so `gbash` remains importable as a library without consumer-side `replace` directives.
+The `mvdan/sh` integration is currently vendored in-tree under `internal/shfork` and compiled as part of the `github.com/ewhauser/gbash` module so `gbash` remains importable as a library without consumer-side `replace` directives.
 
 The fork also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the forked interpreter rather than synthesized in a shell prelude.
 
