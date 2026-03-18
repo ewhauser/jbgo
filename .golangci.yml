@@ -69,6 +69,10 @@ linters:
               desc: Use inv.Fetch instead of direct host TLS clients or listeners.
             - pkg: net$
               desc: Use invocation network capabilities instead of direct host networking.
+            - pkg: io/ioutil$
+              desc: Use inv.FS or commands.ReadAll so sandbox policy is enforced.
+            - pkg: debug/buildinfo$
+              desc: Do not read build info from host filesystem.
         builtins_net_http:
           files:
             - internal/builtins/*.go
@@ -140,6 +144,10 @@ linters:
               desc: Do not use CGO FFI in sandbox code.
             - pkg: ^log$
               desc: Use invocation-provided writers instead of host log sinks.
+            - pkg: io/ioutil$
+              desc: Use inv.FS or commands.ReadAll so sandbox policy is enforced.
+            - pkg: debug/buildinfo$
+              desc: Do not read build info from host filesystem.
         broad_syscall:
           files:
             - "*.go"
@@ -262,6 +270,27 @@ linters:
         - pattern: '^fmt\.(Print|Println|Printf)$'
           pkg: '^fmt$'
           msg: Use fmt.Fprint with inv.Stdout/inv.Stderr instead of writing to host stdout.
+        - pattern: '^os\.(Pipe|NewFile|CopyFS|Executable)$'
+          msg: Use invocation-provided capabilities instead of direct host access.
+        - pattern: '^os\.(UserCacheDir|UserConfigDir)$'
+          msg: Use invocation-provided paths instead of host user directories.
+        - pattern: '^os\.(Getgroups|Setgroups)$'
+          msg: Use invocation-provided identity instead of host group lookups.
+        - pattern: '^ioutil\.(ReadFile|WriteFile|ReadDir|TempDir|TempFile|ReadAll)$'
+          pkg: '^io/ioutil$'
+          msg: Use inv.FS or commands.ReadAll so sandbox policy is enforced.
+        - pattern: '^net\.(ResolveIPAddr|ResolveTCPAddr|ResolveUDPAddr|ResolveUnixAddr|InterfaceAddrs|Interfaces)$'
+          pkg: '^net$'
+          msg: Use invocation network capabilities instead of direct host networking.
+        - pattern: '^runtime\.(NumCPU|GOMAXPROCS)$'
+          pkg: '^runtime$'
+          msg: Use invocation-provided resource limits instead of host runtime state.
+        - pattern: '^buildinfo\.ReadFile$'
+          pkg: '^debug/buildinfo$'
+          msg: Do not read build info from host filesystem.
+        - pattern: '^exec\.LookPath$'
+          pkg: '^os/exec$'
+          msg: Do not search host PATH; use invocation-provided command resolution.
 
   exclusions:
     rules:
@@ -320,6 +349,10 @@ linters:
           - staticcheck
           - unparam
           - unused
+      - path: internal/conformance/runner\.go$
+        text: "use of `exec\\.LookPath` forbidden"
+        linters:
+          - forbidigo
 
 issues:
   max-issues-per-linter: 50
