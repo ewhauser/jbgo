@@ -66,8 +66,8 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 		t.Fatalf("failed to get bash version: %v", err)
 	}
 	firstLine, _, _ := strings.Cut(string(out), "\n")
-	if !strings.Contains(firstLine, "version 5.2.37") {
-		t.Fatalf("conformance tests require bash 5.2.37 (pinned via Nix), got: %s\n\nRun conformance tests via:\n  make conformance-test\n\nTo run a single test file:\n  make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/append.test.sh'", firstLine)
+	if !strings.Contains(firstLine, "version 5.3.9") {
+		t.Fatalf("conformance tests require bash 5.3.9 (pinned via Nix), got: %s\n\nRun conformance tests via:\n  make conformance-test\n\nTo run a single test file:\n  make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/append.test.sh'", firstLine)
 	}
 	t.Logf("bash oracle: %s (%s)", firstLine, bashPath)
 
