@@ -50,7 +50,7 @@ That means the roadmap should focus less on adding more top-level command nodes 
 
 - [x] P0: Land `VarRef` / `Subscript` foundations for assignment targets and variable references
 - [x] P0: Refactor `DeclClause` arguments into typed declaration operands
-- [ ] P0: Add a dedicated conditional AST for `[[ ... ]]` operands and operators
+- [x] P0: Add a dedicated conditional AST for `[[ ... ]]` operands and operators
 - [ ] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
 - [ ] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
 - [ ] P1: Move alias expansion earlier and preserve alias provenance in parse results
@@ -228,11 +228,11 @@ Declaration builtins are a major Bash-specific semantic hotspot. They no longer 
 
 ### 4. Dedicated conditional AST for `[[ ... ]]`
 
-Status: P0
+Status: Landed. Shared pattern AST remains a follow-up item.
 
 #### Problem
 
-The current conditional tree is:
+The old conditional tree was:
 
 - `BinaryTest`
 - `UnaryTest`

@@ -915,11 +915,92 @@ func (c *CaseItem) End() Pos {
 type TestClause struct {
 	Left, Right Pos
 
-	X TestExpr
+	X CondExpr
 }
 
 func (t *TestClause) Pos() Pos { return t.Left }
 func (t *TestClause) End() Pos { return posAddCol(t.Right, 2) }
+
+// CondExpr represents all nodes that form [[ ... ]] conditional expressions.
+//
+// These are [*CondBinary], [*CondUnary], [*CondParen], [*CondWord],
+// [*CondVarRef], [*CondPattern], and [*CondRegex].
+type CondExpr interface {
+	Node
+	condExprNode()
+}
+
+func (*CondBinary) condExprNode()  {}
+func (*CondUnary) condExprNode()   {}
+func (*CondParen) condExprNode()   {}
+func (*CondWord) condExprNode()    {}
+func (*CondVarRef) condExprNode()  {}
+func (*CondPattern) condExprNode() {}
+func (*CondRegex) condExprNode()   {}
+
+// CondBinary represents a binary [[ ... ]] conditional expression.
+type CondBinary struct {
+	OpPos Pos
+	Op    BinTestOperator
+	X, Y  CondExpr
+}
+
+func (b *CondBinary) Pos() Pos { return b.X.Pos() }
+func (b *CondBinary) End() Pos { return b.Y.End() }
+
+// CondUnary represents a unary [[ ... ]] conditional expression.
+type CondUnary struct {
+	OpPos Pos
+	Op    UnTestOperator
+	X     CondExpr
+}
+
+func (u *CondUnary) Pos() Pos { return u.OpPos }
+func (u *CondUnary) End() Pos { return u.X.End() }
+
+// CondParen represents a [[ ... ]] conditional expression within parentheses.
+type CondParen struct {
+	Lparen, Rparen Pos
+
+	X CondExpr
+}
+
+func (p *CondParen) Pos() Pos { return p.Lparen }
+func (p *CondParen) End() Pos { return posAddCol(p.Rparen, 1) }
+
+// CondWord wraps a generic [[ ... ]] conditional word operand.
+type CondWord struct {
+	Word *Word
+}
+
+func (w *CondWord) Pos() Pos { return w.Word.Pos() }
+func (w *CondWord) End() Pos { return w.Word.End() }
+
+// CondVarRef wraps an exact variable reference operand for [[ -v ... ]] and
+// [[ -R ... ]].
+type CondVarRef struct {
+	Ref *VarRef
+}
+
+func (r *CondVarRef) Pos() Pos { return r.Ref.Pos() }
+func (r *CondVarRef) End() Pos { return r.Ref.End() }
+
+// CondPattern wraps a pattern-matching operand for [[ == ]], [[ = ]], and
+// [[ != ]].
+type CondPattern struct {
+	Word *Word
+}
+
+func (p *CondPattern) Pos() Pos { return p.Word.Pos() }
+func (p *CondPattern) End() Pos { return p.Word.End() }
+
+// CondRegex wraps a regular-expression operand for [[ =~ ]].
+type CondRegex struct {
+	Word *Word
+}
+
+func (r *CondRegex) Pos() Pos { return r.Word.Pos() }
+func (r *CondRegex) End() Pos { return r.Word.End() }
 
 // TestExpr represents all nodes that form test expressions.
 //

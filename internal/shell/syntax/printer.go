@@ -150,6 +150,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 	case ArithmExpr:
 		p.line = node.Pos().Line()
 		p.arithmExpr(node, false, false)
+	case CondExpr:
+		p.line = node.Pos().Line()
+		p.condExpr(node)
 	case *Word:
 		p.line = node.Pos().Line()
 		p.word(node)
@@ -938,6 +941,57 @@ func (p *Printer) testExpr(expr TestExpr) {
 	p.testExprSameLine(expr)
 }
 
+func (p *Printer) condExpr(expr CondExpr) {
+	// Multi-line test expressions don't need to escape newlines.
+	if expr.Pos().Line() > p.line {
+		p.newlines(expr.Pos())
+		p.spacePad(expr.Pos())
+	} else if p.wantSpace == spaceRequired {
+		p.space()
+	}
+	p.condExprSameLine(expr)
+}
+
+func (p *Printer) condExprSameLine(expr CondExpr) {
+	p.advanceLine(expr.Pos().Line())
+	switch expr := expr.(type) {
+	case *CondWord:
+		p.word(expr.Word)
+	case *CondVarRef:
+		p.varRef(expr.Ref)
+		p.wantSpace = spaceRequired
+	case *CondPattern:
+		p.word(expr.Word)
+	case *CondRegex:
+		p.word(expr.Word)
+	case *CondBinary:
+		p.condExprSameLine(expr.X)
+		p.space()
+		p.w.WriteString(expr.Op.String())
+		switch expr.Op {
+		case AndTest, OrTest:
+			p.wantSpace = spaceRequired
+			p.condExpr(expr.Y)
+		default:
+			p.space()
+			p.condExprSameLine(expr.Y)
+		}
+	case *CondUnary:
+		p.w.WriteString(expr.Op.String())
+		p.space()
+		p.condExprSameLine(expr.X)
+	case *CondParen:
+		p.w.WriteByte('(')
+		if startsWithCondLparen(expr.X) {
+			p.wantSpace = spaceRequired
+		} else {
+			p.wantSpace = spaceNotRequired
+		}
+		p.condExpr(expr.X)
+		p.w.WriteByte(')')
+	}
+}
+
 func (p *Printer) testExprSameLine(expr TestExpr) {
 	p.advanceLine(expr.Pos().Line())
 	switch expr := expr.(type) {
@@ -1356,7 +1410,7 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 	case *TestClause:
 		p.w.WriteString("[[ ")
 		p.incLevel()
-		p.testExpr(cmd.X)
+		p.condExpr(cmd.X)
 		p.decLevel()
 		p.spacedString("]]", cmd.Right)
 	case *DeclClause:
@@ -1648,4 +1702,15 @@ func startsWithLparen(node Node) bool {
 		return true // keep ( ((
 	}
 	return false
+}
+
+func startsWithCondLparen(node CondExpr) bool {
+	switch node := node.(type) {
+	case *CondParen:
+		return true
+	case *CondUnary:
+		return startsWithCondLparen(node.X)
+	default:
+		return false
+	}
 }

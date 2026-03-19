@@ -391,3 +391,7 @@ func (o BinTestOperator) String() string  { return token(o).String() }
 func (t token) bashQuote() string {
 	return "`" + t.String() + "'"
 }
+
+func bashQuoteString(s string) string {
+	return "`" + s + "'"
+}

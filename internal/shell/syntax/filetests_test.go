@@ -98,6 +98,22 @@ func arithmExpBr(e ArithmExpr) *ArithmExp  { return &ArithmExp{Bracket: true, X:
 func arithmCmd(e ArithmExpr) *ArithmCmd    { return &ArithmCmd{X: e} }
 func parenArit(e ArithmExpr) *ParenArithm  { return &ParenArithm{X: e} }
 func parenTest(e TestExpr) *ParenTest      { return &ParenTest{X: e} }
+func condWord(ps ...WordPart) *CondWord    { return &CondWord{Word: word(ps...)} }
+func litCondWord(s string) *CondWord       { return condWord(lit(s)) }
+func condVarRef(ref *VarRef) *CondVarRef   { return &CondVarRef{Ref: ref} }
+func condPattern(ps ...WordPart) *CondPattern {
+	return &CondPattern{Word: word(ps...)}
+}
+func litCondPattern(s string) *CondPattern { return condPattern(lit(s)) }
+func condRegex(ps ...WordPart) *CondRegex  { return &CondRegex{Word: word(ps...)} }
+func litCondRegex(s string) *CondRegex     { return condRegex(lit(s)) }
+func condUnary(op UnTestOperator, x CondExpr) *CondUnary {
+	return &CondUnary{Op: op, X: x}
+}
+func condBinary(op BinTestOperator, x, y CondExpr) *CondBinary {
+	return &CondBinary{Op: op, X: x, Y: y}
+}
+func condParen(x CondExpr) *CondParen { return &CondParen{X: x} }
 
 func cmdSubst(sts ...*Stmt) *CmdSubst { return &CmdSubst{Stmts: sts} }
 func litParamExp(s string) *ParamExp {
@@ -3891,194 +3907,133 @@ var fileTests = []fileTestCase{
 	),
 	fileTest(
 		[]string{"[[ a ]]"},
-		langFile(&TestClause{X: litWord("a")}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: litCondWord("a")}, LangBash|LangMirBSDKorn|LangZsh),
 		langFile(litStmt("[[", "a", "]]"), LangPOSIX),
 	),
 	fileTest(
 		[]string{"[[ a ]]\nb"},
 		langFile(stmts(
-			&TestClause{X: litWord("a")},
+			&TestClause{X: litCondWord("a")},
 			litCall("b"),
 		), LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ a > b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsAfter,
-			X:  litWord("a"),
-			Y:  litWord("b"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsAfter, litCondWord("a"), litCondWord("b"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ 1 -nt 2 ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsNewer,
-			X:  litWord("1"),
-			Y:  litWord("2"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsNewer, litCondWord("1"), litCondWord("2"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ 1 -eq 2 ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsEql,
-			X:  litWord("1"),
-			Y:  litWord("2"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsEql, litCondWord("1"), litCondWord("2"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -1 -eq -1 ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsEql,
-			// TODO: parse as unary expressions
-			X: litWord("-1"),
-			Y: litWord("-1"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsEql, litCondWord("-1"), litCondWord("-1"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ +3 -eq 1+2 ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsEql,
-			// TODO: parse as unary and binary expressions
-			X: litWord("+3"),
-			Y: litWord("1+2"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsEql, litCondWord("+3"), litCondWord("1+2"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{
 			"[[ -R a ]]",
 			"[[\n-R a\n]]",
 		},
-		langFile(&TestClause{X: &UnaryTest{
-			Op: TsRefVar,
-			X:  litWord("a"),
-		}}, LangBash),
+		langFile(&TestClause{X: condUnary(TsRefVar, condVarRef(litRef("a")))}, LangBash),
+	),
+	fileTest(
+		[]string{`[[ -v assoc[$key] ]]`},
+		langFile(&TestClause{X: condUnary(TsVarSet, condVarRef(refSub("assoc", sub(word(litParamExp("key"))))))}, LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
+		[]string{`[[ -v assoc['k'] ]]`},
+		langFile(&TestClause{X: condUnary(TsVarSet, condVarRef(refSub("assoc", sub(word(sglQuoted("k"))))))}, LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
+		[]string{`[[ -v assoc[k]z ]]`},
+		langFile(&TestClause{X: condUnary(TsVarSet, condWord(lit("assoc"), lit("[k]z")))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ a =~ b ]]", "[[ a =~ b ]];"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y:  litWord("b"),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex("b"))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a =~ " foo "$bar ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y: word(
-				dblQuoted(lit(" foo ")),
-				litParamExp("bar"),
-			),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), condRegex(
+			dblQuoted(lit(" foo ")),
+			litParamExp("bar"),
+		))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a =~ foo"bar" ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y: word(
-				lit("foo"),
-				dblQuoted(lit("bar")),
-			),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), condRegex(
+			lit("foo"),
+			dblQuoted(lit("bar")),
+		))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a =~ [ab](c |d) ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y:  litWord("[ab](c |d)"),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex("[ab](c |d)"))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a =~ ( ]]<>;&) ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y:  litWord("( ]]<>;&)"),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex("( ]]<>;&)"))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a =~ ($foo) ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y:  word(lit("("), litParamExp("foo"), lit(")")),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), condRegex(
+			lit("("),
+			litParamExp("foo"),
+			lit(")"),
+		))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a =~ b\ c|d ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y:  litWord(`b\ c|d`),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex(`b\ c|d`))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a == -n ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsMatch,
-			X:  litWord("a"),
-			Y:  litWord("-n"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), litCondPattern("-n"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{`[[ a == (b|c)* ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsMatch,
-			X:  litWord("a"),
-			Y:  word(lit("(b|c)"), lit("*")),
-		}}, LangZsh),
+		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), condPattern(
+			lit("(b|c)"),
+			lit("*"),
+		))}, LangZsh),
 	),
 	fileTest(
 		[]string{`[[ a == (#i)bar ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsMatch,
-			X:  litWord("a"),
-			Y:  word(lit("(#i)"), lit("bar")),
-		}}, LangZsh),
+		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), condPattern(
+			lit("(#i)"),
+			lit("bar"),
+		))}, LangZsh),
 	),
 	fileTest(
 		[]string{`[[ a =~ -n ]]`},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsReMatch,
-			X:  litWord("a"),
-			Y:  litWord("-n"),
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex("-n"))}, LangBash),
 	),
 	fileTest(
 		[]string{"[[ a =~ b$ || c =~ d$ ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: OrTest,
-			X: &BinaryTest{
-				Op: TsReMatch,
-				X:  litWord("a"),
-				Y:  word(lit("b"), lit("$")),
-			},
-			Y: &BinaryTest{
-				Op: TsReMatch,
-				X:  litWord("c"),
-				Y:  word(lit("d"), lit("$")),
-			},
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(OrTest,
+			condBinary(TsReMatch, litCondWord("a"), condRegex(lit("b"), lit("$"))),
+			condBinary(TsReMatch, litCondWord("c"), condRegex(lit("d"), lit("$"))),
+		)}, LangBash),
 	),
 	fileTest(
 		[]string{"[[ -n $a ]]"},
 		langFile(&TestClause{
-			X: &UnaryTest{Op: TsNempStr, X: word(litParamExp("a"))},
+			X: condUnary(TsNempStr, condWord(litParamExp("a"))),
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ ! $a < 'b' ]]"},
-		langFile(&TestClause{X: &UnaryTest{
-			Op: TsNot,
-			X: &BinaryTest{
-				Op: TsBefore,
-				X:  word(litParamExp("a")),
-				Y:  word(sglQuoted("b")),
-			},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condUnary(TsNot,
+			condBinary(TsBefore, condWord(litParamExp("a")), condWord(sglQuoted("b"))),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{
@@ -4086,10 +4041,9 @@ var fileTests = []fileTestCase{
 			"[[ ! -a $a ]]",
 			"[[\n!\n-a $a\n]]",
 		},
-		langFile(&TestClause{X: &UnaryTest{
-			Op: TsNot,
-			X:  &UnaryTest{Op: TsExists, X: word(litParamExp("a"))},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condUnary(TsNot,
+			condUnary(TsExists, condWord(litParamExp("a"))),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{
@@ -4097,205 +4051,134 @@ var fileTests = []fileTestCase{
 			"[[\na &&\nb ]]",
 			"[[\n\na &&\n\nb ]]",
 		},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  litWord("a"),
-			Y:  litWord("b"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest, litCondWord("a"), litCondWord("b"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ (a && b) ]]"},
-		langFile(&TestClause{X: parenTest(&BinaryTest{
-			Op: AndTest,
-			X:  litWord("a"),
-			Y:  litWord("b"),
-		})}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condParen(condBinary(AndTest, litCondWord("a"), litCondWord("b")))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{
 			"[[ a && (b) ]]",
 			"[[ a &&\n(\nb) ]]",
 		},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  litWord("a"),
-			Y:  parenTest(litWord("b")),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest, litCondWord("a"), condParen(litCondWord("b")))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ (a && b) || -f c ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: OrTest,
-			X: parenTest(&BinaryTest{
-				Op: AndTest,
-				X:  litWord("a"),
-				Y:  litWord("b"),
-			}),
-			Y: &UnaryTest{Op: TsRegFile, X: litWord("c")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(OrTest,
+			condParen(condBinary(AndTest, litCondWord("a"), litCondWord("b"))),
+			condUnary(TsRegFile, litCondWord("c")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{
 			"[[ -S a && -L b ]]",
 			"[[ -S a && -h b ]]",
 		},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsSocket, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsSmbLink, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsSocket, litCondWord("a")),
+			condUnary(TsSmbLink, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -k a && -N b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsSticky, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsModif, X: litWord("b")},
-		}}, LangBash),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsSticky, litCondWord("a")),
+			condUnary(TsModif, litCondWord("b")),
+		)}, LangBash),
 	),
 	fileTest(
 		[]string{"[[ -G a && -O b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsGrpOwn, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsUsrOwn, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsGrpOwn, litCondWord("a")),
+			condUnary(TsUsrOwn, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -d a && -c b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsDirect, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsCharSp, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsDirect, litCondWord("a")),
+			condUnary(TsCharSp, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -b a && -p b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsBlckSp, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsNmPipe, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsBlckSp, litCondWord("a")),
+			condUnary(TsNmPipe, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -g a && -u b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsGIDSet, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsUIDSet, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsGIDSet, litCondWord("a")),
+			condUnary(TsUIDSet, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -r a && -w b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsRead, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsWrite, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsRead, litCondWord("a")),
+			condUnary(TsWrite, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -x a && -s b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsExec, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsNoEmpty, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsExec, litCondWord("a")),
+			condUnary(TsNoEmpty, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -t a && -z b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsFdTerm, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsEmpStr, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsFdTerm, litCondWord("a")),
+			condUnary(TsEmpStr, litCondWord("b")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -o a && -v b ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X:  &UnaryTest{Op: TsOptSet, X: litWord("a")},
-			Y:  &UnaryTest{Op: TsVarSet, X: litWord("b")},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condUnary(TsOptSet, litCondWord("a")),
+			condUnary(TsVarSet, condVarRef(litRef("b"))),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ a -ot b && c -ef d ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X: &BinaryTest{
-				Op: TsOlder,
-				X:  litWord("a"),
-				Y:  litWord("b"),
-			},
-			Y: &BinaryTest{
-				Op: TsDevIno,
-				X:  litWord("c"),
-				Y:  litWord("d"),
-			},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condBinary(TsOlder, litCondWord("a"), litCondWord("b")),
+			condBinary(TsDevIno, litCondWord("c"), litCondWord("d")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ a = b && c != d ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X: &BinaryTest{
-				Op: TsMatchShort,
-				X:  litWord("a"),
-				Y:  litWord("b"),
-			},
-			Y: &BinaryTest{
-				Op: TsNoMatch,
-				X:  litWord("c"),
-				Y:  litWord("d"),
-			},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condBinary(TsMatchShort, litCondWord("a"), litCondPattern("b")),
+			condBinary(TsNoMatch, litCondWord("c"), litCondPattern("d")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ a -ne b && c -le d ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X: &BinaryTest{
-				Op: TsNeq,
-				X:  litWord("a"),
-				Y:  litWord("b"),
-			},
-			Y: &BinaryTest{
-				Op: TsLeq,
-				X:  litWord("c"),
-				Y:  litWord("d"),
-			},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condBinary(TsNeq, litCondWord("a"), litCondWord("b")),
+			condBinary(TsLeq, litCondWord("c"), litCondWord("d")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ c -ge d ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsGeq,
-			X:  litWord("c"),
-			Y:  litWord("d"),
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(TsGeq, litCondWord("c"), litCondWord("d"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ a -lt b && c -gt d ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: AndTest,
-			X: &BinaryTest{
-				Op: TsLss,
-				X:  litWord("a"),
-				Y:  litWord("b"),
-			},
-			Y: &BinaryTest{
-				Op: TsGtr,
-				X:  litWord("c"),
-				Y:  litWord("d"),
-			},
-		}}, LangBash|LangMirBSDKorn|LangZsh),
+		langFile(&TestClause{X: condBinary(AndTest,
+			condBinary(TsLss, litCondWord("a"), litCondWord("b")),
+			condBinary(TsGtr, litCondWord("c"), litCondWord("d")),
+		)}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ 1.2 -gt 0.3 ]]"},
-		langFile(&TestClause{X: &BinaryTest{
-			Op: TsGtr,
-			X:  litWord("1.2"),
-			Y:  litWord("0.3"),
-		}}, LangZsh),
+		langFile(&TestClause{X: condBinary(TsGtr, litCondWord("1.2"), litCondWord("0.3"))}, LangZsh),
 		// TODO: reject floating point here, just like with arithmetic expressions
 		// langErr2(``, LangBash|LangMirBSDKorn),
 	),
@@ -5440,6 +5323,25 @@ func (c sanityChecker) visit(node Node) bool {
 			c.checkPos(node, node.Left, `"`)
 		}
 		c.checkPos(node, node.Right, `"`)
+	case *CondUnary:
+		strs := []string{node.Op.String()}
+		switch node.Op {
+		case TsExists:
+			strs = append(strs, "-a")
+		case TsSmbLink:
+			strs = append(strs, "-h")
+		}
+		c.checkPos(node, node.OpPos, strs...)
+	case *CondBinary:
+		strs := []string{node.Op.String()}
+		switch node.Op {
+		case TsMatch:
+			strs = append(strs, "=")
+		}
+		c.checkPos(node, node.OpPos, strs...)
+	case *CondParen:
+		c.checkPos(node, node.Lparen, "(")
+		c.checkPos(node, node.Rparen, ")")
 	case *UnaryArithm:
 		c.checkPos(node, node.OpPos, node.Op.String())
 	case *UnaryTest:

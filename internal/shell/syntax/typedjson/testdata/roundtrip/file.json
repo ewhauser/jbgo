@@ -3664,7 +3664,7 @@
 					"Col": 19
 				},
 				"X": {
-					"Type": "UnaryTest",
+					"Type": "CondUnary",
 					"Pos": {
 						"Offset": 335,
 						"Line": 26,
@@ -3682,7 +3682,7 @@
 					},
 					"Op": 39,
 					"X": {
-						"Type": "ParenTest",
+						"Type": "CondParen",
 						"Pos": {
 							"Offset": 337,
 							"Line": 26,
@@ -3704,7 +3704,7 @@
 							"Col": 17
 						},
 						"X": {
-							"Type": "BinaryTest",
+							"Type": "CondBinary",
 							"Pos": {
 								"Offset": 338,
 								"Line": 26,
@@ -3722,7 +3722,7 @@
 							},
 							"Op": 11,
 							"X": {
-								"Type": "Word",
+								"Type": "CondWord",
 								"Pos": {
 									"Offset": 338,
 									"Line": 26,
@@ -3733,35 +3733,47 @@
 									"Line": 26,
 									"Col": 10
 								},
-								"Parts": [
-									{
-										"Type": "Lit",
-										"Pos": {
-											"Offset": 338,
-											"Line": 26,
-											"Col": 7
-										},
-										"End": {
-											"Offset": 341,
-											"Line": 26,
-											"Col": 10
-										},
-										"ValuePos": {
-											"Offset": 338,
-											"Line": 26,
-											"Col": 7
-										},
-										"ValueEnd": {
-											"Offset": 341,
-											"Line": 26,
-											"Col": 10
-										},
-										"Value": "foo"
-									}
-								]
+								"Word": {
+									"Pos": {
+										"Offset": 338,
+										"Line": 26,
+										"Col": 7
+									},
+									"End": {
+										"Offset": 341,
+										"Line": 26,
+										"Col": 10
+									},
+									"Parts": [
+										{
+											"Type": "Lit",
+											"Pos": {
+												"Offset": 338,
+												"Line": 26,
+												"Col": 7
+											},
+											"End": {
+												"Offset": 341,
+												"Line": 26,
+												"Col": 10
+											},
+											"ValuePos": {
+												"Offset": 338,
+												"Line": 26,
+												"Col": 7
+											},
+											"ValueEnd": {
+												"Offset": 341,
+												"Line": 26,
+												"Col": 10
+											},
+											"Value": "foo"
+										}
+									]
+								}
 							},
 							"Y": {
-								"Type": "Word",
+								"Type": "CondWord",
 								"Pos": {
 									"Offset": 345,
 									"Line": 26,
@@ -3772,32 +3784,44 @@
 									"Line": 26,
 									"Col": 17
 								},
-								"Parts": [
-									{
-										"Type": "Lit",
-										"Pos": {
-											"Offset": 345,
-											"Line": 26,
-											"Col": 14
-										},
-										"End": {
-											"Offset": 348,
-											"Line": 26,
-											"Col": 17
-										},
-										"ValuePos": {
-											"Offset": 345,
-											"Line": 26,
-											"Col": 14
-										},
-										"ValueEnd": {
-											"Offset": 348,
-											"Line": 26,
-											"Col": 17
-										},
-										"Value": "bar"
-									}
-								]
+								"Word": {
+									"Pos": {
+										"Offset": 345,
+										"Line": 26,
+										"Col": 14
+									},
+									"End": {
+										"Offset": 348,
+										"Line": 26,
+										"Col": 17
+									},
+									"Parts": [
+										{
+											"Type": "Lit",
+											"Pos": {
+												"Offset": 345,
+												"Line": 26,
+												"Col": 14
+											},
+											"End": {
+												"Offset": 348,
+												"Line": 26,
+												"Col": 17
+											},
+											"ValuePos": {
+												"Offset": 345,
+												"Line": 26,
+												"Col": 14
+											},
+											"ValueEnd": {
+												"Offset": 348,
+												"Line": 26,
+												"Col": 17
+											},
+											"Value": "bar"
+										}
+									]
+								}
 							}
 						}
 					}

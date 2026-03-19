@@ -126,6 +126,21 @@ func Walk(node Node, f func(Node) bool) {
 	case *BinaryArithm:
 		Walk(node.X, f)
 		Walk(node.Y, f)
+	case *CondBinary:
+		Walk(node.X, f)
+		Walk(node.Y, f)
+	case *CondUnary:
+		Walk(node.X, f)
+	case *CondParen:
+		Walk(node.X, f)
+	case *CondWord:
+		walkNilable(node.Word, f)
+	case *CondVarRef:
+		walkNilable(node.Ref, f)
+	case *CondPattern:
+		walkNilable(node.Word, f)
+	case *CondRegex:
+		walkNilable(node.Word, f)
 	case *BinaryTest:
 		Walk(node.X, f)
 		Walk(node.Y, f)

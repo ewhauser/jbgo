@@ -998,6 +998,11 @@ type ParseError struct {
 
 	Incomplete bool
 
+	// SecondaryText is an optional second diagnostic line that BashError emits
+	// before the source snippet. Bash uses this for some syntax errors like
+	// "syntax error near ...".
+	SecondaryText string
+
 	// SourceLine is the content of the source line where the error occurred.
 	// When set, BashError includes it as a second diagnostic line.
 	SourceLine string
@@ -1018,8 +1023,16 @@ func (e ParseError) BashError() string {
 	} else {
 		first = fmt.Sprintf("%s: line %d: %s", e.Filename, e.Pos.Line(), e.Text)
 	}
+	lines := []string{first}
+	if e.SecondaryText != "" {
+		if e.Filename == "" {
+			lines = append(lines, fmt.Sprintf("line %d: %s", e.Pos.Line(), e.SecondaryText))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s: line %d: %s", e.Filename, e.Pos.Line(), e.SecondaryText))
+		}
+	}
 	if e.SourceLine == "" {
-		return first
+		return strings.Join(lines, "\n")
 	}
 	var second string
 	if e.Filename == "" {
@@ -1027,7 +1040,8 @@ func (e ParseError) BashError() string {
 	} else {
 		second = fmt.Sprintf("%s: line %d: `%s'", e.Filename, e.Pos.Line(), e.SourceLine)
 	}
-	return first + "\n" + second
+	lines = append(lines, second)
+	return strings.Join(lines, "\n")
 }
 
 // LangError is returned when the parser encounters code that is only valid in
@@ -1086,8 +1100,22 @@ func (p *Parser) posErr(pos Pos, format string, args ...any) {
 	})
 }
 
+func (p *Parser) posErrSecondary(pos Pos, secondary, format string, args ...any) {
+	p.errPass(ParseError{
+		Filename:      p.f.Name,
+		Pos:           pos,
+		Text:          fmt.Sprintf(format, args...),
+		Incomplete:    p.tok == _EOF && p.Incomplete(),
+		SecondaryText: secondary,
+	})
+}
+
 func (p *Parser) curErr(format string, args ...any) {
 	p.posErr(p.pos, format, args...)
+}
+
+func (p *Parser) curErrSecondary(secondary, format string, args ...any) {
+	p.posErrSecondary(p.pos, secondary, format, args...)
 }
 
 func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any) {
@@ -2712,8 +2740,16 @@ func (p *Parser) testClause(s *Stmt) {
 	tc := &TestClause{Left: p.pos}
 	old := p.preNested(testExpr)
 	p.next()
-	if tc.X = p.testExprBinary(false); tc.X == nil {
-		p.followErrExp(tc.Left, dblLeftBrack)
+	if tc.X = p.condExprBinary(false); tc.X == nil {
+		if p.tok == rightParen {
+			p.curErrSecondary(
+				fmt.Sprintf("syntax error near %s", p.tok.bashQuote()),
+				"unexpected token %s in conditional command",
+				p.tok.bashQuote(),
+			)
+		} else {
+			p.followErrExp(tc.Left, dblLeftBrack)
+		}
 	}
 	tc.Right = p.pos
 	if _, ok := p.gotRsrv("]]"); !ok {
@@ -2721,6 +2757,257 @@ func (p *Parser) testClause(s *Stmt) {
 	}
 	p.postNested(old)
 	s.Cmd = tc
+}
+
+func condWordAsVarRef(word *Word) *VarRef {
+	if word == nil || len(word.Parts) == 0 {
+		return nil
+	}
+	name, ok := word.Parts[0].(*Lit)
+	if !ok || !ValidName(name.Value) {
+		return nil
+	}
+	if len(word.Parts) == 1 {
+		return &VarRef{Name: name}
+	}
+	left, ok := word.Parts[1].(*Lit)
+	if !ok || left.Value != "[" {
+		return nil
+	}
+	right, ok := word.Parts[len(word.Parts)-1].(*Lit)
+	if !ok || right.Value != "]" {
+		return nil
+	}
+	if len(word.Parts) < 4 {
+		return nil
+	}
+	parts := slices.Clone(word.Parts[2 : len(word.Parts)-1])
+	sub := &Subscript{
+		Left:  left.Pos(),
+		Right: right.Pos(),
+		Kind:  SubscriptExpr,
+		Expr:  &Word{Parts: parts},
+	}
+	if len(parts) == 1 {
+		if lit, ok := parts[0].(*Lit); ok {
+			switch lit.Value {
+			case "@":
+				sub.Kind = SubscriptAt
+			case "*":
+				sub.Kind = SubscriptStar
+			}
+		}
+	}
+	return &VarRef{Name: name, Index: sub}
+}
+
+func (p *Parser) followCondWord(tok token, pos Pos) *CondWord {
+	w := p.followWordTok(tok, pos)
+	if w == nil {
+		return nil
+	}
+	return &CondWord{Word: w}
+}
+
+func (p *Parser) followCondVarRefOrWord(tok token, pos Pos) CondExpr {
+	w := p.followWordTok(tok, pos)
+	if w == nil {
+		return nil
+	}
+	if ref := condWordAsVarRef(w); ref != nil {
+		return &CondVarRef{Ref: ref}
+	}
+	return &CondWord{Word: w}
+}
+
+func (p *Parser) followCondPattern(tok token, pos Pos) *CondPattern {
+	w := p.followWordTok(tok, pos)
+	if w == nil {
+		return nil
+	}
+	return &CondPattern{Word: w}
+}
+
+func (p *Parser) followCondRegex(tok token, pos Pos) *CondRegex {
+	oldQuote := p.quote
+	p.rxOpenParens = 0
+	p.rxFirstPart = true
+	p.quote = testExprRegexp
+	p.next()
+	w := p.getWord()
+	if p.quote == testExprRegexp {
+		p.quote = oldQuote
+	}
+	if w == nil {
+		switch p.tok {
+		case semicolon, and, rdrIn, rdrOut, rightParen:
+			p.curErrSecondary(
+				fmt.Sprintf("syntax error near %s", p.tok.bashQuote()),
+				"syntax error in conditional expression: unexpected token %s",
+				p.tok.bashQuote(),
+			)
+			return nil
+		}
+		if p.recoverError() {
+			return &CondRegex{Word: p.wordOne(&Lit{ValuePos: recoveredPos})}
+		}
+		p.followErr(pos, tok, noQuote("a word"))
+		return nil
+	}
+	return &CondRegex{Word: w}
+}
+
+func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
+	p.got(_Newl)
+	var left CondExpr
+	if pastAndOr {
+		left = p.condExprUnary()
+	} else {
+		left = p.condExprBinary(true)
+	}
+	if left == nil {
+		return left
+	}
+	p.got(_Newl)
+	switch p.tok {
+	case andAnd, orOr:
+	case _LitWord:
+		if p.val == "]]" {
+			return left
+		}
+		opTok := token(testBinaryOp(p.val))
+		if _, ok := left.(*CondWord); !ok {
+			if opTok != illegalTok {
+				p.posErr(p.pos, "expected %#q, %#q or %#q after complex expr",
+					AndTest, OrTest, dblRightBrack)
+			} else {
+				if b, ok := left.(*CondBinary); ok && b.Op == TsReMatch {
+					p.curErrSecondary(
+						fmt.Sprintf("syntax error near %s", bashQuoteString(p.val)),
+						"syntax error in conditional expression: unexpected token %s",
+						bashQuoteString(p.val),
+					)
+				} else {
+					p.curErr("not a valid test operator: %#q", p.val)
+				}
+			}
+			return left
+		}
+		if opTok == illegalTok {
+			p.curErr("not a valid test operator: %#q", p.val)
+		}
+		p.tok = opTok
+	case _Lit:
+		p.curErr("test operator words must consist of a single literal")
+	case rdrIn, rdrOut:
+		if _, ok := left.(*CondWord); !ok {
+			p.posErr(p.pos, "expected %#q, %#q or %#q after complex expr",
+				AndTest, OrTest, dblRightBrack)
+			return left
+		}
+	case _EOF, rightParen:
+		return left
+	default:
+		p.curErr("not a valid test operator: %#q", p.tok)
+	}
+	b := &CondBinary{
+		OpPos: p.pos,
+		Op:    BinTestOperator(p.tok),
+		X:     left,
+	}
+	switch b.Op {
+	case AndTest, OrTest:
+		p.next()
+		if b.Y = p.condExprBinary(false); b.Y == nil {
+			p.followErrExp(b.OpPos, b.Op)
+		}
+	case TsReMatch:
+		p.checkLang(p.pos, langBashLike|LangZsh, "regex tests")
+		if b.Y = p.followCondRegex(token(b.Op), b.OpPos); b.Y == nil {
+			return nil
+		}
+	case TsMatchShort, TsMatch, TsNoMatch:
+		p.next()
+		if b.Y = p.followCondPattern(token(b.Op), b.OpPos); b.Y == nil {
+			return nil
+		}
+	default:
+		p.next()
+		if b.Y = p.followCondWord(token(b.Op), b.OpPos); b.Y == nil {
+			return nil
+		}
+	}
+	return b
+}
+
+func (p *Parser) condExprUnary() CondExpr {
+	switch p.tok {
+	case _EOF:
+		return nil
+	case rightParen:
+		return nil
+	case _LitWord:
+		op := token(testUnaryOp(p.val))
+		switch op {
+		case illegalTok:
+		case tsRefVar, tsModif:
+			if p.lang.in(langBashLike) {
+				p.tok = op
+			}
+		default:
+			p.tok = op
+		}
+	}
+	switch p.tok {
+	case exclMark:
+		u := &CondUnary{OpPos: p.pos, Op: TsNot}
+		p.next()
+		if u.X = p.condExprBinary(false); u.X == nil {
+			p.followErrExp(u.OpPos, u.Op)
+		}
+		return u
+	case tsExists, tsRegFile, tsDirect, tsCharSp, tsBlckSp, tsNmPipe,
+		tsSocket, tsSmbLink, tsSticky, tsGIDSet, tsUIDSet, tsGrpOwn,
+		tsUsrOwn, tsModif, tsRead, tsWrite, tsExec, tsNoEmpty,
+		tsFdTerm, tsEmpStr, tsNempStr, tsOptSet, tsVarSet, tsRefVar:
+		u := &CondUnary{OpPos: p.pos, Op: UnTestOperator(p.tok)}
+		p.next()
+		if u.Op == TsVarSet || u.Op == TsRefVar {
+			u.X = p.followCondVarRefOrWord(token(u.Op), u.OpPos)
+		} else {
+			u.X = p.followCondWord(token(u.Op), u.OpPos)
+		}
+		return u
+	case leftParen:
+		pe := &CondParen{Lparen: p.pos}
+		p.next()
+		if pe.X = p.condExprBinary(false); pe.X == nil {
+			if p.tok == _LitWord && p.val == "]]" {
+				p.posErr(pe.Lparen, "expected %#q", rightParen)
+			} else {
+				p.followErrExp(pe.Lparen, leftParen)
+			}
+			return nil
+		}
+		if p.tok == rightParen {
+			pe.Rparen = p.pos
+			p.next()
+		} else {
+			p.posErr(pe.Lparen, "expected %#q", rightParen)
+			return nil
+		}
+		return pe
+	case _LitWord:
+		if p.val == "]]" {
+			return nil
+		}
+		fallthrough
+	default:
+		if w := p.getWord(); w != nil {
+			return &CondWord{Word: w}
+		}
+		return nil
+	}
 }
 
 func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {

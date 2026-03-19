@@ -5,6 +5,7 @@ package syntax
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -83,6 +84,24 @@ func TestParseErr(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestParseErrorBashErrorConditionalDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	parser := NewParser(Variant(LangBash))
+	_, err := parser.Parse(strings.NewReader("[[ a =~ c a ]]"), "")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want parse error")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want ParseError", err)
+	}
+	parseErr.SourceLine = "[[ a =~ c a ]]"
+	if got, want := parseErr.BashError(), "line 1: syntax error in conditional expression: unexpected token `a'\nline 1: syntax error near `a'\nline 1: `[[ a =~ c a ]]'"; got != want {
+		t.Fatalf("BashError() mismatch\nwant: %s\ngot:  %s", want, got)
 	}
 }
 
@@ -1642,6 +1661,14 @@ var errorCases = []errorCase{
 		langErr("1:1: reached EOF without matching `[[` with `]]`", LangBash|LangZsh),
 	),
 	errCase(
+		"[[ ) ]]",
+		langErr("1:4: unexpected token `)' in conditional command", LangBash|LangMirBSDKorn|LangZsh),
+	),
+	errCase(
+		"[[ ( ]]",
+		langErr("1:4: expected `)`", LangBash|LangMirBSDKorn|LangZsh),
+	),
+	errCase(
 		"[[ a b c ]]",
 		langErr("1:6: not a valid test operator: `b`", LangBash|LangMirBSDKorn|LangZsh),
 	),
@@ -1683,11 +1710,15 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"[[ a =~ ; ]]",
-		langErr("1:6: `=~` must be followed by a word", LangBash|LangZsh),
+		langErr("1:9: syntax error in conditional expression: unexpected token `;'", LangBash|LangZsh),
 	),
 	errCase(
 		"[[ a =~ )",
-		langErr("1:6: `=~` must be followed by a word", LangBash|LangZsh),
+		langErr("1:9: syntax error in conditional expression: unexpected token `)'", LangBash|LangZsh),
+	),
+	errCase(
+		"[[ a =~ c a ]]",
+		langErr("1:11: syntax error in conditional expression: unexpected token `a'", LangBash|LangZsh),
 	),
 	errCase(
 		"[[ a =~ ())",

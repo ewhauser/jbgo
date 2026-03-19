@@ -78,10 +78,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/bool-parse.test.sh::Not allowed: [[ ) ]] and [[ ( ]]": {
-          "mode": "xfail",
-          "reason": "the [[ parser still reports a generic missing-expression syntax error instead of bash's token-specific conditional parse diagnostics for lone ) and ("
-        },
         "oils/brace-expansion.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
@@ -341,10 +337,6 @@
         "oils/regex.test.sh::Regex with == and not =~ is parse error, different lexer mode required": {
           "mode": "xfail",
           "reason": "the [[ parser still reports generic operator parsing errors instead of bash's regex-aware conditional diagnostics in this == case"
-        },
-        "oils/regex.test.sh::Parse error with 2 words": {
-          "mode": "xfail",
-          "reason": "the [[ parser still reports a generic invalid operator error instead of bash's conditional-expression syntax diagnostics when =~ is followed by two words"
         },
         "oils/regex.test.sh::unquoted [a  b] as pattern, [a  b|c]": {
           "mode": "xfail",

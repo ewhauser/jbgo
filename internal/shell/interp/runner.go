@@ -764,7 +764,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		}
 	case *syntax.TestClause:
-		if r.bashTest(ctx, cm.X, false) == "" && r.exit.ok() {
+		if r.bashCond(ctx, cm.X) == "" && r.exit.ok() {
 			// to preserve exit status code 2 for regex errors, etc
 			r.exit.code = 1
 		}

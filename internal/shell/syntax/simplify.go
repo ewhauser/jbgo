@@ -67,8 +67,27 @@ func (s *simplifier) visit(node Node) bool {
 	case *Word:
 		node.Parts = s.simplifyWord(node.Parts)
 	case *TestClause:
-		node.X = s.removeParensTest(node.X)
-		node.X = s.removeNegateTest(node.X)
+		node.X = s.removeParensCond(node.X)
+		node.X = s.removeNegateCond(node.X)
+	case *CondParen:
+		node.X = s.removeParensCond(node.X)
+		node.X = s.removeNegateCond(node.X)
+	case *CondBinary:
+		node.X = s.unquoteCond(node.X)
+		node.X = s.removeNegateCond(node.X)
+		if node.Op == TsMatchShort {
+			s.modified = true
+			node.Op = TsMatch
+		}
+		switch node.Op {
+		case TsMatch, TsNoMatch, TsReMatch:
+			// preserve quote-sensitive pattern and regex operands
+		default:
+			node.Y = s.unquoteCond(node.Y)
+		}
+		node.Y = s.removeNegateCond(node.Y)
+	case *CondUnary:
+		node.X = s.unquoteCond(node.X)
 	case *ParenTest:
 		node.X = s.removeParensTest(node.X)
 		node.X = s.removeNegateTest(node.X)
@@ -187,6 +206,69 @@ func (s *simplifier) inlineSubshell(stmts []*Stmt) []*Stmt {
 		stmts = sub.Stmts
 	}
 	return stmts
+}
+
+func (s *simplifier) unquoteCond(x CondExpr) CondExpr {
+	w, _ := x.(*CondWord)
+	if w == nil || len(w.Word.Parts) != 1 {
+		return x
+	}
+	dq, _ := w.Word.Parts[0].(*DblQuoted)
+	if dq == nil || len(dq.Parts) != 1 {
+		return x
+	}
+	if _, ok := dq.Parts[0].(*ParamExp); !ok {
+		return x
+	}
+	s.modified = true
+	w.Word.Parts = dq.Parts
+	return w
+}
+
+func (s *simplifier) removeParensCond(x CondExpr) CondExpr {
+	for {
+		par, _ := x.(*CondParen)
+		if par == nil {
+			return x
+		}
+		s.modified = true
+		x = par.X
+	}
+}
+
+func (s *simplifier) removeNegateCond(x CondExpr) CondExpr {
+	u, _ := x.(*CondUnary)
+	if u == nil || u.Op != TsNot {
+		return x
+	}
+	switch y := u.X.(type) {
+	case *CondUnary:
+		switch y.Op {
+		case TsEmpStr:
+			y.Op = TsNempStr
+			s.modified = true
+			return y
+		case TsNempStr:
+			y.Op = TsEmpStr
+			s.modified = true
+			return y
+		case TsNot:
+			s.modified = true
+			return y.X
+		}
+	case *CondBinary:
+		switch y.Op {
+		case TsMatch:
+			y.Op = TsNoMatch
+			s.modified = true
+			return y
+		case TsNoMatch:
+			y.Op = TsMatch
+			s.modified = true
+			return y
+		}
+	}
+	return x
 }
 
 func (s *simplifier) unquoteParams(x TestExpr) TestExpr {

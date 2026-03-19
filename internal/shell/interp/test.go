@@ -108,6 +108,83 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 	return ""
 }
 
+// non-empty string is true, empty string is false
+func (r *Runner) bashCond(ctx context.Context, expr syntax.CondExpr) string {
+	switch x := expr.(type) {
+	case *syntax.CondWord:
+		return r.literal(x.Word)
+	case *syntax.CondPattern:
+		return r.literal(x.Word)
+	case *syntax.CondRegex:
+		return r.literal(x.Word)
+	case *syntax.CondVarRef:
+		return printVarRef(x.Ref)
+	case *syntax.CondParen:
+		return r.bashCond(ctx, x.X)
+	case *syntax.CondBinary:
+		switch x.Op {
+		case syntax.TsReMatch:
+			left, ok := r.testExpandWord(x.X.(*syntax.CondWord).Word, expand.Literal)
+			if !ok {
+				r.clearBASH_REMATCH()
+				return ""
+			}
+			right, ok := r.testExpandWord(x.Y.(*syntax.CondRegex).Word, expand.Regexp)
+			if !ok {
+				r.clearBASH_REMATCH()
+				return ""
+			}
+			if r.binTest(ctx, x.Op, left, right) {
+				return "1"
+			}
+			return ""
+		case syntax.TsMatchShort, syntax.TsMatch, syntax.TsNoMatch:
+			str := r.literal(x.X.(*syntax.CondWord).Word)
+			pattern := r.pattern(x.Y.(*syntax.CondPattern).Word)
+			if match(pattern, str) == (x.Op != syntax.TsNoMatch) {
+				return "1"
+			}
+			return ""
+		}
+		if r.binTest(ctx, x.Op, r.bashCond(ctx, x.X), r.bashCond(ctx, x.Y)) {
+			return "1"
+		}
+		return ""
+	case *syntax.CondUnary:
+		switch x.Op {
+		case syntax.TsVarSet:
+			switch operand := x.X.(type) {
+			case *syntax.CondVarRef:
+				if r.refIsSet(operand.Ref) {
+					return "1"
+				}
+			case *syntax.CondWord:
+				if r.refIsSet(r.looseVarRefWord(operand.Word)) {
+					return "1"
+				}
+			}
+			return ""
+		case syntax.TsRefVar:
+			switch operand := x.X.(type) {
+			case *syntax.CondVarRef:
+				if r.refIsNameRef(operand.Ref) {
+					return "1"
+				}
+			case *syntax.CondWord:
+				if r.refIsNameRef(r.looseVarRefWord(operand.Word)) {
+					return "1"
+				}
+			}
+			return ""
+		}
+		if r.unTest(ctx, x.Op, r.bashCond(ctx, x.X)) {
+			return "1"
+		}
+		return ""
+	}
+	return ""
+}
+
 func (r *Runner) testExpandWord(word *syntax.Word, expandFunc func(*expand.Config, *syntax.Word) (string, error)) (string, bool) {
 	str, err := expandFunc(r.ecfg, word)
 	if err == nil {
