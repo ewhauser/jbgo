@@ -75,7 +75,7 @@ The parser, expansion, pattern, and interpreter packages live in-tree as `intern
 
 The shell core also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the in-tree interpreter rather than synthesized in a shell prelude.
 
-The shell core compiles each user script once before execution. That compile pipeline parses the script, validates unsupported constructs that would otherwise panic the interpreter, checks substitution and glob budgets, applies pipeline rewriting, and instruments loop guards before the runner sees the AST.
+The shell core compiles user input as a sequence of complete parsed chunks before execution. In non-interactive `Run`, the core incrementally reparses the growing script buffer so parse-time state such as aliases and `shopt` flags can affect later commands in the same execution. Each complete chunk then goes through the same validation, budget checks, pipeline rewriting, and loop instrumentation before the runner sees that chunk's AST.
 
 The shell core may also apply small AST normalizations when the in-tree parser or interpreter behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in synthetic subshells so default parent-shell state matches Bash's `lastpipe=off` behavior while still allowing the interpreter to unwrap those specific synthetic wrappers when `shopt -s lastpipe` is enabled.
 
@@ -116,7 +116,7 @@ The runtime is composed of five layers:
 
 Execution flow:
 
-1. Parse the script with `syntax.Parser`.
+1. Parse the script with `syntax.Parser`, incrementally when shell state like aliases must affect later complete commands in the same execution.
 2. Construct an execution context from the current session with:
    - session-owned virtual filesystem
    - command registry
@@ -129,7 +129,7 @@ Execution flow:
    - readdir
    - simple-call interception
    - command execution
-4. Run the parsed program.
+4. Run each compiled chunk in order on one `interp.Runner`, preserving shell state across chunks.
 5. Normalize shell/interpreter errors into an `ExecutionResult`.
 6. Return stdout, stderr, exit code, and structured trace events when tracing is enabled.
 
@@ -137,7 +137,7 @@ The CLI also provides a minimal interactive shell mode. That mode is a front-end
 
 - it keeps one `Session` alive for the duration of the interactive shell
 - it uses `syntax.Parser.InteractiveSeq` to gather complete interactive statements and continuation prompts
-- it executes each completed entry via `Session.Exec`
+- it executes each completed entry via `Session.Exec`, using the same runner-backed parser construction that feeds live alias state into parse-time expansion
 - it carries forward the virtual cwd and shell-visible variable state between entries at the CLI layer
 - it may expose session-local command history via the `history` command, with entries stored in `BASH_HISTORY`
 - it supports programmable completion state via the `complete` and `compopt` shell builtins, but the shipped CLI still does not provide a readline/tab-completion frontend
@@ -518,7 +518,7 @@ For script execution, that pipeline:
 
 1. parses the request text into a `*syntax.File`
 2. validates unsupported constructs such as descriptor-dup redirections that would otherwise panic the interpreter
-3. checks command-substitution depth and glob-operation budgets against the parsed user program
+3. checks command-substitution depth and accumulates glob-operation budgets as parsed chunks enter the compile pipeline
 4. rewrites pipeline right-hand sides into synthetic subshells where needed to preserve default `lastpipe=off` behavior
 5. instruments loop guards for `MaxLoopIterations`
 
@@ -585,7 +585,7 @@ Implementation detail for the current runtime:
 - the counter resets on each `Session.Exec` or `Runtime.Run`
 - commands inside subshells and pipelines count toward the same execution budget
 - loop iteration limits are enforced by AST instrumentation that prepends an internal guard command to loop bodies before execution
-- command substitution depth and glob-operation budgets are validated against the parsed user program during the shell-core compile pipeline
+- command substitution depth and glob-operation budgets are enforced from the shell-core compile pipeline, and glob-operation counts accumulate across all parsed chunks in one execution
 - request-level timeouts and caller cancellation are enforced via execution contexts and normalized into shell-style exit codes
 
 ### 9.6 Command execution

@@ -374,12 +374,11 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		// TODO: implement. for now, having this as a no-op is better than nothing.
 	case "eval":
 		src := strings.Join(args, " ")
-		p := syntax.NewParser()
-		file, err := p.Parse(strings.NewReader(src), "")
-		if err != nil {
+		err := r.runShellReader(ctx, strings.NewReader(src), "", nil)
+		var status ExitStatus
+		if err != nil && !errors.As(err, &status) {
 			return failf(1, "eval: %v\n", err)
 		}
-		r.stmts(ctx, file.Stmts)
 		exit = r.exit
 	case "source", ".":
 		return r.sourceBuiltin(ctx, pos, args)
@@ -613,17 +612,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 
 	case "alias":
 		show := func(name string, als alias) {
-			var buf bytes.Buffer
-			if len(als.args) > 0 {
-				printer := syntax.NewPrinter()
-				printer.Print(&buf, &syntax.CallExpr{
-					Args: als.args,
-				})
-			}
-			if als.blank {
-				buf.WriteByte(' ')
-			}
-			r.outf("alias %s='%s'\n", name, &buf)
+			r.outf("alias %s='%s'\n", name, als.value)
 		}
 
 		if len(args) == 0 {
@@ -631,7 +620,6 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				show(name, als)
 			}
 		}
-	argsLoop:
 		for _, arg := range args {
 			name, src, ok := strings.Cut(arg, "=")
 			if !ok {
@@ -644,24 +632,10 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				continue
 			}
 
-			// TODO: parse any CallExpr perhaps, or even any Stmt
-			parser := syntax.NewParser()
-			var words []*syntax.Word
-			for w, err := range parser.WordsSeq(strings.NewReader(src)) {
-				if err != nil {
-					r.errf("alias: could not parse %q: %v\n", src, err)
-					continue argsLoop
-				}
-				words = append(words, w)
-			}
-
 			if r.alias == nil {
 				r.alias = make(map[string]alias)
 			}
-			r.alias[name] = alias{
-				args:  words,
-				blank: strings.TrimRight(src, " \t") != src,
-			}
+			r.alias[name] = alias{value: src}
 		}
 	case "unalias":
 		for _, name := range args {
@@ -1028,14 +1002,6 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 		return exit
 	}
 	defer f.Close()
-	p := syntax.NewParser()
-	file, err := p.Parse(f, sourceName)
-	if err != nil {
-		r.errf("source: %v\n", err)
-		exit.code = 1
-		return exit
-	}
-
 	oldParams := r.Params
 	oldSourceSetParams := r.sourceSetParams
 	oldInSource := r.inSource
@@ -1051,17 +1017,16 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 	if internal {
 		bashSource = ""
 	}
-	restoreFrame := r.pushFrame(execFrame{
+	frame := &execFrame{
 		kind:       frameKindSource,
 		label:      "source",
 		execFile:   sourceName,
 		bashSource: bashSource,
 		callLine:   r.sourceCallLine(pos),
 		internal:   internal,
-	})
+	}
 	r.inSource = true
-	r.stmts(ctx, file.Stmts)
-	restoreFrame()
+	runErr := r.runShellReader(ctx, f, sourceName, frame)
 
 	if sourceArgs && !r.sourceSetParams {
 		r.Params = oldParams
@@ -1069,6 +1034,12 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 	r.sourceSetParams = oldSourceSetParams
 	r.inSource = oldInSource
 
+	var status ExitStatus
+	if runErr != nil && !errors.As(runErr, &status) {
+		r.errf("source: %v\n", runErr)
+		exit.code = 1
+		return exit
+	}
 	exit = r.exit
 	exit.returning = false
 	return exit
@@ -1729,15 +1700,7 @@ func (r *Runner) printTypeMatch(name string, match shellTypeMatch, mode shellTyp
 
 	switch match.kind {
 	case shellTypeAlias:
-		var buf bytes.Buffer
-		if len(match.als.args) > 0 {
-			printer := syntax.NewPrinter()
-			printer.Print(&buf, &syntax.CallExpr{Args: match.als.args})
-		}
-		if match.als.blank {
-			buf.WriteByte(' ')
-		}
-		r.outf("%s is aliased to `%s'\n", name, &buf)
+		r.outf("%s is aliased to `%s'\n", name, match.als.value)
 	case shellTypeKeyword:
 		r.outf("%s is a shell keyword\n", name)
 	case shellTypeFunction:

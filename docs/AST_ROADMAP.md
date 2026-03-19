@@ -53,7 +53,7 @@ That means the roadmap should focus less on adding more top-level command nodes 
 - [x] P0: Add a dedicated conditional AST for `[[ ... ]]` operands and operators
 - [x] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
 - [x] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
-- [ ] P1: Move alias expansion earlier and preserve alias provenance in parse results
+- [x] P1: Move alias expansion earlier and preserve alias provenance in parse results
 - [ ] P1: Make compound array assignment semantics explicit in the AST
 - [ ] P2: Promote brace expansion from a post-parse rewrite to a stable syntax node
 - [x] P2: Restrict function bodies to compound commands in the AST and validation layer
@@ -407,7 +407,7 @@ Heredocs are one of the most mode-sensitive pieces of shell syntax. Preserving d
 
 ### 7. Alias-aware parse/provenance
 
-Status: P1
+Status: landed
 
 #### Problem
 
@@ -415,8 +415,10 @@ Alias expansion currently happens in the interpreter by rewriting `CallExpr.Args
 
 #### Current implementation signals
 
-- alias expansion is done in `Runner.cmd` for `CallExpr`
-- the AST itself has no record that a token came from alias expansion
+- `syntax.Parser` now accepts an alias resolver via `ExpandAliases(...)` and expands unquoted command-position words before command parsing commits to grammar
+- `syntax.File` and `syntax.Word` preserve alias provenance through `AliasExpansions []*AliasExpansion`
+- the interpreter now stores alias values as raw shell source and feeds live alias state back into parser construction instead of reparsing alias values as argv at runtime
+- top-level `shell.Run`, `source`, and `eval` now execute input as complete parsed chunks so `shopt -s expand_aliases` and alias definitions affect later commands in the same script
 
 #### Conformance signals
 
@@ -433,12 +435,9 @@ Concrete examples:
 
 #### Proposed change
 
-This may be more of a parser pipeline change than a new node type, but the parse result should preserve alias provenance somehow:
-
-- parse-time alias expansion pass
-- or token provenance attached to simple command words
-
-The important part is to stop treating aliasing as a pure runtime string replacement.
+- parse alias text as shell source early enough for aliases to introduce syntax like `{`, `(`, loops, pipelines, `&&`, and assignment-aware declaration builtins
+- preserve per-word alias provenance so later passes can tell which tokens came from aliases
+- move top-level execution from whole-script one-shot parsing to complete-command chunking so parser-visible shell state can evolve during the run
 
 #### Why this matters
 

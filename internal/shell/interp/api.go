@@ -19,6 +19,7 @@ import (
 	"maps"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -261,8 +262,11 @@ type bgProc struct {
 }
 
 type alias struct {
-	args  []*syntax.Word
-	blank bool
+	value string
+}
+
+func (a alias) blank() bool {
+	return strings.TrimRight(a.value, " \t") != a.value
 }
 
 const (
@@ -757,10 +761,23 @@ func (s ExitStatus) Error() string { return fmt.Sprintf("exit status %d", s) }
 // Calling Run on an entire [*File] implies an exit, meaning that an exit trap may
 // run.
 func (r *Runner) Run(ctx context.Context, node syntax.Node) error {
-	return r.run(ctx, node)
+	return r.run(ctx, node, true, true)
 }
 
-func (r *Runner) run(ctx context.Context, node syntax.Node) error {
+func (r *Runner) currentRunError() error {
+	if err := r.exit.err; err != nil {
+		if r.exit.code == 0 {
+			panic("ended up with a non-nil exitStatus.err but a zero exitStatus.code")
+		}
+		return err
+	}
+	if code := r.exit.code; code != 0 {
+		return ExitStatus(code)
+	}
+	return nil
+}
+
+func (r *Runner) run(ctx context.Context, node syntax.Node, runExitTrap, manageMainFrame bool) error {
 	if !r.didReset {
 		r.Reset()
 	}
@@ -770,7 +787,7 @@ func (r *Runner) run(ctx context.Context, node syntax.Node) error {
 	switch node := node.(type) {
 	case *syntax.File:
 		r.filename = node.Name
-		if !r.internalRun && r.topLevelScriptPath != "" && node.Name == r.topLevelScriptPath {
+		if manageMainFrame && !r.internalRun && r.topLevelScriptPath != "" && node.Name == r.topLevelScriptPath {
 			restoreFrame := r.pushFrame(execFrame{
 				kind:       frameKindMain,
 				label:      "main",
@@ -791,21 +808,10 @@ func (r *Runner) run(ctx context.Context, node syntax.Node) error {
 	default:
 		return fmt.Errorf("node can only be File, Stmt, or Command: %T", node)
 	}
-	r.trapCallback(ctx, r.callbackExit, "exit")
-	// Return the first of: a fatal error, a non-fatal handler error, or the exit code.
-	if err := r.exit.err; err != nil {
-		if r.exit.code == 0 {
-			// This should never happen; too much code relies on checking [exitStatus.code]
-			// to see if the last command succeeded or failed. [exitStatus.err] should only be
-			// additional information, so fail loudly if the invariant is broken.
-			panic("ended up with a non-nil exitStatus.err but a zero exitStatus.code")
-		}
-		return err
+	if runExitTrap {
+		r.trapCallback(ctx, r.callbackExit, "exit")
 	}
-	if code := r.exit.code; code != 0 {
-		return ExitStatus(code)
-	}
-	return nil
+	return r.currentRunError()
 }
 
 // Exited reports whether the last Run call should exit an entire shell. This

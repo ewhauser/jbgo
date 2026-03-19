@@ -175,6 +175,7 @@ func ExampleDebugPrint() {
 	// .  .  .  .  .  .  .  .  Value: "echo"
 	// .  .  .  .  .  .  .  }
 	// .  .  .  .  .  .  }
+	// .  .  .  .  .  .  AliasExpansions: []*syntax.AliasExpansion (len = 0) {}
 	// .  .  .  .  .  }
 	// .  .  .  .  .  1: *syntax.Word {
 	// .  .  .  .  .  .  Parts: []syntax.WordPart (len = 1) {
@@ -185,6 +186,7 @@ func ExampleDebugPrint() {
 	// .  .  .  .  .  .  .  .  Value: "foo"
 	// .  .  .  .  .  .  .  }
 	// .  .  .  .  .  .  }
+	// .  .  .  .  .  .  AliasExpansions: []*syntax.AliasExpansion (len = 0) {}
 	// .  .  .  .  .  }
 	// .  .  .  .  }
 	// .  .  .  }
@@ -198,5 +200,6 @@ func ExampleDebugPrint() {
 	// .  .  }
 	// .  }
 	// .  Last: []syntax.Comment (len = 0) {}
+	// .  AliasExpansions: []*syntax.AliasExpansion (len = 0) {}
 	// }
 }

@@ -2,6 +2,7 @@ package shell
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -10,7 +11,7 @@ import (
 
 const loopIterCommandName = "__jb_loop_iter"
 
-func instrumentLoopBudgets(program *syntax.File, pol policy.Policy) error {
+func instrumentLoopBudgets(program *syntax.File, pol policy.Policy, loopNamespace string) error {
 	if program == nil || pol == nil || pol.Limits().MaxLoopIterations <= 0 {
 		return nil
 	}
@@ -30,7 +31,7 @@ func instrumentLoopBudgets(program *syntax.File, pol policy.Policy) error {
 			if hasLoopGuard(node.Do) {
 				return true
 			}
-			guard, err := newLoopGuardStmt(loopKind(node), nextLoopID)
+			guard, err := newLoopGuardStmt(loopKind(node), loopGuardID(loopNamespace, nextLoopID))
 			if err != nil {
 				walkErr = err
 				return false
@@ -41,7 +42,7 @@ func instrumentLoopBudgets(program *syntax.File, pol policy.Policy) error {
 			if hasLoopGuard(node.Do) {
 				return true
 			}
-			guard, err := newLoopGuardStmt("for", nextLoopID)
+			guard, err := newLoopGuardStmt("for", loopGuardID(loopNamespace, nextLoopID))
 			if err != nil {
 				walkErr = err
 				return false
@@ -53,6 +54,14 @@ func instrumentLoopBudgets(program *syntax.File, pol policy.Policy) error {
 	})
 
 	return walkErr
+}
+
+func loopGuardID(namespace string, id int) string {
+	idText := strconv.Itoa(id)
+	if strings.TrimSpace(namespace) == "" {
+		return idText
+	}
+	return namespace + "-" + idText
 }
 
 func loopKind(clause *syntax.WhileClause) string {
@@ -69,8 +78,8 @@ func hasLoopGuard(stmts []*syntax.Stmt) bool {
 	return stmtStartsWithLoopGuard(stmts[0])
 }
 
-func newLoopGuardStmt(kind string, id int) (*syntax.Stmt, error) {
-	file, err := syntax.NewParser().Parse(strings.NewReader(fmt.Sprintf("%s %s %d || exit $?\n", loopIterCommandName, kind, id)), "loop-guard")
+func newLoopGuardStmt(kind, id string) (*syntax.Stmt, error) {
+	file, err := syntax.NewParser().Parse(strings.NewReader(fmt.Sprintf("%s %s %s || exit $?\n", loopIterCommandName, kind, id)), "loop-guard")
 	if err != nil {
 		return nil, err
 	}

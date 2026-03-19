@@ -1312,6 +1312,24 @@ func pathSplit(name string) []string {
 	return strings.Split(name, "/")
 }
 
+// EstimateGlobOperations returns the shell-core budget cost for one pathname
+// glob pattern after quote removal and field splitting.
+func EstimateGlobOperations(pat string) int64 {
+	if pat == "" || !pattern.HasMeta(pat, 0) {
+		return 0
+	}
+	ops := int64(1)
+	for _, part := range pathSplit(pat) {
+		if part == "" {
+			continue
+		}
+		if pattern.HasMeta(part, 0) {
+			ops++
+		}
+	}
+	return ops
+}
+
 func (cfg *Config) glob(base, pat string) ([]string, error) {
 	parts := pathSplit(pat)
 	matches := []string{""}

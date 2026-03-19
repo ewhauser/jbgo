@@ -72,11 +72,7 @@ type resolvedCommand struct {
 	args    []string
 }
 
-type core struct {
-	parser    *syntax.Parser
-	parserMu  sync.Mutex
-	parseFunc func(string, string) (*syntax.File, error)
-}
+type core struct{}
 
 var defaultShellCore = newShellCore()
 
@@ -85,9 +81,7 @@ var internalHelperCommands = map[string]struct{}{
 }
 
 func newShellCore() *core {
-	return &core{
-		parser: syntax.NewParser(),
-	}
+	return &core{}
 }
 
 func Run(ctx context.Context, exec *Execution) (*RunResult, error) {
@@ -100,24 +94,6 @@ func RunCommand(ctx context.Context, exec *Execution) (*RunResult, error) {
 
 func Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error) {
 	return defaultShellCore.Interact(ctx, exec)
-}
-
-func (m *core) parseProgram(name, script string) (*syntax.File, error) {
-	var (
-		program *syntax.File
-		err     error
-	)
-	if m.parseFunc != nil {
-		program, err = m.parseFunc(name, script)
-	} else {
-		m.parserMu.Lock()
-		defer m.parserMu.Unlock()
-		program, err = m.parser.Parse(strings.NewReader(script), name)
-	}
-	if err != nil {
-		return program, attachParseErrorSourceLine(err, script)
-	}
-	return program, nil
 }
 
 func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
@@ -135,14 +111,6 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	}()
 	if exec.Dir == "" {
 		exec.Dir = "/"
-	}
-	compiled, err := m.compileProgram(executionSourceName(exec), exec.Script, exec.Policy)
-	if err != nil {
-		if code, ok := compilationExitStatus(err); ok {
-			writeCompilationError(exec.Stderr, err)
-			return &RunResult{FinalEnv: nil}, interp.ExitStatus(code)
-		}
-		return nil, err
 	}
 
 	if exec.Stdin == nil {
@@ -170,7 +138,19 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	if err != nil {
 		return nil, err
 	}
-	runErr = runner.RunWithMetadata(ctx, compiled.program, effectiveExec.ScriptPath, compiled.pipelineSubshells)
+	runErr = runner.RunReaderWithMetadata(
+		ctx,
+		strings.NewReader(exec.Script),
+		executionSourceName(exec),
+		effectiveExec.ScriptPath,
+		func(file *syntax.File) (map[*syntax.Stmt]*syntax.Stmt, error) {
+			return compileChunk(file, effectiveExec.Policy, budget, budget.nextLoopNamespace())
+		},
+	)
+	if code, ok := compilationExitStatus(runErr); ok {
+		writeCompilationError(exec.Stderr, runErr)
+		return &RunResult{FinalEnv: runner.ShellEnv()}, interp.ExitStatus(code)
+	}
 	return &RunResult{
 		FinalEnv:    runner.ShellEnv(),
 		ShellExited: runner.Exited(),
@@ -450,7 +430,7 @@ func (m *core) callHandler(exec *Execution, budget *executionBudget) interp.Call
 		}
 
 		if interp.IsBuiltin(args[0]) && shouldRewriteBuiltin(args[0]) {
-			if _, ok := exec.Registry.Lookup(args[0]); ok {
+			if _, ok := lookupRegistryCommand(exec, args[0]); ok {
 				rewritten := make([]string, len(args))
 				copy(rewritten[1:], args[1:])
 				rewritten[0] = path.Join(builtinCommandDir(exec), args[0])
@@ -838,9 +818,16 @@ func (e *shellOpenError) Unwrap() error {
 	return e.pathErr
 }
 
+func lookupRegistryCommand(exec *Execution, name string) (commands.Command, bool) {
+	if exec == nil || exec.Registry == nil {
+		return nil, false
+	}
+	return exec.Registry.Lookup(name)
+}
+
 func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.Environ, name string) (_ *resolvedCommand, ok bool, err error) {
 	if isInternalHelperCommand(name) {
-		cmd, ok := exec.Registry.Lookup(name)
+		cmd, ok := lookupRegistryCommand(exec, name)
 		if !ok {
 			return nil, false, nil
 		}
@@ -881,7 +868,7 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 	}
 
 	resolvedName := path.Base(fullPath)
-	cmd, ok := exec.Registry.Lookup(resolvedName)
+	cmd, ok := lookupRegistryCommand(exec, resolvedName)
 	if ok {
 		return &resolvedCommand{
 			command: cmd,
@@ -937,7 +924,7 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath string
 	if !ok {
 		return nil, false, nil
 	}
-	cmd, ok := exec.Registry.Lookup(shebangInterpreter)
+	cmd, ok := lookupRegistryCommand(exec, shebangInterpreter)
 	if !ok {
 		return nil, false, nil
 	}
@@ -1135,9 +1122,12 @@ func fileMutationAction(flag int) string {
 
 type executionBudget struct {
 	maxCommandCount   int64
+	maxGlobOperations int64
 	maxLoopIterations int64
 	count             atomic.Int64
+	globCount         atomic.Int64
 	disabled          atomic.Int32
+	loopNamespaces    atomic.Int64
 	mu                sync.Mutex
 	loopCounts        map[string]int64
 }
@@ -1149,6 +1139,7 @@ func newExecutionBudget(pol policy.Policy) *executionBudget {
 
 	return &executionBudget{
 		maxCommandCount:   pol.Limits().MaxCommandCount,
+		maxGlobOperations: pol.Limits().MaxGlobOperations,
 		maxLoopIterations: pol.Limits().MaxLoopIterations,
 		loopCounts:        make(map[string]int64),
 	}
@@ -1190,6 +1181,28 @@ func (b *executionBudget) beforeLoopIteration(ctx context.Context, args []string
 		return nil
 	}
 	return shellFailure(ctx, 126, "%s loop: too many iterations (%d), increase policy.Limits.MaxLoopIterations", loopKind, b.maxLoopIterations)
+}
+
+func (b *executionBudget) beforeGlob(ops int64) error {
+	if b == nil || b.maxGlobOperations <= 0 || ops <= 0 {
+		return nil
+	}
+	if b.disabled.Load() > 0 {
+		return nil
+	}
+	if b.globCount.Add(ops) <= b.maxGlobOperations {
+		return nil
+	}
+	return &budgetViolation{
+		message: fmt.Sprintf("Glob operation limit exceeded (%d), increase policy.Limits.MaxGlobOperations", b.maxGlobOperations),
+	}
+}
+
+func (b *executionBudget) nextLoopNamespace() string {
+	if b == nil {
+		return ""
+	}
+	return fmt.Sprintf("chunk%d", b.loopNamespaces.Add(1))
 }
 
 func isInternalHelperCommand(name string) bool {

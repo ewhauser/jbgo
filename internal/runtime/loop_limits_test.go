@@ -115,3 +115,21 @@ func TestMaxLoopIterationsAllowsLoopsWithinLimit(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestMaxLoopIterationsDoNotLeakAcrossTopLevelChunks(t *testing.T) {
+	t.Parallel()
+	rt := newRuntimeWithLimits(t, policy.Limits{MaxLoopIterations: 3})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "for i in 1 2 3; do\n  echo a$i\ndone\nfor j in 1 2 3; do\n  echo b$j\ndone\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0 (stderr=%q)", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a1\na2\na3\nb1\nb2\nb3\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

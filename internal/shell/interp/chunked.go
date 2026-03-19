@@ -1,0 +1,253 @@
+package interp
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"io"
+	"reflect"
+	"strings"
+
+	"github.com/ewhauser/gbash/internal/shell/syntax"
+)
+
+// ChunkTransformer can mutate a parsed chunk before execution and optionally
+// return any synthetic pipeline metadata for that chunk.
+type ChunkTransformer func(file *syntax.File) (map[*syntax.Stmt]*syntax.Stmt, error)
+
+// RunReaderWithMetadata parses and executes shell input incrementally so alias
+// and shopt state can affect later complete commands in the same script.
+func (r *Runner) RunReaderWithMetadata(ctx context.Context, reader io.Reader, name, topLevelScriptPath string, transform ChunkTransformer) error {
+	return r.runChunked(ctx, reader, name, topLevelScriptPath, transform, true, nil)
+}
+
+func (r *Runner) runShellReader(ctx context.Context, reader io.Reader, name string, frame *execFrame) error {
+	return r.runChunked(ctx, reader, name, "", nil, false, frame)
+}
+
+func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLevelScriptPath string, transform ChunkTransformer, runExitTrap bool, frame *execFrame) error {
+	if reader == nil {
+		reader = strings.NewReader("")
+	}
+	if !r.didReset {
+		r.Reset()
+	}
+
+	input := bufio.NewReader(reader)
+	var pending strings.Builder
+	var chunkStartOffset uint
+	chunkStartLine := uint(1)
+	totalOffset := uint(0)
+	totalLine := uint(1)
+
+	var restoreFrame func()
+	framePushed := false
+	pushFrame := func() {
+		if framePushed {
+			return
+		}
+		switch {
+		case frame != nil:
+			restoreFrame = r.pushFrame(*frame)
+			framePushed = true
+		case !r.internalRun && topLevelScriptPath != "" && name == topLevelScriptPath:
+			restoreFrame = r.pushFrame(execFrame{
+				kind:       frameKindMain,
+				label:      "main",
+				execFile:   name,
+				bashSource: name,
+				callLine:   0,
+				internal:   false,
+			})
+			framePushed = true
+		}
+	}
+	popFrame := func() {
+		if !framePushed {
+			return
+		}
+		restoreFrame()
+		restoreFrame = nil
+		framePushed = false
+	}
+	finish := func(err error) error {
+		popFrame()
+		if runExitTrap {
+			r.trapCallback(ctx, r.callbackExit, "exit")
+		}
+		if err != nil {
+			return err
+		}
+		return r.currentRunError()
+	}
+
+	for {
+		line, readErr := input.ReadString('\n')
+		if readErr != nil && readErr != io.EOF {
+			return finish(readErr)
+		}
+		if line == "" && readErr == io.EOF && pending.Len() == 0 {
+			break
+		}
+
+		if pending.Len() == 0 {
+			chunkStartOffset = totalOffset
+			chunkStartLine = totalLine
+		}
+		pending.WriteString(line)
+		totalOffset += uint(len(line))
+		totalLine += uint(strings.Count(line, "\n"))
+		if lineContinues(line) {
+			continue
+		}
+		parser := r.newParser()
+		file, err := parser.Parse(strings.NewReader(pending.String()), name)
+		if err != nil {
+			if chunkParseIncomplete(err, parser) && readErr != io.EOF {
+				continue
+			}
+			err = attachChunkParseErrorSourceLine(err, pending.String())
+			return finish(shiftChunkError(err, chunkStartOffset, chunkStartLine))
+		}
+		shiftChunkPositions(file, chunkStartOffset, chunkStartLine)
+		if len(file.Stmts) == 0 {
+			pending.Reset()
+			if readErr == io.EOF {
+				break
+			}
+			continue
+		}
+
+		synthetic := map[*syntax.Stmt]*syntax.Stmt(nil)
+		if transform != nil {
+			var transformErr error
+			synthetic, transformErr = transform(file)
+			if transformErr != nil {
+				return finish(transformErr)
+			}
+		}
+
+		pushFrame()
+		prevTopLevel := r.topLevelScriptPath
+		prevSynthetic := r.syntheticPipelineStmts
+		r.topLevelScriptPath = topLevelScriptPath
+		r.syntheticPipelineStmts = synthetic
+		err = r.run(ctx, file, false, false)
+		r.topLevelScriptPath = prevTopLevel
+		r.syntheticPipelineStmts = prevSynthetic
+		pending.Reset()
+
+		if err != nil {
+			var status ExitStatus
+			if !errors.As(err, &status) {
+				return finish(err)
+			}
+		}
+		if r.Exited() || readErr == io.EOF {
+			break
+		}
+	}
+
+	return finish(nil)
+}
+
+func chunkParseIncomplete(err error, parser *syntax.Parser) bool {
+	if err == nil {
+		return false
+	}
+	if syntax.IsIncomplete(err) || (parser != nil && parser.Incomplete()) {
+		return true
+	}
+	var parseErr syntax.ParseError
+	return errors.As(err, &parseErr) && strings.HasPrefix(parseErr.Text, "unclosed here-document")
+}
+
+func attachChunkParseErrorSourceLine(err error, script string) error {
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) {
+		return err
+	}
+	if parseErr.SourceLine != "" {
+		return err
+	}
+	sourceLine := chunkSourceLineAt(script, parseErr.Pos.Line())
+	if sourceLine == "" {
+		return err
+	}
+	parseErr.SourceLine = sourceLine
+	return parseErr
+}
+
+var posType = reflect.TypeFor[syntax.Pos]()
+
+func shiftChunkPositions(node syntax.Node, offsetBase, lineBase uint) {
+	if node == nil || (offsetBase == 0 && lineBase <= 1) {
+		return
+	}
+	shiftValuePositions(reflect.ValueOf(node), offsetBase, lineBase-1)
+}
+
+func shiftChunkError(err error, offsetBase, lineBase uint) error {
+	if err == nil || (offsetBase == 0 && lineBase <= 1) {
+		return err
+	}
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) || !parseErr.Pos.IsValid() {
+		return err
+	}
+	parseErr.Pos = syntax.NewPos(parseErr.Pos.Offset()+offsetBase, parseErr.Pos.Line()+lineBase-1, parseErr.Pos.Col())
+	return parseErr
+}
+
+func lineContinues(line string) bool {
+	if !strings.HasSuffix(line, "\n") {
+		return false
+	}
+	backslashes := 0
+	for i := len(line) - 2; i >= 0 && line[i] == '\\'; i-- {
+		backslashes++
+	}
+	return backslashes%2 == 1
+}
+
+func chunkSourceLineAt(script string, lineNum uint) string {
+	if lineNum == 0 {
+		return ""
+	}
+	lines := strings.Split(script, "\n")
+	idx := int(lineNum) - 1
+	if idx < 0 || idx >= len(lines) {
+		return ""
+	}
+	return lines[idx]
+}
+
+func shiftValuePositions(val reflect.Value, offsetBase, lineDelta uint) {
+	if !val.IsValid() {
+		return
+	}
+	switch val.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if val.IsNil() {
+			return
+		}
+		shiftValuePositions(val.Elem(), offsetBase, lineDelta)
+	case reflect.Struct:
+		for i := 0; i < val.NumField(); i++ {
+			field := val.Field(i)
+			if field.Type() == posType {
+				pos := field.Interface().(syntax.Pos)
+				if !pos.IsValid() {
+					continue
+				}
+				field.Set(reflect.ValueOf(syntax.NewPos(pos.Offset()+offsetBase, pos.Line()+lineDelta, pos.Col())))
+				continue
+			}
+			shiftValuePositions(field, offsetBase, lineDelta)
+		}
+	case reflect.Slice:
+		for i := 0; i < val.Len(); i++ {
+			shiftValuePositions(val.Index(i), offsetBase, lineDelta)
+		}
+	}
+}

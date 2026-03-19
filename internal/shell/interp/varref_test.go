@@ -5,17 +5,10 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
 func runInterpScript(t *testing.T, src string) (string, string, error) {
 	t.Helper()
-
-	file, err := syntax.NewParser().Parse(strings.NewReader(src), "varref-test.sh")
-	if err != nil {
-		t.Fatalf("Parse error = %v", err)
-	}
 
 	var stdout, stderr bytes.Buffer
 	runner, err := NewRunner(&RunnerConfig{
@@ -27,7 +20,7 @@ func runInterpScript(t *testing.T, src string) (string, string, error) {
 		t.Fatalf("NewRunner error = %v", err)
 	}
 
-	err = runner.Run(context.Background(), file)
+	err = runner.runShellReader(context.Background(), strings.NewReader(src), "varref-test.sh", nil)
 	return stdout.String(), stderr.String(), err
 }
 

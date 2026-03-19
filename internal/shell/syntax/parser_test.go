@@ -2346,6 +2346,98 @@ func TestParseStmtsSeqError(t *testing.T) {
 	}
 }
 
+func TestParseAliasExpansionChangesGrammar(t *testing.T) {
+	t.Parallel()
+
+	parser := NewParser(ExpandAliases(func(name string) (AliasSpec, bool) {
+		switch name {
+		case "e_":
+			return AliasSpec{Value: "for i in 1 2 3; do echo "}, true
+		default:
+			return AliasSpec{}, false
+		}
+	}))
+
+	file, err := parser.Parse(strings.NewReader("e_ $i; done\n"), "")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := len(file.AliasExpansions); got != 1 {
+		t.Fatalf("alias expansion count = %d, want 1", got)
+	}
+	if got, want := file.AliasExpansions[0].Name, "e_"; got != want {
+		t.Fatalf("first alias = %q, want %q", got, want)
+	}
+
+	stmt := file.Stmts[0]
+	loop, ok := stmt.Cmd.(*ForClause)
+	if !ok {
+		t.Fatalf("stmt.Cmd = %T, want *ForClause", stmt.Cmd)
+	}
+	iter, ok := loop.Loop.(*WordIter)
+	if !ok {
+		t.Fatalf("loop.Loop = %T, want *WordIter", loop.Loop)
+	}
+	if got, want := iter.Name.Value, "i"; got != want {
+		t.Fatalf("iter.Name = %q, want %q", got, want)
+	}
+	call, ok := loop.Do[0].Cmd.(*CallExpr)
+	if !ok {
+		t.Fatalf("loop.Do[0].Cmd = %T, want *CallExpr", loop.Do[0].Cmd)
+	}
+	if got, want := call.Args[0].Lit(), "echo"; got != want {
+		t.Fatalf("call.Args[0] = %q, want %q", got, want)
+	}
+	if got := len(call.Args[0].AliasExpansions); got != 1 {
+		t.Fatalf("echo alias chain length = %d, want 1", got)
+	}
+	if got, want := call.Args[0].AliasExpansions[0].Name, "e_"; got != want {
+		t.Fatalf("echo alias provenance = %q, want %q", got, want)
+	}
+}
+
+func TestParseAliasExpansionPreservesWordProvenance(t *testing.T) {
+	t.Parallel()
+
+	parser := NewParser(ExpandAliases(func(name string) (AliasSpec, bool) {
+		switch name {
+		case "hi":
+			return AliasSpec{Value: "echo hello "}, true
+		case "punct":
+			return AliasSpec{Value: "world"}, true
+		default:
+			return AliasSpec{}, false
+		}
+	}))
+
+	file, err := parser.Parse(strings.NewReader("hi punct\n"), "")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got := len(file.AliasExpansions); got != 2 {
+		t.Fatalf("alias expansion count = %d, want 2", got)
+	}
+
+	call := file.Stmts[0].Cmd.(*CallExpr)
+	tests := []struct {
+		word *Word
+		want []string
+	}{
+		{word: call.Args[0], want: []string{"hi"}},
+		{word: call.Args[1], want: []string{"hi"}},
+		{word: call.Args[2], want: []string{"punct"}},
+	}
+	for _, tt := range tests {
+		var got []string
+		for _, expansion := range tt.word.AliasExpansions {
+			got = append(got, expansion.Name)
+		}
+		if diff := cmp.Diff(tt.want, got); diff != "" {
+			t.Fatalf("alias provenance mismatch (-want +got):\n%s", diff)
+		}
+	}
+}
+
 func TestParseWords(t *testing.T) {
 	t.Parallel()
 	p := NewParser()

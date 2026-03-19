@@ -26,6 +26,11 @@ type File struct {
 
 	Stmts []*Stmt
 	Last  []Comment
+
+	// AliasExpansions records alias substitutions applied while parsing this
+	// file. Entries are ordered by expansion time and point at the alias
+	// invocation site, not the alias definition site.
+	AliasExpansions []*AliasExpansion
 }
 
 func (f *File) Pos() Pos { return stmtsPos(f.Stmts, f.Last) }
@@ -594,10 +599,22 @@ func (f *FuncDecl) End() Pos { return f.Body.End() }
 // newlines, semicolons, or parentheses.
 type Word struct {
 	Parts []WordPart
+
+	// AliasExpansions preserves the alias-expansion chain that produced this
+	// word, if any. The chain is ordered from the outermost alias expansion to
+	// the innermost recursive expansion.
+	AliasExpansions []*AliasExpansion
 }
 
 func (w *Word) Pos() Pos { return w.Parts[0].Pos() }
 func (w *Word) End() Pos { return w.Parts[len(w.Parts)-1].End() }
+
+// AliasExpansion records one alias expansion applied while parsing.
+type AliasExpansion struct {
+	Name  string
+	Value string
+	Pos   Pos
+}
 
 // Lit returns the word as a string when it is a simple literal,
 // made up of [*Lit] word parts only.
