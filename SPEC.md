@@ -518,7 +518,7 @@ For script execution, that pipeline:
 
 1. parses the request text into a `*syntax.File`
 2. validates unsupported constructs such as descriptor-dup redirections that would otherwise panic the interpreter
-3. checks command-substitution depth and glob-operation budgets against the parsed user program
+3. checks command-substitution depth and accumulates glob-operation budgets as parsed chunks enter the compile pipeline
 4. rewrites pipeline right-hand sides into synthetic subshells where needed to preserve default `lastpipe=off` behavior
 5. instruments loop guards for `MaxLoopIterations`
 
@@ -585,7 +585,7 @@ Implementation detail for the current runtime:
 - the counter resets on each `Session.Exec` or `Runtime.Run`
 - commands inside subshells and pipelines count toward the same execution budget
 - loop iteration limits are enforced by AST instrumentation that prepends an internal guard command to loop bodies before execution
-- command substitution depth and glob-operation budgets are validated against the parsed user program during the shell-core compile pipeline
+- command substitution depth and glob-operation budgets are enforced from the shell-core compile pipeline, and glob-operation counts accumulate across all parsed chunks in one execution
 - request-level timeouts and caller cancellation are enforced via execution contexts and normalized into shell-style exit codes
 
 ### 9.6 Command execution

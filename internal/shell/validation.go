@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shell/pattern"
+	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/policy"
 )
@@ -42,7 +42,6 @@ func validateExecutionBudgets(program *syntax.File, pol policy.Policy) error {
 	var (
 		currentSubDepth int64
 		maxSubDepth     int64
-		globOps         int64
 		stack           []syntax.Node
 	)
 
@@ -61,14 +60,11 @@ func validateExecutionBudgets(program *syntax.File, pol policy.Policy) error {
 
 		stack = append(stack, node)
 
-		switch node := node.(type) {
-		case *syntax.CmdSubst:
+		if _, ok := node.(*syntax.CmdSubst); ok {
 			currentSubDepth++
 			if currentSubDepth > maxSubDepth {
 				maxSubDepth = currentSubDepth
 			}
-		case *syntax.Word:
-			globOps += estimateWordGlobOps(node)
 		}
 		return true
 	})
@@ -78,12 +74,22 @@ func validateExecutionBudgets(program *syntax.File, pol policy.Policy) error {
 			message: fmt.Sprintf("Command substitution nesting limit exceeded (%d), increase policy.Limits.MaxSubstitutionDepth", limits.MaxSubstitutionDepth),
 		}
 	}
-	if limits.MaxGlobOperations > 0 && globOps > limits.MaxGlobOperations {
-		return &budgetViolation{
-			message: fmt.Sprintf("Glob operation limit exceeded (%d), increase policy.Limits.MaxGlobOperations", limits.MaxGlobOperations),
-		}
-	}
 	return nil
+}
+
+func estimateProgramGlobOps(program *syntax.File) int64 {
+	if program == nil {
+		return 0
+	}
+	var globOps int64
+	syntax.Walk(program, func(node syntax.Node) bool {
+		word, ok := node.(*syntax.Word)
+		if ok {
+			globOps += estimateWordGlobOps(word)
+		}
+		return true
+	})
+	return globOps
 }
 
 func validateSupportedRedirections(program *syntax.File) error {
@@ -188,18 +194,5 @@ func isSupportedRedirectFD(fd string) bool {
 
 func estimateWordGlobOps(word *syntax.Word) int64 {
 	lit := wordLiteral(word)
-	if lit == "" || !pattern.HasMeta(lit, 0) {
-		return 0
-	}
-
-	ops := int64(1)
-	for part := range strings.SplitSeq(lit, "/") {
-		if part == "" {
-			continue
-		}
-		if pattern.HasMeta(part, 0) {
-			ops++
-		}
-	}
-	return ops
+	return expand.EstimateGlobOperations(lit)
 }

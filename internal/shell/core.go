@@ -144,7 +144,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 		executionSourceName(exec),
 		effectiveExec.ScriptPath,
 		func(file *syntax.File) (map[*syntax.Stmt]*syntax.Stmt, error) {
-			return compileChunk(file, effectiveExec.Policy, budget.nextLoopNamespace())
+			return compileChunk(file, effectiveExec.Policy, budget, budget.nextLoopNamespace())
 		},
 	)
 	if code, ok := compilationExitStatus(runErr); ok {
@@ -1122,8 +1122,10 @@ func fileMutationAction(flag int) string {
 
 type executionBudget struct {
 	maxCommandCount   int64
+	maxGlobOperations int64
 	maxLoopIterations int64
 	count             atomic.Int64
+	globCount         atomic.Int64
 	disabled          atomic.Int32
 	loopNamespaces    atomic.Int64
 	mu                sync.Mutex
@@ -1137,6 +1139,7 @@ func newExecutionBudget(pol policy.Policy) *executionBudget {
 
 	return &executionBudget{
 		maxCommandCount:   pol.Limits().MaxCommandCount,
+		maxGlobOperations: pol.Limits().MaxGlobOperations,
 		maxLoopIterations: pol.Limits().MaxLoopIterations,
 		loopCounts:        make(map[string]int64),
 	}
@@ -1178,6 +1181,21 @@ func (b *executionBudget) beforeLoopIteration(ctx context.Context, args []string
 		return nil
 	}
 	return shellFailure(ctx, 126, "%s loop: too many iterations (%d), increase policy.Limits.MaxLoopIterations", loopKind, b.maxLoopIterations)
+}
+
+func (b *executionBudget) beforeGlob(ops int64) error {
+	if b == nil || b.maxGlobOperations <= 0 || ops <= 0 {
+		return nil
+	}
+	if b.disabled.Load() > 0 {
+		return nil
+	}
+	if b.globCount.Add(ops) <= b.maxGlobOperations {
+		return nil
+	}
+	return &budgetViolation{
+		message: fmt.Sprintf("Glob operation limit exceeded (%d), increase policy.Limits.MaxGlobOperations", b.maxGlobOperations),
+	}
 }
 
 func (b *executionBudget) nextLoopNamespace() string {

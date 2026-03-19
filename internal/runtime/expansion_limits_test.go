@@ -107,3 +107,38 @@ func TestMaxGlobOperationsAllowsExpansionWithinLimit(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestMaxGlobOperationsAccumulateAcrossChunks(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:  []string{"/"},
+			WriteRoots: []string{"/"},
+			Limits: policy.Limits{
+				MaxGlobOperations: 3,
+			},
+		}),
+	})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/globtest", 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	writeSessionFile(t, session, "/tmp/globtest/a.txt", []byte("a\n"))
+	writeSessionFile(t, session, "/tmp/globtest/b.txt", []byte("b\n"))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "echo /tmp/globtest/*.txt\necho /tmp/globtest/*.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126", result.ExitCode)
+	}
+	if got, want := result.Stdout, "/tmp/globtest/a.txt /tmp/globtest/b.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "Glob operation limit exceeded") {
+		t.Fatalf("Stderr = %q, want glob-limit message", result.Stderr)
+	}
+}

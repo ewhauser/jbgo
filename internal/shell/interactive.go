@@ -96,7 +96,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 			continue
 		}
-		pipelineSubshells, err := compileChunk(program, exec.Policy, budget.nextLoopNamespace())
+		pipelineSubshells, err := compileChunk(program, exec.Policy, budget, budget.nextLoopNamespace())
 		if err != nil {
 			if code, ok := compilationExitStatus(err); ok {
 				exitCode = code
