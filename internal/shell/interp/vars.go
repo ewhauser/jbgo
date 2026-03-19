@@ -512,10 +512,12 @@ func (r *Runner) expandCompoundArrayElems(elems []*syntax.ArrayElem) []expandedA
 }
 
 func compoundArrayBase(prev expand.Variable, mode syntax.ArrayExprMode, appendAssign bool) expand.Variable {
-	base := expand.Variable{
-		Set:  true,
-		Kind: arrayValueKind(mode),
-	}
+	base := prev
+	base.Set = true
+	base.Kind = arrayValueKind(mode)
+	base.Str = ""
+	base.List = nil
+	base.Map = nil
 	if !appendAssign {
 		if base.Kind == expand.Associative {
 			base.Map = make(map[string]string)

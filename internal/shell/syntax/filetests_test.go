@@ -4859,6 +4859,26 @@ var fileTests = []fileTestCase{
 		}}}, LangBash),
 	),
 	fileTest(
+		[]string{"a=([x]= y)"},
+		langFile(&CallExpr{Assigns: []*Assign{{
+			Ref: litRef("a"),
+			Array: &ArrayExpr{Elems: []*ArrayElem{
+				arrKeyed(subWord("x"), nil),
+				{Kind: ArrayElemSequential, Value: litWord("y")},
+			}},
+		}}}, LangBash),
+	),
+	fileTest(
+		[]string{"a=([x]+= y)"},
+		langFile(&CallExpr{Assigns: []*Assign{{
+			Ref: litRef("a"),
+			Array: &ArrayExpr{Elems: []*ArrayElem{
+				arrKeyedAppend(subWord("x"), nil),
+				{Kind: ArrayElemSequential, Value: litWord("y")},
+			}},
+		}}}, LangBash),
+	),
+	fileTest(
 		[]string{
 			"a=([x]= [y]=)",
 			"a=(\n[x]=\n[y]=\n)",
