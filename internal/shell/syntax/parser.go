@@ -584,9 +584,6 @@ type Parser struct {
 	// lastBquoteEsc is how many times the last backquote token was escaped
 	lastBquoteEsc int
 
-	rxOpenParens int
-	rxFirstPart  bool
-
 	accComs []Comment
 	curComs *[]Comment
 
@@ -763,7 +760,6 @@ const (
 	arithmExprLet
 	arithmExprCmd
 	testExpr
-	testExprRegexp
 	switchCase
 	paramExpArithm
 	paramExpRepl
@@ -1844,6 +1840,62 @@ type rawPatternParser struct {
 	lang LangVariant
 }
 
+type rawWordPartParser struct {
+	lang LangVariant
+}
+
+func (r rawWordPartParser) parse(raw string, base Pos) []WordPart {
+	var parts []WordPart
+	flushLit := func(from, to int) {
+		if from >= to {
+			return
+		}
+		parts = append(parts, &Lit{
+			ValuePos: posAddCol(base, from),
+			ValueEnd: posAddCol(base, to),
+			Value:    raw[from:to],
+		})
+	}
+	partStart := 0
+	for i := 0; i < len(raw); {
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			flushLit(partStart, i)
+			part, consumed, ok := parseRawWordPart(raw[i:], posAddCol(base, i), r.lang)
+			if !ok {
+				i++
+				partStart = i
+				continue
+			}
+			parts = append(parts, part)
+			i += consumed
+			partStart = i
+			continue
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				flushLit(partStart, i)
+				part, consumed, ok := parseRawWordPart(raw[i:], posAddCol(base, i), r.lang)
+				if ok {
+					parts = append(parts, part)
+					i += consumed
+					partStart = i
+					continue
+				}
+			}
+		}
+		i++
+	}
+	flushLit(partStart, len(raw))
+	return parts
+}
+
 func (r rawPatternParser) parse(raw string, base Pos) *Pattern {
 	parts, end, _ := r.parseParts(raw, base, 0, false)
 	return &Pattern{Start: base, EndPos: posAddCol(base, end), Parts: parts}
@@ -2014,7 +2066,19 @@ func (r rawPatternParser) parseExtGlob(raw string, base Pos, start int) (*ExtGlo
 }
 
 func (r rawPatternParser) parseShellPart(raw string, base Pos) (PatternPart, int, bool) {
-	sub := NewParser(Variant(r.lang))
+	part, consumed, ok := parseRawWordPart(raw, base, r.lang)
+	if !ok {
+		return nil, 0, false
+	}
+	patPart, ok := part.(PatternPart)
+	if !ok {
+		return nil, 0, false
+	}
+	return patPart, consumed, true
+}
+
+func parseRawWordPart(raw string, base Pos, lang LangVariant) (WordPart, int, bool) {
+	sub := NewParser(Variant(lang))
 	sub.reset()
 	sub.src = strings.NewReader(raw)
 	sub.offs = int64(base.Offset())
@@ -2026,15 +2090,11 @@ func (r rawPatternParser) parseShellPart(raw string, base Pos) (PatternPart, int
 	if sub.err != nil || part == nil {
 		return nil, 0, false
 	}
-	patPart, ok := part.(PatternPart)
-	if !ok {
-		return nil, 0, false
-	}
 	consumed := int(part.End().Offset() - base.Offset())
 	if consumed <= 0 {
 		return nil, 0, false
 	}
-	return patPart, consumed, true
+	return part, consumed, true
 }
 
 func (p *Parser) extGlob(op GlobOperator, opPos Pos) *ExtGlob {
@@ -3580,18 +3640,87 @@ func (p *Parser) followCondPattern(tok token, pos Pos) *CondPattern {
 }
 
 func (p *Parser) followCondRegex(tok token, pos Pos) *CondRegex {
-	oldQuote := p.quote
-	p.rxOpenParens = 0
-	p.rxFirstPart = true
-	p.quote = testExprRegexp
-	p.next()
-	w := p.getWord()
-	if p.quote == testExprRegexp {
-		p.quote = oldQuote
-	}
+	w := p.scanCondRegex(tok, pos)
 	if w == nil {
+		return nil
+	}
+	return &CondRegex{Word: w}
+}
+
+func (p *Parser) condRegexUnexpectedStart() bool {
+	switch p.r {
+	case ')', ';', '&':
+		return true
+	case '|':
+		return p.peek() == '|'
+	case '<', '>':
+		return p.peek() != '('
+	default:
+		return false
+	}
+}
+
+func (p *Parser) condRegexRightParenBoundary() bool {
+	switch next := p.peek(); next {
+	case utf8.RuneSelf, ' ', '\t', '\n', ';', '&', '<', '>', ')':
+		return true
+	case '|':
+		_, next2 := p.peekTwo()
+		return next2 == '|'
+	case ']':
+		_, next2 := p.peekTwo()
+		return next2 == ']'
+	default:
+		return false
+	}
+}
+
+func (p *Parser) condRegexWhitespaceBoundary() bool {
+	switch next, next2, next3 := p.peekThree(); next {
+	case ']':
+		return next2 == ']' && regexClauseDelimiterByte(next3)
+	case '&':
+		return next2 == '&'
+	case '|':
+		return next2 == '|'
+	default:
+		return false
+	}
+}
+
+func regexClauseDelimiterByte(b byte) bool {
+	switch b {
+	case utf8.RuneSelf, ' ', '\t', '\n', ';', '&', '|', ')':
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Parser) scanCondRegex(tok token, pos Pos) *Word {
+	for {
+		switch p.r {
+		case escNewl, ' ', '\t':
+			p.rune()
+		default:
+			goto scan
+		}
+	}
+
+scan:
+	switch p.r {
+	case '\n', utf8.RuneSelf:
+		p.next()
+		if p.recoverError() {
+			return p.wordOne(&Lit{ValuePos: recoveredPos})
+		}
+		p.followErr(pos, tok, noQuote("a word"))
+		return nil
+	}
+	if p.condRegexUnexpectedStart() {
+		p.next()
 		switch p.tok {
-		case semicolon, and, rdrIn, rdrOut, rightParen:
+		case semicolon, and, andAnd, orOr, rdrIn, rdrOut, rdrInOut, rightParen:
 			p.curErrSecondary(
 				fmt.Sprintf("syntax error near %s", p.tok.bashQuote()),
 				"syntax error in conditional expression: unexpected token %s",
@@ -3600,12 +3729,415 @@ func (p *Parser) followCondRegex(tok token, pos Pos) *CondRegex {
 			return nil
 		}
 		if p.recoverError() {
-			return &CondRegex{Word: p.wordOne(&Lit{ValuePos: recoveredPos})}
+			return p.wordOne(&Lit{ValuePos: recoveredPos})
 		}
 		p.followErr(pos, tok, noQuote("a word"))
 		return nil
 	}
-	return &CondRegex{Word: w}
+
+	start := p.nextPos()
+	p.newLit(p.r)
+	if !p.scanCondRegexRaw(start) {
+		p.litBs = nil
+		return nil
+	}
+	raw := p.endLit()
+	p.next()
+
+	word := &Word{
+		Parts:           rawWordPartParser{lang: p.lang}.parse(raw, start),
+		AliasExpansions: append([]*AliasExpansion(nil), p.aliasChain...),
+	}
+	return p.finishWord(word)
+}
+
+func (p *Parser) scanCondRegexRaw(start Pos) bool {
+	depth := 0
+	for {
+		switch p.r {
+		case utf8.RuneSelf:
+			return true
+		case escNewl:
+			p.rune()
+		case ' ', '\t':
+			if depth == 0 || p.condRegexWhitespaceBoundary() {
+				return true
+			}
+			p.rune()
+		case '\n':
+			if depth == 0 || p.condRegexWhitespaceBoundary() {
+				return true
+			}
+			p.rune()
+		case ']':
+			p.rune()
+		case ';', '&':
+			if depth == 0 || (p.r == '&' && p.peek() == '&') {
+				return true
+			}
+			p.rune()
+		case '|':
+			if p.peek() == '|' {
+				return true
+			}
+			p.rune()
+		case '<', '>':
+			if p.peek() == '(' {
+				if !p.scanCondRegexProcSubst(start, tokenFromProcSubst(p.r)) {
+					return false
+				}
+				continue
+			}
+			if depth == 0 {
+				return true
+			}
+			p.rune()
+		case '(':
+			depth++
+			p.rune()
+		case ')':
+			if depth > 0 {
+				depth--
+			} else if p.condRegexRightParenBoundary() {
+				return true
+			}
+			p.rune()
+		case '\'':
+			if !p.scanCondRegexSingleQuoted(start, sglQuote, false) {
+				return false
+			}
+		case '"':
+			if !p.scanCondRegexDoubleQuoted(start, dblQuote) {
+				return false
+			}
+		case '`':
+			if !p.scanCondRegexBackquote(start) {
+				return false
+			}
+		case '$':
+			if !p.scanCondRegexDollar(start, true) {
+				return false
+			}
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		default:
+			p.rune()
+		}
+	}
+}
+
+func tokenFromProcSubst(r rune) token {
+	if r == '<' {
+		return cmdIn
+	}
+	return cmdOut
+}
+
+func (p *Parser) scanCondRegexProcSubst(start Pos, left token) bool {
+	p.rune()
+	return p.scanCondRegexCommandGroup(start, left)
+}
+
+func (p *Parser) scanCondRegexSingleQuoted(start Pos, quote token, dollar bool) bool {
+	p.rune()
+	for {
+		switch p.r {
+		case '\\':
+			if dollar {
+				if p.rune() == utf8.RuneSelf {
+					return true
+				}
+				p.rune()
+				continue
+			}
+			p.rune()
+		case '\'':
+			p.rune()
+			return true
+		case utf8.RuneSelf:
+			p.tok = _EOF
+			if p.recoverError() {
+				return true
+			}
+			p.quoteErr(start, quote)
+			return false
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) scanCondRegexDoubleQuoted(start Pos, quote token) bool {
+	p.rune()
+	for {
+		switch p.r {
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		case '"':
+			p.rune()
+			return true
+		case '$':
+			if !p.scanCondRegexDollar(start, false) {
+				return false
+			}
+		case '`':
+			if !p.scanCondRegexBackquote(start) {
+				return false
+			}
+		case utf8.RuneSelf:
+			p.tok = _EOF
+			if p.recoverError() {
+				return true
+			}
+			p.quoteErr(start, quote)
+			return false
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) scanCondRegexBackquote(start Pos) bool {
+	p.rune()
+	for {
+		switch p.r {
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		case '`':
+			p.rune()
+			return true
+		case utf8.RuneSelf:
+			p.tok = _EOF
+			if p.recoverError() {
+				return true
+			}
+			p.quoteErr(start, bckQuote)
+			return false
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) scanCondRegexDollar(start Pos, allowDollarQuotes bool) bool {
+	switch r := p.rune(); r {
+	case utf8.RuneSelf:
+		return true
+	case '\'':
+		if !allowDollarQuotes {
+			return true
+		}
+		return p.scanCondRegexSingleQuoted(start, dollSglQuote, true)
+	case '"':
+		if !allowDollarQuotes {
+			return true
+		}
+		return p.scanCondRegexDoubleQuoted(start, dollDblQuote)
+	case '{':
+		return p.scanCondRegexBraced(start, dollBrace, rightBrace)
+	case '[':
+		return p.scanCondRegexBraced(start, dollBrack, rightBrack)
+	case '(':
+		if p.peek() == '(' {
+			p.rune()
+			return p.scanCondRegexDoubleParen(start)
+		}
+		return p.scanCondRegexCommandGroup(start, dollParen)
+	default:
+		if asciiLetter(r) || r == '_' {
+			for {
+				next := p.rune()
+				if !asciiLetter(next) && !asciiDigit(next) && next != '_' {
+					return true
+				}
+			}
+		}
+		if asciiDigit(r) || singleRuneParam(r) {
+			p.rune()
+		}
+		return true
+	}
+}
+
+func (p *Parser) scanCondRegexBraced(start Pos, left, right token) bool {
+	depth := 1
+	p.rune()
+	for {
+		switch p.r {
+		case utf8.RuneSelf:
+			p.tok = _EOF
+			if p.recoverError() {
+				return true
+			}
+			p.matchingErr(start, left, right)
+			return false
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		case '\'':
+			if !p.scanCondRegexSingleQuoted(start, sglQuote, false) {
+				return false
+			}
+		case '"':
+			if !p.scanCondRegexDoubleQuoted(start, dblQuote) {
+				return false
+			}
+		case '`':
+			if !p.scanCondRegexBackquote(start) {
+				return false
+			}
+		case '$':
+			if !p.scanCondRegexDollar(start, true) {
+				return false
+			}
+		case '{':
+			if right == rightBrace {
+				depth++
+			}
+			p.rune()
+		case '}':
+			if right == rightBrace {
+				depth--
+				p.rune()
+				if depth == 0 {
+					return true
+				}
+				continue
+			}
+			p.rune()
+		case ']':
+			if right == rightBrack {
+				p.rune()
+				return true
+			}
+			p.rune()
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) scanCondRegexCommandGroup(start Pos, left token) bool {
+	depth := 1
+	p.rune()
+	for {
+		switch p.r {
+		case utf8.RuneSelf:
+			p.tok = _EOF
+			if p.recoverError() {
+				return true
+			}
+			p.matchingErr(start, left, rightParen)
+			return false
+		case escNewl:
+			p.rune()
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		case '\'':
+			if !p.scanCondRegexSingleQuoted(start, sglQuote, false) {
+				return false
+			}
+		case '"':
+			if !p.scanCondRegexDoubleQuoted(start, dblQuote) {
+				return false
+			}
+		case '`':
+			if !p.scanCondRegexBackquote(start) {
+				return false
+			}
+		case '$':
+			if !p.scanCondRegexDollar(start, true) {
+				return false
+			}
+		case '<', '>':
+			if p.peek() == '(' {
+				if !p.scanCondRegexProcSubst(start, tokenFromProcSubst(p.r)) {
+					return false
+				}
+				continue
+			}
+			p.rune()
+		case '(':
+			depth++
+			p.rune()
+		case ')':
+			depth--
+			p.rune()
+			if depth == 0 {
+				return true
+			}
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) scanCondRegexDoubleParen(start Pos) bool {
+	depth := 0
+	p.rune()
+	for {
+		switch p.r {
+		case utf8.RuneSelf:
+			p.tok = _EOF
+			if p.recoverError() {
+				return true
+			}
+			p.matchingErr(start, dollDblParen, dblRightParen)
+			return false
+		case escNewl:
+			p.rune()
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		case '\'':
+			if !p.scanCondRegexSingleQuoted(start, sglQuote, false) {
+				return false
+			}
+		case '"':
+			if !p.scanCondRegexDoubleQuoted(start, dblQuote) {
+				return false
+			}
+		case '`':
+			if !p.scanCondRegexBackquote(start) {
+				return false
+			}
+		case '$':
+			if !p.scanCondRegexDollar(start, true) {
+				return false
+			}
+		case '(':
+			depth++
+			p.rune()
+		case ')':
+			if depth == 0 && p.peek() == ')' {
+				p.rune()
+				p.rune()
+				return true
+			}
+			if depth > 0 {
+				depth--
+			}
+			p.rune()
+		default:
+			p.rune()
+		}
+	}
 }
 
 func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
@@ -3800,15 +4332,6 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 		if b.Y = p.testExprBinary(false); b.Y == nil {
 			p.followErrExp(b.OpPos, b.Op)
 		}
-	case TsReMatch:
-		p.checkLang(p.pos, langBashLike|LangZsh, "regex tests")
-		p.rxOpenParens = 0
-		p.rxFirstPart = true
-		// TODO(mvdan): Using nested states within a regex will break in
-		// all sorts of ways. The better fix is likely to use a stop
-		// token, like we do with heredocs.
-		p.quote = testExprRegexp
-		fallthrough
 	default:
 		if _, ok := b.X.(*Word); !ok {
 			p.posErr(b.OpPos, "expected %#q, %#q or %#q after complex expr",

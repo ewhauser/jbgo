@@ -4067,6 +4067,18 @@ var fileTests = []fileTestCase{
 		))}, LangBash),
 	),
 	fileTest(
+		[]string{`[[ a =~ "^(a b)$" ]]`},
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), condRegex(
+			dblQuoted(lit("^(a b)"), lit("$")),
+		))}, LangBash),
+	),
+	fileTest(
+		[]string{`[[ a =~ "$pat" ]]`},
+		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), condRegex(
+			dblQuoted(litParamExp("pat")),
+		))}, LangBash),
+	),
+	fileTest(
 		[]string{`[[ a =~ [ab](c |d) ]]`},
 		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex("[ab](c |d)"))}, LangBash),
 	),
@@ -4085,6 +4097,13 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{`[[ a =~ b\ c|d ]]`},
 		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("a"), litCondRegex(`b\ c|d`))}, LangBash),
+	),
+	fileTest(
+		[]string{`[[ 'a b' =~ ^)a\ b($ ]]`},
+		langFile(&TestClause{X: condBinary(TsReMatch, condWord(sglQuoted("a b")), condRegex(
+			lit(`^)a\ b(`),
+			lit("$"),
+		))}, LangBash),
 	),
 	fileTest(
 		[]string{`[[ a == -n ]]`},

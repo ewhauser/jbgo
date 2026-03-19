@@ -389,27 +389,6 @@ skipSpace:
 		p.tok = p.arithmToken(r)
 	case p.quote&allParamExp != 0 && paramOps(r):
 		p.tok = p.paramToken(r)
-	case p.quote == testExprRegexp:
-		if !p.rxFirstPart && p.spaced {
-			p.quote = testExpr
-			goto skipSpace
-		}
-		p.rxFirstPart = false
-		switch r {
-		case ';', '"', '\'', '$', '&', '>', '<', '`':
-			p.tok = p.regToken(r)
-		case ')':
-			if p.rxOpenParens > 0 {
-				// continuation of open paren
-				p.advanceLitRe(r)
-			} else {
-				p.tok = rightParen
-				p.quote = testExpr
-				p.rune() // we are tokenizing manually
-			}
-		default: // including '(', '|'
-			p.advanceLitRe(r)
-		}
 	case regOps(r):
 		p.tok = p.regToken(r)
 	default:
@@ -482,6 +461,23 @@ func (p *Parser) peekTwo() (byte, byte) {
 		return p.bs[p.bsp], utf8.RuneSelf
 	}
 	return p.bs[p.bsp], p.bs[p.bsp+1]
+}
+
+func (p *Parser) peekThree() (byte, byte, byte) {
+	// Like [Parser.peekTwo], this is only best-effort lookahead for now.
+	if int(p.bsp+2) >= len(p.bs) {
+		p.fill()
+	}
+	switch {
+	case int(p.bsp) >= len(p.bs):
+		return utf8.RuneSelf, utf8.RuneSelf, utf8.RuneSelf
+	case int(p.bsp+1) >= len(p.bs):
+		return p.bs[p.bsp], utf8.RuneSelf, utf8.RuneSelf
+	case int(p.bsp+2) >= len(p.bs):
+		return p.bs[p.bsp], p.bs[p.bsp+1], utf8.RuneSelf
+	default:
+		return p.bs[p.bsp], p.bs[p.bsp+1], p.bs[p.bsp+2]
+	}
 }
 
 func (p *Parser) regToken(r rune) token {
@@ -1275,36 +1271,6 @@ func (p *Parser) quotedHdocWord() *Word {
 				return nil
 			}
 			return p.wordOne(p.lit(pos, val))
-		}
-	}
-}
-
-func (p *Parser) advanceLitRe(r rune) {
-	for p.newLit(r); ; r = p.rune() {
-		switch r {
-		case '\\':
-			p.rune()
-		case '(':
-			p.rxOpenParens++
-		case ')':
-			if p.rxOpenParens--; p.rxOpenParens < 0 {
-				p.tok, p.val = _LitWord, p.endLit()
-				p.quote = testExpr
-				return
-			}
-		case ' ', '\t', '\r', '\n', ';', '&', '>', '<':
-			if p.rxOpenParens <= 0 {
-				p.tok, p.val = _LitWord, p.endLit()
-				p.quote = testExpr
-				return
-			}
-		case '"', '\'', '$', '`':
-			p.tok, p.val = _Lit, p.endLit()
-			return
-		case utf8.RuneSelf:
-			p.tok, p.val = _LitWord, p.endLit()
-			p.quote = noState
-			return
 		}
 	}
 }

@@ -200,6 +200,13 @@ func (r *Runner) testExpandWord(word *syntax.Word, expandFunc func(*expand.Confi
 	return "", false
 }
 
+func (r *Runner) failConditionalRegex(format string, args ...any) bool {
+	r.clearBASH_REMATCH()
+	r.exit.code = 2
+	fmt.Fprintf(r.stderr, "syntax error in conditional expression: "+format+"\n", args...)
+	return false
+}
+
 func (r *Runner) clearBASH_REMATCH() {
 	r.setVar("BASH_REMATCH", expand.Variable{
 		Set:  true,
@@ -227,13 +234,11 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 	switch op {
 	case syntax.TsReMatch:
 		if bashRegexHasInvalidBareBraces(y) {
-			r.exit.code = 2
-			return false
+			return r.failConditionalRegex("invalid regular expression")
 		}
 		re, err := regexp.Compile(y)
 		if err != nil {
-			r.exit.code = 2
-			return false
+			return r.failConditionalRegex("%v", err)
 		}
 		m := re.FindStringSubmatch(x)
 		if m == nil {

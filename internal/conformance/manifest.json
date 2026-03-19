@@ -320,31 +320,31 @@
         },
         "oils/regex.test.sh::Fatal error inside [[ =~ ]]": {
           "mode": "xfail",
-          "reason": "division-by-zero error message format differs from bash: gbash reconstructs expression without whitespace"
+          "reason": "division-by-zero error message format still differs from bash because gbash reconstructs the arithmetic expression without bash's original spacing"
         },
         "oils/regex.test.sh::Operator chars ; & but not |": {
           "mode": "xfail",
-          "reason": "the [[ parser still rejects operator tokens like ; and & after =~ earlier than bash, so the conditional parse diagnostics and status flow diverge"
+          "reason": "top-level operator-like regex tokens still diverge from bash, especially around bare |, newline, and conditional-expression diagnostic text"
         },
         "oils/regex.test.sh::Malformed regex": {
           "mode": "xfail",
-          "reason": "malformed regex conditionals still surface parser errors from mvdan/sh rather than bash's conditional-expression diagnostics"
+          "reason": "parser-owned regex operands now reach runtime, but gbash still emits Go regexp errors instead of bash's conditional-expression syntax diagnostics"
         },
         "oils/regex.test.sh::Unquoted { is a regex parse error": {
           "mode": "xfail",
-          "reason": "gbash does not emit the stderr diagnostic that bash outputs for invalid regex in [[ =~ ]]"
+          "reason": "gbash still rejects bare { via regex validation in this case, while bash accepts it as a literal match"
         },
         "oils/regex.test.sh::Regex with == and not =~ is parse error, different lexer mode required": {
           "mode": "xfail",
-          "reason": "the [[ parser still reports generic operator parsing errors instead of bash's regex-aware conditional diagnostics in this == case"
+          "reason": "the [[ parser still reports generic operator parsing errors instead of bash's regex-aware diagnostics when parentheses appear in == patterns"
         },
         "oils/regex.test.sh::unquoted [a  b] as pattern, [a  b|c]": {
           "mode": "xfail",
-          "reason": "the [[ parser still tokenizes some bracket-expression forms differently from bash, causing an early operator parse error"
+          "reason": "bracket-expression parse errors still produce different conditional-expression stderr text than bash"
         },
         "oils/regex.test.sh::unquoted_[a__b]_as_pattern,_[a__b|c]": {
           "mode": "xfail",
-          "reason": "the [[ parser still tokenizes some bracket-expression forms differently from bash, causing an early operator parse error"
+          "reason": "bracket-expression parse errors still produce different conditional-expression stderr text than bash"
         },
         "oils/serialize.test.sh": {
           "mode": "xfail",

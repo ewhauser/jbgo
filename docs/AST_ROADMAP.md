@@ -241,23 +241,23 @@ The old conditional tree was:
 
 That is too generic for Bash conditionals, especially for:
 
-- `=~` regex mode
+- parser-owned `=~` operands
 - `[[ -v ref[subscript] ]]`
 - token-specific syntax errors
 - parse distinctions between regex operators and ordinary shell operators
 
 #### Current implementation signals
 
-- `testExprBinary` still converts many operators late
-- `=~` switches the lexer into a regex mode in a fragile way
-- regex parsing has an explicit TODO noting nested states are brittle
+- `TestClause` now routes `[[ =~ ]]` through a parser-owned RHS scanner instead of flipping the lexer into a regex mode
+- `CondRegex` still wraps `*Word`, so quoted and unquoted pieces are preserved without adding a regex-specific AST
+- runtime still expands with `expand.Regexp` and compiles with Go `regexp`, with conditional-expression diagnostics owned in `interp`
 
 #### Conformance signals
 
 Relevant manifest entries:
 
 - `bool-parse.test.sh::Not allowed: [[ ) ]] and [[ ( ]]`
-- several `regex.test.sh` case-level xfails
+- several `regex.test.sh` case-level xfails for bash diagnostic parity
 
 Relevant files:
 
@@ -278,7 +278,7 @@ Introduce typed conditional operands and condition nodes, for example:
 
 In particular, `[[ -v ... ]]` should not take a generic `Word` operand. It should take a variable-reference-shaped node.
 
-For `=~`, the RHS should preserve whether pieces were quoted or unquoted so runtime can apply Bash regex semantics more accurately.
+For `=~`, the RHS should preserve whether pieces were quoted or unquoted so runtime can apply Bash regex semantics more accurately. That does not require a custom regex engine; it only requires syntax to preserve the operand boundary and shell quoting/expansion structure.
 
 #### Why this matters
 
@@ -596,7 +596,7 @@ The roadmap is working if we can progressively remove special cases like:
 - runtime declaration-argument reparsing
 - string-based reconstruction of array and nameref targets
 - generic `Word` operands in `[[ -v ... ]]`
-- regex-specific parser mode hacks leaking into generic test parsing
+- regex operand boundary handling living in generic lexer state
 - extglob nodes that immediately collapse back to strings
 
 And if those changes let us retire xfails in the following clusters first:
