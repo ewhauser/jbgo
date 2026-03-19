@@ -3294,6 +3294,69 @@ func (p *Parser) testDecl(s *Stmt) {
 	s.Cmd = td
 }
 
+func (p *Parser) funcBodyUnexpectedToken() {
+	quote := p.tok.bashQuote()
+	switch p.tok {
+	case _Lit, _LitWord:
+		quote = bashQuoteString(p.val)
+	}
+	p.curErr("syntax error near unexpected token %s", quote)
+}
+
+func (p *Parser) funcBodyStmt() *Stmt {
+	if p.stopToken() {
+		return nil
+	}
+	s := &Stmt{Position: p.pos}
+	switch p.tok {
+	case _LitWord:
+		switch rsrv := reservedWord(p.val); rsrv {
+		case rsrvLeftBrace:
+			p.block(s)
+		case rsrvIf:
+			p.ifClause(s)
+		case rsrvWhile, rsrvUntil:
+			p.whileClause(s, rsrv == rsrvUntil)
+		case rsrvFor:
+			p.forClause(s)
+		case rsrvCase:
+			p.caseClause(s)
+		case "[[":
+			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+				p.testClause(s)
+			}
+		case rsrvSelect:
+			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+				p.selectClause(s)
+			}
+		default:
+			p.funcBodyUnexpectedToken()
+			return nil
+		}
+	case leftParen:
+		if p.r == ')' {
+			p.curErr("syntax error near unexpected token %s", rightParen.bashQuote())
+			return nil
+		}
+		p.subshell(s)
+	case dblLeftParen:
+		p.arithmExpCmd(s)
+	default:
+		p.funcBodyUnexpectedToken()
+		return nil
+	}
+	if s.Cmd == nil || p.err != nil {
+		if s.Cmd == nil && p.err == nil {
+			p.funcBodyUnexpectedToken()
+		}
+		return nil
+	}
+	for p.peekRedir() {
+		p.doRedirect(s)
+	}
+	return s
+}
+
 func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 	ce := p.call(w)
 	if w == nil {
@@ -3387,8 +3450,10 @@ func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit
 		fd.Names = names
 	}
 	p.got(_Newl)
-	// TODO: reject any body which isn't a compound command, like a quoted word
-	if fd.Body = p.getStmt(false, false, true); fd.Body == nil {
+	if fd.Body = p.funcBodyStmt(); fd.Body == nil {
+		if p.err != nil {
+			return
+		}
 		p.followErr(fd.Pos(), "foo()", noQuote("a statement"))
 	}
 	s.Cmd = fd

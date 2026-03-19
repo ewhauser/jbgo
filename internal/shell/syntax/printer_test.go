@@ -508,7 +508,7 @@ var printTests = []printCase{
 	samePrint("a | #c1\n\tif b; then\n\t\tc\n\tfi"),
 	samePrint("a | #c1\n\t#c2\n\t#c3\n\tb"),
 	samePrint("a && #c1\n\t(\n\t\tb\n\t)"),
-	samePrint("f() body # comment"),
+	samePrint("f() { body; } # comment"),
 	samePrint("f <<EOF\nbody\nEOF"),
 	samePrint("f <<EOF\nEOF"),
 	samePrint("f <<-EOF\n\tbody\nEOF"),

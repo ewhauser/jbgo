@@ -803,6 +803,20 @@ var errorCases = []errorCase{
 		langErr("1:7: reached EOF without matching `{` with `}`"),
 	),
 	errCase(
+		"foo() bar",
+		langErr("1:7: syntax error near unexpected token `bar'"),
+		flipConfirm(LangPOSIX), // dash accepts simple-command function bodies
+	),
+	errCase(
+		`foo() "bar"`,
+		langErr("1:7: syntax error near unexpected token `\"'"),
+		flipConfirm(LangPOSIX), // dash accepts simple-command function bodies
+	),
+	errCase(
+		"foo() >f { bar; }",
+		langErr("1:7: syntax error near unexpected token `>'"),
+	),
+	errCase(
 		"foo-bar() { x; }",
 		langErr("1:1: invalid func name", LangPOSIX),
 	),
@@ -1802,12 +1816,12 @@ var errorCases = []errorCase{
 	errCase(
 		"function `function",
 		langErr("1:1: `function` must be followed by a name", LangBash|LangMirBSDKorn),
-		langErr("1:11: `foo()` must be followed by a statement", LangZsh),
+		langErr("1:10: syntax error near unexpected token ``'", LangZsh),
 	),
 	errCase(
 		`function "foo"(){}`,
 		langErr("1:1: `function` must be followed by a name", LangBash|LangMirBSDKorn),
-		langErr("1:10: invalid func name", LangZsh),
+		langErr("1:10: syntax error near unexpected token `\"'", LangZsh),
 	),
 	errCase(
 		"function foo()",
