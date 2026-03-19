@@ -982,8 +982,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						r.exit.code = 1
 						return false
 					}
+					if as, ok := parsed.(*syntax.DeclAssign); ok && as.Assign.Array != nil {
+						if mode := declArrayModeFromValueType(valType); mode != syntax.ArrayExprInherit {
+							as.Assign.Array.Mode = mode
+						}
+					}
 					if as, ok := parsed.(*syntax.DeclAssign); ok && as.Assign.Array != nil &&
-						valType != "-a" && valType != "-A" {
+						as.Assign.Array.Mode == syntax.ArrayExprInherit {
 						// Bash only keeps runtime-parsed compound assignments structural
 						// when an explicit array attribute is active.
 						parsed = declStringifiedArrayAssign(as.Assign)

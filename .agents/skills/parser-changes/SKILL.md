@@ -62,6 +62,8 @@ Node (base interface)
 ├── HeredocDelim   # Heredoc delimiter source + cooked delimiter metadata
 ├── VarRef         # Canonical variable or element reference
 ├── Subscript      # Bracketed selector like [i], [@], [*]
+├── ArrayExpr      # Compound assignment literal with explicit mode + ordered elems
+├── ArrayElem      # Sequential, keyed, or keyed-append array element
 ├── DeclOperand    # Typed declaration operand
 │   ├── DeclFlag
 │   ├── DeclName
@@ -109,6 +111,8 @@ Key AST design points:
 
 - `Assign.Ref *VarRef` holds assignment targets (not separate `Name` and `Index` fields).
 - `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
+- `ArrayExpr.Mode` distinguishes `Inherit`, `Indexed`, and `Associative`. Ordinary `a=(...)` stays `Inherit`; declaration parsing stamps explicit mode onto later operands after `-a` / `-A`.
+- `ArrayElem.Kind` distinguishes sequential elements, `[k]=v`, and `[k]+=v`. Keep `Index == nil` only for sequential elements and preserve `Elems` slice order as the evaluation order.
 - `DeclClause.Operands []DeclOperand` holds declaration operands (typed as `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`).
 - `TestClause.X CondExpr` holds `[[ ]]` conditionals. The `CondExpr` interface has typed operand wrappers: `CondWord` (generic), `CondVarRef` (for `-v`/`-R`), `CondPattern` (for `==`/`=`/`!=`, wrapping `*Pattern`), and `CondRegex` (for `=~`).
 - Pattern-sensitive contexts now share `Pattern` / `PatternPart`: `CaseItem.Patterns`, `CondPattern.Pattern`, `Replace.Orig`, `Expansion.Pattern`, and `ExtGlob.Patterns`.
@@ -130,6 +134,8 @@ For declaration-specific work, the intended flow is:
 
 - parse source operands directly into `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`
 - when a dynamic declaration word expands into runtime fields, reclassify each field through the syntax-level declaration operand parser
+- when declaration flags establish array mode, stamp that mode onto only the later compound assignments in the same left-to-right operand stream
+- keep runtime-parsed compound assignments structural only when an explicit array attribute is active; otherwise preserve the scalar fallback intentionally
 - do not reconstruct declaration semantics with fake `Assign`s or `strings.Cut(..., \"=\")`-style splitting
 
 ## Conformance Testing
@@ -146,6 +152,13 @@ make conformance-test
 **Single test file:**
 ```bash
 make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/arith.test.sh'
+```
+
+**Compound array work:**
+```bash
+make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/array-literal.test.sh'
+make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/array-assoc.test.sh'
+make conformance-test CONFORMANCE_RUN='TestConformance/bash/oils/array-assign.test.sh'
 ```
 
 **Single test case within a file:**

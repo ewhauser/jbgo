@@ -2624,7 +2624,7 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 	}
 	if as.Value == nil && p.tok == leftParen {
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "arrays")
-		as.Array = &ArrayExpr{Lparen: p.pos}
+		as.Array = &ArrayExpr{Lparen: p.pos, Mode: ArrayExprInherit}
 		newQuote := p.quote
 		if p.lang.in(langBashLike | LangZsh) {
 			newQuote = arrayElems
@@ -2633,7 +2633,7 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 		p.next()
 		p.got(_Newl)
 		for p.tok != _EOF && p.tok != rightParen {
-			ae := &ArrayElem{}
+			ae := &ArrayElem{Kind: ArrayElemSequential}
 			ae.Comments, p.accComs = p.accComs, nil
 			if p.tok == leftBrack {
 				left := p.pos
@@ -2642,7 +2642,27 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 					p.curErr("arrays cannot be nested")
 					return nil
 				}
-				p.follow(left, `[x]`, assgn)
+				switch {
+				case p.tok == assgn:
+					ae.Kind = ArrayElemKeyed
+					p.next()
+				case p.val != "" && p.val[0] == '+':
+					ae.Kind = ArrayElemKeyedAppend
+					p.val = p.val[1:]
+					p.pos = posAddCol(p.pos, 1)
+					if len(p.val) < 1 || p.val[0] != '=' {
+						p.followErr(left, `[x]+`, assgn)
+						return nil
+					}
+					p.pos = posAddCol(p.pos, 1)
+					p.val = p.val[1:]
+					if p.val == "" {
+						p.next()
+					}
+				default:
+					p.followErr(left, `[x]`, assgn)
+					return nil
+				}
 			}
 			if ae.Value = p.getWord(); ae.Value == nil {
 				switch p.tok {
@@ -2744,6 +2764,35 @@ func (p *Parser) getAssign() *Assign {
 
 func looksLikeDeclFlagWord(tok token, val string) bool {
 	return tok == _LitWord && val != "" && (val[0] == '-' || val[0] == '+')
+}
+
+func declArrayModeFromFlagWord(word *Word, current ArrayExprMode) ArrayExprMode {
+	if word == nil {
+		return current
+	}
+	lit := word.Lit()
+	if lit == "" || len(lit) < 2 {
+		return current
+	}
+	switch lit[0] {
+	case '-':
+		for _, r := range lit[1:] {
+			switch r {
+			case 'a':
+				current = ArrayExprIndexed
+			case 'A':
+				current = ArrayExprAssociative
+			}
+		}
+	case '+':
+		for _, r := range lit[1:] {
+			switch r {
+			case 'a', 'A':
+				current = ArrayExprInherit
+			}
+		}
+	}
+	return current
 }
 
 func (p *Parser) declOperand() DeclOperand {
@@ -3786,9 +3835,18 @@ func (p *Parser) testExprUnary() TestExpr {
 
 func (p *Parser) declClause(s *Stmt) {
 	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
+	arrayMode := ArrayExprInherit
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
 		if op := p.declOperand(); op != nil {
+			switch op := op.(type) {
+			case *DeclFlag:
+				arrayMode = declArrayModeFromFlagWord(op.Word, arrayMode)
+			case *DeclAssign:
+				if op.Assign != nil && op.Assign.Array != nil {
+					op.Assign.Array.Mode = arrayMode
+				}
+			}
 			ds.Operands = append(ds.Operands, op)
 		} else {
 			p.followErr(p.pos, ds.Variant.Value, noQuote("names or assignments"))

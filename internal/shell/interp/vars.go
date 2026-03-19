@@ -376,19 +376,285 @@ func (r *Runner) setFunc(name string, body *syntax.Stmt) {
 	r.setFuncInternal(name, r.currentInternal())
 }
 
-func stringIndex(index *syntax.Subscript) bool {
-	if index == nil {
-		return false
+type shadowWriteEnviron struct {
+	parent     expand.WriteEnviron
+	shadow     expand.Variable
+	shadowName string
+	shadowSet  bool
+}
+
+func (e *shadowWriteEnviron) Get(name string) expand.Variable {
+	if e.shadowSet && name == e.shadowName {
+		return e.shadow
 	}
-	w, ok := index.Expr.(*syntax.Word)
-	if !ok || len(w.Parts) != 1 {
-		return false
+	return e.parent.Get(name)
+}
+
+func (e *shadowWriteEnviron) Set(name string, vr expand.Variable) error {
+	if name == e.shadowName {
+		e.shadow = vr
+		e.shadowSet = true
+		return nil
 	}
-	switch w.Parts[0].(type) {
-	case *syntax.DblQuoted, *syntax.SglQuoted:
+	return e.parent.Set(name, vr)
+}
+
+func (e *shadowWriteEnviron) Each(fn func(name string, vr expand.Variable) bool) {
+	seenShadow := false
+	stopped := false
+	e.parent.Each(func(name string, vr expand.Variable) bool {
+		if e.shadowSet && name == e.shadowName {
+			seenShadow = true
+			if !fn(name, e.shadow) {
+				stopped = true
+				return false
+			}
+			return true
+		}
+		if !fn(name, vr) {
+			stopped = true
+			return false
+		}
 		return true
+	})
+	if e.shadowSet && !seenShadow && !stopped {
+		fn(e.shadowName, e.shadow)
 	}
-	return false
+}
+
+type expandedArrayElem struct {
+	kind   syntax.ArrayElemKind
+	index  *syntax.Subscript
+	fields []string
+	value  string
+}
+
+func declArrayModeFromValueType(valType string) syntax.ArrayExprMode {
+	switch valType {
+	case "-a":
+		return syntax.ArrayExprIndexed
+	case "-A":
+		return syntax.ArrayExprAssociative
+	default:
+		return syntax.ArrayExprInherit
+	}
+}
+
+func arrayExprModeFromValueKind(kind expand.ValueKind) syntax.ArrayExprMode {
+	switch kind {
+	case expand.Indexed:
+		return syntax.ArrayExprIndexed
+	case expand.Associative:
+		return syntax.ArrayExprAssociative
+	default:
+		return syntax.ArrayExprInherit
+	}
+}
+
+func arrayValueKind(mode syntax.ArrayExprMode) expand.ValueKind {
+	switch mode {
+	case syntax.ArrayExprAssociative:
+		return expand.Associative
+	default:
+		return expand.Indexed
+	}
+}
+
+func resolveArrayExprMode(prev expand.Variable, as *syntax.Assign, valType string) syntax.ArrayExprMode {
+	if as != nil && as.Array != nil && as.Array.Mode != syntax.ArrayExprInherit {
+		return as.Array.Mode
+	}
+	if mode := declArrayModeFromValueType(valType); mode != syntax.ArrayExprInherit {
+		return mode
+	}
+	if mode := arrayExprModeFromValueKind(prev.Kind); mode != syntax.ArrayExprInherit {
+		return mode
+	}
+	return syntax.ArrayExprIndexed
+}
+
+func (r *Runner) resolvedCompoundArrayTarget(prev expand.Variable, ref *syntax.VarRef) (string, expand.Variable) {
+	if ref == nil {
+		return "", prev
+	}
+	name := ref.Name.Value
+	resolvedRef, _, err := prev.ResolveRef(r.writeEnv, ref)
+	if err == nil && resolvedRef != nil && resolvedRef.Index == nil {
+		name = resolvedRef.Name.Value
+		return name, r.lookupVar(name)
+	}
+	return name, prev
+}
+
+func (r *Runner) expandCompoundArrayElems(elems []*syntax.ArrayElem) []expandedArrayElem {
+	expanded := make([]expandedArrayElem, 0, len(elems))
+	for _, elem := range elems {
+		item := expandedArrayElem{
+			kind:  elem.Kind,
+			index: elem.Index,
+		}
+		switch elem.Kind {
+		case syntax.ArrayElemSequential:
+			if elem.Value != nil {
+				item.fields = r.fields(elem.Value)
+			}
+		default:
+			if elem.Value != nil {
+				item.value = r.literal(elem.Value)
+			}
+		}
+		expanded = append(expanded, item)
+		if r.exit.fatalExit || r.exit.exiting {
+			break
+		}
+	}
+	return expanded
+}
+
+func compoundArrayBase(prev expand.Variable, mode syntax.ArrayExprMode, appendAssign bool) expand.Variable {
+	base := expand.Variable{
+		Set:  true,
+		Kind: arrayValueKind(mode),
+	}
+	if !appendAssign {
+		if base.Kind == expand.Associative {
+			base.Map = make(map[string]string)
+		}
+		return base
+	}
+	switch base.Kind {
+	case expand.Indexed:
+		switch prev.Kind {
+		case expand.String:
+			base.List = []string{prev.Str}
+		case expand.Indexed:
+			base.List = slices.Clone(prev.List)
+		}
+	case expand.Associative:
+		if prev.Kind == expand.Associative {
+			base.Map = maps.Clone(prev.Map)
+		} else {
+			base.Map = make(map[string]string)
+		}
+	}
+	return base
+}
+
+func indexedAssign(list []string, index int, value string, appendValue bool) []string {
+	for len(list) < index+1 {
+		list = append(list, "")
+	}
+	if appendValue {
+		list[index] += value
+	} else {
+		list[index] = value
+	}
+	return list
+}
+
+func (r *Runner) associativeArrayKey(index *syntax.Subscript) string {
+	if index == nil {
+		return ""
+	}
+	if word, ok := index.Expr.(*syntax.Word); ok {
+		return r.literal(word)
+	}
+	var sb strings.Builder
+	if err := syntax.NewPrinter().Print(&sb, index.Expr); err != nil {
+		return ""
+	}
+	return sb.String()
+}
+
+func (r *Runner) assignArray(prev expand.Variable, as *syntax.Assign, valType string) expand.Variable {
+	targetName, targetPrev := r.resolvedCompoundArrayTarget(prev, as.Ref)
+	mode := resolveArrayExprMode(targetPrev, as, valType)
+	elems := r.expandCompoundArrayElems(as.Array.Elems)
+	vr := compoundArrayBase(targetPrev, mode, as.Append)
+	origEnv := r.writeEnv
+	shadowEnv := &shadowWriteEnviron{
+		parent:     origEnv,
+		shadowName: targetName,
+		shadow:     vr,
+		shadowSet:  targetName != "",
+	}
+	r.writeEnv = shadowEnv
+	defer func() {
+		r.writeEnv = origEnv
+	}()
+
+	if mode == syntax.ArrayExprAssociative {
+		pendingKey := ""
+		hasPendingKey := false
+		flushPending := func() {
+			if !hasPendingKey {
+				return
+			}
+			if shadowEnv.shadow.Map == nil {
+				shadowEnv.shadow.Map = make(map[string]string)
+			}
+			shadowEnv.shadow.Map[pendingKey] = ""
+			hasPendingKey = false
+			pendingKey = ""
+		}
+		for _, elem := range elems {
+			switch elem.kind {
+			case syntax.ArrayElemSequential:
+				for _, field := range elem.fields {
+					if !hasPendingKey {
+						pendingKey = field
+						hasPendingKey = true
+						continue
+					}
+					if shadowEnv.shadow.Map == nil {
+						shadowEnv.shadow.Map = make(map[string]string)
+					}
+					shadowEnv.shadow.Map[pendingKey] = field
+					hasPendingKey = false
+					pendingKey = ""
+				}
+			case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
+				flushPending()
+				key := r.associativeArrayKey(elem.index)
+				if shadowEnv.shadow.Map == nil {
+					shadowEnv.shadow.Map = make(map[string]string)
+				}
+				if elem.kind == syntax.ArrayElemKeyedAppend {
+					shadowEnv.shadow.Map[key] += elem.value
+				} else {
+					shadowEnv.shadow.Map[key] = elem.value
+				}
+			}
+			shadowEnv.shadow.Kind = expand.Associative
+			shadowEnv.shadow.Set = true
+			if r.exit.fatalExit || r.exit.exiting {
+				break
+			}
+		}
+		flushPending()
+		return shadowEnv.shadow
+	}
+
+	nextIndex := len(shadowEnv.shadow.List)
+	for _, elem := range elems {
+		switch elem.kind {
+		case syntax.ArrayElemSequential:
+			for _, field := range elem.fields {
+				shadowEnv.shadow.List = indexedAssign(shadowEnv.shadow.List, nextIndex, field, false)
+				nextIndex++
+			}
+		case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
+			index := r.arithm(elem.index.Expr)
+			shadowEnv.shadow.List = indexedAssign(shadowEnv.shadow.List, index, elem.value, elem.kind == syntax.ArrayElemKeyedAppend)
+			nextIndex = index + 1
+		}
+		shadowEnv.shadow.Kind = expand.Indexed
+		shadowEnv.shadow.Set = true
+		if r.exit.fatalExit || r.exit.exiting {
+			break
+		}
+	}
+	return shadowEnv.shadow
 }
 
 // TODO: make assignVal and [setVar] consistent with the [expand.WriteEnviron] interface
@@ -428,72 +694,5 @@ func (r *Runner) assignVal(prev expand.Variable, as *syntax.Assign, valType stri
 		prev.Str = ""
 		return prev
 	}
-	// Array assignment.
-	elems := as.Array.Elems
-	if valType == "" {
-		valType = "-a" // indexed
-		if len(elems) > 0 && stringIndex(elems[0].Index) {
-			valType = "-A" // associative
-		}
-	}
-	if valType == "-A" {
-		amap := make(map[string]string, len(elems))
-		for _, elem := range elems {
-			k := r.literal(elem.Index.Expr.(*syntax.Word))
-			amap[k] = r.literal(elem.Value)
-		}
-		if !as.Append {
-			prev.Kind = expand.Associative
-			prev.Map = amap
-			return prev
-		}
-		// TODO
-		return prev
-	}
-	// Evaluate values for each array element.
-	elemValues := make([]struct {
-		index  int
-		values []string
-	}, len(elems))
-	var index, maxIndex int
-	for i, elem := range elems {
-		if elem.Index != nil {
-			// Index resets our index with a literal value.
-			index = r.arithm(elem.Index.Expr)
-			elemValues[i].values = []string{r.literal(elem.Value)}
-		} else {
-			// Implicit index, advancing for every word.
-			elemValues[i].values = r.fields(elem.Value)
-		}
-		elemValues[i].index = index
-		index += len(elemValues[i].values)
-		maxIndex = max(maxIndex, index)
-	}
-	// Flatten down the values.
-	strs := make([]string, maxIndex)
-	for _, ev := range elemValues {
-		for i, str := range ev.values {
-			strs[ev.index+i] = str
-		}
-	}
-	if !as.Append {
-		prev.Kind = expand.Indexed
-		prev.List = strs
-		return prev
-	}
-	switch prev.Kind {
-	case expand.Unknown:
-		prev.Kind = expand.Indexed
-		prev.List = strs
-	case expand.String:
-		prev.Kind = expand.Indexed
-		prev.List = append([]string{prev.Str}, strs...)
-	case expand.Indexed:
-		prev.List = append(prev.List, strs...)
-	case expand.Associative:
-		// TODO
-	default:
-		panic(fmt.Sprintf("unhandled conversion of kind %d", prev.Kind))
-	}
-	return prev
+	return r.assignArray(prev, as, valType)
 }
