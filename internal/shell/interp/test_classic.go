@@ -73,14 +73,16 @@ func (p *testParser) parseArgs(args []string) (syntax.TestExpr, error) {
 
 func (p *testParser) parseTwoArgs(args []string) (syntax.TestExpr, error) {
 	switch {
+	case args[0] == "!":
+		return &syntax.UnaryTest{Op: syntax.TsNot, X: testWord(args[1])}, nil
+	case isClassicUnaryOp(args[0]):
+		// Unary operator takes precedence - bash treats "[ -a -a ]" as
+		// testing if file "-a" exists, not as a syntax error.
+		return &syntax.UnaryTest{Op: testUnaryOp(args[0]), X: testWord(args[1])}, nil
 	case args[1] == "-a" || args[1] == "-o":
 		return nil, fmt.Errorf("%s must be followed by an expression", args[1])
 	case testExprBinaryOp(args[1]) != illegalTok:
 		return nil, fmt.Errorf("%s must be followed by a word", args[1])
-	case args[0] == "!":
-		return &syntax.UnaryTest{Op: syntax.TsNot, X: testWord(args[1])}, nil
-	case isClassicUnaryOp(args[0]):
-		return &syntax.UnaryTest{Op: testUnaryOp(args[0]), X: testWord(args[1])}, nil
 	default:
 		return nil, fmt.Errorf("%s: unary operator expected", args[0])
 	}

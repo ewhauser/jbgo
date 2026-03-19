@@ -398,16 +398,23 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		return r.sourceBuiltin(ctx, pos, args)
 	case "[":
 		if len(args) == 0 || args[len(args)-1] != "]" {
-			return failf(2, "%v: [: missing matching ]\n", pos)
+			r.errf("[: missing matching ]\n")
+			return failf(2, "")
 		}
 		args = args[:len(args)-1]
 		fallthrough
 	case "test":
+		cmdName := name // "[" or "test"
 		parseErr := false
 		p := testParser{
 			args: args,
 			err: func(err error) {
-				r.errf("%v: %v\n", pos, err)
+				// Match bash error format: "[: error" or just "error" for test
+				if cmdName == "[" {
+					r.errf("%s: %v\n", cmdName, err)
+				} else {
+					r.errf("%v\n", err)
+				}
 				parseErr = true
 			},
 		}
