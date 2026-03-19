@@ -200,3 +200,29 @@ printf 'printf-status=%d array=%s|%s\n' "$?" "${array[0]}" "${array[1]}"
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
+
+func TestAssociativeExpressionKeysRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare -A from_decl[1+2]=x
+printf 'decl=%s\n' "${from_decl[1+2]}"
+declare -A assoc
+assoc[3+4]=y
+printf 'assign=%s\n' "${assoc[3+4]}"
+printf -v 'assoc[5+6]' %s z
+printf 'printf-status=%d value=%s\n' "$?" "${assoc[5+6]}"
+[[ -v assoc[3+4] ]]
+printf 'test=%d\n' "$?"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "decl=x\nassign=y\nprintf-status=0 value=z\ntest=0\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want %q", stderr, "")
+	}
+}

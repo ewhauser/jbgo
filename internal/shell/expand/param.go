@@ -45,6 +45,20 @@ func subscriptWord(sub *syntax.Subscript) (*syntax.Word, bool) {
 	return word, ok
 }
 
+func (cfg *Config) associativeSubscriptKey(sub *syntax.Subscript) (string, error) {
+	if sub == nil {
+		return "", nil
+	}
+	if word, ok := subscriptWord(sub); ok {
+		return Literal(cfg, word)
+	}
+	var sb strings.Builder
+	if err := syntax.NewPrinter().Print(&sb, sub.Expr); err != nil {
+		return "", err
+	}
+	return sb.String(), nil
+}
+
 func resolvedSubscriptMode(sub *syntax.Subscript) syntax.SubscriptMode {
 	if sub == nil || sub.AllElements() {
 		return syntax.SubscriptAuto
@@ -840,6 +854,8 @@ func (cfg *Config) varInd(vr Variable, idx *syntax.Subscript) (string, error) {
 	}
 	if idx.AllElements() {
 		switch vr.Kind {
+		case String:
+			return vr.Str, nil
 		case Indexed:
 			return strings.Join(vr.List, " "), nil
 		case Associative:
@@ -886,11 +902,7 @@ func (cfg *Config) varInd(vr Variable, idx *syntax.Subscript) (string, error) {
 		if vr.Kind != Associative {
 			return "", nil
 		}
-		word, ok := subscriptWord(idx)
-		if !ok {
-			return "", nil
-		}
-		val, err := Literal(cfg, word)
+		val, err := cfg.associativeSubscriptKey(idx)
 		if err != nil {
 			return "", err
 		}

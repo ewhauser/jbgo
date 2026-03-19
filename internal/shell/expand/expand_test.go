@@ -178,6 +178,54 @@ func TestLiteralPreservesParsedBraceExp(t *testing.T) {
 	}
 }
 
+func TestScalarAllElementsSubscriptsPreserveValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "QuotedAt",
+			src:  "\"${s[@]}\"",
+			want: []string{"a b"},
+		},
+		{
+			name: "QuotedStar",
+			src:  "\"${s[*]}\"",
+			want: []string{"a b"},
+		},
+		{
+			name: "UnquotedAt",
+			src:  "${s[@]}",
+			want: []string{"a", "b"},
+		},
+		{
+			name: "UnquotedStar",
+			src:  "${s[*]}",
+			want: []string{"a", "b"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Fields(&Config{
+				Env: testEnv{
+					"s": {Set: true, Kind: String, Str: "a b"},
+				},
+			}, word)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestFieldsPreserveQuotesWhenStringifyingBraceExpInParamArgs(t *testing.T) {
 	t.Parallel()
 

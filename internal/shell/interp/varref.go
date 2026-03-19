@@ -174,11 +174,7 @@ func (r *Runner) refIsSet(ref *syntax.VarRef) bool {
 		if vr.Kind != expand.Associative {
 			return false
 		}
-		word, ok := subscriptWord(ref.Index)
-		if !ok {
-			return false
-		}
-		_, ok = vr.Map[r.literal(word)]
+		_, ok := vr.Map[r.associativeArrayKey(ref.Index)]
 		return ok
 	default:
 		return false
@@ -249,11 +245,7 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 		}
 		return fmt.Errorf("bad array subscript")
 	case resolvedSubscriptMode(index) == syntax.SubscriptAssociative:
-		word, ok := subscriptWord(index)
-		if !ok {
-			return nil
-		}
-		key := r.literal(word)
+		key := r.associativeArrayKey(index)
 		prev.Kind = expand.Associative
 		prev.List = nil
 		prev.Map = maps.Clone(prev.Map)
