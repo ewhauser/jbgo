@@ -233,14 +233,17 @@ func TestSyntaxErrorsUseRealUserLineNumbers(t *testing.T) {
 	t.Parallel()
 
 	session := newSession(t, &Config{})
-	_, err := session.Exec(context.Background(), &ExecutionRequest{
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
 		ScriptPath: "syntax.sh",
 		Script:     "echo one\n(\n",
 	})
-	if err == nil {
-		t.Fatal("Exec() error = nil, want parse failure")
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "syntax.sh:2:1") {
-		t.Fatalf("error = %q, want syntax.sh:2:1", err.Error())
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "syntax.sh: line 2:") {
+		t.Fatalf("Stderr = %q, want syntax.sh: line 2", result.Stderr)
 	}
 }

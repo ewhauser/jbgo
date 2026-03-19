@@ -49,11 +49,11 @@ func TestMalformedFunctionDeclarationDoesNotPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode == 0 {
-		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
 	}
-	if !strings.Contains(result.Stderr, "invalid function declaration") {
-		t.Fatalf("Stderr = %q, want invalid-function-declaration message", result.Stderr)
+	if !strings.Contains(result.Stderr, "syntax error near unexpected token") {
+		t.Fatalf("Stderr = %q, want parse-error message", result.Stderr)
 	}
 	if strings.Contains(result.Stderr, "panic:") {
 		t.Fatalf("Stderr = %q, want sanitized output", result.Stderr)

@@ -39,6 +39,10 @@ func compilationExitStatus(err error) (int, bool) {
 	if errors.As(err, &violation) {
 		return 126, true
 	}
+	var parseErr syntax.ParseError
+	if errors.As(err, &parseErr) {
+		return 2, true
+	}
 	var invalid *shellValidationError
 	if errors.As(err, &invalid) {
 		return 2, true
