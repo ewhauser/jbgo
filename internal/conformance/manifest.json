@@ -150,10 +150,6 @@
           "mode": "xfail",
           "reason": "gbash treats nested array assignment as fatal instead of bash's non-fatal member-assignment error"
         },
-        "oils/array.test.sh::Tilde expansion within array": {
-          "mode": "xfail",
-          "reason": "gbash still applies tilde expansion within array literals differently from bash"
-        },
         "oils/array.test.sh::Is element set?  test -v a[i]": {
           "mode": "xfail",
           "reason": "the runtime test builtin still treats array -v operands as plain words instead of indexed references"
