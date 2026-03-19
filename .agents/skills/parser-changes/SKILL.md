@@ -64,8 +64,16 @@ Node (base interface)
 │   ├── Block      # { stmts; }
 │   ├── Subshell   # ( stmts )
 │   ├── ArithmCmd  # (( expr ))
-│   ├── TestClause # [[ expr ]]
+│   ├── TestClause # [[ expr ]] - uses CondExpr
 │   └── FuncDecl, DeclClause, LetClause, etc.
+├── CondExpr (interface) # [[ ]] conditional expression operands
+│   ├── CondBinary   # x && y, x -eq y
+│   ├── CondUnary    # -e x, -z x, ! x
+│   ├── CondParen    # ( expr )
+│   ├── CondWord     # generic word operand
+│   ├── CondVarRef   # variable ref for -v, -R
+│   ├── CondPattern  # pattern for ==, =, !=
+│   └── CondRegex    # regex for =~
 ├── Word           # A shell word, contains WordParts
 ├── WordPart (interface)
 │   ├── Lit        # Literal string
@@ -82,19 +90,20 @@ Node (base interface)
     └── ParenArithm    # (expr)
 ```
 
-Two recent AST shifts matter for parser work:
+Key AST design points:
 
-- `Assign` no longer stores `Name` and `Index` separately. Assignment targets now flow through `Assign.Ref *VarRef`.
-- Bracketed selectors are no longer just raw `ArithmExpr`s. `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` now use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
-- `DeclClause` no longer uses `Args []*Assign`. Declaration builtins now carry `Operands []DeclOperand`, and `Assign.Naked` is gone.
+- `Assign.Ref *VarRef` holds assignment targets (not separate `Name` and `Index` fields).
+- `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
+- `DeclClause.Operands []DeclOperand` holds declaration operands (typed as `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`).
+- `TestClause.X CondExpr` holds `[[ ]]` conditionals. The `CondExpr` interface has typed operand wrappers: `CondWord` (generic), `CondVarRef` (for `-v`/`-R`), `CondPattern` (for `==`/`=`/`!=`), and `CondRegex` (for `=~`).
 
-When you touch variable references, array indexing, declaration builtins, namerefs, `printf -v`, `test -v`, `${var[...]}`, or compound array literals, you should expect follow-on edits in all three layers:
+When you touch variable references, array indexing, declaration builtins, namerefs, `printf -v`, `test -v`, `[[ -v ]]`, `${var[...]}`, or compound array literals, expect follow-on edits in all three layers:
 
 - `syntax`: `nodes.go`, `parser.go`, `walk.go`, `printer.go`, `simplify.go`, typedjson, and filetests
 - `expand`: `param.go` and any helpers that interpret references or selectors
 - `interp`: `runner.go`, `varref.go`, `vars.go`, and builtin/test consumers
 
-For declaration-specific work, the intended flow is now:
+For declaration-specific work, the intended flow is:
 
 - parse source operands directly into `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`
 - when a dynamic declaration word expands into runtime fields, reclassify each field through the syntax-level declaration operand parser

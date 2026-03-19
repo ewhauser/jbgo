@@ -47,7 +47,7 @@ type ArithmExpr interface {
 Implementations: `*BinaryArithm`, `*UnaryArithm`, `*ParenArithm`, `*FlagsArithm`, `*Word`
 
 ### TestExpr
-Interface for test expression nodes (inside `[[ ]]`):
+Interface for test expression nodes (used by `[ ]` test commands):
 ```go
 type TestExpr interface {
     Node
@@ -56,6 +56,17 @@ type TestExpr interface {
 ```
 
 Implementations: `*BinaryTest`, `*UnaryTest`, `*ParenTest`, `*Word`
+
+### CondExpr
+Interface for conditional expression nodes inside `[[ ]]`:
+```go
+type CondExpr interface {
+    Node
+    condExprNode()
+}
+```
+
+Implementations: `*CondBinary`, `*CondUnary`, `*CondParen`, `*CondWord`, `*CondVarRef`, `*CondPattern`, `*CondRegex`
 
 ## Top-Level Nodes
 
@@ -126,7 +137,7 @@ Important distinction:
 - `Kind == SubscriptAt` means `[@]`
 - `Kind == SubscriptStar` means `[*]`
 
-This is important because `[@]` and `[*]` are no longer inferred later from a generic word literal.
+`[@]` and `[*]` are distinguished at parse time via `Kind`, not inferred from a generic word literal.
 
 ## Command Nodes
 
@@ -251,9 +262,11 @@ type ArithmCmd struct {  // (( expr ))
 ```go
 type TestClause struct {  // [[ expr ]]
     Left, Right Pos
-    X           TestExpr
+    X           CondExpr
 }
 ```
+
+`CondExpr` types provide typed operand wrappers that distinguish patterns, regexes, and variable references at parse time.
 
 ### FuncDecl
 ```go
@@ -466,6 +479,78 @@ type ParenTest struct {
 }
 ```
 
+## Conditional Expression Nodes
+
+These nodes implement the `CondExpr` interface and are used inside `[[ ... ]]` conditionals (via `TestClause.X`). They carry typed operand wrappers that distinguish patterns, regexes, and variable references at parse time.
+
+### CondExpr
+```go
+type CondExpr interface {
+    Node
+    condExprNode()
+}
+```
+
+Implementations: `*CondBinary`, `*CondUnary`, `*CondParen`, `*CondWord`, `*CondVarRef`, `*CondPattern`, `*CondRegex`
+
+### CondBinary
+```go
+type CondBinary struct {
+    OpPos Pos
+    Op    BinTestOperator  // &&, ||, -eq, -ne, -lt, -gt, =~, ==, !=, etc.
+    X, Y  CondExpr
+}
+```
+
+### CondUnary
+```go
+type CondUnary struct {
+    OpPos Pos
+    Op    UnTestOperator  // -e, -f, -d, -z, -n, !, -v, -R, etc.
+    X     CondExpr
+}
+```
+
+### CondParen
+```go
+type CondParen struct {
+    Lparen, Rparen Pos
+    X              CondExpr
+}
+```
+
+### CondWord
+Generic word operand (default wrapper):
+```go
+type CondWord struct {
+    Word *Word
+}
+```
+
+### CondVarRef
+Variable reference operand for `-v` and `-R` tests:
+```go
+type CondVarRef struct {
+    Ref *VarRef
+}
+```
+
+### CondPattern
+Pattern-matching operand for `==`, `=`, and `!=`:
+```go
+type CondPattern struct {
+    Word *Word
+}
+```
+
+### CondRegex
+Regular-expression operand for `=~`:
+```go
+type CondRegex struct {
+    Word *Word
+}
+```
+
 ## Other Nodes
 
 ### Assign
@@ -479,9 +564,7 @@ type Assign struct {
 }
 ```
 
-Notes:
-- This replaced the older `Name` + `Index` split.
-- If you are changing assignment target syntax, follow `Assign.Ref` through `syntax`, `expand`, and `interp`.
+`Assign.Ref` holds assignment targets. When changing assignment target syntax, follow `Assign.Ref` through `syntax`, `expand`, and `interp`.
 
 ### ArrayExpr
 ```go
