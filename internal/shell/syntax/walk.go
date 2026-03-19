@@ -44,6 +44,14 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Ref, f)
 		walkNilable(node.Value, f)
 		walkNilable(node.Array, f)
+	case *DeclFlag:
+		walkNilable(node.Word, f)
+	case *DeclName:
+		walkNilable(node.Ref, f)
+	case *DeclAssign:
+		walkNilable(node.Assign, f)
+	case *DeclDynamicWord:
+		walkNilable(node.Word, f)
 	case *Redirect:
 		walkNilable(node.N, f)
 		Walk(node.Word, f)
@@ -152,7 +160,7 @@ func Walk(node Node, f func(Node) bool) {
 	case *TestClause:
 		Walk(node.X, f)
 	case *DeclClause:
-		walkList(node.Args, f)
+		walkList(node.Operands, f)
 	case *ArrayExpr:
 		walkList(node.Elems, f)
 		walkComments(node.Last, f)
