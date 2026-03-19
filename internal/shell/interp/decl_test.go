@@ -22,11 +22,14 @@ shopt -s expand_aliases
 alias e=export
 e alias_var=works
 printf 'alias=%s\n' "$alias_var"
+declare +a 'string_arr=(2 3)'
+declare +A 'string_assoc=([k]=v)'
+printf 'plus=%s|%s\n' "$string_arr" "$string_assoc"
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const want = "array=1 2 3\nassoc=x\nsplit=1,2\nprefix=unset kept=ok\nalias=works\n"
+	const want = "array=1 2 3\nassoc=x\nsplit=1,2\nprefix=unset kept=ok\nalias=works\nplus=(2 3)|([k]=v)\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}

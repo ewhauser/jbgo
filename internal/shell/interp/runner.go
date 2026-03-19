@@ -987,6 +987,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						r.exit.code = 1
 						return false
 					}
+					if as, ok := parsed.(*syntax.DeclAssign); ok && as.Assign.Array != nil &&
+						(valType == "+a" || valType == "+A") {
+						parsed = declStringifiedArrayAssign(as.Assign)
+					}
 					if dyn, ok := parsed.(*syntax.DeclDynamicWord); ok {
 						parsed = &syntax.DeclName{
 							Ref: &syntax.VarRef{Name: &syntax.Lit{Value: r.literal(dyn.Word)}},
@@ -1156,6 +1160,25 @@ func callExprDeclClause(args []*syntax.Word) *syntax.DeclClause {
 func parseDeclOperandField(field string) (syntax.DeclOperand, error) {
 	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
 	return p.DeclOperand(strings.NewReader(field))
+}
+
+func declStringifiedArrayAssign(as *syntax.Assign) *syntax.DeclAssign {
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter().Print(&buf, as); err != nil {
+		panic(err)
+	}
+	rendered := buf.String()
+	i := strings.IndexByte(rendered, '=')
+	if i < 0 {
+		panic(fmt.Sprintf("assignment printed without '=': %q", rendered))
+	}
+	return &syntax.DeclAssign{Assign: &syntax.Assign{
+		Append: as.Append,
+		Ref:    as.Ref,
+		Value: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{
+			Value: rendered[i+1:],
+		}}},
+	}}
 }
 
 func match(pat, name string) bool {
