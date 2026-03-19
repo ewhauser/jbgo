@@ -222,6 +222,78 @@ func TestCoreRunCallerBuiltinFromSourcedTopLevel(t *testing.T) {
 	}
 }
 
+func TestCoreRunCallerBuiltinIncludesMainFrame(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "echo")
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			`inner() {`,
+			`  caller 0`,
+			`  echo "s0=$?"`,
+			`  caller 1`,
+			`  echo "s1=$?"`,
+			`}`,
+			`outer() {`,
+			`  inner`,
+			`}`,
+			`outer`,
+			"",
+		}, "\n"),
+		ScriptPath: "/tmp/caller-main.sh",
+		Env:        map[string]string{"PATH": "/bin"},
+		Registry:   registry,
+		FS:         fsys,
+		Stdout:     &stdout,
+		Stderr:     &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if got, want := len(lines), 4; got != want {
+		t.Fatalf("output lines = %d, want %d: %q", got, want, stdout.String())
+	}
+	fields0 := strings.Fields(lines[0])
+	if got, want := len(fields0), 3; got != want {
+		t.Fatalf("caller 0 fields = %q, want 3 fields", lines[0])
+	}
+	if got, want := fields0[0], "8"; got != want {
+		t.Fatalf("caller 0 line = %q, want %q", got, want)
+	}
+	if got, want := fields0[1], "outer"; got != want {
+		t.Fatalf("caller 0 function = %q, want %q", got, want)
+	}
+	if got, want := fields0[2], "/tmp/caller-main.sh"; got != want {
+		t.Fatalf("caller 0 source = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "s0=0"; got != want {
+		t.Fatalf("caller 0 status = %q, want %q", got, want)
+	}
+
+	fields1 := strings.Fields(lines[2])
+	if got, want := len(fields1), 3; got != want {
+		t.Fatalf("caller 1 fields = %q, want 3 fields", lines[2])
+	}
+	if got, want := fields1[0], "10"; got != want {
+		t.Fatalf("caller 1 line = %q, want %q", got, want)
+	}
+	if got, want := fields1[1], "main"; got != want {
+		t.Fatalf("caller 1 function = %q, want %q", got, want)
+	}
+	if got, want := fields1[2], "/tmp/caller-main.sh"; got != want {
+		t.Fatalf("caller 1 source = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "s1=0"; got != want {
+		t.Fatalf("caller 1 status = %q, want %q", got, want)
+	}
+}
+
 func TestCoreRunSyncsShellStateWithoutBootstrapEval(t *testing.T) {
 	t.Parallel()
 

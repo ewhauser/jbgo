@@ -178,7 +178,7 @@ func (r *Runner) callerFrame(depth int) (int, execFrame, bool) {
 	stack := make([]execFrame, 0, len(r.frames))
 	for i := len(r.frames) - 1; i >= 0; i-- {
 		frame := r.frames[i]
-		if frame.internal || frame.kind == frameKindMain {
+		if frame.internal {
 			continue
 		}
 		stack = append(stack, frame)
