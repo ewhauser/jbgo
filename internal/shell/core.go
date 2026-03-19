@@ -457,7 +457,7 @@ func (m *core) callHandler(exec *Execution, budget *executionBudget) interp.Call
 
 func shouldRewriteBuiltin(name string) bool {
 	switch name {
-	case "true", "false", "pwd", "cd", "dirs", "pushd", "popd", "type", "command", "source", ".", "test", "[", "printf":
+	case "true", "false", "pwd", "cd", "dirs", "pushd", "popd", "type", "command", "source", ".":
 		return false
 	default:
 		return true

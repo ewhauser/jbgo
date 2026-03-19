@@ -349,7 +349,7 @@ func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState,
 		}
 		transform, err := transformCasePattern(arg, op)
 		if err != nil {
-			return elems, nil
+			return elems, err
 		}
 		for i, elem := range elems {
 			elems[i] = transform(elem)
