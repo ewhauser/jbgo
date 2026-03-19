@@ -56,7 +56,7 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 					return "1"
 				}
 			} else { // [[
-				pattern := r.pattern(yw)
+				pattern := r.patternWord(yw)
 				if match(pattern, str) == (x.Op != syntax.TsNoMatch) {
 					return "1"
 				}
@@ -114,7 +114,7 @@ func (r *Runner) bashCond(ctx context.Context, expr syntax.CondExpr) string {
 	case *syntax.CondWord:
 		return r.literal(x.Word)
 	case *syntax.CondPattern:
-		return r.literal(x.Word)
+		return r.pattern(x.Pattern)
 	case *syntax.CondRegex:
 		return r.literal(x.Word)
 	case *syntax.CondVarRef:
@@ -140,7 +140,7 @@ func (r *Runner) bashCond(ctx context.Context, expr syntax.CondExpr) string {
 			return ""
 		case syntax.TsMatchShort, syntax.TsMatch, syntax.TsNoMatch:
 			str := r.literal(x.X.(*syntax.CondWord).Word)
-			pattern := r.pattern(x.Y.(*syntax.CondPattern).Word)
+			pattern := r.pattern(x.Y.(*syntax.CondPattern).Pattern)
 			if match(pattern, str) == (x.Op != syntax.TsNoMatch) {
 				return "1"
 			}

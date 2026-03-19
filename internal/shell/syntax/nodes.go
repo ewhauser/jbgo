@@ -640,6 +640,49 @@ func (*ProcSubst) wordPartNode() {}
 func (*ExtGlob) wordPartNode()   {}
 func (*BraceExp) wordPartNode()  {}
 
+// Pattern represents a shell pattern shared by extglobs, case arms, [[ == ]],
+// and parameter pattern operators.
+type Pattern struct {
+	Start, EndPos Pos
+	Parts         []PatternPart
+}
+
+func (p *Pattern) Pos() Pos {
+	if len(p.Parts) > 0 {
+		return p.Parts[0].Pos()
+	}
+	return p.Start
+}
+
+func (p *Pattern) End() Pos {
+	if len(p.Parts) > 0 {
+		return p.Parts[len(p.Parts)-1].End()
+	}
+	return p.EndPos
+}
+
+// PatternPart represents all nodes that can form part of a shell pattern.
+//
+// These are [*Lit], [*SglQuoted], [*DblQuoted], [*ParamExp], [*CmdSubst],
+// [*ArithmExp], [*ProcSubst], [*PatternAny], [*PatternSingle],
+// [*PatternCharClass], and [*ExtGlob].
+type PatternPart interface {
+	Node
+	patternPartNode()
+}
+
+func (*Lit) patternPartNode()              {}
+func (*SglQuoted) patternPartNode()        {}
+func (*DblQuoted) patternPartNode()        {}
+func (*ParamExp) patternPartNode()         {}
+func (*CmdSubst) patternPartNode()         {}
+func (*ArithmExp) patternPartNode()        {}
+func (*ProcSubst) patternPartNode()        {}
+func (*PatternAny) patternPartNode()       {}
+func (*PatternSingle) patternPartNode()    {}
+func (*PatternCharClass) patternPartNode() {}
+func (*ExtGlob) patternPartNode()          {}
+
 // Lit represents a string literal.
 //
 // Note that a parsed string literal may not appear as-is in the original source
@@ -672,6 +715,32 @@ type DblQuoted struct {
 
 func (q *DblQuoted) Pos() Pos { return q.Left }
 func (q *DblQuoted) End() Pos { return posAddCol(q.Right, 1) }
+
+// PatternAny represents an unquoted `*` wildcard in a shell pattern.
+type PatternAny struct {
+	Asterisk Pos
+}
+
+func (p *PatternAny) Pos() Pos { return p.Asterisk }
+func (p *PatternAny) End() Pos { return posAddCol(p.Asterisk, 1) }
+
+// PatternSingle represents an unquoted `?` wildcard in a shell pattern.
+type PatternSingle struct {
+	Question Pos
+}
+
+func (p *PatternSingle) Pos() Pos { return p.Question }
+func (p *PatternSingle) End() Pos { return posAddCol(p.Question, 1) }
+
+// PatternCharClass represents a bracket expression such as `[abc]` or
+// `[[:digit:]]` in a shell pattern.
+type PatternCharClass struct {
+	ValuePos, ValueEnd Pos
+	Value              string
+}
+
+func (p *PatternCharClass) Pos() Pos { return p.ValuePos }
+func (p *PatternCharClass) End() Pos { return p.ValueEnd }
 
 // CmdSubst represents a command substitution.
 type CmdSubst struct {
@@ -772,15 +841,17 @@ type Slice struct {
 
 // Replace represents a search and replace expression inside a [ParamExp].
 type Replace struct {
-	All        bool
-	Orig, With *Word
+	All  bool
+	Orig *Pattern
+	With *Word
 }
 
 // Expansion represents string manipulation in a [ParamExp] other than those
 // covered by [Replace].
 type Expansion struct {
-	Op   ParExpOperator
-	Word *Word
+	Op      ParExpOperator
+	Word    *Word
+	Pattern *Pattern
 }
 
 // ArithmExp represents an arithmetic expansion.
@@ -915,7 +986,7 @@ type CaseItem struct {
 	Op       CaseOperator
 	OpPos    Pos // unset if it was finished by "esac"
 	Comments []Comment
-	Patterns []*Word
+	Patterns []*Pattern
 
 	Stmts []*Stmt
 	Last  []Comment
@@ -1022,11 +1093,11 @@ func (r *CondVarRef) End() Pos { return r.Ref.End() }
 // CondPattern wraps a pattern-matching operand for [[ == ]], [[ = ]], and
 // [[ != ]].
 type CondPattern struct {
-	Word *Word
+	Pattern *Pattern
 }
 
-func (p *CondPattern) Pos() Pos { return p.Word.Pos() }
-func (p *CondPattern) End() Pos { return p.Word.End() }
+func (p *CondPattern) Pos() Pos { return p.Pattern.Pos() }
+func (p *CondPattern) End() Pos { return p.Pattern.End() }
 
 // CondRegex wraps a regular-expression operand for [[ =~ ]].
 type CondRegex struct {
@@ -1169,23 +1240,19 @@ func (a *ArrayElem) End() Pos {
 	return posAddCol(a.Index.Pos(), 1)
 }
 
-// TODO(v4): the expand package has to stringify ExtGlob again,
-// and we don't gain much from a WordPart node anyway;
-// make these opaque literals like we did for zsh glob qualifiers.
-
 // ExtGlob represents a Bash extended globbing expression. Note that these are
 // parsed independently of whether or not `shopt -s extglob` has been used,
 // as the parser runs statically and independently of any interpreter.
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
 type ExtGlob struct {
-	OpPos   Pos
-	Op      GlobOperator
-	Pattern *Lit
+	OpPos, Rparen Pos
+	Op            GlobOperator
+	Patterns      []*Pattern
 }
 
 func (e *ExtGlob) Pos() Pos { return e.OpPos }
-func (e *ExtGlob) End() Pos { return posAddCol(e.Pattern.End(), 1) }
+func (e *ExtGlob) End() Pos { return posAddCol(e.Rparen, 1) }
 
 // ProcSubst represents a Bash process substitution.
 //

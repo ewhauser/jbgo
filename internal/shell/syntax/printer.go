@@ -160,6 +160,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 	case *HeredocDelim:
 		p.line = node.Pos().Line()
 		p.heredocDelim(node)
+	case *Pattern:
+		p.line = node.Pos().Line()
+		p.pattern(node)
 	case *VarRef:
 		p.line = node.Pos().Line()
 		p.varRef(node)
@@ -172,6 +175,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 	case WordPart:
 		p.line = node.Pos().Line()
 		p.wordPart(node, nil)
+	case PatternPart:
+		p.line = node.Pos().Line()
+		p.patternPart(node)
 	case *Assign:
 		p.line = node.Pos().Line()
 		p.assigns([]*Assign{node})
@@ -658,6 +664,30 @@ func (p *Printer) wordParts(wps []WordPart, quoted bool) {
 	}
 }
 
+func (p *Printer) pattern(pat *Pattern) {
+	if pat == nil {
+		return
+	}
+	for _, part := range pat.Parts {
+		p.patternPart(part)
+		p.advanceLine(part.End().Line())
+	}
+	p.wantSpace = spaceRequired
+}
+
+func (p *Printer) patternPart(part PatternPart) {
+	switch part := part.(type) {
+	case *PatternAny:
+		p.w.WriteByte('*')
+	case *PatternSingle:
+		p.w.WriteByte('?')
+	case *PatternCharClass:
+		p.writeLit(part.Value)
+	default:
+		p.wordPart(part.(WordPart), nil)
+	}
+}
+
 func (p *Printer) wordPart(wp, next WordPart) {
 	switch wp := wp.(type) {
 	case *Lit:
@@ -701,9 +731,7 @@ func (p *Printer) wordPart(wp, next WordPart) {
 		p.arithmExpr(wp.X, false, false)
 		p.w.WriteString("))")
 	case *ExtGlob:
-		p.w.WriteString(wp.Op.String())
-		p.writeLit(wp.Pattern.Value)
-		p.w.WriteByte(')')
+		p.extGlob(wp)
 	case *ProcSubst:
 		// avoid conflict with << and others
 		if p.wantSpace == spaceRequired {
@@ -713,6 +741,17 @@ func (p *Printer) wordPart(wp, next WordPart) {
 		p.nestedStmts(wp.Stmts, wp.Last, wp.Rparen)
 		p.rightParen(wp.Rparen)
 	}
+}
+
+func (p *Printer) extGlob(eg *ExtGlob) {
+	p.w.WriteString(eg.Op.String())
+	for i, pat := range eg.Patterns {
+		if i > 0 {
+			p.w.WriteByte('|')
+		}
+		p.pattern(pat)
+	}
+	p.w.WriteByte(')')
 }
 
 func (p *Printer) dblQuoted(dq *DblQuoted) {
@@ -809,7 +848,7 @@ func (p *Printer) paramExp(pe *ParamExp) {
 		}
 		p.w.WriteByte('/')
 		if pe.Repl.Orig != nil {
-			p.word(pe.Repl.Orig)
+			p.pattern(pe.Repl.Orig)
 		}
 		p.w.WriteByte('/')
 		if pe.Repl.With != nil {
@@ -819,7 +858,9 @@ func (p *Printer) paramExp(pe *ParamExp) {
 		p.writeLit(pe.Names.String())
 	case pe.Exp != nil:
 		p.w.WriteString(pe.Exp.Op.String())
-		if pe.Exp.Word != nil {
+		if pe.Exp.Pattern != nil {
+			p.pattern(pe.Exp.Pattern)
+		} else if pe.Exp.Word != nil {
 			p.word(pe.Exp.Word)
 		}
 	}
@@ -965,7 +1006,7 @@ func (p *Printer) condExprSameLine(expr CondExpr) {
 		p.varRef(expr.Ref)
 		p.wantSpace = spaceRequired
 	case *CondPattern:
-		p.word(expr.Word)
+		p.pattern(expr.Pattern)
 	case *CondRegex:
 		p.word(expr.Word)
 	case *CondBinary:
@@ -1097,26 +1138,28 @@ func (p *Printer) wordJoin(ws []*Word) {
 	}
 }
 
-func (p *Printer) casePatternJoin(pats []*Word) {
+func (p *Printer) casePatternJoin(pats []*Pattern) {
 	anyNewline := false
-	for i, w := range pats {
+	for i, pat := range pats {
 		// Only valid situation for a literal 'esac' here is with a preceding left paran.
-		if i == 0 && w.Lit() == "esac" {
-			p.w.WriteString("(")
+		if i == 0 && len(pat.Parts) == 1 {
+			if lit, ok := pat.Parts[0].(*Lit); ok && lit.Value == "esac" {
+				p.w.WriteString("(")
+			}
 		}
 		if i > 0 {
 			p.spacedToken("|", Pos{})
 		}
-		if p.wantsNewline(w.Pos(), true) {
+		if p.wantsNewline(pat.Pos(), true) {
 			if !anyNewline {
 				p.incLevel()
 				anyNewline = true
 			}
 			p.bslashNewl()
 		} else {
-			p.spacePad(w.Pos())
+			p.spacePad(pat.Pos())
 		}
-		p.word(w)
+		p.pattern(pat)
 	}
 	if anyNewline {
 		p.decLevel()

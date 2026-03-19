@@ -51,7 +51,7 @@ That means the roadmap should focus less on adding more top-level command nodes 
 - [x] P0: Land `VarRef` / `Subscript` foundations for assignment targets and variable references
 - [x] P0: Refactor `DeclClause` arguments into typed declaration operands
 - [x] P0: Add a dedicated conditional AST for `[[ ... ]]` operands and operators
-- [ ] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
+- [x] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
 - [x] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
 - [ ] P1: Move alias expansion earlier and preserve alias provenance in parse results
 - [ ] P1: Make compound array assignment semantics explicit in the AST
@@ -228,7 +228,7 @@ Declaration builtins are a major Bash-specific semantic hotspot. They no longer 
 
 ### 4. Dedicated conditional AST for `[[ ... ]]`
 
-Status: Landed. Shared pattern AST remains a follow-up item.
+Status: landed
 
 #### Problem
 
@@ -286,7 +286,7 @@ For `=~`, the RHS should preserve whether pieces were quoted or unquoted so runt
 
 ### 5. Shared pattern AST
 
-Status: P1
+Status: landed
 
 #### Problem
 
@@ -300,13 +300,21 @@ Pattern-sensitive contexts are split across:
 
 The AST does not have a unified representation of Bash pattern language.
 
-`ExtGlob` is only `Op + Pattern *Lit`, which is not enough for nested, adjacent, or quote-sensitive structure.
+The old `ExtGlob` shape (`Op + Pattern *Lit`) was not enough for nested, adjacent, or quote-sensitive structure.
 
-#### Current implementation signals
+#### Landed AST shape
 
-- `ExtGlob` stores only a literal payload
-- `expand` and `param` stringify extglob nodes back into strings
-- `case` uses plain `Word` patterns
+- `Pattern` and `PatternPart` model shell patterns directly
+- `PatternPart` reuses shell word parts where possible and adds dedicated wildcard nodes:
+  - `PatternAny`
+  - `PatternSingle`
+  - `PatternCharClass`
+  - `ExtGlob`
+- `ExtGlob` now stores `Patterns []*Pattern`, which preserves nested and adjacent structure
+- `CaseItem.Patterns` now uses `[]*Pattern`
+- `CondPattern` now wraps `Pattern *Pattern`
+- parameter pattern operators now use `Replace.Orig *Pattern` and `Expansion.Pattern *Pattern`
+- `expand` and `interp` now render these pattern nodes from the shared AST before matching
 
 #### Conformance signals
 
@@ -325,24 +333,25 @@ Concrete examples:
 - no brace expansion inside `[[ == ]]`
 - extglob in `case`
 
-#### Proposed AST change
+#### Implementation notes
 
-Introduce a reusable pattern tree that can represent:
+The landed pattern tree represents:
 
 - literals
 - wildcards
 - character classes
 - extglob operators
-- alternation
-- concatenation
+- extglob alternation via `ExtGlob.Patterns`
+- concatenation via `Pattern.Parts`
 - quote boundaries where relevant
 
-Then reuse it in:
+It is now reused in:
 
 - `case` arms
 - `[[ == ]]` and `[[ != ]]`
 - parameter trim and substitution ops
-- pathname globbing
+
+Pathname globbing still consumes rendered pattern strings in `expand`; it does not yet have a dedicated top-level pattern operand node.
 
 #### Why this matters
 

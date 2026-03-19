@@ -1500,31 +1500,414 @@ func (p *Parser) wordPart() WordPart {
 		return nil
 	case globQuest, globStar, globPlus, globAt, globExcl:
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "extended globs")
-		eg := &ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos}
-		lparens := 1
-		r := p.r
-	globLoop:
-		for p.newLit(r); ; r = p.rune() {
-			switch r {
-			case utf8.RuneSelf:
-				break globLoop
-			case '(':
-				lparens++
-			case ')':
-				if lparens--; lparens == 0 {
-					break globLoop
-				}
-			}
-		}
-		eg.Pattern = p.lit(posAddCol(eg.OpPos, 2), p.endLit())
-		p.rune()
-		p.next()
-		if lparens != 0 {
-			p.matchingErr(eg.OpPos, token(eg.Op), rightParen)
-		}
-		return eg
+		return p.extGlob(GlobOperator(p.tok), p.pos)
 	default:
 		return nil
+	}
+}
+
+func sliceLit(lit *Lit, start, end int) *Lit {
+	if lit == nil || start >= end {
+		return nil
+	}
+	return &Lit{
+		ValuePos: posAddCol(lit.ValuePos, start),
+		ValueEnd: posAddCol(lit.ValuePos, end),
+		Value:    lit.Value[start:end],
+	}
+}
+
+func patternCharClassEnd(raw string, start int) int {
+	i := start + 1
+	if i >= len(raw) {
+		return len(raw)
+	}
+	switch raw[i] {
+	case '!', '^':
+		i++
+	}
+	if i < len(raw) && raw[i] == ']' {
+		i++
+	}
+	for i < len(raw) {
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+				continue
+			}
+		case ']':
+			return i + 1
+		}
+		i++
+	}
+	return len(raw)
+}
+
+func splitPatternLit(lit *Lit) []PatternPart {
+	if lit == nil || lit.Value == "" {
+		return nil
+	}
+	var parts []PatternPart
+	flush := func(start, end int) {
+		if part := sliceLit(lit, start, end); part != nil {
+			parts = append(parts, part)
+		}
+	}
+	partStart := 0
+	for i := 0; i < len(lit.Value); i++ {
+		switch lit.Value[i] {
+		case '\\':
+			if i+1 < len(lit.Value) {
+				i++
+			}
+		case '*':
+			flush(partStart, i)
+			parts = append(parts, &PatternAny{Asterisk: posAddCol(lit.ValuePos, i)})
+			partStart = i + 1
+		case '?':
+			flush(partStart, i)
+			parts = append(parts, &PatternSingle{Question: posAddCol(lit.ValuePos, i)})
+			partStart = i + 1
+		case '[':
+			end := patternCharClassEnd(lit.Value, i)
+			flush(partStart, i)
+			parts = append(parts, &PatternCharClass{
+				ValuePos: posAddCol(lit.ValuePos, i),
+				ValueEnd: posAddCol(lit.ValuePos, end),
+				Value:    lit.Value[i:end],
+			})
+			i = end - 1
+			partStart = end
+		}
+	}
+	flush(partStart, len(lit.Value))
+	return parts
+}
+
+func globOperatorFromByte(b byte) GlobOperator {
+	switch b {
+	case '?':
+		return GlobZeroOrOne
+	case '*':
+		return GlobZeroOrMore
+	case '+':
+		return GlobOneOrMore
+	case '@':
+		return GlobOne
+	case '!':
+		return GlobExcept
+	default:
+		return 0
+	}
+}
+
+func trailingExtGlobOp(lit *Lit) (prefix *Lit, op GlobOperator, opPos Pos, ok bool) {
+	if lit == nil || len(lit.Value) == 0 {
+		return nil, 0, Pos{}, false
+	}
+	i := len(lit.Value) - 1
+	if i > 0 {
+		backslashes := 0
+		for j := i - 1; j >= 0 && lit.Value[j] == '\\'; j-- {
+			backslashes++
+		}
+		if backslashes%2 == 1 {
+			return nil, 0, Pos{}, false
+		}
+	}
+	op = globOperatorFromByte(lit.Value[i])
+	if op == 0 {
+		return nil, 0, Pos{}, false
+	}
+	return sliceLit(lit, 0, i), op, posAddCol(lit.ValuePos, i), true
+}
+
+type rawPatternParser struct {
+	lang LangVariant
+}
+
+func (r rawPatternParser) parse(raw string, base Pos) *Pattern {
+	parts, end, _ := r.parseParts(raw, base, 0, false)
+	return &Pattern{Start: base, EndPos: posAddCol(base, end), Parts: parts}
+}
+
+func (r rawPatternParser) parseList(raw string, base Pos) []*Pattern {
+	patterns := make([]*Pattern, 0, 1)
+	start := 0
+	for {
+		parts, end, delim := r.parseParts(raw, base, start, true)
+		patterns = append(patterns, &Pattern{
+			Start:  posAddCol(base, start),
+			EndPos: posAddCol(base, end),
+			Parts:  parts,
+		})
+		if delim != '|' {
+			return patterns
+		}
+		start = end + 1
+	}
+}
+
+func (r rawPatternParser) parseParts(raw string, base Pos, start int, splitOnBar bool) ([]PatternPart, int, byte) {
+	var parts []PatternPart
+	flushLit := func(from, to int) {
+		parts = append(parts, splitPatternLit(&Lit{
+			ValuePos: posAddCol(base, from),
+			ValueEnd: posAddCol(base, to),
+			Value:    raw[from:to],
+		})...)
+	}
+	partStart := start
+	for i := start; i < len(raw); {
+		if splitOnBar && raw[i] == '|' {
+			flushLit(partStart, i)
+			return parts, i, '|'
+		}
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			flushLit(partStart, i)
+			part, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+			if !ok {
+				i++
+				partStart = i
+				continue
+			}
+			parts = append(parts, part)
+			i += consumed
+			partStart = i
+			continue
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				flushLit(partStart, i)
+				part, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+				if ok {
+					parts = append(parts, part)
+					i += consumed
+					partStart = i
+					continue
+				}
+			}
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				flushLit(partStart, i)
+				part, end := r.parseExtGlob(raw, base, i)
+				parts = append(parts, part)
+				i = end
+				partStart = i
+				continue
+			}
+			switch raw[i] {
+			case '*':
+				flushLit(partStart, i)
+				parts = append(parts, &PatternAny{Asterisk: posAddCol(base, i)})
+				i++
+				partStart = i
+				continue
+			case '?':
+				flushLit(partStart, i)
+				parts = append(parts, &PatternSingle{Question: posAddCol(base, i)})
+				i++
+				partStart = i
+				continue
+			}
+		case '[':
+			flushLit(partStart, i)
+			end := patternCharClassEnd(raw, i)
+			parts = append(parts, &PatternCharClass{
+				ValuePos: posAddCol(base, i),
+				ValueEnd: posAddCol(base, end),
+				Value:    raw[i:end],
+			})
+			i = end
+			partStart = i
+			continue
+		}
+		i++
+	}
+	flushLit(partStart, len(raw))
+	return parts, len(raw), 0
+}
+
+func (r rawPatternParser) parseExtGlob(raw string, base Pos, start int) (*ExtGlob, int) {
+	eg := &ExtGlob{OpPos: posAddCol(base, start), Op: globOperatorFromByte(raw[start])}
+	innerStart := start + 2
+	i := innerStart
+	armStart := innerStart
+	appendArm := func(end int) {
+		eg.Patterns = append(eg.Patterns, r.parse(raw[armStart:end], posAddCol(base, armStart)))
+	}
+	for i <= len(raw) {
+		if i >= len(raw) {
+			appendArm(len(raw))
+			eg.Rparen = posAddCol(base, len(raw))
+			return eg, len(raw)
+		}
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+			if ok {
+				i += consumed
+				continue
+			}
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+				if ok {
+					i += consumed
+					continue
+				}
+			}
+		case '[':
+			i = patternCharClassEnd(raw, i)
+			continue
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, end := r.parseExtGlob(raw, base, i)
+				i = end
+				continue
+			}
+		case '|':
+			appendArm(i)
+			armStart = i + 1
+			i++
+			continue
+		case ')':
+			appendArm(i)
+			eg.Rparen = posAddCol(base, i)
+			return eg, i + 1
+		}
+		i++
+	}
+	return eg, len(raw)
+}
+
+func (r rawPatternParser) parseShellPart(raw string, base Pos) (PatternPart, int, bool) {
+	sub := NewParser(Variant(r.lang))
+	sub.reset()
+	sub.src = strings.NewReader(raw)
+	sub.offs = int64(base.Offset())
+	sub.line = int64(base.Line())
+	sub.col = int64(base.Col())
+	sub.rune()
+	sub.next()
+	part := sub.wordPart()
+	if sub.err != nil || part == nil {
+		return nil, 0, false
+	}
+	patPart, ok := part.(PatternPart)
+	if !ok {
+		return nil, 0, false
+	}
+	consumed := int(part.End().Offset() - base.Offset())
+	if consumed <= 0 {
+		return nil, 0, false
+	}
+	return patPart, consumed, true
+}
+
+func (p *Parser) extGlob(op GlobOperator, opPos Pos) *ExtGlob {
+	eg := &ExtGlob{OpPos: opPos, Op: op}
+	lparens := 1
+	r := p.r
+	globStart := posAddCol(opPos, 2)
+globLoop:
+	for p.newLit(r); ; r = p.rune() {
+		switch r {
+		case utf8.RuneSelf:
+			break globLoop
+		case '(':
+			lparens++
+		case ')':
+			if lparens--; lparens == 0 {
+				break globLoop
+			}
+		}
+	}
+	raw := p.endLit()
+	rparen := p.nextPos()
+	p.rune()
+	if lparens != 0 {
+		p.tok = _EOF
+		p.matchingErr(opPos, token(op), rightParen)
+	}
+	eg.Rparen = rparen
+	eg.Patterns = rawPatternParser{lang: p.lang}.parseList(raw, globStart)
+	p.next()
+	return eg
+}
+
+func (p *Parser) getPattern(stops ...token) *Pattern {
+	if pat := (&Pattern{Parts: p.patternParts(nil, stops...)}); len(pat.Parts) > 0 {
+		pat.Start = pat.Parts[0].Pos()
+		pat.EndPos = pat.Parts[len(pat.Parts)-1].End()
+		return pat
+	}
+	return nil
+}
+
+func (p *Parser) patternParts(pps []PatternPart, stops ...token) []PatternPart {
+	if p.quote == noState {
+		p.quote = unquotedWordCont
+		defer func() { p.quote = noState }()
+	}
+	stop := func(tok token) bool {
+		for _, stopTok := range stops {
+			if tok == stopTok {
+				return true
+			}
+		}
+		return false
+	}
+	for {
+		if stop(p.tok) {
+			if len(pps) == 0 {
+				return nil
+			}
+			return pps
+		}
+		switch p.tok {
+		case _Lit, _LitWord, _LitRedir:
+			lit := p.lit(p.pos, p.val)
+			p.next()
+			if p.tok == leftParen {
+				if prefix, op, opPos, ok := trailingExtGlobOp(lit); ok {
+					pps = append(pps, splitPatternLit(prefix)...)
+					pps = append(pps, p.extGlob(op, opPos))
+					if p.spaced {
+						return pps
+					}
+					continue
+				}
+			}
+			pps = append(pps, splitPatternLit(lit)...)
+		default:
+			wp := p.wordPart()
+			if wp == nil {
+				if len(pps) == 0 {
+					return nil
+				}
+				return pps
+			}
+			pps = append(pps, wp.(PatternPart))
+		}
+		if p.spaced {
+			return pps
+		}
 	}
 }
 
@@ -1666,7 +2049,7 @@ func (p *Parser) paramExp() *ParamExp {
 		pe.Repl = &Replace{All: p.tok == dblSlash}
 		p.quote = paramExpRepl
 		p.next()
-		pe.Repl.Orig = p.getWord()
+		pe.Repl.Orig = p.getPattern(slash, rightBrace)
 		p.quote = paramExpExp
 		if p.got(slash) {
 			pe.Repl.With = p.getWord()
@@ -1885,7 +2268,26 @@ func (p *Parser) paramExpExp() *Expansion {
 			p.curErr("invalid @ expansion operator %#q", p.val)
 		}
 	}
-	return &Expansion{Op: op, Word: p.getWord()}
+	exp := &Expansion{Op: op}
+	if patternExpOp(op) {
+		exp.Pattern = p.getPattern(rightBrace)
+	} else {
+		exp.Word = p.getWord()
+	}
+	return exp
+}
+
+func patternExpOp(op ParExpOperator) bool {
+	switch op {
+	case MatchEmpty, ArrayExclude, ArrayIntersect,
+		RemSmallPrefix, RemLargePrefix,
+		RemSmallSuffix, RemLargeSuffix,
+		UpperFirst, UpperAll,
+		LowerFirst, LowerAll:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Parser) eitherIndex() *Subscript {
@@ -2737,10 +3139,10 @@ func (p *Parser) caseItems(stop reservedWord) (items []*CaseItem) {
 		ci.Comments, p.accComs = p.accComs, nil
 		p.got(leftParen)
 		for p.tok != _EOF {
-			if w := p.getWord(); w == nil {
+			if pat := p.getPattern(or, rightParen); pat == nil {
 				p.curErr("case patterns must consist of words")
 			} else {
-				ci.Patterns = append(ci.Patterns, w)
+				ci.Patterns = append(ci.Patterns, pat)
 			}
 			if p.tok == rightParen {
 				break
@@ -2751,7 +3153,9 @@ func (p *Parser) caseItems(stop reservedWord) (items []*CaseItem) {
 		}
 		if len(ci.Patterns) == 0 {
 			if p.recoverError() {
-				ci.Patterns = append(ci.Patterns, p.wordOne(&Lit{ValuePos: recoveredPos}))
+				ci.Patterns = append(ci.Patterns, &Pattern{
+					Parts: []PatternPart{&Lit{ValuePos: recoveredPos}},
+				})
 			} else {
 				p.curErr("case patterns must consist of words")
 			}
@@ -2884,11 +3288,13 @@ func (p *Parser) followCondVarRefOrWord(tok token, pos Pos) CondExpr {
 }
 
 func (p *Parser) followCondPattern(tok token, pos Pos) *CondPattern {
-	w := p.followWordTok(tok, pos)
-	if w == nil {
+	p.next()
+	pat := p.getPattern()
+	if pat == nil {
+		p.followErr(pos, tok, noQuote("a word"))
 		return nil
 	}
-	return &CondPattern{Word: w}
+	return &CondPattern{Pattern: pat}
 }
 
 func (p *Parser) followCondRegex(tok token, pos Pos) *CondRegex {
@@ -2990,7 +3396,6 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 			return nil
 		}
 	case TsMatchShort, TsMatch, TsNoMatch:
-		p.next()
 		if b.Y = p.followCondPattern(token(b.Op), b.OpPos); b.Y == nil {
 			return nil
 		}
