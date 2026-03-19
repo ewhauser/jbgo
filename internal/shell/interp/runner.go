@@ -987,8 +987,15 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						r.exit.code = 1
 						return false
 					}
+					if parsed == nil {
+						r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, field)
+						r.exit.code = 1
+						return false
+					}
 					if as, ok := parsed.(*syntax.DeclAssign); ok && as.Assign.Array != nil &&
-						(valType == "+a" || valType == "+A") {
+						valType != "-a" && valType != "-A" {
+						// Bash only keeps runtime-parsed compound assignments structural
+						// when an explicit array attribute is active.
 						parsed = declStringifiedArrayAssign(as.Assign)
 					}
 					if dyn, ok := parsed.(*syntax.DeclDynamicWord); ok {
