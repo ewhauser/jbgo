@@ -1219,12 +1219,39 @@ type DeclDynamicWord struct {
 func (d *DeclDynamicWord) Pos() Pos { return d.Word.Pos() }
 func (d *DeclDynamicWord) End() Pos { return d.Word.End() }
 
+type ArrayExprMode uint8
+
+const (
+	// ArrayExprInherit leaves compound-assignment interpretation to the
+	// surrounding context, such as a previous declare flag or existing variable
+	// kind.
+	ArrayExprInherit ArrayExprMode = iota
+	// ArrayExprIndexed marks a compound assignment as an indexed array literal.
+	ArrayExprIndexed
+	// ArrayExprAssociative marks a compound assignment as an associative array
+	// literal.
+	ArrayExprAssociative
+)
+
+type ArrayElemKind uint8
+
+const (
+	// ArrayElemSequential appends one or more sequential values without an
+	// explicit [key]= prefix.
+	ArrayElemSequential ArrayElemKind = iota
+	// ArrayElemKeyed assigns a single value to an explicit [key].
+	ArrayElemKeyed
+	// ArrayElemKeyedAppend appends a single value to an explicit [key]+= target.
+	ArrayElemKeyedAppend
+)
+
 // ArrayExpr represents a Bash array expression.
 //
 // This node will only appear with [LangBash].
 type ArrayExpr struct {
 	Lparen, Rparen Pos
 
+	Mode  ArrayExprMode
 	Elems []*ArrayElem
 	Last  []Comment
 }
@@ -1234,10 +1261,17 @@ func (a *ArrayExpr) End() Pos { return posAddCol(a.Rparen, 1) }
 
 // ArrayElem represents a Bash array element.
 //
-// Index can be nil; for example, declare -a x=(value).
-// Value can be nil; for example, declare -A x=([index]=).
-// Finally, neither can be nil; for example, declare -A x=([index]=value)
+// Sequential elements have Kind [ArrayElemSequential] and a nil Index, for
+// example `declare -a x=(value)`.
+//
+// Keyed elements have a non-nil Index with Kind [ArrayElemKeyed] or
+// [ArrayElemKeyedAppend], for example `declare -A x=([index]=value)` or
+// `declare -A x=([index]+=value)`.
+//
+// Value can be nil for empty assignments such as `declare -A x=([index]=)` or
+// `declare -A x=([index]+=)`.
 type ArrayElem struct {
+	Kind     ArrayElemKind
 	Index    *Subscript
 	Value    *Word
 	Comments []Comment
@@ -1254,7 +1288,15 @@ func (a *ArrayElem) End() Pos {
 	if a.Value != nil {
 		return a.Value.End()
 	}
-	return posAddCol(a.Index.Pos(), 1)
+	if a.Index == nil {
+		return Pos{}
+	}
+	switch a.Kind {
+	case ArrayElemKeyedAppend:
+		return posAddCol(a.Index.End(), 2)
+	default:
+		return posAddCol(a.Index.End(), 1)
+	}
 }
 
 // ExtGlob represents a Bash extended globbing expression. Note that these are

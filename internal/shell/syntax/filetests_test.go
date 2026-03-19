@@ -163,12 +163,35 @@ func letClause(exps ...ArithmExpr) *LetClause {
 	return &LetClause{Exprs: exps}
 }
 
-func arrValues(words ...*Word) *ArrayExpr {
-	ae := &ArrayExpr{}
+func arrValuesMode(mode ArrayExprMode, words ...*Word) *ArrayExpr {
+	ae := &ArrayExpr{Mode: mode}
 	for _, w := range words {
-		ae.Elems = append(ae.Elems, &ArrayElem{Value: w})
+		ae.Elems = append(ae.Elems, &ArrayElem{
+			Kind:  ArrayElemSequential,
+			Value: w,
+		})
 	}
 	return ae
+}
+
+func arrValues(words ...*Word) *ArrayExpr {
+	return arrValuesMode(ArrayExprInherit, words...)
+}
+
+func arrKeyed(index *Subscript, value *Word) *ArrayElem {
+	return &ArrayElem{
+		Kind:  ArrayElemKeyed,
+		Index: index,
+		Value: value,
+	}
+}
+
+func arrKeyedAppend(index *Subscript, value *Word) *ArrayElem {
+	return &ArrayElem{
+		Kind:  ArrayElemKeyedAppend,
+		Index: index,
+		Value: value,
+	}
 }
 
 func fullProg(v any) *File {
@@ -4334,7 +4357,7 @@ var fileTests = []fileTestCase{
 				declFlag("-a"),
 				declAssign(&Assign{
 					Ref: ref("foo", nil),
-					Array: arrValues(
+					Array: arrValuesMode(ArrayExprIndexed,
 						litWord("b1"),
 						word(cmdSubst(litStmt("b2"))),
 					),
@@ -4351,7 +4374,7 @@ var fileTests = []fileTestCase{
 				declFlag("-a"),
 				declAssign(&Assign{
 					Ref:   litRef("foo"),
-					Array: arrValues(litWord("b1")),
+					Array: arrValuesMode(ArrayExprIndexed, litWord("b1")),
 				}),
 			),
 		}, LangBash),
@@ -4364,10 +4387,25 @@ var fileTests = []fileTestCase{
 				declFlag("-A"),
 				declAssign(&Assign{
 					Ref: ref("foo", nil),
-					Array: &ArrayExpr{Elems: []*ArrayElem{{
-						Index: subWord("a"),
-						Value: litWord("b"),
-					}}},
+					Array: &ArrayExpr{
+						Mode: ArrayExprAssociative,
+						Elems: []*ArrayElem{
+							arrKeyed(subWord("a"), litWord("b")),
+						},
+					},
+				}),
+			),
+		}, LangBash),
+	),
+	fileTest(
+		[]string{"declare -A foo=(a b c)"},
+		langFile(&DeclClause{
+			Variant: lit("declare"),
+			Operands: declOperands(
+				declFlag("-A"),
+				declAssign(&Assign{
+					Ref:   ref("foo", nil),
+					Array: arrValuesMode(ArrayExprAssociative, litWord("a"), litWord("b"), litWord("c")),
 				}),
 			),
 		}, LangBash),
@@ -4796,10 +4834,19 @@ var fileTests = []fileTestCase{
 		},
 		langFile(&CallExpr{Assigns: []*Assign{{
 			Ref: litRef("a"),
-			Array: &ArrayExpr{Elems: []*ArrayElem{{
-				Index: sub(word(dblQuoted(lit("x y")))),
-				Value: litWord("b"),
-			}}},
+			Array: &ArrayExpr{Elems: []*ArrayElem{
+				arrKeyed(sub(word(dblQuoted(lit("x y")))), litWord("b")),
+			}},
+		}}}, LangBash),
+	),
+	fileTest(
+		[]string{"a=([x]=b [y]+=c)"},
+		langFile(&CallExpr{Assigns: []*Assign{{
+			Ref: litRef("a"),
+			Array: &ArrayExpr{Elems: []*ArrayElem{
+				arrKeyed(subWord("x"), litWord("b")),
+				arrKeyedAppend(subWord("y"), litWord("c")),
+			}},
 		}}}, LangBash),
 	),
 	fileTest(
@@ -4810,8 +4857,8 @@ var fileTests = []fileTestCase{
 		langFile(&CallExpr{Assigns: []*Assign{{
 			Ref: litRef("a"),
 			Array: &ArrayExpr{Elems: []*ArrayElem{
-				{Index: subWord("x")},
-				{Index: subWord("y")},
+				arrKeyed(subWord("x"), nil),
+				arrKeyed(subWord("y"), nil),
 			}},
 		}}}, LangBash),
 	),

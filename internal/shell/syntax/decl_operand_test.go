@@ -18,6 +18,7 @@ func TestParserDeclOperand(t *testing.T) {
 		{src: "foo", wantType: &DeclName{}, want: "foo"},
 		{src: "foo=bar", wantType: &DeclAssign{}, want: "foo=bar"},
 		{src: "foo=(1 2)", wantType: &DeclAssign{}, want: "foo=(1 2)"},
+		{src: "foo=([k]=v [k]+=x)", wantType: &DeclAssign{}, want: "foo=([k]=v [k]+=x)"},
 		{src: "foo[$k]=bar", wantType: &DeclAssign{}, want: "foo[$k]=bar"},
 		{src: "$x", wantType: &DeclDynamicWord{}, want: "$x"},
 	}
@@ -55,6 +56,7 @@ func TestParserDeclOperandField(t *testing.T) {
 		{src: "foo=$HOME", wantType: &DeclAssign{}, want: "foo=$HOME"},
 		{src: `foo="1 2"`, wantType: &DeclAssign{}, want: `foo="1 2"`},
 		{src: `arr=("$HOME" $(printf hacked) plain)`, wantType: &DeclAssign{}, want: `arr=("$HOME" $(printf hacked) plain)`},
+		{src: `arr=([k]=v [k]+=x)`, wantType: &DeclAssign{}, want: `arr=([k]=v [k]+=x)`},
 		{src: "$x", wantType: &DeclDynamicWord{}, want: "$x"},
 	}
 

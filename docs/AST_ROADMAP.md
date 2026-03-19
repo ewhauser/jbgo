@@ -54,7 +54,7 @@ That means the roadmap should focus less on adding more top-level command nodes 
 - [x] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
 - [x] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
 - [x] P1: Move alias expansion earlier and preserve alias provenance in parse results
-- [ ] P1: Make compound array assignment semantics explicit in the AST
+- [x] P1: Make compound array assignment semantics explicit in the AST
 - [ ] P2: Promote brace expansion from a post-parse rewrite to a stable syntax node
 - [x] P2: Restrict function bodies to compound commands in the AST and validation layer
 - [ ] P2: Revisit whether a standalone `LValue` node is still worth the churn now that `Assign.Ref` and `Append` are explicit
@@ -445,7 +445,7 @@ Alias semantics are sensitive to parse phase boundaries. Modeling them later in 
 
 ### 8. Explicit compound assignment semantics
 
-Status: P1
+Status: landed
 
 #### Problem
 
@@ -457,11 +457,12 @@ Status: P1
 - append-to-element behavior
 - evaluation ordering
 
-#### Current implementation signals
+#### Landed AST shape
 
-- array kind is inferred later
-- the interpreter fills indexed arrays by flattening values
-- associative compound handling is incomplete in places
+- `ArrayExpr.Mode` now distinguishes `Inherit`, `Indexed`, and `Associative`
+- `ArrayElem.Kind` now distinguishes sequential, keyed, and keyed-append entries
+- `DeclClause` parsing stamps explicit array mode on later operands after `-a` / `-A`
+- `DeclDynamicWord` reparsing applies the same left-to-right declaration-mode stamping before execution
 
 #### Conformance signals
 
@@ -472,14 +473,12 @@ Relevant families:
 - `oils/array-assign.test.sh`
 - `oils/array-sparse.test.sh`
 
-#### Proposed AST change
+#### Landed execution model
 
-Extend compound assignment nodes with explicit semantics:
-
-- assignment kind: indexed vs associative
-- element kind: implicit sequential, keyed, append
-- original element order
-- evaluation-order-sensitive element forms
+- ordinary `a=(...)` keeps `ArrayExpr.Mode=Inherit` and resolves against declaration state or the existing variable kind
+- sequential RHS values are expanded before mutating the target array
+- elements are then applied in source order so later subscripts can observe earlier mutations
+- associative sequential elements use key/value pairing, while keyed entries use literal-key writes or appends
 
 #### Why this matters
 

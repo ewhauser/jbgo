@@ -139,3 +139,29 @@ func TestEncodeHeredocDelimiter(t *testing.T) {
 	qt.Assert(t, qt.Equals(delim.BodyExpands, false))
 	qt.Assert(t, qt.Equals(len(delim.Parts), 2))
 }
+
+func TestEncodeArrayModes(t *testing.T) {
+	t.Parallel()
+
+	node := &syntax.ArrayExpr{
+		Mode: syntax.ArrayExprAssociative,
+		Elems: []*syntax.ArrayElem{{
+			Kind:  syntax.ArrayElemKeyedAppend,
+			Index: &syntax.Subscript{Kind: syntax.SubscriptExpr, Expr: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "k"}}}},
+			Value: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "v"}}},
+		}},
+	}
+
+	var buf bytes.Buffer
+	err := typedjson.Encode(&buf, node)
+	qt.Assert(t, qt.IsNil(err))
+
+	decoded, err := typedjson.Decode(bytes.NewReader(buf.Bytes()))
+	qt.Assert(t, qt.IsNil(err))
+
+	arr, ok := decoded.(*syntax.ArrayExpr)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.Equals(arr.Mode, syntax.ArrayExprAssociative))
+	qt.Assert(t, qt.Equals(len(arr.Elems), 1))
+	qt.Assert(t, qt.Equals(arr.Elems[0].Kind, syntax.ArrayElemKeyedAppend))
+}

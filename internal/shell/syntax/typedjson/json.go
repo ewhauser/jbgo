@@ -224,6 +224,8 @@ var nodeByName = map[string]reflect.Type{
 	"Pattern":         reflect.TypeFor[syntax.Pattern](),
 	"VarRef":          reflect.TypeFor[syntax.VarRef](),
 	"Subscript":       reflect.TypeFor[syntax.Subscript](),
+	"ArrayExpr":       reflect.TypeFor[syntax.ArrayExpr](),
+	"ArrayElem":       reflect.TypeFor[syntax.ArrayElem](),
 	"DeclFlag":        reflect.TypeFor[syntax.DeclFlag](),
 	"DeclName":        reflect.TypeFor[syntax.DeclName](),
 	"DeclAssign":      reflect.TypeFor[syntax.DeclAssign](),
