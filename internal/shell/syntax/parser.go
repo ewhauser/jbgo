@@ -807,9 +807,56 @@ func (p *Parser) got(tok token) bool {
 	return false
 }
 
-func (p *Parser) gotRsrv(val string) (Pos, bool) {
+type reservedWord string
+
+const (
+	rsrvIf         reservedWord = "if"
+	rsrvThen       reservedWord = "then"
+	rsrvElif       reservedWord = "elif"
+	rsrvElse       reservedWord = "else"
+	rsrvFi         reservedWord = "fi"
+	rsrvWhile      reservedWord = "while"
+	rsrvUntil      reservedWord = "until"
+	rsrvFor        reservedWord = "for"
+	rsrvSelect     reservedWord = "select"
+	rsrvIn         reservedWord = "in"
+	rsrvDo         reservedWord = "do"
+	rsrvDone       reservedWord = "done"
+	rsrvCase       reservedWord = "case"
+	rsrvEsac       reservedWord = "esac"
+	rsrvLeftBrace  reservedWord = "{"
+	rsrvRightBrace reservedWord = "}"
+)
+
+func (p *Parser) atLitWord(val string) bool {
+	return p.tok == _LitWord && p.val == val
+}
+
+func (p *Parser) gotLitWord(val string) (Pos, bool) {
 	pos := p.pos
-	if p.tok == _LitWord && p.val == val {
+	if p.atLitWord(val) {
+		p.next()
+		return pos, true
+	}
+	return pos, false
+}
+
+func (p *Parser) atRsrv(words ...reservedWord) bool {
+	if p.tok != _LitWord {
+		return false
+	}
+	cur := reservedWord(p.val)
+	for _, word := range words {
+		if cur == word {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Parser) gotRsrv(val reservedWord) (Pos, bool) {
+	pos := p.pos
+	if p.atRsrv(val) {
 		p.next()
 		return pos, true
 	}
@@ -854,7 +901,7 @@ func (p *Parser) follow(lpos Pos, left string, tok token) {
 	}
 }
 
-func (p *Parser) followRsrv(lpos Pos, left, val string) Pos {
+func (p *Parser) followRsrv(lpos Pos, left string, val reservedWord) Pos {
 	pos, ok := p.gotRsrv(val)
 	if !ok {
 		if p.recoverError() {
@@ -865,7 +912,7 @@ func (p *Parser) followRsrv(lpos Pos, left, val string) Pos {
 	return pos
 }
 
-func (p *Parser) followStmts(left string, lpos Pos, stops ...string) ([]*Stmt, []Comment) {
+func (p *Parser) followStmts(left string, lpos Pos, stops ...reservedWord) ([]*Stmt, []Comment) {
 	// Language variants disallowing empty command lists:
 	// * [LangPOSIX]: "A list is a sequence of one or more AND-OR lists...".
 	// * [LangBash]: "A list is a sequence of one or more pipelines..."
@@ -905,7 +952,7 @@ func (p *Parser) followWordTok(tok token, pos Pos) *Word {
 	return w
 }
 
-func (p *Parser) stmtEnd(n Node, start, end string) Pos {
+func (p *Parser) stmtEnd(n Node, start string, end reservedWord) Pos {
 	pos, ok := p.gotRsrv(end)
 	if !ok {
 		if p.recoverError() {
@@ -1136,19 +1183,17 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
 	})
 }
 
-func (p *Parser) stmts(yield func(*Stmt, error) bool, stops ...string) {
+func (p *Parser) stmts(yield func(*Stmt, error) bool, stops ...reservedWord) {
 	gotEnd := true
 loop:
 	for p.tok != _EOF {
 		newLine := p.got(_Newl)
 		switch p.tok {
 		case _LitWord:
-			for _, stop := range stops {
-				if p.val == stop {
-					break loop
-				}
+			if p.atRsrv(stops...) {
+				break loop
 			}
-			if p.val == "}" {
+			if p.atRsrv(rsrvRightBrace) {
 				p.curErr(`%#q can only be used to close a block`, rightBrace)
 			}
 		case rightParen:
@@ -1185,7 +1230,7 @@ loop:
 	}
 }
 
-func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
+func (p *Parser) stmtList(stops ...reservedWord) ([]*Stmt, []Comment) {
 	var stmts []*Stmt
 	var last []Comment
 	fn := func(s *Stmt, err error) bool {
@@ -1194,7 +1239,7 @@ func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
 	}
 	p.stmts(fn, stops...)
 	split := len(p.accComs)
-	if p.tok == _LitWord && (p.val == "elif" || p.val == "else" || p.val == "fi") {
+	if p.atRsrv(rsrvElif, rsrvElse, rsrvFi) {
 		// Split the comments, so that any aligned with an opening token
 		// get attached to it. For example:
 		//
@@ -1290,9 +1335,9 @@ func (p *Parser) wordPart() WordPart {
 			old := p.preNested(subCmd)
 			p.rune() // don't tokenize '|'
 			p.next()
-			cs.Stmts, cs.Last = p.stmtList("}")
+			cs.Stmts, cs.Last = p.stmtList(rsrvRightBrace)
 			p.postNested(old)
-			pos, ok := p.gotRsrv("}")
+			pos, ok := p.gotRsrv(rsrvRightBrace)
 			if !ok {
 				p.matchingErr(cs.Left, dollBrace, rightBrace)
 			}
@@ -2215,14 +2260,14 @@ func (p *Parser) doRedirect(s *Stmt) {
 }
 
 func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
-	pos, ok := p.gotRsrv("!")
+	pos, ok := p.gotLitWord("!")
 	s := &Stmt{Position: pos}
 	if ok {
 		s.Negated = true
 		if p.stopToken() {
 			p.posErr(s.Pos(), `%#q cannot form a statement alone`, exclMark)
 		}
-		if _, ok := p.gotRsrv("!"); ok {
+		if _, ok := p.gotLitWord("!"); ok {
 			p.posErr(s.Pos(), `cannot negate a command multiple times`)
 		}
 	}
@@ -2293,8 +2338,8 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 	redirsStart := len(s.Redirs)
 	switch p.tok {
 	case _LitWord:
-		switch p.val {
-		case "{":
+		switch rsrv := reservedWord(p.val); rsrv {
+		case rsrvLeftBrace:
 			p.block(s)
 		case "{}":
 			// Zsh treats closing braces in a special way, allowing this.
@@ -2302,27 +2347,27 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				s.Cmd = &Block{Lbrace: p.pos, Rbrace: posAddCol(p.pos, 1)}
 				p.next()
 			}
-		case "if":
+		case rsrvIf:
 			p.ifClause(s)
-		case "while", "until":
+		case rsrvWhile, rsrvUntil:
 			// TODO(zsh): "repeat"
-			p.whileClause(s, p.val == "until")
-		case "for":
+			p.whileClause(s, rsrv == rsrvUntil)
+		case rsrvFor:
 			p.forClause(s)
-		case "case":
+		case rsrvCase:
 			p.caseClause(s)
 		// TODO(zsh): { try-list } "always" { always-list }
-		case "}":
+		case rsrvRightBrace:
 			p.curErr(`%#q can only be used to close a block`, rightBrace)
-		case "then", "elif":
+		case rsrvThen, rsrvElif:
 			p.curErr("%#q can only be used in an `if`", p.val)
-		case "fi":
+		case rsrvFi:
 			p.curErr("%#q can only be used to end an `if`", p.val)
-		case "do":
+		case rsrvDo:
 			p.curErr(`%#q can only be used in a loop`, p.val)
-		case "done":
+		case rsrvDone:
 			p.curErr(`%#q can only be used to end a loop`, p.val)
-		case "esac":
+		case rsrvEsac:
 			p.curErr("%#q can only be used to end a `case`", p.val)
 		case "!":
 			if !s.Negated {
@@ -2361,7 +2406,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			if p.lang.in(langBashLike) { // Note that mksh lacks this one.
 				p.coprocClause(s)
 			}
-		case "select":
+		case rsrvSelect:
 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
 				p.selectClause(s)
 			}
@@ -2417,7 +2462,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			p.rune()
 			fpos := p.pos
 			p.next()
-			if p.tok == _LitWord && p.val == "{" {
+			if p.atRsrv(rsrvLeftBrace) {
 				p.checkLang(fpos, LangZsh, "anonymous functions")
 			}
 			p.funcDecl(s, fpos, false, true)
@@ -2497,8 +2542,8 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
 func (p *Parser) block(s *Stmt) {
 	b := &Block{Lbrace: p.pos}
 	p.next()
-	b.Stmts, b.Last = p.followStmts("{", b.Lbrace, "}")
-	if pos, ok := p.gotRsrv("}"); ok {
+	b.Stmts, b.Last = p.followStmts("{", b.Lbrace, rsrvRightBrace)
+	if pos, ok := p.gotRsrv(rsrvRightBrace); ok {
 		b.Rbrace = pos
 	} else if p.recoverError() {
 		b.Rbrace = recoveredPos
@@ -2511,32 +2556,32 @@ func (p *Parser) block(s *Stmt) {
 func (p *Parser) ifClause(s *Stmt) {
 	rootIf := &IfClause{Position: p.pos}
 	p.next()
-	rootIf.Cond, rootIf.CondLast = p.followStmts("if", rootIf.Position, "then")
-	rootIf.ThenPos = p.followRsrv(rootIf.Position, "if <cond>", "then")
-	rootIf.Then, rootIf.ThenLast = p.followStmts("then", rootIf.ThenPos, "fi", "elif", "else")
+	rootIf.Cond, rootIf.CondLast = p.followStmts("if", rootIf.Position, rsrvThen)
+	rootIf.ThenPos = p.followRsrv(rootIf.Position, "if <cond>", rsrvThen)
+	rootIf.Then, rootIf.ThenLast = p.followStmts("then", rootIf.ThenPos, rsrvFi, rsrvElif, rsrvElse)
 	curIf := rootIf
-	for p.tok == _LitWord && p.val == "elif" {
+	for p.atRsrv(rsrvElif) {
 		elf := &IfClause{Position: p.pos}
 		curIf.Last = p.accComs
 		p.accComs = nil
 		p.next()
-		elf.Cond, elf.CondLast = p.followStmts("elif", elf.Position, "then")
-		elf.ThenPos = p.followRsrv(elf.Position, "elif <cond>", "then")
-		elf.Then, elf.ThenLast = p.followStmts("then", elf.ThenPos, "fi", "elif", "else")
+		elf.Cond, elf.CondLast = p.followStmts("elif", elf.Position, rsrvThen)
+		elf.ThenPos = p.followRsrv(elf.Position, "elif <cond>", rsrvThen)
+		elf.Then, elf.ThenLast = p.followStmts("then", elf.ThenPos, rsrvFi, rsrvElif, rsrvElse)
 		curIf.Else = elf
 		curIf = elf
 	}
-	if elsePos, ok := p.gotRsrv("else"); ok {
+	if elsePos, ok := p.gotRsrv(rsrvElse); ok {
 		curIf.Last = p.accComs
 		p.accComs = nil
 		els := &IfClause{Position: elsePos}
-		els.Then, els.ThenLast = p.followStmts("else", els.Position, "fi")
+		els.Then, els.ThenLast = p.followStmts("else", els.Position, rsrvFi)
 		curIf.Else = els
 		curIf = els
 	}
 	curIf.Last = p.accComs
 	p.accComs = nil
-	rootIf.FiPos = p.stmtEnd(rootIf, "if", "fi")
+	rootIf.FiPos = p.stmtEnd(rootIf, "if", rsrvFi)
 	for els := rootIf.Else; els != nil; els = els.Else {
 		// All the nested IfClauses share the same FiPos.
 		els.FiPos = rootIf.FiPos
@@ -2546,17 +2591,17 @@ func (p *Parser) ifClause(s *Stmt) {
 
 func (p *Parser) whileClause(s *Stmt, until bool) {
 	wc := &WhileClause{WhilePos: p.pos, Until: until}
-	rsrv := "while"
+	rsrv := rsrvWhile
 	rsrvCond := "while <cond>"
 	if wc.Until {
-		rsrv = "until"
+		rsrv = rsrvUntil
 		rsrvCond = "until <cond>"
 	}
 	p.next()
-	wc.Cond, wc.CondLast = p.followStmts(rsrv, wc.WhilePos, "do")
-	wc.DoPos = p.followRsrv(wc.WhilePos, rsrvCond, "do")
-	wc.Do, wc.DoLast = p.followStmts("do", wc.DoPos, "done")
-	wc.DonePos = p.stmtEnd(wc, rsrv, "done")
+	wc.Cond, wc.CondLast = p.followStmts(string(rsrv), wc.WhilePos, rsrvDo)
+	wc.DoPos = p.followRsrv(wc.WhilePos, rsrvCond, rsrvDo)
+	wc.Do, wc.DoLast = p.followStmts("do", wc.DoPos, rsrvDone)
+	wc.DonePos = p.stmtEnd(wc, string(rsrv), rsrvDone)
 	s.Cmd = wc
 }
 
@@ -2565,19 +2610,19 @@ func (p *Parser) forClause(s *Stmt) {
 	p.next()
 	fc.Loop = p.loop(fc.ForPos)
 
-	start, end := "do", "done"
-	if pos, ok := p.gotRsrv("{"); ok {
+	start, end := rsrvDo, rsrvDone
+	if pos, ok := p.gotRsrv(rsrvLeftBrace); ok {
 		p.checkLang(pos, langBashLike|LangMirBSDKorn, "for loops with braces")
 		fc.DoPos = pos
 		fc.Braces = true
-		start, end = "{", "}"
+		start, end = rsrvLeftBrace, rsrvRightBrace
 	} else {
 		fc.DoPos = p.followRsrv(fc.ForPos, "for foo [in words]", start)
 	}
 
 	s.Comments = append(s.Comments, p.accComs...)
 	p.accComs = nil
-	fc.Do, fc.DoLast = p.followStmts(start, fc.DoPos, end)
+	fc.Do, fc.DoLast = p.followStmts(string(start), fc.DoPos, end)
 	fc.DonePos = p.stmtEnd(fc, "for", end)
 	s.Cmd = fc
 }
@@ -2616,7 +2661,7 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 		return wi
 	}
 	p.got(_Newl)
-	if pos, ok := p.gotRsrv("in"); ok {
+	if pos, ok := p.gotRsrv(rsrvIn); ok {
 		wi.InPos = pos
 		for !p.stopToken() {
 			if w := p.getWord(); w == nil {
@@ -2627,7 +2672,7 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 		}
 		p.got(semicolon)
 		p.got(_Newl)
-	} else if p.tok == _LitWord && p.val == "do" {
+	} else if p.atRsrv(rsrvDo) {
 	} else {
 		p.followErr(fpos, ftok+" foo", noQuote("`in`, `do`, `;`, or a newline"))
 	}
@@ -2638,9 +2683,9 @@ func (p *Parser) selectClause(s *Stmt) {
 	fc := &ForClause{ForPos: p.pos, Select: true}
 	p.next()
 	fc.Loop = p.wordIter("select", fc.ForPos)
-	fc.DoPos = p.followRsrv(fc.ForPos, "select foo [in words]", "do")
-	fc.Do, fc.DoLast = p.followStmts("do", fc.DoPos, "done")
-	fc.DonePos = p.stmtEnd(fc, "select", "done")
+	fc.DoPos = p.followRsrv(fc.ForPos, "select foo [in words]", rsrvDo)
+	fc.Do, fc.DoLast = p.followStmts("do", fc.DoPos, rsrvDone)
+	fc.DonePos = p.stmtEnd(fc, "select", rsrvDone)
 	s.Cmd = fc
 }
 
@@ -2651,15 +2696,15 @@ func (p *Parser) caseClause(s *Stmt) {
 	if cc.Word == nil {
 		p.followErr(cc.Case, "case", noQuote("a word"))
 	}
-	end := "esac"
+	end := rsrvEsac
 	p.got(_Newl)
-	if pos, ok := p.gotRsrv("{"); ok {
+	if pos, ok := p.gotRsrv(rsrvLeftBrace); ok {
 		cc.In = pos
 		cc.Braces = true
 		p.checkLang(cc.Pos(), LangMirBSDKorn, "`case i {`")
-		end = "}"
+		end = rsrvRightBrace
 	} else {
-		cc.In = p.followRsrv(cc.Case, "case x", "in")
+		cc.In = p.followRsrv(cc.Case, "case x", rsrvIn)
 	}
 	cc.Items = p.caseItems(end)
 	cc.Last, p.accComs = p.accComs, nil
@@ -2667,9 +2712,9 @@ func (p *Parser) caseClause(s *Stmt) {
 	s.Cmd = cc
 }
 
-func (p *Parser) caseItems(stop string) (items []*CaseItem) {
+func (p *Parser) caseItems(stop reservedWord) (items []*CaseItem) {
 	p.got(_Newl)
-	for p.tok != _EOF && (p.tok != _LitWord || p.val != stop) {
+	for p.tok != _EOF && !p.atRsrv(stop) {
 		ci := &CaseItem{}
 		ci.Comments, p.accComs = p.accComs, nil
 		p.got(leftParen)
@@ -2752,7 +2797,7 @@ func (p *Parser) testClause(s *Stmt) {
 		}
 	}
 	tc.Right = p.pos
-	if _, ok := p.gotRsrv("]]"); !ok {
+	if _, ok := p.gotLitWord("]]"); !ok {
 		p.matchingErr(tc.Left, dblLeftBrack, dblRightBrack)
 	}
 	p.postNested(old)
@@ -3142,8 +3187,8 @@ func isBashCompoundCommand(tok token, val string) bool {
 	case leftParen, dblLeftParen:
 		return true
 	case _LitWord:
-		switch val {
-		case "{", "if", "while", "until", "for", "case", "[[",
+		switch reservedWord(val) {
+		case rsrvLeftBrace, rsrvIf, rsrvWhile, rsrvUntil, rsrvFor, rsrvCase, "[[",
 			"coproc", "let", "function", "declare", "local",
 			"export", "readonly", "typeset", "nameref":
 			return true
@@ -3155,7 +3200,7 @@ func isBashCompoundCommand(tok token, val string) bool {
 func (p *Parser) timeClause(s *Stmt) {
 	tc := &TimeClause{Time: p.pos}
 	p.next()
-	if _, ok := p.gotRsrv("-p"); ok {
+	if _, ok := p.gotLitWord("-p"); ok {
 		tc.PosixFormat = true
 	}
 	tc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
@@ -3213,14 +3258,14 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
 	fpos := p.pos
 	p.next()
 	names := make([]*Lit, 0, 1)
-	for p.tok == _LitWord && p.val != "{" {
+	for p.tok == _LitWord && !p.atRsrv(rsrvLeftBrace) {
 		names = append(names, p.lit(p.pos, p.val))
 		p.next()
 	}
 	hasParens := p.got(leftParen)
 	switch len(names) {
 	case 0:
-		if hasParens || (p.tok == _LitWord && p.val == "{") {
+		if hasParens || p.atRsrv(rsrvLeftBrace) {
 			p.checkLang(fpos, LangZsh, "anonymous functions")
 		} else if !p.lang.in(LangZsh) {
 			p.followErr(fpos, "function", noQuote("a name"))
@@ -3269,11 +3314,11 @@ loop:
 				break
 			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
-			if p.val == "{" && w != nil && w.Lit() == "function" {
+			if p.atRsrv(rsrvLeftBrace) && w != nil && w.Lit() == "function" {
 				p.checkLang(p.pos, langBashLike, `the "function" builtin`)
 			}
 			// Zsh does not require a semicolon to close a block.
-			if p.lang.in(LangZsh) && p.val == "}" {
+			if p.lang.in(LangZsh) && p.atRsrv(rsrvRightBrace) {
 				break loop
 			}
 			w := p.wordOne(p.lit(p.pos, p.val))
