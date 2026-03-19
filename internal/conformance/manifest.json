@@ -350,10 +350,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/strict-options.test.sh::errexit and top-level control flow": {
-          "mode": "xfail",
-          "reason": "gbash returns 127 instead of bash's exit 1 when the vendored helper path is missing under errexit"
-        },
         "oils/strict-options.test.sh::automatically creating arrays by sparse assignment": {
           "mode": "xfail",
           "reason": "gbash currently materializes sparse indexed arrays with empty leading elements instead of bash's compact expansion"

@@ -1694,6 +1694,24 @@ func TestBashMissingScriptFileReturns127(t *testing.T) {
 	}
 }
 
+func TestBashMissingScriptFileWithErrexitReturns1(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -o errexit /tmp/missing-script.sh\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "bash: /tmp/missing-script.sh: No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestShDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
