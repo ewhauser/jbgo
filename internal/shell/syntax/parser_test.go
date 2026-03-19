@@ -23,6 +23,7 @@ import (
 	"github.com/ewhauser/gbash/internal/testutil"
 	"github.com/go-quicktest/qt"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestParseFiles(t *testing.T) {
@@ -90,18 +91,106 @@ func TestParseErr(t *testing.T) {
 func TestParseErrorBashErrorConditionalDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	parser := NewParser(Variant(LangBash))
-	_, err := parser.Parse(strings.NewReader("[[ a =~ c a ]]"), "")
-	if err == nil {
-		t.Fatal("Parse() error = nil, want parse error")
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "space split regex",
+			src:  "[[ a =~ c a ]]",
+			want: "line 1: syntax error in conditional expression: unexpected token `a'\nline 1: syntax error near `a'\nline 1: `[[ a =~ c a ]]'",
+		},
+		{
+			name: "malformed literal regex",
+			src:  "[[ 'a b' =~ ^)a\\ b($ ]]",
+			want: "line 1: syntax error in conditional expression: unexpected token `)'\nline 1: syntax error near `^)a'\nline 1: `[[ 'a b' =~ ^)a\\ b($ ]]'",
+		},
+		{
+			name: "regex-looking pattern with ==",
+			src:  "[[ '^(a b)$' == ^(a\\ b)$ ]]",
+			want: "line 1: syntax error in conditional expression: unexpected token `('\nline 1: syntax error near `^(a'\nline 1: `[[ '^(a b)$' == ^(a\\ b)$ ]]'",
+		},
+		{
+			name: "unterminated bracket class fragment",
+			src:  "[[ a =~ [a b] ]]",
+			want: "line 1: syntax error in conditional expression: unexpected token `b]'\nline 1: syntax error near `b]'\nline 1: `[[ a =~ [a b] ]]'",
+		},
+		{
+			name: "newline split regex",
+			src:  "[[ $'a\\nb' =~ a\nb ]]",
+			want: "line 1: syntax error in conditional expression: unexpected token `b'\nline 2: syntax error near `b'\nline 2: `b ]]'",
+		},
 	}
-	var parseErr ParseError
-	if !errors.As(err, &parseErr) {
-		t.Fatalf("Parse() error = %T, want ParseError", err)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parser := NewParser(Variant(LangBash))
+			_, err := parser.Parse(strings.NewReader(tc.src), "")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want parse error")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if parseErr.SourceLine == "" {
+				parseErr.SourceLine = sourceLineForTest(tc.src, parseErr.Pos.Line())
+			}
+			if got := parseErr.BashError(); got != tc.want {
+				t.Fatalf("BashError() mismatch\nwant: %s\ngot:  %s", tc.want, got)
+			}
+		})
 	}
-	parseErr.SourceLine = "[[ a =~ c a ]]"
-	if got, want := parseErr.BashError(), "line 1: syntax error in conditional expression: unexpected token `a'\nline 1: syntax error near `a'\nline 1: `[[ a =~ c a ]]'"; got != want {
-		t.Fatalf("BashError() mismatch\nwant: %s\ngot:  %s", want, got)
+}
+
+func TestParseErrorLegacyBashConditionalDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "space split regex",
+			src:  "[[ a =~ c a ]]",
+			want: "line 1: syntax error in conditional expression\nline 1: syntax error near `a'\nline 1: `[[ a =~ c a ]]'",
+		},
+		{
+			name: "unterminated bracket class fragment",
+			src:  "[[ a =~ [a b] ]]",
+			want: "line 1: syntax error in conditional expression\nline 1: syntax error near `b]'\nline 1: `[[ a =~ [a b] ]]'",
+		},
+		{
+			name: "newline split regex",
+			src:  "[[ $'a\\nb' =~ a\nb ]]",
+			want: "line 1: syntax error in conditional expression\nline 2: syntax error near `b'\nline 2: `b ]]'",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parser := NewParser(Variant(LangBash), LegacyBashCompat(true))
+			_, err := parser.Parse(strings.NewReader(tc.src), "")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want parse error")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if parseErr.SourceLine == "" {
+				parseErr.SourceLine = sourceLineForTest(tc.src, parseErr.Pos.Line())
+			}
+			if got := parseErr.BashError(); got != tc.want {
+				t.Fatalf("BashError() mismatch\nwant: %s\ngot:  %s", tc.want, got)
+			}
+		})
 	}
 }
 
@@ -545,7 +634,22 @@ func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
 	}
 }
 
-var cmpOpt = cmp.FilterValues(func(p1, p2 Pos) bool { return true }, cmp.Ignore())
+var cmpOpt = cmp.Options{
+	cmp.FilterValues(func(p1, p2 Pos) bool { return true }, cmp.Ignore()),
+	cmpopts.IgnoreFields(ArithmExp{}, "Source"),
+}
+
+func sourceLineForTest(src string, lineNum uint) string {
+	if lineNum == 0 {
+		return ""
+	}
+	lines := strings.Split(src, "\n")
+	idx := int(lineNum) - 1
+	if idx < 0 || idx >= len(lines) {
+		return ""
+	}
+	return lines[idx]
+}
 
 func singleParse(p *Parser, in string, want *File) func(t *testing.T) {
 	return func(t *testing.T) {
@@ -1824,6 +1928,18 @@ var errorCases = []errorCase{
 	errCase(
 		"[[ a =~ c a ]]",
 		langErr("1:11: syntax error in conditional expression: unexpected token `a'", LangBash|LangZsh),
+	),
+	errCase(
+		"[[ 'a b' =~ ^)a\\ b($ ]]",
+		langErr("1:14: syntax error in conditional expression: unexpected token `)'", LangBash),
+	),
+	errCase(
+		"[[ '^(a b)$' == ^(a\\ b)$ ]]",
+		langErr("1:18: syntax error in conditional expression: unexpected token `('", LangBash),
+	),
+	errCase(
+		"[[ a =~ [a b] ]]",
+		langErr("1:12: syntax error in conditional expression: unexpected token `b]'", LangBash),
 	),
 	errCase(
 		"[[ a =~ ())",

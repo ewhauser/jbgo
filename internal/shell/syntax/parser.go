@@ -4,6 +4,7 @@
 package syntax
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"iter"
@@ -245,6 +246,12 @@ func StopAt(word string) ParserOption {
 // Second, the subshell needs to be closed, so [Subshell.Rparen] is recovered.
 func RecoverErrors(maximum int) ParserOption {
 	return func(p *Parser) { p.recoverErrorsMax = maximum }
+}
+
+// LegacyBashCompat enables parser diagnostics that match the older bash
+// behavior used by the in-shell `bash` builtin conformance path.
+func LegacyBashCompat(enabled bool) ParserOption {
+	return func(p *Parser) { p.legacyBashCompat = enabled }
 }
 
 // NewParser allocates a new [Parser] and applies any number of options.
@@ -564,6 +571,9 @@ type Parser struct {
 
 	keepComments bool
 	lang         LangVariant
+	// legacyBashCompat switches a handful of [[ =~ ]] diagnostics to match
+	// the older bash behavior observed through the bash builtin conformance path.
+	legacyBashCompat bool
 
 	stopAt []byte
 
@@ -1387,10 +1397,13 @@ type ParseError struct {
 	// before the source snippet. Bash uses this for some syntax errors like
 	// "syntax error near ...".
 	SecondaryText string
+	SecondaryPos  Pos
 
 	// SourceLine is the content of the source line where the error occurred.
 	// When set, BashError includes it as a second diagnostic line.
 	SourceLine string
+	// SourceLinePos optionally overrides the line number used for SourceLine.
+	SourceLinePos Pos
 }
 
 func (e ParseError) Error() string {
@@ -1402,6 +1415,14 @@ func (e ParseError) Error() string {
 
 // BashError returns the error message formatted like bash does.
 func (e ParseError) BashError() string {
+	secondaryPos := e.Pos
+	if e.SecondaryPos.IsValid() {
+		secondaryPos = e.SecondaryPos
+	}
+	sourceLinePos := e.Pos
+	if e.SourceLinePos.IsValid() {
+		sourceLinePos = e.SourceLinePos
+	}
 	var first string
 	if e.Filename == "" {
 		first = fmt.Sprintf("line %d: %s", e.Pos.Line(), e.Text)
@@ -1411,9 +1432,9 @@ func (e ParseError) BashError() string {
 	lines := []string{first}
 	if e.SecondaryText != "" {
 		if e.Filename == "" {
-			lines = append(lines, fmt.Sprintf("line %d: %s", e.Pos.Line(), e.SecondaryText))
+			lines = append(lines, fmt.Sprintf("line %d: %s", secondaryPos.Line(), e.SecondaryText))
 		} else {
-			lines = append(lines, fmt.Sprintf("%s: line %d: %s", e.Filename, e.Pos.Line(), e.SecondaryText))
+			lines = append(lines, fmt.Sprintf("%s: line %d: %s", e.Filename, secondaryPos.Line(), e.SecondaryText))
 		}
 	}
 	if e.SourceLine == "" {
@@ -1421,9 +1442,9 @@ func (e ParseError) BashError() string {
 	}
 	var second string
 	if e.Filename == "" {
-		second = fmt.Sprintf("line %d: `%s'", e.Pos.Line(), e.SourceLine)
+		second = fmt.Sprintf("line %d: `%s'", sourceLinePos.Line(), e.SourceLine)
 	} else {
-		second = fmt.Sprintf("%s: line %d: `%s'", e.Filename, e.Pos.Line(), e.SourceLine)
+		second = fmt.Sprintf("%s: line %d: `%s'", e.Filename, sourceLinePos.Line(), e.SourceLine)
 	}
 	lines = append(lines, second)
 	return strings.Join(lines, "\n")
@@ -1492,6 +1513,20 @@ func (p *Parser) posErrSecondary(pos Pos, secondary, format string, args ...any)
 		Text:          fmt.Sprintf(format, args...),
 		Incomplete:    p.tok == _EOF && p.Incomplete(),
 		SecondaryText: secondary,
+		SecondaryPos:  pos,
+	})
+}
+
+func (p *Parser) posErrSecondaryDetailed(pos, secondaryPos, sourceLinePos Pos, sourceLine, secondary, format string, args ...any) {
+	p.errPass(ParseError{
+		Filename:      p.f.Name,
+		Pos:           pos,
+		Text:          fmt.Sprintf(format, args...),
+		Incomplete:    p.tok == _EOF && p.Incomplete(),
+		SecondaryText: secondary,
+		SecondaryPos:  secondaryPos,
+		SourceLine:    sourceLine,
+		SourceLinePos: sourceLinePos,
 	})
 }
 
@@ -1661,6 +1696,130 @@ func (p *Parser) currentRuneSource() string {
 	return string(p.bs[start:p.bsp])
 }
 
+func (p *Parser) sourceFromPos(pos Pos) string {
+	start := int(pos.Offset())
+	if start < 0 || start > len(p.bs) {
+		return ""
+	}
+	return string(p.bs[start:])
+}
+
+func (p *Parser) sourceLineAtPos(pos Pos) string {
+	if !pos.IsValid() {
+		return ""
+	}
+	start := int(pos.Offset())
+	if start < 0 || start > len(p.bs) {
+		return ""
+	}
+	for start > 0 && p.bs[start-1] != '\n' {
+		start--
+	}
+	end := int(pos.Offset())
+	for end < len(p.bs) && p.bs[end] != '\n' {
+		end++
+	}
+	return string(p.bs[start:end])
+}
+
+func (p *Parser) arithmInnerSource(left, right Pos, bracket bool) string {
+	start := int(left.Offset())
+	end := int(right.Offset())
+	if !bracket {
+		start += 3 // $((
+	} else {
+		start += 2 // $[
+	}
+	if start < 0 || start > end || end > len(p.bs) {
+		return ""
+	}
+	return string(p.bs[start:end])
+}
+
+func regexNearFragment(s string) string {
+	var b strings.Builder
+	escaped := false
+	inClass := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			if ch == ' ' || ch == '\t' || ch == '\n' {
+				return b.String()
+			}
+			b.WriteByte(ch)
+			escaped = false
+			continue
+		}
+		if inClass {
+			b.WriteByte(ch)
+			if ch == ']' {
+				inClass = false
+			}
+			continue
+		}
+		switch ch {
+		case '\\':
+			escaped = true
+		case '[':
+			inClass = true
+			b.WriteByte(ch)
+		case ' ', '\t', '\n', ';', '&', '|':
+			return b.String()
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	return b.String()
+}
+
+func literalRegexUnexpectedTopLevelRParen(expr string) (int, string, string, bool) {
+	escaped := false
+	inClass := false
+	depth := 0
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if inClass {
+			switch ch {
+			case '\\':
+				escaped = true
+			case ']':
+				inClass = false
+			}
+			continue
+		}
+		switch ch {
+		case '\\':
+			escaped = true
+		case '[':
+			inClass = true
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return i, ")", regexNearFragment(expr), true
+			}
+			depth--
+		}
+	}
+	return 0, "", "", false
+}
+
+func patternSource(pat *Pattern) string {
+	if pat == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	printer := NewPrinter(Minify(true))
+	if err := printer.Print(&buf, pat); err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
 func (p *Parser) getLit() *Lit {
 	switch p.tok {
 	case _Lit, _LitWord, _LitRedir:
@@ -1777,6 +1936,7 @@ func (p *Parser) wordPart() WordPart {
 		} else {
 			ar.Right = p.arithmEnd(dollDblParen, ar.Left, old)
 		}
+		ar.Source = p.arithmInnerSource(ar.Left, ar.Right, ar.Bracket)
 		return ar
 	case dollParen:
 		p.ensureNoNested(p.pos)
@@ -2272,6 +2432,18 @@ func parseRawWordPart(raw string, base Pos, lang LangVariant) (WordPart, int, bo
 	consumed := int(part.End().Offset() - base.Offset())
 	if consumed <= 0 {
 		return nil, 0, false
+	}
+	if ar, ok := part.(*ArithmExp); ok && ar.Source == "" {
+		start := int(ar.Left.Offset() - base.Offset())
+		end := int(ar.Right.Offset() - base.Offset())
+		if ar.Bracket {
+			start += 2
+		} else {
+			start += 3
+		}
+		if start >= 0 && start <= end && end <= len(raw) {
+			ar.Source = raw[start:end]
+		}
 	}
 	return part, consumed, true
 }
@@ -3977,7 +4149,67 @@ func (p *Parser) followCondRegex(tok token, pos Pos) *CondRegex {
 	if w == nil {
 		return nil
 	}
+	if lit := w.Lit(); lit != "" {
+		if idx, tokenText, near, ok := literalRegexUnexpectedTopLevelRParen(lit); ok {
+			errPos := posAddCol(w.Pos(), idx)
+			p.posErrSecondary(
+				errPos,
+				fmt.Sprintf("syntax error near %s", bashQuoteString(near)),
+				"syntax error in conditional expression: unexpected token %s",
+				bashQuoteString(tokenText),
+			)
+			return nil
+		}
+	}
 	return &CondRegex{Word: w}
+}
+
+func (p *Parser) condBinaryUnexpectedToken(expr *CondBinary, pos Pos, tokenText string) {
+	near := regexNearFragment(p.sourceFromPos(pos))
+	if near == "" {
+		near = tokenText
+	}
+	switch expr.Op {
+	case TsReMatch:
+		text := "syntax error in conditional expression: unexpected token %s"
+		args := []any{bashQuoteString(tokenText)}
+		if p.legacyBashCompat {
+			text = "syntax error in conditional expression"
+			args = nil
+		}
+		if pos.Line() > expr.Pos().Line() {
+			p.posErrSecondaryDetailed(
+				expr.Pos(),
+				pos,
+				pos,
+				p.sourceLineAtPos(pos),
+				fmt.Sprintf("syntax error near %s", bashQuoteString(near)),
+				text,
+				args...,
+			)
+			return
+		}
+		p.posErrSecondary(
+			pos,
+			fmt.Sprintf("syntax error near %s", bashQuoteString(near)),
+			text,
+			args...,
+		)
+	case TsMatchShort, TsMatch, TsNoMatch:
+		if tokenText != "(" {
+			p.posErr(pos, "not a valid test operator: %#q", tokenText)
+			return
+		}
+		near = patternSource(expr.Y.(*CondPattern).Pattern) + near
+		p.posErrSecondary(
+			pos,
+			fmt.Sprintf("syntax error near %s", bashQuoteString(near)),
+			"syntax error in conditional expression: unexpected token %s",
+			bashQuoteString(tokenText),
+		)
+	default:
+		p.posErr(pos, "not a valid test operator: %#q", tokenText)
+	}
 }
 
 func (p *Parser) condRegexUnexpectedStart() bool {
@@ -4487,12 +4719,8 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 				p.posErr(p.pos, "expected %#q, %#q or %#q after complex expr",
 					AndTest, OrTest, dblRightBrack)
 			} else {
-				if b, ok := left.(*CondBinary); ok && b.Op == TsReMatch {
-					p.curErrSecondary(
-						fmt.Sprintf("syntax error near %s", bashQuoteString(p.val)),
-						"syntax error in conditional expression: unexpected token %s",
-						bashQuoteString(p.val),
-					)
+				if b, ok := left.(*CondBinary); ok {
+					p.condBinaryUnexpectedToken(b, p.pos, p.val)
 				} else {
 					p.curErr("not a valid test operator: %#q", p.val)
 				}
@@ -4514,7 +4742,11 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 	case _EOF, rightParen:
 		return left
 	default:
-		p.curErr("not a valid test operator: %#q", p.tok)
+		if b, ok := left.(*CondBinary); ok {
+			p.condBinaryUnexpectedToken(b, p.pos, p.tok.String())
+		} else {
+			p.curErr("not a valid test operator: %#q", p.tok)
+		}
 	}
 	b := &CondBinary{
 		OpPos: p.pos,

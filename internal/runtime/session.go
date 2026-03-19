@@ -99,6 +99,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	})
 	execReq := &shell.Execution{
 		Name:           baseLogEvent.Name,
+		Interpreter:    req.Interpreter,
 		ScriptPath:     req.ScriptPath,
 		Script:         req.Script,
 		Command:        cloneStrings(req.Command),

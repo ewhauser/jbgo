@@ -105,6 +105,8 @@ type Runner struct {
 	ecfg *expand.Config
 	ectx context.Context // just so that Runner.Subshell can use it again
 
+	legacyBashCompat bool
+
 	// didReset remembers whether the runner has ever been reset. This is
 	// used so that Reset is automatically called when running any program
 	// or node for the first time on a Runner.
@@ -291,6 +293,8 @@ type RunnerConfig struct {
 
 	Interactive bool
 
+	LegacyBashCompat bool
+
 	CallHandler      CallHandlerFunc
 	ExecHandler      ExecHandlerFunc
 	OpenHandler      OpenHandlerFunc
@@ -394,6 +398,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.statHandler = cfg.StatHandler
 	r.realpathHandler = cfg.RealpathHandler
 	r.procSubstHandler = cfg.ProcSubstHandler
+	r.legacyBashCompat = cfg.LegacyBashCompat
 	if err := r.setStdIO(cfg.Stdin, cfg.Stdout, cfg.Stderr); err != nil {
 		return nil, err
 	}
@@ -658,12 +663,13 @@ func (r *Runner) Reset() {
 		// These can be set by functions like [Dir] or [Params], but
 		// builtins can overwrite them; reset the fields to whatever the
 		// constructor set up.
-		Dir:    r.origDir,
-		Params: r.origParams,
-		opts:   r.origOpts,
-		stdin:  r.origStdin,
-		stdout: r.origStdout,
-		stderr: r.origStderr,
+		Dir:              r.origDir,
+		Params:           r.origParams,
+		opts:             r.origOpts,
+		stdin:            r.origStdin,
+		stdout:           r.origStdout,
+		stderr:           r.origStderr,
+		legacyBashCompat: r.legacyBashCompat,
 
 		origDir:    r.origDir,
 		origParams: r.origParams,

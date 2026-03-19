@@ -896,6 +896,7 @@ type ArithmExp struct {
 	Left, Right Pos
 	Bracket     bool // deprecated $[expr] form
 	Unsigned    bool // mksh's $((# expr))
+	Source      string
 
 	X ArithmExpr
 }

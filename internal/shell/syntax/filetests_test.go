@@ -4158,13 +4158,6 @@ var fileTests = []fileTestCase{
 		langFile(&TestClause{X: condBinary(TsReMatch, litCondWord("z"), litCondRegex("a||b"))}, LangBash),
 	),
 	fileTest(
-		[]string{`[[ 'a b' =~ ^)a\ b($ ]]`},
-		langFile(&TestClause{X: condBinary(TsReMatch, condWord(sglQuoted("a b")), condRegex(
-			lit(`^)a\ b(`),
-			lit("$"),
-		))}, LangBash),
-	),
-	fileTest(
 		[]string{`[[ a == -n ]]`},
 		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), litCondPattern("-n"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),

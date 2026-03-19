@@ -30,6 +30,7 @@ import (
 
 type Execution struct {
 	Name              string
+	Interpreter       string
 	ScriptPath        string
 	Script            string
 	Command           []string
@@ -195,14 +196,8 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 }
 
 func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.RunnerConfig {
-	return &interp.RunnerConfig{
+	cfg := &interp.RunnerConfig{
 		Env:              expand.ListEnviron(envPairs(m.runnerEnv(exec))...),
-		Dir:              exec.Dir,
-		Stdin:            exec.Stdin,
-		Stdout:           exec.Stdout,
-		Stderr:           exec.Stderr,
-		Params:           runnerParamArgs(exec.StartupOptions, exec.Args),
-		Interactive:      exec.Interactive,
 		CallHandler:      m.callHandler(exec, budget),
 		ExecHandler:      m.execHandler(exec, budget),
 		OpenHandler:      m.openHandler(exec),
@@ -211,6 +206,17 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 		RealpathHandler:  m.realpathHandler(exec),
 		ProcSubstHandler: m.procSubstHandler(exec),
 	}
+	if exec == nil {
+		return cfg
+	}
+	cfg.Dir = exec.Dir
+	cfg.Stdin = exec.Stdin
+	cfg.Stdout = exec.Stdout
+	cfg.Stderr = exec.Stderr
+	cfg.Params = runnerParamArgs(exec.StartupOptions, exec.Args)
+	cfg.Interactive = exec.Interactive
+	cfg.LegacyBashCompat = exec.Interpreter == "bash" || exec.Interpreter == "sh"
+	return cfg
 }
 
 func (m *core) runnerEnv(exec *Execution) map[string]string {

@@ -23,6 +23,21 @@ func parseArithmExpr(t *testing.T, src string) syntax.ArithmExpr {
 	return arith.X
 }
 
+func parseArithmExpansion(t *testing.T, src string) *syntax.ArithmExp {
+	t.Helper()
+	p := syntax.NewParser()
+	file, err := p.Parse(strings.NewReader("echo "+src+"\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	part, ok := call.Args[1].Parts[0].(*syntax.ArithmExp)
+	if !ok {
+		t.Fatalf("word part = %T, want *syntax.ArithmExp", call.Args[1].Parts[0])
+	}
+	return part
+}
+
 func TestArithmSingleQuoteRejection(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -188,5 +203,24 @@ func TestArithmArrayElementLValues(t *testing.T) {
 	}
 	if val, ok := env["a"].IndexedGet(4); !ok || val != "100" {
 		t.Fatalf("a[4] after assign = (%q, %v), want (\"100\", true)", val, ok)
+	}
+}
+
+func TestArithmWithSourcePreservesDivisionByZeroSpacing(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansion(t, "$(( 1 / 0 ))")
+	cfg := &Config{Env: testEnv{}}
+
+	got, err := ArithmWithSource(cfg, exp.X, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+	if err == nil {
+		t.Fatal("ArithmWithSource() error = nil, want division-by-zero error")
+	}
+	if got != 0 {
+		t.Fatalf("ArithmWithSource() = %d, want 0", got)
+	}
+	const want = `1 / 0 : division by 0 (error token is "0 ")`
+	if err.Error() != want {
+		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}
 }

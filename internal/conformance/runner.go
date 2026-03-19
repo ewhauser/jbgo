@@ -281,7 +281,9 @@ func runGBash(ctx context.Context, workspace, script string) (ExecutionResult, e
 		errMsg := err.Error()
 		var parseErr syntax.ParseError
 		if errors.As(err, &parseErr) {
-			parseErr.SourceLine = extractSourceLine(script, parseErr.Pos.Line())
+			if parseErr.SourceLine == "" {
+				parseErr.SourceLine = extractSourceLine(script, parseErr.Pos.Line())
+			}
 			errMsg = parseErr.BashError()
 		}
 		return ExecutionResult{ //nolint:nilerr // non-ExitError is mapped to exit code 2

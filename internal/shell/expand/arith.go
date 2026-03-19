@@ -5,6 +5,7 @@ package expand
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -112,6 +113,55 @@ func (e ArithmSyntaxError) Error() string {
 		return fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %q)", expr, token)
 	}
 	return fmt.Sprintf("arithmetic syntax error: operand expected (error token is %q)", token)
+}
+
+// ArithmDivByZeroError preserves the AST context for bash-style
+// division-by-zero diagnostics and can optionally render exact source slices.
+type ArithmDivByZeroError struct {
+	Expr      syntax.ArithmExpr
+	Token     syntax.ArithmExpr
+	ExprText  string
+	TokenText string
+
+	Source      string
+	SourceStart uint
+	SourceEnd   uint
+}
+
+func (e *ArithmDivByZeroError) Error() string {
+	exprText := e.ExprText
+	if exprText == "" {
+		exprText = arithExprSource(e.Expr)
+	}
+	tokenText := e.TokenText
+	if tokenText == "" {
+		tokenText = arithExprSource(e.Token)
+	}
+	if fromSource, ok := arithExprDiagnosticSource(e.Expr, e.Source, e.SourceStart, e.SourceEnd); ok {
+		exprText = fromSource
+	}
+	if fromSource, ok := arithTokenDiagnosticSource(e.Token, e.Source, e.SourceStart, e.SourceEnd); ok {
+		tokenText = fromSource
+	}
+	return fmt.Sprintf("%s: division by 0 (error token is %q)", exprText, tokenText)
+}
+
+// ArithmWithSource evaluates expr and, when it fails with division by zero,
+// prefers the original arithmetic source text for bash-compatible diagnostics.
+func ArithmWithSource(cfg *Config, expr syntax.ArithmExpr, source string, sourceStart, sourceEnd uint) (int, error) {
+	n, err := Arithm(cfg, expr)
+	if err == nil {
+		return n, nil
+	}
+	var divErr *ArithmDivByZeroError
+	if !errors.As(err, &divErr) {
+		return 0, err
+	}
+	cloned := *divErr
+	cloned.Source = source
+	cloned.SourceStart = sourceStart
+	cloned.SourceEnd = sourceEnd
+	return 0, &cloned
 }
 
 // hasSingleQuote checks if a word contains any single-quoted parts.
@@ -268,6 +318,58 @@ func containsShellExpansion(w *syntax.Word) bool {
 	return false
 }
 
+func arithExprDiagnosticSource(expr syntax.ArithmExpr, source string, sourceStart, sourceEnd uint) (string, bool) {
+	if arithExprUsesExpandedValue(expr) {
+		return "", false
+	}
+	if fromSource, ok := arithSourceSpan(expr, source, sourceStart, sourceEnd, true); ok {
+		return fromSource, true
+	}
+	return "", false
+}
+
+func arithTokenDiagnosticSource(expr syntax.ArithmExpr, source string, sourceStart, sourceEnd uint) (string, bool) {
+	if arithExprUsesExpandedValue(expr) {
+		return "", false
+	}
+	if fromSource, ok := arithSourceSpan(expr, source, sourceStart, sourceEnd, true); ok {
+		return fromSource, true
+	}
+	return "", false
+}
+
+func arithExprUsesExpandedValue(expr syntax.ArithmExpr) bool {
+	w, ok := expr.(*syntax.Word)
+	return ok && containsShellExpansion(w)
+}
+
+func arithSourceSpan(expr syntax.ArithmExpr, source string, sourceStart, sourceEnd uint, includeTrailingSpaces bool) (string, bool) {
+	if source == "" || expr == nil || !expr.Pos().IsValid() || !expr.End().IsValid() {
+		return "", false
+	}
+	start := expr.Pos().Offset()
+	end := expr.End().Offset()
+	if start < sourceStart || end < start || end > sourceEnd {
+		return "", false
+	}
+	relStart := int(start - sourceStart)
+	relEnd := int(end - sourceStart)
+	if relStart < 0 || relEnd < relStart || relEnd > len(source) {
+		return "", false
+	}
+	if includeTrailingSpaces {
+		for relEnd < len(source) {
+			switch source[relEnd] {
+			case ' ', '\t':
+				relEnd++
+			default:
+				return source[relStart:relEnd], true
+			}
+		}
+	}
+	return source[relStart:relEnd], true
+}
+
 // divByZeroError creates a division-by-zero error with source tokens matching bash's format.
 // For shell expansions ($y), bash reports the expanded value; for bare variables (x), it shows the name.
 func divByZeroError(expr *syntax.BinaryArithm, evaluatedLeft, evaluatedDivisor int) error {
@@ -284,7 +386,12 @@ func divByZeroError(expr *syntax.BinaryArithm, evaluatedLeft, evaluatedDivisor i
 		divisor = arithExprSource(expr.Y)
 	}
 	fullExpr := leftStr + expr.Op.String() + divisor
-	return fmt.Errorf("%s: division by 0 (error token is \"%s\")", fullExpr, divisor)
+	return &ArithmDivByZeroError{
+		Expr:      expr,
+		Token:     expr.Y,
+		ExprText:  fullExpr,
+		TokenText: divisor,
+	}
 }
 
 // divByZeroErrorAssgn creates a division-by-zero error for assignment operators.

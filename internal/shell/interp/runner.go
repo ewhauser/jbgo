@@ -1146,6 +1146,9 @@ func (r *Runner) aliasResolver(name string) (syntax.AliasSpec, bool) {
 
 func (r *Runner) newParser(opts ...syntax.ParserOption) *syntax.Parser {
 	base := append([]syntax.ParserOption{}, opts...)
+	if r != nil && r.legacyBashCompat {
+		base = append(base, syntax.LegacyBashCompat(true))
+	}
 	if r != nil && r.opts[optExpandAliases] {
 		base = append(base, syntax.ExpandAliases(r.aliasResolver))
 	}
