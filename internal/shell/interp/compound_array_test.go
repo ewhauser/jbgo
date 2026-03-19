@@ -71,3 +71,26 @@ printf 'vals=%s,%s\n' "${map[k]}" "${map[new]}"
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
 }
+
+func TestCompoundArrayAssignmentsPreserveAttributes(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, err := runInterpScript(t, `
+declare -alx replace=(old)
+replace=(new)
+printf 'replace=%s,%s\n' "${replace@a}" "${replace[0]}"
+
+declare -Aiux append=([k]=v)
+append+=([k]+=x ['new']=y)
+printf 'append=%s,%s,%s\n' "${append@a}" "${append[k]}" "${append[new]}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const want = "" +
+		"replace=alx,new\n" +
+		"append=Aiux,vx,y\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}

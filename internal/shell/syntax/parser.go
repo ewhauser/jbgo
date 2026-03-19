@@ -2703,7 +2703,18 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 					return nil
 				}
 			}
-			if ae.Value = p.getWord(); ae.Value == nil {
+			// For explicit [key]= and [key]+= elements, a spaced word starts
+			// the next array element rather than extending the current value.
+			spacedNextElem := ae.Index != nil && p.spaced
+			if !spacedNextElem {
+				ae.Value = p.getWord()
+			}
+			if ae.Value == nil {
+				if spacedNextElem {
+					// Leave the token in place so the next loop iteration can
+					// parse it as a separate array element.
+					goto arrayElemDone
+				}
 				switch p.tok {
 				case _Newl, rightParen, leftBrack:
 					// TODO: support [index]=[
@@ -2712,6 +2723,7 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 					return nil
 				}
 			}
+		arrayElemDone:
 			if len(p.accComs) > 0 {
 				c := p.accComs[0]
 				if c.Pos().Line() == ae.End().Line() {
