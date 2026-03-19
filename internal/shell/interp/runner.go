@@ -42,6 +42,9 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ectx = ctx
 	r.ecfg = &expand.Config{
 		Env: expandEnv{r},
+		ReportError: func(err error) {
+			r.expandErr(err)
+		},
 		CmdSubst: func(w io.Writer, cs *syntax.CmdSubst) error {
 			switch len(cs.Stmts) {
 			case 0: // nothing to do
@@ -321,6 +324,10 @@ func (e expandEnv) Set(name string, vr expand.Variable) error {
 	return nil // TODO: return any errors
 }
 
+func (e expandEnv) SetVarRef(ref *syntax.VarRef, vr expand.Variable, appendValue bool) error {
+	return e.r.setVarByRef(e.r.lookupVar(ref.Name.Value), ref, vr, appendValue)
+}
+
 func (e expandEnv) Each(fn func(name string, vr expand.Variable) bool) {
 	e.r.writeEnv.Each(fn)
 }
@@ -517,7 +524,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				} else {
 					r.applyVarAttrs(&vr)
 				}
-				if err := r.setVarByRef(prev, as.Ref, vr); err != nil {
+				if err := r.setVarByRef(prev, as.Ref, vr, as.Append); err != nil {
 					r.errf("%v\n", err)
 					r.exit.code = 1
 					continue
@@ -789,7 +796,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool) bool {
 			name := ref.Name.Value
 			if !syntax.ValidName(name) {
-				if allowPlusFlags {
+				if allowPlusFlags && !strings.ContainsAny(name, "[]") {
 					r.errf("declare: invalid name %q\n", name)
 				} else {
 					r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, name)
@@ -826,22 +833,27 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				switch vr.Kind {
 				case expand.Indexed:
 					r.outf("declare -%s %s=(", flags, name)
-					for i, v := range vr.List {
+					for i, index := range vr.IndexedIndices() {
 						if i > 0 {
 							r.out(" ")
 						}
-						r.outf("[%d]=%q", i, v)
+						val, _ := vr.IndexedGet(index)
+						r.outf("[%d]=%q", index, val)
 					}
 					r.out(")\n")
 				case expand.Associative:
 					r.outf("declare -%s %s=(", flags, name)
 					first := true
-					for k, v := range vr.Map {
+					for _, k := range expand.AssociativeKeys(vr.Map) {
+						v := vr.Map[k]
 						if !first {
 							r.out(" ")
 						}
 						r.outf("[%s]=%q", k, v)
 						first = false
+					}
+					if !first {
+						r.out(" ")
 					}
 					r.out(")\n")
 				default:
@@ -859,6 +871,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						vr.Kind = expand.String
 						vr.Str = vr.String()
 						vr.List = nil
+						vr.Indices = nil
 						vr.Map = nil
 					}
 				} else {
@@ -938,7 +951,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.setVar(name, vr)
 				return true
 			}
-			if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr); err != nil {
+			if vr.Kind == expand.NameRef && as.Ref != nil && as.Ref.Index == nil {
+				r.setVar(name, vr)
+				return true
+			}
+			if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr, as.Append); err != nil {
 				r.errf("%v\n", err)
 				r.exit.code = 1
 				return false
@@ -983,14 +1000,19 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				for _, field := range r.fields(operand.Word) {
 					parsed, err := parseDeclOperandField(field)
 					if err != nil {
-						r.errf("%s: %v\n", cm.Variant.Value, err)
-						r.exit.code = 1
-						return false
+						if strings.ContainsAny(field, "[]") {
+							parsed = nil
+							err = nil
+						} else {
+							r.errf("%s: %v\n", cm.Variant.Value, err)
+							r.exit.code = 1
+							continue
+						}
 					}
 					if parsed == nil {
 						r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, field)
 						r.exit.code = 1
-						return false
+						continue
 					}
 					subMode := subscriptModeFromArrayExprMode(declArrayModeFromValueType(valType))
 					switch parsed := parsed.(type) {
@@ -1160,6 +1182,31 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 	for _, as := range assigns {
 		name := as.Ref.Name.Value
 		prev := r.lookupVar(name)
+		if as.Ref.Index != nil {
+			r.errf("`%s': not a valid identifier\n", printVarRef(as.Ref))
+			continue
+		}
+		if as.Array != nil {
+			rendered := r.renderInlineArrayValue(as.Array)
+			vr := expand.Variable{
+				Set:      true,
+				Kind:     expand.String,
+				Str:      rendered,
+				Exported: true,
+			}
+			if as.Append {
+				vr.Str = prev.String() + vr.Str
+			}
+			resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
+			if err != nil {
+				r.errf("%v\n", err)
+				r.exit.code = 1
+				return restores
+			}
+			restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
+			r.setVar(resolvedRef.Name.Value, vr)
+			continue
+		}
 
 		vr, ok := r.assignVal(prev, as, "")
 		if !ok || r.exit.fatalExit || r.exit.exiting {
@@ -1174,7 +1221,8 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 			r.exit.code = 1
 			return restores
 		}
-		if err := r.setVarByRef(prev, as.Ref, vr); err != nil {
+		restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
+		if err := r.setVarByRef(prev, as.Ref, vr, as.Append); err != nil {
 			r.errf("%v\n", err)
 			r.exit.code = 1
 			return restores
@@ -1182,9 +1230,19 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 			return restores
 		}
-		restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
 	}
 	return restores
+}
+
+func (r *Runner) renderInlineArrayValue(expr *syntax.ArrayExpr) string {
+	if expr == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter().Print(&buf, expr); err != nil {
+		return ""
+	}
+	return buf.String()
 }
 
 func callExprDeclClause(args []*syntax.Word) *syntax.DeclClause {

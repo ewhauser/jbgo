@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
@@ -86,6 +85,13 @@ func printVarRef(ref *syntax.VarRef) string {
 	return buf.String()
 }
 
+func badArraySubscriptRef(ref *syntax.VarRef, fallback string) string {
+	if ref != nil && ref.Index != nil {
+		return printVarRef(ref)
+	}
+	return fallback
+}
+
 func (r *Runner) resolveVarRef(ref *syntax.VarRef) (*syntax.VarRef, expand.Variable, error) {
 	vr := r.lookupVar(ref.Name.Value)
 	return vr.ResolveRef(r.writeEnv, ref)
@@ -149,7 +155,7 @@ func (r *Runner) refIsSet(ref *syntax.VarRef) bool {
 		}
 		switch vr.Kind {
 		case expand.Indexed:
-			return len(vr.List) > 0
+			return vr.IndexedCount() > 0
 		case expand.Associative:
 			return len(vr.Map) > 0
 		default:
@@ -164,9 +170,15 @@ func (r *Runner) refIsSet(ref *syntax.VarRef) bool {
 		case expand.Indexed:
 			index := r.arithm(ref.Index.Expr)
 			if index < 0 {
-				index = len(vr.List) + index
+				resolved, ok := vr.IndexedResolve(index)
+				if !ok {
+					r.expandErr(expand.BadArraySubscriptError{Name: ref.Name.Value})
+					return false
+				}
+				index = resolved
 			}
-			return index >= 0 && index < len(vr.List)
+			_, ok := vr.IndexedGet(index)
+			return ok
 		default:
 			return false
 		}
@@ -196,18 +208,7 @@ func arrayDefaultIndex(kind expand.ValueKind) *syntax.Subscript {
 	}
 }
 
-func indexedSubscriptTargetList(prev expand.Variable) []string {
-	switch prev.Kind {
-	case expand.String:
-		return []string{prev.Str}
-	case expand.Indexed:
-		return slices.Clone(prev.List)
-	default:
-		return nil
-	}
-}
-
-func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand.Variable) error {
+func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand.Variable, appendValue bool) error {
 	ref, prev, err := prev.ResolveRef(r.writeEnv, ref)
 	if err != nil {
 		return err
@@ -234,12 +235,18 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 				return fmt.Errorf("bad array subscript")
 			}
 			prev.Kind = expand.Associative
+			prev.Str = ""
 			prev.List = nil
+			prev.Indices = nil
 			prev.Map = maps.Clone(prev.Map)
 			if prev.Map == nil {
 				prev.Map = make(map[string]string)
 			}
-			prev.Map[key] = valStr
+			if appendValue {
+				prev.Map[key] += valStr
+			} else {
+				prev.Map[key] = valStr
+			}
 			r.setVar(name, prev)
 			return nil
 		}
@@ -247,33 +254,94 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 	case resolvedSubscriptMode(index) == syntax.SubscriptAssociative:
 		key := r.associativeArrayKey(index)
 		prev.Kind = expand.Associative
+		prev.Str = ""
 		prev.List = nil
+		prev.Indices = nil
 		prev.Map = maps.Clone(prev.Map)
 		if prev.Map == nil {
 			prev.Map = make(map[string]string)
 		}
-		prev.Map[key] = valStr
+		if appendValue {
+			prev.Map[key] += valStr
+		} else {
+			prev.Map[key] = valStr
+		}
 		r.setVar(name, prev)
 		return nil
 	case resolvedSubscriptMode(index) == syntax.SubscriptIndexed:
-		list := indexedSubscriptTargetList(prev)
 		key := r.arithm(index.Expr)
 		if key < 0 {
-			key = len(list) + key
+			if prev.Kind == expand.Indexed {
+				resolved, ok := prev.IndexedResolve(key)
+				if !ok {
+					return fmt.Errorf("%s: bad array subscript", badArraySubscriptRef(ref, name))
+				}
+				key = resolved
+			} else {
+				return fmt.Errorf("%s: bad array subscript", badArraySubscriptRef(ref, name))
+			}
 		}
-		if key < 0 {
-			return fmt.Errorf("negative array index")
+		switch prev.Kind {
+		case expand.String:
+			next := expand.Variable{Kind: expand.Indexed}
+			if prev.IsSet() {
+				next.Set = true
+				next.List = []string{prev.Str}
+			}
+			next = next.IndexedSet(key, valStr, appendValue)
+			r.setVar(name, next)
+			return nil
+		case expand.Indexed:
+			prev = prev.IndexedSet(key, valStr, appendValue)
+			r.setVar(name, prev)
+			return nil
+		default:
+			prev.Kind = expand.Indexed
+			prev.Str = ""
+			prev.List = nil
+			prev.Map = nil
+			prev.Indices = nil
+			prev = prev.IndexedSet(key, valStr, appendValue)
+			r.setVar(name, prev)
+			return nil
 		}
-		for len(list) < key+1 {
-			list = append(list, "")
-		}
-		list[key] = valStr
-		prev.Kind = expand.Indexed
-		prev.Map = nil
-		prev.List = list
-		r.setVar(name, prev)
-		return nil
 	default:
 		return nil
 	}
+}
+
+func (r *Runner) unsetVarByRef(ref *syntax.VarRef) error {
+	ref, prev, err := r.resolveVarRef(ref)
+	if err != nil {
+		return err
+	}
+	if ref == nil || ref.Index == nil {
+		r.delVar(ref.Name.Value)
+		return nil
+	}
+	name := ref.Name.Value
+	switch prev.Kind {
+	case expand.Indexed:
+		index := r.arithm(ref.Index.Expr)
+		if index < 0 {
+			resolved, ok := prev.IndexedResolve(index)
+			if !ok {
+				return fmt.Errorf("[%d]: bad array subscript", index)
+			}
+			index = resolved
+		}
+		prev = prev.IndexedUnset(index)
+		r.setVar(name, prev)
+	case expand.Associative:
+		key := r.associativeArrayKey(ref.Index)
+		prev.Map = maps.Clone(prev.Map)
+		delete(prev.Map, key)
+		prev.Set = len(prev.Map) > 0
+		r.setVar(name, prev)
+	case expand.String:
+		if r.arithm(ref.Index.Expr) == 0 {
+			r.delVar(name)
+		}
+	}
+	return nil
 }

@@ -22,29 +22,137 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/array-assign.test.sh": {
+        "oils/array-assign.test.sh::Are quotes allowed?": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash does not stop on quoted arithmetic array subscripts where bash treats the assignment as fatal"
         },
-        "oils/array-assoc.test.sh": {
+        "oils/array-assign.test.sh::More fragments like a[  a[5  a[5 +  a[5 + 3]": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's parser diagnostics for incomplete array-assignment words still differ from bash"
         },
-        "oils/array-compat.test.sh": {
+        "oils/array-assign.test.sh::Multiple LHS array words": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash still applies the statement-local HOME binding during adjacent array-assignment tilde expansion"
         },
-        "oils/array-literal.test.sh": {
+        "oils/array-assign.test.sh::argv.sh a[1 + 2]=": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash normalizes spaced array-assignment identifiers in diagnostics instead of preserving bash's original text"
         },
-        "oils/array-sparse.test.sh": {
+        "oils/array-assign.test.sh::file named a[ is  not executed": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash treats `a[5 # 1]=` as a parse error instead of bash's arithmetic error"
         },
-        "oils/array.test.sh": {
+        "oils/array-assoc.test.sh::BashAssoc ${a[@]@Q}": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's array @Q quoting still differs from bash for associative values containing single quotes"
+        },
+        "oils/array-assoc.test.sh::Slice of associative array doesn't make sense in bash": {
+          "mode": "xfail",
+          "reason": "gbash still slices associative-array values differently from bash's hash-order quirk"
+        },
+        "oils/array-assoc.test.sh::bash variable can have an associative array part and a string part": {
+          "mode": "xfail",
+          "reason": "gbash cannot represent bash's mixed scalar-plus-associative variables"
+        },
+        "oils/array-compat.test.sh::value.BashArray internal representation - Assoc (ordering is a problem)": {
+          "mode": "xfail",
+          "reason": "gbash's declare -A listing output still differs from bash's associative-array introspection"
+        },
+        "oils/array-compat.test.sh::value.BashArray internal representation - Indexed": {
+          "mode": "xfail",
+          "reason": "gbash's declare -a listing output still differs from bash's indexed-array introspection"
+        },
+        "oils/array-literal.test.sh::(strict_array) declare -A s+=()": {
+          "mode": "xfail",
+          "reason": "gbash still follows bash's scalar-to-associative append behavior instead of the strict_array expectation"
+        },
+        "oils/array-literal.test.sh::BashArray cannot be changed to BashAssoc and vice versa": {
+          "mode": "xfail",
+          "reason": "gbash still allows indexed and associative array type conversion that bash rejects"
+        },
+        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashArray)": {
+          "mode": "xfail",
+          "reason": "gbash still expands ~ in keyed indexed-array literals using the temporary HOME binding unlike bash"
+        },
+        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashAssoc)": {
+          "mode": "xfail",
+          "reason": "gbash still expands ~ in keyed associative-array literals using the temporary HOME binding unlike bash"
+        },
+        "oils/array-literal.test.sh::append to element (BashAssoc)": {
+          "mode": "xfail",
+          "reason": "gbash preserves the older associative append result that newer bash releases regressed"
+        },
+        "oils/array-literal.test.sh::non-index forms of element (BashAssoc)": {
+          "mode": "xfail",
+          "reason": "gbash is still looser than the Oils spec when bare key/value tails appear in associative literals"
+        },
+        "oils/array-sparse.test.sh::${@:offset:length}": {
+          "mode": "xfail",
+          "reason": "the pinned harness still hits a sed incompatibility before bash and gbash results can be compared"
+        },
+        "oils/array-sparse.test.sh::${a[@]/pat/rep}": {
+          "mode": "xfail",
+          "reason": "gbash still handles anchored sparse-array replacements differently from bash"
+        },
+        "oils/array-sparse.test.sh::compgen -F _set_COMPREPLY": {
+          "mode": "xfail",
+          "reason": "gbash does not implement bash's compgen -F completion hook behavior"
+        },
+        "oils/array.test.sh::${mystr[@]} and ${mystr[*]} disallowed with strict_array": {
+          "mode": "xfail",
+          "reason": "gbash still treats string scalars as arrays in strict_array parameter expansions"
+        },
+        "oils/array.test.sh::Arrays can't be used as env bindings": {
+          "mode": "xfail",
+          "reason": "gbash rejects array-valued env bindings instead of decaying them to strings like bash"
+        },
+        "oils/array.test.sh::Associative arrays can't be used as env bindings either": {
+          "mode": "xfail",
+          "reason": "gbash rejects associative-array env bindings instead of stringifying them like bash"
+        },
+        "oils/array.test.sh::Exporting array doesn't do anything, not even first element": {
+          "mode": "xfail",
+          "reason": "gbash exports array variables differently from bash's no-op behavior"
+        },
+        "oils/array.test.sh::Length op, index op, then transform op is not allowed": {
+          "mode": "xfail",
+          "reason": "gbash emits a custom parameter-expansion error instead of bash's bad substitution"
+        },
+        "oils/array.test.sh::Multiple subscripts not allowed": {
+          "mode": "xfail",
+          "reason": "gbash emits a custom parse error instead of bash's bad substitution for chained subscripts"
+        },
+        "oils/array.test.sh::Negative slice length": {
+          "mode": "xfail",
+          "reason": "gbash still accepts negative array slice lengths that bash rejects"
+        },
+        "oils/array.test.sh::Set array item to array": {
+          "mode": "xfail",
+          "reason": "gbash treats nested array assignment as fatal instead of bash's non-fatal member-assignment error"
+        },
+        "oils/array.test.sh::Tilde expansion within array": {
+          "mode": "xfail",
+          "reason": "gbash still applies tilde expansion within array literals differently from bash"
+        },
+        "oils/array.test.sh::Using an array itself as the index on RHS": {
+          "mode": "xfail",
+          "reason": "gbash's unsupported strict_arith shopt diagnostic text still differs from bash in this array test"
+        },
+        "oils/array.test.sh::Using an array itself as the index on LHS": {
+          "mode": "xfail",
+          "reason": "gbash still coerces array lvalue subscripts differently from bash"
+        },
+        "oils/array.test.sh::array with invalid token": {
+          "mode": "xfail",
+          "reason": "gbash stops invalid array literals earlier than bash's parser"
+        },
+        "oils/array.test.sh::declare -a / local -a is empty array": {
+          "mode": "xfail",
+          "reason": "gbash still differs from bash when declaring empty arrays with declare -a or local -a"
+        },
+        "oils/array.test.sh::strict_array prevents exporting array": {
+          "mode": "xfail",
+          "reason": "gbash still follows bash's export behavior instead of rejecting array export under strict_array"
         },
         "oils/assign-deferred.test.sh": {
           "mode": "xfail",
@@ -350,13 +458,9 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/strict-options.test.sh::automatically creating arrays by sparse assignment": {
+        "oils/strict-options.test.sh::errexit and top-level control flow": {
           "mode": "xfail",
-          "reason": "gbash currently materializes sparse indexed arrays with empty leading elements instead of bash's compact expansion"
-        },
-        "oils/strict-options.test.sh::automatically creating arrays are indexed, not associative": {
-          "mode": "xfail",
-          "reason": "gbash currently materializes sparse indexed arrays with empty leading elements instead of bash's compact expansion"
+          "reason": "gbash returns 127 instead of bash's exit 1 when the vendored helper path is missing under errexit"
         },
         "oils/temp-binding.test.sh": {
           "mode": "xfail",

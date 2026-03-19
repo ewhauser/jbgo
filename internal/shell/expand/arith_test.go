@@ -145,3 +145,48 @@ func TestArithmSingleQuoteRejection(t *testing.T) {
 		})
 	}
 }
+
+func TestArithmArrayElementLValues(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"a": {Set: true, Kind: Indexed, List: []string{"1", "4"}, Indices: []int{1, 4}},
+	}
+	cfg := &Config{Env: env}
+
+	postInc := parseArithmExpr(t, "a[2]++")
+	got, err := Arithm(cfg, postInc)
+	if err != nil {
+		t.Fatalf("Arithm(postInc) error = %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("Arithm(postInc) = %d, want 0", got)
+	}
+	if val, ok := env["a"].IndexedGet(2); !ok || val != "1" {
+		t.Fatalf("a[2] = (%q, %v), want (\"1\", true)", val, ok)
+	}
+
+	preInc := parseArithmExpr(t, "++a[2]")
+	got, err = Arithm(cfg, preInc)
+	if err != nil {
+		t.Fatalf("Arithm(preInc) error = %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("Arithm(preInc) = %d, want 2", got)
+	}
+	if val, ok := env["a"].IndexedGet(2); !ok || val != "2" {
+		t.Fatalf("a[2] after pre-inc = (%q, %v), want (\"2\", true)", val, ok)
+	}
+
+	assign := parseArithmExpr(t, "a[-1]=100")
+	got, err = Arithm(cfg, assign)
+	if err != nil {
+		t.Fatalf("Arithm(assign) error = %v", err)
+	}
+	if got != 100 {
+		t.Fatalf("Arithm(assign) = %d, want 100", got)
+	}
+	if val, ok := env["a"].IndexedGet(4); !ok || val != "100" {
+		t.Fatalf("a[4] after assign = (%q, %v), want (\"100\", true)", val, ok)
+	}
+}

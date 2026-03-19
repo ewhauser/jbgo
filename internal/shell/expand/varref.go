@@ -94,5 +94,18 @@ func (cfg *Config) varRef(ref *syntax.VarRef) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return cfg.varInd(vr, ref.Index)
+	return cfg.varInd(ref.Name.Value, vr, ref.Index)
+}
+
+func (cfg *Config) envSetRef(ref *syntax.VarRef, value string) error {
+	if ref == nil {
+		return nil
+	}
+	if wenv, ok := cfg.Env.(VarRefWriter); ok {
+		return wenv.SetVarRef(ref, Variable{Set: true, Kind: String, Str: value}, false)
+	}
+	if ref.Index != nil {
+		return fmt.Errorf("environment cannot set indexed references")
+	}
+	return cfg.envSet(ref.Name.Value, value)
 }

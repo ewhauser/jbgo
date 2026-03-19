@@ -2933,6 +2933,33 @@ func (p *Parser) varRef() *VarRef {
 	return ref
 }
 
+func subscriptHasWhitespace(sub *Subscript) bool {
+	if sub == nil || !sub.Left.IsValid() || !sub.Right.IsValid() {
+		return false
+	}
+	sourceLen := int(sub.Right.Offset()-sub.Left.Offset()) - 1
+	if sourceLen <= 0 {
+		return false
+	}
+	canonicalLen := 1
+	if sub.Kind == SubscriptExpr {
+		canonicalLen = len(ArithmExprString(sub.Expr))
+	}
+	return sourceLen > canonicalLen
+}
+
+func (p *Parser) bracketStartsWithSpace() bool {
+	if p.r != '[' || p.bsp >= uint(len(p.bs)) {
+		return false
+	}
+	switch p.bs[p.bsp] {
+	case ' ', '\t', '\n':
+		return true
+	default:
+		return false
+	}
+}
+
 func (p *Parser) finishAssign(as *Assign) *Assign {
 	if p.spaced || p.stopToken() {
 		return as
@@ -3059,6 +3086,75 @@ func (p *Parser) getAssignAfterRef(ref *VarRef) *Assign {
 	return p.finishAssign(as)
 }
 
+func (p *Parser) tryAssignAfterRef(ref *VarRef) (*Assign, bool) {
+	as := &Assign{Ref: ref}
+	if p.tok == assgnParen {
+		if !p.lang.in(LangZsh) {
+			p.curErr("arrays cannot be nested")
+			return nil, false
+		}
+		p.tok = leftParen
+		p.pos = posAddCol(p.pos, 1)
+	} else {
+		if p.val != "" && p.val[0] == '+' {
+			as.Append = true
+			p.val = p.val[1:]
+			p.pos = posAddCol(p.pos, 1)
+		}
+		if len(p.val) < 1 || p.val[0] != '=' {
+			return nil, false
+		}
+		p.pos = posAddCol(p.pos, 1)
+		p.val = p.val[1:]
+		if p.val == "" {
+			p.next()
+		}
+	}
+	return p.finishAssign(as), true
+}
+
+func (p *Parser) tryAssignCandidate(declMode bool) (*Assign, bool) {
+	if eqIndex := p.validEqlOffs(); eqIndex > 0 {
+		return p.getAssign(), true
+	}
+	saved := *p
+	ref := p.varRef()
+	if ref == nil {
+		return nil, false
+	}
+	if declMode && ref.Index != nil && subscriptHasWhitespace(ref.Index) {
+		*p = saved
+		p.err = nil
+		return nil, false
+	}
+	if p.spaced || p.stopToken() {
+		if ref.Index != nil && subscriptHasWhitespace(ref.Index) {
+			*p = saved
+			p.err = nil
+			return nil, false
+		}
+		if !p.spaced && (p.pos.After(ref.End()) || (p.val != "" && p.val[0] == '+') || p.r == '+') {
+			p.followErr(ref.Pos(), "a[b]+", assgn)
+		} else {
+			p.followErr(ref.Pos(), "a[b]", assgn)
+		}
+		return nil, false
+	}
+	as, ok := p.tryAssignAfterRef(ref)
+	if !ok && p.err == nil {
+		if ref.Index != nil && subscriptHasWhitespace(ref.Index) {
+			*p = saved
+			return nil, false
+		}
+		if p.val != "" && p.val[0] == '+' {
+			p.followErr(ref.Pos(), "a[b]+", assgn)
+		} else {
+			p.followErr(ref.Pos(), "a[b]", assgn)
+		}
+	}
+	return as, ok
+}
+
 func (p *Parser) getAssign() *Assign {
 	as := &Assign{}
 	if eqIndex := p.validEqlOffs(); eqIndex > 0 { // foo=bar
@@ -3131,7 +3227,7 @@ func (p *Parser) declOperand() DeclOperand {
 		}
 		name := p.val[:nameEnd]
 		if !ValidName(name) {
-			if !strings.Contains(name, "{") {
+			if !strings.ContainsAny(name, "[]") && !strings.Contains(name, "{") {
 				p.curErr("invalid var name")
 				return nil
 			}
@@ -3146,6 +3242,12 @@ func (p *Parser) declOperand() DeclOperand {
 		return nil
 	}
 	if p.hasValidIdent() {
+		if p.bracketStartsWithSpace() {
+			if w := p.getWord(); w != nil {
+				return &DeclDynamicWord{Word: w}
+			}
+			return nil
+		}
 		ref := p.varRef()
 		if ref == nil {
 			return nil
@@ -4832,7 +4934,12 @@ func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 		ce.Args = ce.Args[:0]
 	}
 	if assign {
-		ce.Assigns = append(ce.Assigns, p.getAssign())
+		if as, ok := p.tryAssignCandidate(false); ok {
+			ce.Assigns = append(ce.Assigns, as)
+		} else if p.err != nil {
+			s.Cmd = ce
+			return
+		}
 	}
 loop:
 	for {
@@ -4842,8 +4949,13 @@ loop:
 			break loop
 		case _LitWord:
 			if len(ce.Args) == 0 && p.hasValidIdent() {
-				ce.Assigns = append(ce.Assigns, p.getAssign())
-				break
+				if as, ok := p.tryAssignCandidate(false); ok {
+					ce.Assigns = append(ce.Assigns, as)
+					break
+				}
+				if p.err != nil {
+					break loop
+				}
 			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
 			if p.atRsrv(rsrvLeftBrace) && w != nil && w.Lit() == "function" {
@@ -4862,8 +4974,13 @@ loop:
 			ce.Args = append(ce.Args, w)
 		case _Lit:
 			if len(ce.Args) == 0 && p.hasValidIdent() {
-				ce.Assigns = append(ce.Assigns, p.getAssign())
-				break
+				if as, ok := p.tryAssignCandidate(false); ok {
+					ce.Assigns = append(ce.Assigns, as)
+					break
+				}
+				if p.err != nil {
+					break loop
+				}
 			}
 			ce.Args = append(ce.Args, p.wordAnyNumber())
 		case bckQuote:
@@ -4898,12 +5015,6 @@ loop:
 	}
 	if len(ce.Args) == 0 {
 		ce.Args = nil
-	} else {
-		for _, asgn := range ce.Assigns {
-			if (asgn.Ref != nil && asgn.Ref.Index != nil) || asgn.Array != nil {
-				p.posErr(asgn.Pos(), "inline variables cannot be arrays")
-			}
-		}
 	}
 	s.Cmd = ce
 }

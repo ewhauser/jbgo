@@ -87,6 +87,29 @@ printf '%s\n' "${array[*]}"
 	}
 }
 
+func TestAssociativeVarRefsSupportNonWordSubscripts(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, err := runInterpScript(t, `
+declare -A assoc
+assoc[i]=one
+assoc[i+1]=two
+printf '%s\n' "${assoc[i]}"
+printf '%s\n' "${assoc[i+1]}"
+test -v 'assoc[i+1]'
+printf 'isset=%d\n' "$?"
+unset -v 'assoc[i]'
+printf '%s\n' "${assoc[i]-missing}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const want = "one\ntwo\nisset=0\nmissing\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}
+
 func TestIndirectExpansionSupportsPositionalRefs(t *testing.T) {
 	t.Parallel()
 

@@ -25,6 +25,58 @@ func (e testEnv) Each(fn func(name string, vr Variable) bool) {
 	}
 }
 
+func (e testEnv) Set(name string, vr Variable) error {
+	if !vr.IsSet() && !vr.Declared() {
+		delete(e, name)
+		return nil
+	}
+	e[name] = vr
+	return nil
+}
+
+func (e testEnv) SetVarRef(ref *syntax.VarRef, vr Variable, appendValue bool) error {
+	if ref == nil {
+		return nil
+	}
+	if ref.Index == nil {
+		e[ref.Name.Value] = vr
+		return nil
+	}
+	prev := e[ref.Name.Value]
+	switch prev.Kind {
+	case Associative:
+		key, err := (&Config{Env: e}).associativeSubscriptKey(ref.Index)
+		if err != nil {
+			return err
+		}
+		if prev.Map == nil {
+			prev.Map = make(map[string]string)
+		}
+		if appendValue {
+			prev.Map[key] += vr.Str
+		} else {
+			prev.Map[key] = vr.Str
+		}
+		prev.Set = true
+		e[ref.Name.Value] = prev
+		return nil
+	default:
+		index, err := Arithm(&Config{Env: e}, ref.Index.Expr)
+		if err != nil {
+			return err
+		}
+		if index < 0 {
+			resolved, ok := prev.IndexedResolve(index)
+			if !ok {
+				return BadArraySubscriptError{Name: ref.Name.Value}
+			}
+			index = resolved
+		}
+		e[ref.Name.Value] = prev.IndexedSet(index, vr.Str, appendValue)
+		return nil
+	}
+}
+
 type testEnvEntry struct {
 	name string
 	vr   Variable
@@ -156,6 +208,200 @@ func TestFieldsIdempotency(t *testing.T) {
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("wanted %q, got %q", tc.want, got)
 			}
+		}
+	}
+}
+
+func TestSparseElementExpansionsTreatHolesAsUnset(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"sp": {Set: true, Kind: Indexed, List: []string{"one", "four"}, Indices: []int{1, 4}},
+	}
+
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{`${sp[2]+set}`, ""},
+		{`${sp[2]:-default}`, "default"},
+		{`${sp[-3]+set}`, ""},
+		{`${sp[-3]:-default}`, "default"},
+	}
+	for _, tt := range tests {
+		word := parseWord(t, tt.src)
+		got, err := Literal(&Config{Env: env}, word)
+		if err != nil {
+			t.Fatalf("Literal(%q) error = %v", tt.src, err)
+		}
+		if got != tt.want {
+			t.Fatalf("Literal(%q) = %q, want %q", tt.src, got, tt.want)
+		}
+	}
+}
+
+func TestBadArraySubscriptCanReportWithoutAbortingExpansion(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"sp": {Set: true, Kind: Indexed, List: []string{"one", "two"}, Indices: []int{1, 2}},
+	}
+	var reported []string
+	cfg := &Config{
+		Env: env,
+		ReportError: func(err error) {
+			reported = append(reported, err.Error())
+		},
+	}
+
+	word := parseCommandWord(t, `"${sp[-10]}"`)
+	got, err := Literal(cfg, word)
+	if err != nil {
+		t.Fatalf("Literal() error = %v", err)
+	}
+	if got != "" {
+		t.Fatalf("Literal() = %q, want empty string", got)
+	}
+	if !reflect.DeepEqual(reported, []string{"sp: bad array subscript"}) {
+		t.Fatalf("reported = %#v, want bad array subscript", reported)
+	}
+
+	reported = nil
+	word = parseCommandWord(t, `"$((sp[-10]))"`)
+	got, err = Literal(cfg, word)
+	if err != nil {
+		t.Fatalf("Literal() arithmetic error = %v", err)
+	}
+	if got != "0" {
+		t.Fatalf("Literal() arithmetic = %q, want %q", got, "0")
+	}
+	if !reflect.DeepEqual(reported, []string{"sp: bad array subscript"}) {
+		t.Fatalf("arithmetic reported = %#v, want bad array subscript", reported)
+	}
+
+	reported = nil
+	word = parseCommandWord(t, `${sp[-10]}`)
+	fields, err := Fields(cfg, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	if len(fields) != 0 {
+		t.Fatalf("Fields() = %#v, want zero fields", fields)
+	}
+	if !reflect.DeepEqual(reported, []string{"sp: bad array subscript"}) {
+		t.Fatalf("fields reported = %#v, want bad array subscript once", reported)
+	}
+}
+
+func TestFieldsQuotedSparseArrayExpansionKeepsPrefixAndSuffix(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"a": {Set: true, Kind: Indexed, List: []string{"v0", "v1", "v5", "v9"}, Indices: []int{0, 1, 5, 9}},
+	}
+	word := parseCommandWord(t, `"abc${a[@]}xyz"`)
+	got, err := Fields(&Config{Env: env}, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"abcv0", "v1", "v5", "v9xyz"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFieldsQuotedSparseArrayParamOpsAreElementWise(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"a": {Set: true, Kind: Indexed, List: []string{"v0", "v1", "v5", "v9"}, Indices: []int{0, 1, 5, 9}},
+	}
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{`"${a[@]#v}"`, []string{"0", "1", "5", "9"}},
+		{`"${a[@]@Q}"`, []string{"'v0'", "'v1'", "'v5'", "'v9'"}},
+	}
+	for _, tc := range tests {
+		word := parseCommandWord(t, tc.src)
+		got, err := Fields(&Config{Env: env}, word)
+		if err != nil {
+			t.Fatalf("Fields(%q) error = %v", tc.src, err)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("Fields(%q) = %#v, want %#v", tc.src, got, tc.want)
+		}
+	}
+}
+
+func TestAssociativeSubscriptStringifiesNonWordExpr(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"a": {Set: true, Kind: Associative, Map: map[string]string{"a+1": "value"}},
+	}
+	word := parseWord(t, `${a[a+1]}`)
+	got, err := Literal(&Config{Env: env}, word)
+	if err != nil {
+		t.Fatalf("Literal() error = %v", err)
+	}
+	if got != "value" {
+		t.Fatalf("Literal() = %q, want %q", got, "value")
+	}
+}
+
+func TestBashQuoteValueMatchesSingleQuoteEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"''", "''\\'''\\'''"},
+		{"a'b", "'a'\\''b'"},
+	}
+	for _, tc := range tests {
+		got, err := bashQuoteValue(tc.in)
+		if err != nil {
+			t.Fatalf("bashQuoteValue(%q) error = %v", tc.in, err)
+		}
+		if got != tc.want {
+			t.Fatalf("bashQuoteValue(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestSparseArrayDefaultExpansionUsesElementZeroSetness(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  testEnv
+		src  string
+		want string
+	}{
+		{
+			name: "empty array scalar default",
+			env:  testEnv{"a": {Set: true, Kind: Indexed}},
+			src:  `${a-(unset)}`,
+			want: "(unset)",
+		},
+		{
+			name: "assoc scalar element zero",
+			env:  testEnv{"assoc": {Set: true, Kind: Associative, Map: map[string]string{"0": "zero"}}},
+			src:  `${assoc}`,
+			want: "zero",
+		},
+	}
+	for _, tc := range tests {
+		word := parseWord(t, tc.src)
+		got, err := Literal(&Config{Env: tc.env}, word)
+		if err != nil {
+			t.Fatalf("Literal(%q) error = %v", tc.src, err)
+		}
+		if got != tc.want {
+			t.Fatalf("Literal(%q) = %q, want %q", tc.src, got, tc.want)
 		}
 	}
 }

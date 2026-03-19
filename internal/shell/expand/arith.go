@@ -126,10 +126,10 @@ func hasSingleQuote(word *syntax.Word) *syntax.SglQuoted {
 }
 
 func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
-	return arithm(cfg, expr, expr)
+	return arithm(cfg, expr, expr, 0)
 }
 
-func arithm(cfg *Config, root, expr syntax.ArithmExpr) (int, error) {
+func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 	switch expr := expr.(type) {
 	case *syntax.Word:
 		// Bash rejects single-quoted strings in arithmetic context.
@@ -152,30 +152,42 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr) (int, error) {
 			}
 			str = val
 		}
+		if depth < maxNameRefDepth {
+			p := syntax.NewParser()
+			if nested, err := p.Arithmetic(strings.NewReader(str)); err == nil {
+				if nested != nil {
+					if word, ok := nested.(*syntax.Word); !ok || word.Lit() != str {
+						return arithm(cfg, root, nested, depth+1)
+					}
+				}
+			}
+		}
 		// default to 0
 		return int(atoi(str)), nil
 	case *syntax.ParenArithm:
-		return arithm(cfg, root, expr.X)
+		return arithm(cfg, root, expr.X, depth)
 	case *syntax.UnaryArithm:
 		switch expr.Op {
 		case syntax.Inc, syntax.Dec:
-			name := expr.X.(*syntax.Word).Lit()
-			old := atoi(cfg.envGet(name))
+			ref, old, err := cfg.arithmLValue(expr.X)
+			if err != nil {
+				return 0, err
+			}
 			val := old
 			if expr.Op == syntax.Inc {
 				val++
 			} else {
 				val--
 			}
-			if err := cfg.envSet(name, strconv.FormatInt(val, 10)); err != nil {
+			if err := cfg.envSetRef(ref, strconv.FormatInt(int64(val), 10)); err != nil {
 				return 0, err
 			}
 			if expr.Post {
-				return int(old), nil
+				return old, nil
 			}
-			return int(val), nil
+			return val, nil
 		}
-		val, err := arithm(cfg, root, expr.X)
+		val, err := arithm(cfg, root, expr.X, depth)
 		if err != nil {
 			return 0, err
 		}
@@ -199,21 +211,21 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr) (int, error) {
 			syntax.ShlAssgn, syntax.ShrAssgn:
 			return cfg.assgnArit(root, expr)
 		case syntax.TernQuest: // TernColon can't happen here
-			cond, err := arithm(cfg, root, expr.X)
+			cond, err := arithm(cfg, root, expr.X, depth)
 			if err != nil {
 				return 0, err
 			}
 			b2 := expr.Y.(*syntax.BinaryArithm) // must have Op==TernColon
 			if cond == 1 {
-				return arithm(cfg, root, b2.X)
+				return arithm(cfg, root, b2.X, depth)
 			}
-			return arithm(cfg, root, b2.Y)
+			return arithm(cfg, root, b2.Y, depth)
 		}
-		left, err := arithm(cfg, root, expr.X)
+		left, err := arithm(cfg, root, expr.X, depth)
 		if err != nil {
 			return 0, err
 		}
-		right, err := arithm(cfg, root, expr.Y)
+		right, err := arithm(cfg, root, expr.Y, depth)
 		if err != nil {
 			return 0, err
 		}
@@ -237,7 +249,7 @@ func oneIf(b bool) int {
 // atoi is like [strconv.ParseInt](s, 10, 64), but it ignores errors and trims whitespace.
 func atoi(s string) int64 {
 	s = strings.TrimSpace(s)
-	n, _ := strconv.ParseInt(s, 10, 64)
+	n, _ := strconv.ParseInt(s, 0, 64)
 	return n
 }
 
@@ -283,47 +295,80 @@ func divByZeroErrorAssgn(b *syntax.BinaryArithm, op string) error {
 }
 
 func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (int, error) {
-	name := b.X.(*syntax.Word).Lit()
-	val := atoi(cfg.envGet(name))
-	arg_, err := arithm(cfg, root, b.Y)
+	ref, val, err := cfg.arithmLValue(b.X)
+	if err != nil {
+		return 0, err
+	}
+	arg_, err := arithm(cfg, root, b.Y, 0)
 	if err != nil {
 		return 0, err
 	}
 	arg := int64(arg_)
+	acc := int64(val)
 	switch b.Op {
 	case syntax.Assgn:
-		val = arg
+		acc = arg
 	case syntax.AddAssgn:
-		val += arg
+		acc += arg
 	case syntax.SubAssgn:
-		val -= arg
+		acc -= arg
 	case syntax.MulAssgn:
-		val *= arg
+		acc *= arg
 	case syntax.QuoAssgn:
 		if arg == 0 {
 			return 0, divByZeroErrorAssgn(b, "/")
 		}
-		val /= arg
+		acc /= arg
 	case syntax.RemAssgn:
 		if arg == 0 {
 			return 0, divByZeroErrorAssgn(b, "%")
 		}
-		val %= arg
+		acc %= arg
 	case syntax.AndAssgn:
-		val &= arg
+		acc &= arg
 	case syntax.OrAssgn:
-		val |= arg
+		acc |= arg
 	case syntax.XorAssgn:
-		val ^= arg
+		acc ^= arg
 	case syntax.ShlAssgn:
-		val <<= uint(arg)
+		acc <<= uint(arg)
 	case syntax.ShrAssgn:
-		val >>= uint(arg)
+		acc >>= uint(arg)
 	}
-	if err := cfg.envSet(name, strconv.FormatInt(val, 10)); err != nil {
+	if err := cfg.envSetRef(ref, strconv.FormatInt(acc, 10)); err != nil {
 		return 0, err
 	}
-	return int(val), nil
+	return int(acc), nil
+}
+
+func arithmVarRef(expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
+	word, ok := expr.(*syntax.Word)
+	if !ok || len(word.Parts) != 1 {
+		return nil, false
+	}
+	switch part := word.Parts[0].(type) {
+	case *syntax.Lit:
+		if syntax.ValidName(part.Value) {
+			return &syntax.VarRef{Name: part}, true
+		}
+	case *syntax.ParamExp:
+		if part.Short && part.Index != nil && !part.Dollar.IsValid() {
+			return &syntax.VarRef{Name: part.Param, Index: part.Index}, true
+		}
+	}
+	return nil, false
+}
+
+func (cfg *Config) arithmLValue(expr syntax.ArithmExpr) (*syntax.VarRef, int, error) {
+	ref, ok := arithmVarRef(expr)
+	if !ok {
+		return nil, 0, fmt.Errorf("invalid arithmetic lvalue")
+	}
+	val, err := cfg.varRef(ref)
+	if err != nil {
+		return ref, 0, err
+	}
+	return ref, int(atoi(val)), nil
 }
 
 func intPow(a, b int) int {

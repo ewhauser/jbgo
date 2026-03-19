@@ -96,6 +96,7 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 		vr.Kind = prev.Kind
 		vr.Str = prev.Str
 		vr.List = prev.List
+		vr.Indices = prev.Indices
 		vr.Map = prev.Map
 	} else if prev.ReadOnly {
 		return fmt.Errorf("readonly variable")
@@ -517,6 +518,7 @@ func compoundArrayBase(prev expand.Variable, mode syntax.ArrayExprMode, appendAs
 	base.Kind = arrayValueKind(mode)
 	base.Str = ""
 	base.List = nil
+	base.Indices = nil
 	base.Map = nil
 	if !appendAssign {
 		if base.Kind == expand.Associative {
@@ -531,6 +533,7 @@ func compoundArrayBase(prev expand.Variable, mode syntax.ArrayExprMode, appendAs
 			base.List = []string{prev.Str}
 		case expand.Indexed:
 			base.List = slices.Clone(prev.List)
+			base.Indices = slices.Clone(prev.Indices)
 		}
 	case expand.Associative:
 		if prev.Kind == expand.Associative {
@@ -540,18 +543,6 @@ func compoundArrayBase(prev expand.Variable, mode syntax.ArrayExprMode, appendAs
 		}
 	}
 	return base
-}
-
-func indexedAssign(list []string, index int, value string, appendValue bool) []string {
-	for len(list) < index+1 {
-		list = append(list, "")
-	}
-	if appendValue {
-		list[index] += value
-	} else {
-		list[index] = value
-	}
-	return list
 }
 
 func (r *Runner) associativeArrayKey(index *syntax.Subscript) string {
@@ -565,7 +556,7 @@ func (r *Runner) associativeArrayKey(index *syntax.Subscript) string {
 		return r.literal(word)
 	}
 	var sb strings.Builder
-	if err := syntax.NewPrinter().Print(&sb, index.Expr); err != nil {
+	if err := syntax.NewPrinter(syntax.Minify(true)).Print(&sb, index.Expr); err != nil {
 		return ""
 	}
 	return sb.String()
@@ -663,17 +654,22 @@ func (r *Runner) assignArray(prev expand.Variable, as *syntax.Assign, valType st
 		return shadowEnv.shadow, true
 	}
 
-	nextIndex := len(shadowEnv.shadow.List)
+	nextIndex := shadowEnv.shadow.IndexedAppendIndex()
 	for _, elem := range elems {
 		switch elem.kind {
 		case syntax.ArrayElemSequential:
 			for _, field := range elem.fields {
-				shadowEnv.shadow.List = indexedAssign(shadowEnv.shadow.List, nextIndex, field, false)
+				shadowEnv.shadow = shadowEnv.shadow.IndexedSet(nextIndex, field, false)
 				nextIndex++
 			}
 		case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
 			index := r.arithm(elem.index.Expr)
-			shadowEnv.shadow.List = indexedAssign(shadowEnv.shadow.List, index, elem.value, elem.kind == syntax.ArrayElemKeyedAppend)
+			if index < 0 {
+				if resolved, ok := shadowEnv.shadow.IndexedResolve(index); ok {
+					index = resolved
+				}
+			}
+			shadowEnv.shadow = shadowEnv.shadow.IndexedSet(index, elem.value, elem.kind == syntax.ArrayElemKeyedAppend)
 			nextIndex = index + 1
 		}
 		shadowEnv.shadow.Kind = expand.Indexed
@@ -691,6 +687,9 @@ func (r *Runner) assignVal(prev expand.Variable, as *syntax.Assign, valType stri
 	prev.Set = true
 	if as.Value != nil {
 		s := r.literal(as.Value)
+		if as.Ref != nil && as.Ref.Index != nil {
+			return expand.Variable{Set: true, Kind: expand.String, Str: s}
+		}
 		if !as.Append {
 			prev.Kind = expand.String
 			if valType == "-n" {
@@ -704,10 +703,7 @@ func (r *Runner) assignVal(prev expand.Variable, as *syntax.Assign, valType stri
 			prev.Kind = expand.String
 			prev.Str += s
 		case expand.Indexed:
-			if len(prev.List) == 0 {
-				prev.List = append(prev.List, "")
-			}
-			prev.List[0] += s
+			prev = prev.IndexedSet(0, s, true)
 		case expand.Associative:
 			// TODO
 		}

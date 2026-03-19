@@ -101,9 +101,10 @@ type Variable struct {
 	// Kind defines which of the value fields below should be used.
 	Kind ValueKind
 
-	Str  string            // Used when Kind is String or NameRef.
-	List []string          // Used when Kind is Indexed.
-	Map  map[string]string // Used when Kind is Associative.
+	Str     string            // Used when Kind is String or NameRef.
+	List    []string          // Used when Kind is Indexed.
+	Indices []int             // Set-element indices for sparse indexed arrays.
+	Map     map[string]string // Used when Kind is Associative.
 }
 
 // IsSet reports whether the variable has been set to a value.
@@ -157,11 +158,11 @@ func (v Variable) String() string {
 	case String:
 		return v.Str
 	case Indexed:
-		if len(v.List) > 0 {
-			return v.List[0]
+		if val, ok := v.IndexedGet(0); ok {
+			return val
 		}
 	case Associative:
-		// nothing to do
+		return v.Map["0"]
 	}
 	return ""
 }

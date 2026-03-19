@@ -195,9 +195,20 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 
 		for _, arg := range args {
-			if vars && r.lookupVar(arg).IsSet() {
-				r.delVar(arg)
-			} else if _, ok := r.funcs[arg]; ok && funcs {
+			if vars {
+				if ref, err := r.strictVarRef(arg); err == nil {
+					if err := r.unsetVarByRef(ref); err != nil {
+						r.errf("unset: %v\n", err)
+						exit.code = 1
+					}
+					continue
+				}
+				if r.lookupVar(arg).Declared() {
+					r.delVar(arg)
+					continue
+				}
+			}
+			if _, ok := r.funcs[arg]; ok && funcs {
 				r.delFunc(arg)
 			}
 		}
@@ -269,8 +280,11 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 					&syntax.Lit{Value: sb.String()},
 				}},
 			}
-			vr, _ := r.assignVal(prev, as, "")
-			if err := r.setVarByRef(prev, destRef, vr); err != nil {
+			vr, ok := r.assignVal(prev, as, "")
+			if !ok || r.exit.fatalExit || r.exit.exiting {
+				return exit
+			}
+			if err := r.setVarByRef(prev, destRef, vr, false); err != nil {
 				return failf(2, "printf: %v\n", err)
 			}
 		}

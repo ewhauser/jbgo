@@ -49,6 +49,10 @@ type Config struct {
 	// ProcSubst expands a process substitution node.
 	ProcSubst func(*syntax.ProcSubst) (string, error)
 
+	// ReportError is used for non-fatal expansion diagnostics where bash emits
+	// stderr but still yields an empty string or zero value.
+	ReportError func(error)
+
 	// ReadDir is used for file path globbing.
 	// If nil, globbing is disabled.
 	ReadDir func(string) ([]fs.DirEntry, error)
@@ -111,6 +115,14 @@ func prepareConfig(cfg *Config) *Config {
 	}
 
 	return cfg
+}
+
+func (cfg *Config) swallowNonFatal(err error) bool {
+	if err == nil || cfg.ReportError == nil || !isBadArraySubscript(err) {
+		return false
+	}
+	cfg.ReportError(err)
+	return true
 }
 
 func (cfg *Config) ifsRune(r rune) bool {
@@ -857,7 +869,10 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 		case *syntax.ArithmExp:
 			n, err := Arithm(cfg, wp.X)
 			if err != nil {
-				return nil, err
+				if !cfg.swallowNonFatal(err) {
+					return nil, err
+				}
+				n = 0
 			}
 			field = append(field, fieldPart{val: strconv.Itoa(n)})
 		case *syntax.BraceExp:
@@ -969,22 +984,16 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			}
 			curField = append(curField, fp)
 		case *syntax.DblQuoted:
-			if len(wp.Parts) == 1 {
-				pe, _ := wp.Parts[0].(*syntax.ParamExp)
-				if elems, ok, err := cfg.quotedElemFields(pe); err != nil {
-					return nil, err
-				} else if ok {
-					for i, elem := range elems {
-						if i > 0 {
-							flush()
-						}
-						curField = append(curField, fieldPart{
-							quote: quoteDouble,
-							val:   elem,
-						})
+			if dqFields, ok, err := cfg.dblQuotedFields(wp.Parts); err != nil {
+				return nil, err
+			} else if ok {
+				for i, field2 := range dqFields {
+					if i > 0 {
+						flush()
 					}
-					continue
+					curField = append(curField, field2...)
 				}
+				continue
 			}
 			allowEmpty = true
 			wfield, err := cfg.wordField(wp.Parts, quoteDouble)
@@ -1021,7 +1030,10 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		case *syntax.ArithmExp:
 			n, err := Arithm(cfg, wp.X)
 			if err != nil {
-				return nil, err
+				if !cfg.swallowNonFatal(err) {
+					return nil, err
+				}
+				n = 0
 			}
 			curField = append(curField, fieldPart{val: strconv.Itoa(n)})
 		case *syntax.BraceExp:
@@ -1065,6 +1077,69 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 	return fields, nil
 }
 
+func (cfg *Config) dblQuotedFields(wps []syntax.WordPart) ([][]fieldPart, bool, error) {
+	sawArray := false
+	for _, wp := range wps {
+		pe, ok := wp.(*syntax.ParamExp)
+		if !ok {
+			continue
+		}
+		if _, handled, err := cfg.quotedElemFields(pe); err != nil {
+			return nil, false, err
+		} else if handled {
+			sawArray = true
+			break
+		}
+	}
+	if !sawArray {
+		return nil, false, nil
+	}
+
+	var fields [][]fieldPart
+	var curField []fieldPart
+	flush := func() {
+		copied := append([]fieldPart(nil), curField...)
+		fields = append(fields, copied)
+		curField = nil
+	}
+	for _, wp := range wps {
+		if pe, ok := wp.(*syntax.ParamExp); ok {
+			elems, handled, err := cfg.quotedElemFields(pe)
+			if err != nil {
+				return nil, false, err
+			}
+			if handled {
+				switch len(elems) {
+				case 0:
+					continue
+				case 1:
+					curField = append(curField, fieldPart{quote: quoteDouble, val: elems[0]})
+					continue
+				}
+				curField = append(curField, fieldPart{quote: quoteDouble, val: elems[0]})
+				flush()
+				for _, elem := range elems[1 : len(elems)-1] {
+					fields = append(fields, []fieldPart{{quote: quoteDouble, val: elem}})
+				}
+				curField = []fieldPart{{quote: quoteDouble, val: elems[len(elems)-1]}}
+				continue
+			}
+		}
+		parts, err := cfg.wordField([]syntax.WordPart{wp}, quoteDouble)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, part := range parts {
+			part.quote = quoteDouble
+			curField = append(curField, part)
+		}
+	}
+	if len(curField) > 0 {
+		fields = append(fields, append([]fieldPart(nil), curField...))
+	}
+	return fields, true, nil
+}
+
 // quotedElemFields returns the list of elements resulting from a quoted
 // parameter expansion that should be treated especially, like "${foo[@]}".
 func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error) {
@@ -1100,10 +1175,8 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 		case "@": // "${!name[@]}"
 			switch vr := cfg.Env.Get(name); vr.Kind {
 			case Indexed:
-				// TODO: if an indexed array only has elements 0 and 10,
-				// we should not return all indices in between those.
-				keys := make([]string, 0, len(vr.List))
-				for key := range vr.List {
+				keys := make([]string, 0, vr.IndexedCount())
+				for _, key := range vr.IndexedIndices() {
 					keys = append(keys, strconv.Itoa(key))
 				}
 				return keys, true, nil
@@ -1117,46 +1190,46 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 	if !ok {
 		return nil, false, nil
 	}
-	if pe.Exp == nil {
+	if pe.Exp == nil && pe.Repl == nil {
 		return fields, true, nil
 	}
 
 	hasElems := len(elems) > 0
-	isAt := pe.Param.Value == "@" || subscriptLit(pe.Index) == "@"
-	isStar := pe.Param.Value == "*" || subscriptLit(pe.Index) == "*"
-	null := !hasElems
-	if isAt && len(elems) == 1 && elems[0] == "" {
-		null = true
+	null := arrayExpansionNull(pe, fields, elems)
+	if pe.Exp != nil {
+		switch pe.Exp.Op {
+		case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
+			if pe.Exp.Op == syntax.AlternateUnset && hasElems || pe.Exp.Op == syntax.AlternateUnsetOrNull && !null {
+				word, err := cfg.quotedParamWord(pe.Exp.Word)
+				return word, true, err
+			}
+		case syntax.DefaultUnset, syntax.DefaultUnsetOrNull:
+			if pe.Exp.Op == syntax.DefaultUnset && !hasElems || pe.Exp.Op == syntax.DefaultUnsetOrNull && null {
+				word, err := cfg.quotedParamWord(pe.Exp.Word)
+				return word, true, err
+			}
+		case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+			if pe.Exp.Op == syntax.ErrorUnset && !hasElems || pe.Exp.Op == syntax.ErrorUnsetOrNull && null {
+				return nil, false, nil
+			}
+		case syntax.AssignUnset, syntax.AssignUnsetOrNull:
+			if pe.Exp.Op == syntax.AssignUnset && !hasElems || pe.Exp.Op == syntax.AssignUnsetOrNull && null {
+				return nil, false, nil
+			}
+		}
 	}
-	if isStar && len(fields) == 1 && fields[0] == "" {
-		null = true
+	state, err := cfg.paramExpState(pe)
+	if err != nil {
+		return nil, false, err
 	}
-	switch pe.Exp.Op {
-	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
-		if pe.Exp.Op == syntax.AlternateUnset && hasElems || pe.Exp.Op == syntax.AlternateUnsetOrNull && !null {
-			word, err := cfg.quotedParamWord(pe.Exp.Word)
-			return word, true, err
-		}
-		return fields, true, nil
-	case syntax.DefaultUnset, syntax.DefaultUnsetOrNull:
-		if pe.Exp.Op == syntax.DefaultUnset && hasElems || pe.Exp.Op == syntax.DefaultUnsetOrNull && !null {
-			return fields, true, nil
-		}
-		word, err := cfg.quotedParamWord(pe.Exp.Word)
-		return word, true, err
-	case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
-		if pe.Exp.Op == syntax.ErrorUnset && hasElems || pe.Exp.Op == syntax.ErrorUnsetOrNull && !null {
-			return fields, true, nil
-		}
-		return nil, false, nil
-	case syntax.AssignUnset, syntax.AssignUnsetOrNull:
-		if pe.Exp.Op == syntax.AssignUnset && hasElems || pe.Exp.Op == syntax.AssignUnsetOrNull && !null {
-			return fields, true, nil
-		}
-		return nil, false, nil
-	default:
-		return fields, true, nil
+	elems, err = cfg.transformArrayElems(pe, state, elems)
+	if err != nil {
+		return nil, false, err
 	}
+	if arrayExpansionIsStar(pe) {
+		return []string{cfg.ifsJoin(elems)}, true, nil
+	}
+	return elems, true, nil
 }
 
 func quotedIndirectArrayTarget(pe *syntax.ParamExp) bool {
@@ -1191,10 +1264,10 @@ func (cfg *Config) quotedParamWord(word *syntax.Word) ([]string, error) {
 func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, bool) {
 	switch name := pe.Param.Value; name {
 	case "*": // "${*}" or "${*:offset:length}"
-		elems := cfg.sliceElems(pe, cfg.Env.Get(name).List, true)
+		elems := cfg.sliceElems(pe, cfg.Env.Get(name).IndexedValues(), nil, true)
 		return []string{cfg.ifsJoin(elems)}, elems, true
 	case "@": // "${@}" or "${@:offset:length}"
-		elems := cfg.sliceElems(pe, cfg.Env.Get(name).List, true)
+		elems := cfg.sliceElems(pe, cfg.Env.Get(name).IndexedValues(), nil, true)
 		return elems, elems, true
 	}
 
@@ -1214,10 +1287,10 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 	case "@": // "${name[@]}"
 		switch vr.Kind {
 		case Indexed:
-			elems := cfg.sliceElems(pe, vr.List, false)
+			elems := cfg.sliceElems(pe, vr.IndexedValues(), vr.IndexedIndices(), false)
 			return elems, elems, true
 		case Associative:
-			elems := sortedMapValues(vr.Map)
+			elems := cfg.sliceElems(pe, sortedMapValues(vr.Map), nil, false)
 			return elems, elems, true
 		case Unknown:
 			if !vr.IsSet() {
@@ -1228,11 +1301,11 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 		}
 	case "*": // "${name[*]}"
 		if vr.Kind == Indexed {
-			elems := cfg.sliceElems(pe, vr.List, false)
+			elems := cfg.sliceElems(pe, vr.IndexedValues(), vr.IndexedIndices(), false)
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 		if vr.Kind == Associative {
-			elems := sortedMapValues(vr.Map)
+			elems := cfg.sliceElems(pe, sortedMapValues(vr.Map), nil, false)
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 	}
@@ -1244,12 +1317,50 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 // In bash, positional parameter offsets ($@ and $*) are 1-based and
 // offset 0 includes $0 (the shell or script name). Negative offsets
 // count from $# + 1, so $0 is reachable via large enough negative values.
-func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, positional bool) []string {
+func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indices []int, positional bool) []string {
 	if pe.Slice == nil {
 		return elems
 	}
 	if positional {
 		elems = append([]string{cfg.Env.Get("0").Str}, elems...)
+		indices = nil
+	}
+	if len(indices) > 0 {
+		start := 0
+		if pe.Slice.Offset != nil {
+			offset, err := Arithm(cfg, pe.Slice.Offset)
+			if err != nil {
+				return elems
+			}
+			if offset < 0 {
+				offset = indices[len(indices)-1] + 1 + offset
+				if offset < 0 {
+					return nil
+				}
+			}
+			start = len(elems)
+			for i, index := range indices {
+				if index >= offset {
+					start = i
+					break
+				}
+			}
+			elems = elems[start:]
+			indices = indices[start:]
+		}
+		if pe.Slice.Length != nil {
+			length, err := Arithm(cfg, pe.Slice.Length)
+			if err != nil {
+				return elems
+			}
+			if length <= 0 {
+				return nil
+			}
+			if length < len(elems) {
+				elems = elems[:length]
+			}
+		}
+		return elems
 	}
 	slicePos := func(n int) int {
 		if n < 0 {

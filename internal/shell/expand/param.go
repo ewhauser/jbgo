@@ -4,6 +4,7 @@
 package expand
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"slices"
@@ -52,11 +53,11 @@ func (cfg *Config) associativeSubscriptKey(sub *syntax.Subscript) (string, error
 	if word, ok := subscriptWord(sub); ok {
 		return Literal(cfg, word)
 	}
-	var sb strings.Builder
-	if err := syntax.NewPrinter().Print(&sb, sub.Expr); err != nil {
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter(syntax.Minify(true)).Print(&buf, sub.Expr); err != nil {
 		return "", err
 	}
-	return sb.String(), nil
+	return buf.String(), nil
 }
 
 func resolvedSubscriptMode(sub *syntax.Subscript) syntax.SubscriptMode {
@@ -115,7 +116,7 @@ func (cfg *Config) indirectValue(name string) (string, error) {
 	}
 	switch target.Param.Value {
 	case "@", "*":
-		return cfg.ifsJoin(cfg.Env.Get(target.Param.Value).List), nil
+		return cfg.ifsJoin(cfg.Env.Get(target.Param.Value).IndexedValues()), nil
 	}
 	ref := &syntax.VarRef{
 		Name:  target.Param,
@@ -213,6 +214,198 @@ type paramExpState struct {
 	elems            []string
 	indexAllElements bool
 	callVarInd       bool
+	swallowedError   bool
+}
+
+func arrayExpansionIsAt(pe *syntax.ParamExp) bool {
+	return pe != nil && (pe.Param.Value == "@" || subscriptLit(pe.Index) == "@")
+}
+
+func arrayExpansionIsStar(pe *syntax.ParamExp) bool {
+	return pe != nil && (pe.Param.Value == "*" || subscriptLit(pe.Index) == "*")
+}
+
+func arrayExpansionNull(pe *syntax.ParamExp, fields, elems []string) bool {
+	hasElems := len(elems) > 0
+	null := !hasElems
+	if arrayExpansionIsAt(pe) && len(elems) == 1 && elems[0] == "" {
+		null = true
+	}
+	if arrayExpansionIsStar(pe) && len(fields) == 1 && fields[0] == "" {
+		null = true
+	}
+	return null
+}
+
+func decodeParamOpEscapes(str string) string {
+	tail := str
+	var rns []rune
+	for tail != "" {
+		rn, _, rest, _ := strconv.UnquoteChar(tail, 0)
+		rns = append(rns, rn)
+		tail = rest
+	}
+	return string(rns)
+}
+
+func bashQuoteValue(str string) (string, error) {
+	if _, err := syntax.Quote(str, syntax.LangBash); err != nil {
+		return "", err
+	}
+	if !strings.Contains(str, "'") {
+		return "'" + str + "'", nil
+	}
+	parts := strings.Split(str, "'")
+	var sb strings.Builder
+	for i, part := range parts {
+		sb.WriteByte('\'')
+		sb.WriteString(part)
+		sb.WriteByte('\'')
+		if i+1 < len(parts) {
+			sb.WriteString("\\'")
+		}
+	}
+	return sb.String(), nil
+}
+
+func transformCasePattern(arg string, op syntax.ParExpOperator) (func(string) string, error) {
+	caseFunc := unicode.ToLower
+	if op == syntax.UpperFirst || op == syntax.UpperAll {
+		caseFunc = unicode.ToUpper
+	}
+	all := op == syntax.UpperAll || op == syntax.LowerAll
+	expr, err := pattern.Regexp(arg, pattern.ExtendedOperators)
+	if err != nil {
+		return func(s string) string { return s }, err
+	}
+	rx := regexp.MustCompile(expr)
+	return func(elem string) string {
+		rs := []rune(elem)
+		for ri, r := range rs {
+			if rx.MatchString(string(r)) {
+				rs[ri] = caseFunc(r)
+				if !all {
+					break
+				}
+			}
+		}
+		return string(rs)
+	}, nil
+}
+
+func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState, elems []string) ([]string, error) {
+	elems = slices.Clone(elems)
+	if pe.Repl != nil {
+		orig, err := Pattern(cfg, pe.Repl.Orig)
+		if err != nil {
+			return nil, err
+		}
+		if orig == "" {
+			return elems, nil
+		}
+		with, err := Literal(cfg, pe.Repl.With)
+		if err != nil {
+			return nil, err
+		}
+		n := 1
+		if pe.Repl.All {
+			n = -1
+		}
+		for i, elem := range elems {
+			locs := findAllIndex(orig, elem, n)
+			sb := cfg.strBuilder()
+			last := 0
+			for _, loc := range locs {
+				sb.WriteString(elem[last:loc[0]])
+				sb.WriteString(with)
+				last = loc[1]
+			}
+			sb.WriteString(elem[last:])
+			elems[i] = sb.String()
+		}
+		return elems, nil
+	}
+	if pe.Exp == nil {
+		return elems, nil
+	}
+
+	switch op := pe.Exp.Op; op {
+	case syntax.RemSmallPrefix, syntax.RemLargePrefix,
+		syntax.RemSmallSuffix, syntax.RemLargeSuffix:
+		arg, err := Pattern(cfg, pe.Exp.Pattern)
+		if err != nil {
+			return nil, err
+		}
+		suffix := op == syntax.RemSmallSuffix || op == syntax.RemLargeSuffix
+		small := op == syntax.RemSmallPrefix || op == syntax.RemSmallSuffix
+		for i, elem := range elems {
+			elems[i] = removePattern(elem, arg, suffix, small)
+		}
+	case syntax.UpperFirst, syntax.UpperAll,
+		syntax.LowerFirst, syntax.LowerAll:
+		arg, err := Pattern(cfg, pe.Exp.Pattern)
+		if err != nil {
+			return nil, err
+		}
+		transform, err := transformCasePattern(arg, op)
+		if err != nil {
+			return elems, nil
+		}
+		for i, elem := range elems {
+			elems[i] = transform(elem)
+		}
+	case syntax.OtherParamOps:
+		arg, err := Literal(cfg, pe.Exp.Word)
+		if err != nil {
+			return nil, err
+		}
+		switch arg {
+		case "Q":
+			for i, elem := range elems {
+				quoted, err := bashQuoteValue(elem)
+				if err != nil {
+					return nil, err
+				}
+				elems[i] = quoted
+			}
+		case "E":
+			for i, elem := range elems {
+				elems[i] = decodeParamOpEscapes(elem)
+			}
+		case "a":
+			flags := state.orig.Flags()
+			for i := range elems {
+				elems[i] = flags
+			}
+		case "P":
+			// TODO: implement prompt expansion (\u, \h, \w, etc.).
+		default:
+			return elems, nil
+		}
+	}
+	return elems, nil
+}
+
+func (cfg *Config) arrayParamFields(pe *syntax.ParamExp, state paramExpState, elems []string) ([][]fieldPart, bool, error) {
+	elems, err := cfg.transformArrayElems(pe, state, elems)
+	if err != nil {
+		return nil, false, err
+	}
+	if arrayExpansionIsStar(pe) {
+		fields := cfg.splitFieldParts([]fieldPart{{val: cfg.ifsJoin(elems)}})
+		out := make([][]fieldPart, 0, len(fields))
+		for _, field := range fields {
+			out = append(out, append([]fieldPart(nil), field...))
+		}
+		return out, true, nil
+	}
+	var fields [][]fieldPart
+	for _, elem := range elems {
+		for _, field := range cfg.splitFieldParts([]fieldPart{{val: elem}}) {
+			fields = append(fields, append([]fieldPart(nil), field...))
+		}
+	}
+	return fields, true, nil
 }
 
 func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
@@ -274,24 +467,91 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 		case Indexed:
 			state.indexAllElements = true
 			state.callVarInd = false
-			state.elems = cfg.sliceElems(pe, state.vr.List, state.name == "@" || state.name == "*")
+			state.elems = cfg.sliceElems(pe, state.vr.IndexedValues(), state.vr.IndexedIndices(), state.name == "@" || state.name == "*")
 			state.str = strings.Join(state.elems, " ")
 		case Associative:
 			state.indexAllElements = true
 			state.callVarInd = false
-			state.elems = sortedMapValues(state.vr.Map)
+			state.elems = cfg.sliceElems(pe, sortedMapValues(state.vr.Map), nil, false)
 			state.str = strings.Join(state.elems, " ")
+		}
+	}
+	if index == nil && !state.indexAllElements {
+		switch state.vr.Kind {
+		case Indexed:
+			if val, ok := state.vr.IndexedGet(0); ok {
+				state.vr = Variable{Set: true, Kind: String, Str: val}
+				state.str = val
+			} else {
+				state.vr = Variable{Kind: String}
+				state.str = ""
+			}
+			state.callVarInd = false
+		case Associative:
+			if val, ok := state.vr.Map["0"]; ok {
+				state.vr = Variable{Set: true, Kind: String, Str: val}
+				state.str = val
+			} else {
+				state.vr = Variable{Kind: String}
+				state.str = ""
+			}
+			state.callVarInd = false
+		}
+	}
+	if index != nil && !state.indexAllElements {
+		switch state.vr.Kind {
+		case Indexed:
+			i, err := Arithm(cfg, index.Expr)
+			if err != nil {
+				return state, err
+			}
+			if i < 0 {
+				resolved, ok := state.vr.IndexedResolve(i)
+				if ok {
+					i = resolved
+				} else {
+					break
+				}
+			}
+			if val, ok := state.vr.IndexedGet(i); ok {
+				state.vr = Variable{Set: true, Kind: String, Str: val}
+			} else {
+				state.vr = Variable{Kind: String}
+			}
+			index = nil
+		case Associative:
+			key, err := cfg.associativeSubscriptKey(index)
+			if err != nil {
+				return state, err
+			}
+			if val, ok := state.vr.Map[key]; ok {
+				state.vr = Variable{Set: true, Kind: String, Str: val}
+			} else {
+				state.vr = Variable{Kind: String}
+			}
+			index = nil
 		}
 	}
 	if state.callVarInd {
 		var err error
-		state.str, err = cfg.varInd(state.vr, index)
+		state.str, err = cfg.varInd(state.name, state.vr, index)
 		if err != nil {
-			return state, err
+			if cfg.swallowNonFatal(err) {
+				state.vr = Variable{Kind: String}
+				state.str = ""
+				state.callVarInd = false
+				state.swallowedError = true
+			} else {
+				return state, err
+			}
 		}
 	}
 	if !state.indexAllElements {
-		state.elems = []string{state.str}
+		if state.callVarInd {
+			state.elems = []string{state.str}
+		} else {
+			state.elems = []string{""}
+		}
 	}
 	return state, nil
 }
@@ -473,7 +733,7 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 }
 
 func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, error) {
-	if pe.Exp == nil || pe.Excl || pe.Length || pe.Width || pe.IsSet || pe.Repl != nil || pe.Slice != nil {
+	if pe.Excl || pe.Length || pe.Width || pe.IsSet {
 		return nil, false, nil
 	}
 	oldParam := cfg.curParam
@@ -482,6 +742,81 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, err
 	state, err := cfg.paramExpState(pe)
 	if err != nil {
 		return nil, false, err
+	}
+	if state.swallowedError && !state.indexAllElements {
+		return [][]fieldPart{}, true, nil
+	}
+	fields0, elems, isArray := cfg.quotedArrayFields(pe)
+	if isArray {
+		argFields := func() ([][]fieldPart, string, error) {
+			var fields [][]fieldPart
+			arg := ""
+			if pe.Exp != nil && pe.Exp.Word != nil {
+				parts, err := cfg.paramArgField(pe.Exp.Word, quoteNone)
+				if err != nil {
+					return nil, "", err
+				}
+				arg = cfg.fieldJoin(parts)
+				fields = cfg.splitFieldParts(parts)
+			}
+			return fields, arg, nil
+		}
+		hasElems := len(elems) > 0
+		null := arrayExpansionNull(pe, fields0, elems)
+		if pe.Exp != nil {
+			switch op := pe.Exp.Op; op {
+			case syntax.AlternateUnset:
+				if hasElems {
+					fields, _, err := argFields()
+					return fields, true, err
+				}
+				return cfg.arrayParamFields(pe, state, elems)
+			case syntax.AlternateUnsetOrNull:
+				if !null {
+					fields, _, err := argFields()
+					return fields, true, err
+				}
+				return cfg.arrayParamFields(pe, state, elems)
+			case syntax.DefaultUnset:
+				if !hasElems {
+					fields, _, err := argFields()
+					return fields, true, err
+				}
+			case syntax.DefaultUnsetOrNull:
+				if null {
+					fields, _, err := argFields()
+					return fields, true, err
+				}
+			case syntax.AssignUnset:
+				if !hasElems {
+					fields, arg, err := argFields()
+					if err != nil {
+						return nil, false, err
+					}
+					if err := cfg.envSet(state.name, arg); err != nil {
+						return nil, false, err
+					}
+					return fields, true, nil
+				}
+			case syntax.AssignUnsetOrNull:
+				if null {
+					fields, arg, err := argFields()
+					if err != nil {
+						return nil, false, err
+					}
+					if err := cfg.envSet(state.name, arg); err != nil {
+						return nil, false, err
+					}
+					return fields, true, nil
+				}
+			case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+				return nil, false, nil
+			}
+		}
+		return cfg.arrayParamFields(pe, state, elems)
+	}
+	if pe.Exp == nil || pe.Repl != nil || pe.Slice != nil {
+		return nil, false, nil
 	}
 	argFields := func() ([][]fieldPart, string, error) {
 		var fields [][]fieldPart
@@ -597,10 +932,8 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		case orig.Kind == NameRef:
 			strs = append(strs, orig.Str)
 		case pe.Index != nil && vr.Kind == Indexed:
-			for i, e := range vr.List {
-				if e != "" {
-					strs = append(strs, strconv.Itoa(i))
-				}
+			for _, index := range vr.IndexedIndices() {
+				strs = append(strs, strconv.Itoa(index))
 			}
 		case pe.Index != nil && vr.Kind == Associative:
 			strs = sortedMapKeys(vr.Map)
@@ -848,7 +1181,7 @@ func removePattern(str, pat string, fromEnd, shortest bool) string {
 	return str
 }
 
-func (cfg *Config) varInd(vr Variable, idx *syntax.Subscript) (string, error) {
+func (cfg *Config) varInd(name string, vr Variable, idx *syntax.Subscript) (string, error) {
 	if idx == nil {
 		return vr.String(), nil
 	}
@@ -857,7 +1190,7 @@ func (cfg *Config) varInd(vr Variable, idx *syntax.Subscript) (string, error) {
 		case String:
 			return vr.Str, nil
 		case Indexed:
-			return strings.Join(vr.List, " "), nil
+			return strings.Join(vr.IndexedValues(), " "), nil
 		case Associative:
 			// Iterate values in bash-compatible key order.
 			keys := sortedMapKeys(vr.Map)
@@ -892,10 +1225,14 @@ func (cfg *Config) varInd(vr Variable, idx *syntax.Subscript) (string, error) {
 				return "", err
 			}
 			if i < 0 {
-				return "", fmt.Errorf("negative array index")
+				resolved, ok := vr.IndexedResolve(i)
+				if !ok {
+					return "", BadArraySubscriptError{Name: name}
+				}
+				i = resolved
 			}
-			if i < len(vr.List) {
-				return vr.List[i], nil
+			if val, ok := vr.IndexedGet(i); ok {
+				return val, nil
 			}
 		}
 	case syntax.SubscriptAssociative:

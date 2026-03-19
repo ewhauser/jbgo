@@ -1886,16 +1886,6 @@ var errorCases = []errorCase{
 		flipConfirmAll, // stringifies
 	),
 	errCase(
-		"a=(x y) foo",
-		langErr("1:1: inline variables cannot be arrays", LangBash|LangZsh),
-		flipConfirmAll, // stringifies
-	),
-	errCase(
-		"a[2]=x foo",
-		langErr("1:1: inline variables cannot be arrays", LangBash|LangZsh),
-		flipConfirmAll, // stringifies
-	),
-	errCase(
 		"function",
 		langErr("1:1: `function` must be followed by a name", LangBash|LangMirBSDKorn),
 		langErr("1:1: `foo()` must be followed by a statement", LangZsh),
@@ -1972,7 +1962,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"a[i]+",
-		langErr("1:1: `a[b]+` must be followed by `=`", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: `a[b]` must be followed by `=`", LangBash|LangMirBSDKorn|LangZsh),
 		flipConfirmAll, // is cmd
 	),
 	errCase(
