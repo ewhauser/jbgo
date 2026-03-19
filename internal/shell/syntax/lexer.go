@@ -1181,7 +1181,10 @@ func (p *Parser) advanceLitHdoc(r rune) {
 		r = p.rune()
 	}
 	lStart := len(p.litBs) - 1
-	stop := p.hdocStops[len(p.hdocStops)-1]
+	var stop []byte
+	if !p.parsingDoc && len(p.hdocStops) > 0 {
+		stop = p.hdocStops[len(p.hdocStops)-1]
+	}
 	for ; ; r = p.rune() {
 		switch r {
 		case escNewl, '$':
@@ -1205,7 +1208,7 @@ func (p *Parser) advanceLitHdoc(r rune) {
 			} else if lStart == 0 && lastTok == _Lit {
 				// This line starts right after an escaped
 				// newline, so it should never end the heredoc.
-			} else if lStart >= 0 {
+			} else if lStart >= 0 && len(p.hdocStops) > 0 {
 				// Compare the current line with the stop word.
 				line := p.litBs[lStart:]
 				if r != utf8.RuneSelf && len(line) > 0 {

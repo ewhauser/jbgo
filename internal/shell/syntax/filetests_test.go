@@ -1241,6 +1241,21 @@ var fileTests = []fileTestCase{
 		}),
 	),
 	fileTest(
+		[]string{"a <<EOF\nMVDAN_CC_SH_SYNTAX_EOF\n$bar\nEOF"},
+		langFile(&Stmt{
+			Cmd: litCall("a"),
+			Redirs: []*Redirect{{
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc: word(
+					lit("MVDAN_CC_SH_SYNTAX_EOF\n"),
+					litParamExp("bar"),
+					lit("\n"),
+				),
+			}},
+		}),
+	),
+	fileTest(
 		[]string{"a <<EOF\n\"$bar\"\nEOF"},
 		langFile(&Stmt{
 			Cmd: litCall("a"),

@@ -485,7 +485,6 @@ func (p *Parser) document(r io.Reader, start Pos) (*Word, error) {
 	p.col = int64(start.Col())
 	p.rune()
 	p.quote = hdocBody
-	p.hdocStops = [][]byte{[]byte("MVDAN_CC_SH_SYNTAX_EOF")}
 	p.parsingDoc = true
 	p.next()
 	w := p.getWord()
