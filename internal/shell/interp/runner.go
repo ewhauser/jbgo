@@ -1203,8 +1203,11 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 				r.exit.code = 1
 				return restores
 			}
-			restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
 			r.setVar(resolvedRef.Name.Value, vr)
+			if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+				return restores
+			}
+			restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
 			continue
 		}
 
@@ -1221,7 +1224,6 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 			r.exit.code = 1
 			return restores
 		}
-		restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
 		if err := r.setVarByRef(prev, as.Ref, vr, as.Append); err != nil {
 			r.errf("%v\n", err)
 			r.exit.code = 1
@@ -1230,6 +1232,7 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 			return restores
 		}
+		restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
 	}
 	return restores
 }

@@ -688,7 +688,7 @@ func (r *Runner) assignVal(prev expand.Variable, as *syntax.Assign, valType stri
 	if as.Value != nil {
 		s := r.literal(as.Value)
 		if as.Ref != nil && as.Ref.Index != nil {
-			return expand.Variable{Set: true, Kind: expand.String, Str: s}
+			return expand.Variable{Set: true, Kind: expand.String, Str: s}, true
 		}
 		if !as.Append {
 			prev.Kind = expand.String
