@@ -78,6 +78,9 @@ retry:
 	}
 	if b := p.bs[p.bsp]; b < utf8.RuneSelf {
 		p.bsp++
+		if p.captureWordRaw {
+			p.wordRawBs = append(p.wordRawBs, b)
+		}
 		switch b {
 		case '\x00':
 			// Ignore null bytes while parsing, like bash.
@@ -131,6 +134,9 @@ decodeRune:
 	}
 	if p.litBs != nil {
 		p.litBs = append(p.litBs, p.bs[p.bsp:p.bsp+uint(w)]...)
+	}
+	if p.captureWordRaw {
+		p.wordRawBs = append(p.wordRawBs, p.bs[p.bsp:p.bsp+uint(w)]...)
 	}
 	p.bsp += uint(w)
 	if p.r == utf8.RuneError && w == 1 {

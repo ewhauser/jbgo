@@ -176,6 +176,13 @@ func TestParseHeredocDelimiterMetadata(t *testing.T) {
 			wantParts:   1,
 		},
 		{
+			name:        "arithmetic expansion spacing",
+			src:         "cat <<$((1 + 2))\nbody\n$((1 + 2))",
+			wantValue:   "$((1 + 2))",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
 			name:        "special parameter",
 			src:         "cat <<$-\nbody\n$-",
 			wantValue:   "$-",
