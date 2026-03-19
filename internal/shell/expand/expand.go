@@ -196,7 +196,7 @@ func Pattern(cfg *Config, pat *syntax.Pattern) (string, error) {
 		return "", nil
 	}
 	cfg = prepareConfig(cfg)
-	return cfg.patternString(pat)
+	return cfg.patternString(pat, true)
 }
 
 // PatternWord expands a single shell word as a pattern. It is retained for
@@ -222,13 +222,14 @@ func PatternWord(cfg *Config, word *syntax.Word) (string, error) {
 	return sb.String(), nil
 }
 
-func (cfg *Config) patternString(pat *syntax.Pattern) (string, error) {
+func (cfg *Config) patternString(pat *syntax.Pattern, allowLeadingTilde bool) (string, error) {
 	if pat == nil {
 		return "", nil
 	}
 	var sb strings.Builder
 	for i, part := range pat.Parts {
-		if err := cfg.appendPatternPart(&sb, part, i == 0, i+1 < len(pat.Parts)); err != nil {
+		leading := allowLeadingTilde && i == 0
+		if err := cfg.appendPatternPart(&sb, part, leading, i+1 < len(pat.Parts)); err != nil {
 			return "", err
 		}
 	}
@@ -272,7 +273,11 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 			return err
 		} else if ok {
 			for _, fp := range parts {
-				sb.WriteString(fp.val)
+				if fp.quote > quoteNone {
+					sb.WriteString(pattern.QuoteMeta(fp.val, 0))
+				} else {
+					sb.WriteString(fp.val)
+				}
 			}
 		} else {
 			val, err := cfg.paramExp(part, quoteNone)
@@ -318,7 +323,7 @@ func (cfg *Config) extGlobString(eg *syntax.ExtGlob) (string, error) {
 		if i > 0 {
 			sb.WriteByte('|')
 		}
-		str, err := cfg.patternString(pat)
+		str, err := cfg.patternString(pat, false)
 		if err != nil {
 			return "", err
 		}

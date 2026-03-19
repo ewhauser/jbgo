@@ -178,6 +178,57 @@ func TestPatternASTExpansionPreservesPatternOperators(t *testing.T) {
 	}
 }
 
+func TestPatternASTExpansionEscapesQuotedParamExpFastPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: `double quoted star`,
+			src:  `${x-"*"}`,
+			want: `\*`,
+		},
+		{
+			name: `single quoted question`,
+			src:  `${x-'?'}`,
+			want: `\?`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pat := parseCondPattern(t, tc.src)
+			got, err := Pattern(&Config{Env: testEnv{}}, pat)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestPatternASTExpansionDoesNotTildeExpandExtglobArms(t *testing.T) {
+	t.Parallel()
+
+	pat := parseCondPattern(t, `@(~/src|~)`)
+	got, err := Pattern(&Config{
+		Env: testEnv{
+			"HOME": {Set: true, Kind: String, Str: "/tmp/home"},
+		},
+	}, pat)
+	if err != nil {
+		t.Fatalf("did not want error, got %v", err)
+	}
+	const want = `@(~/src|~)`
+	if got != want {
+		t.Fatalf("wanted %q, got %q", want, got)
+	}
+}
+
 func TestLiteralParameterPatternOperatorsUsePatternAST(t *testing.T) {
 	t.Parallel()
 
