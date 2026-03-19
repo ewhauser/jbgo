@@ -156,6 +156,8 @@ type Runner struct {
 	origStdout io.Writer
 	origStderr io.Writer
 
+	inRedirectWord int
+
 	// Most scripts don't use pushd/popd, so make space for the initial PWD
 	// without requiring an extra allocation.
 	dirStack     []string
@@ -253,8 +255,9 @@ type bgProc struct {
 	// after which point the result fields below are set.
 	done chan struct{}
 
-	exit      *exitStatus
-	procSubst bool
+	exit          *exitStatus
+	procSubst     bool
+	waitAtStmtEnd bool
 }
 
 type alias struct {
@@ -764,7 +767,6 @@ func (r *Runner) run(ctx context.Context, node syntax.Node) error {
 	r.fillExpandConfig(ctx)
 	r.exit = exitStatus{}
 	r.filename = ""
-	procSubstStart := len(r.bgProcs)
 	switch node := node.(type) {
 	case *syntax.File:
 		r.filename = node.Name
@@ -789,7 +791,6 @@ func (r *Runner) run(ctx context.Context, node syntax.Node) error {
 	default:
 		return fmt.Errorf("node can only be File, Stmt, or Command: %T", node)
 	}
-	r.waitProcSubsts(procSubstStart)
 	r.trapCallback(ctx, r.callbackExit, "exit")
 	// Return the first of: a fatal error, a non-fatal handler error, or the exit code.
 	if err := r.exit.err; err != nil {

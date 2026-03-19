@@ -243,6 +243,8 @@ outer
 
 #### caller builtin with sourced file and top level
 cat > "$TMP/caller-inner.sh" <<'EOF'
+caller 0
+echo "source-top=$?"
 inner() {
   caller 0
   echo "status=$?"

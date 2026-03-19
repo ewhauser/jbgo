@@ -313,21 +313,21 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		default:
 			return failf(2, "caller: too many arguments\n")
 		}
-		lines := r.bashLineNoStack()
-		funcs := r.funcNameStack()
-		sources := r.bashSourceStack()
-		if depth >= len(lines) || depth+1 >= len(funcs) {
+		line, frame, ok := r.callerFrame(depth)
+		if !ok {
 			exit.code = 1
 			return exit
 		}
-		file := ""
-		if depth+1 < len(sources) {
-			file = sources[depth+1]
-		}
-		if file != "" {
-			fmt.Fprintf(r.stdout, "%s %s %s\n", lines[depth], funcs[depth+1], file)
+		lineText := strconv.Itoa(line)
+		if frame.bashSource != "" && frame.label != "" {
+			fmt.Fprintf(r.stdout, "%s %s %s\n", lineText, frame.label, frame.bashSource)
+		} else if frame.bashSource != "" {
+			fmt.Fprintf(r.stdout, "%s %s\n", lineText, frame.bashSource)
+		} else if frame.label != "" {
+			fmt.Fprintf(r.stdout, "%s %s\n", lineText, frame.label)
 		} else {
-			fmt.Fprintf(r.stdout, "%s %s\n", lines[depth], funcs[depth+1])
+			r.out(lineText)
+			r.out("\n")
 		}
 	case "builtin":
 		if len(args) < 1 {

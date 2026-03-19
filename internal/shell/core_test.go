@@ -177,6 +177,51 @@ func TestCoreRunCallerBuiltin(t *testing.T) {
 	}
 }
 
+func TestCoreRunCallerBuiltinFromSourcedTopLevel(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "cat")
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			`cat > caller-inner.sh <<'EOF'`,
+			`caller 0`,
+			`EOF`,
+			`cat > caller-outer.sh <<'EOF'`,
+			`. ./caller-inner.sh`,
+			`EOF`,
+			`. ./caller-outer.sh`,
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+
+	line := strings.TrimSpace(stdout.String())
+	fields := strings.Fields(line)
+	if len(fields) != 3 {
+		t.Fatalf("caller output fields = %q, want 3 fields", line)
+	}
+	if got, want := fields[0], "1"; got != want {
+		t.Fatalf("caller line = %q, want %q", got, want)
+	}
+	if got, want := fields[1], "source"; got != want {
+		t.Fatalf("caller function = %q, want %q", got, want)
+	}
+	if got := fields[2]; got != "./caller-outer.sh" && !strings.HasSuffix(got, "/caller-outer.sh") {
+		t.Fatalf("caller source = %q, want caller-outer.sh", got)
+	}
+}
+
 func TestCoreRunSyncsShellStateWithoutBootstrapEval(t *testing.T) {
 	t.Parallel()
 

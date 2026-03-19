@@ -85,6 +85,14 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.updateExpandOpts()
 }
 
+func (r *Runner) expandingRedirectWord(fn func() string) string {
+	r.inRedirectWord++
+	defer func() {
+		r.inRedirectWord--
+	}()
+	return fn()
+}
+
 func (r *Runner) customProcSubst(ctx context.Context, ps *syntax.ProcSubst) (string, error) {
 	endpoint, err := r.procSubstHandler(r.handlerCtx(ctx, handlerKindProcSubst, ps.Pos()), ps)
 	if err != nil {
@@ -145,9 +153,10 @@ func (r *Runner) runProcSubst(ctx context.Context, ps *syntax.ProcSubst, path st
 	// TODO: note that `man bash` mentions that `wait` only waits for the last
 	// process substitution as long as it is $!; the logic here would mean we wait for all of them.
 	bg := bgProc{
-		done:      make(chan struct{}),
-		exit:      new(exitStatus),
-		procSubst: true,
+		done:          make(chan struct{}),
+		exit:          new(exitStatus),
+		procSubst:     true,
+		waitAtStmtEnd: r.inRedirectWord > 0 && ps.Op == syntax.CmdOut,
 	}
 	r.bgProcs = append(r.bgProcs, bg)
 	go func() {
@@ -374,6 +383,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 
 func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	oldIn, oldOut, oldErr := r.stdin, r.stdout, r.stderr
+	procSubstStart := len(r.bgProcs)
 	closers := make([]io.Closer, 0, len(st.Redirs))
 	for _, rd := range st.Redirs {
 		cls, err := r.redir(ctx, rd)
@@ -391,6 +401,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	for i := len(closers) - 1; i >= 0; i-- {
 		_ = closers[i].Close()
 	}
+	r.waitProcSubsts(procSubstStart)
 	if st.Negated {
 		if r.exit.ok() {
 			r.exit.code = 1
@@ -420,7 +431,7 @@ func (r *Runner) waitProcSubsts(start int) {
 	}
 	for i := start; i < len(r.bgProcs); i++ {
 		bg := r.bgProcs[i]
-		if !bg.procSubst {
+		if !bg.procSubst || !bg.waitAtStmtEnd {
 			continue
 		}
 		<-bg.done
@@ -1232,7 +1243,9 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 			panic(fmt.Sprintf("unsupported redirect fd: %v", rd.N.Value))
 		}
 	}
-	arg := r.literal(rd.Word)
+	arg := r.expandingRedirectWord(func() string {
+		return r.literal(rd.Word)
+	})
 	switch rd.Op {
 	case syntax.WordHdoc:
 		pr, pw := r.newPipe()
