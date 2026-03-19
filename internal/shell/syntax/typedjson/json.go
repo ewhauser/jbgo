@@ -220,6 +220,7 @@ func (opts DecodeOptions) Decode(r io.Reader) (syntax.Node, error) {
 var nodeByName = map[string]reflect.Type{
 	"File":            reflect.TypeFor[syntax.File](),
 	"Word":            reflect.TypeFor[syntax.Word](),
+	"HeredocDelim":    reflect.TypeFor[syntax.HeredocDelim](),
 	"VarRef":          reflect.TypeFor[syntax.VarRef](),
 	"Subscript":       reflect.TypeFor[syntax.Subscript](),
 	"DeclFlag":        reflect.TypeFor[syntax.DeclFlag](),

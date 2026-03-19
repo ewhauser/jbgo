@@ -52,7 +52,7 @@ That means the roadmap should focus less on adding more top-level command nodes 
 - [x] P0: Refactor `DeclClause` arguments into typed declaration operands
 - [x] P0: Add a dedicated conditional AST for `[[ ... ]]` operands and operators
 - [ ] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
-- [ ] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
+- [x] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
 - [ ] P1: Move alias expansion earlier and preserve alias provenance in parse results
 - [ ] P1: Make compound array assignment semantics explicit in the AST
 - [ ] P2: Promote brace expansion from a post-parse rewrite to a stable syntax node
@@ -350,7 +350,7 @@ A shared pattern AST would reduce duplicated pattern handling and improve consis
 
 ### 6. Heredoc delimiter metadata
 
-Status: P1
+Status: landed
 
 #### Problem
 
@@ -363,9 +363,10 @@ Status: P1
 
 #### Current implementation signals
 
-- `Redirect.Word *Word` is used for heredoc delimiters
-- parser uses special heredoc lexer state and `forbidNested`
-- runtime distinguishes body expansion separately
+- `Redirect.HdocDelim *HeredocDelim` now replaces `Redirect.Word` for `<<` and `<<-`
+- `HeredocDelim` preserves original delimiter parts alongside cooked delimiter text
+- parser stores whether quoting was present and whether body expansion remains enabled
+- printer, walker, and typed JSON treat heredoc delimiters as first-class syntax nodes
 
 #### Conformance signals
 
@@ -380,16 +381,16 @@ Concrete examples:
 - `cat <<'EOF'"2"`
 - malformed pipeline/heredoc interactions
 
-#### Proposed AST change
+#### Shipped AST change
 
-Add a dedicated delimiter node or metadata struct, for example:
+`Redirect` now carries a dedicated `HeredocDelim` node for `<<` and `<<-` redirects. The node keeps:
 
-- raw delimiter text after quote removal
-- whether any quoting was present
-- whether body expansion is enabled
-- operator kind (`<<`, `<<-`, `<<<`)
+- original delimiter parts for round-tripping and diagnostics
+- cooked delimiter text after quote removal
+- whether any quoting or escaping was present
+- whether the body should be parsed with expansion enabled
 
-The body can remain a word-like tree, but the delimiter should stop being an ordinary shell word.
+The body remains a word-like tree, but the delimiter is no longer modeled as an ordinary shell word.
 
 #### Why this matters
 

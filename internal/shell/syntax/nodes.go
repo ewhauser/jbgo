@@ -371,11 +371,12 @@ func (a *Assign) End() Pos {
 
 // Redirect represents an input/output redirection.
 type Redirect struct {
-	OpPos Pos
-	Op    RedirOperator
-	N     *Lit  // fd>, or {varname}> in Bash
-	Word  *Word // >word
-	Hdoc  *Word // here-document body
+	OpPos     Pos
+	Op        RedirOperator
+	N         *Lit          // fd>, or {varname}> in Bash
+	Word      *Word         // >word
+	HdocDelim *HeredocDelim // <<EOF delimiter metadata
+	Hdoc      *Word         // here-document body
 }
 
 func (r *Redirect) Pos() Pos {
@@ -389,7 +390,40 @@ func (r *Redirect) End() Pos {
 	if r.Hdoc != nil {
 		return r.Hdoc.End()
 	}
-	return r.Word.End()
+	if r.HdocDelim != nil {
+		return r.HdocDelim.End()
+	}
+	if r.Word != nil {
+		return r.Word.End()
+	}
+	if r.N != nil {
+		return r.N.End()
+	}
+	return posAddCol(r.OpPos, len(r.Op.String()))
+}
+
+// HeredocDelim represents a here-document delimiter and the parser metadata
+// derived from it.
+type HeredocDelim struct {
+	Parts []WordPart
+
+	Value       string // delimiter text after quote removal
+	Quoted      bool   // whether any quoting/escaping was present
+	BodyExpands bool   // whether the heredoc body allows shell expansion
+}
+
+func (d *HeredocDelim) Pos() Pos {
+	if len(d.Parts) == 0 {
+		return Pos{}
+	}
+	return d.Parts[0].Pos()
+}
+
+func (d *HeredocDelim) End() Pos {
+	if len(d.Parts) == 0 {
+		return Pos{}
+	}
+	return d.Parts[len(d.Parts)-1].End()
 }
 
 // CallExpr represents a command execution or function call, otherwise known as

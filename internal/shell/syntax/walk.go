@@ -54,8 +54,11 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Word, f)
 	case *Redirect:
 		walkNilable(node.N, f)
-		Walk(node.Word, f)
+		walkNilable(node.Word, f)
+		walkNilable(node.HdocDelim, f)
 		walkNilable(node.Hdoc, f)
+	case *HeredocDelim:
+		walkList(node.Parts, f)
 	case *CallExpr:
 		walkList(node.Assigns, f)
 		walkList(node.Args, f)
