@@ -108,3 +108,34 @@ func TestEncodeSubscriptKind(t *testing.T) {
 	qt.Assert(t, qt.IsTrue(ok))
 	qt.Assert(t, qt.Equals(sub.Kind, syntax.SubscriptStar))
 }
+
+func TestEncodeHeredocDelimiter(t *testing.T) {
+	t.Parallel()
+
+	node := &syntax.HeredocDelim{
+		Parts: []syntax.WordPart{
+			&syntax.DblQuoted{Parts: []syntax.WordPart{
+				&syntax.Lit{Value: "EOF"},
+			}},
+			&syntax.Lit{Value: "2"},
+		},
+		Value:       "EOF2",
+		Quoted:      true,
+		BodyExpands: false,
+	}
+
+	var buf bytes.Buffer
+	err := typedjson.Encode(&buf, node)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsTrue(buf.Len() > 0))
+
+	decoded, err := typedjson.Decode(bytes.NewReader(buf.Bytes()))
+	qt.Assert(t, qt.IsNil(err))
+
+	delim, ok := decoded.(*syntax.HeredocDelim)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.Equals(delim.Value, "EOF2"))
+	qt.Assert(t, qt.Equals(delim.Quoted, true))
+	qt.Assert(t, qt.Equals(delim.BodyExpands, false))
+	qt.Assert(t, qt.Equals(len(delim.Parts), 2))
+}

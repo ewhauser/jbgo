@@ -733,7 +733,9 @@ func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
 	buf := make([]byte, 0, 4)
 	didUnquote := false
 	for _, wp := range w.Parts {
-		buf, didUnquote = p.unquotedWordPart(buf, wp, false)
+		var quoted bool
+		buf, quoted = p.unquotedWordPart(buf, wp, false)
+		didUnquote = didUnquote || quoted
 	}
 	return buf, didUnquote
 }
@@ -763,6 +765,19 @@ func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byt
 	return buf, quoted
 }
 
+func (p *Parser) heredocDelimFromWord(w *Word) *HeredocDelim {
+	if w == nil {
+		return nil
+	}
+	value, quoted := p.unquotedWordBytes(w)
+	return &HeredocDelim{
+		Parts:       w.Parts,
+		Value:       string(value),
+		Quoted:      quoted,
+		BodyExpands: !quoted,
+	}
+}
+
 func (p *Parser) doHeredocs() {
 	hdocs := p.heredocs[p.buriedHdocs:]
 	if len(hdocs) == 0 {
@@ -780,19 +795,22 @@ func (p *Parser) doHeredocs() {
 		if r.Op == DashHdoc {
 			p.quote = hdocBodyTabs
 		}
-		stop, quoted := p.unquotedWordBytes(r.Word)
+		var stop []byte
+		if r.HdocDelim != nil {
+			stop = []byte(r.HdocDelim.Value)
+		}
 		p.hdocStops = append(p.hdocStops, stop)
 		if i > 0 && p.r == '\n' {
 			p.rune()
 		}
-		if quoted {
+		if r.HdocDelim != nil && !r.HdocDelim.BodyExpands {
 			r.Hdoc = p.quotedHdocWord()
 		} else {
 			p.next()
 			r.Hdoc = p.getWord()
 		}
 		if stop := p.hdocStops[len(p.hdocStops)-1]; stop != nil {
-			p.posErr(r.Pos(), "unclosed here-document %#q", stop)
+			p.posErr(r.Pos(), "unclosed here-document %#q", r.HdocDelim.Value)
 		}
 		p.hdocStops = p.hdocStops[:len(p.hdocStops)-1]
 	}
@@ -2239,7 +2257,7 @@ func (p *Parser) doRedirect(s *Stmt) {
 		old := p.quote
 		p.quote, p.forbidNested = hdocWord, true
 		p.heredocs = append(p.heredocs, r)
-		r.Word = p.followWordTok(token(r.Op), r.OpPos)
+		r.HdocDelim = p.heredocDelimFromWord(p.followWordTok(token(r.Op), r.OpPos))
 		p.quote, p.forbidNested = old, false
 		if p.tok == _Newl {
 			if len(p.accComs) > 0 {

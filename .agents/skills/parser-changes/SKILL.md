@@ -50,6 +50,8 @@ Read `internal/shell/syntax/nodes.go` for complete definitions. Here's the hiera
 Node (base interface)
 ├── File           # Top-level: contains Stmts
 ├── Stmt           # Statement wrapper: holds Command + Redirs + flags
+├── Redirect       # Redirect operator plus target/body metadata
+├── HeredocDelim   # Heredoc delimiter source + cooked delimiter metadata
 ├── VarRef         # Canonical variable or element reference
 ├── Subscript      # Bracketed selector like [i], [@], [*]
 ├── DeclOperand    # Typed declaration operand
@@ -96,6 +98,7 @@ Key AST design points:
 - `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
 - `DeclClause.Operands []DeclOperand` holds declaration operands (typed as `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`).
 - `TestClause.X CondExpr` holds `[[ ]]` conditionals. The `CondExpr` interface has typed operand wrappers: `CondWord` (generic), `CondVarRef` (for `-v`/`-R`), `CondPattern` (for `==`/`=`/`!=`), and `CondRegex` (for `=~`).
+- `Redirect.HdocDelim *HeredocDelim` is the only AST shape for `<<` and `<<-` delimiters. Use `Redirect.Word` only for ordinary redirect targets and here-strings. `HeredocDelim` preserves original parts plus cooked delimiter text, quote presence, and whether the body expands.
 
 When you touch variable references, array indexing, declaration builtins, namerefs, `printf -v`, `test -v`, `[[ -v ]]`, `${var[...]}`, or compound array literals, expect follow-on edits in all three layers:
 

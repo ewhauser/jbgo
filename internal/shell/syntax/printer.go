@@ -114,9 +114,10 @@ func NewPrinter(opts ...PrinterOption) *Printer {
 // Print "pretty-prints" the given syntax tree node to the given writer. Writes
 // to w are buffered.
 //
-// The node types supported at the moment are [*File], [*Stmt], [*Word], [*Assign], any
-// [Command] node, any [ArithmExpr] node, and any WordPart node. A trailing
-// newline will only be printed when a [*File] is used.
+// The node types supported at the moment are [*File], [*Stmt], [*Word],
+// [*HeredocDelim], [*Assign], any [Command] node, any [ArithmExpr] node, and
+// any WordPart node. A trailing newline will only be printed when a [*File] is
+// used.
 func (p *Printer) Print(w io.Writer, node Node) error {
 	p.reset()
 
@@ -156,6 +157,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 	case *Word:
 		p.line = node.Pos().Line()
 		p.word(node)
+	case *HeredocDelim:
+		p.line = node.Pos().Line()
+		p.heredocDelim(node)
 	case *VarRef:
 		p.line = node.Pos().Line()
 		p.varRef(node)
@@ -512,9 +516,9 @@ func (p *Printer) flushHeredocs() {
 		} else if r.Hdoc != nil {
 			p.wordParts(r.Hdoc.Parts, true)
 		}
-		p.unquotedWord(r.Word)
+		p.unquotedHeredocDelim(r.HdocDelim)
 		if r.Hdoc != nil {
-			// Overwrite p.line, since printing r.Word again can set
+			// Overwrite p.line, since printing the delimiter again can set
 			// p.line to the beginning of the heredoc again.
 			p.advanceLine(r.Hdoc.End().Line())
 		}
@@ -1030,8 +1034,24 @@ func (p *Printer) word(w *Word) {
 	p.wantSpace = spaceRequired
 }
 
+func (p *Printer) heredocDelim(d *HeredocDelim) {
+	p.wordParts(d.Parts, false)
+	p.wantSpace = spaceRequired
+}
+
 func (p *Printer) unquotedWord(w *Word) {
-	for _, wp := range w.Parts {
+	p.unquotedWordParts(w.Parts)
+}
+
+func (p *Printer) unquotedHeredocDelim(d *HeredocDelim) {
+	if d == nil {
+		return
+	}
+	p.unquotedWordParts(d.Parts)
+}
+
+func (p *Printer) unquotedWordParts(parts []WordPart) {
+	for _, wp := range parts {
 		switch wp := wp.(type) {
 		case *SglQuoted:
 			p.writeLit(wp.Value)
@@ -1049,6 +1069,14 @@ func (p *Printer) unquotedWord(w *Word) {
 			}
 		}
 	}
+}
+
+func (p *Printer) redirectWord(r *Redirect) {
+	if r.HdocDelim != nil {
+		p.heredocDelim(r.HdocDelim)
+		return
+	}
+	p.word(r.Word)
 }
 
 func (p *Printer) wordJoin(ws []*Word) {
@@ -1154,7 +1182,7 @@ func (p *Printer) stmt(s *Stmt) {
 		} else {
 			p.wantSpace = spaceRequired
 		}
-		p.word(r.Word)
+		p.redirectWord(r)
 		if r.Op == Hdoc || r.Op == DashHdoc {
 			p.pendingHdocs = append(p.pendingHdocs, r)
 		}
@@ -1198,7 +1226,7 @@ func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos)
 		} else {
 			p.wantSpace = spaceRequired
 		}
-		p.word(r.Word)
+		p.redirectWord(r)
 		startRedirs++
 	}
 	return startRedirs

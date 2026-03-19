@@ -105,6 +105,70 @@ func TestParseErrorBashErrorConditionalDiagnostics(t *testing.T) {
 	}
 }
 
+func TestParseHeredocDelimiterMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		src         string
+		wantValue   string
+		wantQuoted  bool
+		wantExpands bool
+		wantParts   int
+	}{
+		{
+			name:        "literal",
+			src:         "cat <<EOF\nbody\nEOF",
+			wantValue:   "EOF",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "single quoted",
+			src:         "cat <<'EOF'\nbody\nEOF",
+			wantValue:   "EOF",
+			wantQuoted:  true,
+			wantExpands: false,
+			wantParts:   1,
+		},
+		{
+			name:        "mixed quoted pieces",
+			src:         "cat <<\"EOF\"2\nbody\nEOF2",
+			wantValue:   "EOF2",
+			wantQuoted:  true,
+			wantExpands: false,
+			wantParts:   2,
+		},
+		{
+			name:        "escaped literal",
+			src:         "cat <<\\EOF\nbody\nEOF",
+			wantValue:   "EOF",
+			wantQuoted:  true,
+			wantExpands: false,
+			wantParts:   1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			prog, err := NewParser().Parse(strings.NewReader(tc.src), "")
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.Equals(len(prog.Stmts), 1))
+			qt.Assert(t, qt.Equals(len(prog.Stmts[0].Redirs), 1))
+
+			redir := prog.Stmts[0].Redirs[0]
+			qt.Assert(t, qt.IsNil(redir.Word))
+			qt.Assert(t, qt.IsTrue(redir.HdocDelim != nil))
+			qt.Assert(t, qt.Equals(redir.HdocDelim.Value, tc.wantValue))
+			qt.Assert(t, qt.Equals(redir.HdocDelim.Quoted, tc.wantQuoted))
+			qt.Assert(t, qt.Equals(redir.HdocDelim.BodyExpands, tc.wantExpands))
+			qt.Assert(t, qt.Equals(len(redir.HdocDelim.Parts), tc.wantParts))
+		})
+	}
+}
+
 func TestParseConfirm(t *testing.T) {
 	if testing.Short() {
 		t.Skip("calling external shells is slow")

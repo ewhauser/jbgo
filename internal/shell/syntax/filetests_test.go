@@ -19,6 +19,17 @@ func lits(strs ...string) []*Lit {
 }
 func word(ps ...WordPart) *Word { return &Word{Parts: ps} }
 func litWord(s string) *Word    { return word(lit(s)) }
+func heredocDelim(ps ...WordPart) *HeredocDelim {
+	w := word(ps...)
+	value, quoted := new(Parser).unquotedWordBytes(w)
+	return &HeredocDelim{
+		Parts:       ps,
+		Value:       string(value),
+		Quoted:      quoted,
+		BodyExpands: !quoted,
+	}
+}
+func litHeredocDelim(s string) *HeredocDelim { return heredocDelim(lit(s)) }
 func sub(expr ArithmExpr) *Subscript {
 	return &Subscript{Kind: SubscriptExpr, Expr: expr}
 }
@@ -1080,9 +1091,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1091,9 +1102,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("\nbar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("\nbar\n"),
 			}},
 		}),
 	),
@@ -1102,9 +1113,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n\n"),
 			}},
 		}),
 	),
@@ -1113,9 +1124,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("1\n2\n3\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("1\n2\n3\n"),
 			}},
 		}),
 	),
@@ -1124,8 +1135,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("a"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					lit("foo"),
 					litParamExp("bar"),
@@ -1139,8 +1150,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("a"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					lit(`"`),
 					litParamExp("bar"),
@@ -1154,8 +1165,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("a"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					lit("$"),
 					lit("''"),
@@ -1173,8 +1184,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("a"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					cmdSubst(litStmt("b")),
 					lit("\nc\n"),
@@ -1190,8 +1201,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("a"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					lit("foo"),
 					cmdSubst(litStmt("bar")),
@@ -1205,9 +1216,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("a"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("\\${\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("\\${\n"),
 			}},
 		}),
 	),
@@ -1219,9 +1230,9 @@ var fileTests = []fileTestCase{
 		langFile(block(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		})),
 	),
@@ -1235,9 +1246,9 @@ var fileTests = []fileTestCase{
 		langFile(cmdSubst(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		})),
 	),
@@ -1249,8 +1260,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					lit("bar\nEOF"),
 					cmdSubst(litStmt("oops")),
@@ -1267,8 +1278,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 				Hdoc: word(
 					lit("bar\nNOTEOF"),
 					cmdSubst(litStmt("oops")),
@@ -1287,9 +1298,9 @@ var fileTests = []fileTestCase{
 		langFile(cmdSubst(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(sglQuoted("EOF")),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
+				Hdoc:      litWord("bar\n"),
 			}},
 		})),
 	),
@@ -1298,9 +1309,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(sglQuoted("EOF")),
-				Hdoc: litWord("bar\nEOF`oops`\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
+				Hdoc:      litWord("bar\nEOF`oops`\n"),
 			}},
 		}),
 	),
@@ -1309,9 +1320,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(sglQuoted("EOF")),
-				Hdoc: litWord("bar\nNOTEOF`oops`\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
+				Hdoc:      litWord("bar\nNOTEOF`oops`\n"),
 			}},
 		}),
 	),
@@ -1331,9 +1342,9 @@ var fileTests = []fileTestCase{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{
 				{
-					Op:   Hdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("bar\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("bar\n"),
 				},
 				{Op: RdrOut, Word: litWord("f")},
 			},
@@ -1346,9 +1357,9 @@ var fileTests = []fileTestCase{
 			X: &Stmt{
 				Cmd: litCall("foo"),
 				Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("bar\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("bar\n"),
 				}},
 			},
 			Y: stmt(block(litStmt("etc"))),
@@ -1363,9 +1374,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: call(word(cmdSubst(litStmt("foo")))),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}, LangBash|LangMirBSDKorn),
 	),
@@ -1378,9 +1389,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: call(word(cmdSubst(litStmt("foo")))),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1392,9 +1403,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: call(word(arithmExp(litWord("foo")))),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1405,9 +1416,9 @@ var fileTests = []fileTestCase{
 			Then: []*Stmt{{
 				Cmd: litCall("foo"),
 				Redirs: []*Redirect{{
-					Op:   DashHdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("\t\tbar\n\t"),
+					Op:        DashHdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("\t\tbar\n\t"),
 				}},
 			}},
 		}),
@@ -1419,9 +1430,9 @@ var fileTests = []fileTestCase{
 			Then: []*Stmt{{
 				Cmd: litCall("foo"),
 				Redirs: []*Redirect{{
-					Op:   DashHdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("\t"),
+					Op:        DashHdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("\t"),
 				}},
 			}},
 		}),
@@ -1432,9 +1443,9 @@ var fileTests = []fileTestCase{
 			{
 				Cmd: litCall("foo"),
 				Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("EOF_body\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("EOF_body\n"),
 				}},
 			},
 			litStmt("foo2"),
@@ -1445,9 +1456,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("FOOBAR"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("FOOBAR"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1456,9 +1467,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(dblQuoted(lit("EOF"))),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(dblQuoted(lit("EOF"))),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1468,9 +1479,9 @@ var fileTests = []fileTestCase{
 			{
 				Cmd: litCall("foo"),
 				Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: word(sglQuoted("EOF")),
-					Hdoc: litWord("EOF_body\n"),
+					Op:        Hdoc,
+					HdocDelim: heredocDelim(sglQuoted("EOF")),
+					Hdoc:      litWord("EOF_body\n"),
 				}},
 			},
 			litStmt("foo2"),
@@ -1481,9 +1492,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(sglQuoted("EOF")),
-				Hdoc: litWord("${\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
+				Hdoc:      litWord("${\n"),
 			}},
 		}),
 	),
@@ -1492,8 +1503,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(sglQuoted("EOF")),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
 			}},
 		}),
 	),
@@ -1502,9 +1513,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(dblQuoted(lit("EOF")), lit("2")),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(dblQuoted(lit("EOF")), lit("2")),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1513,9 +1524,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("\\EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("\\EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -1524,9 +1535,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: word(lit("bar"), lit("baz\n")),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      word(lit("bar"), lit("baz\n")),
 			}},
 		}),
 	),
@@ -1539,9 +1550,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: word(sglQuoted("EOF")),
-				Hdoc: litWord("bar\\\n"),
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
+				Hdoc:      litWord("bar\\\n"),
 			}},
 		}),
 	),
@@ -1553,9 +1564,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   DashHdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("\tbar\n"),
+				Op:        DashHdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("\tbar\n"),
 			}},
 		}),
 	),
@@ -1564,8 +1575,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 			}},
 		}),
 	),
@@ -1574,8 +1585,8 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   DashHdoc,
-				Word: litWord("EOF"),
+				Op:        DashHdoc,
+				HdocDelim: litHeredocDelim("EOF"),
 			}},
 		}),
 	),
@@ -1584,9 +1595,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   DashHdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("\tbar\n"),
+				Op:        DashHdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("\tbar\n"),
 			}},
 		}),
 	),
@@ -1595,9 +1606,9 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: litCall("foo"),
 			Redirs: []*Redirect{{
-				Op:   DashHdoc,
-				Word: word(sglQuoted("EOF")),
-				Hdoc: litWord("\tbar\n"),
+				Op:        DashHdoc,
+				HdocDelim: heredocDelim(sglQuoted("EOF")),
+				Hdoc:      litWord("\tbar\n"),
 			}},
 		}),
 	),
@@ -1610,17 +1621,17 @@ var fileTests = []fileTestCase{
 			{
 				Cmd: litCall("f1"),
 				Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: litWord("EOF1"),
-					Hdoc: litWord("h1\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF1"),
+					Hdoc:      litWord("h1\n"),
 				}},
 			},
 			{
 				Cmd: litCall("f2"),
 				Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: litWord("EOF2"),
-					Hdoc: litWord("h2\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF2"),
+					Hdoc:      litWord("h2\n"),
 				}},
 			},
 		}),
@@ -1634,9 +1645,9 @@ var fileTests = []fileTestCase{
 			{
 				Cmd: litCall("a"),
 				Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("foo\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("foo\n"),
 				}},
 			},
 			litStmt("b"), litStmt("b"), litStmt("b"),
@@ -1655,9 +1666,9 @@ var fileTests = []fileTestCase{
 				word(dblQuoted(lit("\narg"))),
 			),
 			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("bar\n"),
 			}},
 		}),
 	),
@@ -3770,9 +3781,9 @@ var fileTests = []fileTestCase{
 				Stmts: []*Stmt{{
 					Cmd: litCall("cat"),
 					Redirs: []*Redirect{{
-						Op:   Hdoc,
-						Word: litWord("EOF"),
-						Hdoc: litWord("foo\n"),
+						Op:        Hdoc,
+						HdocDelim: litHeredocDelim("EOF"),
+						Hdoc:      litWord("foo\n"),
 					}},
 				}},
 			}},
@@ -4769,9 +4780,9 @@ var fileTests = []fileTestCase{
 		langFile(&BinaryCmd{
 			Op: Pipe,
 			X: &Stmt{Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("foo\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("foo\n"),
 			}}},
 			Y: litStmt("b"),
 		}),
@@ -4783,8 +4794,8 @@ var fileTests = []fileTestCase{
 			X: stmt(&BinaryCmd{
 				Op: Pipe,
 				X: &Stmt{Redirs: []*Redirect{
-					{Op: Hdoc, Word: litWord("EOF1")},
-					{Op: Hdoc, Word: litWord("EOF2")},
+					{Op: Hdoc, HdocDelim: litHeredocDelim("EOF1")},
+					{Op: Hdoc, HdocDelim: litHeredocDelim("EOF2")},
 				}},
 				Y: litStmt("c"),
 			}),
@@ -4799,9 +4810,9 @@ var fileTests = []fileTestCase{
 		langFile(&BinaryCmd{
 			Op: AndStmt,
 			X: &Stmt{Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("hdoc\n"),
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc:      litWord("hdoc\n"),
 			}}},
 			Y: stmt(block(litStmt("bar"))),
 		}),
@@ -4814,9 +4825,9 @@ var fileTests = []fileTestCase{
 			Body: stmt(block(stmt(&BinaryCmd{
 				Op: AndStmt,
 				X: &Stmt{Redirs: []*Redirect{{
-					Op:   Hdoc,
-					Word: litWord("EOF"),
-					Hdoc: litWord("hdoc\n"),
+					Op:        Hdoc,
+					HdocDelim: litHeredocDelim("EOF"),
+					Hdoc:      litWord("hdoc\n"),
 				}}},
 				Y: stmt(block(litStmt("bar"))),
 			}))),

@@ -23,6 +23,7 @@ func TestWalk(t *testing.T) {
 		"*syntax.DeclAssign":      false,
 		"*syntax.DeclDynamicWord": false,
 		"*syntax.Redirect":        false,
+		"*syntax.HeredocDelim":    false,
 		"*syntax.CallExpr":        false,
 		"*syntax.Subshell":        false,
 		"*syntax.Block":           false,
