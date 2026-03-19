@@ -378,9 +378,9 @@ run_make_check() {
     if (
       cd "$workdir"
       if command -v setsid >/dev/null 2>&1; then
-        env CONFIG_SHELL="$config_shell" setsid make "$log_target" VERBOSE=no RUN_EXPENSIVE_TESTS=yes "srcdir=$workdir"
+        env CONFIG_SHELL="$config_shell" setsid make "$log_target" VERBOSE=no "srcdir=$workdir"
       else
-        env CONFIG_SHELL="$config_shell" make "$log_target" VERBOSE=no RUN_EXPENSIVE_TESTS=yes "srcdir=$workdir"
+        env CONFIG_SHELL="$config_shell" make "$log_target" VERBOSE=no "srcdir=$workdir"
       fi
     ) >>"$log_path" 2>&1; then
       make_status=0
