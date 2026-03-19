@@ -4,7 +4,6 @@
 package expand
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,15 +17,16 @@ import (
 // ArithmSyntaxError is returned when arithmetic evaluation encounters
 // a syntax error such as a quoted string operand.
 type ArithmSyntaxError struct {
-	Expr  string // the expression being evaluated (for context)
-	Token string // the invalid token
+	Expr  syntax.ArithmExpr // the expression being evaluated
+	Token syntax.ArithmExpr // the invalid token within Expr
 }
 
 func (e ArithmSyntaxError) Error() string {
-	if e.Expr != "" && e.Expr != e.Token {
-		return fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %q)", e.Expr, e.Token)
+	token := syntax.ArithmExprString(e.Token)
+	if expr := syntax.ArithmExprString(e.Expr); expr != "" {
+		return fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %q)", expr, token)
 	}
-	return fmt.Sprintf("arithmetic syntax error: operand expected (error token is %q)", e.Token)
+	return fmt.Sprintf("arithmetic syntax error: operand expected (error token is %q)", token)
 }
 
 // hasSingleQuote checks if a word contains any single-quoted parts.
@@ -40,25 +40,16 @@ func hasSingleQuote(word *syntax.Word) *syntax.SglQuoted {
 	return nil
 }
 
-// printWord returns the printed form of a word for error messages.
-func printWord(word *syntax.Word) string {
-	var buf bytes.Buffer
-	printer := syntax.NewPrinter()
-	printer.Print(&buf, word)
-	return buf.String()
-}
-
-// printBinaryArithm returns the printed form of a binary arithmetic expression.
-func printBinaryArithm(b *syntax.BinaryArithm) string {
-	return printWord(b.X.(*syntax.Word)) + b.Op.String() + printWord(b.Y.(*syntax.Word))
-}
-
 func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+	return arithm(cfg, expr, expr)
+}
+
+func arithm(cfg *Config, root, expr syntax.ArithmExpr) (int, error) {
 	switch expr := expr.(type) {
 	case *syntax.Word:
 		// Bash rejects single-quoted strings in arithmetic context.
 		if hasSingleQuote(expr) != nil {
-			return 0, ArithmSyntaxError{Token: printWord(expr)}
+			return 0, ArithmSyntaxError{Expr: root, Token: expr}
 		}
 		str, err := Literal(cfg, expr)
 		if err != nil {
@@ -79,7 +70,7 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 		// default to 0
 		return int(atoi(str)), nil
 	case *syntax.ParenArithm:
-		return Arithm(cfg, expr.X)
+		return arithm(cfg, root, expr.X)
 	case *syntax.UnaryArithm:
 		switch expr.Op {
 		case syntax.Inc, syntax.Dec:
@@ -99,7 +90,7 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 			}
 			return int(val), nil
 		}
-		val, err := Arithm(cfg, expr.X)
+		val, err := arithm(cfg, root, expr.X)
 		if err != nil {
 			return 0, err
 		}
@@ -121,23 +112,23 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 			syntax.MulAssgn, syntax.QuoAssgn, syntax.RemAssgn,
 			syntax.AndAssgn, syntax.OrAssgn, syntax.XorAssgn,
 			syntax.ShlAssgn, syntax.ShrAssgn:
-			return cfg.assgnArit(expr)
+			return cfg.assgnArit(root, expr)
 		case syntax.TernQuest: // TernColon can't happen here
-			cond, err := Arithm(cfg, expr.X)
+			cond, err := arithm(cfg, root, expr.X)
 			if err != nil {
 				return 0, err
 			}
 			b2 := expr.Y.(*syntax.BinaryArithm) // must have Op==TernColon
 			if cond == 1 {
-				return Arithm(cfg, b2.X)
+				return arithm(cfg, root, b2.X)
 			}
-			return Arithm(cfg, b2.Y)
+			return arithm(cfg, root, b2.Y)
 		}
-		left, err := Arithm(cfg, expr.X)
+		left, err := arithm(cfg, root, expr.X)
 		if err != nil {
 			return 0, err
 		}
-		right, err := Arithm(cfg, expr.Y)
+		right, err := arithm(cfg, root, expr.Y)
 		if err != nil {
 			return 0, err
 		}
@@ -161,16 +152,10 @@ func atoi(s string) int64 {
 	return n
 }
 
-func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
+func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (int, error) {
 	name := b.X.(*syntax.Word).Lit()
 	val := atoi(cfg.envGet(name))
-	// Check for single-quoted RHS before evaluation to provide full expression in error.
-	if word, ok := b.Y.(*syntax.Word); ok {
-		if hasSingleQuote(word) != nil {
-			return 0, ArithmSyntaxError{Expr: printBinaryArithm(b), Token: printWord(word)}
-		}
-	}
-	arg_, err := Arithm(cfg, b.Y)
+	arg_, err := arithm(cfg, root, b.Y)
 	if err != nil {
 		return 0, err
 	}

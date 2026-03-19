@@ -238,19 +238,33 @@ func (r *Runner) expandErr(err error) {
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {
-	return r.arithmWithPrefix(expr, "")
+	return r.arithmEval(expr, false)
 }
 
-func (r *Runner) arithmWithPrefix(expr syntax.ArithmExpr, prefix string) int {
+func (r *Runner) arithmCmd(expr syntax.ArithmExpr) int {
+	return r.arithmEval(expr, true)
+}
+
+func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool) int {
 	n, err := expand.Arithm(r.ecfg, expr)
-	if err != nil {
-		var syntaxErr expand.ArithmSyntaxError
-		if prefix != "" && errors.As(err, &syntaxErr) {
-			err = fmt.Errorf("%s%s", prefix, syntaxErr.Error())
-		}
+	var syntaxErr expand.ArithmSyntaxError
+	if command && errors.As(err, &syntaxErr) {
+		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)
 	return n
+}
+
+type arithmCommandError struct {
+	err error
+}
+
+func (e arithmCommandError) Error() string {
+	return fmt.Sprintf("((: %s", e.err)
+}
+
+func (e arithmCommandError) Unwrap() error {
+	return e.err
 }
 
 func (r *Runner) fields(words ...*syntax.Word) []string {
@@ -659,21 +673,21 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		case *syntax.CStyleLoop:
 			if y.Init != nil {
-				r.arithm(y.Init)
+				r.arithmCmd(y.Init)
 			}
-			for y.Cond == nil || r.arithm(y.Cond) != 0 {
+			for y.Cond == nil || r.arithmCmd(y.Cond) != 0 {
 				if !r.exit.ok() || r.loopStmtsBroken(ctx, cm.Do) {
 					break
 				}
 				if y.Post != nil {
-					r.arithm(y.Post)
+					r.arithmCmd(y.Post)
 				}
 			}
 		}
 	case *syntax.FuncDecl:
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
-		r.exit.oneIf(r.arithmWithPrefix(cm.X, "((: ") == 0)
+		r.exit.oneIf(r.arithmCmd(cm.X) == 0)
 	case *syntax.LetClause:
 		var val int
 		for _, expr := range cm.Exprs {

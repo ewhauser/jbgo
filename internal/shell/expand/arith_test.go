@@ -25,46 +25,68 @@ func parseArithmExpr(t *testing.T, src string) syntax.ArithmExpr {
 
 func TestArithmSingleQuoteRejection(t *testing.T) {
 	tests := []struct {
-		name    string
-		src     string
-		wantErr bool
-		errTok  string // expected token in error
+		name       string
+		src        string
+		wantErr    bool
+		errExpr    string
+		errTok     string
+		errMessage string
 	}{
 		{
-			name:    "single quoted number",
-			src:     "'1'",
-			wantErr: true,
-			errTok:  "'1'",
+			name:       "single quoted number",
+			src:        "'1'",
+			wantErr:    true,
+			errExpr:    "'1'",
+			errTok:     "'1'",
+			errMessage: "'1': arithmetic syntax error: operand expected (error token is \"'1'\")",
 		},
 		{
-			name:    "single quoted with space",
-			src:     "'1 '",
-			wantErr: true,
-			errTok:  "'1 '",
+			name:       "single quoted with space",
+			src:        "'1 '",
+			wantErr:    true,
+			errExpr:    "'1 '",
+			errTok:     "'1 '",
+			errMessage: "'1 ': arithmetic syntax error: operand expected (error token is \"'1 '\")",
 		},
 		{
-			name:    "ansi-c quoted",
-			src:     "$'1'",
-			wantErr: true,
-			errTok:  "$'1'",
+			name:       "ansi-c quoted",
+			src:        "$'1'",
+			wantErr:    true,
+			errExpr:    "$'1'",
+			errTok:     "$'1'",
+			errMessage: "$'1': arithmetic syntax error: operand expected (error token is \"$'1'\")",
 		},
 		{
-			name:    "ansi-c quoted with escape",
-			src:     "$'\\n'",
-			wantErr: true,
-			errTok:  "$'\\n'",
+			name:       "ansi-c quoted with escape",
+			src:        "$'\\n'",
+			wantErr:    true,
+			errExpr:    "$'\\n'",
+			errTok:     "$'\\n'",
+			errMessage: "$'\\n': arithmetic syntax error: operand expected (error token is \"$'\\\\n'\")",
 		},
 		{
-			name:    "assignment with single quoted",
-			src:     "x='1'",
-			wantErr: true,
-			errTok:  "'1'",
+			name:       "assignment with single quoted",
+			src:        "x='1'",
+			wantErr:    true,
+			errExpr:    "x='1'",
+			errTok:     "'1'",
+			errMessage: "x='1': arithmetic syntax error: operand expected (error token is \"'1'\")",
 		},
 		{
-			name:    "add-assign with single quoted",
-			src:     "x+='2'",
-			wantErr: true,
-			errTok:  "'2'",
+			name:       "add-assign with single quoted",
+			src:        "x+='2'",
+			wantErr:    true,
+			errExpr:    "x+='2'",
+			errTok:     "'2'",
+			errMessage: "x+='2': arithmetic syntax error: operand expected (error token is \"'2'\")",
+		},
+		{
+			name:       "binary expression with single quoted rhs",
+			src:        "1+'2'",
+			wantErr:    true,
+			errExpr:    "1+'2'",
+			errTok:     "'2'",
+			errMessage: "1+'2': arithmetic syntax error: operand expected (error token is \"'2'\")",
 		},
 		{
 			name:    "plain number",
@@ -106,8 +128,14 @@ func TestArithmSingleQuoteRejection(t *testing.T) {
 					t.Errorf("Arithm(%q) expected ArithmSyntaxError, got %T: %v", tt.src, err, err)
 					return
 				}
-				if syntaxErr.Token != tt.errTok {
-					t.Errorf("Arithm(%q) error token = %q, want %q", tt.src, syntaxErr.Token, tt.errTok)
+				if got := syntax.ArithmExprString(syntaxErr.Expr); got != tt.errExpr {
+					t.Errorf("Arithm(%q) error expr = %q, want %q", tt.src, got, tt.errExpr)
+				}
+				if got := syntax.ArithmExprString(syntaxErr.Token); got != tt.errTok {
+					t.Errorf("Arithm(%q) error token = %q, want %q", tt.src, got, tt.errTok)
+				}
+				if got := syntaxErr.Error(); got != tt.errMessage {
+					t.Errorf("Arithm(%q) error message = %q, want %q", tt.src, got, tt.errMessage)
 				}
 			} else {
 				if err != nil {

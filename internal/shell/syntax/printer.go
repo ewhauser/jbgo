@@ -115,8 +115,8 @@ func NewPrinter(opts ...PrinterOption) *Printer {
 // to w are buffered.
 //
 // The node types supported at the moment are [*File], [*Stmt], [*Word], [*Assign], any
-// [Command] node, and any WordPart node. A trailing newline will only be printed
-// when a [*File] is used.
+// [Command] node, any [ArithmExpr] node, and any WordPart node. A trailing
+// newline will only be printed when a [*File] is used.
 func (p *Printer) Print(w io.Writer, node Node) error {
 	p.reset()
 
@@ -147,6 +147,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 		p.stmtList([]*Stmt{node}, nil)
 	case Command:
 		p.command(node, nil)
+	case ArithmExpr:
+		p.line = node.Pos().Line()
+		p.arithmExpr(node, false, false)
 	case *Word:
 		p.line = node.Pos().Line()
 		p.word(node)

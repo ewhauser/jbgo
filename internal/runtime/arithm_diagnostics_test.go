@@ -1,0 +1,81 @@
+package runtime
+
+import "testing"
+
+func TestArithmCommandRegressionIncludesStandaloneExpression(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "(( '1' ))\n")
+	if got, want := result.ExitCode, 1; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "((: '1': arithmetic syntax error: operand expected (error token is \"'1'\")\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForInit(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "for ((i='1'; i<2; i++)); do break; done\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "((: i='1': arithmetic syntax error: operand expected (error token is \"'1'\")\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForCond(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "for ((i=0; i<'2'; i++)); do :; done\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "((: i<'2': arithmetic syntax error: operand expected (error token is \"'2'\")\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForPost(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "for ((i=0; i<1; '1')); do i=1; done\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "((: '1': arithmetic syntax error: operand expected (error token is \"'1'\")\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmCommandRegressionPreservesReadonlyVariableError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "readonly x=1\n((x=2))\n")
+	if got, want := result.ExitCode, 1; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "x: readonly variable\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmForLoopRegressionPreservesReadonlyVariableError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "readonly x=1\nfor ((x=2; 0; x++)); do :; done\n")
+	if got, want := result.ExitCode, 1; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "x: readonly variable\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
