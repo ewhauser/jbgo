@@ -56,7 +56,7 @@ That means the roadmap should focus less on adding more top-level command nodes 
 - [ ] P1: Move alias expansion earlier and preserve alias provenance in parse results
 - [ ] P1: Make compound array assignment semantics explicit in the AST
 - [ ] P2: Promote brace expansion from a post-parse rewrite to a stable syntax node
-- [ ] P2: Restrict function bodies to compound commands in the AST and validation layer
+- [x] P2: Restrict function bodies to compound commands in the AST and validation layer
 - [ ] P2: Revisit whether a standalone `LValue` node is still worth the churn now that `Assign.Ref` and `Append` are explicit
 
 ## Priority Order
@@ -69,7 +69,7 @@ Recommended implementation order:
 4. alias-aware parse/provenance
 5. compound assignment cleanup
 6. brace expansion cleanup
-7. function-body tightening
+7. function-body tightening (done)
 8. standalone `LValue` re-evaluation only if write-target-specific metadata grows
 
 This order should unlock the largest amount of conformance work without forcing repeated AST churn.
@@ -522,15 +522,20 @@ This is a cleanup item rather than a critical blocker, but it would make brace b
 
 ### 10. Function bodies should be compound commands
 
-Status: P2
+Status: Done
 
-#### Problem
+`FuncDecl.Body` remains a `*Stmt`, but the parser now restricts function bodies to a single shell-command form with trailing redirections.
 
-`FuncDecl.Body` is any `Stmt`, and the parser still has a TODO to reject non-compound bodies.
+The parser now accepts:
 
-#### Current implementation signals
+- brace groups, subshells, loops, conditionals, `case`, `select`, `(( ))`, and `[[ ]]`
+- trailing redirections after that body command
 
-- `funcDecl` notes that bodies should probably be restricted
+The parser now rejects:
+
+- simple commands and quoted words as function bodies
+- leading redirections before the body command
+- `&&`, `||`, and pipeline operators being absorbed into the body instead of the enclosing statement
 
 #### Conformance signals
 
@@ -540,19 +545,7 @@ Relevant families:
 - `oils/sh-func.test.sh`
 - `oils/empty-bodies.test.sh`
 
-#### Proposed change
-
-Either:
-
-- add a `CompoundCommand` interface
-
-or:
-
-- validate `FuncDecl.Body.Cmd` against an explicit allowlist of compound forms
-
-#### Why this matters
-
-This is smaller than the items above, but it tightens correctness and reduces the number of parser states that the interpreter has to defend against.
+This tightens correctness and reduces the number of parser states that the interpreter has to defend against.
 
 ## Implementation Notes
 

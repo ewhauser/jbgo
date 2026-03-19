@@ -103,12 +103,21 @@ func Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error) 
 }
 
 func (m *core) parseProgram(name, script string) (*syntax.File, error) {
+	var (
+		program *syntax.File
+		err     error
+	)
 	if m.parseFunc != nil {
-		return m.parseFunc(name, script)
+		program, err = m.parseFunc(name, script)
+	} else {
+		m.parserMu.Lock()
+		defer m.parserMu.Unlock()
+		program, err = m.parser.Parse(strings.NewReader(script), name)
 	}
-	m.parserMu.Lock()
-	defer m.parserMu.Unlock()
-	return m.parser.Parse(strings.NewReader(script), name)
+	if err != nil {
+		return program, attachParseErrorSourceLine(err, script)
+	}
+	return program, nil
 }
 
 func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
@@ -289,6 +298,34 @@ func executionSourceName(exec *Execution) string {
 	default:
 		return "stdin"
 	}
+}
+
+func attachParseErrorSourceLine(err error, script string) error {
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) {
+		return err
+	}
+	if parseErr.SourceLine != "" {
+		return err
+	}
+	sourceLine := sourceLineAt(script, parseErr.Pos.Line())
+	if sourceLine == "" {
+		return err
+	}
+	parseErr.SourceLine = sourceLine
+	return parseErr
+}
+
+func sourceLineAt(script string, lineNum uint) string {
+	if lineNum == 0 {
+		return ""
+	}
+	lines := strings.Split(script, "\n")
+	idx := int(lineNum) - 1
+	if idx < 0 || idx >= len(lines) {
+		return ""
+	}
+	return lines[idx]
 }
 
 func ExitCode(err error) int {

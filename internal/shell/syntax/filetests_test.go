@@ -893,6 +893,30 @@ var fileTests = []fileTestCase{
 		}),
 	),
 	fileTest(
+		[]string{"foo() { a; } && bar"},
+		langFile(&BinaryCmd{
+			Op: AndStmt,
+			X: stmt(&FuncDecl{
+				Parens: true,
+				Name:   lit("foo"),
+				Body:   stmt(block(litStmt("a"))),
+			}),
+			Y: litStmt("bar"),
+		}),
+	),
+	fileTest(
+		[]string{"foo() (a) | bar"},
+		langFile(&BinaryCmd{
+			Op: Pipe,
+			X: stmt(&FuncDecl{
+				Parens: true,
+				Name:   lit("foo"),
+				Body:   stmt(subshell(litStmt("a"))),
+			}),
+			Y: litStmt("bar"),
+		}),
+	),
+	fileTest(
 		[]string{"foO_123() { a; }"},
 		langFile(&FuncDecl{
 			Parens: true,
