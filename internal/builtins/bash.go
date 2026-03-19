@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	stdfs "io/fs"
+	"slices"
 )
 
 type Bash struct {
@@ -94,7 +95,11 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		scriptData, _, err := readAllFile(ctx, inv, parsed.ScriptPath)
 		if err != nil {
 			if errors.Is(err, stdfs.ErrNotExist) {
-				return exitf(inv, 127, "%s: %s: No such file or directory", c.name, parsed.ScriptPath)
+				exitCode := 127
+				if slices.Contains(parsed.StartupOptions, "errexit") {
+					exitCode = 1
+				}
+				return exitf(inv, exitCode, "%s: %s: No such file or directory", c.name, parsed.ScriptPath)
 			}
 			return exitf(inv, 1, "%s: %s: %s", c.name, parsed.ScriptPath, readAllErrorText(err))
 		}
