@@ -3,6 +3,8 @@ package builtins
 import (
 	"context"
 	"io"
+
+	"github.com/ewhauser/gbash/internal/printfutil"
 )
 
 type Echo struct{}
@@ -231,13 +233,13 @@ func decodeEchoEscapes(value string) (decoded []byte, stop bool) {
 		case '\\':
 			decoded = append(decoded, '\\')
 		case 'x':
-			if i+1 >= len(value) || !isHexDigit(value[i+1]) {
+			if i+1 >= len(value) || !printfutil.IsHexDigit(value[i+1]) {
 				decoded = append(decoded, '\\', 'x')
 				continue
 			}
 			i++
 			hex := echoHexValue(value[i])
-			if i+1 < len(value) && isHexDigit(value[i+1]) {
+			if i+1 < len(value) && printfutil.IsHexDigit(value[i+1]) {
 				i++
 				hex = hex*16 + echoHexValue(value[i])
 			}

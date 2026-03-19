@@ -156,6 +156,41 @@ func TestCoreRunPreservesLastpipeBehavior(t *testing.T) {
 	}
 }
 
+func TestCoreRunUsesShellPrintfBuiltinForFormatting(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "printf")
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"single=\"'A\"",
+			"text='a b'",
+			`printf '%d|%X|%.1f|%q\n' "$single" 31 1.25 "$text"`,
+			`printf -v whole '%d|%X|%.1f|%q' "$single" 31 1.25 "$text"`,
+			`printf '<%s>\n' "$whole"`,
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	const want = "65|1F|1.2|\"a b\"\n<65|1F|1.2|\"a b\">\n"
+	if got := stdout.String(); got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestCoreRunUsesShellPrintfBuiltinForVarRefs(t *testing.T) {
 	t.Parallel()
 
@@ -168,10 +203,11 @@ func TestCoreRunUsesShellPrintfBuiltinForVarRefs(t *testing.T) {
 		Script: strings.Join([]string{
 			"typeset -A assoc=([k]=v)",
 			"key=k",
-			"printf -v 'assoc[$key]' '/%s/' val",
+			"single=\"'A\"",
+			"printf -v 'assoc[$key]' '%d' \"$single\"",
 			`echo "assoc=${assoc[k]} status=$?"`,
 			"array=(a b '')",
-			"printf -v 'array[1+1]' %s z",
+			"printf -v 'array[1+1]' %X 31",
 			`echo "array=${array[2]} status=$?"`,
 			"",
 		}, "\n"),
@@ -184,7 +220,7 @@ func TestCoreRunUsesShellPrintfBuiltinForVarRefs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
 	}
-	if got, want := stdout.String(), "assoc=/val/ status=0\narray=z status=0\n"; got != want {
+	if got, want := stdout.String(), "assoc=65 status=0\narray=1F status=0\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {

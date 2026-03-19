@@ -7,6 +7,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/ewhauser/gbash/internal/printfutil"
 )
 
 type Find struct{}
@@ -429,7 +431,7 @@ func findHasPrintfAction(actions []findAction) bool {
 }
 
 func formatFindPrintf(format string, item *findPrintData) string {
-	processed, _, _ := decodeEscapes(format)
+	processed, _, _ := printfutil.DecodeEscapes(format)
 
 	var out strings.Builder
 	for i := 0; i < len(processed); {

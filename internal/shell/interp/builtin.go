@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ewhauser/gbash/internal/printfutil"
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -268,28 +269,19 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			}
 		}
 		format, args := args[0], args[1:]
-		var sb strings.Builder
-		for {
-			s, n, err := expand.Format(r.ecfg, format, args)
-			if err != nil {
-				return failf(1, "%v\n", err)
-			}
-			if destRef == nil {
-				r.out(s)
-			} else {
-				sb.WriteString(s)
-			}
-			args = args[n:]
-			if n == 0 || len(args) == 0 {
-				break
-			}
+		formatted, err := printfutil.Format(format, args)
+		if err != nil {
+			return failf(1, "%v\n", err)
+		}
+		if destRef == nil {
+			r.out(formatted)
 		}
 		if destRef != nil {
 			prev := r.lookupVar(destRef.Name.Value)
 			as := &syntax.Assign{
 				Ref: destRef,
 				Value: &syntax.Word{Parts: []syntax.WordPart{
-					&syntax.Lit{Value: sb.String()},
+					&syntax.Lit{Value: formatted},
 				}},
 			}
 			vr, ok := r.assignVal(prev, as, "")
