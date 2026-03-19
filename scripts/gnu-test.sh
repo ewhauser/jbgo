@@ -113,6 +113,7 @@ write_wrapper() {
   cat > "$path" <<EOF
 #!/bin/sh
 set -eu
+\${GNU_XTRACE:+set -x}
 
 script_path=\$0
 case "\$script_path" in
@@ -143,9 +144,9 @@ export PWD
 GBASH_UMASK=\$(umask)
 EOF
   if [[ -n "$command_name" ]]; then
-    printf '%s\n' "exec \"\$gbash_bin\" --readwrite-root \"\$root_dir\" --cwd \"\$sandbox_cwd\" -c 'GBASH_UMASK=\$1; export GBASH_UMASK; POSIXLY_CORRECT=\$2; if [ -n \"\$POSIXLY_CORRECT\" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec \"\$@\"' _ \"\$GBASH_UMASK\" \"\${POSIXLY_CORRECT-}\" $command_name \"\$@\"" >> "$path"
+    printf '%s\n' "exec \"\$gbash_bin\" --readwrite-root \"\$root_dir\" --cwd \"\$sandbox_cwd\" -c '\${GNU_XTRACE:+set -x}; GBASH_UMASK=\$1; export GBASH_UMASK; POSIXLY_CORRECT=\$2; if [ -n \"\$POSIXLY_CORRECT\" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec \"\$@\"' _ \"\$GBASH_UMASK\" \"\${POSIXLY_CORRECT-}\" $command_name \"\$@\"" >> "$path"
   else
-    printf '%s\n' 'exec "$gbash_bin" --readwrite-root "$root_dir" --cwd "$sandbox_cwd" -c '\''GBASH_UMASK=$1; export GBASH_UMASK; POSIXLY_CORRECT=$2; if [ -n "$POSIXLY_CORRECT" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec "$@"'\'' _ "$GBASH_UMASK" "${POSIXLY_CORRECT-}" "$@"' >> "$path"
+    printf '%s\n' 'exec "$gbash_bin" --readwrite-root "$root_dir" --cwd "$sandbox_cwd" -c '\''${GNU_XTRACE:+set -x}; GBASH_UMASK=$1; export GBASH_UMASK; POSIXLY_CORRECT=$2; if [ -n "$POSIXLY_CORRECT" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec "$@"'\'' _ "$GBASH_UMASK" "${POSIXLY_CORRECT-}" "$@"' >> "$path"
   fi
   chmod 755 "$path"
 }
@@ -174,6 +175,7 @@ write_wrapper() {
   {
     printf '%s\n' '#!/bin/sh'
     printf '%s\n' 'set -eu'
+    printf '%s\n' '${GNU_XTRACE:+set -x}'
     printf '\n'
     printf '%s\n' 'script_path=$0'
     printf '%s\n' 'case "$script_path" in'
@@ -203,9 +205,9 @@ write_wrapper() {
     printf '%s\n' 'export PWD'
     printf '%s\n' 'GBASH_UMASK=$(umask)'
     if [ -n "$command_name" ]; then
-      printf '%s\n' "exec \"\$gbash_bin\" --readwrite-root \"\$root_dir\" --cwd \"\$sandbox_cwd\" -c 'GBASH_UMASK=\$1; export GBASH_UMASK; POSIXLY_CORRECT=\$2; if [ -n \"\$POSIXLY_CORRECT\" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec \"\$@\"' _ \"\$GBASH_UMASK\" \"\${POSIXLY_CORRECT-}\" $command_name \"\$@\""
+      printf '%s\n' "exec \"\$gbash_bin\" --readwrite-root \"\$root_dir\" --cwd \"\$sandbox_cwd\" -c '\${GNU_XTRACE:+set -x}; GBASH_UMASK=\$1; export GBASH_UMASK; POSIXLY_CORRECT=\$2; if [ -n \"\$POSIXLY_CORRECT\" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec \"\$@\"' _ \"\$GBASH_UMASK\" \"\${POSIXLY_CORRECT-}\" $command_name \"\$@\""
     else
-      printf '%s\n' 'exec "$gbash_bin" --readwrite-root "$root_dir" --cwd "$sandbox_cwd" -c '\''GBASH_UMASK=$1; export GBASH_UMASK; POSIXLY_CORRECT=$2; if [ -n "$POSIXLY_CORRECT" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec "$@"'\'' _ "$GBASH_UMASK" "${POSIXLY_CORRECT-}" "$@"'
+      printf '%s\n' 'exec "$gbash_bin" --readwrite-root "$root_dir" --cwd "$sandbox_cwd" -c '\''${GNU_XTRACE:+set -x}; GBASH_UMASK=$1; export GBASH_UMASK; POSIXLY_CORRECT=$2; if [ -n "$POSIXLY_CORRECT" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; shift 2; exec "$@"'\'' _ "$GBASH_UMASK" "${POSIXLY_CORRECT-}" "$@"'
     fi
   } > "$path"
   chmod 755 "$path"
@@ -373,6 +375,10 @@ run_make_check() {
     log_target="$test_base.log"
     trs_path="$workdir/$test_base.trs"
     rm -f "$workdir/$log_target" "$trs_path"
+
+    # Print test progress and disk usage for debugging
+    echo "=== RUNNING: $test_path ===" >&2
+    df -h "$workdir" 2>/dev/null | tail -1 >&2 || true
 
     make_status=0
     if (

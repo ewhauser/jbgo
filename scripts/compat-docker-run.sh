@@ -106,6 +106,7 @@ docker run --rm ${PLATFORM:+--platform "$PLATFORM"} \
   -e GNU_UTILS="${GNU_UTILS:-}" \
   -e GNU_TESTS="${GNU_TESTS:-}" \
   -e GNU_KEEP_WORKDIR="${GNU_KEEP_WORKDIR:-}" \
+  -e GNU_XTRACE="${GNU_XTRACE:-}" \
   -v "$REPO_ROOT:/workspace" \
   -w /workspace \
   "$IMAGE_NAME" \
