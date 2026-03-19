@@ -59,12 +59,6 @@ func literalizeDeclFieldAssign(src string, as *Assign) *Assign {
 		return nil
 	}
 	if as.Array != nil {
-		for _, elem := range as.Array.Elems {
-			if elem == nil {
-				continue
-			}
-			elem.Value = literalizeDeclFieldWord(src, elem.Value)
-		}
 		return as
 	}
 
