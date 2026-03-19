@@ -84,6 +84,50 @@ type Stmt struct {
 }
 ```
 
+### VarRef
+Canonical reference to a shell variable or element:
+```go
+type VarRef struct {
+    Name  *Lit
+    Index *Subscript // nil, [i], ["k"], [@], [*]
+}
+```
+
+Used by:
+- `Assign.Ref`
+- nameref resolution helpers in `expand` and `interp`
+- dynamic lvalue consumers like `printf -v`, `test -v`, and `[[ -v ]]`
+
+There is also a dedicated parser entrypoint for this shape:
+```go
+func (p *Parser) VarRef(r io.Reader) (*VarRef, error)
+```
+
+### Subscript
+Bracketed selector shared by variable refs, parameter expansions, and array literals:
+```go
+type SubscriptKind uint8
+
+const (
+    SubscriptExpr SubscriptKind = iota
+    SubscriptAt
+    SubscriptStar
+)
+
+type Subscript struct {
+    Left, Right Pos
+    Kind        SubscriptKind
+    Expr        ArithmExpr
+}
+```
+
+Important distinction:
+- `Kind == SubscriptExpr` means the selector is represented by `Expr`
+- `Kind == SubscriptAt` means `[@]`
+- `Kind == SubscriptStar` means `[*]`
+
+This is important because `[@]` and `[*]` are no longer inferred later from a generic word literal.
+
 ## Command Nodes
 
 ### CallExpr (Simple Command)
@@ -283,7 +327,7 @@ type ParamExp struct {
 
     Param       *Lit
     NestedParam WordPart     // nested expansion
-    Index       ArithmExpr   // ${a[i]}
+    Index       *Subscript   // ${a[i]}, ${a[@]}, ${a[*]}
 
     // Expansion operations (only one set)
     Slice     *Slice          // ${a:x:y}
@@ -307,6 +351,10 @@ type Expansion struct {
     Word *Word
 }
 ```
+
+Notes:
+- `ParamExp.Index.Expr` may still be an arithmetic-looking `*Word`, a string-like word, or a zsh-specific expression such as a comma slice.
+- `ParamExp.Index.Kind` tells you whether the selector was a generic expression, `[@]`, or `[*]`.
 
 ### CmdSubst
 ```go
@@ -423,14 +471,17 @@ type ParenTest struct {
 ### Assign
 ```go
 type Assign struct {
-    Append bool       // +=
-    Naked  bool       // without '=' (in declare)
-    Name   *Lit       // Variable name
-    Index  ArithmExpr // [i] or ["k"]
-    Value  *Word      // =val
-    Array  *ArrayExpr // =(arr)
+    Append bool
+    Naked  bool
+    Ref    *VarRef    // nil only for dynamic naked decl operands
+    Value  *Word
+    Array  *ArrayExpr
 }
 ```
+
+Notes:
+- This replaced the older `Name` + `Index` split.
+- If you are changing assignment target syntax, follow `Assign.Ref` through `syntax`, `expand`, and `interp`.
 
 ### ArrayExpr
 ```go
@@ -441,11 +492,15 @@ type ArrayExpr struct {
 }
 
 type ArrayElem struct {
-    Index    ArithmExpr  // Can be nil
-    Value    *Word       // Can be nil
+    Index    *Subscript // Can be nil
+    Value    *Word      // Can be nil
     Comments []Comment
 }
 ```
+
+Notes:
+- `ArrayElem.Index.Kind` distinguishes `[expr]` from `[@]` / `[*]`.
+- Runtime still decides how to interpret `SubscriptExpr` based on context; the AST now preserves selector shape without reparsing it from a bare arithmetic node.
 
 ### Redirect
 ```go

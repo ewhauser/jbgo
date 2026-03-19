@@ -50,6 +50,8 @@ Read `internal/shell/syntax/nodes.go` for complete definitions. Here's the hiera
 Node (base interface)
 ├── File           # Top-level: contains Stmts
 ├── Stmt           # Statement wrapper: holds Command + Redirs + flags
+├── VarRef         # Canonical variable or element reference
+├── Subscript      # Bracketed selector like [i], [@], [*]
 ├── Command (interface)
 │   ├── CallExpr   # Simple command: cmd arg1 arg2
 │   ├── BinaryCmd  # cmd1 && cmd2, cmd1 || cmd2, cmd1 | cmd2
@@ -74,6 +76,17 @@ Node (base interface)
     ├── UnaryArithm    # ++x, x--, !x, ~x
     └── ParenArithm    # (expr)
 ```
+
+Two recent AST shifts matter for parser work:
+
+- `Assign` no longer stores `Name` and `Index` separately. Assignment targets now flow through `Assign.Ref *VarRef`.
+- Bracketed selectors are no longer just raw `ArithmExpr`s. `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` now use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
+
+When you touch variable references, array indexing, namerefs, `printf -v`, `test -v`, `${var[...]}`, or compound array literals, you should expect follow-on edits in all three layers:
+
+- `syntax`: `nodes.go`, `parser.go`, `walk.go`, `printer.go`, `simplify.go`, typedjson, and filetests
+- `expand`: `param.go` and any helpers that interpret references or selectors
+- `interp`: `varref.go`, `vars.go`, and builtin/test consumers
 
 ## Conformance Testing
 
@@ -226,6 +239,18 @@ Check bash's actual output, then replicate the format.
 2. Find the relevant expansion function in `expand/expand.go` or `expand/param.go`
 3. Trace through with the AST node type
 4. Fix the logic, matching bash behavior
+
+### Pattern 5: Ref or subscript changes
+
+If the change touches variable references or bracketed selectors:
+
+1. Update the source-of-truth nodes in `syntax/nodes.go`
+2. Update both parser entry points:
+   - normal script parsing in `syntax/parser.go`
+   - the dedicated `Parser.VarRef` entrypoint if ref syntax changed
+3. Update printer, walker, simplify, typedjson, and filetests together
+4. Migrate `expand` and `interp` off any raw-string or raw-`ArithmExpr` assumptions
+5. Add parser tests for selector shape, especially `[@]`, `[*]`, and any malformed trailing-junk cases
 
 ## Reference Files
 
