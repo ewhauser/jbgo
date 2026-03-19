@@ -184,7 +184,7 @@ func shiftChunkPositions(node syntax.Node, offsetBase, lineBase uint) {
 	if node == nil || (offsetBase == 0 && lineBase <= 1) {
 		return
 	}
-	shiftValuePositions(reflect.ValueOf(node), offsetBase, lineBase-1)
+	shiftValuePositions(reflect.ValueOf(node), offsetBase, lineBase-1, make(map[uintptr]struct{}))
 }
 
 func shiftChunkError(err error, offsetBase, lineBase uint) error {
@@ -200,14 +200,97 @@ func shiftChunkError(err error, offsetBase, lineBase uint) error {
 }
 
 func lineContinues(line string) bool {
-	if !strings.HasSuffix(line, "\n") {
+	if !strings.HasSuffix(line, "\n") || len(line) < 2 || line[len(line)-2] != '\\' {
 		return false
 	}
-	backslashes := 0
-	for i := len(line) - 2; i >= 0 && line[i] == '\\'; i-- {
-		backslashes++
+
+	const (
+		lineStateTop = iota
+		lineStateSingle
+		lineStateDouble
+		lineStateBacktick
+		lineStateComment
+	)
+
+	state := lineStateTop
+	escaped := false
+	commentAllowed := true
+	for i := 0; i < len(line)-1; i++ {
+		ch := line[i]
+		switch state {
+		case lineStateComment:
+			continue
+		case lineStateSingle:
+			if ch == '\'' {
+				state = lineStateTop
+			}
+			commentAllowed = false
+			continue
+		case lineStateDouble:
+			if escaped {
+				escaped = false
+				commentAllowed = false
+				continue
+			}
+			switch ch {
+			case '\\':
+				escaped = true
+			case '"':
+				state = lineStateTop
+			}
+			commentAllowed = false
+			continue
+		case lineStateBacktick:
+			if escaped {
+				escaped = false
+				commentAllowed = false
+				continue
+			}
+			switch ch {
+			case '\\':
+				escaped = true
+			case '`':
+				state = lineStateTop
+			}
+			commentAllowed = false
+			continue
+		}
+
+		if escaped {
+			escaped = false
+			commentAllowed = false
+			continue
+		}
+
+		switch ch {
+		case '\\':
+			escaped = true
+			commentAllowed = false
+		case '\'':
+			state = lineStateSingle
+			commentAllowed = false
+		case '"':
+			state = lineStateDouble
+			commentAllowed = false
+		case '`':
+			state = lineStateBacktick
+			commentAllowed = false
+		case '#':
+			if commentAllowed {
+				state = lineStateComment
+				continue
+			}
+			commentAllowed = false
+		case ' ', '\t', '\r':
+			commentAllowed = true
+		case '!', '&', '(', ')', ';', '<', '>', '|':
+			commentAllowed = true
+		default:
+			commentAllowed = false
+		}
 	}
-	return backslashes%2 == 1
+
+	return state != lineStateComment && escaped
 }
 
 func chunkSourceLineAt(script string, lineNum uint) string {
@@ -222,16 +305,26 @@ func chunkSourceLineAt(script string, lineNum uint) string {
 	return lines[idx]
 }
 
-func shiftValuePositions(val reflect.Value, offsetBase, lineDelta uint) {
+func shiftValuePositions(val reflect.Value, offsetBase, lineDelta uint, seen map[uintptr]struct{}) {
 	if !val.IsValid() {
 		return
 	}
 	switch val.Kind() {
-	case reflect.Pointer, reflect.Interface:
+	case reflect.Pointer:
 		if val.IsNil() {
 			return
 		}
-		shiftValuePositions(val.Elem(), offsetBase, lineDelta)
+		ptr := val.Pointer()
+		if _, ok := seen[ptr]; ok {
+			return
+		}
+		seen[ptr] = struct{}{}
+		shiftValuePositions(val.Elem(), offsetBase, lineDelta, seen)
+	case reflect.Interface:
+		if val.IsNil() {
+			return
+		}
+		shiftValuePositions(val.Elem(), offsetBase, lineDelta, seen)
 	case reflect.Struct:
 		for i := 0; i < val.NumField(); i++ {
 			field := val.Field(i)
@@ -243,11 +336,11 @@ func shiftValuePositions(val reflect.Value, offsetBase, lineDelta uint) {
 				field.Set(reflect.ValueOf(syntax.NewPos(pos.Offset()+offsetBase, pos.Line()+lineDelta, pos.Col())))
 				continue
 			}
-			shiftValuePositions(field, offsetBase, lineDelta)
+			shiftValuePositions(field, offsetBase, lineDelta, seen)
 		}
 	case reflect.Slice:
 		for i := 0; i < val.Len(); i++ {
-			shiftValuePositions(val.Index(i), offsetBase, lineDelta)
+			shiftValuePositions(val.Index(i), offsetBase, lineDelta, seen)
 		}
 	}
 }
