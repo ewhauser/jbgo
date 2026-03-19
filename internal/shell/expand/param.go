@@ -37,6 +37,59 @@ func subscriptLit(sub *syntax.Subscript) string {
 	}
 }
 
+func indirectSpecialParam(name string) bool {
+	switch name {
+	case "@", "*", "#", "?", "-", "$", "!":
+		return true
+	default:
+		return false
+	}
+}
+
+func indirectPositionalParam(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func indirectParamExp(name string) (*syntax.ParamExp, error) {
+	ref, err := parseVarRef(name)
+	if err == nil {
+		return &syntax.ParamExp{
+			Param: ref.Name,
+			Index: ref.Index,
+		}, nil
+	}
+	if indirectSpecialParam(name) || indirectPositionalParam(name) {
+		return &syntax.ParamExp{
+			Param: &syntax.Lit{Value: name},
+		}, nil
+	}
+	return nil, fmt.Errorf("invalid indirect expansion")
+}
+
+func (cfg *Config) indirectValue(name string) (string, error) {
+	target, err := indirectParamExp(name)
+	if err != nil {
+		return "", err
+	}
+	switch target.Param.Value {
+	case "@", "*":
+		return cfg.ifsJoin(cfg.Env.Get(target.Param.Value).List), nil
+	}
+	ref := &syntax.VarRef{
+		Name:  target.Param,
+		Index: target.Index,
+	}
+	return cfg.varRef(ref)
+}
+
 // fnv1Hash computes the FNV-1 hash for a string.
 // This matches bash's internal hash function for associative arrays.
 func fnv1Hash(s string) uint32 {
@@ -513,11 +566,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		case str == "":
 			return "", nil
 		default:
-			ref, err := parseVarRef(str)
-			if err != nil {
-				return "", fmt.Errorf("invalid indirect expansion")
-			}
-			val, err := cfg.varRef(ref)
+			val, err := cfg.indirectValue(str)
 			if err != nil {
 				return "", err
 			}

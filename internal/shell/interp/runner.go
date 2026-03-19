@@ -1116,7 +1116,13 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 		// Inline command vars are always exported.
 		vr.Exported = true
 
-		restores = append(restores, restoreVar{name, prev})
+		resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
+		if err != nil {
+			r.errf("%v\n", err)
+			r.exit.code = 1
+			return restores
+		}
+		restores = append(restores, restoreVar{resolvedRef.Name.Value, resolvedPrev})
 		if err := r.setVarByRef(prev, as.Ref, vr); err != nil {
 			r.errf("%v\n", err)
 			r.exit.code = 1
