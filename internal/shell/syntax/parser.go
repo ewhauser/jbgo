@@ -1906,7 +1906,7 @@ func (p *Parser) hasValidIdent() bool {
 	if p.tok != _Lit && p.tok != _LitWord {
 		return false
 	}
-	if end := p.eqlOffs; end > 0 {
+	if end := p.validEqlOffs(); end > 0 {
 		if p.val[end-1] == '+' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) {
 			end-- // a+=x
 		}
@@ -1917,6 +1917,13 @@ func (p *Parser) hasValidIdent() bool {
 		return false // *[i]=x
 	}
 	return p.r == '[' // a[i]=x
+}
+
+func (p *Parser) validEqlOffs() int {
+	if p.eqlOffs <= 0 || p.eqlOffs >= len(p.val) {
+		return -1
+	}
+	return p.eqlOffs
 }
 
 func (p *Parser) varRef() *VarRef {
@@ -2035,9 +2042,9 @@ func (p *Parser) getAssignAfterRef(ref *VarRef) *Assign {
 
 func (p *Parser) getAssign() *Assign {
 	as := &Assign{}
-	if p.eqlOffs > 0 { // foo=bar
-		nameEnd := p.eqlOffs
-		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+	if eqIndex := p.validEqlOffs(); eqIndex > 0 { // foo=bar
+		nameEnd := eqIndex
+		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[eqIndex-1] == '+' {
 			// a+=b
 			as.Append = true
 			nameEnd--
@@ -2045,9 +2052,9 @@ func (p *Parser) getAssign() *Assign {
 		as.Ref = &VarRef{Name: p.lit(p.pos, p.val[:nameEnd])}
 		// since we're not using the entire p.val
 		as.Ref.Name.ValueEnd = posAddCol(as.Ref.Name.ValuePos, nameEnd)
-		left := p.lit(posAddCol(p.pos, 1), p.val[p.eqlOffs+1:])
+		left := p.lit(posAddCol(p.pos, 1), p.val[eqIndex+1:])
 		if left.Value != "" {
-			left.ValuePos = posAddCol(left.ValuePos, p.eqlOffs)
+			left.ValuePos = posAddCol(left.ValuePos, eqIndex)
 			as.Value = p.wordOne(left)
 		}
 		p.next()
@@ -2069,9 +2076,9 @@ func looksLikeDeclFlagWord(tok token, val string) bool {
 }
 
 func (p *Parser) declOperand() DeclOperand {
-	if p.eqlOffs > 0 {
-		nameEnd := p.eqlOffs
-		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+	if eqIndex := p.validEqlOffs(); eqIndex > 0 {
+		nameEnd := eqIndex
+		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[eqIndex-1] == '+' {
 			nameEnd--
 		}
 		name := p.val[:nameEnd]
@@ -2649,6 +2656,13 @@ func (p *Parser) caseItems(stop string) (items []*CaseItem) {
 			}
 			if !p.got(or) {
 				p.curErr("case patterns must be separated with %#q", or)
+			}
+		}
+		if len(ci.Patterns) == 0 {
+			if p.recoverError() {
+				ci.Patterns = append(ci.Patterns, p.wordOne(&Lit{ValuePos: recoveredPos}))
+			} else {
+				p.curErr("case patterns must consist of words")
 			}
 		}
 		old := p.preNested(switchCase)

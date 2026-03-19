@@ -1,0 +1,107 @@
+[
+  {
+    "name": "unexpected-do",
+    "kind": "parse-error",
+    "script": "do echo hi\n"
+  },
+  {
+    "name": "top-level-close-brace",
+    "kind": "parse-error",
+    "script": "}\necho should-not-run\n"
+  },
+  {
+    "name": "block-needs-space",
+    "kind": "parse-error",
+    "script": "{ls; }\n"
+  },
+  {
+    "name": "misplaced-parentheses",
+    "kind": "parse-error",
+    "script": "echo a(b)\n"
+  },
+  {
+    "name": "empty-dbracket-clause",
+    "kind": "parse-error",
+    "script": "[[ || true ]]\n"
+  },
+  {
+    "name": "unterminated-command-sub",
+    "kind": "parse-error",
+    "script": "$(x\n"
+  },
+  {
+    "name": "unterminated-backticks",
+    "kind": "parse-error",
+    "script": "`x\n"
+  },
+  {
+    "name": "unterminated-param-expansion",
+    "kind": "parse-error",
+    "script": "echo ${value\n"
+  },
+  {
+    "name": "nested-array-literal",
+    "kind": "parse-error",
+    "script": "a=( inside=() )\necho len=${#a[@]}\n"
+  },
+  {
+    "name": "unterminated-heredoc",
+    "kind": "parse-error",
+    "script": "cat <<EOF\nline one\n$(echo nested)\n"
+  },
+  {
+    "name": "bad-heredoc-comment-mix",
+    "kind": "parse-error",
+    "script": "cat <<EOF # trailing comment\n$(echo nested\nEOF\n"
+  },
+  {
+    "name": "recovery-storm",
+    "kind": "recovery",
+    "script": "if then\nfor do\necho ${\n[[ || ]]\ncase x in\n)\n"
+  },
+  {
+    "name": "deep-cmdsub-stack",
+    "kind": "nesting",
+    "script": "echo $(echo $(echo $(echo $(echo $(echo $(echo $(echo hi)))))))\n"
+  },
+  {
+    "name": "deep-block-stack",
+    "kind": "nesting",
+    "script": "{ { { { { echo hi; }; }; }; }\n"
+  },
+  {
+    "name": "arith-vs-cmdsub-ambiguity",
+    "kind": "ambiguity",
+    "script": "echo $(( echo 1\necho 2\n))\n"
+  },
+  {
+    "name": "incomplete-arith-assignment",
+    "kind": "parse-error",
+    "script": "A0=$((0 0"
+  },
+  {
+    "name": "process-subst-unclosed",
+    "kind": "parse-error",
+    "script": "cat <(echo hi\n"
+  },
+  {
+    "name": "nul-byte-input",
+    "kind": "encoding",
+    "script": "echo hi\u0000there\n"
+  },
+  {
+    "name": "crlf-control-flow",
+    "kind": "line-endings",
+    "script": "if true;\r\nthen\r\n  echo hi\r\nfi\r\n"
+  },
+  {
+    "name": "separator-burst",
+    "kind": "parse-error",
+    "script": "echo one ;;;; echo two\n"
+  },
+  {
+    "name": "redir-burst",
+    "kind": "parse-error",
+    "script": "echo hi >>>>> out\n"
+  }
+]

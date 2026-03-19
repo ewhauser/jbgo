@@ -142,11 +142,16 @@ FUZZ_FULL_SHARD_4 := \
 	./contrib/jq:FuzzJQCommands \
 	FuzzAttackMutations
 
+FUZZ_FULL_SHARD_5 := \
+	./internal/shell/syntax:FuzzParseAdversarial \
+	./internal/shell/syntax:FuzzParseAttackMutations
+
 FUZZ_FULL_TARGETS := \
 	$(FUZZ_FULL_SHARD_1) \
 	$(FUZZ_FULL_SHARD_2) \
 	$(FUZZ_FULL_SHARD_3) \
-	$(FUZZ_FULL_SHARD_4)
+	$(FUZZ_FULL_SHARD_4) \
+	$(FUZZ_FULL_SHARD_5)
 
 lint:
 	@set -eu; \

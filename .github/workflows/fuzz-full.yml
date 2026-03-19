@@ -25,6 +25,8 @@ jobs:
             make_var: FUZZ_FULL_SHARD_3
           - shard: shard-4
             make_var: FUZZ_FULL_SHARD_4
+          - shard: shard-5
+            make_var: FUZZ_FULL_SHARD_5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 

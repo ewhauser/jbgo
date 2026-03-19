@@ -2702,6 +2702,10 @@ func TestParseRecoverErrors(t *testing.T) {
 			wantMissing: 1,
 		},
 		{
+			src:         "case 0(",
+			wantMissing: 3,
+		},
+		{
 			src:         `(one | { two >`,
 			wantMissing: 3,
 		},

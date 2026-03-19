@@ -887,7 +887,21 @@ type CaseItem struct {
 	Last  []Comment
 }
 
-func (c *CaseItem) Pos() Pos { return c.Patterns[0].Pos() }
+func (c *CaseItem) Pos() Pos {
+	if len(c.Patterns) > 0 {
+		return c.Patterns[0].Pos()
+	}
+	if len(c.Comments) > 0 {
+		return c.Comments[0].Pos()
+	}
+	if pos := stmtsPos(c.Stmts, c.Last); pos.IsValid() || pos.IsRecovered() {
+		return pos
+	}
+	if c.OpPos.IsValid() || c.OpPos.IsRecovered() {
+		return c.OpPos
+	}
+	return recoveredPos
+}
 func (c *CaseItem) End() Pos {
 	if c.OpPos.IsValid() {
 		return posAddCol(c.OpPos, len(c.Op.String()))
