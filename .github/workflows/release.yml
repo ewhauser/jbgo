@@ -22,7 +22,6 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  workflows: write
 
 concurrency:
   group: publish-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.event.pull_request.head.ref }}
@@ -93,6 +92,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.resolve.outputs.ref }}
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Fetch tags
         run: git fetch --force --tags origin
