@@ -330,6 +330,35 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			<-bg.done
 			exit = *bg.exit
 		}
+	case "caller":
+		depth := 0
+		switch len(args) {
+		case 0:
+		case 1:
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < 0 {
+				return failf(2, "caller: %s: numeric argument required\n", args[0])
+			}
+			depth = n
+		default:
+			return failf(2, "caller: too many arguments\n")
+		}
+		line, frame, ok := r.callerFrame(depth)
+		if !ok {
+			exit.code = 1
+			return exit
+		}
+		lineText := strconv.Itoa(line)
+		if frame.bashSource != "" && frame.label != "" {
+			fmt.Fprintf(r.stdout, "%s %s %s\n", lineText, frame.label, frame.bashSource)
+		} else if frame.bashSource != "" {
+			fmt.Fprintf(r.stdout, "%s %s\n", lineText, frame.bashSource)
+		} else if frame.label != "" {
+			fmt.Fprintf(r.stdout, "%s %s\n", lineText, frame.label)
+		} else {
+			r.out(lineText)
+			r.out("\n")
+		}
 	case "builtin":
 		if len(args) < 1 {
 			break

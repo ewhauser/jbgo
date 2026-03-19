@@ -183,6 +183,13 @@ n=3
 [a7]
 ## END
 
+#### mapfile -u with named file descriptor
+type mapfile >/dev/null 2>&1 || exit 0
+printf '%s\n' red blue > "$TMP/mapfile-u.txt"
+exec {fd}< "$TMP/mapfile-u.txt"
+mapfile -u "$fd" -t arr
+argv.sh "${arr[@]}"
+
 #### mapfile / readarray stdin  TODO: Fix me.
 shopt -s lastpipe  # for bash
 

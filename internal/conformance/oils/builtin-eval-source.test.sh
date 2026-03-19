@@ -204,6 +204,17 @@ path
 status=0
 ## END
 
+#### shopt -u sourcepath toggles PATH lookup
+mkdir -p dir
+echo "echo from-path" > dir/cmd
+PATH="dir:$PATH"
+shopt -u sourcepath || exit 0
+. cmd
+echo "disabled=$?"
+shopt -s sourcepath
+. cmd
+echo "enabled=$?"
+
 #### source works for files in subdirectory
 mkdir -p dir
 echo "echo path" > dir/cmd

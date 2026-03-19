@@ -170,3 +170,21 @@ func (r *Runner) bashLineNoStack() []string {
 	}
 	return stack
 }
+
+func (r *Runner) callerFrame(depth int) (int, execFrame, bool) {
+	if depth < 0 {
+		return 0, execFrame{}, false
+	}
+	stack := make([]execFrame, 0, len(r.frames))
+	for i := len(r.frames) - 1; i >= 0; i-- {
+		frame := r.frames[i]
+		if frame.internal {
+			continue
+		}
+		stack = append(stack, frame)
+	}
+	if depth+1 >= len(stack) {
+		return 0, execFrame{}, false
+	}
+	return stack[depth].callLine, stack[depth+1], true
+}

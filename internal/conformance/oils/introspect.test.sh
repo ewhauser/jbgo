@@ -224,6 +224,50 @@ f  # line 9
 ['end F', '10']
 ## END
 
+#### caller builtin in nested functions
+cat > "$TMP/caller-lib.sh" <<'EOF'
+inner() {
+  caller 0
+  echo "status=$?"
+  caller 1
+  echo "status=$?"
+  caller 2
+  echo "status=$?"
+}
+outer() {
+  inner
+}
+EOF
+. "$TMP/caller-lib.sh"
+outer
+
+#### caller builtin with sourced file and top level
+cat > "$TMP/caller-inner.sh" <<'EOF'
+caller 0
+echo "source-top=$?"
+inner() {
+  caller 0
+  echo "status=$?"
+  caller 1
+  echo "status=$?"
+}
+outer() {
+  inner
+}
+EOF
+cat > "$TMP/caller-outer.sh" <<'EOF'
+. "$TMP/caller-inner.sh"
+wrapper() {
+  outer
+}
+wrapper
+EOF
+. "$TMP/caller-outer.sh"
+caller 0
+echo "top=$?"
+caller 9
+echo "far=$?"
+
 #### Locations with temp frame
 
 cd $REPO_ROOT

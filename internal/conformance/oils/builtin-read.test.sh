@@ -586,6 +586,20 @@ find . -type f -a -print0 | { read -r -d ''; echo "[$REPLY]"; }
 ## STDOUT:
 [./a\b\c\d]
 ## END
+## N-I dash/zsh/mksh STDOUT:
+## END
+
+#### while IFS= read -r line || [[ -n $line ]]
+printf '%s' $'one\nlast line without newline' > "$TMP/read-loop.txt"
+while IFS= read -r line || [[ -n $line ]]; do
+  printf '<%s>\n' "$line"
+done < "$TMP/read-loop.txt"
+
+#### while IFS= read -r -d '' item || [[ -n $item ]]
+printf '%s\0%s' alpha beta > "$TMP/read-loop-nul.txt"
+while IFS= read -r -d '' item || [[ -n $item ]]; do
+  printf '<%s>\n' "$item"
+done < "$TMP/read-loop-nul.txt"
 
 #### read from redirected directory is non-fatal error
 

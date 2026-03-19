@@ -156,6 +156,8 @@ type Runner struct {
 	origStdout io.Writer
 	origStderr io.Writer
 
+	inRedirectWord int
+
 	// Most scripts don't use pushd/popd, so make space for the initial PWD
 	// without requiring an extra allocation.
 	dirStack     []string
@@ -253,7 +255,9 @@ type bgProc struct {
 	// after which point the result fields below are set.
 	done chan struct{}
 
-	exit *exitStatus
+	exit          *exitStatus
+	procSubst     bool
+	waitAtStmtEnd bool
 }
 
 type alias struct {
