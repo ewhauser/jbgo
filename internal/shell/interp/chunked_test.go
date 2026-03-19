@@ -26,6 +26,11 @@ func TestLineContinuesHonorsShellContext(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "parameter expansion hash is not comment",
+			line: "echo ${x:- # } \\\n",
+			want: true,
+		},
+		{
 			name: "even trailing backslashes do not continue",
 			line: "echo foo \\\\\n",
 			want: false,
@@ -56,6 +61,24 @@ hi
 		t.Fatalf("Run error = %v", err)
 	}
 	if got, want := stdout, "hi\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunShellReaderKeepsBackslashActiveInsideParameterExpansion(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+echo ${x:- # } \
+world
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "# world\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr != "" {

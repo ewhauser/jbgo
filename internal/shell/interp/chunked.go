@@ -215,6 +215,7 @@ func lineContinues(line string) bool {
 	state := lineStateTop
 	escaped := false
 	commentAllowed := true
+	paramDepth := 0
 	for i := 0; i < len(line)-1; i++ {
 		ch := line[i]
 		switch state {
@@ -266,6 +267,12 @@ func lineContinues(line string) bool {
 		case '\\':
 			escaped = true
 			commentAllowed = false
+		case '$':
+			if i+1 < len(line)-1 && line[i+1] == '{' {
+				paramDepth++
+				i++
+			}
+			commentAllowed = false
 		case '\'':
 			state = lineStateSingle
 			commentAllowed = false
@@ -276,9 +283,14 @@ func lineContinues(line string) bool {
 			state = lineStateBacktick
 			commentAllowed = false
 		case '#':
-			if commentAllowed {
+			if commentAllowed && paramDepth == 0 {
 				state = lineStateComment
 				continue
+			}
+			commentAllowed = false
+		case '}':
+			if paramDepth > 0 {
+				paramDepth--
 			}
 			commentAllowed = false
 		case ' ', '\t', '\r':
