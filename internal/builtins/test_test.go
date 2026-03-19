@@ -79,15 +79,17 @@ func TestTestReportsParseErrorsAndBracketMismatch(t *testing.T) {
 	if result.ExitCode != 2 {
 		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "missing argument after '='") {
-		t.Fatalf("Stderr = %q, want missing-argument error", result.Stderr)
+	// Accept both "missing argument after '='" (registry) and "= must be followed by a word" (interp)
+	if !strings.Contains(result.Stderr, "missing argument") && !strings.Contains(result.Stderr, "must be followed by") {
+		t.Fatalf("Stderr = %q, want error about missing argument after '='", result.Stderr)
 	}
 
 	result = mustExecSession(t, session, "[ 1 -eq 1\n")
 	if result.ExitCode != 2 {
 		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "missing ']'") {
+	// Accept both "missing ']'" (registry) and "missing matching ]" (interp)
+	if !strings.Contains(result.Stderr, "missing") || !strings.Contains(result.Stderr, "]") {
 		t.Fatalf("Stderr = %q, want missing-closing-bracket error", result.Stderr)
 	}
 }

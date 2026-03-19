@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"reflect"
 	"regexp"
 	"unicode"
 
@@ -253,17 +255,25 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 		r.setVar("BASH_REMATCH", vr)
 		return true
 	case syntax.TsNewer:
+		// -nt: True if file1 is newer than file2, or if file1 exists and file2 does not.
 		info1, err1 := r.stat(ctx, x)
 		info2, err2 := r.stat(ctx, y)
-		if err1 != nil || err2 != nil {
-			return false
+		if err1 != nil {
+			return false // file1 doesn't exist
+		}
+		if err2 != nil {
+			return true // file1 exists, file2 doesn't
 		}
 		return info1.ModTime().After(info2.ModTime())
 	case syntax.TsOlder:
+		// -ot: True if file1 is older than file2, or if file2 exists and file1 does not.
 		info1, err1 := r.stat(ctx, x)
 		info2, err2 := r.stat(ctx, y)
-		if err1 != nil || err2 != nil {
-			return false
+		if err2 != nil {
+			return false // file2 doesn't exist
+		}
+		if err1 != nil {
+			return true // file2 exists, file1 doesn't
 		}
 		return info1.ModTime().Before(info2.ModTime())
 	case syntax.TsDevIno:
@@ -272,7 +282,7 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 		if err1 != nil || err2 != nil {
 			return false
 		}
-		return os.SameFile(info1, info2)
+		return sameFile(info1, info2)
 	case syntax.TsEql:
 		return atoi(x) == atoi(y)
 	case syntax.TsNeq:
@@ -463,4 +473,52 @@ func (r *Runner) unTest(ctx context.Context, op syntax.UnTestOperator, x string)
 	default:
 		panic(fmt.Sprintf("unhandled unary test op: %v", op))
 	}
+}
+
+// sameFile reports whether info1 and info2 describe the same file.
+// It first tries os.SameFile which works for real filesystems, then falls back
+// to comparing NodeID for memory filesystems or DeviceID/Inode for filesystems
+// that provide those via the FileIdentity interface.
+func sameFile(info1, info2 fs.FileInfo) bool {
+	if os.SameFile(info1, info2) {
+		return true
+	}
+	// Try FileIdentity interface for sandbox filesystems
+	type fileIdentity interface {
+		FileIdentity() (deviceID, inode uint64)
+	}
+	if fi1, ok := info1.Sys().(fileIdentity); ok {
+		if fi2, ok := info2.Sys().(fileIdentity); ok {
+			dev1, ino1 := fi1.FileIdentity()
+			dev2, ino2 := fi2.FileIdentity()
+			return dev1 == dev2 && ino1 == ino2
+		}
+	}
+	// Check for structs with NodeID field (used by MemoryFS)
+	sys1, sys2 := info1.Sys(), info2.Sys()
+	if id1, ok := getNodeID(sys1); ok {
+		if id2, ok := getNodeID(sys2); ok {
+			return id1 == id2 && id1 != 0
+		}
+	}
+	return false
+}
+
+// getNodeID extracts a NodeID field from a struct using reflection.
+func getNodeID(v any) (uint64, bool) {
+	if v == nil {
+		return 0, false
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return 0, false
+	}
+	field := rv.FieldByName("NodeID")
+	if !field.IsValid() || field.Kind() != reflect.Uint64 {
+		return 0, false
+	}
+	return field.Uint(), true
 }

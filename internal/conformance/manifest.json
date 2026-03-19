@@ -66,14 +66,6 @@
           "mode": "xfail",
           "reason": "gbash cannot represent bash's mixed scalar-plus-associative variables"
         },
-        "oils/array-assoc.test.sh::test -v assoc[key]": {
-          "mode": "xfail",
-          "reason": "the runtime test builtin still parses -v operands as plain words instead of associative array references"
-        },
-        "oils/array-assoc.test.sh::test -v with dynamic parsing": {
-          "mode": "xfail",
-          "reason": "the runtime test builtin does not yet evaluate dynamic associative array references for -v"
-        },
         "oils/array-compat.test.sh::value.BashArray internal representation - Assoc (ordering is a problem)": {
           "mode": "xfail",
           "reason": "gbash's declare -A listing output still differs from bash's associative-array introspection"
@@ -149,14 +141,6 @@
         "oils/array.test.sh::Set array item to array": {
           "mode": "xfail",
           "reason": "gbash treats nested array assignment as fatal instead of bash's non-fatal member-assignment error"
-        },
-        "oils/array.test.sh::Is element set?  test -v a[i]": {
-          "mode": "xfail",
-          "reason": "the runtime test builtin still treats array -v operands as plain words instead of indexed references"
-        },
-        "oils/array.test.sh::test -v a[i] with arith expressions": {
-          "mode": "xfail",
-          "reason": "the runtime test builtin does not yet evaluate indexed array arithmetic operands for -v"
         },
         "oils/array.test.sh::Using an array itself as the index on RHS": {
           "mode": "xfail",

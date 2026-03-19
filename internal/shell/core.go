@@ -378,11 +378,15 @@ func (m *core) statHandler(exec *Execution) interp.StatHandlerFunc {
 	return func(ctx context.Context, name string, followSymlinks bool) (stdfs.FileInfo, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
-		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, abs); err != nil {
-			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), abs, "", "")
+		action := policy.FileActionStat
+		if !followSymlinks {
+			action = policy.FileActionLstat
+		}
+		if err := allowPath(ctx, exec.Policy, exec.FS, action, abs); err != nil {
+			recordPolicyDenied(exec.Trace, err, string(action), abs, "", "")
 			return nil, handlerPathError(ctx, state.Stderr, "stat", abs, err)
 		}
-		recordFile(exec.Trace, string(policy.FileActionStat), abs)
+		recordFile(exec.Trace, string(action), abs)
 		if followSymlinks {
 			return exec.FS.Stat(ctx, abs)
 		}
@@ -457,7 +461,8 @@ func (m *core) callHandler(exec *Execution, budget *executionBudget) interp.Call
 
 func shouldRewriteBuiltin(name string) bool {
 	switch name {
-	case "true", "false", "pwd", "cd", "dirs", "pushd", "popd", "type", "command", "source", ".":
+	case "true", "false", "pwd", "cd", "dirs", "pushd", "popd", "type", "command", "source", ".",
+		"test", "[":
 		return false
 	default:
 		return true
