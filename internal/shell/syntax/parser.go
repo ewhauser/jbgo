@@ -18,10 +18,33 @@ import (
 // call it directly, for example KeepComments(true)(parser).
 type ParserOption func(*Parser)
 
+// AliasSpec describes a shell alias value as raw shell source.
+//
+// Value should preserve the exact alias replacement text, including any
+// trailing blanks or newlines.
+type AliasSpec struct {
+	Value string
+}
+
+// EndsWithBlank reports whether the alias replacement should keep alias
+// expansion enabled for the next shell word.
+func (a AliasSpec) EndsWithBlank() bool {
+	return strings.TrimRight(a.Value, " \t") != a.Value
+}
+
+// AliasResolver returns a raw alias replacement for an unquoted command word.
+type AliasResolver func(name string) (AliasSpec, bool)
+
 // KeepComments makes the parser parse comments and attach them to
 // nodes, as opposed to discarding them.
 func KeepComments(enabled bool) ParserOption {
 	return func(p *Parser) { p.keepComments = enabled }
+}
+
+// ExpandAliases configures parse-time alias expansion for unquoted command
+// words.
+func ExpandAliases(resolver AliasResolver) ParserOption {
+	return func(p *Parser) { p.aliasResolver = resolver }
 }
 
 // LangVariant describes a shell language variant to use when tokenizing and
@@ -573,6 +596,31 @@ type Parser struct {
 	readBuf [bufSize]byte
 	litBuf  [bufSize]byte
 	litBs   []byte
+
+	aliasResolver   AliasResolver
+	aliasChain      []*AliasExpansion
+	aliasBlankNext  bool
+	aliasInputStack []aliasInputState
+	aliasActive     map[string]int
+	aliasSource     *AliasExpansion
+	tokAliasChain   []*AliasExpansion
+}
+
+type aliasInputState struct {
+	src     io.Reader
+	bs      []byte
+	bsp     uint
+	r       rune
+	w       int
+	offs    int64
+	line    int64
+	col     int64
+	readErr error
+	readEOF bool
+
+	aliasChain     []*AliasExpansion
+	aliasBlankNext bool
+	aliasSource    *AliasExpansion
 }
 
 // Incomplete reports whether the parser needs more input bytes
@@ -607,6 +655,14 @@ func (p *Parser) reset() {
 	p.litBatch = nil
 	p.wordBatch = nil
 	p.litBs = nil
+	p.aliasChain = nil
+	p.aliasBlankNext = false
+	p.aliasInputStack = p.aliasInputStack[:0]
+	p.aliasSource = nil
+	p.tokAliasChain = nil
+	if p.aliasActive != nil {
+		clear(p.aliasActive)
+	}
 }
 
 // nextPos returns the position of the next rune, [Parser.r].
@@ -649,6 +705,7 @@ func (p *Parser) wordAnyNumber() *Word {
 	p.wordBatch = p.wordBatch[1:]
 	w := &alloc.word
 	w.Parts = p.wordParts(alloc.parts[:0])
+	w.AliasExpansions = append(w.AliasExpansions[:0], p.tokAliasChain...)
 	return w
 }
 
@@ -661,6 +718,13 @@ func (p *Parser) wordOne(part WordPart) *Word {
 	w := &alloc.word
 	w.Parts = alloc.parts[:1]
 	w.Parts[0] = part
+	w.AliasExpansions = append(w.AliasExpansions[:0], p.tokAliasChain...)
+	return w
+}
+
+func (p *Parser) wordOneWithAliases(part WordPart, aliases []*AliasExpansion) *Word {
+	w := p.wordOne(part)
+	w.AliasExpansions = append(w.AliasExpansions[:0], aliases...)
 	return w
 }
 
@@ -727,6 +791,120 @@ func (p *Parser) preNested(quote quoteState) (s saveState) {
 
 func (p *Parser) postNested(s saveState) {
 	p.quote, p.buriedHdocs = s.quote, s.buriedHdocs
+}
+
+func aliasEndsWithBlank(src string) bool {
+	return strings.TrimRight(src, " \t") != src
+}
+
+func (p *Parser) resumeAliasInput() bool {
+	if len(p.aliasInputStack) == 0 {
+		return false
+	}
+	blankNext := p.aliasSource != nil && aliasEndsWithBlank(p.aliasSource.Value)
+	if p.aliasSource != nil && p.aliasActive != nil {
+		if depth := p.aliasActive[p.aliasSource.Name]; depth > 1 {
+			p.aliasActive[p.aliasSource.Name] = depth - 1
+		} else {
+			delete(p.aliasActive, p.aliasSource.Name)
+		}
+	}
+
+	last := len(p.aliasInputStack) - 1
+	state := p.aliasInputStack[last]
+	p.aliasInputStack = p.aliasInputStack[:last]
+
+	p.src = state.src
+	p.bs = state.bs
+	p.bsp = state.bsp
+	p.r = state.r
+	p.w = state.w
+	p.offs = state.offs
+	p.line = state.line
+	p.col = state.col
+	p.readErr = state.readErr
+	p.readEOF = state.readEOF
+	p.aliasChain = state.aliasChain
+	p.aliasSource = state.aliasSource
+	p.aliasBlankNext = state.aliasBlankNext || blankNext
+	return true
+}
+
+func (p *Parser) commandAliasCandidate() bool {
+	if p.aliasResolver == nil {
+		return false
+	}
+	switch p.tok {
+	case _Lit, _LitWord:
+	default:
+		return false
+	}
+	if p.val == "" || p.atRsrv(
+		rsrvIf, rsrvThen, rsrvElif, rsrvElse, rsrvFi,
+		rsrvWhile, rsrvUntil, rsrvFor, rsrvSelect, rsrvIn,
+		rsrvDo, rsrvDone, rsrvCase, rsrvEsac,
+		rsrvLeftBrace, rsrvRightBrace,
+	) {
+		return false
+	}
+	return p.aliasActive == nil || p.aliasActive[p.val] == 0
+}
+
+func (p *Parser) expandCommandAlias() bool {
+	if !p.commandAliasCandidate() {
+		return false
+	}
+	spec, ok := p.aliasResolver(p.val)
+	if !ok || spec.Value == "" {
+		return false
+	}
+
+	expansion := &AliasExpansion{
+		Name:  p.val,
+		Value: spec.Value,
+		Pos:   p.pos,
+	}
+	p.f.AliasExpansions = append(p.f.AliasExpansions, expansion)
+
+	state := aliasInputState{
+		src:            p.src,
+		bs:             append([]byte(nil), p.bs...),
+		bsp:            p.bsp,
+		r:              p.r,
+		w:              p.w,
+		offs:           p.offs,
+		line:           p.line,
+		col:            p.col,
+		readErr:        p.readErr,
+		readEOF:        p.readEOF,
+		aliasChain:     append([]*AliasExpansion(nil), p.aliasChain...),
+		aliasBlankNext: p.aliasBlankNext,
+		aliasSource:    p.aliasSource,
+	}
+	p.aliasInputStack = append(p.aliasInputStack, state)
+
+	if p.aliasActive == nil {
+		p.aliasActive = make(map[string]int)
+	}
+	p.aliasActive[expansion.Name]++
+
+	p.src = strings.NewReader(spec.Value)
+	p.bs = nil
+	p.bsp = 0
+	p.r = 0
+	p.w = 0
+	p.offs = int64(expansion.Pos.Offset())
+	p.line = int64(expansion.Pos.Line())
+	p.col = int64(expansion.Pos.Col())
+	p.readErr = nil
+	p.readEOF = false
+	p.aliasChain = append(append([]*AliasExpansion(nil), state.aliasChain...), expansion)
+	p.aliasSource = expansion
+	p.aliasBlankNext = false
+
+	p.rune()
+	p.next()
+	return true
 }
 
 func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
@@ -2679,6 +2857,18 @@ func (p *Parser) doRedirect(s *Stmt) {
 	}
 }
 
+func (p *Parser) expandCommandAliases(initial bool) {
+	allow := initial || p.aliasBlankNext
+	for allow {
+		if p.expandCommandAlias() {
+			allow = true
+			continue
+		}
+		p.aliasBlankNext = false
+		return
+	}
+}
+
 func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 	pos, ok := p.gotLitWord("!")
 	s := &Stmt{Position: pos}
@@ -2756,6 +2946,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		p.doRedirect(s)
 	}
 	redirsStart := len(s.Redirs)
+	p.expandCommandAliases(true)
 	switch p.tok {
 	case _LitWord:
 		switch rsrv := reservedWord(p.val); rsrv {
@@ -2842,6 +3033,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			p.callExpr(s, nil, true)
 			break
 		}
+		aliases := append([]*AliasExpansion(nil), p.tokAliasChain...)
 		name := p.lit(p.pos, p.val)
 		p.next()
 		// In zsh, ( after a word is a glob qualifier unless followed
@@ -2854,7 +3046,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			}
 			p.funcDecl(s, name.ValuePos, false, true, name)
 		} else {
-			w := p.wordOne(name)
+			w := p.wordOneWithAliases(name, aliases)
 			if p.lang.in(LangZsh) && !p.spaced {
 				w.Parts = append(w.Parts, p.wordParts(nil)...)
 			}

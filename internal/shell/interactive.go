@@ -3,6 +3,7 @@ package shell
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -65,9 +66,10 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 		pending.WriteString(line)
 		rawScript := pending.String()
 
-		compiled, err := m.compileProgram(exec.Name, rawScript, exec.Policy)
+		parser := runner.NewParser()
+		program, err := parser.Parse(strings.NewReader(rawScript), exec.Name)
 		if err != nil {
-			if syntax.IsIncomplete(err) && readErr != io.EOF {
+			if interactiveParseIncomplete(err, parser) && readErr != io.EOF {
 				_, _ = io.WriteString(exec.Stdout, continuationPrompt)
 				continue
 			}
@@ -85,7 +87,23 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 			continue
 		}
-		if len(compiled.program.Stmts) == 0 {
+		if len(program.Stmts) == 0 {
+			pending.Reset()
+			if readErr == io.EOF {
+				break
+			}
+			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
+			continue
+		}
+		pipelineSubshells, err := compileChunk(program, exec.Policy)
+		if err != nil {
+			if code, ok := compilationExitStatus(err); ok {
+				exitCode = code
+				writeCompilationError(exec.Stderr, err)
+			} else {
+				exitCode = 1
+				_, _ = fmt.Fprintln(exec.Stderr, err)
+			}
 			pending.Reset()
 			if readErr == io.EOF {
 				break
@@ -94,7 +112,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 			continue
 		}
 		rememberInteractiveHistory(runner, rawScript) //nolint:contextcheck // interactive history is stored by direct runner state mutation
-		runErr := runner.RunWithMetadata(ctx, compiled.program, "", compiled.pipelineSubshells)
+		runErr := runner.RunWithMetadata(ctx, program, "", pipelineSubshells)
 		exitCode = ExitCode(runErr)
 		pending.Reset()
 		if runner.Exited() {
@@ -109,6 +127,17 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 		_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 	}
 	return &InteractiveResult{ExitCode: exitCode}, nil
+}
+
+func interactiveParseIncomplete(err error, parser *syntax.Parser) bool {
+	if err == nil {
+		return false
+	}
+	if syntax.IsIncomplete(err) || (parser != nil && parser.Incomplete()) {
+		return true
+	}
+	var parseErr syntax.ParseError
+	return errors.As(err, &parseErr) && strings.HasPrefix(parseErr.Text, "unclosed here-document")
 }
 
 func interactiveEnv(exec *Execution, runner *interp.Runner) map[string]string {

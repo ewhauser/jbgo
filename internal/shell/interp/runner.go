@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -474,22 +473,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r2.exit.exiting = false // subshells don't exit the parent shell
 		r.exit = r2.exit
 	case *syntax.CallExpr:
-		// Use a new slice, to not modify the slice in the alias map.
 		args := cm.Args
-		for i := 0; i < len(args); {
-			if !r.opts[optExpandAliases] {
-				break
-			}
-			als, ok := r.alias[args[i].Lit()]
-			if !ok {
-				break
-			}
-			args = slices.Replace(args, i, i+1, als.args...)
-			if !als.blank {
-				break
-			}
-			i += len(als.args)
-		}
 		if decl := prefixAssignDeclClause(args, cm.Assigns); decl != nil {
 			r.expandAssignsForSideEffects(cm.Assigns)
 			if r.exit.fatalExit || r.exit.exiting {
@@ -1090,19 +1074,36 @@ func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
 	}
 	r.handlingTrap = true
 
-	p := syntax.NewParser()
-	// TODO: do this parsing when "trap" is called?
-	file, err := p.Parse(strings.NewReader(callback), name+" trap")
-	if err != nil {
+	oldExit := r.exit
+	if err := r.runShellReader(ctx, strings.NewReader(callback), name+" trap", nil); err != nil {
 		r.errf(name+"trap: %v\n", err)
 		// ignore errors in the callback
+		r.exit = oldExit
+		r.handlingTrap = false
 		return
 	}
-	oldExit := r.exit
-	r.stmts(ctx, file.Stmts)
 	r.exit = oldExit // traps on EXIT or ERR should not modify the result
 
 	r.handlingTrap = false
+}
+
+func (r *Runner) aliasResolver(name string) (syntax.AliasSpec, bool) {
+	if r == nil || !r.opts[optExpandAliases] {
+		return syntax.AliasSpec{}, false
+	}
+	als, ok := r.alias[name]
+	if !ok {
+		return syntax.AliasSpec{}, false
+	}
+	return syntax.AliasSpec{Value: als.value}, true
+}
+
+func (r *Runner) newParser(opts ...syntax.ParserOption) *syntax.Parser {
+	base := append([]syntax.ParserOption{}, opts...)
+	if r != nil && r.opts[optExpandAliases] {
+		base = append(base, syntax.ExpandAliases(r.aliasResolver))
+	}
+	return syntax.NewParser(base...)
 }
 
 type restoreVar struct {

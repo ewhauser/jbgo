@@ -8,30 +8,18 @@ import (
 	"github.com/ewhauser/gbash/policy"
 )
 
-type compiledProgram struct {
-	program           *syntax.File
-	pipelineSubshells map[*syntax.Stmt]*syntax.Stmt
-}
-
-func (m *core) compileProgram(name, script string, pol policy.Policy) (*compiledProgram, error) {
-	program, err := m.parseProgram(name, script)
-	if err != nil {
-		return nil, err
-	}
+func compileChunk(program *syntax.File, pol policy.Policy) (map[*syntax.Stmt]*syntax.Stmt, error) {
 	if invalid := validateInterpreterSafety(program); invalid != nil {
 		return nil, invalid
 	}
 	if violation := validateExecutionBudgets(program, pol); violation != nil {
 		return nil, violation
 	}
-	compiled := &compiledProgram{
-		program:           program,
-		pipelineSubshells: normalizeExecutionProgram(program),
-	}
+	synthetic := normalizeExecutionProgram(program)
 	if err := instrumentLoopBudgets(program, pol); err != nil {
 		return nil, err
 	}
-	return compiled, nil
+	return synthetic, nil
 }
 
 func compilationExitStatus(err error) (int, bool) {

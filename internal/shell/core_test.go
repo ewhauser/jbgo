@@ -2,6 +2,7 @@ package shell
 
 import (
 	"context"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -9,28 +10,56 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/builtins"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/trace"
 )
 
-func TestCoreRunParsesScriptOnce(t *testing.T) {
+func TestCoreRunExpandsAliasesAcrossCompleteCommands(t *testing.T) {
 	t.Parallel()
 
-	parser := syntax.NewParser()
-	parseCount := 0
-	m := &core{
-		parseFunc: func(name, script string) (*syntax.File, error) {
-			parseCount++
-			return parser.Parse(strings.NewReader(script), name)
-		},
-	}
-
-	if _, err := m.Run(context.Background(), &Execution{Script: "true\n"}); err != nil {
+	var stdout strings.Builder
+	result, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"shopt -s expand_aliases",
+			`alias both='echo one && echo two'`,
+			"both",
+			"",
+		}, "\n"),
+		Stdout: &stdout,
+		Stderr: io.Discard,
+	})
+	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if got, want := parseCount, 1; got != want {
-		t.Fatalf("parse count = %d, want %d", got, want)
+	if got, want := stdout.String(), "one\ntwo\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
+func TestCoreRunPreservesLineContinuationsAcrossChunks(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	result, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"printf '%s %s\\n' one \\",
+			"two",
+			"",
+		}, "\n"),
+		Stdout: &stdout,
+		Stderr: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := stdout.String(), "one two\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
 	}
 }
 

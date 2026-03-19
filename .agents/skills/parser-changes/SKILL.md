@@ -22,6 +22,14 @@ Script text -> [syntax] -> AST -> [expand] -> Values -> [interp] -> Execution
 
 **interp** (`internal/shell/interp/`): Executes the AST by walking nodes, managing shell state, and dispatching commands. This is where control flow, redirects, and command execution live.
 
+Alias-aware parsing spans all three layers. Parse-time alias behavior now works by:
+
+- storing alias values as raw shell source in `interp`, not pre-tokenized argv
+- constructing parsers with `syntax.ExpandAliases(...)` from live runner alias state
+- executing top-level, `source`, and `eval` input as complete parsed chunks so alias and `shopt` changes can affect later commands in the same execution
+
+If your parser change touches aliases, assignment-word recognition, or syntax-bearing aliases such as `{`, `(`, loops, pipelines, or declaration builtins, expect coordinated edits in `syntax`, `interp`, and the shell-core chunking path.
+
 ## Decision Tree: Where Does My Change Go?
 
 Ask these questions in order:
@@ -273,6 +281,14 @@ Check bash's actual output, then replicate the format.
 
 1. Write a failing test in `expand/*_test.go`
 2. Find the relevant expansion function in `expand/expand.go` or `expand/param.go`
+
+### Pattern 5: Parse-time alias changes
+
+1. Add parser coverage in `syntax/parser_test.go` for the grammar change and any alias provenance you need on `Word` or `File`
+2. Keep alias values as raw shell source in `interp`; do not reimplement aliasing by rewriting `CallExpr.Args` at runtime
+3. Plumb live alias state into parser construction with `syntax.ExpandAliases(...)`
+4. If the change must affect later commands in the same script, verify the chunked execution path (`shell.Run`, `source`, `eval`, interactive parsing) rather than only one-shot parser calls
+5. Run at least the relevant unit tests plus targeted conformance such as `oils/alias.test.sh` or an alias-sensitive assignment case
 3. Trace through with the AST node type
 4. Fix the logic, matching bash behavior
 

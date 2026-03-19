@@ -153,7 +153,7 @@ func (p *Parser) fill() (n int) {
 	}
 	p.offs += int64(p.bsp)
 	left := len(p.bs) - int(p.bsp)
-	copy(p.readBuf[:left], p.readBuf[p.bsp:])
+	copy(p.readBuf[:left], p.bs[p.bsp:])
 readAgain:
 	n, err := 0, p.readErr
 	if err == nil {
@@ -228,12 +228,27 @@ func (p *Parser) nextKeepSpaces() {
 	}
 	if p.err != nil {
 		p.tok = _EOF
+		p.tokAliasChain = p.tokAliasChain[:0]
+		return
+	}
+	p.tokAliasChain = append(p.tokAliasChain[:0], p.aliasChain...)
+	if p.aliasBlankNext {
+		if p.expandCommandAlias() {
+			return
+		}
+		switch p.tok {
+		case _Lit, _LitWord:
+			p.aliasBlankNext = false
+		}
 	}
 }
 
 func (p *Parser) next() {
+	for p.r == utf8.RuneSelf && p.resumeAliasInput() {
+	}
 	if p.r == utf8.RuneSelf {
 		p.tok = _EOF
+		p.tokAliasChain = p.tokAliasChain[:0]
 		return
 	}
 	p.spaced = false
@@ -249,7 +264,12 @@ skipSpace:
 	for {
 		switch r {
 		case utf8.RuneSelf:
+			if p.resumeAliasInput() {
+				r = p.r
+				continue
+			}
 			p.tok = _EOF
+			p.tokAliasChain = p.tokAliasChain[:0]
 			return
 		case escNewl:
 			r = p.rune()
@@ -278,6 +298,7 @@ skipSpace:
 			p.r = utf8.RuneSelf
 			p.w = 1
 			p.tok = _EOF
+			p.tokAliasChain = p.tokAliasChain[:0]
 			return
 		}
 	}
@@ -396,6 +417,18 @@ skipSpace:
 	}
 	if p.err != nil {
 		p.tok = _EOF
+		p.tokAliasChain = p.tokAliasChain[:0]
+		return
+	}
+	p.tokAliasChain = append(p.tokAliasChain[:0], p.aliasChain...)
+	if p.aliasBlankNext {
+		if p.expandCommandAlias() {
+			return
+		}
+		switch p.tok {
+		case _Lit, _LitWord:
+			p.aliasBlankNext = false
+		}
 	}
 }
 

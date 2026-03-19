@@ -101,6 +101,10 @@ func (r *Runner) RunWithMetadata(ctx context.Context, node syntax.Node, topLevel
 	return r.Run(ctx, node)
 }
 
+func (r *Runner) NewParser(opts ...syntax.ParserOption) *syntax.Parser {
+	return r.newParser(opts...)
+}
+
 func (r *Runner) SetShellVar(name string, vr expand.Variable) error {
 	if !r.didReset {
 		r.Reset()
