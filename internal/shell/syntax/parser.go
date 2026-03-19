@@ -961,7 +961,7 @@ func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byt
 		}
 		buf = append(buf, '}')
 	default:
-		buf = append(buf, wordPartString(wp)...)
+		buf = append(buf, wordPartSourceString(wp)...)
 	}
 	return buf, quoted
 }
@@ -1010,7 +1010,7 @@ func (p *Parser) doHeredocs() {
 			break
 		}
 		if r.HdocDelim != nil && r.HdocDelim.BodyExpands && raw != nil {
-			bodyParser := NewParser(Variant(p.lang))
+			bodyParser := NewParser(Variant(p.lang), KeepComments(p.keepComments))
 			r.Hdoc, p.err = bodyParser.document(strings.NewReader(raw.Lit()), bodyStart)
 			if p.err == nil && r.Hdoc != nil {
 				setWordEnd(r.Hdoc, raw.End())

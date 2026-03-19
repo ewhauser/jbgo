@@ -32,3 +32,18 @@ func wordPartString(part WordPart) string {
 	}
 	return buf.String()
 }
+
+func wordPartSourceString(part WordPart) string {
+	cs, ok := part.(*CmdSubst)
+	if !ok || !cs.Backquotes {
+		return wordPartString(part)
+	}
+
+	clone := *cs
+	clone.Backquotes = false
+	rendered := wordPartString(&clone)
+	if len(rendered) >= 3 && rendered[0] == '$' && rendered[1] == '(' && rendered[len(rendered)-1] == ')' {
+		return "`" + rendered[2:len(rendered)-1] + "`"
+	}
+	return rendered
+}

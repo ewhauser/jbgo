@@ -97,7 +97,7 @@
     "work_dir": "/home/agent/project",
     "script": "cat missing.txt\n",
     "stdout": "",
-    "stderr": "cat: missing.txt: file does not exist\n",
+    "stderr": "cat: missing.txt: No such file or directory\n",
     "exit_code": 1,
     "events": [
       {

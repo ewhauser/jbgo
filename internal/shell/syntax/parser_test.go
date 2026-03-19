@@ -169,6 +169,13 @@ func TestParseHeredocDelimiterMetadata(t *testing.T) {
 			wantParts:   1,
 		},
 		{
+			name:        "backquote command substitution",
+			src:         "cat <<`bar`\nbody\n`bar`",
+			wantValue:   "`bar`",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
 			name:        "special parameter",
 			src:         "cat <<$-\nbody\n$-",
 			wantValue:   "$-",
@@ -203,6 +210,24 @@ func TestParseHeredocDelimiterMetadata(t *testing.T) {
 			qt.Assert(t, qt.Equals(len(redir.HdocDelim.Parts), tc.wantParts))
 		})
 	}
+}
+
+func TestParseHeredocBackquoteDelimiterPreservesCmdSubstForm(t *testing.T) {
+	t.Parallel()
+
+	prog, err := NewParser().Parse(strings.NewReader("cat <<`bar`\nbody\n`bar`"), "")
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(len(prog.Stmts), 1))
+	qt.Assert(t, qt.Equals(len(prog.Stmts[0].Redirs), 1))
+
+	redir := prog.Stmts[0].Redirs[0]
+	qt.Assert(t, qt.IsTrue(redir.HdocDelim != nil))
+	qt.Assert(t, qt.Equals(redir.HdocDelim.Value, "`bar`"))
+	qt.Assert(t, qt.Equals(len(redir.HdocDelim.Parts), 1))
+
+	cmdSubst, ok := redir.HdocDelim.Parts[0].(*CmdSubst)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.IsTrue(cmdSubst.Backquotes))
 }
 
 func TestParseConfirm(t *testing.T) {
