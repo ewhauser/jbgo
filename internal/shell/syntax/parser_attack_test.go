@@ -163,17 +163,16 @@ func exerciseParserAttack(script []byte, lang LangVariant, keepComments bool, re
 		opts = append(opts, RecoverErrors(recoverErrors))
 	}
 
-	prog, err := NewParser(opts...).Parse(bytes.NewReader(script), "")
-	if err != nil {
-		return nil
-	}
-	if prog == nil {
-		return fmt.Errorf("nil program without parse error")
-	}
+	prog, parseErr := NewParser(opts...).Parse(bytes.NewReader(script), "")
+	if parseErr == nil {
+		if prog == nil {
+			return fmt.Errorf("nil program without parse error")
+		}
 
-	Walk(prog, func(Node) bool { return true })
-	if err := NewPrinter().Print(io.Discard, prog); err != nil {
-		return fmt.Errorf("printer failed: %w\nscript=%q", err, script)
+		Walk(prog, func(Node) bool { return true })
+		if err := NewPrinter().Print(io.Discard, prog); err != nil {
+			return fmt.Errorf("printer failed: %w\nscript=%q", err, script)
+		}
 	}
 	return nil
 }
