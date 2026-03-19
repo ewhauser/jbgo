@@ -23,10 +23,9 @@ func TestShellScriptsMatchBashBehavior(t *testing.T) {
 	// Keep each allowlisted divergence in its own single-purpose fixture so a
 	// known gap never suppresses unrelated parity checks from the same script.
 	knownDivergences := map[string]string{
-		"10-ifs-consecutive-delimiters.sh": "IFS splitting with consecutive delimiters collapses empty fields instead of preserving them",
-		"11-bitwise-hex-arithmetic.sh":     "hex literals (0xFF) and bitwise operators in arithmetic expansion do not evaluate correctly",
-		"12-herestring-whitespace.sh":      "read from a here-string does not strip leading/trailing IFS whitespace the way Bash does",
-		"13-sparse-array-unset.sh":         "unsetting individual array indices does not create sparse arrays; the array remains densely indexed",
+		"11-bitwise-hex-arithmetic.sh": "hex literals (0xFF) and bitwise operators in arithmetic expansion do not evaluate correctly",
+		"12-herestring-whitespace.sh":  "read from a here-string does not strip leading/trailing IFS whitespace the way Bash does",
+		"13-sparse-array-unset.sh":     "unsetting individual array indices does not create sparse arrays; the array remains densely indexed",
 	}
 
 	for _, scriptPath := range scripts {

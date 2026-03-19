@@ -41,7 +41,8 @@ func (r *Runner) newPipe() (StdinReader, io.WriteCloser) {
 func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ectx = ctx
 	r.ecfg = &expand.Config{
-		Env: expandEnv{r},
+		CurrentUserHome: r.origHome,
+		Env:             expandEnv{r},
 		ReportError: func(err error) {
 			r.expandErr(err)
 		},

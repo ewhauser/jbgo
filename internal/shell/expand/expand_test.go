@@ -828,6 +828,29 @@ func TestNamesByPrefixSkipsShadowedUnsetVariables(t *testing.T) {
 	}
 }
 
+func TestNamesByPrefixSortsResults(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Env: layeredTestEnv{
+			values: map[string]Variable{
+				"foo2": {Set: true, Kind: String, Str: "two"},
+				"foo1": {Set: true, Kind: String, Str: "one"},
+			},
+			entries: []testEnvEntry{
+				{name: "foo2", vr: Variable{Set: true, Kind: String, Str: "two"}},
+				{name: "foo1", vr: Variable{Set: true, Kind: String, Str: "one"}},
+			},
+		},
+	}
+
+	got := cfg.namesByPrefix("foo")
+	want := []string{"foo1", "foo2"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("namesByPrefix(%q) = %q, want %q", "foo", got, want)
+	}
+}
+
 func TestFieldsQuotedArrayOperatorWordPreservesFieldBoundaries(t *testing.T) {
 	tests := []struct {
 		name string
@@ -934,6 +957,256 @@ func TestLiteralDecodesDollarSingleQuotedANSICEscapes(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestFieldsWordSplittingPreservesCustomIFSEmpties(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		env  testEnv
+		want []string
+	}{
+		{
+			name: "ConsecutiveNonWhitespaceDelimiters",
+			src:  `$x`,
+			env: testEnv{
+				"IFS": {Set: true, Kind: String, Str: "x"},
+				"x":   {Set: true, Kind: String, Str: "xxa"},
+			},
+			want: []string{"", "", "a"},
+		},
+		{
+			name: "MixedWhitespaceAndNonWhitespace",
+			src:  `$x`,
+			env: testEnv{
+				"IFS": {Set: true, Kind: String, Str: " :"},
+				"x":   {Set: true, Kind: String, Str: " :a:: b:"},
+			},
+			want: []string{"", "a", "", "b"},
+		},
+		{
+			name: "GlobMetacharacterDelimiter",
+			src:  `$x`,
+			env: testEnv{
+				"IFS": {Set: true, Kind: String, Str: "*"},
+				"x":   {Set: true, Kind: String, Str: "*a**"},
+			},
+			want: []string{"", "a", ""},
+		},
+		{
+			name: "UnicodeDelimiterUsesIFSBytes",
+			src:  `$x`,
+			env: testEnv{
+				"IFS": {Set: true, Kind: String, Str: "ç"},
+				"x":   {Set: true, Kind: String, Str: "çx"},
+			},
+			want: []string{"", "", "x"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Fields(&Config{Env: tc.env}, word)
+			if err != nil {
+				t.Fatalf("Fields(%q) error = %v", tc.src, err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("Fields(%q) = %#v, want %#v", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFieldsUnquotedArrayExpansionsRespectSplitContext(t *testing.T) {
+	t.Parallel()
+
+	defaultEmptyArgs := testEnv{
+		"@": {Set: true, Kind: Indexed, List: []string{"", "", "", "", ""}},
+		"*": {Set: true, Kind: Indexed, List: []string{"", "", "", "", ""}},
+	}
+	customEmptyArgs := testEnv{
+		"IFS": {Set: true, Kind: String, Str: "x"},
+		"@":   {Set: true, Kind: Indexed, List: []string{"", "", "", "", ""}},
+		"*":   {Set: true, Kind: Indexed, List: []string{"", "", "", "", ""}},
+	}
+
+	tests := []struct {
+		name string
+		cfg  *Config
+		src  string
+		want []string
+	}{
+		{
+			name: "DefaultIFSAtInLargerWord",
+			cfg:  &Config{Env: defaultEmptyArgs},
+			src:  `=$@=`,
+			want: []string{"=", "="},
+		},
+		{
+			name: "EmptyIFSAtInLargerWord",
+			cfg: &Config{Env: testEnv{
+				"IFS": {Set: true, Kind: String, Str: ""},
+				"@":   {Set: true, Kind: Indexed, List: []string{"", "", "", "", ""}},
+				"*":   {Set: true, Kind: Indexed, List: []string{"", "", "", "", ""}},
+			}},
+			src:  `=$@=`,
+			want: []string{"=", "="},
+		},
+		{
+			name: "CustomIFSAtInLargerWord",
+			cfg:  &Config{Env: customEmptyArgs},
+			src:  `=$@=`,
+			want: []string{"=", "", "", "", "="},
+		},
+		{
+			name: "CustomIFSStarInLargerWord",
+			cfg:  &Config{Env: customEmptyArgs},
+			src:  `=$*=`,
+			want: []string{"=", "", "", "", "="},
+		},
+		{
+			name: "CustomIFSStarBareWord",
+			cfg:  &Config{Env: customEmptyArgs},
+			src:  `$*`,
+			want: []string{"", "", "", ""},
+		},
+		{
+			name: "ArrayAtCustomIFS",
+			cfg: &Config{
+				Env: testEnv{
+					"IFS": {Set: true, Kind: String, Str: "z"},
+					"a":   {Set: true, Kind: Indexed, List: []string{"a b", "c", ""}},
+				},
+			},
+			src:  `${a[@]}`,
+			want: []string{"a b", "c"},
+		},
+		{
+			name: "ArrayAtEmptyIFSElidesEmptyElements",
+			cfg: &Config{
+				Env: testEnv{
+					"IFS": {Set: true, Kind: String, Str: ""},
+					"a":   {Set: true, Kind: Indexed, List: []string{"", "one", ""}},
+				},
+			},
+			src:  `${a[@]}`,
+			want: []string{"one"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Fields(tc.cfg, word)
+			if err != nil {
+				t.Fatalf("Fields(%q) error = %v", tc.src, err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("Fields(%q) = %#v, want %#v", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLiteralArrayJoinUsesStringContextRules(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "AtUsesSpaces",
+			src:  `$@`,
+			want: "x y z",
+		},
+		{
+			name: "StarUsesIFSFirstByte",
+			src:  `$*`,
+			want: "x:y z",
+		},
+	}
+
+	cfg := &Config{
+		Env: testEnv{
+			"IFS": {Set: true, Kind: String, Str: ":"},
+			"@":   {Set: true, Kind: Indexed, List: []string{"x", "y z"}},
+			"*":   {Set: true, Kind: Indexed, List: []string{"x", "y z"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseWord(t, tc.src)
+			got, err := Literal(cfg, word)
+			if err != nil {
+				t.Fatalf("Literal(%q) error = %v", tc.src, err)
+			}
+			if got != tc.want {
+				t.Fatalf("Literal(%q) = %q, want %q", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFieldsUnquotedParamOperatorWordKeepsOuterLiteralBoundaries(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `1${undef:-"2 3" "4 5"}6`)
+	got, err := Fields(&Config{Env: testEnv{}}, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"12 3", "4 56"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLiteralCurrentUserHomeOverride(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  *Config
+		want string
+	}{
+		{
+			name: "LiveHOME",
+			cfg: &Config{
+				Env: testEnv{
+					"HOME": {Set: true, Kind: String, Str: "/live"},
+				},
+			},
+			want: "/live/src",
+		},
+		{
+			name: "CurrentUserHomeOverride",
+			cfg: &Config{
+				CurrentUserHome: "/startup",
+				Env: testEnv{
+					"HOME": {Set: true, Kind: String, Str: "/live"},
+				},
+			},
+			want: "/startup/src",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, `~/src`)
+			got, err := Literal(tc.cfg, word)
+			if err != nil {
+				t.Fatalf("Literal() error = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("Literal() = %q, want %q", got, tc.want)
 			}
 		})
 	}

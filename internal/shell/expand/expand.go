@@ -80,6 +80,11 @@ type Config struct {
 	// pattern matching features when performing pathname expansion (globbing).
 	ExtGlob bool
 
+	// CurrentUserHome overrides the home directory used for current-user
+	// tilde expansion. If empty, tilde expansion falls back to the live HOME
+	// environment variable and then platform defaults.
+	CurrentUserHome string
+
 	bufferAlloc strings.Builder
 	fieldAlloc  [4]fieldPart
 	fieldsAlloc [4][]fieldPart
@@ -132,6 +137,47 @@ func (cfg *Config) ifsRune(r rune) bool {
 		}
 	}
 	return false
+}
+
+func (cfg *Config) ifsWhitespaceRune(r rune) bool {
+	if !cfg.ifsRune(r) {
+		return false
+	}
+	return r == ' ' || r == '\t' || r == '\n'
+}
+
+type ifsRuneType uint8
+
+const (
+	ifsRuneNone ifsRuneType = iota
+	ifsRuneWhitespace
+	ifsRuneNonWhitespace
+)
+
+func (cfg *Config) classifyIFSRune(r rune) ifsRuneType {
+	switch {
+	case cfg.ifsWhitespaceRune(r):
+		return ifsRuneWhitespace
+	case cfg.ifsRune(r):
+		return ifsRuneNonWhitespace
+	default:
+		return ifsRuneNone
+	}
+}
+
+func (cfg *Config) ifsByte(b byte) bool {
+	return strings.IndexByte(cfg.ifs, b) >= 0
+}
+
+func (cfg *Config) classifyIFSByte(b byte) ifsRuneType {
+	switch {
+	case cfg.ifsByte(b) && (b == ' ' || b == '\t' || b == '\n'):
+		return ifsRuneWhitespace
+	case cfg.ifsByte(b):
+		return ifsRuneNonWhitespace
+	default:
+		return ifsRuneNone
+	}
 }
 
 func (cfg *Config) ifsJoin(strs []string) string {
@@ -646,39 +692,139 @@ func (cfg *Config) fieldJoin(parts []fieldPart) string {
 	return sb.String()
 }
 
-func (cfg *Config) splitFieldParts(parts []fieldPart) [][]fieldPart {
-	fields := cfg.fieldsAlloc[:0]
-	curField := cfg.fieldAlloc[:0]
-	flush := func() {
-		if len(curField) == 0 {
-			return
-		}
-		fields = append(fields, curField)
-		curField = nil
+type fieldSplitter struct {
+	cfg            *Config
+	fields         [][]fieldPart
+	cur            []fieldPart
+	haveField      bool
+	curElideEmpty  bool
+	clusterStarted bool
+	clusterPrev    bool
+	clusterNonWS   int
+}
+
+func newFieldSplitter(cfg *Config) fieldSplitter {
+	return fieldSplitter{cfg: cfg}
+}
+
+func (s *fieldSplitter) flushField() {
+	if !s.haveField {
+		return
 	}
+	if len(s.cur) == 0 && s.curElideEmpty {
+		s.cur = nil
+		s.haveField = false
+		s.curElideEmpty = false
+		return
+	}
+	s.fields = append(s.fields, s.cur)
+	s.cur = nil
+	s.haveField = false
+	s.curElideEmpty = false
+}
+
+func (s *fieldSplitter) finishCluster() {
+	if !s.clusterStarted {
+		return
+	}
+	empties := s.clusterNonWS
+	if s.clusterPrev && empties > 0 {
+		empties--
+	}
+	for range empties {
+		s.fields = append(s.fields, nil)
+	}
+	s.clusterStarted = false
+	s.clusterPrev = false
+	s.clusterNonWS = 0
+}
+
+func (s *fieldSplitter) ensureField() {
+	s.finishCluster()
+	s.haveField = true
+	s.curElideEmpty = false
+}
+
+func (s *fieldSplitter) appendPart(part fieldPart) {
+	s.finishCluster()
+	s.cur = append(s.cur, part)
+	s.haveField = true
+	s.curElideEmpty = false
+}
+
+func (s *fieldSplitter) appendFieldParts(parts []fieldPart) {
 	for _, part := range parts {
 		if part.quote > quoteNone {
-			curField = append(curField, part)
+			s.appendPart(part)
 			continue
 		}
-		fieldStart := -1
-		for i, r := range part.val {
-			if cfg.ifsRune(r) {
-				if fieldStart >= 0 {
-					curField = append(curField, fieldPart{val: part.val[fieldStart:i]})
-					fieldStart = -1
-				}
-				flush()
-			} else if fieldStart < 0 {
-				fieldStart = i
-			}
-		}
-		if fieldStart >= 0 {
-			curField = append(curField, fieldPart{val: part.val[fieldStart:]})
-		}
+		s.appendUnquoted(part.val)
 	}
-	flush()
-	return fields
+}
+
+func (s *fieldSplitter) startCluster() {
+	if s.clusterStarted {
+		return
+	}
+	if s.haveField {
+		s.flushField()
+		s.clusterPrev = true
+	} else {
+		s.clusterPrev = false
+	}
+	s.clusterStarted = true
+}
+
+func (s *fieldSplitter) appendUnquoted(val string) {
+	if val == "" {
+		return
+	}
+	start := 0
+	for i := 0; i < len(val); i++ {
+		rType := s.cfg.classifyIFSByte(val[i])
+		if rType == ifsRuneNone {
+			continue
+		}
+		if start < i {
+			s.appendPart(fieldPart{val: val[start:i]})
+		}
+		s.startCluster()
+		if rType == ifsRuneNonWhitespace {
+			s.clusterNonWS++
+		}
+		start = i + 1
+	}
+	if start < len(val) {
+		s.appendPart(fieldPart{val: val[start:]})
+	}
+}
+
+func (s *fieldSplitter) appendSplitFields(fields [][]fieldPart, elideEmpty bool) {
+	s.finishCluster()
+	for i, field := range fields {
+		if i > 0 {
+			s.flushField()
+		}
+		if len(field) > 0 {
+			s.cur = append(s.cur, field...)
+			s.curElideEmpty = false
+		} else if !s.haveField {
+			s.curElideEmpty = elideEmpty
+		}
+		s.haveField = true
+	}
+}
+
+func (s *fieldSplitter) finish() [][]fieldPart {
+	s.finishCluster()
+	s.flushField()
+	return s.fields
+}
+
+func (cfg *Config) splitFieldParts(parts []fieldPart) [][]fieldPart {
+	splitter := newFieldSplitter(cfg)
+	splitter.appendFieldParts(parts)
+	return splitter.finish()
 }
 
 func (cfg *Config) escapedGlobField(parts []fieldPart) (escaped string, glob bool) {
@@ -923,45 +1069,19 @@ func (cfg *Config) cmdSubst(cs *syntax.CmdSubst) (string, error) {
 }
 
 func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
-	fields := cfg.fieldsAlloc[:0]
-	curField := cfg.fieldAlloc[:0]
-	allowEmpty := false
-	flush := func() {
-		if len(curField) == 0 {
-			return
-		}
-		fields = append(fields, curField)
-		curField = nil
-	}
-	splitAdd := func(val string) {
-		fieldStart := -1
-		for i, r := range val {
-			if cfg.ifsRune(r) {
-				if fieldStart >= 0 { // ending a field
-					curField = append(curField, fieldPart{val: val[fieldStart:i]})
-					fieldStart = -1
-				}
-				flush()
-			} else {
-				if fieldStart < 0 { // starting a new field
-					fieldStart = i
-				}
-			}
-		}
-		if fieldStart >= 0 { // ending a field without IFS
-			curField = append(curField, fieldPart{val: val[fieldStart:]})
-		}
-	}
+	splitter := newFieldSplitter(cfg)
 	for i, wp := range wps {
 		switch wp := wp.(type) {
 		case *syntax.Lit:
 			s := wp.Value
 			if i == 0 {
 				prefix, rest := cfg.expandUser(s, len(wps) > 1)
-				curField = append(curField, fieldPart{
-					quote: quoteSingle,
-					val:   prefix,
-				})
+				if prefix != "" {
+					splitter.appendPart(fieldPart{
+						quote: quoteSingle,
+						val:   prefix,
+					})
+				}
 				s = rest
 			}
 			if strings.Contains(s, "\\") {
@@ -978,59 +1098,57 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				}
 				s = sb.String()
 			}
-			curField = append(curField, fieldPart{val: s})
+			if s != "" {
+				splitter.appendPart(fieldPart{val: s})
+			}
 		case *syntax.SglQuoted:
-			allowEmpty = true
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}
 			if wp.Dollar {
 				fp.val = decodeANSICString(fp.val)
 				fp.val, _, _ = strings.Cut(fp.val, "\x00") // cut the string if format included \x00
 			}
-			curField = append(curField, fp)
+			splitter.appendPart(fp)
 		case *syntax.DblQuoted:
 			if dqFields, ok, err := cfg.dblQuotedFields(wp.Parts); err != nil {
 				return nil, err
 			} else if ok {
-				for i, field2 := range dqFields {
-					if i > 0 {
-						flush()
-					}
-					curField = append(curField, field2...)
-				}
+				splitter.appendSplitFields(dqFields, false)
 				continue
 			}
-			allowEmpty = true
 			wfield, err := cfg.wordField(wp.Parts, quoteDouble)
 			if err != nil {
 				return nil, err
 			}
+			if len(wfield) == 0 {
+				splitter.appendPart(fieldPart{quote: quoteDouble, val: ""})
+				continue
+			}
 			for _, part := range wfield {
 				part.quote = quoteDouble
-				curField = append(curField, part)
+				splitter.appendPart(part)
 			}
 		case *syntax.ParamExp:
-			if fields2, ok, err := cfg.paramExpFields(wp); err != nil {
+			if fields2, ok, elideEmpty, err := cfg.paramExpFields(wp); err != nil {
 				return nil, err
 			} else if ok {
-				for i, field2 := range fields2 {
-					if i > 0 {
-						flush()
-					}
-					curField = append(curField, field2...)
-				}
+				splitter.appendSplitFields(fields2, elideEmpty)
+			} else if val, ok, err := cfg.paramExpSplitValue(wp); err != nil {
+				return nil, err
+			} else if ok {
+				splitter.appendUnquoted(val)
 			} else {
 				val, err := cfg.paramExp(wp, quoteNone)
 				if err != nil {
 					return nil, err
 				}
-				splitAdd(val)
+				splitter.appendUnquoted(val)
 			}
 		case *syntax.CmdSubst:
 			val, err := cfg.cmdSubst(wp)
 			if err != nil {
 				return nil, err
 			}
-			splitAdd(val)
+			splitter.appendUnquoted(val)
 		case *syntax.ArithmExp:
 			n, err := Arithm(cfg, wp.X)
 			if err != nil {
@@ -1039,7 +1157,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				}
 				n = 0
 			}
-			curField = append(curField, fieldPart{val: strconv.Itoa(n)})
+			splitter.appendPart(fieldPart{val: strconv.Itoa(n)})
 		case *syntax.BraceExp:
 			parts, err := cfg.braceFieldParts(wp, quoteNone, func(word *syntax.Word, ql quoteLevel) ([]fieldPart, error) {
 				return cfg.wordField(word.Parts, ql)
@@ -1047,13 +1165,15 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			if err != nil {
 				return nil, err
 			}
-			curField = append(curField, parts...)
+			for _, part := range parts {
+				splitter.appendPart(part)
+			}
 		case *syntax.ProcSubst:
 			procPath, err := cfg.ProcSubst(wp)
 			if err != nil {
 				return nil, err
 			}
-			splitAdd(procPath)
+			splitter.appendUnquoted(procPath)
 		case *syntax.ExtGlob:
 			if !cfg.ExtGlob {
 				return nil, fmt.Errorf("extended globbing operator used without the \"extglob\" option set")
@@ -1069,16 +1189,12 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			if err != nil {
 				return nil, err
 			}
-			curField = append(curField, fieldPart{val: pat})
+			splitter.appendPart(fieldPart{val: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
 	}
-	flush()
-	if allowEmpty && len(fields) == 0 {
-		fields = append(fields, curField)
-	}
-	return fields, nil
+	return splitter.finish(), nil
 }
 
 func (cfg *Config) dblQuotedFields(wps []syntax.WordPart) ([][]fieldPart, bool, error) {
@@ -1416,6 +1532,9 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
 		// that's overkill. We can't use [os.UserHomeDir], because we want
 		// to use cfg.Env, and we always want to check "HOME" first.
 
+		if cfg.CurrentUserHome != "" {
+			return cfg.CurrentUserHome, rest
+		}
 		if vr := cfg.Env.Get("HOME"); vr.IsSet() {
 			return vr.String(), rest
 		}

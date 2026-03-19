@@ -153,6 +153,7 @@ type Runner struct {
 	opts runnerOpts
 
 	origDir    string
+	origHome   string
 	origParams []string
 	origOpts   runnerOpts
 	origStdin  StdinReader
@@ -632,6 +633,10 @@ const (
 func (r *Runner) Reset() {
 	if !r.didReset {
 		r.origDir = r.Dir
+		r.origHome = r.Env.Get("HOME").String()
+		if r.origHome == "" {
+			r.origHome = defaultVirtualHomeDir
+		}
 		r.origParams = r.Params
 		r.origOpts = r.opts
 		r.origStdin = r.stdin
@@ -672,6 +677,7 @@ func (r *Runner) Reset() {
 		legacyBashCompat: r.legacyBashCompat,
 
 		origDir:    r.origDir,
+		origHome:   r.origHome,
 		origParams: r.origParams,
 		origOpts:   r.origOpts,
 		origStdin:  r.origStdin,

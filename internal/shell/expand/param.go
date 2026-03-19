@@ -115,7 +115,9 @@ func (cfg *Config) indirectValue(name string) (string, error) {
 		return "", err
 	}
 	switch target.Param.Value {
-	case "@", "*":
+	case "@":
+		return strings.Join(cfg.Env.Get(target.Param.Value).IndexedValues(), " "), nil
+	case "*":
 		return cfg.ifsJoin(cfg.Env.Get(target.Param.Value).IndexedValues()), nil
 	}
 	ref := &syntax.VarRef{
@@ -235,6 +237,25 @@ func arrayExpansionNull(pe *syntax.ParamExp, fields, elems []string) bool {
 		null = true
 	}
 	return null
+}
+
+func (cfg *Config) joinArrayElemsForString(pe *syntax.ParamExp, elems []string) string {
+	if arrayExpansionIsStar(pe) {
+		return cfg.ifsJoin(elems)
+	}
+	return strings.Join(elems, " ")
+}
+
+func elemsAsFields(elems []string) [][]fieldPart {
+	fields := make([][]fieldPart, len(elems))
+	for i, elem := range elems {
+		if elem == "" {
+			fields[i] = []fieldPart{}
+			continue
+		}
+		fields[i] = []fieldPart{{val: elem}}
+	}
+	return fields
 }
 
 func decodeParamOpEscapes(str string) string {
@@ -391,21 +412,104 @@ func (cfg *Config) arrayParamFields(pe *syntax.ParamExp, state paramExpState, el
 	if err != nil {
 		return nil, false, err
 	}
-	if arrayExpansionIsStar(pe) {
-		fields := cfg.splitFieldParts([]fieldPart{{val: cfg.ifsJoin(elems)}})
-		out := make([][]fieldPart, 0, len(fields))
-		for _, field := range fields {
-			out = append(out, append([]fieldPart(nil), field...))
-		}
-		return out, true, nil
-	}
 	var fields [][]fieldPart
 	for _, elem := range elems {
-		for _, field := range cfg.splitFieldParts([]fieldPart{{val: elem}}) {
+		elemFields := cfg.splitFieldParts([]fieldPart{{val: elem}})
+		if len(elemFields) == 0 && elem == "" {
+			elemFields = [][]fieldPart{{}}
+		}
+		for _, field := range elemFields {
 			fields = append(fields, append([]fieldPart(nil), field...))
 		}
 	}
 	return fields, true, nil
+}
+
+func (cfg *Config) paramExpSplitValue(pe *syntax.ParamExp) (string, bool, error) {
+	if cfg.ifs == "" || pe == nil || pe.Length || pe.Width || pe.IsSet || pe.Excl {
+		return "", false, nil
+	}
+
+	fields0, elems, isArray := cfg.quotedArrayFields(pe)
+	if !isArray {
+		return "", false, nil
+	}
+
+	state, err := cfg.paramExpState(pe)
+	if err != nil {
+		return "", false, err
+	}
+	if state.swallowedError && !state.indexAllElements {
+		return "", true, nil
+	}
+
+	wordValue := func(word *syntax.Word) (string, error) {
+		if word == nil {
+			return "", nil
+		}
+		parts, err := cfg.paramArgField(word, quoteNone)
+		if err != nil {
+			return "", err
+		}
+		return cfg.fieldJoin(parts), nil
+	}
+
+	hasElems := len(elems) > 0
+	null := arrayExpansionNull(pe, fields0, elems)
+	if pe.Exp != nil {
+		switch pe.Exp.Op {
+		case syntax.AlternateUnset:
+			if hasElems {
+				val, err := wordValue(pe.Exp.Word)
+				return val, true, err
+			}
+		case syntax.AlternateUnsetOrNull:
+			if !null {
+				val, err := wordValue(pe.Exp.Word)
+				return val, true, err
+			}
+		case syntax.DefaultUnset:
+			if !hasElems {
+				val, err := wordValue(pe.Exp.Word)
+				return val, true, err
+			}
+		case syntax.DefaultUnsetOrNull:
+			if null {
+				val, err := wordValue(pe.Exp.Word)
+				return val, true, err
+			}
+		case syntax.AssignUnset:
+			if !hasElems {
+				val, err := wordValue(pe.Exp.Word)
+				if err != nil {
+					return "", false, err
+				}
+				if err := cfg.envSet(state.name, val); err != nil {
+					return "", false, err
+				}
+				return val, true, nil
+			}
+		case syntax.AssignUnsetOrNull:
+			if null {
+				val, err := wordValue(pe.Exp.Word)
+				if err != nil {
+					return "", false, err
+				}
+				if err := cfg.envSet(state.name, val); err != nil {
+					return "", false, err
+				}
+				return val, true, nil
+			}
+		case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+			return "", false, nil
+		}
+	}
+
+	elems, err = cfg.transformArrayElems(pe, state, elems)
+	if err != nil {
+		return "", false, err
+	}
+	return cfg.ifsJoin(elems), true, nil
 }
 
 func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
@@ -468,12 +572,12 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 			state.indexAllElements = true
 			state.callVarInd = false
 			state.elems = cfg.sliceElems(pe, state.vr.IndexedValues(), state.vr.IndexedIndices(), state.name == "@" || state.name == "*")
-			state.str = strings.Join(state.elems, " ")
+			state.str = cfg.joinArrayElemsForString(pe, state.elems)
 		case Associative:
 			state.indexAllElements = true
 			state.callVarInd = false
 			state.elems = cfg.sliceElems(pe, sortedMapValues(state.vr.Map), nil, false)
-			state.str = strings.Join(state.elems, " ")
+			state.str = cfg.joinArrayElemsForString(pe, state.elems)
 		}
 	}
 	if index == nil && !state.indexAllElements {
@@ -732,22 +836,78 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 	return nil, false, nil
 }
 
-func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, error) {
-	if pe.Excl || pe.Length || pe.Width || pe.IsSet {
-		return nil, false, nil
+func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, bool, error) {
+	if pe.Length || pe.Width || pe.IsSet {
+		return nil, false, false, nil
 	}
 	oldParam := cfg.curParam
 	cfg.curParam = pe
 	defer func() { cfg.curParam = oldParam }()
 	state, err := cfg.paramExpState(pe)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	if state.swallowedError && !state.indexAllElements {
-		return [][]fieldPart{}, true, nil
+		return [][]fieldPart{}, true, false, nil
+	}
+	if pe.Excl {
+		switch pe.Names {
+		case syntax.NamesPrefixWords:
+			return elemsAsFields(cfg.namesByPrefix(pe.Param.Value)), true, false, nil
+		case syntax.NamesPrefix:
+			names := cfg.namesByPrefix(pe.Param.Value)
+			if cfg.ifs == "" {
+				if len(names) == 0 {
+					return [][]fieldPart{}, true, false, nil
+				}
+				return [][]fieldPart{{{val: cfg.ifsJoin(names)}}}, true, false, nil
+			}
+			return elemsAsFields(names), true, false, nil
+		}
+
+		switch subscriptLit(pe.Index) {
+		case "@":
+			switch state.vr.Kind {
+			case Indexed:
+				keys := make([]string, 0, state.vr.IndexedCount())
+				for _, key := range state.vr.IndexedIndices() {
+					keys = append(keys, strconv.Itoa(key))
+				}
+				return elemsAsFields(keys), true, false, nil
+			case Associative:
+				return elemsAsFields(sortedMapKeys(state.vr.Map)), true, false, nil
+			}
+		case "*":
+			switch state.vr.Kind {
+			case Indexed:
+				keys := make([]string, 0, state.vr.IndexedCount())
+				for _, key := range state.vr.IndexedIndices() {
+					keys = append(keys, strconv.Itoa(key))
+				}
+				if cfg.ifs == "" {
+					if len(keys) == 0 {
+						return [][]fieldPart{}, true, false, nil
+					}
+					return [][]fieldPart{{{val: strings.Join(keys, " ")}}}, true, false, nil
+				}
+				return elemsAsFields(keys), true, false, nil
+			case Associative:
+				keys := sortedMapKeys(state.vr.Map)
+				if cfg.ifs == "" {
+					if len(keys) == 0 {
+						return [][]fieldPart{}, true, false, nil
+					}
+					return [][]fieldPart{{{val: strings.Join(keys, " ")}}}, true, false, nil
+				}
+				return elemsAsFields(keys), true, false, nil
+			}
+		}
 	}
 	fields0, elems, isArray := cfg.quotedArrayFields(pe)
 	if isArray {
+		if cfg.ifs != "" {
+			return nil, false, false, nil
+		}
 		argFields := func() ([][]fieldPart, string, error) {
 			var fields [][]fieldPart
 			arg := ""
@@ -768,55 +928,58 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, err
 			case syntax.AlternateUnset:
 				if hasElems {
 					fields, _, err := argFields()
-					return fields, true, err
+					return fields, true, false, err
 				}
-				return cfg.arrayParamFields(pe, state, elems)
+				fields, ok, err := cfg.arrayParamFields(pe, state, elems)
+				return fields, ok, true, err
 			case syntax.AlternateUnsetOrNull:
 				if !null {
 					fields, _, err := argFields()
-					return fields, true, err
+					return fields, true, false, err
 				}
-				return cfg.arrayParamFields(pe, state, elems)
+				fields, ok, err := cfg.arrayParamFields(pe, state, elems)
+				return fields, ok, true, err
 			case syntax.DefaultUnset:
 				if !hasElems {
 					fields, _, err := argFields()
-					return fields, true, err
+					return fields, true, false, err
 				}
 			case syntax.DefaultUnsetOrNull:
 				if null {
 					fields, _, err := argFields()
-					return fields, true, err
+					return fields, true, false, err
 				}
 			case syntax.AssignUnset:
 				if !hasElems {
 					fields, arg, err := argFields()
 					if err != nil {
-						return nil, false, err
+						return nil, false, false, err
 					}
 					if err := cfg.envSet(state.name, arg); err != nil {
-						return nil, false, err
+						return nil, false, false, err
 					}
-					return fields, true, nil
+					return fields, true, false, nil
 				}
 			case syntax.AssignUnsetOrNull:
 				if null {
 					fields, arg, err := argFields()
 					if err != nil {
-						return nil, false, err
+						return nil, false, false, err
 					}
 					if err := cfg.envSet(state.name, arg); err != nil {
-						return nil, false, err
+						return nil, false, false, err
 					}
-					return fields, true, nil
+					return fields, true, false, nil
 				}
 			case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
-				return nil, false, nil
+				return nil, false, false, nil
 			}
 		}
-		return cfg.arrayParamFields(pe, state, elems)
+		fields, ok, err := cfg.arrayParamFields(pe, state, elems)
+		return fields, ok, true, err
 	}
 	if pe.Exp == nil || pe.Repl != nil || pe.Slice != nil {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	argFields := func() ([][]fieldPart, string, error) {
 		var fields [][]fieldPart
@@ -836,47 +999,47 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, err
 	case syntax.AlternateUnset:
 		if state.vr.IsSet() {
 			fields, _, err := argFields()
-			return fields, true, err
+			return fields, true, false, err
 		}
 	case syntax.AlternateUnsetOrNull:
 		if state.str != "" {
 			fields, _, err := argFields()
-			return fields, true, err
+			return fields, true, false, err
 		}
 	case syntax.DefaultUnset:
 		if !state.vr.IsSet() {
 			fields, _, err := argFields()
-			return fields, true, err
+			return fields, true, false, err
 		}
 	case syntax.DefaultUnsetOrNull:
 		if state.str == "" {
 			fields, _, err := argFields()
-			return fields, true, err
+			return fields, true, false, err
 		}
 	case syntax.AssignUnset:
 		if !state.vr.IsSet() {
 			fields, arg, err := argFields()
 			if err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
 			if err := cfg.envSet(state.name, arg); err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
-			return fields, true, nil
+			return fields, true, false, nil
 		}
 	case syntax.AssignUnsetOrNull:
 		if state.str == "" {
 			fields, arg, err := argFields()
 			if err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
 			if err := cfg.envSet(state.name, arg); err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
-			return fields, true, nil
+			return fields, true, false, nil
 		}
 	}
-	return nil, false, nil
+	return nil, false, false, nil
 }
 
 func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) {
@@ -1082,7 +1245,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 				for i, elem := range elems {
 					elems[i] = removePattern(elem, arg, suffix, small)
 				}
-				str = strings.Join(elems, " ")
+				str = cfg.joinArrayElemsForString(pe, elems)
 			case syntax.UpperFirst, syntax.UpperAll,
 				syntax.LowerFirst, syntax.LowerAll:
 
@@ -1111,7 +1274,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 					}
 					elems[i] = string(rs)
 				}
-				str = strings.Join(elems, " ")
+				str = cfg.joinArrayElemsForString(pe, elems)
 			case syntax.OtherParamOps:
 				switch arg {
 				case "Q":
@@ -1190,6 +1353,9 @@ func (cfg *Config) varInd(name string, vr Variable, idx *syntax.Subscript) (stri
 		case String:
 			return vr.Str, nil
 		case Indexed:
+			if idx.Kind == syntax.SubscriptStar {
+				return cfg.ifsJoin(vr.IndexedValues()), nil
+			}
 			return strings.Join(vr.IndexedValues(), " "), nil
 		case Associative:
 			// Iterate values in bash-compatible key order.
@@ -1262,5 +1428,6 @@ func (cfg *Config) namesByPrefix(prefix string) []string {
 			}
 		}
 	}
+	slices.Sort(names)
 	return names
 }
