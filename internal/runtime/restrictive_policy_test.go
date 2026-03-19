@@ -221,7 +221,7 @@ func TestRestrictivePolicyTimeoutRespectsCommandAllowlist(t *testing.T) {
 func TestRestrictivePolicyXArgsRespectsCommandAllowlist(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{
-		Policy: restrictivePolicy([]string{"xargs", "printf"}, []string{"cd"}),
+		Policy: restrictivePolicy([]string{"xargs", "printf"}, []string{"cd", "printf"}),
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
@@ -242,7 +242,7 @@ func TestRestrictivePolicyAllowsProcessSubstitutionWithinSandboxRoots(t *testing
 	t.Parallel()
 
 	rt := newRuntime(t, &Config{
-		Policy: restrictivePolicy([]string{"cat", "printf"}, []string{"cd"}),
+		Policy: restrictivePolicy([]string{"cat", "printf"}, []string{"cd", "printf"}),
 	})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
