@@ -89,6 +89,7 @@ func (cfg *Config) indirectValue(name string) (string, error) {
 	}
 	return cfg.varRef(ref)
 }
+
 // fnv1Hash computes the FNV-1 hash for a string.
 // This matches bash's internal hash function for associative arrays.
 func fnv1Hash(s string) uint32 {
