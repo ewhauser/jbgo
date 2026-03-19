@@ -1533,24 +1533,31 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
 		// to use cfg.Env, and we always want to check "HOME" first.
 
 		if cfg.CurrentUserHome != "" {
-			return cfg.CurrentUserHome, rest
+			return joinTildeHome(cfg.CurrentUserHome, rest)
 		}
 		if vr := cfg.Env.Get("HOME"); vr.IsSet() {
-			return vr.String(), rest
+			return joinTildeHome(vr.String(), rest)
 		}
 
 		if runtime.GOOS == "windows" {
 			if vr := cfg.Env.Get("USERPROFILE"); vr.IsSet() {
-				return vr.String(), rest
+				return joinTildeHome(vr.String(), rest)
 			}
 		}
 		return "", field
 	}
 
 	if vr := cfg.Env.Get("HOME " + name); vr.IsSet() {
-		return vr.String(), rest
+		return joinTildeHome(vr.String(), rest)
 	}
 	return "", field
+}
+
+func joinTildeHome(home, rest string) (string, string) {
+	if strings.HasSuffix(home, "/") && strings.HasPrefix(rest, "/") {
+		rest = strings.TrimPrefix(rest, "/")
+	}
+	return home, rest
 }
 
 func findAllIndex(pat, name string, n int) [][]int {

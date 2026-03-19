@@ -1196,6 +1196,16 @@ func TestLiteralCurrentUserHomeOverride(t *testing.T) {
 			},
 			want: "/startup/src",
 		},
+		{
+			name: "RootHomeAvoidsDoubleSlash",
+			cfg: &Config{
+				CurrentUserHome: "/",
+				Env: testEnv{
+					"HOME": {Set: true, Kind: String, Str: "/live"},
+				},
+			},
+			want: "/src",
+		},
 	}
 
 	for _, tc := range tests {

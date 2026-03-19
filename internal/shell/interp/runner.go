@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,8 +41,12 @@ func (r *Runner) newPipe() (StdinReader, io.WriteCloser) {
 
 func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ectx = ctx
+	currentUserHome := ""
+	if runtime.GOOS == "darwin" {
+		currentUserHome = r.origHome
+	}
 	r.ecfg = &expand.Config{
-		CurrentUserHome: r.origHome,
+		CurrentUserHome: currentUserHome,
 		Env:             expandEnv{r},
 		ReportError: func(err error) {
 			r.expandErr(err)

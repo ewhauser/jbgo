@@ -258,6 +258,20 @@ func elemsAsFields(elems []string) [][]fieldPart {
 	return fields
 }
 
+func (cfg *Config) splitElemsAsFields(elems []string) [][]fieldPart {
+	var fields [][]fieldPart
+	for _, elem := range elems {
+		elemFields := cfg.splitFieldParts([]fieldPart{{val: elem}})
+		if len(elemFields) == 0 && elem == "" {
+			elemFields = [][]fieldPart{{}}
+		}
+		for _, field := range elemFields {
+			fields = append(fields, append([]fieldPart(nil), field...))
+		}
+	}
+	return fields
+}
+
 func decodeParamOpEscapes(str string) string {
 	tail := str
 	var rns []rune
@@ -412,17 +426,7 @@ func (cfg *Config) arrayParamFields(pe *syntax.ParamExp, state paramExpState, el
 	if err != nil {
 		return nil, false, err
 	}
-	var fields [][]fieldPart
-	for _, elem := range elems {
-		elemFields := cfg.splitFieldParts([]fieldPart{{val: elem}})
-		if len(elemFields) == 0 && elem == "" {
-			elemFields = [][]fieldPart{{}}
-		}
-		for _, field := range elemFields {
-			fields = append(fields, append([]fieldPart(nil), field...))
-		}
-	}
-	return fields, true, nil
+	return cfg.splitElemsAsFields(elems), true, nil
 }
 
 func (cfg *Config) paramExpSplitValue(pe *syntax.ParamExp) (string, bool, error) {
@@ -853,7 +857,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 	if pe.Excl {
 		switch pe.Names {
 		case syntax.NamesPrefixWords:
-			return elemsAsFields(cfg.namesByPrefix(pe.Param.Value)), true, false, nil
+			return cfg.splitElemsAsFields(cfg.namesByPrefix(pe.Param.Value)), true, false, nil
 		case syntax.NamesPrefix:
 			names := cfg.namesByPrefix(pe.Param.Value)
 			if cfg.ifs == "" {
@@ -862,7 +866,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 				}
 				return [][]fieldPart{{{val: cfg.ifsJoin(names)}}}, true, false, nil
 			}
-			return elemsAsFields(names), true, false, nil
+			return cfg.splitElemsAsFields(names), true, false, nil
 		}
 
 		switch subscriptLit(pe.Index) {
@@ -873,9 +877,9 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 				for _, key := range state.vr.IndexedIndices() {
 					keys = append(keys, strconv.Itoa(key))
 				}
-				return elemsAsFields(keys), true, false, nil
+				return cfg.splitElemsAsFields(keys), true, false, nil
 			case Associative:
-				return elemsAsFields(sortedMapKeys(state.vr.Map)), true, false, nil
+				return cfg.splitElemsAsFields(sortedMapKeys(state.vr.Map)), true, false, nil
 			}
 		case "*":
 			switch state.vr.Kind {
@@ -890,7 +894,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 					}
 					return [][]fieldPart{{{val: strings.Join(keys, " ")}}}, true, false, nil
 				}
-				return elemsAsFields(keys), true, false, nil
+				return cfg.splitElemsAsFields(keys), true, false, nil
 			case Associative:
 				keys := sortedMapKeys(state.vr.Map)
 				if cfg.ifs == "" {
@@ -899,7 +903,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 					}
 					return [][]fieldPart{{{val: strings.Join(keys, " ")}}}, true, false, nil
 				}
-				return elemsAsFields(keys), true, false, nil
+				return cfg.splitElemsAsFields(keys), true, false, nil
 			}
 		}
 	}
