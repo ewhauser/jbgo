@@ -256,24 +256,32 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 		return true
 	case syntax.TsNewer:
 		// -nt: True if file1 is newer than file2, or if file1 exists and file2 does not.
+		// Only treat ErrNotExist as "file missing" - other errors (permission, policy) return false.
 		info1, err1 := r.stat(ctx, x)
 		info2, err2 := r.stat(ctx, y)
 		if err1 != nil {
-			return false // file1 doesn't exist
+			return false // file1 error or doesn't exist
 		}
 		if err2 != nil {
-			return true // file1 exists, file2 doesn't
+			if errors.Is(err2, fs.ErrNotExist) {
+				return true // file1 exists, file2 doesn't exist
+			}
+			return false // file2 has other error (permission, etc.)
 		}
 		return info1.ModTime().After(info2.ModTime())
 	case syntax.TsOlder:
 		// -ot: True if file1 is older than file2, or if file2 exists and file1 does not.
+		// Only treat ErrNotExist as "file missing" - other errors (permission, policy) return false.
 		info1, err1 := r.stat(ctx, x)
 		info2, err2 := r.stat(ctx, y)
 		if err2 != nil {
-			return false // file2 doesn't exist
+			return false // file2 error or doesn't exist
 		}
 		if err1 != nil {
-			return true // file2 exists, file1 doesn't
+			if errors.Is(err1, fs.ErrNotExist) {
+				return true // file2 exists, file1 doesn't exist
+			}
+			return false // file1 has other error (permission, etc.)
 		}
 		return info1.ModTime().Before(info2.ModTime())
 	case syntax.TsDevIno:
