@@ -52,6 +52,11 @@ Node (base interface)
 ├── Stmt           # Statement wrapper: holds Command + Redirs + flags
 ├── VarRef         # Canonical variable or element reference
 ├── Subscript      # Bracketed selector like [i], [@], [*]
+├── DeclOperand    # Typed declaration operand
+│   ├── DeclFlag
+│   ├── DeclName
+│   ├── DeclAssign
+│   └── DeclDynamicWord
 ├── Command (interface)
 │   ├── CallExpr   # Simple command: cmd arg1 arg2
 │   ├── BinaryCmd  # cmd1 && cmd2, cmd1 || cmd2, cmd1 | cmd2
@@ -81,12 +86,19 @@ Two recent AST shifts matter for parser work:
 
 - `Assign` no longer stores `Name` and `Index` separately. Assignment targets now flow through `Assign.Ref *VarRef`.
 - Bracketed selectors are no longer just raw `ArithmExpr`s. `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` now use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
+- `DeclClause` no longer uses `Args []*Assign`. Declaration builtins now carry `Operands []DeclOperand`, and `Assign.Naked` is gone.
 
-When you touch variable references, array indexing, namerefs, `printf -v`, `test -v`, `${var[...]}`, or compound array literals, you should expect follow-on edits in all three layers:
+When you touch variable references, array indexing, declaration builtins, namerefs, `printf -v`, `test -v`, `${var[...]}`, or compound array literals, you should expect follow-on edits in all three layers:
 
 - `syntax`: `nodes.go`, `parser.go`, `walk.go`, `printer.go`, `simplify.go`, typedjson, and filetests
 - `expand`: `param.go` and any helpers that interpret references or selectors
-- `interp`: `varref.go`, `vars.go`, and builtin/test consumers
+- `interp`: `runner.go`, `varref.go`, `vars.go`, and builtin/test consumers
+
+For declaration-specific work, the intended flow is now:
+
+- parse source operands directly into `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`
+- when a dynamic declaration word expands into runtime fields, reclassify each field through the syntax-level declaration operand parser
+- do not reconstruct declaration semantics with fake `Assign`s or `strings.Cut(..., \"=\")`-style splitting
 
 ## Conformance Testing
 

@@ -490,6 +490,21 @@ func (p *Parser) VarRef(r io.Reader) (*VarRef, error) {
 	return ref, p.err
 }
 
+// DeclOperand parses a single Bash-style declaration operand, such as "-a",
+// "foo", "foo=bar", or `assoc["k"]=value`.
+func (p *Parser) DeclOperand(r io.Reader) (DeclOperand, error) {
+	p.reset()
+	p.f = &File{}
+	p.src = r
+	p.rune()
+	p.next()
+	op := p.declOperand()
+	if p.err == nil && p.tok != _EOF {
+		p.curErr("unexpected token in declaration operand: %#q", p.tok)
+	}
+	return op, p.err
+}
+
 // Parser holds the internal state of the parsing mechanism of a
 // program.
 type Parser struct {
@@ -1925,68 +1940,7 @@ func (p *Parser) varRef() *VarRef {
 	return ref
 }
 
-func (p *Parser) getAssign(needEqual bool) *Assign {
-	as := &Assign{}
-	if p.eqlOffs > 0 { // foo=bar
-		nameEnd := p.eqlOffs
-		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
-			// a+=b
-			as.Append = true
-			nameEnd--
-		}
-		as.Ref = &VarRef{Name: p.lit(p.pos, p.val[:nameEnd])}
-		// since we're not using the entire p.val
-		as.Ref.Name.ValueEnd = posAddCol(as.Ref.Name.ValuePos, nameEnd)
-		left := p.lit(posAddCol(p.pos, 1), p.val[p.eqlOffs+1:])
-		if left.Value != "" {
-			left.ValuePos = posAddCol(left.ValuePos, p.eqlOffs)
-			as.Value = p.wordOne(left)
-		}
-		p.next()
-	} else { // foo[x]=bar
-		as.Ref = p.varRef()
-		if as.Ref == nil {
-			return nil
-		}
-		if p.spaced || p.stopToken() {
-			if needEqual {
-				p.followErr(as.Pos(), "a[b]", assgn)
-			} else {
-				as.Naked = true
-				return as
-			}
-		}
-		if p.tok == assgnParen {
-			if !p.lang.in(LangZsh) {
-				p.curErr("arrays cannot be nested")
-				return nil
-			}
-			// zsh allows a[i]=(values...).
-			// assgnParen consumed both '=' and '(',
-			// so rewrite as leftParen for array parsing below.
-			p.tok = leftParen
-			p.pos = posAddCol(p.pos, 1)
-		} else {
-			if p.val != "" && p.val[0] == '+' {
-				as.Append = true
-				p.val = p.val[1:]
-				p.pos = posAddCol(p.pos, 1)
-			}
-			if len(p.val) < 1 || p.val[0] != '=' {
-				if as.Append {
-					p.followErr(as.Pos(), "a[b]+", assgn)
-				} else {
-					p.followErr(as.Pos(), "a[b]", assgn)
-				}
-				return nil
-			}
-			p.pos = posAddCol(p.pos, 1)
-			p.val = p.val[1:]
-			if p.val == "" {
-				p.next()
-			}
-		}
-	}
+func (p *Parser) finishAssign(as *Assign) *Assign {
 	if p.spaced || p.stopToken() {
 		return as
 	}
@@ -2042,6 +1996,126 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 		}
 	}
 	return as
+}
+
+func (p *Parser) getAssignAfterRef(ref *VarRef) *Assign {
+	as := &Assign{Ref: ref}
+	if p.tok == assgnParen {
+		if !p.lang.in(LangZsh) {
+			p.curErr("arrays cannot be nested")
+			return nil
+		}
+		// zsh allows a[i]=(values...).
+		// assgnParen consumed both '=' and '(',
+		// so rewrite as leftParen for array parsing below.
+		p.tok = leftParen
+		p.pos = posAddCol(p.pos, 1)
+	} else {
+		if p.val != "" && p.val[0] == '+' {
+			as.Append = true
+			p.val = p.val[1:]
+			p.pos = posAddCol(p.pos, 1)
+		}
+		if len(p.val) < 1 || p.val[0] != '=' {
+			if as.Append {
+				p.followErr(as.Pos(), "a[b]+", assgn)
+			} else {
+				p.followErr(as.Pos(), "a[b]", assgn)
+			}
+			return nil
+		}
+		p.pos = posAddCol(p.pos, 1)
+		p.val = p.val[1:]
+		if p.val == "" {
+			p.next()
+		}
+	}
+	return p.finishAssign(as)
+}
+
+func (p *Parser) getAssign() *Assign {
+	as := &Assign{}
+	if p.eqlOffs > 0 { // foo=bar
+		nameEnd := p.eqlOffs
+		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+			// a+=b
+			as.Append = true
+			nameEnd--
+		}
+		as.Ref = &VarRef{Name: p.lit(p.pos, p.val[:nameEnd])}
+		// since we're not using the entire p.val
+		as.Ref.Name.ValueEnd = posAddCol(as.Ref.Name.ValuePos, nameEnd)
+		left := p.lit(posAddCol(p.pos, 1), p.val[p.eqlOffs+1:])
+		if left.Value != "" {
+			left.ValuePos = posAddCol(left.ValuePos, p.eqlOffs)
+			as.Value = p.wordOne(left)
+		}
+		p.next()
+		return p.finishAssign(as)
+	}
+	ref := p.varRef()
+	if ref == nil {
+		return nil
+	}
+	if p.spaced || p.stopToken() {
+		p.followErr(ref.Pos(), "a[b]", assgn)
+		return nil
+	}
+	return p.getAssignAfterRef(ref)
+}
+
+func looksLikeDeclFlagWord(tok token, val string) bool {
+	return tok == _LitWord && val != "" && (val[0] == '-' || val[0] == '+')
+}
+
+func (p *Parser) declOperand() DeclOperand {
+	if p.eqlOffs > 0 {
+		nameEnd := p.eqlOffs
+		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+			nameEnd--
+		}
+		name := p.val[:nameEnd]
+		if !ValidName(name) {
+			if !strings.Contains(name, "{") {
+				p.curErr("invalid var name")
+				return nil
+			}
+			if w := p.getWord(); w != nil {
+				return &DeclDynamicWord{Word: w}
+			}
+			return nil
+		}
+		if as := p.getAssign(); as != nil {
+			return &DeclAssign{Assign: as}
+		}
+		return nil
+	}
+	if p.hasValidIdent() {
+		ref := p.varRef()
+		if ref == nil {
+			return nil
+		}
+		if p.spaced || p.stopToken() {
+			return &DeclName{Ref: ref}
+		}
+		if as := p.getAssignAfterRef(ref); as != nil {
+			return &DeclAssign{Assign: as}
+		}
+		return nil
+	}
+	if p.tok == _LitWord && ValidName(p.val) {
+		return &DeclName{Ref: &VarRef{Name: p.getLit()}}
+	}
+	if looksLikeDeclFlagWord(p.tok, p.val) {
+		if w := p.getWord(); w != nil {
+			return &DeclFlag{Word: w}
+		}
+		return nil
+	}
+	if w := p.getWord(); w != nil {
+		return &DeclDynamicWord{Word: w}
+	}
+	return nil
 }
 
 func (p *Parser) peekRedir() bool {
@@ -2753,20 +2827,8 @@ func (p *Parser) declClause(s *Stmt) {
 	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
-		if p.hasValidIdent() {
-			ds.Args = append(ds.Args, p.getAssign(false))
-		} else if p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
-			p.curErr("invalid var name")
-		} else if p.tok == _LitWord && ValidName(p.val) {
-			ds.Args = append(ds.Args, &Assign{
-				Naked: true,
-				Ref:   &VarRef{Name: p.getLit()},
-			})
-		} else if w := p.getWord(); w != nil {
-			ds.Args = append(ds.Args, &Assign{
-				Naked: true,
-				Value: w,
-			})
+		if op := p.declOperand(); op != nil {
+			ds.Operands = append(ds.Operands, op)
 		} else {
 			p.followErr(p.pos, ds.Variant.Value, noQuote("names or assignments"))
 		}
@@ -2892,7 +2954,7 @@ func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 		ce.Args = ce.Args[:0]
 	}
 	if assign {
-		ce.Assigns = append(ce.Assigns, p.getAssign(true))
+		ce.Assigns = append(ce.Assigns, p.getAssign())
 	}
 loop:
 	for {
@@ -2902,7 +2964,7 @@ loop:
 			break loop
 		case _LitWord:
 			if len(ce.Args) == 0 && p.hasValidIdent() {
-				ce.Assigns = append(ce.Assigns, p.getAssign(true))
+				ce.Assigns = append(ce.Assigns, p.getAssign())
 				break
 			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
@@ -2921,7 +2983,7 @@ loop:
 			ce.Args = append(ce.Args, w)
 		case _Lit:
 			if len(ce.Args) == 0 && p.hasValidIdent() {
-				ce.Assigns = append(ce.Assigns, p.getAssign(true))
+				ce.Assigns = append(ce.Assigns, p.getAssign())
 				break
 			}
 			ce.Args = append(ce.Args, p.wordAnyNumber())

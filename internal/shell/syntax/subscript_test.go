@@ -55,7 +55,11 @@ func TestParseSubscriptKinds(t *testing.T) {
 	}
 
 	decl := file.Stmts[1].Cmd.(*DeclClause)
-	if got := decl.Args[0].Ref.Index.Kind; got != SubscriptStar {
+	name, ok := decl.Operands[0].(*DeclName)
+	if !ok {
+		t.Fatalf("declare operand = %T, want *DeclName", decl.Operands[0])
+	}
+	if got := name.Ref.Index.Kind; got != SubscriptStar {
 		t.Fatalf("declare subscript kind = %v, want %v", got, SubscriptStar)
 	}
 }

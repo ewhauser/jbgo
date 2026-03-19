@@ -48,9 +48,8 @@ That means the roadmap should focus less on adding more top-level command nodes 
 
 ## Checklist
 
-- [ ] P0: Introduce a first-class `LValue` / `VarRef` AST for assignment targets and variable references
-- [ ] P0: Replace generic `Assign.Index ArithmExpr` with a typed subscript AST
-- [ ] P0: Refactor `DeclClause` arguments into typed declaration operands
+- [x] P0: Land `VarRef` / `Subscript` foundations for assignment targets and variable references
+- [x] P0: Refactor `DeclClause` arguments into typed declaration operands
 - [ ] P0: Add a dedicated conditional AST for `[[ ... ]]` operands and operators
 - [ ] P1: Introduce a first-class pattern AST shared by extglob, `case`, `[[ == ]]`, and parameter pattern operators
 - [ ] P1: Add dedicated heredoc delimiter metadata instead of treating delimiters as generic words
@@ -58,21 +57,20 @@ That means the roadmap should focus less on adding more top-level command nodes 
 - [ ] P1: Make compound array assignment semantics explicit in the AST
 - [ ] P2: Promote brace expansion from a post-parse rewrite to a stable syntax node
 - [ ] P2: Restrict function bodies to compound commands in the AST and validation layer
+- [ ] P2: Revisit whether a standalone `LValue` node is still worth the churn now that `Assign.Ref` and `Append` are explicit
 
 ## Priority Order
 
 Recommended implementation order:
 
-1. `LValue` / `VarRef`
-2. typed subscripts
-3. typed declaration operands
-4. `[[ ... ]]` conditional operands
-5. pattern AST
-6. heredoc delimiter metadata
-7. alias-aware parse/provenance
-8. compound assignment cleanup
-9. brace expansion cleanup
-10. function-body tightening
+1. `[[ ... ]]` conditional operands
+2. pattern AST
+3. heredoc delimiter metadata
+4. alias-aware parse/provenance
+5. compound assignment cleanup
+6. brace expansion cleanup
+7. function-body tightening
+8. standalone `LValue` re-evaluation only if write-target-specific metadata grows
 
 This order should unlock the largest amount of conformance work without forcing repeated AST churn.
 
@@ -80,16 +78,9 @@ This order should unlock the largest amount of conformance work without forcing 
 
 ### 1. First-class `LValue` / `VarRef`
 
-Status: P0
+Status: landed `VarRef` foundation, standalone `LValue` deferred
 
 #### Problem
-
-The parser currently represents assignment targets as:
-
-- `Assign.Name *Lit`
-- `Assign.Index ArithmExpr`
-
-That is not rich enough for Bash.
 
 Bash has a real concept of variable references and assignment targets that can appear in multiple contexts:
 
@@ -105,9 +96,9 @@ Today those cases are spread across parsing and runtime code, and many of them a
 
 #### Current implementation signals
 
-- `Assign` overloads `Index ArithmExpr` for both indexed and associative access in `internal/shell/syntax/nodes.go`
-- `flattenAssigns` and `reparseCompoundAssign` in `internal/shell/interp/runner.go` reconstruct declaration operands from strings
-- nameref and associative array access rely on string forms rather than typed references in `internal/shell/expand/param.go` and `internal/shell/interp/vars.go`
+- `Assign` now uses `Ref *VarRef` plus `Append bool`
+- `VarRef` is a first-class node reused by assignment parsing, runtime var-ref parsing, and nameref resolution
+- `printf -v`, `test -v`, `[[ -v ]]`, and nameref code paths now share the same `VarRef` parser instead of ad hoc string splitting
 
 #### Conformance signals
 
@@ -129,46 +120,21 @@ Concrete examples:
 
 #### Proposed AST change
 
-Introduce a first-class node family, for example:
+Keep `VarRef` as the shared reference node. Defer a separate `LValue` wrapper unless we need write-target-specific metadata beyond:
 
-- `VarRef`
-- `LValue`
-- `Subscript`
-
-Suggested shape:
-
-```go
-type VarRef struct {
-	Name      *Lit
-	Selectors []Selector
-}
-
-type LValue struct {
-	Ref    *VarRef
-	Append bool
-}
-```
-
-Then reuse that shape in:
-
-- assignments
-- declaration operands
-- nameref declarations
-- parameter indirection
-- `printf -v`
-- `test -v` and `[[ -v ]]`
+- assignment append mode
+- reference selectors
+- write-context validation rules that cannot live on `Assign`
 
 #### Why this matters
 
-This is the most important AST enhancement because it removes a large amount of stringly-typed reparsing and gives the parser a single authoritative model for "this is a reference to a shell variable or element".
+The important part was making references typed. A standalone `LValue` node is now a cleanup/refinement task, not the main conformance unlock.
 
 ### 2. Typed subscript AST
 
-Status: P0
+Status: landed core node, runtime follow-up remains
 
 #### Problem
-
-`eitherIndex()` currently parses bracket contents through arithmetic mode and returns `ArithmExpr`. That is too coarse for Bash.
 
 Bash has context-sensitive subscript behavior:
 
@@ -182,10 +148,9 @@ The current AST cannot preserve those distinctions.
 
 #### Current implementation signals
 
-- `Assign.Index  ArithmExpr`
-- `ParamExp.Index ArithmExpr`
-- `ArrayElem.Index ArithmExpr`
-- `eitherIndex()` always returns `ArithmExpr`
+- `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` now use `*Subscript`
+- `Subscript.Kind` already distinguishes generic expression selectors from `[@]` and `[*]`
+- indexed vs associative interpretation still mostly lives in expand/interp, so selector semantics are not fully typed yet
 
 #### Conformance signals
 
@@ -197,21 +162,12 @@ Relevant examples:
 
 #### Proposed AST change
 
-Introduce typed selectors, for example:
+Build on the current `Subscript` node instead of replacing it. The remaining work is to preserve more selector semantics, especially:
 
-- `IndexedSubscript`
-- `AssocSubscript`
-- `AllElementsSubscript`
-- `SliceSubscript`
-
-or a single `Subscript` node with a `Kind` field and typed payloads.
-
-This should preserve:
-
-- raw source form
-- whether the parser considered the subscript arithmetic or string-like
-- selector special cases such as `@` and `*`
-- whether the subscript is valid only in specific contexts like `-v`
+- indexed vs associative interpretation
+- `-v`-specific validation
+- side-effectful arithmetic subscripts
+- slice-specific structure where generic `Expr` is still too coarse
 
 #### Why this matters
 
@@ -219,11 +175,11 @@ Without this, array semantics continue to leak into runtime heuristics and re-pa
 
 ### 3. Typed declaration operands
 
-Status: P0
+Status: landed
 
 #### Problem
 
-`DeclClause.Args []*Assign` currently mixes together:
+Declaration builtins used to mix together:
 
 - flags
 - query modes like `-p` and `-f`
@@ -235,10 +191,10 @@ That is not a clean AST model. It is a parser convenience that pushes complexity
 
 #### Current implementation signals
 
-- `DeclClause` only stores `Variant` and `Args`
-- `flattenAssigns` turns dynamic words into synthetic assignments at runtime
-- `reparseCompoundAssign` reparses strings back into compound assignments
-- declaration builtins are detected twice: once as `CallExpr`, then converted back into `DeclClause`
+- `DeclClause` now stores `Operands []DeclOperand`
+- the parser now emits `DeclFlag`, `DeclName`, `DeclAssign`, and `DeclDynamicWord`
+- dynamic declaration fields are reparsed through a syntax-level declaration-operand parser instead of `flattenAssigns` / `reparseCompoundAssign`
+- declaration builtins are still detected from `CallExpr` in interp, but the normalization now preserves typed operands
 
 #### Conformance signals
 
@@ -259,19 +215,16 @@ Concrete examples:
 
 #### Proposed AST change
 
-Replace `Args []*Assign` with a typed operand list, for example:
+Done. The shipped shape is:
 
-- `DeclOption`
-- `DeclQuery`
+- `DeclFlag`
 - `DeclName`
 - `DeclAssign`
 - `DeclDynamicWord`
 
-This keeps the original parse result intact and avoids reconstructing intent in the interpreter.
-
 #### Why this matters
 
-Declaration builtins are a major Bash-specific semantic hotspot. They should not depend on string reparsing if we want reliable conformance.
+Declaration builtins are a major Bash-specific semantic hotspot. They no longer depend on fake declaration-shaped assignments or compound-assignment reparsing.
 
 ### 4. Dedicated conditional AST for `[[ ... ]]`
 
@@ -618,20 +571,20 @@ The highest-value work is:
 
 #### Milestone 1
 
-- add `VarRef` / `LValue`
-- convert assignment targets to use it
-- wire `test -v`, `[[ -v ]]`, `printf -v`, and nameref parsing to use it
+- landed `VarRef`
+- converted assignment targets to use it
+- wired `test -v`, `[[ -v ]]`, `printf -v`, and nameref parsing to use it
 
 #### Milestone 2
 
-- add typed subscript nodes
-- split indexed vs associative behavior
-- remove array-key guessing from runtime
+- landed `Subscript`
+- distinguished `[@]` / `[*]` selectors
+- left indexed vs associative runtime typing as follow-up work
 
 #### Milestone 3
 
-- refactor `DeclClause`
-- remove `flattenAssigns` / `reparseCompoundAssign` style fallback logic where possible
+- landed typed declaration operands
+- removed `flattenAssigns` / `reparseCompoundAssign` from declaration execution
 
 #### Milestone 4
 

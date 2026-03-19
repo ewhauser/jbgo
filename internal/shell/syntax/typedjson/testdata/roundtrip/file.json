@@ -3069,8 +3069,9 @@
 					},
 					"Value": "declare"
 				},
-				"Args": [
+				"Operands": [
 					{
+						"Type": "DeclName",
 						"Pos": {
 							"Offset": 285,
 							"Line": 20,
@@ -3081,7 +3082,6 @@
 							"Line": 20,
 							"Col": 12
 						},
-						"Naked": true,
 						"Ref": {
 							"Pos": {
 								"Offset": 285,

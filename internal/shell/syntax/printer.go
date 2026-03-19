@@ -159,6 +159,9 @@ func (p *Printer) Print(w io.Writer, node Node) error {
 	case *Subscript:
 		p.line = node.Pos().Line()
 		p.subscript(node)
+	case DeclOperand:
+		p.line = node.Pos().Line()
+		p.declOperands([]DeclOperand{node})
 	case WordPart:
 		p.line = node.Pos().Line()
 		p.wordPart(node, nil)
@@ -1358,7 +1361,7 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		p.spacedString("]]", cmd.Right)
 	case *DeclClause:
 		p.spacedString(cmd.Variant.Value, cmd.Pos())
-		p.assigns(cmd.Args)
+		p.declOperands(cmd.Operands)
 	case *TimeClause:
 		p.spacedString("time", cmd.Pos())
 		if cmd.PosixFormat {
@@ -1508,26 +1511,53 @@ func (p *Printer) assigns(assigns []*Assign) {
 		} else {
 			p.spacePad(a.Pos())
 		}
-		if a.Ref != nil {
-			p.varRef(a.Ref)
-			if a.Append {
-				p.w.WriteByte('+')
-			}
-			if !a.Naked {
-				p.w.WriteByte('=')
-			}
+		p.assign(a)
+		p.wantSpace = spaceRequired
+	}
+	p.decLevel()
+}
+
+func (p *Printer) assign(a *Assign) {
+	if a.Ref != nil {
+		p.varRef(a.Ref)
+		if a.Append {
+			p.w.WriteByte('+')
 		}
-		if a.Value != nil {
-			// Ensure we don't use an escaped newline after '=',
-			// because that can result in indentation, thus
-			// splitting "foo=bar" into "foo= bar".
-			p.advanceLine(a.Value.Pos().Line())
-			p.word(a.Value)
-		} else if a.Array != nil {
-			p.wantSpace = spaceNotRequired
-			p.w.WriteByte('(')
-			p.elemJoin(a.Array.Elems, a.Array.Last)
-			p.rightParen(a.Array.Rparen)
+		p.w.WriteByte('=')
+	}
+	if a.Value != nil {
+		// Ensure we don't use an escaped newline after '=',
+		// because that can result in indentation, thus
+		// splitting "foo=bar" into "foo= bar".
+		p.advanceLine(a.Value.Pos().Line())
+		p.word(a.Value)
+	} else if a.Array != nil {
+		p.wantSpace = spaceNotRequired
+		p.w.WriteByte('(')
+		p.elemJoin(a.Array.Elems, a.Array.Last)
+		p.rightParen(a.Array.Rparen)
+	}
+}
+
+func (p *Printer) declOperands(operands []DeclOperand) {
+	p.incLevel()
+	for _, operand := range operands {
+		if p.wantsNewline(operand.Pos(), true) {
+			p.bslashNewl()
+		} else {
+			p.spacePad(operand.Pos())
+		}
+		switch operand := operand.(type) {
+		case *DeclFlag:
+			p.word(operand.Word)
+		case *DeclName:
+			p.varRef(operand.Ref)
+		case *DeclAssign:
+			p.assign(operand.Assign)
+		case *DeclDynamicWord:
+			p.word(operand.Word)
+		default:
+			panic(fmt.Sprintf("unexpected declaration operand node: %T", operand))
 		}
 		p.wantSpace = spaceRequired
 	}

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"iter"
 	"math"
 	"os"
 	"slices"
@@ -797,33 +796,8 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		case "typeset":
 			allowPlusFlags = true
 		}
-	assignLoop:
-		for as := range r.flattenAssigns(cm.Args) {
-			name := as.Ref.Name.Value
-			if allowPlusFlags || !strings.HasPrefix(name, "+") {
-				fp := flagParser{remaining: []string{name}}
-				for fp.more() {
-					switch flag := fp.flag(); flag {
-					case "-x", "-r", "-i", "-l", "-u":
-						modes = append(modes, flag)
-					case "+i", "+l", "+u":
-						modes = append(modes, flag)
-					case "-a", "-A", "-n":
-						valType = flag
-					case "+a", "+A":
-						valType = flag
-					case "-g":
-						global = true
-					case "-f", "-p":
-						declQuery = flag
-					default:
-						r.errf("declare: invalid option %q\n", flag)
-						r.exit.code = 2
-						return
-					}
-					continue assignLoop
-				}
-			}
+		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool) bool {
+			name := ref.Name.Value
 			if !syntax.ValidName(name) {
 				if allowPlusFlags {
 					r.errf("declare: invalid name %q\n", name)
@@ -831,7 +805,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, name)
 				}
 				r.exit.code = 1
-				return
+				return false
 			}
 			if declQuery == "-f" {
 				// declare -f name: print function definition.
@@ -845,7 +819,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				} else {
 					r.exit.code = 1
 				}
-				continue
+				return true
 			}
 			if declQuery == "-p" {
 				// declare -p name: print variable with attributes.
@@ -853,7 +827,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				if !vr.Declared() {
 					r.errf("declare: %s: not found\n", name)
 					r.exit.code = 1
-					continue
+					return true
 				}
 				flags := vr.Flags()
 				if flags == "" {
@@ -883,10 +857,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				default:
 					r.outf("declare -%s %s=%q\n", flags, name, vr.Str)
 				}
-				continue
+				return true
 			}
 			vr := r.lookupVar(name)
-			if as.Naked {
+			if !isAssign {
 				if valType == "-A" {
 					vr.Kind = expand.Associative
 				} else if valType == "+a" || valType == "+A" {
@@ -901,13 +875,6 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					vr.Kind = expand.KeepValue
 				}
 			} else {
-				// When -a/-A is in effect and the value looks like a compound
-				// assignment "(elem ...)", reparse it as an array.
-				if (valType == "-a" || valType == "-A") && as.Array == nil && as.Value != nil {
-					if reparsed := r.reparseCompoundAssign(as); reparsed != nil {
-						as = reparsed
-					}
-				}
 				if valType == "+a" || valType == "+A" {
 					// +a/+A with a value: treat as string assignment.
 					vr = r.assignVal(vr, as, "")
@@ -967,14 +934,79 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 			}
 			r.applyVarAttrs(&vr)
-			if as.Naked {
+			if !isAssign {
 				r.setVar(name, vr)
-			} else {
-				if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr); err != nil {
-					r.errf("%v\n", err)
-					r.exit.code = 1
-					return
+				return true
+			}
+			if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr); err != nil {
+				r.errf("%v\n", err)
+				r.exit.code = 1
+				return false
+			}
+			return true
+		}
+		var processOperand func(syntax.DeclOperand) bool
+		processOperand = func(operand syntax.DeclOperand) bool {
+			switch operand := operand.(type) {
+			case *syntax.DeclFlag:
+				name := r.literal(operand.Word)
+				if allowPlusFlags || !strings.HasPrefix(name, "+") {
+					fp := flagParser{remaining: []string{name}}
+					for fp.more() {
+						switch flag := fp.flag(); flag {
+						case "-x", "-r", "-i", "-l", "-u":
+							modes = append(modes, flag)
+						case "+i", "+l", "+u":
+							modes = append(modes, flag)
+						case "-a", "-A", "-n":
+							valType = flag
+						case "+a", "+A":
+							valType = flag
+						case "-g":
+							global = true
+						case "-f", "-p":
+							declQuery = flag
+						default:
+							r.errf("declare: invalid option %q\n", flag)
+							r.exit.code = 2
+							return false
+						}
+					}
+					return true
 				}
+				return processNamedOperand(&syntax.VarRef{Name: &syntax.Lit{Value: name}}, nil, false)
+			case *syntax.DeclName:
+				return processNamedOperand(operand.Ref, nil, false)
+			case *syntax.DeclAssign:
+				return processNamedOperand(operand.Assign.Ref, operand.Assign, true)
+			case *syntax.DeclDynamicWord:
+				for _, field := range r.fields(operand.Word) {
+					parsed, err := parseDeclOperandField(field)
+					if err != nil {
+						r.errf("%s: %v\n", cm.Variant.Value, err)
+						r.exit.code = 1
+						return false
+					}
+					if dyn, ok := parsed.(*syntax.DeclDynamicWord); ok {
+						parsed = &syntax.DeclName{
+							Ref: &syntax.VarRef{Name: &syntax.Lit{Value: r.literal(dyn.Word)}},
+						}
+					}
+					if !processOperand(parsed) {
+						return false
+					}
+					if r.exit.fatalExit || r.exit.exiting {
+						return false
+					}
+				}
+				return true
+			default:
+				panic(fmt.Sprintf("unexpected declaration operand: %T", operand))
+			}
+		}
+		for _, operand := range cm.Operands {
+			if !processOperand(operand) {
+				return
 			}
 		}
 	case *syntax.TimeClause:
@@ -1008,19 +1040,16 @@ func prefixAssignDeclClause(args []*syntax.Word, assigns []*syntax.Assign) *synt
 	default:
 		return nil
 	}
-	declArgs := make([]*syntax.Assign, 0, len(args)-1)
+	operands := make([]syntax.DeclOperand, 0, len(args)-1)
 	for _, arg := range args[1:] {
 		if arg == nil {
 			continue
 		}
-		declArgs = append(declArgs, &syntax.Assign{
-			Naked: true,
-			Value: arg,
-		})
+		operands = append(operands, &syntax.DeclDynamicWord{Word: arg})
 	}
 	return &syntax.DeclClause{
-		Variant: &syntax.Lit{Value: variant},
-		Args:    declArgs,
+		Variant:  &syntax.Lit{Value: variant},
+		Operands: operands,
 	}
 }
 
@@ -1057,37 +1086,6 @@ func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
 	r.exit = oldExit // traps on EXIT or ERR should not modify the result
 
 	r.handlingTrap = false
-}
-
-func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] {
-	return func(yield func(*syntax.Assign) bool) {
-		for _, as := range args {
-			// Convert "declare $x" into "declare value".
-			// Don't use syntax.Parser here, as we only want the basic
-			// splitting by '='.
-			if as.Ref != nil {
-				if !yield(as) {
-					return
-				}
-				continue
-			}
-			for _, field := range r.fields(as.Value) {
-				as := &syntax.Assign{}
-				name, val, ok := strings.Cut(field, "=")
-				as.Ref = &syntax.VarRef{Name: &syntax.Lit{Value: name}}
-				if !ok {
-					as.Naked = true
-				} else {
-					as.Value = &syntax.Word{Parts: []syntax.WordPart{
-						&syntax.Lit{Value: val},
-					}}
-				}
-				if !yield(as) {
-					return
-				}
-			}
-		}
-	}
 }
 
 type restoreVar struct {
@@ -1150,43 +1148,14 @@ func callExprDeclClause(args []*syntax.Word) *syntax.DeclClause {
 		},
 	}
 	for _, arg := range args[1:] {
-		decl.Args = append(decl.Args, &syntax.Assign{
-			Naked: true,
-			Value: arg,
-		})
+		decl.Operands = append(decl.Operands, &syntax.DeclDynamicWord{Word: arg})
 	}
 	return decl
 }
 
-// reparseCompoundAssign checks if an assign's value looks like a compound
-// assignment "(elem ...)" and reparses it so that as.Array is populated.
-// This is needed for "declare -a 'var=(1 2 3)'" where the value came from
-// a dynamically expanded string. Returns nil if the value is not a compound
-// assignment.
-func (r *Runner) reparseCompoundAssign(as *syntax.Assign) *syntax.Assign {
-	val := r.literal(as.Value)
-	if !strings.HasPrefix(val, "(") || !strings.HasSuffix(val, ")") {
-		return nil
-	}
-	// Parse "name=(elems)" to get a proper Assign with Array populated.
-	src := as.Ref.Name.Value + "=" + val
-	p := syntax.NewParser()
-	file, err := p.Parse(strings.NewReader(src), "")
-	if err != nil || len(file.Stmts) != 1 {
-		return nil
-	}
-	stmt := file.Stmts[0]
-	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Assigns) != 1 {
-		return nil
-	}
-	reparsed := call.Assigns[0]
-	if reparsed.Array == nil {
-		return nil
-	}
-	// Preserve the append flag from the original assign.
-	reparsed.Append = as.Append
-	return reparsed
+func parseDeclOperandField(field string) (syntax.DeclOperand, error) {
+	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	return p.DeclOperand(strings.NewReader(field))
 }
 
 func match(pat, name string) bool {

@@ -218,10 +218,14 @@ func (opts DecodeOptions) Decode(r io.Reader) (syntax.Node, error) {
 }
 
 var nodeByName = map[string]reflect.Type{
-	"File":      reflect.TypeFor[syntax.File](),
-	"Word":      reflect.TypeFor[syntax.Word](),
-	"VarRef":    reflect.TypeFor[syntax.VarRef](),
-	"Subscript": reflect.TypeFor[syntax.Subscript](),
+	"File":            reflect.TypeFor[syntax.File](),
+	"Word":            reflect.TypeFor[syntax.Word](),
+	"VarRef":          reflect.TypeFor[syntax.VarRef](),
+	"Subscript":       reflect.TypeFor[syntax.Subscript](),
+	"DeclFlag":        reflect.TypeFor[syntax.DeclFlag](),
+	"DeclName":        reflect.TypeFor[syntax.DeclName](),
+	"DeclAssign":      reflect.TypeFor[syntax.DeclAssign](),
+	"DeclDynamicWord": reflect.TypeFor[syntax.DeclDynamicWord](),
 
 	"Lit":       reflect.TypeFor[syntax.Lit](),
 	"SglQuoted": reflect.TypeFor[syntax.SglQuoted](),

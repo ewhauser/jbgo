@@ -50,9 +50,7 @@ func litAssigns(pairs ...string) []*Assign {
 	l := make([]*Assign, len(pairs))
 	for i, pair := range pairs {
 		name, val, ok := strings.Cut(pair, "=")
-		if !ok {
-			l[i] = &Assign{Naked: true, Ref: litRef(name)}
-		} else if val == "" {
+		if !ok || val == "" {
 			l[i] = &Assign{Ref: litRef(name)}
 		} else {
 			l[i] = &Assign{Ref: litRef(name), Value: litWord(val)}
@@ -60,6 +58,13 @@ func litAssigns(pairs ...string) []*Assign {
 	}
 	return l
 }
+
+func declOperands(ops ...DeclOperand) []DeclOperand { return ops }
+func declFlag(s string) *DeclFlag                   { return &DeclFlag{Word: litWord(s)} }
+func declName(name string) *DeclName                { return &DeclName{Ref: litRef(name)} }
+func declNameRef(ref *VarRef) *DeclName             { return &DeclName{Ref: ref} }
+func declAssign(assign *Assign) *DeclAssign         { return &DeclAssign{Assign: assign} }
+func declDynamicWord(word *Word) *DeclDynamicWord   { return &DeclDynamicWord{Word: word} }
 
 func call(words ...*Word) *CallExpr    { return &CallExpr{Args: words} }
 func litCall(strs ...string) *CallExpr { return call(litWords(strs...)...) }
@@ -4299,17 +4304,19 @@ var fileTests = []fileTestCase{
 		langFile(litStmt("declare", "-f", "func")),
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{
-				{Naked: true, Value: litWord("-f")},
-				{Naked: true, Ref: litRef("func")},
-			},
+			Operands: declOperands(
+				declFlag("-f"),
+				declName("func"),
+			),
 		}, langBashLike|LangZsh),
 	),
 	fileTest(
 		[]string{"(local bar)"},
 		langFile(subshell(stmt(&DeclClause{
 			Variant: lit("local"),
-			Args:    litAssigns("bar"),
+			Operands: declOperands(
+				declName("bar"),
+			),
 		})), LangBash|LangMirBSDKorn|LangZsh),
 		langFile(subshell(litStmt("local", "bar")), LangPOSIX),
 	),
@@ -4317,7 +4324,9 @@ var fileTests = []fileTestCase{
 		[]string{"local {a,b}_c=1"},
 		langFile(&DeclClause{
 			Variant: lit("local"),
-			Args:    []*Assign{{Naked: true, Value: litWord("{a,b}_c=1")}},
+			Operands: declOperands(
+				declDynamicWord(litWord("{a,b}_c=1")),
+			),
 		}, LangBash|LangMirBSDKorn|LangZsh),
 		langFile(litStmt("local", "{a,b}_c=1"), LangPOSIX),
 	),
@@ -4330,7 +4339,9 @@ var fileTests = []fileTestCase{
 		[]string{"export bar"},
 		langFile(&DeclClause{
 			Variant: lit("export"),
-			Args:    litAssigns("bar"),
+			Operands: declOperands(
+				declName("bar"),
+			),
 		}, LangBash|LangMirBSDKorn|LangZsh),
 		langFile(litStmt("export", "bar"), LangPOSIX),
 	),
@@ -4338,7 +4349,9 @@ var fileTests = []fileTestCase{
 		[]string{"readonly -n"},
 		langFile(&DeclClause{
 			Variant: lit("readonly"),
-			Args:    []*Assign{{Naked: true, Value: litWord("-n")}},
+			Operands: declOperands(
+				declFlag("-n"),
+			),
 		}, LangBash|LangMirBSDKorn|LangZsh),
 		langFile(litStmt("readonly", "-n"), LangPOSIX),
 	),
@@ -4346,9 +4359,9 @@ var fileTests = []fileTestCase{
 		[]string{"nameref bar="},
 		langFile(&DeclClause{
 			Variant: lit("nameref"),
-			Args: []*Assign{{
-				Ref: litRef("bar"),
-			}},
+			Operands: declOperands(
+				declAssign(&Assign{Ref: litRef("bar")}),
+			),
 		}, LangBash|LangMirBSDKorn|LangZsh),
 		langFile(litStmt("nameref", "bar="), LangPOSIX),
 	),
@@ -4356,12 +4369,12 @@ var fileTests = []fileTestCase{
 		[]string{"declare -a +n -b$o foo=bar"},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{
-				{Naked: true, Value: litWord("-a")},
-				{Naked: true, Value: litWord("+n")},
-				{Naked: true, Value: word(lit("-b"), litParamExp("o"))},
-				{Ref: litRef("foo"), Value: litWord("bar")},
-			},
+			Operands: declOperands(
+				declFlag("-a"),
+				declFlag("+n"),
+				declDynamicWord(word(lit("-b"), litParamExp("o"))),
+				declAssign(&Assign{Ref: litRef("foo"), Value: litWord("bar")}),
+			),
 		}, LangBash),
 	),
 	fileTest(
@@ -4371,16 +4384,16 @@ var fileTests = []fileTestCase{
 		},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{
-				{Naked: true, Value: litWord("-a")},
-				{
+			Operands: declOperands(
+				declFlag("-a"),
+				declAssign(&Assign{
 					Ref: ref("foo", nil),
 					Array: arrValues(
 						litWord("b1"),
 						word(cmdSubst(litStmt("b2"))),
 					),
-				},
-			},
+				}),
+			),
 		}, LangBash),
 		langErr2("1:16: the `declare` builtin is a bash feature; tried parsing as LANG", LangPOSIX),
 	),
@@ -4388,68 +4401,65 @@ var fileTests = []fileTestCase{
 		[]string{"local -a foo=(b1)"},
 		langFile(&DeclClause{
 			Variant: lit("local"),
-			Args: []*Assign{
-				{Naked: true, Value: litWord("-a")},
-				{
+			Operands: declOperands(
+				declFlag("-a"),
+				declAssign(&Assign{
 					Ref:   litRef("foo"),
 					Array: arrValues(litWord("b1")),
-				},
-			},
+				}),
+			),
 		}, LangBash),
 	),
 	fileTest(
 		[]string{"declare -A foo=([a]=b)"},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{
-				{Naked: true, Value: litWord("-A")},
-				{
+			Operands: declOperands(
+				declFlag("-A"),
+				declAssign(&Assign{
 					Ref: ref("foo", nil),
 					Array: &ArrayExpr{Elems: []*ArrayElem{{
 						Index: subWord("a"),
 						Value: litWord("b"),
 					}}},
-				},
-			},
+				}),
+			),
 		}, LangBash),
 	),
 	fileTest(
 		[]string{"declare foo[a]="},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{{
-				Ref: ref("foo", litWord("a")),
-			}},
+			Operands: declOperands(
+				declAssign(&Assign{Ref: ref("foo", litWord("a"))}),
+			),
 		}, LangBash),
 	),
 	fileTest(
 		[]string{"declare foo[*]"},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{{
-				Ref:   refSub("foo", subStar()),
-				Naked: true,
-			}},
+			Operands: declOperands(
+				declNameRef(refSub("foo", subStar())),
+			),
 		}, LangBash),
 	),
 	fileTest(
 		[]string{`declare foo["x y"]`},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{{
-				Ref:   ref("foo", word(dblQuoted(lit("x y")))),
-				Naked: true,
-			}},
+			Operands: declOperands(
+				declNameRef(ref("foo", word(dblQuoted(lit("x y"))))),
+			),
 		}, LangBash),
 	),
 	fileTest(
 		[]string{`declare foo['x y']`},
 		langFile(&DeclClause{
 			Variant: lit("declare"),
-			Args: []*Assign{{
-				Ref:   ref("foo", word(sglQuoted("x y"))),
-				Naked: true,
-			}},
+			Operands: declOperands(
+				declNameRef(ref("foo", word(sglQuoted("x y")))),
+			),
 		}, LangBash),
 	),
 	fileTest(
@@ -4481,13 +4491,10 @@ var fileTests = []fileTestCase{
 		langFile(&Stmt{
 			Cmd: &DeclClause{
 				Variant: lit("declare"),
-				Args: []*Assign{
-					{Naked: true, Value: litWord("-f")},
-					{
-						Naked: true,
-						Value: word(litParamExp("func")),
-					},
-				},
+				Operands: declOperands(
+					declFlag("-f"),
+					declDynamicWord(word(litParamExp("func"))),
+				),
 			},
 			Redirs: []*Redirect{
 				{Op: RdrOut, Word: litWord("/dev/null")},
@@ -4499,7 +4506,9 @@ var fileTests = []fileTestCase{
 		langFile(stmts(
 			&DeclClause{
 				Variant: lit("declare"),
-				Args:    litAssigns("a"),
+				Operands: declOperands(
+					declName("a"),
+				),
 			},
 			block(litStmt("x")),
 		), LangBash),

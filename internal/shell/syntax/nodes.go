@@ -274,6 +274,19 @@ func (*TimeClause) commandNode()   {}
 func (*CoprocClause) commandNode() {}
 func (*TestDecl) commandNode()     {}
 
+// DeclOperand represents a typed operand to a Bash-style declaration builtin.
+//
+// These are [*DeclFlag], [*DeclName], [*DeclAssign], and [*DeclDynamicWord].
+type DeclOperand interface {
+	Node
+	declOperandNode()
+}
+
+func (*DeclFlag) declOperandNode()        {}
+func (*DeclName) declOperandNode()        {}
+func (*DeclAssign) declOperandNode()      {}
+func (*DeclDynamicWord) declOperandNode() {}
+
 type SubscriptKind uint8
 
 const (
@@ -330,16 +343,10 @@ func (r *VarRef) End() Pos {
 
 // Assign represents an assignment to a variable.
 //
-// If [Assign.Ref]'s Index is non-nil, the value will be a word and not an array
-// as nested
-// arrays are not allowed.
-//
-// If Naked is true and Ref is nil, the assignment is part of a [DeclClause] and
-// the argument (in the Value field) will be evaluated at run-time. This
-// includes parameter expansions, which may expand to assignments or options.
+// If [Assign.Ref]'s Index is non-nil, the value will be a word and not an
+// array, as nested arrays are not allowed.
 type Assign struct {
 	Append bool // +=
-	Naked  bool // without '='
 	Ref    *VarRef
 	Value  *Word      // =val
 	Array  *ArrayExpr // =(arr)
@@ -358,9 +365,6 @@ func (a *Assign) End() Pos {
 	}
 	if a.Array != nil {
 		return a.Array.End()
-	}
-	if a.Naked {
-		return a.Ref.End()
 	}
 	return posAddCol(a.Ref.End(), 1)
 }
@@ -947,26 +951,56 @@ type ParenTest struct {
 func (p *ParenTest) Pos() Pos { return p.Lparen }
 func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
 
-// DeclClause represents a Bash declare clause.
-//
-// Args can contain a mix of regular and naked assignments. The naked
-// assignments can represent either options or variable names.
-//
-// This node will only appear with [LangBash].
+// DeclClause represents a Bash-style declaration clause.
 type DeclClause struct {
 	// Variant is one of "declare", "local", "export", "readonly",
 	// "typeset", or "nameref".
-	Variant *Lit
-	Args    []*Assign
+	Variant  *Lit
+	Operands []DeclOperand
 }
 
 func (d *DeclClause) Pos() Pos { return d.Variant.Pos() }
 func (d *DeclClause) End() Pos {
-	if len(d.Args) > 0 {
-		return d.Args[len(d.Args)-1].End()
+	if len(d.Operands) > 0 {
+		return d.Operands[len(d.Operands)-1].End()
 	}
 	return d.Variant.End()
 }
+
+// DeclFlag is a literal option word in a declaration builtin, such as "-a" or
+// "+n".
+type DeclFlag struct {
+	Word *Word
+}
+
+func (d *DeclFlag) Pos() Pos { return d.Word.Pos() }
+func (d *DeclFlag) End() Pos { return d.Word.End() }
+
+// DeclName is a bare declaration operand naming a variable or reference
+// without assigning a value.
+type DeclName struct {
+	Ref *VarRef
+}
+
+func (d *DeclName) Pos() Pos { return d.Ref.Pos() }
+func (d *DeclName) End() Pos { return d.Ref.End() }
+
+// DeclAssign is a declaration operand that carries a real assignment.
+type DeclAssign struct {
+	Assign *Assign
+}
+
+func (d *DeclAssign) Pos() Pos { return d.Assign.Pos() }
+func (d *DeclAssign) End() Pos { return d.Assign.End() }
+
+// DeclDynamicWord is a declaration operand whose runtime expansion can produce
+// flags, names, or assignments.
+type DeclDynamicWord struct {
+	Word *Word
+}
+
+func (d *DeclDynamicWord) Pos() Pos { return d.Word.Pos() }
+func (d *DeclDynamicWord) End() Pos { return d.Word.End() }
 
 // ArrayExpr represents a Bash array expression.
 //
