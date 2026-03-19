@@ -58,7 +58,7 @@ jobs:
           set +e
           rm -rf "$RESULTS_DIR"
           mkdir -p "$RESULTS_DIR"
-          GNU_RESULTS_DIR="$RESULTS_DIR" GNU_UTILS="md5sum,mkdir,mkfifo,mknod,mktemp,mv,nl,nproc,nohup,numfmt,od,paste,pathchk,pr,printenv,printf,ptx,pwd" make gnu-test 2>&1 | tee "$RESULTS_DIR/harness.log"
+          GNU_RESULTS_DIR="$RESULTS_DIR" GNU_UTILS="readlink,realpath,rm,rmdir,seq,sha1sum,sha224sum,sha256sum,sha384sum,sha512sum,shuf,sleep,sort,split,stat,sum,sync,tac,tail,tee,test,touch,tr,truncate,tsort,tty,uname,unexpand,uniq,unlink,vdir,wc,whoami,yes" make gnu-test 2>&1 | tee "$RESULTS_DIR/harness.log"
           rc=${PIPESTATUS[0]}
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
           exit 0
