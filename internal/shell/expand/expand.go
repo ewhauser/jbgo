@@ -904,6 +904,21 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 	}
 	name := pe.Param.Value
 	if pe.Excl {
+		if pe.Names == 0 && pe.Index == nil {
+			state, err := cfg.paramExpState(pe)
+			if err != nil {
+				return nil, false, err
+			}
+			if state.orig.Kind != NameRef && state.str != "" {
+				target, err := indirectParamExp(state.str)
+				if err != nil {
+					return nil, false, err
+				}
+				if fields, _, ok := cfg.quotedArrayFields(target); ok {
+					return fields, true, nil
+				}
+			}
+		}
 		switch pe.Names {
 		case syntax.NamesPrefixWords: // "${!prefix@}"
 			return cfg.namesByPrefix(pe.Param.Value), true, nil

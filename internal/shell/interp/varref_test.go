@@ -104,6 +104,30 @@ printf '%s\n' "${!name}"
 	}
 }
 
+func TestIndirectExpansionPreservesQuotedAllElementsTargets(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, err := runInterpScript(t, `
+set -- 'a b' c
+name='@'
+printf '<%s>|<%s>\n' "${!name}"
+name='*'
+printf '<%s>\n' "${!name}"
+arr=('x y' z)
+name='arr[@]'
+printf '<%s>|<%s>\n' "${!name}"
+name='arr[*]'
+printf '<%s>\n' "${!name}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const want = "<a b>|<c>\n<a b c>\n<x y>|<z>\n<x y z>\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}
+
 func TestRunCallAssignsRestoresResolvedNameRefTargets(t *testing.T) {
 	t.Parallel()
 

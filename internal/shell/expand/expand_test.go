@@ -291,6 +291,62 @@ func TestLiteralIndirectExpansionAllowsPositionalTarget(t *testing.T) {
 	}
 }
 
+func TestFieldsQuotedIndirectAllElementsTargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  testEnv
+		want []string
+	}{
+		{
+			name: "SpecialAt",
+			env: testEnv{
+				"name": {Set: true, Kind: String, Str: "@"},
+				"@":    {Set: true, Kind: Indexed, List: []string{"a b", "c"}},
+			},
+			want: []string{"a b", "c"},
+		},
+		{
+			name: "SpecialStar",
+			env: testEnv{
+				"name": {Set: true, Kind: String, Str: "*"},
+				"*":    {Set: true, Kind: Indexed, List: []string{"a b", "c"}},
+			},
+			want: []string{"a b c"},
+		},
+		{
+			name: "ArrayAt",
+			env: testEnv{
+				"name": {Set: true, Kind: String, Str: "arr[@]"},
+				"arr":  {Set: true, Kind: Indexed, List: []string{"a b", "c"}},
+			},
+			want: []string{"a b", "c"},
+		},
+		{
+			name: "ArrayStar",
+			env: testEnv{
+				"name": {Set: true, Kind: String, Str: "arr[*]"},
+				"arr":  {Set: true, Kind: Indexed, List: []string{"a b", "c"}},
+			},
+			want: []string{"a b c"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, "\"${!name}\"")
+			got, err := Fields(&Config{Env: tc.env}, word)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestNamesByPrefixSkipsShadowedUnsetVariables(t *testing.T) {
 	cfg := &Config{
 		Env: layeredTestEnv{

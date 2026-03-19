@@ -58,15 +58,36 @@ func indirectPositionalParam(name string) bool {
 	return true
 }
 
-func (cfg *Config) indirectValue(name string) (string, error) {
+func indirectParamExp(name string) (*syntax.ParamExp, error) {
 	ref, err := parseVarRef(name)
 	if err == nil {
-		return cfg.varRef(ref)
+		return &syntax.ParamExp{
+			Param: ref.Name,
+			Index: ref.Index,
+		}, nil
 	}
 	if indirectSpecialParam(name) || indirectPositionalParam(name) {
-		return cfg.Env.Get(name).String(), nil
+		return &syntax.ParamExp{
+			Param: &syntax.Lit{Value: name},
+		}, nil
 	}
-	return "", fmt.Errorf("invalid indirect expansion")
+	return nil, fmt.Errorf("invalid indirect expansion")
+}
+
+func (cfg *Config) indirectValue(name string) (string, error) {
+	target, err := indirectParamExp(name)
+	if err != nil {
+		return "", err
+	}
+	switch target.Param.Value {
+	case "@", "*":
+		return cfg.ifsJoin(cfg.Env.Get(target.Param.Value).List), nil
+	}
+	ref := &syntax.VarRef{
+		Name:  target.Param,
+		Index: target.Index,
+	}
+	return cfg.varRef(ref)
 }
 // fnv1Hash computes the FNV-1 hash for a string.
 // This matches bash's internal hash function for associative arrays.
