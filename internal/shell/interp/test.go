@@ -401,23 +401,38 @@ func bashRegexBraceIsLiteral(expr string, index int) bool {
 	for i := 0; i < len(expr); i++ {
 		ch := expr[i]
 		if escaped {
+			if i == index {
+				return true
+			}
 			escaped = false
 			continue
 		}
 		switch ch {
 		case '\\':
+			if i == index {
+				return false
+			}
 			escaped = true
 		case '[':
+			if i == index {
+				return false
+			}
 			if !inClass {
 				inClass = true
 			}
 		case ']':
+			if i == index && inClass {
+				return true
+			}
 			if inClass {
 				inClass = false
 			}
 		case '{':
-			if i != index || inClass {
+			if i != index {
 				continue
+			}
+			if inClass {
+				return true
 			}
 			j := i + 1
 			start := j
@@ -440,6 +455,10 @@ func bashRegexBraceIsLiteral(expr string, index int) bool {
 				}
 			}
 			return j < len(expr) && expr[j] == '}'
+		default:
+			if i == index && inClass {
+				return true
+			}
 		}
 	}
 	return false

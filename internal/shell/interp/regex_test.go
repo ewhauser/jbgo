@@ -132,3 +132,25 @@ printf 'pipe2=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+
+func TestConditionalRegexLiteralBracesAndClasses(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+[[ { =~ "{" ]] && echo quoted
+[[ '{}' =~ \{\} ]] && echo escaped
+lisp='^^([][{}\(\)^@])|^(~@)'
+[[ '(' =~ $lisp ]] && echo class
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+
+	const wantStdout = "quoted\nescaped\nclass\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
