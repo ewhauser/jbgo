@@ -142,10 +142,6 @@
           "mode": "xfail",
           "reason": "gbash treats nested array assignment as fatal instead of bash's non-fatal member-assignment error"
         },
-        "oils/array.test.sh::Tilde expansion within array": {
-          "mode": "xfail",
-          "reason": "gbash still applies statement-local HOME binding during array-assignment tilde expansion"
-        },
         "oils/array.test.sh::Using an array itself as the index on RHS": {
           "mode": "xfail",
           "reason": "gbash's unsupported strict_arith shopt diagnostic text still differs from bash in this array test"
