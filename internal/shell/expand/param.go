@@ -351,7 +351,11 @@ func (cfg *Config) paramArgField(word *syntax.Word, ql quoteLevel) ([]fieldPart,
 			}
 			field = append(field, fieldPart{val: path})
 		case *syntax.ExtGlob:
-			field = append(field, fieldPart{val: wp.Op.String() + wp.Pattern.Value + ")"})
+			pat, err := cfg.extGlobString(wp)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
@@ -672,7 +676,16 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 				}
 			}
 		default:
-			arg, err := Literal(cfg, pe.Exp.Word)
+			var arg string
+			switch op {
+			case syntax.RemSmallPrefix, syntax.RemLargePrefix,
+				syntax.RemSmallSuffix, syntax.RemLargeSuffix,
+				syntax.UpperFirst, syntax.UpperAll,
+				syntax.LowerFirst, syntax.LowerAll:
+				arg, err = Pattern(cfg, pe.Exp.Pattern)
+			default:
+				arg, err = Literal(cfg, pe.Exp.Word)
+			}
 			if err != nil {
 				return "", err
 			}
@@ -707,7 +720,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 				all := op == syntax.UpperAll || op == syntax.LowerAll
 
 				// empty string means '?'; nothing to do there
-				expr, err := pattern.Regexp(arg, 0)
+				expr, err := pattern.Regexp(arg, pattern.ExtendedOperators)
 				if err != nil {
 					return str, nil
 				}
@@ -767,7 +780,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 }
 
 func removePattern(str, pat string, fromEnd, shortest bool) string {
-	var mode pattern.Mode
+	mode := pattern.ExtendedOperators
 	if shortest {
 		mode |= pattern.Shortest
 	}

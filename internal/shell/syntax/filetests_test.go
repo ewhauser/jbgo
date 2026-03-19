@@ -17,6 +17,31 @@ func lits(strs ...string) []*Lit {
 	}
 	return l
 }
+func pattern(ps ...PatternPart) *Pattern { return &Pattern{Parts: ps} }
+func litPattern(s string) *Pattern {
+	return &Pattern{Parts: splitPatternLit(&Lit{Value: s})}
+}
+func wordPattern(w *Word) *Pattern {
+	if w == nil {
+		return nil
+	}
+	parts := make([]PatternPart, 0, len(w.Parts))
+	for _, part := range w.Parts {
+		if lit, ok := part.(*Lit); ok {
+			parts = append(parts, splitPatternLit(&Lit{Value: lit.Value})...)
+			continue
+		}
+		parts = append(parts, part.(PatternPart))
+	}
+	return &Pattern{Parts: parts}
+}
+func litPatterns(strs ...string) []*Pattern {
+	l := make([]*Pattern, 0, len(strs))
+	for _, s := range strs {
+		l = append(l, litPattern(s))
+	}
+	return l
+}
 func word(ps ...WordPart) *Word { return &Word{Parts: ps} }
 func litWord(s string) *Word    { return word(lit(s)) }
 func heredocDelim(ps ...WordPart) *HeredocDelim {
@@ -109,11 +134,14 @@ func arithmExpBr(e ArithmExpr) *ArithmExp  { return &ArithmExp{Bracket: true, X:
 func arithmCmd(e ArithmExpr) *ArithmCmd    { return &ArithmCmd{X: e} }
 func parenArit(e ArithmExpr) *ParenArithm  { return &ParenArithm{X: e} }
 func parenTest(e TestExpr) *ParenTest      { return &ParenTest{X: e} }
-func condWord(ps ...WordPart) *CondWord    { return &CondWord{Word: word(ps...)} }
-func litCondWord(s string) *CondWord       { return condWord(lit(s)) }
-func condVarRef(ref *VarRef) *CondVarRef   { return &CondVarRef{Ref: ref} }
-func condPattern(ps ...WordPart) *CondPattern {
-	return &CondPattern{Word: word(ps...)}
+func extglob(op GlobOperator, pats ...*Pattern) *ExtGlob {
+	return &ExtGlob{Op: op, Patterns: pats}
+}
+func condWord(ps ...WordPart) *CondWord  { return &CondWord{Word: word(ps...)} }
+func litCondWord(s string) *CondWord     { return condWord(lit(s)) }
+func condVarRef(ref *VarRef) *CondVarRef { return &CondVarRef{Ref: ref} }
+func condPattern(ps ...PatternPart) *CondPattern {
+	return &CondPattern{Pattern: pattern(ps...)}
 }
 func litCondPattern(s string) *CondPattern { return condPattern(lit(s)) }
 func condRegex(ps ...WordPart) *CondRegex  { return &CondRegex{Word: word(ps...)} }
@@ -2508,8 +2536,8 @@ var fileTests = []fileTestCase{
 		langFile(&ParamExp{
 			Param: lit("var"),
 			Exp: &Expansion{
-				Op:   RemSmallPrefix,
-				Word: word(lit("*"), sglQuoted(`="`)),
+				Op:      RemSmallPrefix,
+				Pattern: wordPattern(word(lit("*"), sglQuoted(`="`))),
 			},
 		}),
 	),
@@ -2518,7 +2546,7 @@ var fileTests = []fileTestCase{
 		langFile(&ParamExp{
 			Param: lit("var"),
 			Repl: &Replace{
-				Orig: word(sglQuoted("a")),
+				Orig: wordPattern(word(sglQuoted("a"))),
 				With: word(lit("b"), sglQuoted("c"), lit("d")),
 			},
 		}, LangBash|LangMirBSDKorn|LangZsh),
@@ -2529,15 +2557,15 @@ var fileTests = []fileTestCase{
 			&ParamExp{
 				Param: lit("foo"),
 				Exp: &Expansion{
-					Op:   RemSmallSuffix,
-					Word: litWord("bar"),
+					Op:      RemSmallSuffix,
+					Pattern: litPattern("bar"),
 				},
 			},
 			&ParamExp{
 				Param: lit("foo"),
 				Exp: &Expansion{
-					Op:   RemLargeSuffix,
-					Word: litWord("bar*"),
+					Op:      RemLargeSuffix,
+					Pattern: litPattern("bar*"),
 				},
 			},
 		)),
@@ -2548,15 +2576,15 @@ var fileTests = []fileTestCase{
 			&ParamExp{
 				Param: lit("3"),
 				Exp: &Expansion{
-					Op:   RemSmallPrefix,
-					Word: litWord("bar"),
+					Op:      RemSmallPrefix,
+					Pattern: litPattern("bar"),
 				},
 			},
 			&ParamExp{
 				Param: lit("-"),
 				Exp: &Expansion{
-					Op:   RemLargePrefix,
-					Word: litWord("bar*"),
+					Op:      RemLargePrefix,
+					Pattern: litPattern("bar*"),
 				},
 			},
 		)),
@@ -2566,8 +2594,8 @@ var fileTests = []fileTestCase{
 		langFile(&ParamExp{
 			Param: lit("foo"),
 			Exp: &Expansion{
-				Op:   RemSmallSuffix,
-				Word: litWord("?"),
+				Op:      RemSmallSuffix,
+				Pattern: litPattern("?"),
 			},
 		}),
 	),
@@ -2579,8 +2607,8 @@ var fileTests = []fileTestCase{
 			call(litWord("echo"), word(&ParamExp{
 				Param: lit("foo"),
 				Exp: &Expansion{
-					Op:   MatchEmpty,
-					Word: litWord("bar"),
+					Op:      MatchEmpty,
+					Pattern: litPattern("bar"),
 				},
 			})),
 		), LangZsh),
@@ -2594,8 +2622,8 @@ var fileTests = []fileTestCase{
 			call(litWord("echo"), word(&ParamExp{
 				Param: lit("foo"),
 				Exp: &Expansion{
-					Op:   ArrayExclude,
-					Word: litWord("bar"),
+					Op:      ArrayExclude,
+					Pattern: litPattern("bar"),
 				},
 			})),
 		), LangZsh),
@@ -2608,8 +2636,8 @@ var fileTests = []fileTestCase{
 			call(litWord("echo"), word(&ParamExp{
 				Param: lit("foo"),
 				Exp: &Expansion{
-					Op:   ArrayIntersect,
-					Word: litWord("bar"),
+					Op:      ArrayIntersect,
+					Pattern: litPattern("bar"),
 				},
 			})),
 		), LangZsh),
@@ -2870,7 +2898,7 @@ var fileTests = []fileTestCase{
 		[]string{`${foo/a/b}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{Orig: litWord("a"), With: litWord("b")},
+			Repl:  &Replace{Orig: litPattern("a"), With: litWord("b")},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 		langErr2("1:6: search and replace is a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
 	),
@@ -2878,14 +2906,14 @@ var fileTests = []fileTestCase{
 		[]string{"${foo/ /\t}"},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{Orig: litWord(" "), With: litWord("\t")},
+			Repl:  &Replace{Orig: litPattern(" "), With: litWord("\t")},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{`${foo/[/]-}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{Orig: litWord("["), With: litWord("]-")},
+			Repl:  &Replace{Orig: litPattern("["), With: litWord("]-")},
 		}, LangBash|LangMirBSDKorn), // TODO: zsh parses as a pattern?
 	),
 	fileTest(
@@ -2893,7 +2921,7 @@ var fileTests = []fileTestCase{
 		langFile(&ParamExp{
 			Param: lit("foo"),
 			Repl: &Replace{
-				Orig: litWord("bar"),
+				Orig: litPattern("bar"),
 				With: litWord("b/a/r"),
 			},
 		}, LangBash|LangMirBSDKorn|LangZsh),
@@ -2903,7 +2931,7 @@ var fileTests = []fileTestCase{
 		langFile(&ParamExp{
 			Param: lit("foo"),
 			Repl: &Replace{
-				Orig: word(litParamExp("a")),
+				Orig: wordPattern(word(litParamExp("a"))),
 				With: word(sglDQuoted(`\'`)),
 			},
 		}, LangBash|LangMirBSDKorn|LangZsh),
@@ -2914,7 +2942,7 @@ var fileTests = []fileTestCase{
 			Param: lit("foo"),
 			Repl: &Replace{
 				All:  true,
-				Orig: litWord("b1"),
+				Orig: litPattern("b1"),
 				With: litWord("b2"),
 			},
 		}, LangBash|LangMirBSDKorn|LangZsh),
@@ -2930,21 +2958,21 @@ var fileTests = []fileTestCase{
 		[]string{`${foo/-//}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{Orig: litWord("-"), With: litWord("/")},
+			Repl:  &Replace{Orig: litPattern("-"), With: litWord("/")},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{`${foo//#/}`, `${foo//#}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{All: true, Orig: litWord("#")},
+			Repl:  &Replace{All: true, Orig: litPattern("#")},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{`${foo//[42]/}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{All: true, Orig: litWord("[42]")},
+			Repl:  &Replace{All: true, Orig: litPattern("[42]")},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
@@ -2953,29 +2981,29 @@ var fileTests = []fileTestCase{
 			word(&ParamExp{
 				Param: lit("a"),
 				Exp: &Expansion{
-					Op:   UpperFirst,
-					Word: litWord("b"),
+					Op:      UpperFirst,
+					Pattern: litPattern("b"),
 				},
 			}),
 			word(&ParamExp{
 				Param: lit("a"),
 				Exp: &Expansion{
-					Op:   UpperAll,
-					Word: litWord("b"),
+					Op:      UpperAll,
+					Pattern: litPattern("b"),
 				},
 			}),
 			word(&ParamExp{
 				Param: lit("a"),
 				Exp: &Expansion{
-					Op:   LowerFirst,
-					Word: litWord("b"),
+					Op:      LowerFirst,
+					Pattern: litPattern("b"),
 				},
 			}),
 			word(&ParamExp{
 				Param: lit("a"),
 				Exp: &Expansion{
-					Op:   LowerAll,
-					Word: litWord("b"),
+					Op:      LowerAll,
+					Pattern: litPattern("b"),
 				},
 			}),
 		), LangBash),
@@ -3695,12 +3723,12 @@ var fileTests = []fileTestCase{
 			Items: []*CaseItem{
 				{
 					Op:       Break,
-					Patterns: litWords("1"),
+					Patterns: litPatterns("1"),
 					Stmts:    litStmts("foo"),
 				},
 				{
 					Op:       Break,
-					Patterns: litWords("2", "3*"),
+					Patterns: litPatterns("2", "3*"),
 					Stmts:    litStmts("bar"),
 				},
 			},
@@ -3713,10 +3741,10 @@ var fileTests = []fileTestCase{
 			Items: []*CaseItem{
 				{
 					Op:       Fallthrough,
-					Patterns: litWords("1"),
+					Patterns: litPatterns("1"),
 					Stmts:    litStmts("a"),
 				},
-				{Op: Break, Patterns: litWords("2")},
+				{Op: Break, Patterns: litPatterns("2")},
 			},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
@@ -3730,7 +3758,7 @@ var fileTests = []fileTestCase{
 			Word: litWord("i"),
 			Items: []*CaseItem{{
 				Op:       Break,
-				Patterns: litWords("1"),
+				Patterns: litPatterns("1"),
 				Stmts:    litStmts("a"),
 			}},
 		}, LangMirBSDKorn),
@@ -3742,12 +3770,12 @@ var fileTests = []fileTestCase{
 			Items: []*CaseItem{
 				{
 					Op:       Resume,
-					Patterns: litWords("1"),
+					Patterns: litPatterns("1"),
 					Stmts:    litStmts("a"),
 				},
 				{
 					Op:       Break,
-					Patterns: litWords("2"),
+					Patterns: litPatterns("2"),
 					Stmts:    litStmts("b"),
 				},
 			},
@@ -3760,12 +3788,12 @@ var fileTests = []fileTestCase{
 			Items: []*CaseItem{
 				{
 					Op:       ResumeKorn,
-					Patterns: litWords("1"),
+					Patterns: litPatterns("1"),
 					Stmts:    litStmts("a"),
 				},
 				{
 					Op:       Break,
-					Patterns: litWords("2"),
+					Patterns: litPatterns("2"),
 					Stmts:    litStmts("b"),
 				},
 			},
@@ -3777,7 +3805,7 @@ var fileTests = []fileTestCase{
 			Word: word(litParamExp("i")),
 			Items: []*CaseItem{{
 				Op:       Break,
-				Patterns: litWords("1"),
+				Patterns: litPatterns("1"),
 				Stmts: []*Stmt{{
 					Cmd: litCall("cat"),
 					Redirs: []*Redirect{{
@@ -4013,7 +4041,7 @@ var fileTests = []fileTestCase{
 		[]string{`[[ a == (b|c)* ]]`},
 		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), condPattern(
 			lit("(b|c)"),
-			lit("*"),
+			&PatternAny{},
 		))}, LangZsh),
 	),
 	fileTest(
@@ -4607,7 +4635,7 @@ var fileTests = []fileTestCase{
 			Word: word(lit("a")),
 			Items: []*CaseItem{{
 				Op:       Break,
-				Patterns: litWords("b"),
+				Patterns: litPatterns("b"),
 				Stmts: stmts(letClause(&UnaryArithm{
 					Op:   Inc,
 					Post: true,
@@ -4845,11 +4873,11 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{"echo ?(b)*(c)+(d)@(e)!(f)"},
 		langFile(call(litWord("echo"), word(
-			&ExtGlob{Op: GlobZeroOrOne, Pattern: lit("b")},
-			&ExtGlob{Op: GlobZeroOrMore, Pattern: lit("c")},
-			&ExtGlob{Op: GlobOneOrMore, Pattern: lit("d")},
-			&ExtGlob{Op: GlobOne, Pattern: lit("e")},
-			&ExtGlob{Op: GlobExcept, Pattern: lit("f")},
+			extglob(GlobZeroOrOne, litPattern("b")),
+			extglob(GlobZeroOrMore, litPattern("c")),
+			extglob(GlobOneOrMore, litPattern("d")),
+			extglob(GlobOne, litPattern("e")),
+			extglob(GlobExcept, litPattern("f")),
 		)), LangBash|LangMirBSDKorn),
 		langFile(call(litWord("echo"), word(
 			lit("?"), lit("(b)"),
@@ -4863,7 +4891,10 @@ var fileTests = []fileTestCase{
 		[]string{"echo foo@(b*(c|d))bar"},
 		langFile(call(litWord("echo"), word(
 			lit("foo"),
-			&ExtGlob{Op: GlobOne, Pattern: lit("b*(c|d)")},
+			extglob(GlobOne, pattern(
+				lit("b"),
+				extglob(GlobZeroOrMore, litPatterns("c", "d")...),
+			)),
 			lit("bar"),
 		)), LangBash|LangMirBSDKorn),
 	),
@@ -4871,15 +4902,15 @@ var fileTests = []fileTestCase{
 		[]string{"echo $a@(b)$c?(d)$e*(f)$g+(h)$i!(j)$k"},
 		langFile(call(litWord("echo"), word(
 			litParamExp("a"),
-			&ExtGlob{Op: GlobOne, Pattern: lit("b")},
+			extglob(GlobOne, litPattern("b")),
 			litParamExp("c"),
-			&ExtGlob{Op: GlobZeroOrOne, Pattern: lit("d")},
+			extglob(GlobZeroOrOne, litPattern("d")),
 			litParamExp("e"),
-			&ExtGlob{Op: GlobZeroOrMore, Pattern: lit("f")},
+			extglob(GlobZeroOrMore, litPattern("f")),
 			litParamExp("g"),
-			&ExtGlob{Op: GlobOneOrMore, Pattern: lit("h")},
+			extglob(GlobOneOrMore, litPattern("h")),
 			litParamExp("i"),
-			&ExtGlob{Op: GlobExcept, Pattern: lit("j")},
+			extglob(GlobExcept, litPattern("j")),
 			litParamExp("k"),
 		)), LangBash|LangMirBSDKorn),
 	),
@@ -4992,13 +5023,13 @@ var fileTests = []fileTestCase{
 			NestedParam: &ParamExp{
 				Param: lit("foo"),
 				Exp: &Expansion{
-					Op:   RemSmallPrefix,
-					Word: litWord("head"),
+					Op:      RemSmallPrefix,
+					Pattern: litPattern("head"),
 				},
 			},
 			Exp: &Expansion{
-				Op:   RemSmallSuffix,
-				Word: litWord("tail"),
+				Op:      RemSmallSuffix,
+				Pattern: litPattern("tail"),
 			},
 		}, LangZsh),
 	),
@@ -5015,8 +5046,8 @@ var fileTests = []fileTestCase{
 		langFile(&ParamExp{
 			NestedParam: cmdSubst(litStmt("echo", "footail")),
 			Exp: &Expansion{
-				Op:   RemSmallSuffix,
-				Word: litWord("tail"),
+				Op:      RemSmallSuffix,
+				Pattern: litPattern("tail"),
 			},
 		}, LangZsh),
 	),
@@ -5334,6 +5365,14 @@ func (c sanityChecker) visit(node Node) bool {
 			c.checkPos(node, node.Left, `"`)
 		}
 		c.checkPos(node, node.Right, `"`)
+	case *Pattern:
+	case *PatternAny:
+		c.checkPos(node, node.Asterisk, "*")
+	case *PatternSingle:
+		c.checkPos(node, node.Question, "?")
+	case *PatternCharClass:
+		c.checkPos(node, node.ValuePos, node.Value)
+		c.checkPos(node, node.ValueEnd)
 	case *CondUnary:
 		strs := []string{node.Op.String()}
 		switch node.Op {
@@ -5461,7 +5500,7 @@ func (c sanityChecker) visit(node Node) bool {
 		c.checkPos(node, node.Rparen, ")")
 	case *ExtGlob:
 		c.checkPos(node, node.OpPos, node.Op.String())
-		c.checkPos(node, posAddCol(node.End(), -1), ")")
+		c.checkPos(node, node.Rparen, ")")
 	case *ProcSubst:
 		c.checkPos(node, node.OpPos, node.Op.String())
 		c.checkPos(node, node.Rparen, ")")

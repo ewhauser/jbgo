@@ -294,8 +294,14 @@ func (r *Runner) document(word *syntax.Word) string {
 	return str
 }
 
-func (r *Runner) pattern(word *syntax.Word) string {
-	str, err := expand.Pattern(r.ecfg, word)
+func (r *Runner) pattern(pat *syntax.Pattern) string {
+	str, err := expand.Pattern(r.ecfg, pat)
+	r.expandErr(err)
+	return str
+}
+
+func (r *Runner) patternWord(word *syntax.Word) string {
+	str, err := expand.PatternWord(r.ecfg, word)
 	r.expandErr(err)
 	return str
 }

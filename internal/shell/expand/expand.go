@@ -184,13 +184,25 @@ func Document(cfg *Config, word *syntax.Word) (string, error) {
 	return cfg.fieldJoin(field), nil
 }
 
-// Pattern expands a single shell word as a pattern, using [pattern.QuoteMeta]
-// on any non-quoted parts of the input word. The result can be used on
+// Pattern expands a shell pattern AST. Quoted parts are escaped via
+// [pattern.QuoteMeta], while pattern operators such as `*`, `?`, bracket
+// expressions, and extended globs are preserved. The result can be used on
 // [pattern.Regexp] directly.
 //
 // The config specifies shell expansion options; nil behaves the same as an
 // empty config.
-func Pattern(cfg *Config, word *syntax.Word) (string, error) {
+func Pattern(cfg *Config, pat *syntax.Pattern) (string, error) {
+	if pat == nil {
+		return "", nil
+	}
+	cfg = prepareConfig(cfg)
+	return cfg.patternString(pat, true)
+}
+
+// PatternWord expands a single shell word as a pattern. It is retained for
+// classic test/[ operands, which still parse as generic words rather than the
+// first-class pattern AST.
+func PatternWord(cfg *Config, word *syntax.Word) (string, error) {
 	if word == nil {
 		return "", nil
 	}
@@ -199,7 +211,7 @@ func Pattern(cfg *Config, word *syntax.Word) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sb := cfg.strBuilder()
+	var sb strings.Builder
 	for _, part := range field {
 		if part.quote > quoteNone {
 			sb.WriteString(pattern.QuoteMeta(part.val, 0))
@@ -207,6 +219,117 @@ func Pattern(cfg *Config, word *syntax.Word) (string, error) {
 			sb.WriteString(part.val)
 		}
 	}
+	return sb.String(), nil
+}
+
+func (cfg *Config) patternString(pat *syntax.Pattern, allowLeadingTilde bool) (string, error) {
+	if pat == nil {
+		return "", nil
+	}
+	var sb strings.Builder
+	for i, part := range pat.Parts {
+		leading := allowLeadingTilde && i == 0
+		if err := cfg.appendPatternPart(&sb, part, leading, i+1 < len(pat.Parts)); err != nil {
+			return "", err
+		}
+	}
+	return sb.String(), nil
+}
+
+func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPart, leading, more bool) error {
+	switch part := part.(type) {
+	case *syntax.PatternAny:
+		sb.WriteByte('*')
+	case *syntax.PatternSingle:
+		sb.WriteByte('?')
+	case *syntax.PatternCharClass:
+		sb.WriteString(part.Value)
+	case *syntax.Lit:
+		s := part.Value
+		if leading {
+			if prefix, rest := cfg.expandUser(s, more); prefix != "" {
+				s = prefix + rest
+			}
+		}
+		s, _, _ = strings.Cut(s, "\x00")
+		sb.WriteString(s)
+	case *syntax.SglQuoted:
+		s := part.Value
+		if part.Dollar {
+			s = decodeANSICString(s)
+			s, _, _ = strings.Cut(s, "\x00")
+		}
+		sb.WriteString(pattern.QuoteMeta(s, 0))
+	case *syntax.DblQuoted:
+		field, err := cfg.wordField(part.Parts, quoteDouble)
+		if err != nil {
+			return err
+		}
+		for _, fp := range field {
+			sb.WriteString(pattern.QuoteMeta(fp.val, 0))
+		}
+	case *syntax.ParamExp:
+		if parts, ok, err := cfg.paramExpWordField(part, quoteNone); err != nil {
+			return err
+		} else if ok {
+			for _, fp := range parts {
+				if fp.quote > quoteNone {
+					sb.WriteString(pattern.QuoteMeta(fp.val, 0))
+				} else {
+					sb.WriteString(fp.val)
+				}
+			}
+		} else {
+			val, err := cfg.paramExp(part, quoteNone)
+			if err != nil {
+				return err
+			}
+			sb.WriteString(val)
+		}
+	case *syntax.CmdSubst:
+		val, err := cfg.cmdSubst(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(val)
+	case *syntax.ArithmExp:
+		n, err := Arithm(cfg, part.X)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(strconv.Itoa(n))
+	case *syntax.ProcSubst:
+		procPath, err := cfg.ProcSubst(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(procPath)
+	case *syntax.ExtGlob:
+		s, err := cfg.extGlobString(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(s)
+	default:
+		panic(fmt.Sprintf("unhandled pattern part: %T", part))
+	}
+	return nil
+}
+
+func (cfg *Config) extGlobString(eg *syntax.ExtGlob) (string, error) {
+	var sb strings.Builder
+	sb.WriteString(eg.Op.String())
+	for i, pat := range eg.Patterns {
+		if i > 0 {
+			sb.WriteByte('|')
+		}
+		str, err := cfg.patternString(pat, false)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(str)
+	}
+	sb.WriteByte(')')
 	return sb.String(), nil
 }
 
@@ -725,7 +848,11 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			// Like how [Config.wordFields] deals with [syntax.ExtGlob],
 			// except that we allow these through even when [Config.ExtGlob]
 			// is false, as it only applies to pathname expansion.
-			field = append(field, fieldPart{val: wp.Op.String() + wp.Pattern.Value + ")"})
+			pat, err := cfg.extGlobString(wp)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
@@ -884,7 +1011,11 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			// TODO(v4): perhaps the syntax parser should keep extended globbing expressions
 			// as plain literal strings, because a custom node is not particularly helpful.
 			// It's not like other globbing operators like `*` or `**` get their own nodes.
-			curField = append(curField, fieldPart{val: wp.Op.String() + wp.Pattern.Value + ")"})
+			pat, err := cfg.extGlobString(wp)
+			if err != nil {
+				return nil, err
+			}
+			curField = append(curField, fieldPart{val: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
@@ -1151,7 +1282,7 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
 }
 
 func findAllIndex(pat, name string, n int) [][]int {
-	expr, err := pattern.Regexp(pat, 0)
+	expr, err := pattern.Regexp(pat, pattern.ExtendedOperators)
 	if err != nil {
 		return nil
 	}

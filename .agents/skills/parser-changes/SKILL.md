@@ -85,6 +85,11 @@ Node (base interface)
 │   ├── CmdSubst   # $(cmd) or `cmd`
 │   ├── ArithmExp  # $((expr))
 │   └── ProcSubst, ExtGlob, BraceExp
+├── Pattern        # shell pattern for case/[[ == ]]/param ops/extglob arms
+├── PatternPart (interface)
+│   ├── Lit, SglQuoted, DblQuoted, ParamExp, CmdSubst
+│   ├── ArithmExp, ProcSubst, ExtGlob
+│   └── PatternAny, PatternSingle, PatternCharClass
 └── ArithmExpr (interface)
     ├── Word           # Variable or literal in arithmetic
     ├── BinaryArithm   # x + y, x = y, x ? y : z
@@ -97,7 +102,8 @@ Key AST design points:
 - `Assign.Ref *VarRef` holds assignment targets (not separate `Name` and `Index` fields).
 - `VarRef.Index`, `ParamExp.Index`, and `ArrayElem.Index` use `*Subscript`, with `Kind` distinguishing generic expression subscripts from `[@]` and `[*]`.
 - `DeclClause.Operands []DeclOperand` holds declaration operands (typed as `DeclFlag`, `DeclName`, `DeclAssign`, or `DeclDynamicWord`).
-- `TestClause.X CondExpr` holds `[[ ]]` conditionals. The `CondExpr` interface has typed operand wrappers: `CondWord` (generic), `CondVarRef` (for `-v`/`-R`), `CondPattern` (for `==`/`=`/`!=`), and `CondRegex` (for `=~`).
+- `TestClause.X CondExpr` holds `[[ ]]` conditionals. The `CondExpr` interface has typed operand wrappers: `CondWord` (generic), `CondVarRef` (for `-v`/`-R`), `CondPattern` (for `==`/`=`/`!=`, wrapping `*Pattern`), and `CondRegex` (for `=~`).
+- Pattern-sensitive contexts now share `Pattern` / `PatternPart`: `CaseItem.Patterns`, `CondPattern.Pattern`, `Replace.Orig`, `Expansion.Pattern`, and `ExtGlob.Patterns`.
 - `Redirect.HdocDelim *HeredocDelim` is the only AST shape for `<<` and `<<-` delimiters. Use `Redirect.Word` only for ordinary redirect targets and here-strings. `HeredocDelim` preserves original parts plus cooked delimiter text, quote presence, and whether the body expands.
 
 When you touch variable references, array indexing, declaration builtins, namerefs, `printf -v`, `test -v`, `[[ -v ]]`, `${var[...]}`, or compound array literals, expect follow-on edits in all three layers:
@@ -105,6 +111,12 @@ When you touch variable references, array indexing, declaration builtins, namere
 - `syntax`: `nodes.go`, `parser.go`, `walk.go`, `printer.go`, `simplify.go`, typedjson, and filetests
 - `expand`: `param.go` and any helpers that interpret references or selectors
 - `interp`: `runner.go`, `varref.go`, `vars.go`, and builtin/test consumers
+
+When you touch pattern semantics, expect the same three-layer sweep:
+
+- `syntax`: `nodes.go`, `parser.go`, `printer.go`, `walk.go`, typedjson, and filetests
+- `expand`: pattern rendering plus parameter expansion helpers
+- `interp`: `[[ ... ]]`, `case`, and any other runtime pattern consumers
 
 For declaration-specific work, the intended flow is:
 

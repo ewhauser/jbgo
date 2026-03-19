@@ -35,6 +35,17 @@ type WordPart interface {
 
 Implementations: `*Lit`, `*SglQuoted`, `*DblQuoted`, `*ParamExp`, `*CmdSubst`, `*ArithmExp`, `*ProcSubst`, `*ExtGlob`, `*BraceExp`
 
+### PatternPart
+Interface for components that can appear inside a shell pattern:
+```go
+type PatternPart interface {
+    Node
+    patternPartNode()
+}
+```
+
+Implementations: `*Lit`, `*SglQuoted`, `*DblQuoted`, `*ParamExp`, `*CmdSubst`, `*ArithmExp`, `*ProcSubst`, `*PatternAny`, `*PatternSingle`, `*PatternCharClass`, `*ExtGlob`
+
 ### ArithmExpr
 Interface for arithmetic expression nodes:
 ```go
@@ -300,6 +311,21 @@ type Word struct {
 func (w *Word) Lit() string  // Returns literal string if all parts are *Lit
 ```
 
+### Pattern
+```go
+type Pattern struct {
+    Start, EndPos Pos
+    Parts         []PatternPart
+}
+```
+
+Used by:
+- `CaseItem.Patterns`
+- `CondPattern.Pattern`
+- `Replace.Orig`
+- `Expansion.Pattern`
+- `ExtGlob.Patterns`
+
 ### Lit (Literal)
 ```go
 type Lit struct {
@@ -356,12 +382,14 @@ type Slice struct {
 
 type Replace struct {
     All        bool
-    Orig, With *Word
+    Orig       *Pattern
+    With       *Word
 }
 
 type Expansion struct {
     Op   ParExpOperator  // +, :+, -, :-, ?, :?, =, :=, %, %%, #, ##, etc.
-    Word *Word
+    Word    *Word
+    Pattern *Pattern
 }
 ```
 
@@ -401,12 +429,34 @@ type ProcSubst struct {
 }
 ```
 
+### PatternAny
+```go
+type PatternAny struct {
+    Asterisk Pos
+}
+```
+
+### PatternSingle
+```go
+type PatternSingle struct {
+    Question Pos
+}
+```
+
+### PatternCharClass
+```go
+type PatternCharClass struct {
+    ValuePos, ValueEnd Pos
+    Value              string
+}
+```
+
 ### ExtGlob
 ```go
 type ExtGlob struct {
-    OpPos   Pos
-    Op      GlobOperator  // ?(, *(, +(, @(, !(
-    Pattern *Lit
+    OpPos, Rparen Pos
+    Op            GlobOperator  // ?(, *(, +(, @(, !(
+    Patterns      []*Pattern
 }
 ```
 
@@ -539,7 +589,7 @@ type CondVarRef struct {
 Pattern-matching operand for `==`, `=`, and `!=`:
 ```go
 type CondPattern struct {
-    Word *Word
+    Pattern *Pattern
 }
 ```
 

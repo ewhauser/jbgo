@@ -103,6 +103,11 @@ func Walk(node Node, f func(Node) bool) {
 	case *SglQuoted:
 	case *DblQuoted:
 		walkList(node.Parts, f)
+	case *Pattern:
+		walkList(node.Parts, f)
+	case *PatternAny:
+	case *PatternSingle:
+	case *PatternCharClass:
 	case *CmdSubst:
 		walkList(node.Stmts, f)
 		walkComments(node.Last, f)
@@ -121,6 +126,7 @@ func Walk(node Node, f func(Node) bool) {
 		}
 		if node.Exp != nil {
 			walkNilable(node.Exp.Word, f)
+			walkNilable(node.Exp.Pattern, f)
 		}
 	case *ArithmExp:
 		Walk(node.X, f)
@@ -141,7 +147,7 @@ func Walk(node Node, f func(Node) bool) {
 	case *CondVarRef:
 		walkNilable(node.Ref, f)
 	case *CondPattern:
-		walkNilable(node.Word, f)
+		walkNilable(node.Pattern, f)
 	case *CondRegex:
 		walkNilable(node.Word, f)
 	case *BinaryTest:
@@ -193,7 +199,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Index, f)
 		walkNilable(node.Value, f)
 	case *ExtGlob:
-		Walk(node.Pattern, f)
+		walkList(node.Patterns, f)
 	case *ProcSubst:
 		walkList(node.Stmts, f)
 		walkComments(node.Last, f)

@@ -691,30 +691,62 @@
 									"Line": 6,
 									"Col": 1
 								},
+								"Rparen": {
+									"Offset": 56,
+									"Line": 6,
+									"Col": 6
+								},
 								"Op": 142,
-								"Pattern": {
-									"Pos": {
-										"Offset": 53,
-										"Line": 6,
-										"Col": 3
-									},
-									"End": {
-										"Offset": 56,
-										"Line": 6,
-										"Col": 6
-									},
-									"ValuePos": {
-										"Offset": 53,
-										"Line": 6,
-										"Col": 3
-									},
-									"ValueEnd": {
-										"Offset": 56,
-										"Line": 6,
-										"Col": 6
-									},
-									"Value": "foo"
-								}
+								"Patterns": [
+									{
+										"Pos": {
+											"Offset": 53,
+											"Line": 6,
+											"Col": 3
+										},
+										"End": {
+											"Offset": 56,
+											"Line": 6,
+											"Col": 6
+										},
+										"Start": {
+											"Offset": 53,
+											"Line": 6,
+											"Col": 3
+										},
+										"EndPos": {
+											"Offset": 56,
+											"Line": 6,
+											"Col": 6
+										},
+										"Parts": [
+											{
+												"Type": "Lit",
+												"Pos": {
+													"Offset": 53,
+													"Line": 6,
+													"Col": 3
+												},
+												"End": {
+													"Offset": 56,
+													"Line": 6,
+													"Col": 6
+												},
+												"ValuePos": {
+													"Offset": 53,
+													"Line": 6,
+													"Col": 3
+												},
+												"ValueEnd": {
+													"Offset": 56,
+													"Line": 6,
+													"Col": 6
+												},
+												"Value": "foo"
+											}
+										]
+									}
+								]
 							}
 						]
 					},
@@ -2505,6 +2537,16 @@
 									"Col": 11
 								},
 								"End": {
+									"Offset": 232,
+									"Line": 15,
+									"Col": 14
+								},
+								"Start": {
+									"Offset": 229,
+									"Line": 15,
+									"Col": 11
+								},
+								"EndPos": {
 									"Offset": 232,
 									"Line": 15,
 									"Col": 14
