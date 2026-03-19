@@ -58,7 +58,7 @@ jobs:
           set +e
           rm -rf "$RESULTS_DIR"
           mkdir -p "$RESULTS_DIR"
-          GNU_RESULTS_DIR="$RESULTS_DIR" GNU_UTILS="basenc,cut,env,expr,factor,fmt,fold,groups,head,id,join,ln,mkdir,numfmt,od,paste,printf,pwd,readlink,rmdir,seq,test,touch,tr,truncate,tty,uname,unexpand,uniq,unlink,vdir,wc,whoami,yes" make gnu-test
+          GNU_RESULTS_DIR="$RESULTS_DIR" GNU_UTILS="basenc,cat,cut,df,du,env,expr,factor,fmt,fold,groups,head,id,join,ln,ls,mkdir,mv,numfmt,od,paste,printf,pwd,readlink,rm,rmdir,seq,stat,test,touch,tr,truncate,tty,uname,unexpand,uniq,unlink,vdir,wc,whoami,yes" make gnu-test
           rc=$?
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
           exit 0
