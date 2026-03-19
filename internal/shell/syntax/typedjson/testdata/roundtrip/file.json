@@ -588,6 +588,7 @@
 									"Line": 5,
 									"Col": 21
 								},
+								"Source": "baz",
 								"X": {
 									"Type": "Word",
 									"Pos": {

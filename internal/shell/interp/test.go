@@ -243,10 +243,10 @@ func testExpandErrFatal(err error) bool {
 }
 
 func (r *Runner) regexMatch(subject, expr string) bool {
-	translated := translateBashRegex(expr)
-	if bashRegexHasEmptyAlternation(translated) {
-		return r.failInvalidRegex(expr, "empty (sub)expression")
+	if bashRegexHasInvalidBareBrace(expr) {
+		return r.failInvalidRegex(expr, "Invalid preceding regular expression")
 	}
+	translated := translateBashRegex(expr)
 	re, err := regexp.Compile(translated)
 	if err != nil {
 		return r.failInvalidRegex(expr, bashRegexCompileErrorReason(err))
@@ -375,12 +375,6 @@ func translateBashRegex(expr string) string {
 				inClass = false
 			}
 			b.WriteByte(ch)
-		case '{':
-			if inClass || bashRegexBraceIsQuantifier(expr, i) {
-				b.WriteByte(ch)
-				continue
-			}
-			b.WriteString(`\{`)
 		default:
 			b.WriteByte(ch)
 		}
@@ -388,7 +382,20 @@ func translateBashRegex(expr string) string {
 	return b.String()
 }
 
-func bashRegexBraceIsQuantifier(expr string, index int) bool {
+func bashRegexHasInvalidBareBrace(expr string) bool {
+	for i := 0; i < len(expr); i++ {
+		if expr[i] != '{' {
+			continue
+		}
+		if bashRegexBraceIsLiteral(expr, i) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func bashRegexBraceIsLiteral(expr string, index int) bool {
 	escaped := false
 	inClass := false
 	for i := 0; i < len(expr); i++ {
@@ -436,60 +443,6 @@ func bashRegexBraceIsQuantifier(expr string, index int) bool {
 		}
 	}
 	return false
-}
-
-func bashRegexHasEmptyAlternation(expr string) bool {
-	type altState struct {
-		branchHasAtom  bool
-		sawAlternation bool
-	}
-	stack := []altState{{}}
-	escaped := false
-	inClass := false
-	for i := 0; i < len(expr); i++ {
-		ch := expr[i]
-		if escaped {
-			stack[len(stack)-1].branchHasAtom = true
-			escaped = false
-			continue
-		}
-		if inClass {
-			if ch == ']' {
-				inClass = false
-			}
-			continue
-		}
-		switch ch {
-		case '\\':
-			escaped = true
-		case '[':
-			inClass = true
-			stack[len(stack)-1].branchHasAtom = true
-		case '(':
-			stack = append(stack, altState{})
-		case ')':
-			if len(stack) == 1 {
-				return false
-			}
-			state := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			if state.sawAlternation && !state.branchHasAtom {
-				return true
-			}
-			stack[len(stack)-1].branchHasAtom = true
-		case '|':
-			if !stack[len(stack)-1].branchHasAtom {
-				return true
-			}
-			stack[len(stack)-1].branchHasAtom = false
-			stack[len(stack)-1].sawAlternation = true
-		case '*', '+', '?':
-			// Quantifiers do not start a new branch atom by themselves.
-		default:
-			stack[len(stack)-1].branchHasAtom = true
-		}
-	}
-	return stack[len(stack)-1].sawAlternation && !stack[len(stack)-1].branchHasAtom
 }
 
 func (r *Runner) statMode(ctx context.Context, name string, mode os.FileMode) bool {

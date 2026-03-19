@@ -39,22 +39,22 @@ bad='^)a\ b($'
 printf 'paren=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 brace='{'
 [[ { =~ $brace ]]
-printf 'brace=%d rematch=%d value=%s\n' "$?" "${#BASH_REMATCH[@]}" "${BASH_REMATCH[0]}"
+printf 'brace=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "seed=1\npipe=2 rematch=0\nparen=2 rematch=0\nbrace=0 rematch=1 value={\n"
+	const wantStdout = "seed=1\npipe=0 rematch=1\nparen=2 rematch=0\nbrace=2 rematch=0\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
 
-	if !strings.Contains(stderr, "invalid regular expression `|': empty (sub)expression") {
-		t.Fatalf("stderr = %q, want empty alternation diagnostic", stderr)
-	}
 	if !strings.Contains(stderr, "invalid regular expression `^)a\\ b($': parentheses not balanced") {
 		t.Fatalf("stderr = %q, want parentheses diagnostic", stderr)
+	}
+	if !strings.Contains(stderr, "invalid regular expression `{': Invalid preceding regular expression") {
+		t.Fatalf("stderr = %q, want bare brace diagnostic", stderr)
 	}
 	if got := strings.Count(stderr, "invalid regular expression"); got != 2 {
 		t.Fatalf("stderr = %q, want 2 invalid regex diagnostics", stderr)
@@ -95,12 +95,14 @@ bad='^)a\ b($'
 printf 'paren=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 [[ '|' =~ | ]]
 printf 'literal=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
+[[ '|' =~ a| ]]
+printf 'trailing=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "seed=1\npipe=2 rematch=0\nparen=2 rematch=0\nliteral=2 rematch=0\n"
+	const wantStdout = "seed=1\npipe=0 rematch=1\nparen=2 rematch=0\nliteral=0 rematch=1\ntrailing=0 rematch=1\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -109,7 +111,7 @@ printf 'literal=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 	}
 }
 
-func TestConditionalRegexLiteralAlternationErrors(t *testing.T) {
+func TestConditionalRegexLiteralAlternationMatches(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
@@ -122,14 +124,11 @@ printf 'pipe2=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "pipe1=2 rematch=0\npipe2=2 rematch=0\n"
+	const wantStdout = "pipe1=0 rematch=1\npipe2=0 rematch=1\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	if !strings.Contains(stderr, "invalid regular expression `|': empty (sub)expression") {
-		t.Fatalf("stderr = %q, want bare alternation diagnostic", stderr)
-	}
-	if !strings.Contains(stderr, "invalid regular expression `a|': empty (sub)expression") {
-		t.Fatalf("stderr = %q, want trailing alternation diagnostic", stderr)
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
