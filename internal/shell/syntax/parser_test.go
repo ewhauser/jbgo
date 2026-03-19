@@ -147,6 +147,56 @@ func TestParseHeredocDelimiterMetadata(t *testing.T) {
 			wantExpands: false,
 			wantParts:   1,
 		},
+		{
+			name:        "short parameter expansion",
+			src:         "cat <<$bar\nbody\n$bar",
+			wantValue:   "$bar",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "brace parameter expansion",
+			src:         "cat <<${bar}\nbody\n${bar}",
+			wantValue:   "${bar}",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "command substitution",
+			src:         "cat <<$(bar)\nbody\n$(bar)",
+			wantValue:   "$(bar)",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "backquote command substitution",
+			src:         "cat <<`bar`\nbody\n`bar`",
+			wantValue:   "`bar`",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "arithmetic expansion spacing",
+			src:         "cat <<$((1 + 2))\nbody\n$((1 + 2))",
+			wantValue:   "$((1 + 2))",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "special parameter",
+			src:         "cat <<$-\nbody\n$-",
+			wantValue:   "$-",
+			wantExpands: true,
+			wantParts:   1,
+		},
+		{
+			name:        "quoted parameter expansion",
+			src:         "cat <<\"$bar\"\nbody\n$bar",
+			wantValue:   "$bar",
+			wantQuoted:  true,
+			wantExpands: false,
+			wantParts:   1,
+		},
 	}
 
 	for _, tc := range tests {
@@ -167,6 +217,24 @@ func TestParseHeredocDelimiterMetadata(t *testing.T) {
 			qt.Assert(t, qt.Equals(len(redir.HdocDelim.Parts), tc.wantParts))
 		})
 	}
+}
+
+func TestParseHeredocBackquoteDelimiterPreservesCmdSubstForm(t *testing.T) {
+	t.Parallel()
+
+	prog, err := NewParser().Parse(strings.NewReader("cat <<`bar`\nbody\n`bar`"), "")
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(len(prog.Stmts), 1))
+	qt.Assert(t, qt.Equals(len(prog.Stmts[0].Redirs), 1))
+
+	redir := prog.Stmts[0].Redirs[0]
+	qt.Assert(t, qt.IsTrue(redir.HdocDelim != nil))
+	qt.Assert(t, qt.Equals(redir.HdocDelim.Value, "`bar`"))
+	qt.Assert(t, qt.Equals(len(redir.HdocDelim.Parts), 1))
+
+	cmdSubst, ok := redir.HdocDelim.Parts[0].(*CmdSubst)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.IsTrue(cmdSubst.Backquotes))
 }
 
 func TestParseConfirm(t *testing.T) {
@@ -973,16 +1041,6 @@ var errorCases = []errorCase{
 		flipConfirmUnclosedHeredoc,
 	),
 	errCase(
-		"<<EOF\n\\\nEOF",
-		langErr("1:1: unclosed here-document `EOF`"),
-		flipConfirmAll, // why does mksh allow this?
-	),
-	errCase(
-		"<<EOF\nfoo\\\nEOF",
-		langErr("1:1: unclosed here-document `EOF`"),
-		flipConfirmUnclosedHeredoc,
-	),
-	errCase(
 		"<<'EOF'\n\\\n",
 		langErr("1:1: unclosed here-document `EOF`"),
 		flipConfirmUnclosedHeredoc,
@@ -1032,7 +1090,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"`<<EOF\nNOTEOF`",
-		langErr("1:2: unclosed here-document `EOF`", LangBash|LangMirBSDKorn),
+		langErr("2:7: reached EOF without closing quote \"`\"", LangBash|LangMirBSDKorn),
 		flipConfirmAll,
 		// Note that this works on external shells as they treat "`" as outside the heredoc.
 	),
@@ -1544,37 +1602,6 @@ var errorCases = []errorCase{
 		"echo \"`)`\"",
 		langErr("1:8: syntax error near unexpected token `)'"),
 		flipConfirm(LangPOSIX), // dash bug?
-	),
-	errCase(
-		"<<$bar\n$bar",
-		langErr("1:3: expansions not allowed in heredoc words"),
-		flipConfirmAll, // we are stricter
-	),
-	errCase(
-		"<<${bar}\n${bar}",
-		langErr("1:3: expansions not allowed in heredoc words"),
-		flipConfirmAll, // we are stricter
-	),
-	errCase(
-		"<<$(bar)\n$(bar)",
-		langErr("1:3: expansions not allowed in heredoc words", LangBash),
-		flipConfirmAll, // we are stricter
-	),
-
-	errCase(
-		"<<$-\n$-",
-		langErr("1:3: expansions not allowed in heredoc words"),
-		flipConfirmAll, // we are stricter
-	),
-	errCase(
-		"<<`bar`\n`bar`",
-		langErr("1:3: expansions not allowed in heredoc words"),
-		flipConfirmAll, // we are stricter
-	),
-	errCase(
-		"<<\"$bar\"\n$bar",
-		langErr("1:4: expansions not allowed in heredoc words"),
-		flipConfirmAll, // we are stricter
 	),
 	errCase(
 		"<<a <<0\n$(<<$<<",

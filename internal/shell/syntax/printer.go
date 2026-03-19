@@ -1130,6 +1130,8 @@ func (p *Printer) unquotedWordParts(parts []WordPart) {
 					p.w.WriteByte(b)
 				}
 			}
+		default:
+			p.wordPart(wp, nil)
 		}
 	}
 }

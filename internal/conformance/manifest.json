@@ -250,18 +250,6 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/here-doc.test.sh::Here doc with bad comsub delimiter": {
-          "mode": "xfail",
-          "reason": "gbash rejects expanded heredoc delimiters that bash accepts"
-        },
-        "oils/here-doc.test.sh::Here doc with bad var delimiter": {
-          "mode": "xfail",
-          "reason": "gbash rejects expanded heredoc delimiters that bash accepts"
-        },
-        "oils/here-doc.test.sh::Here doc with line continuation, then pipe.  Syntax error.": {
-          "mode": "xfail",
-          "reason": "gbash reports a different heredoc syntax failure than bash for this malformed pipeline"
-        },
         "oils/known-differences.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"

@@ -1241,6 +1241,21 @@ var fileTests = []fileTestCase{
 		}),
 	),
 	fileTest(
+		[]string{"a <<EOF\nMVDAN_CC_SH_SYNTAX_EOF\n$bar\nEOF"},
+		langFile(&Stmt{
+			Cmd: litCall("a"),
+			Redirs: []*Redirect{{
+				Op:        Hdoc,
+				HdocDelim: litHeredocDelim("EOF"),
+				Hdoc: word(
+					lit("MVDAN_CC_SH_SYNTAX_EOF\n"),
+					litParamExp("bar"),
+					lit("\n"),
+				),
+			}},
+		}),
+	),
+	fileTest(
 		[]string{"a <<EOF\n\"$bar\"\nEOF"},
 		langFile(&Stmt{
 			Cmd: litCall("a"),
@@ -1613,6 +1628,28 @@ var fileTests = []fileTestCase{
 				Hdoc:      litWord("bar\n"),
 			}},
 		}),
+	),
+	fileTest(
+		[]string{"foo <<${bar}\nbody\n${bar}"},
+		langFile(&Stmt{
+			Cmd: litCall("foo"),
+			Redirs: []*Redirect{{
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(&ParamExp{Param: lit("bar")}),
+				Hdoc:      litWord("body\n"),
+			}},
+		}),
+	),
+	fileTest(
+		[]string{"foo <<$(bar)\nbody\n$(bar)"},
+		langFile(&Stmt{
+			Cmd: litCall("foo"),
+			Redirs: []*Redirect{{
+				Op:        Hdoc,
+				HdocDelim: heredocDelim(cmdSubst(litStmt("bar"))),
+				Hdoc:      litWord("body\n"),
+			}},
+		}, langBashLike|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"foo <<\\EOF\nbar\nEOF"},

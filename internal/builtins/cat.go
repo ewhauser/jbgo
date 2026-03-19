@@ -286,10 +286,7 @@ func catErrorMessage(name, label string, err error) string {
 	if err == nil {
 		return name
 	}
-	message := err.Error()
-	if message == "is a directory" {
-		message = "Is a directory"
-	}
+	message := readAllErrorText(err)
 	for _, prefix := range []string{
 		label + ": ",
 		"open " + label + ": ",

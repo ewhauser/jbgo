@@ -78,6 +78,9 @@ retry:
 	}
 	if b := p.bs[p.bsp]; b < utf8.RuneSelf {
 		p.bsp++
+		if p.captureWordRaw {
+			p.wordRawBs = append(p.wordRawBs, b)
+		}
 		switch b {
 		case '\x00':
 			// Ignore null bytes while parsing, like bash.
@@ -131,6 +134,9 @@ decodeRune:
 	}
 	if p.litBs != nil {
 		p.litBs = append(p.litBs, p.bs[p.bsp:p.bsp+uint(w)]...)
+	}
+	if p.captureWordRaw {
+		p.wordRawBs = append(p.wordRawBs, p.bs[p.bsp:p.bsp+uint(w)]...)
 	}
 	p.bsp += uint(w)
 	if p.r == utf8.RuneError && w == 1 {
@@ -1177,7 +1183,10 @@ func (p *Parser) advanceLitHdoc(r rune) {
 		r = p.rune()
 	}
 	lStart := len(p.litBs) - 1
-	stop := p.hdocStops[len(p.hdocStops)-1]
+	var stop []byte
+	if !p.parsingDoc && len(p.hdocStops) > 0 {
+		stop = p.hdocStops[len(p.hdocStops)-1]
+	}
 	for ; ; r = p.rune() {
 		switch r {
 		case escNewl, '$':
@@ -1201,7 +1210,7 @@ func (p *Parser) advanceLitHdoc(r rune) {
 			} else if lStart == 0 && lastTok == _Lit {
 				// This line starts right after an escaped
 				// newline, so it should never end the heredoc.
-			} else if lStart >= 0 {
+			} else if lStart >= 0 && len(p.hdocStops) > 0 {
 				// Compare the current line with the stop word.
 				line := p.litBs[lStart:]
 				if r != utf8.RuneSelf && len(line) > 0 {
@@ -1235,7 +1244,11 @@ func (p *Parser) quotedHdocWord() *Word {
 	stop := p.hdocStops[len(p.hdocStops)-1]
 	for ; ; r = p.rune() {
 		if r == utf8.RuneSelf {
-			return nil
+			val := p.endLit()
+			if val == "" {
+				return nil
+			}
+			return p.wordOne(p.lit(pos, val))
 		}
 		for p.quote == hdocBodyTabs && r == '\t' {
 			r = p.rune()

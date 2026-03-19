@@ -473,12 +473,18 @@ func (p *Parser) WordsSeq(r io.Reader) iter.Seq2[*Word, error] {
 // Similarly, the here-document word parsed here cannot be ended by any
 // delimiter other than reaching the end of the input.
 func (p *Parser) Document(r io.Reader) (*Word, error) {
+	return p.document(r, NewPos(0, 1, 1))
+}
+
+func (p *Parser) document(r io.Reader, start Pos) (*Word, error) {
 	p.reset()
 	p.f = &File{}
 	p.src = r
+	p.offs = int64(start.Offset())
+	p.line = int64(start.Line())
+	p.col = int64(start.Col())
 	p.rune()
 	p.quote = hdocBody
-	p.hdocStops = [][]byte{[]byte("MVDAN_CC_SH_SYNTAX_EOF")}
 	p.parsingDoc = true
 	p.next()
 	w := p.getWord()
@@ -590,9 +596,11 @@ type Parser struct {
 	litBatch  []Lit
 	wordBatch []wordAlloc
 
-	readBuf [bufSize]byte
-	litBuf  [bufSize]byte
-	litBs   []byte
+	readBuf        [bufSize]byte
+	litBuf         [bufSize]byte
+	litBs          []byte
+	wordRawBs      []byte
+	captureWordRaw bool
 
 	aliasResolver   AliasResolver
 	aliasChain      []*AliasExpansion
@@ -652,6 +660,8 @@ func (p *Parser) reset() {
 	p.litBatch = nil
 	p.wordBatch = nil
 	p.litBs = nil
+	p.wordRawBs = nil
+	p.captureWordRaw = false
 	p.aliasChain = nil
 	p.aliasBlankNext = false
 	p.aliasInputStack = p.aliasInputStack[:0]
@@ -904,17 +914,29 @@ func (p *Parser) expandCommandAlias() bool {
 }
 
 func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
+	return p.unquotedWordBytesRaw(w, nil)
+}
+
+func (p *Parser) unquotedWordBytesRaw(w *Word, raw []byte) ([]byte, bool) {
 	buf := make([]byte, 0, 4)
 	didUnquote := false
+	var rawBase uint
+	if w != nil {
+		rawBase = w.Pos().Offset()
+	}
 	for _, wp := range w.Parts {
 		var quoted bool
-		buf, quoted = p.unquotedWordPart(buf, wp, false)
+		buf, quoted = p.unquotedWordPartRaw(buf, wp, false, raw, rawBase)
 		didUnquote = didUnquote || quoted
 	}
 	return buf, didUnquote
 }
 
 func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byte, quoted bool) {
+	return p.unquotedWordPartRaw(buf, wp, quotes, nil, 0)
+}
+
+func (p *Parser) unquotedWordPartRaw(buf []byte, wp WordPart, quotes bool, raw []byte, rawBase uint) (_ []byte, quoted bool) {
 	switch wp := wp.(type) {
 	case *Lit:
 		for i := 0; i < len(wp.Value); i++ {
@@ -932,7 +954,7 @@ func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byt
 		quoted = true
 	case *DblQuoted:
 		for _, wp2 := range wp.Parts {
-			buf, _ = p.unquotedWordPart(buf, wp2, true)
+			buf, _ = p.unquotedWordPartRaw(buf, wp2, true, raw, rawBase)
 		}
 		quoted = true
 	case *BraceExp:
@@ -946,19 +968,37 @@ func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byt
 				}
 			}
 			for _, elemPart := range elem.Parts {
-				buf, _ = p.unquotedWordPart(buf, elemPart, quotes)
+				buf, _ = p.unquotedWordPartRaw(buf, elemPart, quotes, raw, rawBase)
 			}
 		}
 		buf = append(buf, '}')
+	default:
+		if partRaw, ok := wordPartRawBytes(raw, rawBase, wp); ok {
+			buf = append(buf, partRaw...)
+		} else {
+			buf = append(buf, wordPartString(wp)...)
+		}
 	}
 	return buf, quoted
 }
 
-func (p *Parser) heredocDelimFromWord(w *Word) *HeredocDelim {
+func wordPartRawBytes(raw []byte, rawBase uint, wp WordPart) ([]byte, bool) {
+	if len(raw) == 0 || wp == nil || !wp.Pos().IsValid() || !wp.End().IsValid() {
+		return nil, false
+	}
+	start := int(wp.Pos().Offset() - rawBase)
+	end := int(wp.End().Offset() - rawBase)
+	if start < 0 || end < start || end > len(raw) {
+		return nil, false
+	}
+	return raw[start:end], true
+}
+
+func (p *Parser) heredocDelimFromWord(w *Word, raw string) *HeredocDelim {
 	if w == nil {
 		return nil
 	}
-	value, quoted := p.unquotedWordBytes(w)
+	value, quoted := p.unquotedWordBytesRaw(w, []byte(raw))
 	return &HeredocDelim{
 		Parts:       w.Parts,
 		Value:       string(value),
@@ -992,18 +1032,98 @@ func (p *Parser) doHeredocs() {
 		if i > 0 && p.r == '\n' {
 			p.rune()
 		}
-		if r.HdocDelim != nil && !r.HdocDelim.BodyExpands {
-			r.Hdoc = p.quotedHdocWord()
-		} else {
-			p.next()
-			r.Hdoc = p.getWord()
+		bodyStart := p.nextPos()
+		raw := p.quotedHdocWord()
+		if p.err != nil {
+			break
 		}
-		if stop := p.hdocStops[len(p.hdocStops)-1]; stop != nil {
-			p.posErr(r.Pos(), "unclosed here-document %#q", r.HdocDelim.Value)
+		if r.HdocDelim != nil && r.HdocDelim.BodyExpands && raw != nil {
+			bodyParser := NewParser(Variant(p.lang), KeepComments(p.keepComments))
+			r.Hdoc, p.err = bodyParser.document(strings.NewReader(raw.Lit()), bodyStart)
+			if p.err == nil && r.Hdoc != nil {
+				setWordEnd(r.Hdoc, raw.End())
+			}
+		} else {
+			r.Hdoc = raw
+		}
+		if p.err == nil && raw != nil && r.Hdoc == nil {
+			r.Hdoc = raw
+		}
+		if p.err == nil {
+			if stop := p.hdocStops[len(p.hdocStops)-1]; stop != nil {
+				p.posErr(r.Pos(), "unclosed here-document %#q", r.HdocDelim.Value)
+			}
 		}
 		p.hdocStops = p.hdocStops[:len(p.hdocStops)-1]
 	}
 	p.quote = old
+}
+
+func posSubCol(p Pos, n int) Pos {
+	if n <= 0 {
+		return p
+	}
+	offset := p.Offset()
+	line := p.Line()
+	col := p.Col()
+	if int(offset) < n {
+		offset = 0
+	} else {
+		offset -= uint(n)
+	}
+	if int(col) < n {
+		col = 0
+	} else {
+		col -= uint(n)
+	}
+	return NewPos(offset, line, col)
+}
+
+func setWordEnd(w *Word, end Pos) {
+	if w == nil || len(w.Parts) == 0 {
+		return
+	}
+	setWordPartEnd(w.Parts[len(w.Parts)-1], end)
+}
+
+func setWordPartEnd(part WordPart, end Pos) {
+	switch part := part.(type) {
+	case *Lit:
+		part.ValueEnd = end
+	case *SglQuoted:
+		part.Right = posSubCol(end, 1)
+	case *DblQuoted:
+		part.Right = posSubCol(end, 1)
+	case *CmdSubst:
+		part.Right = posSubCol(end, 1)
+	case *ParamExp:
+		if !part.Short {
+			part.Rbrace = posSubCol(end, 1)
+			return
+		}
+		if part.Index != nil {
+			part.Index.Right = posSubCol(end, 1)
+			return
+		}
+		if part.Param != nil {
+			part.Param.ValueEnd = end
+		}
+	case *ArithmExp:
+		width := 2
+		if part.Bracket {
+			width = 1
+		}
+		part.Right = posSubCol(end, width)
+	case *ProcSubst:
+		part.Rparen = posSubCol(end, 1)
+	case *ExtGlob:
+		part.Rparen = posSubCol(end, 1)
+	case *BraceExp:
+		if len(part.Elems) == 0 {
+			return
+		}
+		setWordEnd(part.Elems[len(part.Elems)-1], posSubCol(end, 1))
+	}
 }
 
 func (p *Parser) got(tok token) bool {
@@ -1157,6 +1277,17 @@ func (p *Parser) followWordTok(tok token, pos Pos) *Word {
 		p.followErr(pos, tok, noQuote("a word"))
 	}
 	return w
+}
+
+func (p *Parser) followWordTokRaw(tok token, pos Pos) (*Word, string) {
+	w, raw := p.getWordRaw()
+	if w == nil {
+		if p.recoverError() {
+			return p.wordOne(&Lit{ValuePos: recoveredPos}), ""
+		}
+		p.followErr(pos, tok, noQuote("a word"))
+	}
+	return w, raw
 }
 
 func (p *Parser) stmtEnd(n Node, start string, end reservedWord) Pos {
@@ -1480,6 +1611,54 @@ func (p *Parser) getWord() *Word {
 		return w
 	}
 	return nil
+}
+
+func (p *Parser) getWordRaw() (*Word, string) {
+	p.wordRawBs = append(p.wordRawBs[:0], p.currentTokenCaptureSeed()...)
+	p.captureWordRaw = true
+	w := p.getWord()
+	p.captureWordRaw = false
+	if w == nil {
+		p.wordRawBs = p.wordRawBs[:0]
+		return nil, ""
+	}
+	span := int(w.End().Offset() - w.Pos().Offset())
+	if span < 0 || span > len(p.wordRawBs) {
+		span = len(p.wordRawBs)
+	}
+	raw := string(p.wordRawBs[:span])
+	p.wordRawBs = p.wordRawBs[:0]
+	return w, raw
+}
+
+func (p *Parser) currentTokenCaptureSeed() string {
+	seed := p.currentTokenSource()
+	switch p.tok {
+	case dollar, dollSglQuote, dollDblQuote, dollBrace, dollBrack, dollParen, dollDblParen,
+		sglQuote, dblQuote, cmdIn, assgnParen, cmdOut:
+		seed += p.currentRuneSource()
+	}
+	return seed
+}
+
+func (p *Parser) currentTokenSource() string {
+	switch p.tok {
+	case _Lit, _LitWord, _LitRedir:
+		return p.val
+	default:
+		return p.tok.String()
+	}
+}
+
+func (p *Parser) currentRuneSource() string {
+	if p.r == utf8.RuneSelf || p.w <= 0 {
+		return ""
+	}
+	start := int(p.bsp) - p.w
+	if start < 0 || start > len(p.bs) || int(p.bsp) > len(p.bs) {
+		return ""
+	}
+	return string(p.bs[start:p.bsp])
 }
 
 func (p *Parser) getLit() *Lit {
@@ -3032,11 +3211,12 @@ func (p *Parser) doRedirect(s *Stmt) {
 	p.next()
 	switch r.Op {
 	case Hdoc, DashHdoc:
-		old := p.quote
-		p.quote, p.forbidNested = hdocWord, true
+		oldQuote, oldForbidNested := p.quote, p.forbidNested
+		p.quote = hdocWord
 		p.heredocs = append(p.heredocs, r)
-		r.HdocDelim = p.heredocDelimFromWord(p.followWordTok(token(r.Op), r.OpPos))
-		p.quote, p.forbidNested = old, false
+		w, raw := p.followWordTokRaw(token(r.Op), r.OpPos)
+		r.HdocDelim = p.heredocDelimFromWord(w, raw)
+		p.quote, p.forbidNested = oldQuote, oldForbidNested
 		if p.tok == _Newl {
 			if len(p.accComs) > 0 {
 				c := p.accComs[0]

@@ -19,3 +19,16 @@ func ArithmExprString(expr ArithmExpr) string {
 	}
 	return buf.String()
 }
+
+func wordPartString(part WordPart) string {
+	if part == nil {
+		return ""
+	}
+
+	var buf bytes.Buffer
+	printer := NewPrinter()
+	if err := printer.Print(&buf, part); err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
