@@ -506,6 +506,8 @@ func FuzzEchoCommand(f *testing.F) {
 				"echo -e %s >/tmp/echo-escapes.txt\n"+
 				"echo -E %s >/tmp/echo-literal.txt\n"+
 				"POSIXLY_CORRECT=1 echo -n -E %s >/tmp/echo-posix.txt\n"+
+				"LC_ALL=C LANG=C echo -e '\\e\\u6\\u03bc\\U0010ffff\\U00110000\\udc00\\U0000dc00' >/tmp/echo-c-locale.txt\n"+
+				"LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 echo -e '\\u03bc\\U0001F642\\udc00\\U00110000' >/tmp/echo-utf8-locale.txt\n"+
 				"echo -- %s >/tmp/echo-double-dash.txt\n"+
 				"echo --version >/tmp/echo-version.txt\n"+
 				"echo --help >/tmp/echo-help.txt\n",
