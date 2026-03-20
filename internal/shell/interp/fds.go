@@ -22,6 +22,7 @@ type shellFD struct {
 	writer   io.Writer
 	closer   io.Closer
 	deadline readDeadliner
+	owned    bool
 
 	buffered   bool
 	bufferByte byte
@@ -29,10 +30,18 @@ type shellFD struct {
 }
 
 func newShellInputFD(reader io.Reader) *shellFD {
+	return newShellInputFDWithOwnership(reader, false)
+}
+
+func newOwnedShellInputFD(reader io.Reader) *shellFD {
+	return newShellInputFDWithOwnership(reader, true)
+}
+
+func newShellInputFDWithOwnership(reader io.Reader, owned bool) *shellFD {
 	if reader == nil {
 		return &shellFD{}
 	}
-	fd := &shellFD{reader: reader}
+	fd := &shellFD{reader: reader, owned: owned}
 	if closer, ok := reader.(io.Closer); ok {
 		fd.closer = closer
 	}
@@ -47,7 +56,7 @@ func newShellOutputFD(writer io.Writer) *shellFD {
 }
 
 func newShellReadWriteFD(file io.ReadWriteCloser, readable, writable bool) *shellFD {
-	fd := &shellFD{closer: file}
+	fd := &shellFD{closer: file, owned: true}
 	if readable {
 		fd.reader = file
 	}
@@ -109,6 +118,13 @@ func (fd *shellFD) PeekByte() (byte, error) {
 		err = io.EOF
 	}
 	return 0, err
+}
+
+func (fd *shellFD) UnderlyingReader() io.Reader {
+	if fd == nil {
+		return nil
+	}
+	return fd.reader
 }
 
 func (fd *shellFD) SetReadDeadline(t time.Time) error {
@@ -233,14 +249,27 @@ func (r *Runner) lookupNamedFD(name string) (int, error) {
 
 func (r *Runner) setFD(fdNum int, fd *shellFD) {
 	r.ensureFDTable()
+	old := r.fds[fdNum]
 	if fd == nil {
 		delete(r.fds, fdNum)
 	} else {
 		r.fds[fdNum] = fd
 	}
+	if old != nil && old != fd && old.owned && !r.fdReferencedElsewhere(fdNum, old) {
+		_ = old.Close()
+	}
 	if fdNum >= 0 && fdNum <= 2 {
 		r.syncStandardFDs()
 	}
+}
+
+func (r *Runner) fdReferencedElsewhere(exclude int, target *shellFD) bool {
+	for fdNum, fd := range r.fds {
+		if fdNum != exclude && fd == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runner) getFD(fdNum int) *shellFD {

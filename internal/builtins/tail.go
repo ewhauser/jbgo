@@ -761,7 +761,22 @@ func tailUintField(field reflect.Value) uint64 {
 }
 
 func ensureTailStdinAvailable(inv *Invocation) error {
-	statter, ok := inv.Stdin.(interface {
+	reader := inv.Stdin
+	for {
+		unwrapper, ok := reader.(interface {
+			UnderlyingReader() io.Reader
+		})
+		if !ok {
+			break
+		}
+		next := unwrapper.UnderlyingReader()
+		if next == nil || next == reader {
+			break
+		}
+		reader = next
+	}
+
+	statter, ok := reader.(interface {
 		Stat() (stdfs.FileInfo, error)
 	})
 	if !ok {

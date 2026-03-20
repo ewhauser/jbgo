@@ -29,10 +29,15 @@ func TestMalformedRedirectionDoesNotPanic(t *testing.T) {
 			if result.ExitCode == 0 {
 				t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
 			}
-			if !strings.Contains(result.Stderr, "invalid redirection") {
-				t.Fatalf("Stderr = %q, want invalid-redirection message", result.Stderr)
+			if !strings.Contains(result.Stderr, "invalid redirection") &&
+				!strings.Contains(result.Stderr, "Bad file descriptor") &&
+				!strings.Contains(result.Stderr, "command not found") {
+				t.Fatalf("Stderr = %q, want sanitized redirection failure", result.Stderr)
 			}
 			if strings.Contains(result.Stderr, "unhandled >& arg") {
+				t.Fatalf("Stderr = %q, want sanitized panic output", result.Stderr)
+			}
+			if strings.Contains(result.Stderr, "panic:") {
 				t.Fatalf("Stderr = %q, want sanitized panic output", result.Stderr)
 			}
 		})

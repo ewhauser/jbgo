@@ -443,10 +443,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/blog1.test.sh::Julia example from spec/oil-user-feedback": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/brace-expansion.test.sh::Ascending number range expansion with negative step is invalid": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1243,198 +1239,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-process.test.sh::write big file with ulimit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::\"backslash + newline\" should be swallowed regardless of \"-d <delim>\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::IFS='\\ ' and backslash escaping": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::IFS='x ' incomplete backslash": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::IFS='x ' read -a: intermediate spaces (unlimited split)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::IFS='x ' read -a: trailing spaces (unlimited split)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::IFS='x ' read a b: trailing spaces (with max_split)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::IFS=x read a b <<< xxxxxx": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::mapfile from directory (bash doesn't handle errors)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -N doesn't respect delimiter, while read -n does": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -N ignores delimiters": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -d '' (null-separated records)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -d -n - respects delimiter and splits": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -d : (colon-separated records)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -d when there's no delimiter": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n (with $REPLY)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n 0": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n 4 with backslash + delim": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n 4 with incomplete backslash": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n and backslash escape": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n doesn't strip whitespace (bug fix)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n from directory": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n from pipe": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n vs. -N": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -n with invalid arg": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -p (not fully tested)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -r -d '' for NUL strings, e.g. find -print0": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -rd": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -s from pipe, not a terminal": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -t -0.5 is invalid": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -t 0 tests if input is available": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -t 0.5": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -u": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -u -s": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -u 3 -d 5": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -u 3 -d b -N 6": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read -u syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read /dev/null": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read and \"\\ \"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read bash bug": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read from redirected directory is non-fatal error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read multiple lines with IFS=:": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read multiple vars spanning many lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read usage": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read will unset extranous vars": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read with line continuation reads multiple physical lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read with smooshed args": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::read without args uses $REPLY, no splitting occurs (without -n)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-read.test.sh::while IFS= read -r -d '' item || [[ -n $item ]]": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2602,15 +2406,21 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - mapfile builtin": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read -n": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "darwin's byte-dump formatting still differs from the Linux CI oracle for this read -n case",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read builtin": {
+          "mode": "xfail",
+          "reason": "darwin's byte-dump formatting still differs from the Linux CI oracle for this read builtin case",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - mapfile builtin": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2896,10 +2706,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect.test.sh::1>&- to close file descriptor": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/redirect.test.sh::1>&2- (Bash bug: fail to restore closed fd)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -2909,14 +2715,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/redirect.test.sh::: 3>&3-": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::<&": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::<> for read/write": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2952,27 +2750,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect.test.sh::Named file descriptor for input": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/redirect.test.sh::Named read-write file descriptor": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Open descriptor with exec": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Open file on descriptor 3 and write to it many times": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Open file on descriptor 4 and write to it many times": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Open multiple descriptors with exec": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -3004,10 +2782,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/redirect.test.sh::echo foo >&N where N is first unused fd": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::exec redirect then various builtins": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

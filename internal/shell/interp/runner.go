@@ -32,6 +32,8 @@ const (
 	// shellReplyVar, or REPLY, is a special variable in Bash that is used to store the result of
 	// the select command or of the read command, when no variable name is specified
 	shellReplyVar = "REPLY"
+	// Bash uses 128 + SIGALRM for read timeouts.
+	readBuiltinTimeoutExitCode = 128 + 14
 )
 
 // newPipe creates a pipe using the default virtual pipe implementation.
@@ -1582,11 +1584,11 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 		if err != nil {
 			return nil, err
 		}
-		r.setFD(targetFD, newShellInputFD(pr))
+		r.setFD(targetFD, newOwnedShellInputFD(pr))
 		return pr, nil
 	case syntax.WordHdoc:
 		pr, pw := r.newPipe()
-		r.setFD(targetFD, newShellInputFD(pr))
+		r.setFD(targetFD, newOwnedShellInputFD(pr))
 		// We write to the pipe in a new goroutine,
 		// as pipe writes may block once the buffer gets full.
 		go func() {
@@ -1674,7 +1676,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	f, err := r.open(ctx, arg, mode, 0o644, false)
 	if err != nil {
 		if rd.Op == syntax.RdrIn && (errors.Is(err, syscall.EISDIR) || strings.Contains(err.Error(), "Is a directory")) {
-			fd := newShellInputFD(&directoryReadCloser{path: arg})
+			fd := newOwnedShellInputFD(&directoryReadCloser{path: arg})
 			r.setFD(targetFD, fd)
 			return fd, nil
 		}

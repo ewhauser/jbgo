@@ -550,7 +550,11 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			if !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrDeadlineExceeded) {
 				r.errf("read: %d: read error: %s\n", opts.fd, readBuiltinErrorText(err))
 			}
-			exit.code = 1
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				exit.code = readBuiltinTimeoutExitCode
+			} else {
+				exit.code = 1
+			}
 			return exit
 		}
 

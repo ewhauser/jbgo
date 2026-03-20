@@ -1,10 +1,12 @@
 package interp
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +97,37 @@ printf 'status=%d\n' "$?"
 	}
 	if stderr != "read: 0: read error: Is a directory\n" {
 		t.Fatalf("stderr = %q, want %q", stderr, "read: 0: read error: Is a directory\n")
+	}
+}
+
+func TestReadBuiltinTimeoutStatus(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:    "/tmp",
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+
+	pr, pw := runner.newPipe()
+	defer pw.Close()
+	runner.setStdinReader(pr)
+
+	err = runner.runShellReader(context.Background(), strings.NewReader(`
+read -t 0.01 var
+printf 'status=%d\n' "$?"
+`), "read-timeout-test.sh", nil)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout.String() != "status=142\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "status=142\n")
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
