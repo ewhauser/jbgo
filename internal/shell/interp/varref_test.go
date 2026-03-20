@@ -326,6 +326,27 @@ printf 'test=%d\n' "$?"
 	}
 }
 
+func TestNumericDbracketStopsAfterLeftOperandError(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+unset x
+[[ 08 -eq x=1 ]]
+printf 'status=%d x=%s\n' "$?" "${x-unset}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "status=1 x=unset\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "08: value too great for base (error token is \"08\")\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
 func TestIndexedAssignQuotedSubscriptIsFatal(t *testing.T) {
 	t.Parallel()
 

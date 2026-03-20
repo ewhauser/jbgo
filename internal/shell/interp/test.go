@@ -268,10 +268,30 @@ func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *trac
 			}
 		}
 		left := r.evalCond(ctx, x.X, trace)
+		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+			return left
+		}
 		right := r.evalCond(ctx, x.Y, trace)
+		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+			return condEval{
+				trace: condTraceBinary(left.trace, x.Op, right.trace),
+			}
+		}
 		value := condBoolString(r.binTest(ctx, x.Op, left.value, right.value))
 		if isNumericTestOp(x.Op) {
-			value = condBoolString(numericTest(x.Op, int64(r.evalIntegerAttr(left.value)), int64(r.evalIntegerAttr(right.value))))
+			leftNum := int64(r.evalIntegerAttr(left.value))
+			if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+				return condEval{
+					trace: condTraceBinary(left.trace, x.Op, right.trace),
+				}
+			}
+			rightNum := int64(r.evalIntegerAttr(right.value))
+			if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+				return condEval{
+					trace: condTraceBinary(left.trace, x.Op, right.trace),
+				}
+			}
+			value = condBoolString(numericTest(x.Op, leftNum, rightNum))
 		}
 		return condEval{
 			value: value,
