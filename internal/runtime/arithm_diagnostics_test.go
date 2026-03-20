@@ -79,3 +79,19 @@ func TestArithmForLoopRegressionPreservesReadonlyVariableError(t *testing.T) {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestArithmExpansionNounsetIndexedRefUsesBaseName(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "set -o nounset\necho $(( undef[0] ))\n")
+	if got, want := result.ExitCode, 127; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stdout, ""; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "undef: unbound variable\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}

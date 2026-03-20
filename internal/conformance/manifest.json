@@ -25,8 +25,9 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/alias.test.sh::Invalid syntax of alias": {
+        "oils/array-assign.test.sh::More fragments like a[  a[5  a[5 +  a[5 + 3]": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "gbash's parser diagnostics for incomplete array-assignment words still differ from bash"
         },
         "oils/alias.test.sh::Loop split across both iterative and recursive aliases": {
           "mode": "xfail",
@@ -3560,10 +3561,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::patsub with single quotes and hyphen in character class (regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-slice.test.sh::${array[@]::} has implicit length of zero - for ble.sh": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

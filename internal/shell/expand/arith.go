@@ -366,6 +366,19 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 		}
 		str, err := Document(cfg, expr)
 		if err != nil {
+			var unboundErr UnboundVariableError
+			if errors.As(err, &unboundErr) {
+				if ref, ok := arithmVarRef(expr); ok && ref.Index != nil && ref.Name != nil {
+					unboundErr.Name = ref.Name.Value
+					return 0, unboundErr
+				}
+			}
+			var unsetErr UnsetParameterError
+			if errors.As(err, &unsetErr) && unsetErr.Message == "unbound variable" {
+				if ref, ok := arithmVarRef(expr); ok && ref.Index != nil && ref.Name != nil {
+					return 0, UnboundVariableError{Name: ref.Name.Value}
+				}
+			}
 			return 0, err
 		}
 		return cfg.arithmStringValue(root, expr, expr, str, depth)
@@ -804,20 +817,35 @@ func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (in
 
 func arithmVarRef(expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
 	word, ok := expr.(*syntax.Word)
-	if !ok || len(word.Parts) != 1 {
+	if !ok {
 		return nil, false
 	}
-	switch part := word.Parts[0].(type) {
-	case *syntax.Lit:
-		if syntax.ValidName(part.Value) {
-			return &syntax.VarRef{Name: part}, true
-		}
-	case *syntax.ParamExp:
-		if part.Short && part.Index != nil && !part.Dollar.IsValid() && syntax.ValidName(part.Param.Value) {
-			return &syntax.VarRef{Name: part.Param, Index: part.Index}, true
+	if len(word.Parts) == 1 {
+		switch part := word.Parts[0].(type) {
+		case *syntax.Lit:
+			if syntax.ValidName(part.Value) {
+				return &syntax.VarRef{Name: part}, true
+			}
+		case *syntax.ParamExp:
+			if part.Short && part.Index != nil && !part.Dollar.IsValid() && syntax.ValidName(part.Param.Value) {
+				return &syntax.VarRef{Name: part.Param, Index: part.Index}, true
+			}
 		}
 	}
-	return nil, false
+	if containsShellExpansion(word) {
+		return nil, false
+	}
+	ref, err := parseVarRef(arithExprSource(word))
+	if err != nil || ref == nil {
+		return nil, false
+	}
+	if ref.Name == nil || !syntax.ValidName(ref.Name.Value) {
+		return nil, false
+	}
+	if ref.Index != nil && emptySubscript(ref.Index) {
+		return nil, false
+	}
+	return ref, true
 }
 
 func isEmptyArithWord(word *syntax.Word) bool {
