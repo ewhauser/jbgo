@@ -766,7 +766,8 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 	for i := range info.formats {
 		format := &info.formats[i]
 		var b strings.Builder
-		if format.addASCIIDump {
+		switch {
+		case format.addASCIIDump:
 			b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
 			for j := 0; j < info.lineBytes; j += format.format.byteSize {
 				if j > 0 {
@@ -786,7 +787,7 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 			b.WriteString(strings.Repeat(" ", missing))
 			b.WriteString("  ")
 			b.WriteString(odASCIIDump(raw))
-		} else if len(info.formats) > 1 {
+		case len(info.formats) > 1:
 			leading := odLeadingDelimiter(format.format)
 			if displayPrefix == "" {
 				leading = odNoPrefixLeadingDelimiter(format.format)
@@ -802,7 +803,7 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 				end := min(j+format.format.byteSize, len(padded))
 				b.WriteString(format.format.format(padded[j:end], order))
 			}
-		} else {
+		default:
 			for j := 0; j < lineLen; j += format.format.byteSize {
 				end := min(j+format.format.byteSize, len(padded))
 				b.WriteString(format.format.format(padded[j:end], order))
