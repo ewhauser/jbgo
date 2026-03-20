@@ -83,21 +83,9 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/append.test.sh::Try to append list to element": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-completion.test.sh::compgen -A user": {
           "mode": "xfail",
           "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database"
-        },
-        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashArray)": {
-          "mode": "xfail",
-          "reason": "gbash still expands ~ in keyed indexed-array literals using the temporary HOME binding unlike bash"
-        },
-        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashAssoc)": {
-          "mode": "xfail",
-          "reason": "gbash still expands ~ in keyed associative-array literals using the temporary HOME binding unlike bash"
         },
         "oils/array.test.sh::array with invalid token": {
           "mode": "xfail",
@@ -192,22 +180,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/ble-features.test.sh::[bash_unset] localvar-inherit from tempenv": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=(declare v); \"${a[@]}\" fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=declare; \"$a\" v=1 fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [52] BUG: \\builtin local v=1 fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [56] BUG: declare -p unset does not print any error message": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1714,15 +1686,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/tilde.test.sh::a[x]=foo:~ has tilde expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/tilde.test.sh::temp assignment x=~ env": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/tilde.test.sh::tilde expansion an assignment keyword": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1734,10 +1698,6 @@
           ]
         },
         "oils/tilde.test.sh::x=${undef-~:~}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/tilde.test.sh::x=foo:~ has tilde expansion": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1772,13 +1732,6 @@
             "darwin"
           ]
         },
-        "oils/var-op-bash.test.sh::${#var@X} is a parse error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/var-op-bash.test.sh::${x@u} U L - upper / lower case (bash 5.1 feature)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1806,6 +1759,46 @@
           ]
         },
         "oils/var-op-bash.test.sh::undef vs. empty string in var ops": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-len.test.sh::Length operator can't be followed by test operator": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::${v//} is empty search and replacement": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::Chromium from http://www.oilshell.org/blog/2016/11/07.html": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::Synthesized ${x///} bug (similar to above)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::When LC_ALL=C, pattern ? doesn't match multibyte character": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::patsub with [^]]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-slice.test.sh::Cannot take length of substring slice": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-slice.test.sh::Permutations of implicit begin and length": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-strip.test.sh::strip unquoted and quoted [": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-strip.test.sh::strip unquoted and quoted []": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
