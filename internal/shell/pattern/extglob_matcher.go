@@ -285,7 +285,7 @@ func (m *extMatcher) ends(seq *extSeq, ti int, name string, ni int) []int {
 		case '+':
 			out = append(out, m.groupRepeat(tok, seq, ti, name, ni)...)
 		case '!':
-			for _, end := range m.candidateEnds(name, ni, false) {
+			for _, end := range m.candidateEnds(name, ni, true) {
 				if m.groupAltMatchesExactly(tok, name, ni, end) {
 					continue
 				}
@@ -352,9 +352,6 @@ func (m *extMatcher) matchLiteral(lit, name string, ni int) (int, bool) {
 	} else if part != lit {
 		return 0, false
 	}
-	if m.mode&Filenames != 0 && strings.ContainsRune(part, '/') {
-		return 0, false
-	}
 	return ni + len(lit), true
 }
 
@@ -369,7 +366,7 @@ func (m *extMatcher) matchSingle(name string, ni int, respectLeadingDot bool) (i
 	if m.mode&Filenames != 0 && r == '/' {
 		return 0, false
 	}
-	if respectLeadingDot && ni == 0 && m.mode&Filenames != 0 && m.mode&GlobLeadingDot == 0 && r == '.' {
+	if respectLeadingDot && m.leadingDotBlocked(name, ni) && r == '.' {
 		return 0, false
 	}
 	return ni + size, true
@@ -388,7 +385,7 @@ func (m *extMatcher) candidateEnds(name string, ni int, respectLeadingDot bool) 
 	if ni >= len(name) {
 		return ends
 	}
-	if respectLeadingDot && ni == 0 && m.mode&Filenames != 0 && m.mode&GlobLeadingDot == 0 && name[ni] == '.' {
+	if respectLeadingDot && m.leadingDotBlocked(name, ni) && name[ni] == '.' {
 		return ends
 	}
 	for i := ni; i < len(name); {
@@ -403,6 +400,13 @@ func (m *extMatcher) candidateEnds(name string, ni int, respectLeadingDot bool) 
 		ends = append(ends, i)
 	}
 	return ends
+}
+
+func (m *extMatcher) leadingDotBlocked(name string, ni int) bool {
+	if m.mode&Filenames == 0 || m.mode&GlobLeadingDot != 0 || ni >= len(name) || name[ni] != '.' {
+		return false
+	}
+	return ni == 0 || name[ni-1] == '/'
 }
 
 func uniqSortedInts(values []int) []int {
