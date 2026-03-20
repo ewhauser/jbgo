@@ -2815,13 +2815,15 @@ func (p *Parser) paramExp() *ParamExp {
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
 		pe.Repl = &Replace{All: p.tok == dblSlash}
 		p.quote = paramExpRepl
-		switch p.r {
-		case '#':
-			pe.Repl.Anchor = ReplaceAnchorPrefix
-			p.rune()
-		case '%':
-			pe.Repl.Anchor = ReplaceAnchorSuffix
-			p.rune()
+		if p.tok == slash {
+			switch p.r {
+			case '#':
+				pe.Repl.Anchor = ReplaceAnchorPrefix
+				p.rune()
+			case '%':
+				pe.Repl.Anchor = ReplaceAnchorSuffix
+				p.rune()
+			}
 		}
 		p.next()
 		if pe.Repl.Anchor == ReplaceAnchorNone {

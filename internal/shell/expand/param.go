@@ -172,10 +172,138 @@ func (cfg *Config) compileParamPattern(expr string) *compiledParamPattern {
 	}
 }
 
-func normalizeParamReplacement(with string) string {
-	// In ${x/pat/repl}, a backslash used to quote the slash delimiter does not
-	// survive into the replacement payload.
-	return strings.ReplaceAll(with, `\/`, `/`)
+func consumeParamReplacementLiteralEscapes(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var sb strings.Builder
+	sb.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		if b == '\\' {
+			if i+1 >= len(s) {
+				break
+			}
+			i++
+			b = s[i]
+		}
+		sb.WriteByte(b)
+	}
+	return sb.String()
+}
+
+func collapseParamReplacementBackslashPairs(s string) string {
+	if !strings.Contains(s, `\\`) {
+		return s
+	}
+	var sb strings.Builder
+	sb.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '\\' {
+			i++
+		}
+		sb.WriteByte(s[i])
+	}
+	return sb.String()
+}
+
+func (cfg *Config) replacementWord(word *syntax.Word) (string, error) {
+	if word == nil {
+		return "", nil
+	}
+	sb := cfg.strBuilder()
+	for i, wp := range word.Parts {
+		part, err := cfg.replacementWordPart(wp, i == 0, i+1 < len(word.Parts))
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(part)
+	}
+	return sb.String(), nil
+}
+
+func (cfg *Config) replacementWordPart(wp syntax.WordPart, leading, more bool) (string, error) {
+	switch wp := wp.(type) {
+	case *syntax.Lit:
+		s := wp.Value
+		if leading {
+			if prefix, rest, expanded := cfg.expandUser(s, more); expanded {
+				s = prefix + rest
+			}
+		}
+		s = consumeParamReplacementLiteralEscapes(s)
+		s, _, _ = strings.Cut(s, "\x00")
+		return s, nil
+	case *syntax.SglQuoted:
+		s := wp.Value
+		if wp.Dollar {
+			s = cfg.decodeANSICString(s)
+			s, _, _ = strings.Cut(s, "\x00")
+		}
+		return s, nil
+	case *syntax.DblQuoted:
+		field, err := cfg.wordField(wp.Parts, quoteDouble)
+		if err != nil {
+			return "", err
+		}
+		return cfg.fieldJoin(field), nil
+	case *syntax.ParamExp:
+		if parts, ok, err := cfg.paramExpWordField(wp, quoteNone); err != nil {
+			return "", err
+		} else if ok {
+			return collapseParamReplacementBackslashPairs(cfg.fieldJoin(parts)), nil
+		}
+		val, err := cfg.paramExp(wp, quoteNone)
+		if err != nil {
+			return "", err
+		}
+		return collapseParamReplacementBackslashPairs(val), nil
+	case *syntax.CmdSubst:
+		val, err := cfg.cmdSubst(wp)
+		if err != nil {
+			return "", err
+		}
+		return collapseParamReplacementBackslashPairs(val), nil
+	case *syntax.ArithmExp:
+		sourceStart := wp.Left.Offset() + 3
+		if wp.Bracket {
+			sourceStart = wp.Left.Offset() + 2
+		}
+		n, err := ArithmWithSource(cfg, wp.X, wp.Source, sourceStart, wp.Right.Offset())
+		if err != nil {
+			if !cfg.swallowNonFatal(err) {
+				return "", err
+			}
+			n = 0
+		}
+		return strconv.Itoa(n), nil
+	case *syntax.BraceExp:
+		parts, err := cfg.braceFieldParts(wp, quoteNone, func(word *syntax.Word, ql quoteLevel) ([]fieldPart, error) {
+			val, err := cfg.replacementWord(word)
+			if err != nil {
+				return nil, err
+			}
+			return []fieldPart{{val: val}}, nil
+		})
+		if err != nil {
+			return "", err
+		}
+		return cfg.fieldJoin(parts), nil
+	case *syntax.ProcSubst:
+		procPath, err := cfg.ProcSubst(wp)
+		if err != nil {
+			return "", err
+		}
+		return collapseParamReplacementBackslashPairs(procPath), nil
+	case *syntax.ExtGlob:
+		raw, err := cfg.extGlobLiteralString(wp)
+		if err != nil {
+			return "", err
+		}
+		return raw, nil
+	default:
+		panic(fmt.Sprintf("unhandled replacement word part: %T", wp))
+	}
 }
 
 func (cfg *Config) findParamPatternAllIndex(pat, name string, n int, anchor syntax.ReplaceAnchor) ([][]int, error) {
@@ -676,11 +804,10 @@ func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState,
 		if orig == "" && pe.Repl.Anchor == syntax.ReplaceAnchorNone {
 			return elems, nil
 		}
-		with, err := Literal(cfg, pe.Repl.With)
+		with, err := cfg.replacementWord(pe.Repl.With)
 		if err != nil {
 			return nil, err
 		}
-		with = normalizeParamReplacement(with)
 		n := 1
 		if pe.Repl.All {
 			n = -1
@@ -1629,11 +1756,10 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		if orig == "" && pe.Repl.Anchor == syntax.ReplaceAnchorNone {
 			break // nothing to replace
 		}
-		with, err := Literal(cfg, pe.Repl.With)
+		with, err := cfg.replacementWord(pe.Repl.With)
 		if err != nil {
 			return "", err
 		}
-		with = normalizeParamReplacement(with)
 		n := 1
 		if pe.Repl.All {
 			n = -1

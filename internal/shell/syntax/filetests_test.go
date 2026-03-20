@@ -3119,7 +3119,14 @@ var fileTests = []fileTestCase{
 		[]string{`${foo//#/}`, `${foo//#}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),
-			Repl:  &Replace{All: true, Anchor: ReplaceAnchorPrefix},
+			Repl:  &Replace{All: true, Orig: litPattern("#")},
+		}, LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
+		[]string{`${foo//%/}`, `${foo//%}`},
+		langFile(&ParamExp{
+			Param: lit("foo"),
+			Repl:  &Replace{All: true, Orig: litPattern("%")},
 		}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
