@@ -1296,9 +1296,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					targetEnv = ownerEnv
 				}
 			}
-				return runWithWriteEnv(targetEnv, func() bool {
-					vr := declLookupVar(targetEnv, name)
-					declaredBefore := vr.Declared()
+			return runWithWriteEnv(targetEnv, func() bool {
+				vr := declLookupVar(targetEnv, name)
+				declaredBefore := vr.Declared()
 				if msg := arrayConversionError(name, vr); msg != "" {
 					if r.evalDepth > 0 {
 						declErrf("%s\n", msg)
