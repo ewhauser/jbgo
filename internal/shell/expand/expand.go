@@ -1969,7 +1969,19 @@ func ReadFieldsFromChars(cfg *Config, chars []ReadFieldChar, n int) []string {
 
 func ReadFields(cfg *Config, s string, n int, raw bool) []string {
 	chars := make([]ReadFieldChar, 0, len(s))
+	escaped := false
 	for i := 0; i < len(s); i++ {
+		if !raw {
+			if escaped {
+				chars = append(chars, ReadFieldChar{Value: s[i], Escaped: true})
+				escaped = false
+				continue
+			}
+			if s[i] == '\\' {
+				escaped = true
+				continue
+			}
+		}
 		chars = append(chars, ReadFieldChar{Value: s[i]})
 	}
 	return ReadFieldsFromChars(cfg, chars, n)

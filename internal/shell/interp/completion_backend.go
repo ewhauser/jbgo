@@ -275,18 +275,18 @@ func (b *runnerCompletionBackend) RunFunction(name string, req completionutil.Ho
 	restoreVars := b.pushCompletionEnv(req)
 	defer restoreVars()
 	oldExit := b.runner.exit
+	oldLastExpandExit := b.runner.lastExpandExit
 	oldStderr := b.runner.stderr
 	var errBuf bytes.Buffer
-	b.runner.stderr = io.MultiWriter(oldStderr, &errBuf)
+	b.runner.setStderrWriter(io.MultiWriter(oldStderr, &errBuf))
+	b.runner.lastExpandExit = exitStatus{}
 	defer func() {
-		b.runner.stderr = oldStderr
+		b.runner.setStderrWriter(oldStderr)
 		b.runner.exit = oldExit
+		b.runner.lastExpandExit = oldLastExpandExit
 	}()
 	b.runner.call(b.ctx, todoPos, []string{name, "compgen", req.Word, ""})
-	status := exitCodeForCompletion(b.runner.exit)
-	if status == 0 && errBuf.Len() > 0 {
-		status = 1
-	}
+	status := completionHookStatus(b.runner.exit, b.runner.lastExpandExit, &errBuf)
 	candidates := completionReplyCandidates(b.runner.lookupVar("COMPREPLY"))
 	if status != 0 {
 		candidates = nil
@@ -304,26 +304,30 @@ func (b *runnerCompletionBackend) RunCommandHook(command string, req completionu
 	restoreVars := b.pushCompletionEnv(req)
 	defer restoreVars()
 	oldExit := b.runner.exit
+	oldLastExpandExit := b.runner.lastExpandExit
 	oldStdout := b.runner.stdout
 	oldStderr := b.runner.stderr
 	var out bytes.Buffer
 	var errBuf bytes.Buffer
-	b.runner.stdout = &out
-	b.runner.stderr = io.MultiWriter(oldStderr, &errBuf)
+	b.runner.setStdoutWriter(&out)
+	b.runner.setStderrWriter(io.MultiWriter(oldStderr, &errBuf))
+	b.runner.lastExpandExit = exitStatus{}
 	defer func() {
-		b.runner.stdout = oldStdout
-		b.runner.stderr = oldStderr
+		b.runner.setStdoutWriter(oldStdout)
+		b.runner.setStderrWriter(oldStderr)
 		b.runner.exit = oldExit
+		b.runner.lastExpandExit = oldLastExpandExit
 	}()
-	src := command
-	if !strings.HasSuffix(src, "\n") {
-		src += "\n"
+	if simpleCompletionCommand(command) {
+		b.runner.call(b.ctx, todoPos, []string{command})
+	} else {
+		src := command
+		if !strings.HasSuffix(src, "\n") {
+			src += "\n"
+		}
+		_ = b.runner.runShellReader(b.ctx, strings.NewReader(src), "", nil)
 	}
-	_ = b.runner.runShellReader(b.ctx, strings.NewReader(src), "", nil)
-	status := exitCodeForCompletion(b.runner.exit)
-	if status == 0 && errBuf.Len() > 0 {
-		status = 1
-	}
+	status := completionHookStatus(b.runner.exit, b.runner.lastExpandExit, &errBuf)
 	lines := splitCompletionLines(out.String())
 	if status != 0 {
 		lines = nil
@@ -393,6 +397,21 @@ func completionReplyCandidates(vr expand.Variable) []string {
 		}
 	}
 	return nil
+}
+
+func simpleCompletionCommand(command string) bool {
+	return command != "" && !strings.ContainsAny(command, " \t\n;&|()<>$`\"'\\")
+}
+
+func completionHookStatus(exit, expandExit exitStatus, errBuf *bytes.Buffer) int {
+	status := exitCodeForCompletion(exit)
+	if status == 0 {
+		status = exitCodeForCompletion(expandExit)
+	}
+	if status == 0 && errBuf != nil && errBuf.Len() > 0 {
+		status = 1
+	}
+	return status
 }
 
 func exitCodeForCompletion(exit exitStatus) int {

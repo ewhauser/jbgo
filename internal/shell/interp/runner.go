@@ -996,6 +996,15 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return ""
 			}
 		}
+		declLookupVar := func(name string) expand.Variable {
+			if !local || global {
+				return r.lookupVar(name)
+			}
+			if vr, ok := currentScopeVar(r.writeEnv, name); ok {
+				return vr
+			}
+			return expand.Variable{}
+		}
 		sawNamedOperand := false
 		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool) bool {
 			name := ref.Name.Value
@@ -1037,7 +1046,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				printDeclaredVar(name, vr)
 				return true
 			}
-			vr := r.lookupVar(name)
+			vr := declLookupVar(name)
 			if msg := arrayConversionError(name, vr); msg != "" {
 				declErrf("%s\n", msg)
 				r.exit.code = 1

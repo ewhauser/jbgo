@@ -149,6 +149,25 @@ func execEnv(env expand.Environ) []string {
 	return list
 }
 
+func currentScopeVar(env expand.WriteEnviron, name string) (expand.Variable, bool) {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		normalized := env.normalize(name)
+		vr, ok := env.values[normalized]
+		if !ok {
+			return expand.Variable{}, false
+		}
+		return vr.Variable, true
+	case *shadowWriteEnviron:
+		if env.shadowSet && name == env.shadowName {
+			return env.shadow, true
+		}
+		return currentScopeVar(env.parent, name)
+	default:
+		return expand.Variable{}, false
+	}
+}
+
 func (r *Runner) lookupVar(name string) expand.Variable {
 	if name == "" {
 		panic("variable name must not be empty")

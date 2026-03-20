@@ -127,10 +127,6 @@
           "mode": "xfail",
           "reason": "gbash rejects associative-array env bindings instead of stringifying them like bash"
         },
-        "oils/array.test.sh::Exporting array doesn't do anything, not even first element": {
-          "mode": "xfail",
-          "reason": "gbash exports array variables differently from bash's no-op behavior"
-        },
         "oils/array.test.sh::Length op, index op, then transform op is not allowed": {
           "mode": "xfail",
           "reason": "gbash emits a custom parameter-expansion error instead of bash's bad substitution"
@@ -158,10 +154,6 @@
         "oils/array.test.sh::array with invalid token": {
           "mode": "xfail",
           "reason": "gbash stops invalid array literals earlier than bash's parser"
-        },
-        "oils/array.test.sh::declare -a / local -a is empty array": {
-          "mode": "xfail",
-          "reason": "gbash still differs from bash when declaring empty arrays with declare -a or local -a"
         },
         "oils/array.test.sh::strict_array prevents exporting array": {
           "mode": "xfail",

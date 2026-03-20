@@ -345,6 +345,89 @@ func TestCoreRunPreservesArithmeticDiagnosticsInsideFunctions(t *testing.T) {
 	}
 }
 
+func TestCoreRunCompgenFunctionErrorsSuppressPartialReplies(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"_f() {",
+			"  COMPREPLY=( foo bar )",
+			"  COMPREPLY+=( $(( 1 / 0 )) )",
+			"}",
+			"compgen -F _f foo",
+			"echo status=$?",
+			"",
+		}, "\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "status=1\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "" +
+		"compgen: warning: -F option may not work as you expect\n" +
+		"1 / 0 : division by 0 (error token is \"0 \")\n"
+	if got := stderr.String(); got != wantStderr {
+		t.Fatalf("stderr = %q, want %q", got, wantStderr)
+	}
+}
+
+func TestCoreRunCompgenCommandHookPreservesStdoutOrder(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"f() { echo foo; echo bar; }",
+			"compgen -C f b",
+			"echo status=$?",
+			"",
+		}, "\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "foo\nbar\nstatus=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "compgen: warning: -C option may not work as you expect\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestCoreRunCompgenWordlistHonorsEscapedIFSDelimiters(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"IFS=':%'",
+			`compgen -W 'spam:eggs%ham cheese\:colon'`,
+			"",
+		}, "\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "spam\neggs\nham cheese:colon\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestCoreRunWaitsForOutputProcessSubstitution(t *testing.T) {
 	t.Parallel()
 

@@ -93,3 +93,19 @@ func TestReadFieldsFromChars(t *testing.T) {
 		})
 	}
 }
+
+func TestReadFieldsPreservesEscapedIFSDelimiters(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Env: ListEnviron("IFS=:%")}
+	got := ReadFields(cfg, `spam:eggs%ham cheese\:colon`, -1, false)
+	want := []string{"spam", "eggs", "ham cheese:colon"}
+	if len(got) != len(want) {
+		t.Fatalf("len(ReadFields()) = %d, want %d (%q)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ReadFields()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

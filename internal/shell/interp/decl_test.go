@@ -231,6 +231,40 @@ printf 'A=%s,%s,%s\n' "${A[a]}" "${A[b]}" "${A[c]}"
 	}
 }
 
+func TestDeclareAllowsLocalArrayKindShadowing(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare -a shared=(1 2)
+declare -A other=([g]=x)
+
+f() {
+  declare -A shared=([k]=v)
+  local -a other=(3 4)
+  declare -p shared
+  declare -p other
+}
+
+f
+declare -p shared
+declare -p other
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"declare -A shared=([k]=\"v\" )\n" +
+		"declare -a other=([0]=\"3\" [1]=\"4\")\n" +
+		"declare -a shared=([0]=\"1\" [1]=\"2\")\n" +
+		"declare -A other=([g]=\"x\" )\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestDeclareAssociativeAppendPreservesStringAtZeroKey(t *testing.T) {
 	t.Parallel()
 
