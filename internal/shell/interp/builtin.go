@@ -489,64 +489,55 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 		exit.returning = true
 	case "read":
-		var prompt string
-		raw := false
-		silent := false
-		readArray := false
-		fp := flagParser{remaining: args}
-		for fp.more() {
-			switch flag := fp.flag(); flag {
-			case "-s":
-				silent = true
-			case "-r":
-				raw = true
-			case "-a":
-				readArray = true
-			case "-p":
-				prompt = fp.value()
-				if prompt == "" {
-					return failf(2, "read: -p: option requires an argument\n")
+		opts, names, parseErr := parseReadBuiltinArgs(args)
+		if parseErr != nil {
+			return failf(parseErr.code, "%s", parseErr.msg)
+		}
+		if opts.arrayName != "" {
+			if !syntax.ValidName(opts.arrayName) {
+				return failf(2, "read: %q: invalid identifier\n", opts.arrayName)
+			}
+		} else {
+			for _, name := range names {
+				if !syntax.ValidName(name) {
+					return failf(2, "read: invalid identifier %q\n", name)
 				}
-			default:
-				return failf(2, "read: invalid option %q\n", flag)
 			}
 		}
 
-		args := fp.args()
-		for _, name := range args {
-			if !syntax.ValidName(name) {
-				return failf(2, "read: invalid identifier %q\n", name)
-			}
+		fd := r.getFD(opts.fd)
+		if fd == nil || fd.reader == nil {
+			return failf(1, "read: %d: invalid file descriptor: Bad file descriptor\n", opts.fd)
+		}
+		if opts.prompt != "" && r.readBuiltinCanPrompt(opts.fd, fd) {
+			r.errf("%s", opts.prompt)
 		}
 
-		if prompt != "" {
-			r.out(prompt)
-		}
-
-		var line []byte
-		var err error
-		_ = silent
-		line, err = r.readLine(ctx, raw)
-		if readArray {
-			// read -a arrayname: split line into fields and assign to indexed array.
-			arrayName := shellReplyVar
-			if len(args) > 0 {
-				arrayName = args[0]
+		chars, err := r.readBuiltinInput(ctx, fd, opts)
+		record := readBuiltinCharsString(chars)
+		switch {
+		case opts.arrayName != "":
+			values := []string(nil)
+			if opts.exactChars >= 0 {
+				values = []string{record}
+			} else {
+				values = expand.ReadFieldsFromChars(r.ecfg, chars, -1)
 			}
-			// Use -1 as max to get all fields without joining the last ones.
-			values := expand.ReadFields(r.ecfg, string(line), -1, raw)
-			r.setVar(arrayName, expand.Variable{
+			r.setVar(opts.arrayName, expand.Variable{
 				Set:  true,
 				Kind: expand.Indexed,
 				List: values,
 			})
-		} else {
-			if len(args) == 0 {
-				args = append(args, shellReplyVar)
+		case len(names) == 0:
+			r.setVarString(shellReplyVar, record)
+		case opts.exactChars >= 0:
+			r.setVarString(names[0], record)
+			for _, name := range names[1:] {
+				r.setVarString(name, "")
 			}
-
-			values := expand.ReadFields(r.ecfg, string(line), len(args), raw)
-			for i, name := range args {
+		default:
+			values := expand.ReadFieldsFromChars(r.ecfg, chars, len(names))
+			for i, name := range names {
 				val := ""
 				if i < len(values) {
 					val = values[i]
@@ -555,9 +546,10 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			}
 		}
 
-		// We can get data back from readLine and an error at the same time, so
-		// check err after we process the data.
 		if err != nil {
+			if !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrDeadlineExceeded) {
+				r.errf("read: %d: read error: %s\n", opts.fd, readBuiltinErrorText(err))
+			}
 			exit.code = 1
 			return exit
 		}
@@ -826,6 +818,268 @@ func (r *Runner) printOptLine(name string, enabled, supported bool) {
 		return
 	}
 	r.outf("%s\t%s\t(%q not supported)\n", name, state, r.optStatusText(!enabled))
+}
+
+const readBuiltinUsage = "read: usage: read [-Eers] [-a array] [-d delim] [-i text] [-n nchars] [-N nchars] [-p prompt] [-t timeout] [-u fd] [name ...]\n"
+
+type readBuiltinOptions struct {
+	raw        bool
+	silent     bool
+	prompt     string
+	arrayName  string
+	fd         int
+	delimiter  byte
+	maxChars   int
+	exactChars int
+	timeout    time.Duration
+	timeoutSet bool
+}
+
+type readBuiltinParseError struct {
+	code uint8
+	msg  string
+}
+
+func parseReadBuiltinArgs(args []string) (readBuiltinOptions, []string, *readBuiltinParseError) {
+	opts := readBuiltinOptions{
+		fd:         0,
+		delimiter:  '\n',
+		maxChars:   -1,
+		exactChars: -1,
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return opts, args[i+1:], nil
+		}
+		if len(arg) < 2 || arg[0] != '-' {
+			return opts, args[i:], nil
+		}
+		for j := 1; j < len(arg); j++ {
+			switch arg[j] {
+			case 'r':
+				opts.raw = true
+			case 's':
+				opts.silent = true
+			case 'a':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -a: option requires an argument\n"}
+				}
+				opts.arrayName = value
+				i = next
+				j = len(arg)
+			case 'd':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -d: option requires an argument\n"}
+				}
+				if value == "" {
+					opts.delimiter = 0
+				} else {
+					opts.delimiter = value[0]
+				}
+				i = next
+				j = len(arg)
+			case 'n':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -n: option requires an argument\n"}
+				}
+				num, err := strconv.Atoi(value)
+				if err != nil || num < 0 {
+					return opts, nil, &readBuiltinParseError{code: 1, msg: fmt.Sprintf("read: %s: invalid number\n", value)}
+				}
+				opts.maxChars = num
+				opts.exactChars = -1
+				i = next
+				j = len(arg)
+			case 'N':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -N: option requires an argument\n"}
+				}
+				num, err := strconv.Atoi(value)
+				if err != nil || num < 0 {
+					return opts, nil, &readBuiltinParseError{code: 1, msg: fmt.Sprintf("read: %s: invalid number\n", value)}
+				}
+				opts.exactChars = num
+				opts.maxChars = -1
+				i = next
+				j = len(arg)
+			case 'p':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -p: option requires an argument\n"}
+				}
+				opts.prompt = value
+				i = next
+				j = len(arg)
+			case 't':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -t: option requires an argument\n"}
+				}
+				timeout, err := strconv.ParseFloat(value, 64)
+				if err != nil || timeout < 0 {
+					return opts, nil, &readBuiltinParseError{code: 1, msg: fmt.Sprintf("read: %s: invalid timeout specification\n", value)}
+				}
+				opts.timeoutSet = true
+				opts.timeout = time.Duration(timeout * float64(time.Second))
+				i = next
+				j = len(arg)
+			case 'u':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &readBuiltinParseError{code: 2, msg: "read: -u: option requires an argument\n"}
+				}
+				fd, err := strconv.Atoi(value)
+				if err != nil || fd < 0 {
+					return opts, nil, &readBuiltinParseError{code: 1, msg: fmt.Sprintf("read: %s: invalid file descriptor specification\n", value)}
+				}
+				opts.fd = fd
+				i = next
+				j = len(arg)
+			default:
+				return opts, nil, &readBuiltinParseError{
+					code: 2,
+					msg:  fmt.Sprintf("read: -%c: invalid option\n%s", arg[j], readBuiltinUsage),
+				}
+			}
+		}
+	}
+	return opts, nil, nil
+}
+
+func readBuiltinOptionArg(args []string, i int, arg string, j int) (string, int, bool) {
+	if j+1 < len(arg) {
+		return arg[j+1:], i, true
+	}
+	if i+1 >= len(args) {
+		return "", i, false
+	}
+	return args[i+1], i + 1, true
+}
+
+func readBuiltinCharsString(chars []expand.ReadFieldChar) string {
+	if len(chars) == 0 {
+		return ""
+	}
+	buf := make([]byte, len(chars))
+	for i, ch := range chars {
+		buf[i] = ch.Value
+	}
+	return string(buf)
+}
+
+func readBuiltinErrorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "is a directory") {
+		return "Is a directory"
+	}
+	return err.Error()
+}
+
+func (r *Runner) readBuiltinCanPrompt(fdNum int, fd *shellFD) bool {
+	if fdNum != 0 || !r.interactive || fd == nil {
+		return false
+	}
+	file, ok := fd.reader.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func readBuiltinDeadlineGuard(ctx context.Context, fd *shellFD, deadline time.Time) func() {
+	if fd == nil {
+		return func() {}
+	}
+	if !deadline.IsZero() {
+		_ = fd.SetReadDeadline(deadline)
+	}
+	stopc := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = fd.SetReadDeadline(time.Now())
+		close(stopc)
+	})
+	return func() {
+		if !stop() {
+			<-stopc
+		}
+		_ = fd.SetReadDeadline(time.Time{})
+	}
+}
+
+func (r *Runner) readBuiltinPoll(ctx context.Context, fd *shellFD) error {
+	cleanup := readBuiltinDeadlineGuard(ctx, fd, time.Now())
+	defer cleanup()
+
+	_, err := fd.PeekByte()
+	if err == nil || errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
+
+func (r *Runner) readBuiltinInput(ctx context.Context, fd *shellFD, opts readBuiltinOptions) ([]expand.ReadFieldChar, error) {
+	if fd == nil || fd.reader == nil {
+		return nil, errors.New("bad file descriptor")
+	}
+	if opts.maxChars == 0 || opts.exactChars == 0 {
+		return nil, nil
+	}
+	if opts.timeoutSet && opts.timeout == 0 {
+		return nil, r.readBuiltinPoll(ctx, fd)
+	}
+
+	deadline := time.Time{}
+	if opts.timeoutSet {
+		deadline = time.Now().Add(opts.timeout)
+	}
+	cleanup := readBuiltinDeadlineGuard(ctx, fd, deadline)
+	defer cleanup()
+
+	chars := make([]expand.ReadFieldChar, 0, 64)
+	pendingEscape := false
+	for {
+		if opts.exactChars >= 0 && len(chars) >= opts.exactChars {
+			return chars, nil
+		}
+		if opts.maxChars >= 0 && len(chars) >= opts.maxChars {
+			return chars, nil
+		}
+
+		b, err := fd.ReadByte()
+		if err != nil {
+			return chars, err
+		}
+		if !opts.raw && pendingEscape {
+			pendingEscape = false
+			if b == '\n' {
+				continue
+			}
+			chars = append(chars, expand.ReadFieldChar{Value: b, Escaped: true})
+			continue
+		}
+		if !opts.raw && b == '\\' {
+			pendingEscape = true
+			continue
+		}
+		if opts.exactChars < 0 && b == opts.delimiter {
+			return chars, nil
+		}
+		if b == 0 {
+			continue
+		}
+		chars = append(chars, expand.ReadFieldChar{Value: b})
+	}
 }
 
 func (r *Runner) readLine(ctx context.Context, raw bool) ([]byte, error) {

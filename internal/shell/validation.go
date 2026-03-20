@@ -3,6 +3,7 @@ package shell
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
@@ -114,12 +115,12 @@ func validateSupportedRedirections(program *syntax.File) error {
 
 		switch redir.Op {
 		case syntax.DplOut:
-			if !isSupportedDupOutTarget(wordLiteral(redir.Word)) {
+			if !isSupportedDupTarget(wordLiteral(redir.Word)) {
 				walkErr = &shellValidationError{message: "invalid redirection"}
 				return false
 			}
 		case syntax.DplIn:
-			if !isSupportedDupInTarget(wordLiteral(redir.Word)) {
+			if !isSupportedDupTarget(wordLiteral(redir.Word)) {
 				walkErr = &shellValidationError{message: "invalid redirection"}
 				return false
 			}
@@ -170,25 +171,27 @@ func hasFunctionNameLiteral(name *syntax.Lit) bool {
 	return name != nil && strings.TrimSpace(name.Value) != ""
 }
 
-func isSupportedDupOutTarget(target string) bool {
-	switch target {
-	case "1", "2", "-":
+func isSupportedDupTarget(target string) bool {
+	if target == "-" {
 		return true
-	default:
-		return false
 	}
-}
-
-func isSupportedDupInTarget(target string) bool {
-	return target == "-"
+	if _, err := strconv.Atoi(target); err == nil {
+		return true
+	}
+	return strings.HasPrefix(target, "$")
 }
 
 func isSupportedRedirectFD(fd string) bool {
-	switch fd {
-	case "", "0", "1", "2":
+	switch {
+	case fd == "":
+		return true
+	case fd[0] == '{' && fd[len(fd)-1] == '}':
+		return true
+	case strings.HasPrefix(fd, "$"):
 		return true
 	default:
-		return false
+		_, err := strconv.Atoi(fd)
+		return err == nil
 	}
 }
 

@@ -10,15 +10,9 @@ import (
 )
 
 func (r *Runner) setStdIO(in io.Reader, out, err io.Writer) error {
-	r.stdin = stdinReader(in)
-	if out == nil {
-		out = io.Discard
-	}
-	r.stdout = out
-	if err == nil {
-		err = io.Discard
-	}
-	r.stderr = err
+	r.setStdinReader(stdinReader(in))
+	r.setStdoutWriter(out)
+	r.setStderrWriter(err)
 	return nil
 }
 
