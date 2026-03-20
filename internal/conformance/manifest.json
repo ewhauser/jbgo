@@ -3446,11 +3446,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/type-compat.test.sh::append in arith context": {
-          "mode": "xfail",
-          "reason": "gbash now rejects single-quoted strings in (( )) with correct behavior, but error message trailing whitespace differs from bash"
-        },
-        "oils/unicode.test.sh::$'' does NOT check that 0x110000 is too big at parse time": {
+        "oils/unicode.test.sh": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

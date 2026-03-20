@@ -602,7 +602,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				panic(fmt.Sprintf("unhandled shopt flag: %s", flag))
 			default:
 				if flag == "--" {
-					return failf(2, "shopt: --: invalid option\nshopt: usage: shopt [-pqsu] [-o long-option] optname [optname...]\n")
+					return failf(2, "shopt: --: invalid option\nshopt: usage: shopt [-pqsu] [-o] [optname ...]\n")
 				}
 				return failf(2, "shopt: invalid option %q\n", flag)
 			}

@@ -1631,7 +1631,7 @@ func TestBashCommandNotFoundFromCommandStringUsesInvocationPrefix(t *testing.T) 
 	if result.ExitCode != 127 {
 		t.Fatalf("ExitCode = %d, want 127; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stderr, "bash: missing-cmd: command not found\n"; got != want {
+	if got, want := result.Stderr, "bash: line 1: missing-cmd: command not found\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
@@ -1800,7 +1800,7 @@ func TestBashCommandStringPrefixesFatalArithmeticDiagnostic(t *testing.T) {
 	if result.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	const want = "bash: a + 42x: value too great for base (error token is \"42x\")\n"
+	const want = "bash: line 1: a + 42x: value too great for base (error token is \"42x\")\n"
 	if got := result.Stderr; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}

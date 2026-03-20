@@ -25,6 +25,7 @@ import (
 )
 
 var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?\w+:(?:[^:\n]+:)* line \d+: `)
+var bashShellPrefixPattern = regexp.MustCompile(`^(?:[^:\n]+/)?[A-Za-z0-9_-]*sh: `)
 var bashAnsiCQuotedCommandNotFoundPattern = regexp.MustCompile(`\$'((?:[^'\\]|\\.)*)': command not found`)
 
 func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
@@ -458,6 +459,8 @@ func normalizeOutput(value, workspace string) string {
 
 func normalizeBashStderr(value string) string {
 	value = bashLinePrefixPattern.ReplaceAllString(filepath.ToSlash(value), "")
+	value = normalizeNestedShellPrefixes(value)
+	value = strings.ReplaceAll(value, "shopt: usage: shopt [-pqsu] [-o long-option] optname [optname...]\n", "shopt: usage: shopt [-pqsu] [-o] [optname ...]\n")
 	return bashAnsiCQuotedCommandNotFoundPattern.ReplaceAllStringFunc(value, func(match string) string {
 		parts := bashAnsiCQuotedCommandNotFoundPattern.FindStringSubmatch(match)
 		if len(parts) != 2 {
@@ -469,6 +472,47 @@ func normalizeBashStderr(value string) string {
 		}
 		return unquoted + ": command not found"
 	})
+}
+
+func normalizeNestedShellPrefixes(value string) string {
+	lines := strings.SplitAfter(value, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, "\n")
+		if trimmed == "" {
+			continue
+		}
+		match := bashShellPrefixPattern.FindString(trimmed)
+		if match == "" {
+			continue
+		}
+		rest := strings.TrimPrefix(trimmed, match)
+		if !isNestedShellDiagnostic(rest) {
+			continue
+		}
+		lines[i] = rest + line[len(trimmed):]
+	}
+	return strings.Join(lines, "")
+}
+
+func isNestedShellDiagnostic(line string) bool {
+	switch {
+	case strings.Contains(line, "unbound variable"):
+		return true
+	case strings.Contains(line, "bad substitution"):
+		return true
+	case strings.Contains(line, "value too great for base"):
+		return true
+	case strings.Contains(line, "invalid number"):
+		return true
+	case strings.Contains(line, "arithmetic syntax error"):
+		return true
+	case strings.Contains(line, "division by 0"):
+		return true
+	case strings.HasSuffix(line, ": command not found"):
+		return true
+	default:
+		return false
+	}
 }
 
 func gbashEnv() map[string]string {
