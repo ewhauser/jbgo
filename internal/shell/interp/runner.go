@@ -237,14 +237,40 @@ func (r *Runner) expandErr(err error) {
 		return
 	}
 	errMsg := err.Error()
+	fatalExpansionErr := r.commandString && !r.interactive
+	var (
+		cmdArithErr    arithmCommandError
+		unboundVarErr  expand.UnboundVariableError
+		unsetErr       expand.UnsetParameterError
+		indirectErr    expand.InvalidIndirectExpansionError
+		invalidNameErr expand.InvalidVariableNameError
+		arithSyntaxErr expand.ArithmSyntaxError
+		arithDiagErr   *expand.ArithmDiagnosticError
+	)
 	fmt.Fprintln(r.stderr, errMsg)
 	switch {
-	case errors.As(err, &expand.UnsetParameterError{}):
+	case errors.As(err, &cmdArithErr):
+		r.exit.code = 1
+	case errors.As(err, &unboundVarErr):
 		r.exit.code = 127
 		r.exit.exiting = true
-	case errors.As(err, &expand.InvalidIndirectExpansionError{}):
+	case errors.As(err, &unsetErr):
+		r.exit.code = 127
+		r.exit.exiting = true
+	case errors.As(err, &indirectErr):
 		r.exit.code = 1
-	case errors.As(err, &expand.InvalidVariableNameError{}):
+	case errors.As(err, &invalidNameErr):
+		r.exit.code = 1
+	case errors.As(err, &arithSyntaxErr):
+		r.exit.code = 1
+		r.exit.exiting = fatalExpansionErr
+	case errors.As(err, &arithDiagErr):
+		r.exit.code = 1
+		r.exit.exiting = fatalExpansionErr
+	case errMsg == "bad substitution" || strings.Contains(errMsg, ": bad substitution"):
+		r.exit.code = 1
+		r.exit.exiting = fatalExpansionErr
+	case errMsg == "invalid indirect expansion":
 		r.exit.code = 1
 	default:
 		return // other cases do not exit
@@ -252,21 +278,34 @@ func (r *Runner) expandErr(err error) {
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {
-	return r.arithmEval(expr, false)
+	return r.arithmEval(expr, false, "", 0, 0)
 }
 
 func (r *Runner) arithmCmd(expr syntax.ArithmExpr) int {
-	return r.arithmEval(expr, true)
+	return r.arithmEval(expr, true, "", 0, 0)
 }
 
-func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool) int {
-	n, err := expand.Arithm(r.ecfg, expr)
+func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool, source string, sourceStart, sourceEnd uint) int {
+	var (
+		n   int
+		err error
+	)
+	if source != "" {
+		n, err = expand.ArithmWithSource(r.ecfg, expr, source, sourceStart, sourceEnd)
+	} else {
+		n, err = expand.Arithm(r.ecfg, expr)
+	}
 	var syntaxErr expand.ArithmSyntaxError
-	if command && errors.As(err, &syntaxErr) {
+	var diagErr *expand.ArithmDiagnosticError
+	if command && (errors.As(err, &syntaxErr) || errors.As(err, &diagErr)) {
 		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)
 	return n
+}
+
+func (r *Runner) arithmCmdExpr(cm *syntax.ArithmCmd) int {
+	return r.arithmEval(cm.X, true, cm.Source, cm.Left.Offset()+2, cm.Right.Offset())
 }
 
 type arithmCommandError struct {
@@ -788,7 +827,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			trace.newLineFlush()
 		}
-		r.exit.oneIf(r.arithmCmd(cm.X) == 0)
+		val := r.arithmCmdExpr(cm)
+		if r.exit.ok() {
+			r.exit.oneIf(val == 0)
+		}
 	case *syntax.LetClause:
 		var val int
 		for _, expr := range cm.Exprs {
@@ -813,7 +855,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		}
 
 		trace.newLineFlush()
-		r.exit.oneIf(val == 0)
+		if r.exit.ok() {
+			r.exit.oneIf(val == 0)
+		}
 	case *syntax.CaseClause:
 		trace.string("case ")
 		trace.expr(cm.Word)

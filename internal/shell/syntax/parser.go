@@ -509,6 +509,18 @@ func (p *Parser) Arithmetic(r io.Reader) (ArithmExpr, error) {
 	p.quote = arithmExpr
 	p.next()
 	expr := p.arithmExpr(false)
+	if p.err == nil && p.tok != _EOF {
+		switch p.tok {
+		case _Lit, _LitWord:
+			p.curErr("not a valid arithmetic operator: %#q", p.val)
+		case leftBrack:
+			p.curErr("%#q must follow a name", leftBrack)
+		case colon:
+			p.curErr("ternary operator missing %#q before %#q", quest, colon)
+		default:
+			p.curErr("not a valid arithmetic operator: %#q", p.tok)
+		}
+	}
 	return expr, p.err
 }
 
@@ -713,6 +725,22 @@ func (p *Parser) lit(pos Pos, val string) *Lit {
 	l.ValueEnd = p.nextPos()
 	l.Value = val
 	return l
+}
+
+func (p *Parser) rawLit(start, end Pos, val string) *Lit {
+	if len(p.litBatch) == 0 {
+		p.litBatch = make([]Lit, 32)
+	}
+	l := &p.litBatch[0]
+	p.litBatch = p.litBatch[1:]
+	l.ValuePos = start
+	l.ValueEnd = end
+	l.Value = val
+	return l
+}
+
+func (p *Parser) emptyWord(pos Pos) *Word {
+	return p.wordOne(p.rawLit(pos, pos, ""))
 }
 
 type wordAlloc struct {
@@ -1789,10 +1817,37 @@ func (p *Parser) arithmInnerSource(left, right Pos, bracket bool) string {
 	} else {
 		start += 2 // $[
 	}
+	if end > len(p.bs) {
+		end = len(p.bs)
+	}
 	if start < 0 || start > end || end > len(p.bs) {
 		return ""
 	}
 	return string(p.bs[start:end])
+}
+
+func (p *Parser) arithmCmdSource(left, right Pos) string {
+	start := int(left.Offset()) + 2 // ((
+	end := int(right.Offset())
+	if end > len(p.bs) {
+		end = len(p.bs)
+	}
+	if start < 0 || start > end || end > len(p.bs) {
+		return ""
+	}
+	return string(p.bs[start:end])
+}
+
+func (p *Parser) sourceRange(start, end Pos) string {
+	if !start.IsValid() || !end.IsValid() {
+		return ""
+	}
+	from := int(start.Offset())
+	to := int(end.Offset())
+	if from < 0 || from > to || to > len(p.bs) {
+		return ""
+	}
+	return string(p.bs[from:to])
 }
 
 func regexNearFragment(s string) string {
@@ -1993,7 +2048,9 @@ func (p *Parser) wordPart() WordPart {
 			ar.Right = p.pos
 			p.next()
 		} else {
-			ar.Right = p.arithmEnd(dollDblParen, ar.Left, old)
+			expr := ar.X
+			ar.Right = p.arithmEndExpr(&expr, dollDblParen, ar.Left, old)
+			ar.X = expr
 		}
 		ar.Source = p.arithmInnerSource(ar.Left, ar.Right, ar.Bracket)
 		return ar
@@ -4037,7 +4094,10 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
 		ar.Unsigned = true
 	}
 	ar.X = p.followArithm(dblLeftParen, ar.Left)
-	ar.Right = p.arithmEnd(dblLeftParen, ar.Left, old)
+	expr := ar.X
+	ar.Right = p.arithmEndExpr(&expr, dblLeftParen, ar.Left, old)
+	ar.X = expr
+	ar.Source = p.arithmCmdSource(ar.Left, ar.Right)
 	s.Cmd = ar
 }
 

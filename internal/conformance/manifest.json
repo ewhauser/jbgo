@@ -87,138 +87,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/arith-context.test.sh::Empty expression (( ))  $(( ))": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-context.test.sh::Empty expression a[]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-context.test.sh::Empty expression in ${a[@]: : }": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-dynamic.test.sh::Double quotes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-dynamic.test.sh::Single quotes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-dynamic.test.sh::Substitutions": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Comment not allowed in the middle of multiline arithmetic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Constant with quotes like '1'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Constants in base 36": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Constants in bases 2 to 64": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Double subscript": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Dynamic base constants": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Dynamic parsing of arithmetic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Increment undefined variables with nounset": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Integer constant parsing": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Integer constant validation": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid LValue": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid LValue that looks like array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid LValue: two sets of brackets": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid constant": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Logical Ops Short Circuit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Multiple digit constants with base N": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Negative exponent": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Negative numbers with bit shift": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::No floating point": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::array assignment with dynamic array name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::assignment with dynamic var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::nested ternary (bug fix)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::nounset with arithmetic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::s[0] with string '12 34'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::unary array assignment with dynamic var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::unary assignment with dynamic var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::undef[0] with nounset": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/array-assoc.test.sh::BashAssoc ${a[@]@Q}": {
           "mode": "xfail",
           "reason": "gbash's array @Q quoting still differs from bash for associative values containing single quotes"
@@ -519,19 +387,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-idioms.test.sh::dynamic arith varname: assign": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::dynamic arith varname: copy/add": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/ble-idioms.test.sh::recursive arith: recursion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::recursive arith: short circuit &&, ||": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -711,27 +567,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-bracket.test.sh::No octal, hex, base N conversion - leading 0 is a regular decimal": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-bracket.test.sh::[ -t invalid ]": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-bracket.test.sh::[ a -eq b ]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-bracket.test.sh::] syntax errors": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bracket.test.sh::negative octal numbers, etc.": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bracket.test.sh::no recursive arith [ 1+2 -eq 3 ]": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2339,18 +2179,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dbracket.test.sh::Hex literals with -eq": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::Octal literals with -eq": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::Quotes don't matter in comparison": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/dbracket.test.sh::[[ && ]] is syntax error": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -2390,10 +2218,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dbracket.test.sh::negative numbers - zero, decimal, octal, hex, base N": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/dbracket.test.sh::tilde expansion with =~ (confusing)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -2410,10 +2234,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/divergence.test.sh::xz package: dirprefix=\"${line##*([}\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dparen.test.sh::literal strings inside (( ))": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2570,7 +2390,7 @@
         },
         "oils/for-expr.test.sh::Arith lexer mode": {
           "mode": "xfail",
-          "reason": "gbash arithmetic-for parsing accepts quoted operands that bash rejects in this case"
+          "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case"
         },
         "oils/func-parsing.test.sh::Function name with $": {
           "mode": "xfail",
@@ -2937,10 +2757,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/paren-ambiguity.test.sh::((gzip example - zdiff package - #2337": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/paren-ambiguity.test.sh::((pkg-config example - postfix package - #2337": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -3446,10 +3262,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/type-compat.test.sh::append in arith context": {
-          "mode": "xfail",
-          "reason": "gbash now rejects single-quoted strings in (( )) with correct behavior, but error message trailing whitespace differs from bash"
-        },
         "oils/unicode.test.sh::$'' does NOT check that 0x110000 is too big at parse time": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -3564,10 +3376,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::patsub with single quotes and hyphen in character class (regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-slice.test.sh::${array[@]::} has implicit length of zero - for ble.sh": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

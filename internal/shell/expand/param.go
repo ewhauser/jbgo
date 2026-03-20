@@ -45,6 +45,14 @@ func subscriptWord(sub *syntax.Subscript) (*syntax.Word, bool) {
 	return word, ok
 }
 
+func badSubstitution(pe *syntax.ParamExp) error {
+	src := printNode(pe)
+	if src == "" {
+		return fmt.Errorf("bad substitution")
+	}
+	return fmt.Errorf("%s: bad substitution", src)
+}
+
 func (cfg *Config) associativeSubscriptKey(sub *syntax.Subscript) (string, error) {
 	if sub == nil {
 		return "", nil
@@ -252,6 +260,14 @@ type UnsetParameterError struct {
 
 func (u UnsetParameterError) Error() string {
 	return fmt.Sprintf("%s: %s", paramExpOperandString(u.Node), u.Message)
+}
+
+type UnboundVariableError struct {
+	Name string
+}
+
+func (u UnboundVariableError) Error() string {
+	return fmt.Sprintf("%s: unbound variable", u.Name)
 }
 
 func overridingUnset(pe *syntax.ParamExp) bool {
@@ -721,6 +737,9 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 	}
 
 	index := pe.Index
+	if emptySubscript(index) {
+		return state, badSubstitution(pe)
+	}
 	switch state.name {
 	case "@", "*":
 		kind := syntax.SubscriptAt
@@ -944,7 +963,11 @@ func (cfg *Config) paramArgField(word *syntax.Word, ql quoteLevel) ([]fieldPart,
 			}
 			field = append(field, fieldPart{val: val})
 		case *syntax.ArithmExp:
-			n, err := Arithm(cfg, wp.X)
+			sourceStart := wp.Left.Offset() + 3
+			if wp.Bracket {
+				sourceStart = wp.Left.Offset() + 2
+			}
+			n, err := ArithmWithSource(cfg, wp.X, wp.Source, sourceStart, wp.Right.Offset())
 			if err != nil {
 				return nil, err
 			}

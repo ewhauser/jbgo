@@ -950,6 +950,7 @@ func (a *ArithmExp) End() Pos {
 type ArithmCmd struct {
 	Left, Right Pos
 	Unsigned    bool // mksh's ((# expr))
+	Source      string
 
 	X ArithmExpr
 }

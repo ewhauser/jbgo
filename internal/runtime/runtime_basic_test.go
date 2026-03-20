@@ -27,6 +27,24 @@ func TestRunSimpleScript(t *testing.T) {
 	}
 }
 
+func TestRunPreservesTrailingCarriageReturnWithoutInjectedNewline(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '[%s]\\n' -\r",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "[-\r]\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestRunRedirectAndCat(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

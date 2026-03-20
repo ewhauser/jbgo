@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/bits"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,22 @@ func arithExprSource(expr syntax.ArithmExpr) string {
 	var buf bytes.Buffer
 	writeArithExpr(&buf, expr)
 	return buf.String()
+}
+
+func arithExprPrinted(expr syntax.ArithmExpr) string {
+	if expr == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter().Print(&buf, expr); err == nil {
+		return buf.String()
+	}
+	return arithExprSource(expr)
+}
+
+func bashQuoteErrorToken(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+	return `"` + replacer.Replace(s) + `"`
 }
 
 // writeArithExpr writes the source representation of an arithmetic expression to buf.
@@ -53,6 +70,9 @@ func writeLiteral(buf *bytes.Buffer, part syntax.WordPart) {
 	case *syntax.Lit:
 		buf.WriteString(p.Value)
 	case *syntax.SglQuoted:
+		if p.Dollar {
+			buf.WriteByte('$')
+		}
 		buf.WriteByte('\'')
 		buf.WriteString(p.Value)
 		buf.WriteByte('\'')
@@ -63,13 +83,18 @@ func writeLiteral(buf *bytes.Buffer, part syntax.WordPart) {
 		}
 		buf.WriteByte('"')
 	case *syntax.ParamExp:
-		buf.WriteByte('$')
-		if p.Short {
-			buf.WriteString(p.Param.Value)
+		var tmp bytes.Buffer
+		if err := syntax.NewPrinter().Print(&tmp, &syntax.Word{Parts: []syntax.WordPart{p}}); err == nil {
+			buf.WriteString(tmp.String())
 		} else {
-			buf.WriteByte('{')
-			buf.WriteString(p.Param.Value)
-			buf.WriteByte('}')
+			buf.WriteByte('$')
+			if p.Short {
+				buf.WriteString(p.Param.Value)
+			} else {
+				buf.WriteByte('{')
+				buf.WriteString(p.Param.Value)
+				buf.WriteByte('}')
+			}
 		}
 	case *syntax.CmdSubst:
 		buf.WriteString("$(")
@@ -105,14 +130,68 @@ func writeLiteral(buf *bytes.Buffer, part syntax.WordPart) {
 type ArithmSyntaxError struct {
 	Expr  syntax.ArithmExpr // the expression being evaluated
 	Token syntax.ArithmExpr // the invalid token within Expr
+
+	Source      string
+	SourceStart uint
+	SourceEnd   uint
+
+	Replacements []arithDiagnosticReplacement
 }
 
 func (e ArithmSyntaxError) Error() string {
-	token := syntax.ArithmExprString(e.Token)
-	if expr := syntax.ArithmExprString(e.Expr); expr != "" {
-		return fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %q)", expr, token)
+	exprText := arithExprSource(e.Expr)
+	tokenText := arithExprSource(e.Token)
+	if fromSource, ok := arithExprDiagnosticSource(e.Expr, e.Source, e.SourceStart, e.SourceEnd, e.Replacements); ok {
+		exprText = fromSource
 	}
-	return fmt.Sprintf("arithmetic syntax error: operand expected (error token is %q)", token)
+	if fromSource, ok := arithTokenDiagnosticSource(e.Token, e.Source, e.SourceStart, e.SourceEnd, e.Replacements); ok {
+		tokenText = fromSource
+	}
+	if exprText != "" {
+		return fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %s)", exprText, bashQuoteErrorToken(tokenText))
+	}
+	return fmt.Sprintf("arithmetic syntax error: operand expected (error token is %s)", bashQuoteErrorToken(tokenText))
+}
+
+// ArithmDiagnosticError preserves bash-style arithmetic diagnostics that are
+// not simple operand-expected errors.
+type ArithmDiagnosticError struct {
+	Expr      syntax.ArithmExpr
+	Token     syntax.ArithmExpr
+	Message   string
+	ExprText  string
+	TokenText string
+
+	Source      string
+	SourceStart uint
+	SourceEnd   uint
+
+	Replacements []arithDiagnosticReplacement
+}
+
+func (e *ArithmDiagnosticError) Error() string {
+	exprText := e.ExprText
+	if exprText == "" && e.Expr != nil {
+		exprText = arithExprSource(e.Expr)
+	}
+	tokenText := e.TokenText
+	if tokenText == "" && e.Token != nil {
+		tokenText = arithExprSource(e.Token)
+	}
+	if e.Expr != nil {
+		if fromSource, ok := arithExprDiagnosticSource(e.Expr, e.Source, e.SourceStart, e.SourceEnd, e.Replacements); ok {
+			exprText = fromSource
+		}
+	}
+	if tokenText == "" && e.Token != nil {
+		if fromSource, ok := arithTokenDiagnosticSource(e.Token, e.Source, e.SourceStart, e.SourceEnd, e.Replacements); ok {
+			tokenText = fromSource
+		}
+	}
+	if exprText == "" {
+		return fmt.Sprintf("%s (error token is %s)", e.Message, bashQuoteErrorToken(tokenText))
+	}
+	return fmt.Sprintf("%s: %s (error token is %s)", exprText, e.Message, bashQuoteErrorToken(tokenText))
 }
 
 // ArithmDivByZeroError preserves the AST context for bash-style
@@ -145,7 +224,7 @@ func (e *ArithmDivByZeroError) Error() string {
 	if fromSource, ok := arithTokenDiagnosticSource(e.Token, e.Source, e.SourceStart, e.SourceEnd, e.Replacements); ok {
 		tokenText = fromSource
 	}
-	return fmt.Sprintf("%s: division by 0 (error token is %q)", exprText, tokenText)
+	return fmt.Sprintf("%s: division by 0 (error token is %s)", exprText, bashQuoteErrorToken(tokenText))
 }
 
 // ArithmWithSource evaluates expr and, when it fails with division by zero,
@@ -156,14 +235,32 @@ func ArithmWithSource(cfg *Config, expr syntax.ArithmExpr, source string, source
 		return n, nil
 	}
 	var divErr *ArithmDivByZeroError
-	if !errors.As(err, &divErr) {
-		return 0, err
+	if errors.As(err, &divErr) {
+		cloned := *divErr
+		cloned.Source = source
+		cloned.SourceStart = sourceStart
+		cloned.SourceEnd = sourceEnd
+		return 0, &cloned
 	}
-	cloned := *divErr
-	cloned.Source = source
-	cloned.SourceStart = sourceStart
-	cloned.SourceEnd = sourceEnd
-	return 0, &cloned
+	var diagErr *ArithmDiagnosticError
+	if errors.As(err, &diagErr) {
+		cloned := *diagErr
+		cloned.Source = source
+		cloned.SourceStart = sourceStart
+		cloned.SourceEnd = sourceEnd
+		if cloned.Expr != nil && cloned.ExprText != "" && source != "" && !arithExprUsesExpandedValue(cloned.Expr) {
+			cloned.ExprText = source
+		}
+		return 0, &cloned
+	}
+	var syntaxErr ArithmSyntaxError
+	if errors.As(err, &syntaxErr) {
+		syntaxErr.Source = source
+		syntaxErr.SourceStart = sourceStart
+		syntaxErr.SourceEnd = sourceEnd
+		return 0, syntaxErr
+	}
+	return 0, err
 }
 
 // hasSingleQuote checks if a word contains any single-quoted parts.
@@ -181,52 +278,130 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 	return arithm(cfg, expr, expr, 0)
 }
 
-func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
-	switch expr := expr.(type) {
-	case *syntax.Word:
-		// Bash rejects single-quoted strings in arithmetic context.
-		if hasSingleQuote(expr) != nil {
-			return 0, ArithmSyntaxError{Expr: root, Token: expr}
-		}
-		str, err := Document(cfg, expr)
-		if err != nil {
-			return 0, err
-		}
-		// recursively fetch vars
-		i := 0
-		for syntax.ValidName(str) {
-			val := cfg.envGet(str)
-			if val == "" {
-				break
+func (cfg *Config) arithmStringValue(root, tokenExpr syntax.ArithmExpr, word *syntax.Word, str string, depth int) (int, error) {
+	s := strings.TrimSpace(str)
+	if s == "" || isEmptyArithWord(word) {
+		return 0, nil
+	}
+
+	i := 0
+	for syntax.ValidName(s) {
+		vr := cfg.Env.Get(s)
+		if !vr.IsSet() {
+			if cfg.NoUnset {
+				return 0, UnboundVariableError{Name: s}
 			}
-			if i++; i >= maxNameRefDepth {
-				break
-			}
-			str = val
+			break
 		}
-		if depth < maxNameRefDepth {
-			p := syntax.NewParser()
-			nested, err := p.Arithmetic(strings.NewReader(str))
-			if err != nil {
-				if strings.TrimSpace(str) == "" {
-					return 0, nil
-				}
-				return 0, err
-			}
+		val := vr.String()
+		if val == "" {
+			break
+		}
+		if i++; i >= maxNameRefDepth {
+			break
+		}
+		s = val
+	}
+
+	if depth < maxNameRefDepth {
+		p := syntax.NewParser()
+		if nested, err := p.Arithmetic(strings.NewReader(s)); err == nil {
 			if nested != nil {
-				if word, ok := nested.(*syntax.Word); !ok || word.Lit() != str {
+				if word, ok := nested.(*syntax.Word); !ok || word.Lit() != s {
 					return arithm(cfg, root, nested, depth+1)
 				}
 			}
 		}
-		// default to 0
-		return int(atoi(str)), nil
+	}
+
+	if n, ok, err := parseArithNumber(s, root, tokenExpr); ok || err != nil {
+		if err != nil {
+			err = arithExpandedWordError(err, root, tokenExpr, word, s)
+		}
+		return int(n), err
+	}
+	return 0, nil
+}
+
+func arithExpandedWordError(err error, root, tokenExpr syntax.ArithmExpr, word *syntax.Word, value string) error {
+	if err == nil || root != tokenExpr || word == nil {
+		return err
+	}
+	if len(word.Parts) != 1 {
+		return err
+	}
+	part, ok := word.Parts[0].(*syntax.ParamExp)
+	if !ok || !part.Short || part.Dollar.IsValid() || part.Index == nil {
+		return err
+	}
+	var diagErr *ArithmDiagnosticError
+	if !errors.As(err, &diagErr) {
+		return err
+	}
+	cloned := *diagErr
+	cloned.Expr = nil
+	cloned.ExprText = value
+	return &cloned
+}
+
+func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
+	if depth < maxNameRefDepth {
+		if parsed, ok, err := arithmRuntimeParse(cfg, expr); err != nil {
+			return 0, err
+		} else if ok {
+			return arithm(cfg, root, parsed, depth+1)
+		}
+	}
+	switch expr := expr.(type) {
+	case *syntax.Word:
+		// Bash rejects single-quoted strings in arithmetic context.
+		if hasSingleQuote(expr) != nil {
+			token := syntax.ArithmExpr(expr)
+			if root != nil && root.Pos() == expr.Pos() {
+				token = root
+			}
+			return 0, ArithmSyntaxError{Expr: root, Token: token}
+		}
+		if !containsShellExpansion(expr) {
+			src := arithExprSource(expr)
+			p := syntax.NewParser()
+			if _, err := p.Arithmetic(strings.NewReader(src)); err != nil {
+				var parseErr syntax.ParseError
+				tokenText := src
+				if errors.As(err, &parseErr) {
+					tokenText = arithParseErrorToken(src, parseErr.Pos)
+				}
+				return 0, &ArithmDiagnosticError{
+					Expr:      root,
+					TokenText: tokenText,
+					Message:   "arithmetic syntax error: invalid arithmetic operator",
+				}
+			}
+		}
+		str, err := Document(cfg, expr)
+		if err != nil {
+			var unboundErr UnboundVariableError
+			if errors.As(err, &unboundErr) {
+				if ref, ok := arithmVarRef(expr); ok && ref.Index != nil && ref.Name != nil {
+					unboundErr.Name = ref.Name.Value
+					return 0, unboundErr
+				}
+			}
+			var unsetErr UnsetParameterError
+			if errors.As(err, &unsetErr) && unsetErr.Message == "unbound variable" {
+				if ref, ok := arithmVarRef(expr); ok && ref.Index != nil && ref.Name != nil {
+					return 0, UnboundVariableError{Name: ref.Name.Value}
+				}
+			}
+			return 0, err
+		}
+		return cfg.arithmStringValue(root, expr, expr, str, depth)
 	case *syntax.ParenArithm:
 		return arithm(cfg, root, expr.X, depth)
 	case *syntax.UnaryArithm:
 		switch expr.Op {
 		case syntax.Inc, syntax.Dec:
-			ref, old, err := cfg.arithmLValue(expr.X)
+			ref, old, err := cfg.arithmLValue(root, expr.X)
 			if err != nil {
 				return 0, err
 			}
@@ -273,10 +448,36 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 				return 0, err
 			}
 			b2 := expr.Y.(*syntax.BinaryArithm) // must have Op==TernColon
-			if cond == 1 {
+			if cond != 0 {
 				return arithm(cfg, root, b2.X, depth)
 			}
 			return arithm(cfg, root, b2.Y, depth)
+		case syntax.AndArit:
+			left, err := arithm(cfg, root, expr.X, depth)
+			if err != nil {
+				return 0, err
+			}
+			if left == 0 {
+				return 0, nil
+			}
+			right, err := arithm(cfg, root, expr.Y, depth)
+			if err != nil {
+				return 0, err
+			}
+			return oneIf(right != 0), nil
+		case syntax.OrArit:
+			left, err := arithm(cfg, root, expr.X, depth)
+			if err != nil {
+				return 0, err
+			}
+			if left != 0 {
+				return 1, nil
+			}
+			right, err := arithm(cfg, root, expr.Y, depth)
+			if err != nil {
+				return 0, err
+			}
+			return oneIf(right != 0), nil
 		}
 		left, err := arithm(cfg, root, expr.X, depth)
 		if err != nil {
@@ -288,9 +489,9 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 		}
 		// Check for division by zero with source tokens
 		if right == 0 && (expr.Op == syntax.Quo || expr.Op == syntax.Rem) {
-			return 0, divByZeroError(expr, left, right)
+			return 0, divByZeroErrorFor(root, expr, left, right)
 		}
-		return binArit(expr.Op, left, right)
+		return binArit(root, expr, expr.Op, left, right)
 	default:
 		panic(fmt.Sprintf("unexpected arithm expr: %T", expr))
 	}
@@ -303,19 +504,16 @@ func oneIf(b bool) int {
 	return 0
 }
 
-// atoi is like [strconv.ParseInt](s, 10, 64), but it ignores errors and trims whitespace.
-func atoi(s string) int64 {
-	s = strings.TrimSpace(s)
-	n, _ := strconv.ParseInt(s, 0, 64)
-	return n
-}
-
 // containsShellExpansion reports whether a Word contains any shell expansion
 // parts ($var, ${var}, $(cmd), etc.) that are pre-expanded before arithmetic.
 func containsShellExpansion(w *syntax.Word) bool {
 	for _, part := range w.Parts {
-		switch part.(type) {
-		case *syntax.ParamExp, *syntax.CmdSubst, *syntax.ArithmExp:
+		switch part := part.(type) {
+		case *syntax.ParamExp:
+			if !(part.Short && part.Index != nil && !part.Dollar.IsValid()) {
+				return true
+			}
+		case *syntax.CmdSubst, *syntax.ArithmExp:
 			return true
 		case *syntax.DblQuoted:
 			// Double-quoted strings can contain expansions
@@ -336,6 +534,9 @@ func arithExprDiagnosticSource(expr syntax.ArithmExpr, source string, sourceStar
 		return "", false
 	}
 	if fromSource, ok := arithSourceSpan(expr, source, sourceStart, sourceEnd, true, replacements); ok {
+		if prefix := arithLeadingExprDiagnosticPrefix(expr, source, sourceStart); prefix != "" {
+			fromSource = prefix + fromSource
+		}
 		return fromSource, true
 	}
 	return "", false
@@ -366,6 +567,96 @@ func arithExprUsesExpandedValue(expr syntax.ArithmExpr) bool {
 	}
 }
 
+func arithParseErrorToken(source string, pos syntax.Pos) string {
+	if source == "" || !pos.IsValid() {
+		return source
+	}
+	start := int(pos.Offset())
+	if start < 0 || start >= len(source) {
+		return source
+	}
+	for start > 0 && (source[start-1] == ' ' || source[start-1] == '\t') {
+		start--
+	}
+	if start > 0 {
+		switch source[start-1] {
+		case '#', '[', '.':
+			start--
+		}
+	}
+	return source[start:]
+}
+
+func arithRuntimeSource(cfg *Config, expr syntax.ArithmExpr) (string, error) {
+	switch expr := expr.(type) {
+	case *syntax.Word:
+		if arithExprUsesExpandedValue(expr) {
+			return Literal(cfg, expr)
+		}
+		return arithExprSource(expr), nil
+	case *syntax.BinaryArithm:
+		left, err := arithRuntimeSource(cfg, expr.X)
+		if err != nil {
+			return "", err
+		}
+		right, err := arithRuntimeSource(cfg, expr.Y)
+		if err != nil {
+			return "", err
+		}
+		return left + expr.Op.String() + right, nil
+	case *syntax.UnaryArithm:
+		val, err := arithRuntimeSource(cfg, expr.X)
+		if err != nil {
+			return "", err
+		}
+		if expr.Post {
+			return val + expr.Op.String(), nil
+		}
+		return expr.Op.String() + val, nil
+	case *syntax.ParenArithm:
+		val, err := arithRuntimeSource(cfg, expr.X)
+		if err != nil {
+			return "", err
+		}
+		return "(" + val + ")", nil
+	default:
+		return arithExprSource(expr), nil
+	}
+}
+
+func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr, bool, error) {
+	switch expr.(type) {
+	case *syntax.Word:
+		return nil, false, nil
+	case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm:
+	default:
+		return nil, false, nil
+	}
+	if !arithExprUsesExpandedValue(expr) {
+		return nil, false, nil
+	}
+	src, err := arithRuntimeSource(cfg, expr)
+	if err != nil {
+		return nil, false, err
+	}
+	p := syntax.NewParser()
+	parsed, err := p.Arithmetic(strings.NewReader(src))
+	if err != nil {
+		return nil, false, &ArithmDiagnosticError{
+			ExprText:  src,
+			TokenText: src,
+			Message:   "arithmetic syntax error: invalid arithmetic operator",
+		}
+	}
+	if parsed == nil {
+		return nil, false, nil
+	}
+	if word, ok := parsed.(*syntax.Word); ok && word.Lit() == src {
+		return nil, false, nil
+	}
+	return parsed, true, nil
+}
+
 func arithSourceSpan(expr syntax.ArithmExpr, source string, sourceStart, sourceEnd uint, includeTrailingSpaces bool, replacements []arithDiagnosticReplacement) (string, bool) {
 	if source == "" || expr == nil || !expr.Pos().IsValid() || !expr.End().IsValid() {
 		return "", false
@@ -391,6 +682,25 @@ func arithSourceSpan(expr syntax.ArithmExpr, source string, sourceStart, sourceE
 		}
 	}
 	return arithSourceSpanSegment(source, sourceStart, relStart, relEnd, start, end, replacements), true
+}
+
+func arithLeadingExprDiagnosticPrefix(expr syntax.ArithmExpr, source string, sourceStart uint) string {
+	if source == "" || expr == nil || !expr.Pos().IsValid() {
+		return ""
+	}
+	relStart := int(expr.Pos().Offset() - sourceStart)
+	if relStart <= 0 || relStart > len(source) {
+		return ""
+	}
+	prefix := source[:relStart]
+	if strings.Trim(prefix, " \t\r\n") != "" {
+		return ""
+	}
+	idx := strings.IndexByte(prefix, '\n')
+	if idx < 0 {
+		return ""
+	}
+	return prefix[idx:]
 }
 
 func arithSourceSpanSegment(source string, sourceStart uint, relStart, relEnd int, start, end uint, replacements []arithDiagnosticReplacement) string {
@@ -458,6 +768,13 @@ func divByZeroError(expr *syntax.BinaryArithm, evaluatedLeft, evaluatedDivisor i
 	}
 }
 
+func divByZeroErrorFor(root syntax.ArithmExpr, expr *syntax.BinaryArithm, evaluatedLeft, evaluatedDivisor int) error {
+	if rootExpr, ok := root.(*syntax.BinaryArithm); ok && rootExpr.Op == expr.Op {
+		return divByZeroError(rootExpr, evaluatedLeft, evaluatedDivisor)
+	}
+	return divByZeroError(expr, evaluatedLeft, evaluatedDivisor)
+}
+
 // divByZeroErrorAssgn creates a division-by-zero error for assignment operators.
 func divByZeroErrorAssgn(b *syntax.BinaryArithm, op string) error {
 	lhs := arithExprSource(b.X)
@@ -466,7 +783,7 @@ func divByZeroErrorAssgn(b *syntax.BinaryArithm, op string) error {
 }
 
 func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (int, error) {
-	ref, val, err := cfg.arithmLValue(b.X)
+	ref, val, err := cfg.arithmLValue(root, b.X)
 	if err != nil {
 		return 0, err
 	}
@@ -502,9 +819,9 @@ func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (in
 	case syntax.XorAssgn:
 		acc ^= arg
 	case syntax.ShlAssgn:
-		acc <<= uint(arg)
+		acc = int64(int(acc) << maskedShift(int(arg)))
 	case syntax.ShrAssgn:
-		acc >>= uint(arg)
+		acc = int64(int(acc) >> maskedShift(int(arg)))
 	}
 	if err := cfg.envSetRef(ref, strconv.FormatInt(acc, 10)); err != nil {
 		return 0, err
@@ -514,32 +831,324 @@ func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (in
 
 func arithmVarRef(expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
 	word, ok := expr.(*syntax.Word)
-	if !ok || len(word.Parts) != 1 {
+	if !ok {
 		return nil, false
 	}
-	switch part := word.Parts[0].(type) {
-	case *syntax.Lit:
-		if syntax.ValidName(part.Value) {
-			return &syntax.VarRef{Name: part}, true
-		}
-	case *syntax.ParamExp:
-		if part.Short && part.Index != nil && !part.Dollar.IsValid() {
-			return &syntax.VarRef{Name: part.Param, Index: part.Index}, true
+	if len(word.Parts) == 1 {
+		switch part := word.Parts[0].(type) {
+		case *syntax.Lit:
+			if syntax.ValidName(part.Value) {
+				return &syntax.VarRef{Name: part}, true
+			}
+		case *syntax.ParamExp:
+			if part.Short && part.Index != nil && !part.Dollar.IsValid() && syntax.ValidName(part.Param.Value) {
+				return &syntax.VarRef{Name: part.Param, Index: part.Index}, true
+			}
 		}
 	}
-	return nil, false
+	if containsShellExpansion(word) {
+		return nil, false
+	}
+	ref, err := parseVarRef(arithExprSource(word))
+	if err != nil || ref == nil {
+		return nil, false
+	}
+	if ref.Name == nil || !syntax.ValidName(ref.Name.Value) {
+		return nil, false
+	}
+	if ref.Index != nil && emptySubscript(ref.Index) {
+		return nil, false
+	}
+	return ref, true
 }
 
-func (cfg *Config) arithmLValue(expr syntax.ArithmExpr) (*syntax.VarRef, int, error) {
+func isEmptyArithWord(word *syntax.Word) bool {
+	if word == nil || len(word.Parts) != 1 {
+		return false
+	}
+	lit, ok := word.Parts[0].(*syntax.Lit)
+	return ok && lit.Value == ""
+}
+
+func isEmptyArithExpr(expr syntax.ArithmExpr) bool {
+	word, ok := expr.(*syntax.Word)
+	return ok && isEmptyArithWord(word)
+}
+
+func arithWordDiagnostic(root, tokenExpr syntax.ArithmExpr, exprText, tokenText, message string) error {
+	diag := &ArithmDiagnosticError{
+		ExprText:  exprText,
+		TokenText: tokenText,
+		Message:   message,
+	}
+	if root == nil {
+		return diag
+	}
+	diag.Expr = root
+	if root != tokenExpr && !arithExprUsesExpandedValue(root) {
+		diag.ExprText = arithExprPrinted(root)
+	}
+	return diag
+}
+
+func isArithWordChar(b byte) bool {
+	return (b >= '0' && b <= '9') ||
+		(b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		b == '_' || b == '@'
+}
+
+func arithDigitValue(base int, b byte) (int, bool) {
+	switch {
+	case b >= '0' && b <= '9':
+		return int(b - '0'), true
+	case b >= 'a' && b <= 'z':
+		return int(b-'a') + 10, true
+	case b >= 'A' && b <= 'Z':
+		if base <= 36 {
+			return int(b-'A') + 10, true
+		}
+		return int(b-'A') + 36, true
+	case b == '@':
+		return 62, true
+	case b == '_':
+		return 63, true
+	default:
+		return 0, false
+	}
+}
+
+func parseArithNumberPrefix(s string) (int64, int, string, string, bool) {
+	if s == "" || s[0] < '0' || s[0] > '9' {
+		return 0, 0, "", "", false
+	}
+
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i > 0 && i < len(s) && s[i] == '#' {
+		basePart := s[:i]
+		if len(basePart) > 1 && basePart[0] == '0' {
+			return 0, len(s), "invalid number", s, true
+		}
+		base, err := strconv.Atoi(basePart)
+		if err != nil || base < 2 || base > 64 || i+1 >= len(s) {
+			return 0, len(s), "invalid number", s, true
+		}
+		var n int64
+		j := i + 1
+		for ; j < len(s); j++ {
+			d, ok := arithDigitValue(base, s[j])
+			if !ok {
+				break
+			}
+			if d >= base {
+				return 0, len(s), "value too great for base", s, true
+			}
+			n = n*int64(base) + int64(d)
+		}
+		if j == i+1 {
+			return 0, len(s), "invalid number", s, true
+		}
+		if j < len(s) && isArithWordChar(s[j]) {
+			return 0, len(s), "value too great for base", s, true
+		}
+		return n, j, "", "", true
+	}
+
+	if len(s) >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X') {
+		var n int64
+		j := 2
+		for ; j < len(s); j++ {
+			d, ok := arithDigitValue(16, s[j])
+			if !ok || d >= 16 {
+				break
+			}
+			n = n*16 + int64(d)
+		}
+		if j == 2 {
+			return 0, len(s), "value too great for base", s, true
+		}
+		if j < len(s) && isArithWordChar(s[j]) {
+			return 0, len(s), "value too great for base", s, true
+		}
+		return n, j, "", "", true
+	}
+
+	base := 10
+	if len(s) > 1 && s[0] == '0' {
+		base = 8
+	}
+	var n int64
+	j := 0
+	for ; j < len(s); j++ {
+		b := s[j]
+		if b < '0' || b > '9' {
+			break
+		}
+		d := int(b - '0')
+		if d >= base {
+			return 0, len(s), "value too great for base", s, true
+		}
+		n = n*int64(base) + int64(d)
+	}
+	if j < len(s) && isArithWordChar(s[j]) {
+		return 0, len(s), "value too great for base", s, true
+	}
+	return n, j, "", "", true
+}
+
+func parseArithNumber(s string, root, tokenExpr syntax.ArithmExpr) (int64, bool, error) {
+	n, consumed, msg, token, ok := parseArithNumberPrefix(s)
+	if !ok {
+		return 0, false, nil
+	}
+	if msg != "" {
+		return 0, true, arithWordDiagnostic(root, tokenExpr, s, token, msg)
+	}
+	rest := s[consumed:]
+	if strings.TrimSpace(rest) == "" {
+		return n, true, nil
+	}
+	trimmed := strings.TrimLeft(rest, " \t")
+	message := "arithmetic syntax error: invalid arithmetic operator"
+	if trimmed != "" {
+		switch trimmed[0] {
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+			'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+			'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+			'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+			'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+			'_', '\'', '"':
+			if rest != trimmed {
+				message = "arithmetic syntax error in expression"
+			}
+		}
+	}
+	return 0, true, arithWordDiagnostic(root, tokenExpr, s, trimmed, message)
+}
+
+func arithmWordValue(root syntax.ArithmExpr, expr *syntax.Word, str string) (int, error) {
+	s := strings.TrimSpace(str)
+	if s == "" || isEmptyArithWord(expr) {
+		return 0, nil
+	}
+	if n, ok, err := parseArithNumber(s, root, expr); ok || err != nil {
+		return int(n), err
+	}
+	return 0, nil
+}
+
+func maskedShift(n int) uint {
+	return uint(n) & (bits.UintSize - 1)
+}
+
+func arithInvalidRefTail(text string) string {
+	if text == "" {
+		return text
+	}
+	i := 0
+	for i < len(text) && ((text[i] >= 'a' && text[i] <= 'z') || (text[i] >= 'A' && text[i] <= 'Z') || text[i] == '_' || (i > 0 && text[i] >= '0' && text[i] <= '9')) {
+		i++
+	}
+	if i == 0 {
+		if len(text) > 1 {
+			return text[1:]
+		}
+		return text
+	}
+	if i < len(text) && text[i] == '[' {
+		depth := 0
+		for ; i < len(text); i++ {
+			switch text[i] {
+			case '[':
+				depth++
+			case ']':
+				if depth > 0 {
+					depth--
+					if depth == 0 {
+						i++
+						if i < len(text) {
+							return text[i:]
+						}
+						return ""
+					}
+				}
+			}
+		}
+	}
+	if i < len(text) {
+		return text[i:]
+	}
+	return ""
+}
+
+func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr) (*syntax.VarRef, int, error) {
 	ref, ok := arithmVarRef(expr)
 	if !ok {
-		return nil, 0, fmt.Errorf("invalid arithmetic lvalue")
+		word, wordOK := expr.(*syntax.Word)
+		if !wordOK {
+			tokenText := "="
+			if b, ok := root.(*syntax.BinaryArithm); ok && b.X == expr {
+				tokenText = b.Op.String() + " " + arithExprSource(b.Y) + " "
+			}
+			return nil, 0, &ArithmDiagnosticError{
+				Expr:      root,
+				TokenText: tokenText,
+				Message:   "attempted assignment to non-variable",
+			}
+		}
+		var (
+			text string
+			err  error
+		)
+		if !containsShellExpansion(word) {
+			text = arithExprSource(word)
+		} else {
+			text, err = Literal(cfg, word)
+			if err != nil {
+				return nil, 0, err
+			}
+		}
+		ref, err = parseVarRef(text)
+		if err != nil {
+			tail := arithInvalidRefTail(text)
+			if tail == "" {
+				tail = text
+			}
+			if b, ok := root.(*syntax.BinaryArithm); ok && b.X == expr {
+				tail += " " + b.Op.String() + " " + arithExprSource(b.Y) + " "
+			}
+			return nil, 0, &ArithmDiagnosticError{
+				Expr:      root,
+				TokenText: tail,
+				Message:   "arithmetic syntax error: invalid arithmetic operator",
+			}
+		}
+		if ref.Index != nil && isEmptyArithExpr(ref.Index.Expr) {
+			return nil, 0, BadArraySubscriptError{Name: text}
+		}
+	}
+	resolvedRef, vr, err := cfg.resolveVarRef(ref)
+	if err != nil {
+		return ref, 0, err
+	}
+	if resolvedRef != nil {
+		ref = resolvedRef
+	}
+	if cfg.NoUnset && !vr.IsSet() {
+		return ref, 0, UnboundVariableError{Name: ref.Name.Value}
 	}
 	val, err := cfg.varRef(ref)
 	if err != nil {
 		return ref, 0, err
 	}
-	return ref, int(atoi(val)), nil
+	n, err := cfg.arithmStringValue(expr, expr, nil, val, 0)
+	if err != nil {
+		return ref, 0, err
+	}
+	return ref, n, nil
 }
 
 func intPow(a, b int) int {
@@ -554,7 +1163,7 @@ func intPow(a, b int) int {
 	return p
 }
 
-func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
+func binArit(root syntax.ArithmExpr, expr *syntax.BinaryArithm, op syntax.BinAritOperator, x, y int) (int, error) {
 	switch op {
 	case syntax.Add:
 		return x + y, nil
@@ -569,6 +1178,17 @@ func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
 		// Division by zero is checked before calling binArit with source tokens
 		return x % y, nil
 	case syntax.Pow:
+		if y < 0 {
+			tokenText := arithExprSource(expr.Y)
+			if b, ok := root.(*syntax.BinaryArithm); ok && b.X == expr {
+				tokenText = b.Op.String() + " " + arithExprSource(b.Y) + " "
+			}
+			return 0, &ArithmDiagnosticError{
+				Expr:      root,
+				TokenText: tokenText,
+				Message:   "exponent less than 0",
+			}
+		}
 		return intPow(x, y), nil
 	case syntax.Eql:
 		return oneIf(x == y), nil
@@ -589,13 +1209,9 @@ func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
 	case syntax.Xor:
 		return x ^ y, nil
 	case syntax.Shr:
-		return x >> uint(y), nil
+		return x >> maskedShift(y), nil
 	case syntax.Shl:
-		return x << uint(y), nil
-	case syntax.AndArit:
-		return oneIf(x != 0 && y != 0), nil
-	case syntax.OrArit:
-		return oneIf(x != 0 || y != 0), nil
+		return x << maskedShift(y), nil
 	case syntax.Comma:
 		// x is executed but its result discarded
 		return y, nil

@@ -38,6 +38,21 @@ func parseArithmExpansion(t *testing.T, src string) *syntax.ArithmExp {
 	return part
 }
 
+func parseArithmExpansionScript(t *testing.T, script string) *syntax.ArithmExp {
+	t.Helper()
+	p := syntax.NewParser()
+	file, err := p.Parse(strings.NewReader(script), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	part, ok := call.Args[1].Parts[0].(*syntax.ArithmExp)
+	if !ok {
+		t.Fatalf("word part = %T, want *syntax.ArithmExp", call.Args[1].Parts[0])
+	}
+	return part
+}
+
 func TestArithmSingleQuoteRejection(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -242,6 +257,84 @@ func TestArithmWithSourcePreservesExpandedOperands(t *testing.T) {
 		t.Fatalf("ArithmWithSource() = %d, want 0", got)
 	}
 	const want = `1 / 0 : division by 0 (error token is "0 ")`
+	if err.Error() != want {
+		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestArithmWithSourcePreservesInvalidConstantExpression(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansion(t, "$((a + 42x))")
+	cfg := &Config{Env: testEnv{}}
+
+	got, err := ArithmWithSource(cfg, exp.X, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+	if err == nil {
+		t.Fatal("ArithmWithSource() error = nil, want invalid-constant error")
+	}
+	if got != 0 {
+		t.Fatalf("ArithmWithSource() = %d, want 0", got)
+	}
+	const want = `a + 42x: value too great for base (error token is "42x")`
+	if err.Error() != want {
+		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestArithmWithSourcePreservesInvalidConstantExpressionWithoutTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansionScript(t, "echo $((a + 42x))")
+	cfg := &Config{Env: testEnv{}}
+
+	got, err := ArithmWithSource(cfg, exp.X, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+	if err == nil {
+		t.Fatal("ArithmWithSource() error = nil, want invalid-constant error")
+	}
+	if got != 0 {
+		t.Fatalf("ArithmWithSource() = %d, want 0", got)
+	}
+	const want = `a + 42x: value too great for base (error token is "42x")`
+	if err.Error() != want {
+		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestArithmWithSourcePreservesLeadingNewlineInMultilineDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansionScript(t, "echo $((\n1 + 2  # not a comment\n))\n")
+	cfg := &Config{Env: testEnv{}}
+
+	got, err := ArithmWithSource(cfg, exp.X, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+	if err == nil {
+		t.Fatal("ArithmWithSource() error = nil, want multiline diagnostic error")
+	}
+	if got != 0 {
+		t.Fatalf("ArithmWithSource() = %d, want 0", got)
+	}
+	const want = "\n1 + 2  # not a comment\n: arithmetic syntax error: invalid arithmetic operator (error token is \"# not a comment\n\")"
+	if err.Error() != want {
+		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestArithmWithSourceUsesExpandedStringForIndexedStringDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansion(t, "$(( s[0] ))")
+	cfg := &Config{Env: testEnv{
+		"s": {Set: true, Kind: String, Str: "12 34"},
+	}}
+
+	got, err := ArithmWithSource(cfg, exp.X, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+	if err == nil {
+		t.Fatal("ArithmWithSource() error = nil, want indexed-string diagnostic")
+	}
+	if got != 0 {
+		t.Fatalf("ArithmWithSource() = %d, want 0", got)
+	}
+	const want = `12 34: arithmetic syntax error in expression (error token is "34")`
 	if err.Error() != want {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}

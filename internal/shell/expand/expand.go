@@ -1178,7 +1178,11 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			}
 			splitter.appendUnquoted(val)
 		case *syntax.ArithmExp:
-			n, err := Arithm(cfg, wp.X)
+			sourceStart := wp.Left.Offset() + 3
+			if wp.Bracket {
+				sourceStart = wp.Left.Offset() + 2
+			}
+			n, err := ArithmWithSource(cfg, wp.X, wp.Source, sourceStart, wp.Right.Offset())
 			if err != nil {
 				if !cfg.swallowNonFatal(err) {
 					return nil, err

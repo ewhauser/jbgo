@@ -14,7 +14,7 @@ func (p *Parser) arithmExprComma(compact bool) ArithmExpr {
 
 func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
 	// Assign is different from the other binary operators because it's
-	// right-associative and needs to check that it's placed after a name
+	// right-associative.
 	value := p.arithmExprTernary(compact)
 	switch BinAritOperator(p.tok) {
 	case AddAssgn, SubAssgn, MulAssgn, QuoAssgn, RemAssgn, AndAssgn,
@@ -22,9 +22,6 @@ func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
 		AndBoolAssgn, OrBoolAssgn, XorBoolAssgn, PowAssgn:
 		if compact && p.spaced {
 			return value
-		}
-		if !isArithName(value) {
-			p.posErr(p.pos, "%#q must follow a name", p.tok)
 		}
 		pos := p.pos
 		tok := p.tok
@@ -172,10 +169,10 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 	case addAdd, subSub:
 		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
 		p.nextArith(compact)
-		if p.tok != _LitWord {
-			p.followErr(ue.OpPos, ue.Op, noQuote("a literal"))
-		}
 		ue.X = p.arithmExprValue(compact)
+		if ue.X == nil {
+			p.followErrExp(ue.OpPos, ue.Op)
+		}
 		return ue
 	case leftParen:
 		if p.quote == paramExpArithm && p.lang.in(LangZsh) {
@@ -215,6 +212,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 			return nil
 		}
 	}
+	x = p.arithmContinueWord(x, compact)
 
 	if compact && p.spaced {
 		return x
@@ -226,9 +224,6 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 	// we want real nil, not (*Word)(nil) as that
 	// sets the type to non-nil and then x != nil
 	if p.tok == addAdd || p.tok == subSub {
-		if !isArithName(x) {
-			p.curErr("%#q must follow a name", p.tok)
-		}
 		u := &UnaryArithm{
 			Post:  true,
 			OpPos: p.pos,
@@ -239,6 +234,88 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 		return u
 	}
 	return x
+}
+
+func (p *Parser) arithmWordSuffixStart() bool {
+	if p.spaced {
+		return false
+	}
+	switch p.tok {
+	case leftBrack, period, hash, _Lit, _LitWord:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Parser) arithmWordSuffixBoundary() bool {
+	if p.spaced || p.peekArithmEnd() || p.tok == _EOF {
+		return true
+	}
+	switch p.tok {
+	case rightBrack, rightParen, addAdd, subSub:
+		return true
+	}
+	return token(BinAritOperator(p.tok)) != illegalTok
+}
+
+func (p *Parser) arithmWordSuffixEnd(compact bool) Pos {
+	parenDepth := 0
+	brackDepth := 0
+	for {
+		if parenDepth == 0 && brackDepth == 0 && p.arithmWordSuffixBoundary() {
+			return p.pos
+		}
+		switch p.tok {
+		case leftParen:
+			parenDepth++
+		case rightParen:
+			if parenDepth == 0 {
+				return p.pos
+			}
+			parenDepth--
+		case leftBrack:
+			brackDepth++
+		case rightBrack:
+			if brackDepth == 0 {
+				return p.pos
+			}
+			brackDepth--
+		}
+		p.nextArith(compact)
+	}
+}
+
+func (p *Parser) appendArithmSuffix(expr ArithmExpr, start, end Pos, src string) ArithmExpr {
+	if src == "" {
+		return expr
+	}
+	part := p.rawLit(start, end, src)
+	switch expr := expr.(type) {
+	case *Word:
+		expr.Parts = append(expr.Parts, part)
+		return expr
+	case *BinaryArithm:
+		expr.Y = p.appendArithmSuffix(expr.Y, start, end, src)
+		return expr
+	case *UnaryArithm:
+		expr.X = p.appendArithmSuffix(expr.X, start, end, src)
+		return expr
+	case *ParenArithm:
+		expr.X = p.appendArithmSuffix(expr.X, start, end, src)
+		return expr
+	default:
+		return p.wordOne(part)
+	}
+}
+
+func (p *Parser) arithmContinueWord(expr ArithmExpr, compact bool) ArithmExpr {
+	if _, ok := expr.(*Word); !ok || !p.arithmWordSuffixStart() {
+		return expr
+	}
+	start := p.pos
+	end := p.arithmWordSuffixEnd(compact)
+	return p.appendArithmSuffix(expr, start, end, p.sourceRange(start, end))
 }
 
 // nextArith consumes a token.
@@ -298,25 +375,21 @@ func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, op
 	}
 }
 
-func isArithName(left ArithmExpr) bool {
-	w, ok := left.(*Word)
-	if !ok || len(w.Parts) != 1 {
-		return false
-	}
-	switch wp := w.Parts[0].(type) {
-	case *Lit:
-		return ValidName(wp.Value)
-	case *ParamExp:
-		return wp.nakedIndex()
-	default:
-		return false
-	}
-}
-
 func (p *Parser) followArithm(ftok token, fpos Pos) ArithmExpr {
 	x := p.arithmExpr(false)
 	if x == nil {
-		p.followErrExp(fpos, ftok)
+		switch {
+		case ftok == dblLeftParen && p.peekArithmEnd():
+			return p.emptyWord(p.pos)
+		case ftok == dollDblParen && p.peekArithmEnd():
+			return p.emptyWord(p.pos)
+		case ftok == leftBrack && p.tok == rightBrack:
+			return p.emptyWord(p.pos)
+		case ftok == colon && (p.tok == colon || p.tok == rightBrace):
+			return p.emptyWord(p.pos)
+		default:
+			p.followErrExp(fpos, ftok)
+		}
 	}
 	return x
 }
@@ -349,6 +422,40 @@ func (p *Parser) matchedArithm(lpos Pos, left, right token) {
 	if !p.got(right) {
 		p.arithmMatchingErr(lpos, left, right)
 	}
+}
+
+func (p *Parser) arithmTailToEnd() (Pos, string, bool) {
+	start := p.pos
+	for !p.peekArithmEnd() {
+		if p.tok == _EOF {
+			return Pos{}, "", false
+		}
+		p.nextArith(false)
+	}
+	return p.pos, p.sourceRange(start, p.pos), true
+}
+
+func (p *Parser) arithmEndExpr(expr *ArithmExpr, ltok token, lpos Pos, old saveState) Pos {
+	if !p.peekArithmEnd() {
+		if p.recoverError() {
+			return recoveredPos
+		}
+		if expr != nil && *expr != nil {
+			tailStart := p.pos
+			if end, tail, ok := p.arithmTailToEnd(); ok {
+				*expr = p.appendArithmSuffix(*expr, tailStart, end, tail)
+			} else {
+				p.arithmMatchingErr(lpos, ltok, dblRightParen)
+			}
+		} else {
+			p.arithmMatchingErr(lpos, ltok, dblRightParen)
+		}
+	}
+	p.rune()
+	p.postNested(old)
+	pos := p.pos
+	p.next()
+	return pos
 }
 
 func (p *Parser) arithmEnd(ltok token, lpos Pos, old saveState) Pos {

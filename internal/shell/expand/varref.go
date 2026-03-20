@@ -46,6 +46,9 @@ func (e InvalidIdentifierError) Error() string {
 // reference plus the final variable value that it points to.
 func (v Variable) ResolveRef(env Environ, ref *syntax.VarRef) (*syntax.VarRef, Variable, error) {
 	resolved := cloneVarRef(ref)
+	if resolved != nil && emptySubscript(resolved.Index) {
+		return nil, Variable{}, BadArraySubscriptError{Name: printNode(resolved)}
+	}
 	for range maxNameRefDepth {
 		if v.Kind != NameRef {
 			if resolved != nil {
@@ -56,6 +59,9 @@ func (v Variable) ResolveRef(env Environ, ref *syntax.VarRef) (*syntax.VarRef, V
 		target, err := parseVarRef(v.Str)
 		if err != nil {
 			return nil, Variable{}, err
+		}
+		if emptySubscript(target.Index) {
+			return nil, Variable{}, BadArraySubscriptError{Name: printNode(target)}
 		}
 		if resolved != nil && resolved.Index != nil {
 			if target.Index != nil {

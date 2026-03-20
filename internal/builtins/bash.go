@@ -127,6 +127,10 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 	if err != nil {
 		return err
 	}
+	commandString := parsed != nil && parsed.Source == BashSourceCommandString
+	if commandString {
+		prefixNestedShellDiagnostic(result, parsed.Name)
+	}
 	if result != nil && result.Stderr != "" {
 		result.Stderr = prefixNestedShellCommandNotFound(c.name, result.Stderr)
 	}
@@ -200,6 +204,57 @@ func containsControlRune(s string) bool {
 		}
 	}
 	return false
+}
+
+func prefixNestedShellDiagnostic(result *ExecutionResult, shellName string) {
+	if result == nil || result.ExitCode == 0 || result.Stderr == "" {
+		return
+	}
+	hadTrailingNewline := strings.HasSuffix(result.Stderr, "\n")
+	trimmed := strings.TrimSuffix(result.Stderr, "\n")
+	lines := strings.Split(trimmed, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if !shouldPrefixNestedShellDiagnostic(line, shellName) {
+			return
+		}
+		normalized := strings.TrimRight(strings.TrimLeft(lines[i], " \t"), " \t")
+		normalized = strings.Replace(normalized, " : ", ": ", 1)
+		lines[i] = shellName + ": line 1: " + normalized
+		result.Stderr = strings.Join(lines, "\n")
+		if hadTrailingNewline {
+			result.Stderr += "\n"
+		}
+		return
+	}
+}
+
+func shouldPrefixNestedShellDiagnostic(line, shellName string) bool {
+	if line == "" {
+		return false
+	}
+	if shellName != "" && strings.HasPrefix(line, shellName+": ") {
+		return false
+	}
+	switch {
+	case strings.Contains(line, "unbound variable"):
+		return true
+	case strings.Contains(line, "bad substitution"):
+		return true
+	case strings.Contains(line, "value too great for base"):
+		return true
+	case strings.Contains(line, "invalid number"):
+		return true
+	case strings.Contains(line, "arithmetic syntax error"):
+		return true
+	case strings.Contains(line, "division by 0"):
+		return true
+	default:
+		return false
+	}
 }
 
 var _ Command = (*Bash)(nil)

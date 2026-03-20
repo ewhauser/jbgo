@@ -10,7 +10,7 @@ func TestArithmCommandRegressionIncludesStandaloneExpression(t *testing.T) {
 	if got, want := result.ExitCode, 1; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
-	if got, want := result.Stderr, "((: '1': arithmetic syntax error: operand expected (error token is \"'1'\")\n"; got != want {
+	if got, want := result.Stderr, "((: '1' : arithmetic syntax error: operand expected (error token is \"'1' \")\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
@@ -20,7 +20,7 @@ func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForInit(t *testing.T)
 	session := newSession(t, &Config{})
 
 	result := mustExecSession(t, session, "for ((i='1'; i<2; i++)); do break; done\n")
-	if got, want := result.ExitCode, 0; got != want {
+	if got, want := result.ExitCode, 1; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
 	if got, want := result.Stderr, "((: i='1': arithmetic syntax error: operand expected (error token is \"'1'\")\n"; got != want {
@@ -33,7 +33,7 @@ func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForCond(t *testing.T)
 	session := newSession(t, &Config{})
 
 	result := mustExecSession(t, session, "for ((i=0; i<'2'; i++)); do :; done\n")
-	if got, want := result.ExitCode, 0; got != want {
+	if got, want := result.ExitCode, 1; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
 	if got, want := result.Stderr, "((: i<'2': arithmetic syntax error: operand expected (error token is \"'2'\")\n"; got != want {
@@ -46,7 +46,7 @@ func TestArithmForLoopRegressionUsesArithmeticCommandPrefixForPost(t *testing.T)
 	session := newSession(t, &Config{})
 
 	result := mustExecSession(t, session, "for ((i=0; i<1; '1')); do i=1; done\n")
-	if got, want := result.ExitCode, 0; got != want {
+	if got, want := result.ExitCode, 1; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
 	if got, want := result.Stderr, "((: '1': arithmetic syntax error: operand expected (error token is \"'1'\")\n"; got != want {
@@ -76,6 +76,22 @@ func TestArithmForLoopRegressionPreservesReadonlyVariableError(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
 	if got, want := result.Stderr, "x: readonly variable\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmExpansionNounsetIndexedRefUsesBaseName(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "set -o nounset\necho $(( undef[0] ))\n")
+	if got, want := result.ExitCode, 127; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stdout, ""; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "undef: unbound variable\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }

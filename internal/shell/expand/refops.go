@@ -1,6 +1,7 @@
 package expand
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -26,4 +27,27 @@ func (e BadArraySubscriptError) Error() string {
 func isBadArraySubscript(err error) bool {
 	var target BadArraySubscriptError
 	return errors.As(err, &target)
+}
+
+func emptySubscript(sub *syntax.Subscript) bool {
+	if sub == nil || sub.AllElements() {
+		return false
+	}
+	word, ok := sub.Expr.(*syntax.Word)
+	if !ok || len(word.Parts) != 1 {
+		return false
+	}
+	lit, ok := word.Parts[0].(*syntax.Lit)
+	return ok && lit.Value == ""
+}
+
+func printNode(node syntax.Node) string {
+	if node == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter().Print(&buf, node); err != nil {
+		return ""
+	}
+	return buf.String()
 }

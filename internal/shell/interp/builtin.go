@@ -427,7 +427,12 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			exit.code = 2
 			return exit
 		}
-		exit.oneIf(r.bashTest(ctx, expr, true) == "")
+		if r.bashTest(ctx, expr, true) == "" && exit.code == 0 {
+			exit.oneIf(true)
+		}
+		if r.exit.code != 0 {
+			exit = r.exit
+		}
 	case "exec":
 		// TODO: Consider unix.Exec, i.e. actually replacing
 		// the process. It's in theory what a shell should do,
@@ -596,6 +601,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			case "-p", "-q":
 				panic(fmt.Sprintf("unhandled shopt flag: %s", flag))
 			default:
+				if flag == "--" {
+					return failf(2, "shopt: --: invalid option\nshopt: usage: shopt [-pqsu] [-o] [optname ...]\n")
+				}
 				return failf(2, "shopt: invalid option %q\n", flag)
 			}
 		}

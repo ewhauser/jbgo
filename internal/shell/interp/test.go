@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	resyntax "regexp/syntax"
+	"strconv"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
@@ -57,6 +58,39 @@ func condTraceOperand(operand string) string {
 		return "''"
 	}
 	return operand
+}
+
+func isNumericTestOp(op syntax.BinTestOperator) bool {
+	switch op {
+	case syntax.TsEql, syntax.TsNeq, syntax.TsLeq, syntax.TsGeq, syntax.TsLss, syntax.TsGtr:
+		return true
+	default:
+		return false
+	}
+}
+
+func classicTestInt(s string) (int64, bool) {
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	return n, err == nil
+}
+
+func numericTest(op syntax.BinTestOperator, x, y int64) bool {
+	switch op {
+	case syntax.TsEql:
+		return x == y
+	case syntax.TsNeq:
+		return x != y
+	case syntax.TsLeq:
+		return x <= y
+	case syntax.TsGeq:
+		return x >= y
+	case syntax.TsLss:
+		return x < y
+	case syntax.TsGtr:
+		return x > y
+	default:
+		return false
+	}
 }
 
 // non-empty string is true, empty string is false
@@ -105,6 +139,32 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 				if match(pattern, str) == (x.Op != syntax.TsNoMatch) {
 					return "1"
 				}
+			}
+			return ""
+		}
+		if classic && isNumericTestOp(x.Op) {
+			left := r.bashTest(ctx, x.X, classic)
+			if !r.exit.ok() {
+				return ""
+			}
+			right := r.bashTest(ctx, x.Y, classic)
+			if !r.exit.ok() {
+				return ""
+			}
+			lx, ok := classicTestInt(left)
+			if !ok {
+				r.errf("[: %s: integer expected\n", left)
+				r.exit.code = 2
+				return ""
+			}
+			rx, ok := classicTestInt(right)
+			if !ok {
+				r.errf("[: %s: integer expected\n", right)
+				r.exit.code = 2
+				return ""
+			}
+			if numericTest(x.Op, lx, rx) {
+				return "1"
 			}
 			return ""
 		}
@@ -209,8 +269,12 @@ func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *trac
 		}
 		left := r.evalCond(ctx, x.X, trace)
 		right := r.evalCond(ctx, x.Y, trace)
+		value := condBoolString(r.binTest(ctx, x.Op, left.value, right.value))
+		if isNumericTestOp(x.Op) {
+			value = condBoolString(numericTest(x.Op, int64(r.evalIntegerAttr(left.value)), int64(r.evalIntegerAttr(right.value))))
+		}
 		return condEval{
-			value: condBoolString(r.binTest(ctx, x.Op, left.value, right.value)),
+			value: value,
 			trace: condTraceBinary(left.trace, x.Op, right.trace),
 		}
 	case *syntax.CondUnary:
@@ -305,12 +369,20 @@ func testExpandErrFatal(err error) bool {
 	if err == nil {
 		return false
 	}
+	var (
+		unboundVarErr  expand.UnboundVariableError
+		unsetErr       expand.UnsetParameterError
+		indirectErr    expand.InvalidIndirectExpansionError
+		invalidNameErr expand.InvalidVariableNameError
+	)
 	switch {
-	case errors.As(err, &expand.UnsetParameterError{}):
+	case errors.As(err, &unboundVarErr):
 		return true
-	case errors.As(err, &expand.InvalidIndirectExpansionError{}):
+	case errors.As(err, &unsetErr):
 		return true
-	case errors.As(err, &expand.InvalidVariableNameError{}):
+	case errors.As(err, &indirectErr):
+		return true
+	case errors.As(err, &invalidNameErr):
 		return true
 	default:
 		return false

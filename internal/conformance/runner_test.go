@@ -43,6 +43,15 @@ func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	if got, want := normalizeBashStderr("/tmp/x/bash: line 2: parse error\n"), "parse error\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
 	}
+	if got, want := normalizeBashStderr("bash: a + 42x: value too great for base (error token is \"42x\")\n"), "a + 42x: value too great for base (error token is \"42x\")\n"; got != want {
+		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
+	}
+	if got, want := normalizeBashStderr("0x1X: value too great for base (error token is \"0x1X\")\n"), "0x1X: value too great for base (error token is \"0x1X\")\n"; got != want {
+		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
+	}
+	if got, want := normalizeBashStderr("shopt: usage: shopt [-pqsu] [-o long-option] optname [optname...]\n"), "shopt: usage: shopt [-pqsu] [-o] [optname ...]\n"; got != want {
+		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
+	}
 	if got, want := normalizeBashStderr("$'echo\\rTEST': command not found\n"), "echo\rTEST: command not found\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
 	}

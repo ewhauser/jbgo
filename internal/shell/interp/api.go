@@ -176,6 +176,7 @@ type Runner struct {
 	optState getopts
 
 	interactive            bool
+	commandString          bool
 	syntheticPipelineStmts map[*syntax.Stmt]*syntax.Stmt
 
 	// keepRedirs is used so that "exec" can make any redirections
@@ -303,7 +304,8 @@ type RunnerConfig struct {
 	Stderr io.Writer
 	Params []string
 
-	Interactive bool
+	Interactive   bool
+	CommandString bool
 
 	LegacyBashCompat bool
 
@@ -412,6 +414,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.realpathHandler = cfg.RealpathHandler
 	r.procSubstHandler = cfg.ProcSubstHandler
 	r.legacyBashCompat = cfg.LegacyBashCompat
+	r.commandString = cfg.CommandString
 	if err := r.setStdIO(cfg.Stdin, cfg.Stdout, cfg.Stderr); err != nil {
 		return nil, err
 	}
@@ -686,6 +689,7 @@ func (r *Runner) Reset() {
 		stdout:           r.origStdout,
 		stderr:           r.origStderr,
 		legacyBashCompat: r.legacyBashCompat,
+		commandString:    r.commandString,
 
 		origDir:    r.origDir,
 		origParams: r.origParams,
@@ -880,6 +884,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		internalRun:            r.internalRun,
 		opts:                   r.opts,
 		interactive:            r.interactive,
+		commandString:          r.commandString,
 		legacyBashCompat:       r.legacyBashCompat,
 		exit:                   r.exit,
 		lastExit:               r.lastExit,

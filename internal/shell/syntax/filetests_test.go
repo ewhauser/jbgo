@@ -522,12 +522,12 @@ var fileTests = []fileTestCase{
 	),
 	fileTest(
 		[]string{"((1.2 > 0.3))"},
+		langFile(arithmCmd(word(lit("1"), lit(".2 > 0.3"))), LangBash|LangMirBSDKorn),
 		langFile(arithmCmd(&BinaryArithm{
 			Op: Gtr,
 			X:  litWord("1.2"),
 			Y:  litWord("0.3"),
 		}), LangZsh),
-		langErr2("1:4: floating point arithmetic is a zsh feature; tried parsing as LANG", LangBash|LangMirBSDKorn),
 	),
 	fileTest(
 		[]string{
