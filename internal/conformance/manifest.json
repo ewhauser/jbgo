@@ -2,25 +2,222 @@
   "suites": {
     "bash": {
       "entries": {
-        "oils/alias.test.sh": {
+        "oils/alias.test.sh::Alias that is && || ;": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/append.test.sh": {
+        "oils/alias.test.sh::Alias that is pipeline": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/arith-context.test.sh": {
+        "oils/alias.test.sh::Alias with a quote in the middle is a syntax error": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/arith-dynamic.test.sh": {
+        "oils/alias.test.sh::Corner case: alias inside LHS array arithmetic expression": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/arith.test.sh": {
+        "oils/alias.test.sh::Invalid syntax of alias": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::Loop split across both iterative and recursive aliases": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::Syntax error after expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::Two aliases in pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/alias.test.sh::Usage of builtins": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::alias not defined": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::alias used in here doc": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::alias with environment bindings works": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::alias with line continuation in the middle": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::alias with word of multiple lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::first and second word are the same alias, with trailing space": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::unalias -a": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::unalias not defined": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/alias.test.sh::unalias without args is a usage error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/append.test.sh::Try to append list to element": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith-context.test.sh::Empty expression (( ))  $(( ))": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith-context.test.sh::Empty expression a[]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith-context.test.sh::Empty expression in ${a[@]: : }": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith-dynamic.test.sh::Double quotes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith-dynamic.test.sh::Single quotes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith-dynamic.test.sh::Substitutions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Comment not allowed in the middle of multiline arithmetic": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Constant with quotes like '1'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Constants in base 36": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Constants in bases 2 to 64": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Double subscript": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Dynamic base constants": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Dynamic parsing of arithmetic": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Increment undefined variables with nounset": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Integer constant parsing": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Integer constant validation": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Invalid LValue": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Invalid LValue that looks like array": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Invalid LValue: two sets of brackets": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Invalid constant": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Logical Ops Short Circuit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Multiple digit constants with base N": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Negative exponent": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::Negative numbers with bit shift": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::No floating point": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::array assignment with dynamic array name": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::assignment with dynamic var name": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::nested ternary (bug fix)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::nounset with arithmetic": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::s[0] with string '12 34'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::unary array assignment with dynamic var name": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::unary assignment with dynamic var name": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/arith.test.sh::undef[0] with nounset": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/array-assoc.test.sh::BashAssoc ${a[@]@Q}": {
           "mode": "xfail",
@@ -110,13 +307,13 @@
           "mode": "xfail",
           "reason": "gbash treats nested array assignment as fatal instead of bash's non-fatal member-assignment error"
         },
-        "oils/array.test.sh::Using an array itself as the index on RHS": {
-          "mode": "xfail",
-          "reason": "gbash's unsupported strict_arith shopt diagnostic text still differs from bash in this array test"
-        },
         "oils/array.test.sh::Using an array itself as the index on LHS": {
           "mode": "xfail",
           "reason": "gbash still coerces array lvalue subscripts differently from bash"
+        },
+        "oils/array.test.sh::Using an array itself as the index on RHS": {
+          "mode": "xfail",
+          "reason": "gbash's unsupported strict_arith shopt diagnostic text still differs from bash in this array test"
         },
         "oils/array.test.sh::array with invalid token": {
           "mode": "xfail",
@@ -130,205 +327,2386 @@
           "mode": "xfail",
           "reason": "gbash still follows bash's export behavior instead of rejecting array export under strict_array"
         },
-        "oils/assign-deferred.test.sh": {
+        "oils/assign-deferred.test.sh::'builtin' prefix is allowed on assignments": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign-extended.test.sh": {
+        "oils/assign-deferred.test.sh::'command' prefix is allowed on assignments": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign.test.sh": {
+        "oils/assign-deferred.test.sh::export a[7]=8": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-features.test.sh": {
+        "oils/assign-deferred.test.sh::readonly a[7]=8": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-idioms.test.sh": {
+        "oils/assign-extended.test.sh::ble.sh: eval -- \"$(declare -p var arr)\"": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-unset.test.sh": {
+        "oils/assign-extended.test.sh::declare": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/blog1.test.sh": {
+        "oils/assign-extended.test.sh::declare -F prints function names": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh": {
+        "oils/assign-extended.test.sh::declare -F with shopt -s extdebug prints more info": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh": {
+        "oils/assign-extended.test.sh::declare -p": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-bash.test.sh": {
+        "oils/assign-extended.test.sh::declare -p UNDEF (and typeset) -- prints something to stderr": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-bracket.test.sh": {
+        "oils/assign-extended.test.sh::declare -p and value.Undef": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-cd.test.sh": {
+        "oils/assign-extended.test.sh::declare -p foo=bar doesn't make sense": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-completion.test.sh": {
+        "oils/assign-extended.test.sh::declare -p var": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-dirs.test.sh": {
+        "oils/assign-extended.test.sh::declare -paA": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-echo.test.sh": {
+        "oils/assign-extended.test.sh::declare -pg": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-eval-source.test.sh": {
+        "oils/assign-extended.test.sh::declare -pnrx": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-getopts.test.sh": {
+        "oils/assign-extended.test.sh::eval -- \"$(declare -p arr)\" (restore arrays w/ unset elements)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-meta-assign.test.sh": {
+        "oils/assign-extended.test.sh::function name with /": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-meta.test.sh": {
+        "oils/assign-extended.test.sh::invalid var name": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-misc.test.sh": {
+        "oils/assign-extended.test.sh::myvar=typeset (another form of dynamic assignment)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-printf.test.sh": {
+        "oils/assign-extended.test.sh::syntax error in array assignment": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-process.test.sh": {
+        "oils/assign-extended.test.sh::typeset +r removes read-only attribute (TODO: documented in bash to do nothing)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-read.test.sh": {
+        "oils/assign-extended.test.sh::typeset +x": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-set.test.sh": {
+        "oils/assign-extended.test.sh::typeset -ar makes it readonly": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-special.test.sh": {
+        "oils/assign-extended.test.sh::typeset -p": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-times.test.sh": {
+        "oils/assign-extended.test.sh::typeset -r makes a string readonly": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh": {
+        "oils/assign-extended.test.sh::unset and shell funcs": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-err.test.sh": {
+        "oils/assign.test.sh::\"readonly -a arr\" and \"readonly -A dict\" should not not remove existing arrays": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh": {
+        "oils/assign.test.sh::Env binding not allowed before compound command": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-type-bash.test.sh": {
+        "oils/assign.test.sh::Env value with escaped <": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-umask.test.sh": {
+        "oils/assign.test.sh::Test above without 'local' (which is not POSIX)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-vars.test.sh": {
+        "oils/assign.test.sh::aliased assignment doesn't split": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/case_.test.sh": {
+        "oils/assign.test.sh::local a=loc $var c=loc": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/command-sub.test.sh": {
+        "oils/assign.test.sh::readonly array should not be modified by a+=(1)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/command_.test.sh": {
+        "oils/assign.test.sh::redirect after assignment builtin (eval redirects after evaluating arguments)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dbracket.test.sh": {
+        "oils/assign.test.sh::redirect after bare assignment": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/divergence.test.sh": {
+        "oils/assign.test.sh::redirect after command sub (like case above but without assignment builtin)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dparen.test.sh": {
+        "oils/ble-features.test.sh::[bash_unset] function call with tempenv vs tempenv-eval": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/empty-bodies.test.sh": {
+        "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for localvar": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/errexit.test.sh": {
+        "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for localvar (mutated from tempenv)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/exit-status.test.sh": {
+        "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for tempenv": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/extglob-files.test.sh": {
+        "oils/ble-features.test.sh::[bash_unset] localvar-inherit from tempenv": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/extglob-match.test.sh": {
+        "oils/ble-features.test.sh::[compat_array] scalar write to associative arrays": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/fatal-errors.test.sh": {
+        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=(declare v); \"${a[@]}\" fails": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=declare; \"$a\" v=1 fails": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::Issue #1069 [52] BUG: \\builtin local v=1 fails": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::Issue #1069 [56] BUG: declare -p unset does not print any error message": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::Issue #1069 [59] - Assigning Str to BashArray/BashAssoc should not remove BashArray/BashAssoc": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::dynamic arith varname: assign": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::dynamic arith varname: copy/add": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::recursive arith: recursion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::recursive arith: short circuit &&, ||": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::shift unshift reverse": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::shopt -u expand_aliases and eval": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested localvars": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested tempenvs": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-unset.test.sh::[bash_unset] local-unset / dynamic-unset for localvar on nested-context": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-unset.test.sh::[bash_unset] local-unset for nested tempenvs": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/blog1.test.sh::${####}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/blog1.test.sh::${###2}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/blog1.test.sh::${###}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/blog1.test.sh::${##2}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/blog1.test.sh::${#1#'###'}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/blog1.test.sh::Julia example from spec/oil-user-feedback": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Ascending number range expansion with negative step is invalid": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Char ranges with steps of the wrong sign": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Descending number range expansion with positive step is invalid": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Fixed width number range expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Mixed case char expansion is invalid": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Mixed comma and range doesn't work": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Tilde expansion with brace expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::Two kinds of tilde expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::double expansion with literal and simple var": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/brace-expansion.test.sh::double expansion with simple var -- bash bug": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::#2640 Hanging when reading from character devices": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::'echo' and printf fail on writing to full disk": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::First word like foo$x() and foo$[1+2] (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::Function names": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::assign readonly -- multiple lines -- set -o posix": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::assign readonly -- one line": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::file with NUL byte": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::other builtins fail on writing to full disk": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::process sub <(echo 42 | tee PWNED) not allowed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::unset readonly -- multiple lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/bugs.test.sh::unset readonly -- one line": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bash.test.sh::help": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bash.test.sh::mapfile (delimiter): -d '' (null-separated)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bash.test.sh::mapfile (input range): -s start -n count": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bash.test.sh::mapfile (store position): -O start": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bash.test.sh::mapfile -u with named file descriptor": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::( ) ! -a -o with system version of [": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::-h and -L test for symlink": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::-k for sticky bit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::-ot and -nt": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::-u for setuid, -g too": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::Looks like octal, but digit is too big": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::No octal, hex, base N conversion - leading 0 is a regular decimal": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::[ -t invalid ]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::[ a -eq b ]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::] syntax errors": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::negative octal numbers, etc.": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::no recursive arith [ 1+2 -eq 3 ]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::test -c": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::test -p named pipe": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-bracket.test.sh::test with extra args is syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::CDPATH is respected": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-cd.test.sh::Test the current directory after 'cd ..' involving symlinks": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::arguments to pwd": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::cd - without OLDPWD": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::cd BAD/..": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::cd to relative path with -L and -P": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::cd to symlink with -L and -P": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::cd with 2 or more args - with strict_arg_parse": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::cd with 2 or more args is allowed (strict_arg_parse disabled)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::pwd errors out on args with strict_arg_parse": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::pwd in symlinked dir on shell initialization": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::pwd with symlink and -P": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-cd.test.sh::remove pwd dir": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::-A function prints functions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::-o filenames and -o nospace have no effect with compgen": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::-o plusdirs and -o dirnames with compgen": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::Invalid syntax": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::Parse errors for compgen -W and complete -W": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::Runtime errors for compgen -F func": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::Runtime errors for compgen -W": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A command completes builtins and keywords": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A command completes external commands": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A command completes functions and aliases": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A directory": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A file": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -A user": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -F with scalar COMPREPLY": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -W '' cmd is not a usage error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -W 'one two three'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -W evaluates code in $()": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -W uses IFS, and delimiters are escaped with \\": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -W words -X filter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -e P": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -e on known, but unexported, var": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -e on unknown var": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -e with global/local exported vars": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -f": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -f -X filter -- $cur": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -f on invalid  dir": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -k completes reserved shell keywords": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -k shows Oils keywords too": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -k shows the same keywords as bash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -o default completes files and dirs": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -v P": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -v on unknown var": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen -v with local vars": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen doesn't need shell quoting": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen doesn't respect -X for user-defined functions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen with action and suffix: helptopic": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen with actions: alias, setopt": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen with actions: function / variable / file": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::compgen with actions: shopt": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::complete -C vs. compgen -C": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::complete -F f is usage error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-completion.test.sh::how compgen calls completion functions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::cd replaces the lowest entry on the directory stack!": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::dirs -c to clear the stack": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::dirs -p to print one entry per line": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::dirs -v to print numbered stack, one entry per line": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::dirs builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::dirs does not take arguments": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::dirs test of path alias `..`": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::popd usage error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::pushd does not take more than one argument": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-dirs.test.sh::pushd/popd": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::\\0 \\1 \\8": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::\\0377 is the highest octal byte": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-echo.test.sh::\\0400 is one more than the highest octal byte": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-echo.test.sh::\\0777 is out of range": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-echo.test.sh::\\u6": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::\\x": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::echo -e with 4 digit unicode escape": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::echo -e with 8 digit unicode escape": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::echo -e with C escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::echo builtin should disallow typed args - literal": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::incomplete hex escape": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::incomplete octal escape": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-echo.test.sh::incomplete unicode escape": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::Eval in bash does tilde expansion in array": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::Eval in does tilde expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::Eval with syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::Source with no arguments": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::Source with syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::eval accepts/ignores --": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::eval usage": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::shopt -u sourcepath toggles PATH lookup": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::source accepts/ignores --": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-eval-source.test.sh::source doesn't crash when targeting a directory": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::More Smooshing 2": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::OPTIND after multiple getopts with different spec": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::OPTIND after multiple getopts with same spec": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::flag and arg: -c10": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts handles '--' #2579": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts leaves all args after '--' as operands #2579": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts missing required argument": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts normal mode - missing required argument (compare with silent)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts sees unknown arg": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts with invalid flag": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-getopts.test.sh::getopts with invalid variable name": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::\\builtin declare - ble.sh relies on it": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::\\command readonly - similar issue": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-meta-assign.test.sh::builtin declare,local": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::builtin typeset, export,readonly": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::command export,readonly": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::command local": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::dynamic builtin command ASSIGN, command builtin ASSIGN": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::export, builtin export": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta-assign.test.sh::static builtin command ASSIGN, command builtin ASSIGN": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::builtin ls not found": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::builtin usage": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -V": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -V nonexistent": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -p (find hidden tool in default path)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -p (override existing program)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -v": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -v doesn't find executable dir": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
+        },
+        "oils/builtin-meta.test.sh::command -v doesn't find non-executable file": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-meta.test.sh::command -v with multiple names": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-misc.test.sh::Print shell strings with normal chars: set and printf %q and ${x@Q}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-misc.test.sh::Print shell strings with weird chars: set and printf %q and ${x@Q}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-misc.test.sh::Shifting too far": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-misc.test.sh::history builtin usage": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-misc.test.sh::time pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::%(strftime format)T": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::%(strftime format)T TZ in environ but not in shell's memory": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::%(strftime format)T doesn't respect TZ if not exported": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::%06s is no-op": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
+        },
+        "oils/builtin-printf.test.sh::%10.5(strftime format)T": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::Arbitrary base 64#a is rejected (unlike in shell arithmetic)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::Runtime error for invalid integer": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::Unicode char with '": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::bash truncates long strftime string at 128": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::leading spaces are accepted in value given to %d %X, but not trailing spaces": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::negative numbers with unsigned / octal / hex": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf # flag": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf % escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf %*.*s (width/precision from args)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf %6q (width)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf %b does backslash escaping": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf %b unicode escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf %b with truncated octal escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-printf.test.sh::printf %c unicode - prints the first BYTE of a string - it does not respect UTF-8": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-printf.test.sh::printf %q": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf -v dynamic scope": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf -v syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf backslash escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf eE fF gG": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf invalid backslash escape (is ignored)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf invalid format": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf negative integer overflow": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf negative numbers": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf octal backslash escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf positive integer overflow": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf unicode backslash escapes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::printf with no args": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-printf.test.sh::unsigned / octal / hex big": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::Changing resource limit is denied": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::Exit builtin with invalid arg": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::Exit builtin with too many args": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::arg that would overflow 64 bits is detected": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::exec -- 2>&1": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::exec -a sets argv[0]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::exec builtin accepts --": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::time with brace group argument": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit -S for soft limit (default), -H for hard limit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit -f 1 prevents files larger 512 bytes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit -n limits file descriptors": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit accepts 'unlimited'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit doesn't accept multiple flags - reduce confusion between shells": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit negative arg": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit negative flag": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit of 2**32, 2**31 (int overflow)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit that is 64 bits": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit too many args": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::ulimit with no flags is like -f": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-process.test.sh::write big file with ulimit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::\"backslash + newline\" should be swallowed regardless of \"-d <delim>\"": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::IFS='\\ ' and backslash escaping": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::IFS='x ' incomplete backslash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::IFS='x ' read -a: intermediate spaces (unlimited split)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::IFS='x ' read -a: trailing spaces (unlimited split)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::IFS='x ' read a b: trailing spaces (with max_split)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::IFS=x read a b <<< xxxxxx": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::mapfile from directory (bash doesn't handle errors)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -N doesn't respect delimiter, while read -n does": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -N ignores delimiters": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -d '' (null-separated records)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -d -n - respects delimiter and splits": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -d : (colon-separated records)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -d when there's no delimiter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n (with $REPLY)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n 0": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n 4 with backslash + delim": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n 4 with incomplete backslash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n and backslash escape": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n doesn't strip whitespace (bug fix)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n from directory": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n from pipe": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n vs. -N": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -n with invalid arg": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -p (not fully tested)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -r -d '' for NUL strings, e.g. find -print0": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -rd": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -s from pipe, not a terminal": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -t -0.5 is invalid": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -t 0 tests if input is available": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -t 0.5": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -u": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -u -s": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -u 3 -d 5": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -u 3 -d b -N 6": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read -u syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read /dev/null": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read and \"\\ \"": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read bash bug": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read from redirected directory is non-fatal error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read multiple lines with IFS=:": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read multiple vars spanning many lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read usage": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read will unset extranous vars": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read with line continuation reads multiple physical lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read with smooshed args": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::read without args uses $REPLY, no splitting occurs (without -n)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-read.test.sh::while IFS= read -r -d '' item || [[ -n $item ]]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::'set' and 'eval' round trip": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::A single + is an ignored flag; not an argument": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::can continue after unknown option": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set +a stops exporting": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set - - and so forth": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set - stops option processing like set --": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set -eu (flag parsing)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set -o allexport (long form)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set -u with undefined var in interactive shell does NOT exit the interpreter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::set -u with undefined variable exits the interpreter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-set.test.sh::variables set before set -a are not exported": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::Prefix assignments persist after readonly, but NOT exported (set -o posix)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::Prefix assignments persist after special builtins, like : (set -o posix)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::Prefix binding for exec is a special case (versus e.g. readonly)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::Shift is special and fails whole script": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::Special builtins can't be redefined as shell functions (set -o posix)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::bash 'type' gets confused - says 'function', but runs builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-special.test.sh::set is special and fails whole script, even if using || true": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-times.test.sh::times shows two formatted lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::Combine DEBUG trap and ERR trap": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::Combine DEBUG trap and USR1 trap": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::Combine ERR trap and USR1 trap": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::Compare trap DEBUG vs. trap ERR": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::One 'echo' in first pipeline part - why does bash behave differently from case above?": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::but trap DEBUG respects errexit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap -l": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap -p": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap -p in child is BUGGY in bash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG and command sub / subshell": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG and control flow": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG and pipeline (lastpipe difference)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG case": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG for each": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG for expr": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG function call": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG if while": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG ignores $?": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG not run in forked interpreter for first pipeline part": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG with 'exit'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG with 'return'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG with non-compound commands": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-bash.test.sh::trap RETURN": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::Pipeline group quirk": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::error in trap ERR (recursive)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::set -o errtrace - trap ERR runs in shell functions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::set -o errtrace - trap ERR runs in shell functions (LINENO)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::set -o errtrace: trap ERR runs in subprograms": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::set -o errtrace: trap ERR with &": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR and errexit disabled context": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR and pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR and pipelines - PIPESTATUS difference": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR and set -o errexit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR and || conditional": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR does not run in errexit situations": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR doesn't run in subprograms - subshell, command sub, async": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR not active in shell functions in (bash behavior)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR pipelines without simple commands": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR with \"atoms\": assignment (( [[": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR with for,  case, { }": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR with redirect": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap-err.test.sh::trap can use original $LINENO": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::Register the same handler for multiple signals": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::Remove multiple handlers with trap -": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::Remove trap with an unsigned integer": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::SIGINT and INT are aliases": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::eval in the exit trap (regression for issue #293)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::exit 1 when trap code string is invalid": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::exit codes for traps are isolated": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::print trap handler with multiple lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap '' EXIT - printing state": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap '' sets handler to empty string (SIG_IGN)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap '' with multiple signals": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap 'echo hi' KILL (regression test, caught by smoosh suite)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap -p is like trap: it prints the handlers and full signal names": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap 0 2 resets EXIT AND SIGINT": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap 0 is equivalent to trap EXIT": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap 1 is equivalent to SIGHUP; HUP is equivalent to SIGHUP": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap EXIT calling exit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap EXIT clears the EXIT trap": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap EXIT with PARSE error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap EXIT with PARSE error and explicit exit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap EXIT, sleep, SIGINT: non-interactively": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap INT, sleep, SIGINT: non-interactively": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap USR1, sleep, SIGINT: non-interactively": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap foo gives non-zero error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::trap with command.NoOp - check internal invariant": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-trap.test.sh::trap without args prints traps": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::traps are cleared in subshell (started with &)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-trap.test.sh::traps are not active inside subshells $() ()  trap | cat": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-type-bash.test.sh::type -P builtin -> not a file but file found": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-type-bash.test.sh::type -P does not find directories (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
+        },
+        "oils/builtin-type-bash.test.sh::type -a -> builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-type-bash.test.sh::type -a -> builtin and file and shell function": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-type-bash.test.sh::type -ap -> builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-type-bash.test.sh::type -t doesn't find non-executable (like command -v)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-type-bash.test.sh::type prints function source code": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::'umask -S' prints symbolic umask": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::'umask -p' prints a form that can be eval'd": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::'umask 0002' sets the umask": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::set umask with symbolic mode: g-w,o-w": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::set umask with symbolic mode: u-rw  ...  u=,g+,o-  ...": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::symbolic syntax error: b=rwx": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::symbolic syntax error: empty clause u-r,,u-r": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::symbolic syntax error: start with -": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask X perm": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask a is valid who": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask allow overwriting and duplicates": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask bare op": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask default who": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask permcopy": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask permcopy running value": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask s perm": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask sequential actions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask t perm": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::umask with too many arguments (i.e. extra spaces)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::usage: empty input, space input": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::usage: invalid octal digits": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::usage: large octal number": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-umask.test.sh::usage: too many args": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Dependent export setting": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Export a local that shadows a global": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Export sets a global variable that persists after export -n": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Exporting a parent func variable (dynamic scope)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Unset a function without -f": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Unset and scope (bug #653)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Unset exported variable, then define it again.  It's NOT still exported.": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Unset readonly variable": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::Unset wrong type": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::can't export array (strict_array)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::can't export associative array (strict_array)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::export -n foo=bar not allowed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/builtin-vars.test.sh::local after readonly": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/case_.test.sh::Case statement with ;&": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/case_.test.sh::Case statement with ;;&": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/case_.test.sh::Pattern ? matches 1 code point (many bytes), but not multiple code points": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/case_.test.sh::case \\n bug regression": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/case_.test.sh::matching every byte against itself": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/case_.test.sh::matching the byte 0xff against empty string - DISABLED - CI only bug?": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command-sub.test.sh::Double Quotes in Command Sub in Double Quotes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command-sub.test.sh::Escaped quote in [[ ]]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command-sub.test.sh::Making keyword out of command sub should NOT work": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::$PATH lookup": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::Command block": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/command_.test.sh::File in relative subdirectory and no shebang is executed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::File with no shebang is executed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::File with relative path and no shebang is executed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::Name too long": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::Non-executable on $PATH": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::Not a dir": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::Permission denied": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::filling $PATH cache, then deleting command": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::filling $PATH cache, then insert the same command earlier in cache": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::hash with args": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/command_.test.sh::hash without args prints the cache": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::(( array1 == array2 )) doesn't work": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::Argument that looks like a real operator": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::Hex literals with -eq": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::Octal literals with -eq": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::Quotes don't matter in comparison": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ && ]] is syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ '(' foo ]] is syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ -z '>' a ]] is syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ -z ]] is syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ ]] is syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ a 3< b ]] doesn't work (bug regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::[[ regex syntax error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
+        },
+        "oils/dbracket.test.sh::[[ with op variable (compare with test-builtin.test.sh)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::\\(\\) in pattern (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::negative numbers - zero, decimal, octal, hex, base N": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dbracket.test.sh::tilde expansion with =~ (confusing)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
+        },
+        "oils/divergence.test.sh::!( as negation and subshell versus extended glob - #2463": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/divergence.test.sh::xz package: dirprefix=\"${line##*([}\"": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/dparen.test.sh::literal strings inside (( ))": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/empty-bodies.test.sh::Empty do/done": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/empty-bodies.test.sh::Empty then/fi": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/errexit.test.sh::Command sub exit code is lost": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/errexit.test.sh::More && ||": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/errexit.test.sh::bash atoms [[ (( - redir failure checked": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/errexit.test.sh::errexit and brace group { }": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/errexit.test.sh::errexit and time { }": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/errexit.test.sh::set -e in function #2": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/errexit.test.sh::set errexit while it's ignored in a subshell (moot with strict_errexit)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/errexit.test.sh::simple command / assign - redir failure DOES respect errexit": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/errexit.test.sh::simple command that's an alias - redir failure checked": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/exit-status.test.sh::func subshell OverflowError https://github.com/oilshell/oil/issues/996": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/exit-status.test.sh::subshell OverflowError https://github.com/oilshell/oil/issues/996": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/extglob-files.test.sh::+() matches 1 or more": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Escaping of pipe (glibc bug, see demo/glibc_fnmatch.c)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Extended glob as argument to ${undef:-} (dynamic globbing)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Extended glob in assignment builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Extended glob patterns with spaces": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Filenames with spaces": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Glob other punctuation chars (lexer mode)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::More glob escaping": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Nested extended glob pattern": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::Two adjacent alternations": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::failglob": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::no match": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::noglob": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-files.test.sh::nullglob with extended glob": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-match.test.sh::Matching literal '@(cc)'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-match.test.sh::Turning extglob on changes the meaning of [[ !(str) ]] in bash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-match.test.sh::extended glob of single unicode char": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/extglob-match.test.sh::regular glob of single unicode char": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in case": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in conditional word": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in redirect word": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/for-expr.test.sh::Arith lexer mode": {
           "mode": "xfail",
           "reason": "gbash arithmetic-for parsing accepts quoted operands that bash rejects in this case"
         },
-        "oils/func-parsing.test.sh": {
+        "oils/func-parsing.test.sh::Function name with $": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/glob-bash.test.sh": {
+        "oils/func-parsing.test.sh::Function name with command sub": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/glob.test.sh": {
+        "oils/glob-bash.test.sh::nocaseglob with nullglob and failglob": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/globignore.test.sh": {
+        "oils/glob-bash.test.sh::shopt -s failglob behavior on single line with semicolon": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/globstar.test.sh": {
+        "oils/glob-bash.test.sh::shopt -s failglob exits properly in command context with set -e": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob-bash.test.sh::shopt -s failglob exits properly in loop context with set -e": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob-bash.test.sh::shopt -s failglob in array literal context": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob-bash.test.sh::shopt -s failglob in command context": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob-bash.test.sh::shopt -s failglob in loop context": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::Glob unicode char": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::glob can expand to command and arg": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::glob escaped": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::glob with char class expression": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::glob with escaped - in char class": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::set -o noglob": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::shopt -u globskipdots shows . and ..": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::. and .. always filtered when GLOBIGNORE is set": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Don't glob flags on file system with GLOBIGNORE": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Extended glob expansion combined with GLOBIGNORE": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore *": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore *.o:*.h": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore *.txt": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore .:..": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore ?.txt": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore dirs dist/*:node_modules/*": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore globs with char classes like [[:alnum:]]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore globs with char patterns like [!ab]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Ignore single file src/__main__.py": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::Quoting GLOBIGNORE": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::When GLOBIGNORE is set, glob may become empty (nullglob too)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::find files in subdirectory but not the ignored pattern": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::resetting globignore reverts to default behaviour": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globignore.test.sh::treat escaped patterns literally": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/globstar.test.sh::each occurrence of ** recurses through all depths": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/introspect.test.sh::${FUNCNAME} with prefix/suffix operators": {
           "mode": "xfail",
@@ -338,285 +2716,1075 @@
           "mode": "xfail",
           "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics"
         },
-        "oils/known-differences.test.sh": {
+        "oils/known-differences.test.sh::`set` output format - ifupdown-ng": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/let.test.sh": {
+        "oils/let.test.sh::let": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/loop.test.sh": {
+        "oils/let.test.sh::let with ()": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/nameref.test.sh": {
+        "oils/loop.test.sh::break in condition of loop": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/nix-idioms.test.sh": {
+        "oils/loop.test.sh::for loop with invalid identifier": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/nocasematch-match.test.sh": {
+        "oils/loop.test.sh::top-level break/continue/return (without strict_control_flow)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/nul-bytes.test.sh": {
+        "oils/loop.test.sh::while in pipe": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
         },
-        "oils/paren-ambiguity.test.sh": {
+        "oils/nameref.test.sh::-n attribute before it has a value": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh": {
+        "oils/nameref.test.sh::-n attribute on array is hard error, not a warning": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/pipeline.test.sh": {
+        "oils/nameref.test.sh::@ in nameref isn't supported, unlike in ${!ref}": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/quote.test.sh": {
+        "oils/nameref.test.sh::Mutually recursive namerefs detected on READ": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect-command.test.sh": {
+        "oils/nameref.test.sh::Mutually recursive namerefs detected on WRITE": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect-multi.test.sh": {
+        "oils/nameref.test.sh::a[@] in nameref": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect.test.sh": {
+        "oils/nameref.test.sh::assign to empty nameref and invalid nameref": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/serialize.test.sh": {
+        "oils/nameref.test.sh::assign to invalid ref": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/sh-func.test.sh": {
+        "oils/nameref.test.sh::bad mutation through nameref: ref[0]= where ref is array[0]": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/sh-options-bash.test.sh": {
+        "oils/nameref.test.sh::exported nameref": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/smoke.test.sh": {
+        "oils/nameref.test.sh::flag -n and +n": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/temp-binding.test.sh": {
+        "oils/nameref.test.sh::flag -n combined ${!ref} -- bash INVERTS": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/tilde.test.sh": {
+        "oils/nameref.test.sh::mutating through nameref: ref=": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nameref.test.sh::named ref with $# and shopt -s strict_nameref": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nameref.test.sh::named ref with $# doesn't work": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nameref.test.sh::named ref with 1 $1 etc.": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nameref.test.sh::readonly nameref doesn't prevent assigning through it": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nix-idioms.test.sh::${!ref} to undefined array": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nix-idioms.test.sh::${!ref} to undefined string var is fatal, INCONSISTENT with array": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nix-idioms.test.sh::Similar to above with set -u": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nix-idioms.test.sh::export with dynamic var name +=": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nix-idioms.test.sh::var ref to array 'preHooks[@]'": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nocasematch-match.test.sh::[ matching": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nocasematch-match.test.sh::[[ equality matching": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nocasematch-match.test.sh::[[ regex matching": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nocasematch-match.test.sh::case matching": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nocasematch-match.test.sh::file matching": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nocasematch-match.test.sh::parameter expansion matching": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - command sub": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - mapfile builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read -n": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::Issue 2269 - Do NUL bytes match ? in ${a#?}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::Issue 2269 Reduction": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::NUL bytes and IFS splitting": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::NUL bytes with echo -e": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/nul-bytes.test.sh::Strip ops # ## % %% with NUL bytes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/nul-bytes.test.sh::printf - \\0 escape shows NUL byte": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/nul-bytes.test.sh::printf - literal NUL in format string": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::$(( closed with ) ) after multiple lines is command - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::$(( closed with )) after multiple lines is parse error - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::$((which example - command sub versus arith sub - gnunet-gtk package": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::(( closed with ) ) after multiple lines is command - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::(( closed with )) after multiple lines is parse error - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::(((grep example - 4+ instances in regtest/aports - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::((gzip example - zdiff package - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::((pkg-config example - postfix package - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/paren-ambiguity.test.sh::((test example - liblo package - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Bad braced var sub -- not allowed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Bad var sub caught at parse time": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Incomplete for": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Incomplete if": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Incomplete while": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Invalid for loop variable name": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Long Token - 65535 bytes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::Token that's too long for Oils - 65536 bytes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::array literal in case": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::array literal inside array is a parse error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::array literal inside loop is a parse error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::bad var name in export": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::bad var name in local": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::do unexpected": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::empty clause in [[": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::incomplete backticks": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::incomplete command sub": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::interactive parse error (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::misplaced ;;": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::{ is its own word, needs a space": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/parse-errors.test.sh::} is a parse error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/pipeline.test.sh::Evaluation of argv[0] in pipeline occurs in child": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::Nested pipelines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::PIPESTATUS": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/pipeline.test.sh::PIPESTATUS is set on simple commands": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/pipeline.test.sh::PIPESTATUS with shopt -s lastpipe": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/pipeline.test.sh::Pipeline in eval": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::Redirect in Pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::SIGPIPE causes pipeline to die (regression for issue #295)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/quote.test.sh::$'' octal escapes don't have leading 0": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/quote.test.sh::$'' octal escapes with fewer than 3 chars": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/quote.test.sh::$'' supports \\cA escape for Ctrl-A - mask with 0x1f": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/quote.test.sh::$? split over multiple lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/quote.test.sh::\\c' is an escape, unlike bash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-command.test.sh::Brace group redirect": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/redirect-command.test.sh::Prefix redirect for loop -- not allowed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-command.test.sh::Redirect in assignment": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-command.test.sh::redirect bash extensions:   [[  ((  for ((": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/redirect-multi.test.sh::Extended glob that doesn't match anything": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::File redirect to $var with glob char": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::File redirect with extended glob": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::File redirect without matching any file, with failglob": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::File redirects have word splitting too!": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::Non-file redirects don't respect glob args (we differe from bash)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::Redirect to $empty (in function body)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::Redirect to ''": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect-multi.test.sh::Redirect with brace expansion isn't allowed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::1>&- to close file descriptor": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::1>&2- (Bash bug: fail to restore closed fd)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::1>&2- to move file descriptor": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::: 3>&3-": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::<&": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::<> for read/write": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::<> for read/write named pipes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::>& and <& are the same": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::>&word redirects stdout and stderr when word is not a number or -": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::>| to clobber": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Descriptor redirect with filename": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Double digit fd (20> file)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Duplicated named file descriptor shares file position": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Named file descriptor": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Named file descriptor for input": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Named read-write file descriptor": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Open descriptor with exec": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Open file on descriptor 3 and write to it many times": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Open file on descriptor 4 and write to it many times": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Open multiple descriptors with exec": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Parsing of x=1> and related cases": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Parsing of x={myvar} and related cases": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Redirect echo to stderr, and then redirect all of stdout somewhere.": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/redirect.test.sh::Redirect to empty string": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::Redirect to file descriptor that's not open": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::can't mention big file descriptor": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::echo foo >&N where N is first unused fd": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::exec redirect then various builtins": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::noclobber can still write to non-regular files like /dev/null": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/redirect.test.sh::xtrace not affected by redirects": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/regex.test.sh::Operator chars ; & but not |": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/regex.test.sh::Unquoted { is a regex parse error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/serialize.test.sh::${var@Q}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::declare": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::printf %q invalid unicode": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::printf %q newline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::printf %q quotes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::printf %q spaces": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::printf %q unicode": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::printf %q unprintable": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/serialize.test.sh::set": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-func.test.sh::Return without args gives previous": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-func.test.sh::Scope of global variable when sourced in function (Shell Functions aren't Closures)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-func.test.sh::Subshell function": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-func.test.sh::return \"\" (a lot of disagreement)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::SHELLOPTS and BASHOPTS are non-empty": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::SHELLOPTS is readonly": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::SHELLOPTS is updated when options are changed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::SHELLOPTS reflects flags like sh -x": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::export SHELLOPTS does cross-process tracing": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::export SHELLOPTS does cross-process tracing with bash": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/sh-options-bash.test.sh::shopt -s progcomp hostcomplete are stubs (bash-completion)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/smoke.test.sh::Here doc with redirect": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/smoke.test.sh::failed command": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/smoke.test.sh::pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/smoke.test.sh::pipeline with builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/temp-binding.test.sh::Temp bindings with unset": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::${x//~/~root}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::No tilde expansion in word that looks like assignment but isn't": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::No ~ expansion in dynamic assignment": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::a[x]=foo:~ has tilde expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::temp assignment x=~ env": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::tilde expansion an assignment keyword": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::tilde expansion of word after redirect": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/tilde.test.sh::x=${undef-~:~}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/tilde.test.sh::x=foo:~ has tilde expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/type-compat.test.sh::append in arith context": {
           "mode": "xfail",
           "reason": "gbash now rejects single-quoted strings in (( )) with correct behavior, but error message trailing whitespace differs from bash"
         },
-        "oils/unicode.test.sh": {
+        "oils/unicode.test.sh::$'' does NOT check that 0x110000 is too big at parse time": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-op-bash.test.sh::${#var@X} is a parse error": {
+        "oils/unicode.test.sh::$'' does not check for surrogate range at parse time": {
           "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/unicode.test.sh::Max code point U+10ffff can escaped with $''  printf  echo -e": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/unicode.test.sh::Unicode escapes \\u03bc \\U000003bc in $'', echo -e, printf": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/unicode.test.sh::printf / echo -e do NOT check max code point at runtime": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/unicode.test.sh::printf / echo -e do NOT check surrogates at runtime": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-bash.test.sh::${!A@a} and ${!A[@]@a}": {
           "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-bash.test.sh::${!var[@]@X}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/var-op-bash.test.sh::${#var@X} is a parse error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-bash.test.sh::${x@u} U L - upper / lower case (bash 5.1 feature)": {
           "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-bash.test.sh::-o nounset with var ops": {
           "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-bash.test.sh::argv array and @P @Q @a": {
           "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-bash.test.sh::assoc array and @P @Q @a": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/var-op-bash.test.sh::undef and @P @Q @a": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/var-op-bash.test.sh::undef vs. empty string in var ops": {
           "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-len.test.sh::Length operator can't be followed by test operator": {
           "mode": "xfail",
-          "reason": "gbash's `${#...}` length semantics still diverge from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::${v//} is empty search and replacement": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::${x//~homedir/}": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::Chromium from http://www.oilshell.org/blog/2016/11/07.html": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
-        },
-        "oils/var-op-patsub.test.sh::patsub with [^]]": {
-          "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
-        },
-        "oils/var-op-patsub.test.sh::patsub with single quotes and hyphen in character class (regression)": {
-          "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::Replace char class": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::Replace fixed strings": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::Right Anchored Pattern replacement with %": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::Substitute one unicode character (UTF-8)": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::Synthesized ${x///} bug (similar to above)": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-patsub.test.sh::When LC_ALL=C, pattern ? doesn't match multibyte character": {
           "mode": "xfail",
-          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::patsub with [^]]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-patsub.test.sh::patsub with single quotes and hyphen in character class (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-slice.test.sh::${array[@]::} has implicit length of zero - for ble.sh": {
           "mode": "xfail",
-          "reason": "gbash's substring slicing still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-slice.test.sh::Cannot take length of substring slice": {
           "mode": "xfail",
-          "reason": "gbash's substring slicing still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-slice.test.sh::Permutations of implicit begin and length": {
           "mode": "xfail",
-          "reason": "gbash's substring slicing still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-strip.test.sh::Append using replacement of %": {
           "mode": "xfail",
-          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-strip.test.sh::Prepend using replacement of #": {
           "mode": "xfail",
-          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
-        },
-        "oils/var-op-strip.test.sh::strip all unicode": {
-          "mode": "xfail",
-          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-strip.test.sh::Strip unicode prefix": {
           "mode": "xfail",
-          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-strip.test.sh::strip all unicode": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-strip.test.sh::strip unquoted and quoted [": {
           "mode": "xfail",
-          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-strip.test.sh::strip unquoted and quoted []": {
           "mode": "xfail",
-          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-test.test.sh::$* (\"\" \"\") and - and + (IFS=)": {
           "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-test.test.sh::Assign default with array": {
           "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-test.test.sh::Lazy Evaluation of Alternative": {
           "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::op-test for unquoted ${a[*]:-empty} with IFS=": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-test.test.sh::Unquoted with array as default value": {
           "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-test.test.sh::op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-op-test.test.sh::op-test for unquoted ${a[*]:-empty} with IFS=": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-ref.test.sh::Bizarre tilde expansion in array index": {
           "mode": "xfail",
-          "reason": "gbash's indirect expansion still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-ref.test.sh::Indirect expansion TO fancy expansion features bash disallows": {
           "mode": "xfail",
-          "reason": "gbash's indirect expansion still diverges from bash in this case"
-        },
-        "oils/var-ref.test.sh::var ref doesn't need cycle detection": {
-          "mode": "xfail",
-          "reason": "gbash's indirect expansion still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-ref.test.sh::var ref TO array with arbitrary subscripts": {
           "mode": "xfail",
-          "reason": "gbash's indirect expansion still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-ref.test.sh::var ref doesn't need cycle detection": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub-quote.test.sh::Multiple words: outer double quotes, inner single quotes with var": {
           "mode": "xfail",
-          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub-quote.test.sh::Right Brace as argument (similar to #702)": {
           "mode": "xfail",
-          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
-        },
-        "oils/var-sub-quote.test.sh::single quotes work inside character classes": {
-          "mode": "xfail",
-          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub-quote.test.sh::Syntax error for single quote in double quote": {
           "mode": "xfail",
-          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-sub-quote.test.sh::single quotes work inside character classes": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub.test.sh::Bad var sub": {
           "mode": "xfail",
-          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub.test.sh::Descriptor redirect to bad \"$@\"": {
           "mode": "xfail",
-          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub.test.sh::Filename redirect with \"$@\"": {
           "mode": "xfail",
-          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub.test.sh::Here doc with bad \"$@\" delimiter": {
           "mode": "xfail",
-          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/vars-bash.test.sh": {
+        "oils/vars-bash.test.sh::$SHELL is set to what is in /etc/passwd": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/vars-special.test.sh": {
+        "oils/vars-special.test.sh::$1 .. $9 are scoped, while $0 is not": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/whitespace.test.sh": {
+        "oils/vars-special.test.sh::$BASHPID DOES change with subshell and command sub": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$HOME is NOT set": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$HOSTNAME": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$LINENO in ((": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$LINENO in for loop": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$OSTYPE is non-empty": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$PIPESTATUS": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$PPID": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$RANDOM": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$SECONDS": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ and ${_}": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ is not reset with (( and [[": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ is not undefined on first use": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ with && and ||": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ with assignments, arrays, etc.": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ with loop": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ with pipeline and subshell": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ with simple command and evaluation": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::$_ with word splitting": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::Some vars are set, even without startup file, or env: PATH, PWD": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::UID EUID PPID can't be changed": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/vars-special.test.sh::Vars set interactively only: $HISTFILE": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/whitespace.test.sh::\\r in arith expression is allowed by some shells, but not most!": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/whitespace.test.sh::whitespace in string to integer conversion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/xtrace.test.sh::xtrace with unprintable chars": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         }
       }
     }
