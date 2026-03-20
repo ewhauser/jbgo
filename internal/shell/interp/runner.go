@@ -622,24 +622,15 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.exit = r2.exit
 	case *syntax.CallExpr:
 		args := cm.Args
-		if decl := prefixAssignDeclClause(args, cm.Assigns); decl != nil {
-			if !r.expandAssignsForSideEffects(cm.Assigns) {
-				return
-			}
-			r.cmd(ctx, decl)
-			return
-		}
-		// Check for declaration builtins before expanding args to avoid
-		// double expansion of command substitutions in decl arguments.
-		if decl := callExprDeclClause(args); decl != nil {
-			if !r.expandAssignsForSideEffects(cm.Assigns) {
-				return
-			}
-			r.cmd(ctx, decl)
-			return
-		}
 		r.lastExpandExit = exitStatus{}
-		fields := r.fields(args...)
+		fields, decl := r.resolveCallExprArgs(args)
+		if decl != nil {
+			if !r.expandAssignsForSideEffects(cm.Assigns) {
+				return
+			}
+			r.cmd(ctx, decl)
+			return
+		}
 		if len(fields) == 0 {
 			for _, as := range cm.Assigns {
 				prev := r.lookupVar(as.Ref.Name.Value)
@@ -1663,26 +1654,39 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	}
 }
 
-func prefixAssignDeclClause(args []*syntax.Word, assigns []*syntax.Assign) *syntax.DeclClause {
-	if len(assigns) == 0 || len(args) == 0 {
-		return nil
+func (r *Runner) printDeclaredVar(name string, vr expand.Variable) {
+	flags := vr.Flags()
+	if flags == "" {
+		flags = "-"
 	}
-	variant := args[0].Lit()
-	switch variant {
-	case "declare", "local", "export", "readonly", "typeset", "nameref":
-	default:
-		return nil
-	}
-	operands := make([]syntax.DeclOperand, 0, len(args)-1)
-	for _, arg := range args[1:] {
-		if arg == nil {
-			continue
+	switch vr.Kind {
+	case expand.Indexed:
+		r.outf("declare -%s %s=(", flags, name)
+		for i, index := range vr.IndexedIndices() {
+			if i > 0 {
+				r.out(" ")
+			}
+			val, _ := vr.IndexedGet(index)
+			r.outf("[%d]=%q", index, val)
 		}
-		operands = append(operands, &syntax.DeclDynamicWord{Word: arg})
-	}
-	return &syntax.DeclClause{
-		Variant:  &syntax.Lit{Value: variant},
-		Operands: operands,
+		r.out(")\n")
+	case expand.Associative:
+		r.outf("declare -%s %s=(", flags, name)
+		first := true
+		for _, k := range expand.AssociativeKeys(vr.Map) {
+			v := vr.Map[k]
+			if !first {
+				r.out(" ")
+			}
+			r.outf("[%s]=%q", k, v)
+			first = false
+		}
+		if !first {
+			r.out(" ")
+		}
+		r.out(")\n")
+	default:
+		r.outf("declare -%s %s=%q\n", flags, name, vr.Str)
 	}
 }
 
@@ -1697,6 +1701,69 @@ func declUsage(name string) string {
 	}
 }
 
+func declaredVarMatches(vr expand.Variable, valType string, modes []string) bool {
+	if !vr.Declared() {
+		return false
+	}
+	switch valType {
+	case "-a":
+		if vr.Kind != expand.Indexed {
+			return false
+		}
+	case "-A":
+		if vr.Kind != expand.Associative {
+			return false
+		}
+	case "-n":
+		if vr.Kind != expand.NameRef {
+			return false
+		}
+	}
+	for _, mode := range modes {
+		switch mode {
+		case "-i":
+			if !vr.Integer {
+				return false
+			}
+		case "-l":
+			if !vr.Lower {
+				return false
+			}
+		case "-r":
+			if !vr.ReadOnly {
+				return false
+			}
+		case "-u":
+			if !vr.Upper {
+				return false
+			}
+		case "-x":
+			if !vr.Exported {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (r *Runner) printDeclaredVars(valType string, modes []string) {
+	names := make([]string, 0, 16)
+	seen := make(map[string]struct{})
+	r.writeEnv.Each(func(name string, _ expand.Variable) bool {
+		if _, ok := seen[name]; ok {
+			return true
+		}
+		seen[name] = struct{}{}
+		if declaredVarMatches(r.lookupVar(name), valType, modes) {
+			names = append(names, name)
+		}
+		return true
+	})
+	sort.Strings(names)
+	for _, name := range names {
+		r.printDeclaredVar(name, r.lookupVar(name))
+	}
+}
 func (r *Runner) lastpipeStmt(stmt *syntax.Stmt) (*syntax.Stmt, bool) {
 	if !r.opts[optLastPipe] || r.interactive || stmt == nil {
 		return nil, false
@@ -1929,23 +1996,106 @@ func declClauseFromFields(name string, fields []string) *syntax.DeclClause {
 	return decl
 }
 
-func callExprDeclClause(args []*syntax.Word) *syntax.DeclClause {
-	if len(args) == 0 {
-		return nil
-	}
-	name := args[0].Lit()
+func isDeclVariantName(name string) bool {
 	switch name {
 	case "declare", "local", "export", "readonly", "typeset", "nameref":
+		return true
 	default:
-		return nil
+		return false
 	}
-	decl := declClauseFromFields(name, nil)
-	decl.Variant.ValuePos = args[0].Pos()
-	decl.Variant.ValueEnd = args[0].End()
-	for _, arg := range args[1:] {
-		decl.Operands = append(decl.Operands, &syntax.DeclDynamicWord{Word: arg})
+}
+
+func declClauseFromCallWords(variant string, variantWord *syntax.Word, operands []*syntax.Word) *syntax.DeclClause {
+	decl := declClauseFromFields(variant, nil)
+	if variantWord != nil {
+		decl.Variant.ValuePos = variantWord.Pos()
+		decl.Variant.ValueEnd = variantWord.End()
+	}
+	for _, arg := range operands {
+		if arg == nil {
+			continue
+		}
+		decl.Operands = append(decl.Operands, declOperandFromCallWord(arg))
 	}
 	return decl
+}
+
+func declOperandFromCallWord(word *syntax.Word) syntax.DeclOperand {
+	if word == nil {
+		return nil
+	}
+	lit := word.Lit()
+	if lit == "" {
+		return &syntax.DeclDynamicWord{Word: word}
+	}
+	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	op, err := p.DeclOperand(strings.NewReader(lit))
+	if err != nil || op == nil {
+		return &syntax.DeclDynamicWord{Word: word}
+	}
+	return op
+}
+
+func expandedDeclVariant(fields []string) (variant string, matched bool, needMore bool) {
+	sawWrapperPrefix := false
+	lastWasWrapper := false
+	for i := 0; i < len(fields); i++ {
+		name := fields[i]
+		if isDeclVariantName(name) {
+			return name, true, false
+		}
+		switch name {
+		case "builtin":
+			sawWrapperPrefix = true
+			lastWasWrapper = true
+			continue
+		case "command":
+			sawWrapperPrefix = true
+			lastWasWrapper = true
+			continue
+		case "--":
+			if !lastWasWrapper {
+				return "", false, false
+			}
+			lastWasWrapper = false
+			continue
+		default:
+			return "", false, false
+		}
+	}
+	return "", false, sawWrapperPrefix
+}
+
+func (r *Runner) resolveCallExprArgs(args []*syntax.Word) ([]string, *syntax.DeclClause) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	fields := make([]string, 0, len(args))
+	leading := make([]string, 0, len(args))
+	canDetectDecl := true
+	for i, arg := range args {
+		expanded := r.fields(arg)
+		if !r.exit.ok() || r.exit.exiting || r.exit.fatalExit || r.exit.err != nil {
+			return nil, nil
+		}
+		fields = append(fields, expanded...)
+		if !canDetectDecl {
+			continue
+		}
+		if len(expanded) != 1 {
+			canDetectDecl = false
+			continue
+		}
+		leading = append(leading, expanded[0])
+		variant, matched, needMore := expandedDeclVariant(leading)
+		if matched {
+			return nil, declClauseFromCallWords(variant, arg, args[i+1:])
+		}
+		if !needMore {
+			canDetectDecl = false
+		}
+	}
+	return fields, nil
 }
 
 func parseDeclOperandField(field string) (syntax.DeclOperand, error) {

@@ -593,7 +593,7 @@ func gbashEnv(specPath string) map[string]string {
 		return env
 	}
 	env["HOME"] = conformanceVirtualHomeDir
-	env["PATH"] = "/bin:/usr/bin"
+	env["PATH"] = gbashPathValue()
 	env["PWD"] = "/"
 	env["TMP"] = "/tmp"
 	env["TMPDIR"] = "/tmp"
@@ -601,6 +601,13 @@ func gbashEnv(specPath string) map[string]string {
 		env["REPO_ROOT"] = gbashWorkspaceRoot(specPath)
 	}
 	return env
+}
+
+func gbashPathValue() string {
+	if runtime.GOOS == "darwin" {
+		return "/bin:/usr/bin"
+	}
+	return "/usr/bin:/bin"
 }
 
 func bashEnv(workspace, specPath string) []string {

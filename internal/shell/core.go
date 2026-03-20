@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -74,6 +76,9 @@ type resolvedCommand struct {
 	source  string
 	args    []string
 }
+
+const virtualCommandStubPrefix = "# gbash virtual command stub: "
+const maxVirtualCommandStubBytes = 256
 
 type core struct{}
 
@@ -538,10 +543,11 @@ func wrappedBuiltinInvocations(args []string) []builtinInvocation {
 	for len(current) > 0 {
 		switch current[0] {
 		case "builtin":
-			if len(current) < 2 || !interp.IsBuiltin(current[1]) {
+			next := builtinCommandTarget(current[1:])
+			if len(next) == 0 || !interp.IsBuiltin(next[0]) {
 				return invocations
 			}
-			current = append([]string(nil), current[1:]...)
+			current = append([]string(nil), next...)
 			invocations = append(invocations, builtinInvocation{
 				name: current[0],
 				argv: append([]string(nil), current...),
@@ -563,14 +569,28 @@ func wrappedBuiltinInvocations(args []string) []builtinInvocation {
 	return invocations
 }
 
+func builtinCommandTarget(args []string) []string {
+	rest := append([]string(nil), args...)
+	if len(rest) > 0 && rest[0] == "--" {
+		rest = rest[1:]
+	}
+	return rest
+}
+
 func commandBuiltinTarget(args []string) []string {
 	show := false
 	rest := append([]string(nil), args...)
 	for len(rest) > 0 {
 		switch rest[0] {
-		case "-v":
+		case "-v", "-V":
 			show = true
 			rest = rest[1:]
+		case "--":
+			rest = rest[1:]
+			if show || len(rest) == 0 {
+				return nil
+			}
+			return rest
 		default:
 			if show || len(rest) == 0 {
 				return nil
@@ -946,27 +966,36 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		return nil, false, nil //nolint:nilerr // stat error means the file doesn't exist as a command
 	}
 
+	// When the file lives inside the built-in command directory (default
+	// /bin) and its basename matches a registered command, resolve to the
+	// registry implementation directly. This prevents infinite recursion
+	// when a stub script (e.g. #!/bin/sh\nsort) in the built-in dir calls
+	// the same command name in its body. Files outside the built-in dir
+	// are resolved normally so user scripts can override built-in names.
 	resolvedName := path.Base(fullPath)
-	cmd, ok := lookupRegistryCommand(exec, resolvedName)
-	if ok {
-		return &resolvedCommand{
-			command: cmd,
-			name:    resolvedName,
-			path:    fullPath,
-			source:  source,
-		}, true, nil
+	if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
+		if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {
+			return &resolvedCommand{
+				command: cmd,
+				name:    resolvedName,
+				path:    fullPath,
+				source:  source,
+			}, true, nil
+		}
 	}
 
-	script, ok, err := resolveShebangCommand(ctx, exec, fullPath, commandName)
+	resolved, ok, err := resolveCommandFile(ctx, exec, fullPath, info.Mode(), commandName)
 	if err != nil {
 		return nil, false, err
 	}
 	if !ok {
 		return nil, false, nil
 	}
-	script.path = fullPath
-	script.source = "shebang"
-	return script, true, nil
+	resolved.path = fullPath
+	if resolved.source == "" {
+		resolved.source = source
+	}
+	return resolved, true, nil
 }
 
 func pathDirs(env expand.Environ, dir string) []string {
@@ -986,7 +1015,79 @@ func pathDirs(env expand.Environ, dir string) []string {
 	return dirs
 }
 
-func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invokedPath string) (_ *resolvedCommand, ok bool, err error) {
+type shebangResolution struct {
+	resolved    *resolvedCommand
+	interpreter string
+}
+
+func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invokedPath string) (_ shebangResolution, ok bool, err error) {
+	file, err := exec.FS.Open(ctx, fullPath)
+	if err != nil {
+		return shebangResolution{}, false, nil
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	line, ok, err := readShebangLine(file)
+	if err != nil || !ok {
+		return shebangResolution{}, ok, err
+	}
+	interpreterPath, shebangInterpreter, argv, ok := parseShebangInterpreter(line)
+	if !ok {
+		return shebangResolution{}, true, nil
+	}
+	cmd, ok := lookupRegistryCommand(exec, shebangInterpreter)
+	if !ok {
+		return shebangResolution{interpreter: interpreterPath}, true, nil
+	}
+	scriptArg := fullPath
+	if strings.Contains(invokedPath, "/") {
+		scriptArg = invokedPath
+	}
+	return shebangResolution{
+		resolved: &resolvedCommand{
+			command: cmd,
+			name:    shebangInterpreter,
+			args:    append(argv, scriptArg),
+		},
+		interpreter: interpreterPath,
+	}, true, nil
+}
+
+func resolveCommandFile(ctx context.Context, exec *Execution, fullPath string, mode stdfs.FileMode, invokedPath string) (_ *resolvedCommand, ok bool, err error) {
+	if !isExecutableCommandFile(mode) {
+		return nil, false, nil
+	}
+	if resolved, ok, err := resolveVirtualCommandStub(ctx, exec, fullPath); ok || err != nil {
+		return resolved, ok, err
+	}
+	if shebang, ok, err := resolveShebangCommand(ctx, exec, fullPath, invokedPath); ok || err != nil {
+		if err != nil {
+			return nil, false, err
+		}
+		if shebang.resolved != nil {
+			shebang.resolved.source = "shebang"
+			return shebang.resolved, true, nil
+		}
+		if shebang.interpreter != "" {
+			return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: %s: bad interpreter: No such file or directory", fullPath, shebang.interpreter)
+		}
+	}
+	shellName := defaultScriptInterpreter(exec)
+	cmd, ok := lookupRegistryCommand(exec, shellName)
+	if !ok {
+		return nil, false, nil
+	}
+	return &resolvedCommand{
+		command: cmd,
+		name:    shellName,
+		args:    []string{fullPath},
+		source:  "shell-script",
+	}, true, nil
+}
+
+func resolveVirtualCommandStub(ctx context.Context, exec *Execution, fullPath string) (_ *resolvedCommand, ok bool, err error) {
 	file, err := exec.FS.Open(ctx, fullPath)
 	if err != nil {
 		return nil, false, nil
@@ -995,27 +1096,70 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invok
 		_ = file.Close()
 	}()
 
-	line, ok, err := readShebangLine(file)
-	if err != nil || !ok {
+	name, ok, err := readVirtualCommandStub(ctx, file)
+	if err != nil {
 		return nil, false, err
 	}
-	shebangInterpreter, argv, ok := parseShebangInterpreter(line)
 	if !ok {
 		return nil, false, nil
 	}
-	cmd, ok := lookupRegistryCommand(exec, shebangInterpreter)
-	if !ok {
+	if path.Base(fullPath) != name {
 		return nil, false, nil
 	}
-	scriptArg := fullPath
-	if strings.Contains(invokedPath, "/") {
-		scriptArg = invokedPath
+	cmd, ok := lookupRegistryCommand(exec, name)
+	if !ok {
+		return nil, false, nil
 	}
 	return &resolvedCommand{
 		command: cmd,
-		name:    shebangInterpreter,
-		args:    append(argv, scriptArg),
+		name:    name,
 	}, true, nil
+}
+
+func readVirtualCommandStub(ctx context.Context, r io.Reader) (string, bool, error) {
+	reader := commandutil.ReaderWithContext(ctx, r)
+	var buf bytes.Buffer
+	n, err := io.Copy(&buf, io.LimitReader(reader, maxVirtualCommandStubBytes+1))
+	if err != nil {
+		return "", false, err
+	}
+	if n > maxVirtualCommandStubBytes {
+		return "", false, nil
+	}
+	name, ok := parseVirtualCommandStub(strings.TrimSpace(buf.String()))
+	if !ok {
+		return "", false, nil
+	}
+	return name, true, nil
+}
+
+func isExecutableCommandFile(mode stdfs.FileMode) bool {
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return mode&0o111 != 0
+}
+
+func defaultScriptInterpreter(exec *Execution) string {
+	if exec != nil {
+		switch path.Base(strings.TrimSpace(exec.Interpreter)) {
+		case "bash", "sh":
+			return path.Base(strings.TrimSpace(exec.Interpreter))
+		}
+	}
+	return "bash"
+}
+
+func parseVirtualCommandStub(line string) (string, bool) {
+	name, ok := strings.CutPrefix(line, virtualCommandStubPrefix)
+	if !ok {
+		return "", false
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsAny(name, "/ \t\r\n") {
+		return "", false
+	}
+	return name, true
 }
 
 func readShebangLine(r io.Reader) (line string, ok bool, err error) {
@@ -1037,8 +1181,71 @@ func readShebangLine(r io.Reader) (line string, ok bool, err error) {
 	return strings.TrimSpace(line[2:]), true, nil
 }
 
-func parseShebangInterpreter(line string) (name string, args []string, ok bool) {
+func parseShebangInterpreter(line string) (interpreterPath, name string, args []string, ok bool) {
 	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return "", "", nil, false
+	}
+	interpreterPath = fields[0]
+	name = path.Base(fields[0])
+	if name == "" || name == "." || name == "/" {
+		return "", "", nil, false
+	}
+	if name == "env" {
+		name, args, ok = parseEnvShebangInterpreter(fields[1:])
+		if !ok {
+			return interpreterPath, "", nil, false
+		}
+		return interpreterPath, name, args, true
+	}
+	if len(fields) > 1 {
+		args = append(args, fields[1:]...)
+	}
+	return interpreterPath, name, args, true
+}
+
+func parseEnvShebangInterpreter(fields []string) (name string, args []string, ok bool) {
+	for len(fields) > 0 {
+		switch field := fields[0]; {
+		case field == "--":
+			fields = fields[1:]
+			goto done
+		case field == "-i", field == "--ignore-environment", field == "-0", field == "--null", field == "-v", field == "--debug":
+			fields = fields[1:]
+			continue
+		case field == "-u", field == "--unset", field == "-C", field == "--chdir":
+			if len(fields) < 2 {
+				return "", nil, false
+			}
+			fields = fields[2:]
+			continue
+		case strings.HasPrefix(field, "-u"), strings.HasPrefix(field, "-C"):
+			if len(field) == 2 {
+				return "", nil, false
+			}
+			fields = fields[1:]
+			continue
+		case strings.HasPrefix(field, "--unset="), strings.HasPrefix(field, "--chdir="):
+			if !strings.Contains(field, "=") || strings.HasSuffix(field, "=") {
+				return "", nil, false
+			}
+			fields = fields[1:]
+			continue
+		case field == "-S", field == "--split-string":
+			fields = fields[1:]
+			goto done
+		case strings.HasPrefix(field, "-S"), strings.HasPrefix(field, "--split-string="):
+			split, ok := envSplitStringFields(field)
+			if !ok {
+				return "", nil, false
+			}
+			fields = append(split, fields[1:]...)
+			goto done
+		}
+		break
+	}
+
+done:
 	if len(fields) == 0 {
 		return "", nil, false
 	}
@@ -1050,6 +1257,18 @@ func parseShebangInterpreter(line string) (name string, args []string, ok bool) 
 		args = append(args, fields[1:]...)
 	}
 	return name, args, true
+}
+
+func envSplitStringFields(field string) ([]string, bool) {
+	value := strings.TrimPrefix(field, "-S")
+	if remainder, ok := strings.CutPrefix(field, "--split-string="); ok {
+		value = remainder
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, false
+	}
+	return strings.Fields(value), true
 }
 
 func shellFailure(ctx context.Context, code int, format string, args ...any) error {

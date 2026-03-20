@@ -233,6 +233,185 @@ func TestWhichSupportsAllSilentAndHelp(t *testing.T) {
 	}
 }
 
+func TestCommandBuiltinV(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: `
+shopt -s expand_aliases
+alias ll='echo alias'
+fn() { :; }
+command -v ll fn for pwd /bin/true missing
+printf 'first=%d\n' "$?"
+command -v echo fn ZZZ for
+printf 'second=%d\n' "$?"
+mkdir -p /tmp/cmdv
+echo 'echo hi' > /tmp/cmdv/tool
+chmod +x /tmp/cmdv/tool
+command -v /tmp/cmdv/tool
+printf 'slash=%d\n' "$?"
+echo 'echo hi' > /tmp/cmdv/plain
+command -v /tmp/cmdv/plain
+printf 'plain=%d\n' "$?"
+`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "" +
+		"ll\n" +
+		"fn\n" +
+		"for\n" +
+		"pwd\n" +
+		"/bin/true\n" +
+		"first=1\n" +
+		"echo\n" +
+		"fn\n" +
+		"for\n" +
+		"second=0\n" +
+		"/tmp/cmdv/tool\n" +
+		"slash=0\n" +
+		"plain=1\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestCommandBuiltinVUpper(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: `
+shopt -s expand_aliases
+alias ll='echo alias'
+fn() { :; }
+command -V ll
+command -V fn
+command -V for
+command -V pwd
+command -V missing
+printf 'status=%d\n' "$?"
+`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	for _, want := range []string{
+		"ll is aliased to `echo alias'\n",
+		"fn is a function\n",
+		"fn () \n{ \n    :\n}\n",
+		"for is a shell keyword\n",
+		"pwd is a shell builtin\n",
+		"status=1\n",
+	} {
+		if !strings.Contains(result.Stdout, want) {
+			t.Fatalf("Stdout = %q, want substring %q", result.Stdout, want)
+		}
+	}
+	if got := result.Stderr; got != "command: missing: not found\n" {
+		t.Fatalf("Stderr = %q, want %q", got, "command: missing: not found\n")
+	}
+}
+
+func TestCommandBuiltinVUpperPreservesCaseTerminators(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: `
+case_fn() {
+  case $1 in
+    a) echo a ;;
+    b) echo b ;;
+  esac
+}
+command -V case_fn
+`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got := strings.Count(result.Stdout, ";;\n"); got < 2 {
+		t.Fatalf("Stdout = %q, want case terminators preserved", result.Stdout)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestCommandBuiltinVUpperPreservesHeredocBody(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: `
+heredoc_fn() {
+  cat <<EOF
+  keep leading space
+EOF
+}
+command -V heredoc_fn
+`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if want := "cat <<EOF\n  keep leading space\nEOF\n"; !strings.Contains(result.Stdout, want) {
+		t.Fatalf("Stdout = %q, want substring %q", result.Stdout, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestCommandBuiltinPUsesDefaultPath(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: `
+mkdir -p /tmp/bin
+echo 'echo wrong' > /tmp/bin/tr
+chmod +x /tmp/bin/tr
+PATH=/tmp/bin:$PATH
+echo aaa | tr a b
+echo aaa | command -p tr a b
+PATH=
+command -p ls >/dev/null
+printf 'ls=%d\n' "$?"
+`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "wrong\nbbb\nls=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestHelpShowsBuiltinSynopsis(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
