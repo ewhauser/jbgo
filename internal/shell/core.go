@@ -1191,21 +1191,40 @@ func parseShebangInterpreter(line string) (interpreterPath, name string, args []
 
 func parseEnvShebangInterpreter(fields []string) (name string, args []string, ok bool) {
 	for len(fields) > 0 {
-		switch fields[0] {
-		case "--":
+		switch field := fields[0]; {
+		case field == "--":
 			fields = fields[1:]
 			goto done
-		case "-i", "--ignore-environment", "-0", "--null", "-v", "--debug":
+		case field == "-i", field == "--ignore-environment", field == "-0", field == "--null", field == "-v", field == "--debug":
 			fields = fields[1:]
 			continue
-		case "-u", "--unset", "-C", "--chdir":
+		case field == "-u", field == "--unset", field == "-C", field == "--chdir":
 			if len(fields) < 2 {
 				return "", nil, false
 			}
 			fields = fields[2:]
 			continue
-		case "-S", "--split-string":
+		case strings.HasPrefix(field, "-u"), strings.HasPrefix(field, "-C"):
+			if len(field) == 2 {
+				return "", nil, false
+			}
 			fields = fields[1:]
+			continue
+		case strings.HasPrefix(field, "--unset="), strings.HasPrefix(field, "--chdir="):
+			if !strings.Contains(field, "=") || strings.HasSuffix(field, "=") {
+				return "", nil, false
+			}
+			fields = fields[1:]
+			continue
+		case field == "-S", field == "--split-string":
+			fields = fields[1:]
+			goto done
+		case strings.HasPrefix(field, "-S"), strings.HasPrefix(field, "--split-string="):
+			split, ok := envSplitStringFields(field)
+			if !ok {
+				return "", nil, false
+			}
+			fields = append(split, fields[1:]...)
 			goto done
 		}
 		break
@@ -1223,6 +1242,18 @@ done:
 		args = append(args, fields[1:]...)
 	}
 	return name, args, true
+}
+
+func envSplitStringFields(field string) ([]string, bool) {
+	value := strings.TrimPrefix(field, "-S")
+	if remainder, ok := strings.CutPrefix(field, "--split-string="); ok {
+		value = remainder
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, false
+	}
+	return strings.Fields(value), true
 }
 
 func shellFailure(ctx context.Context, code int, format string, args ...any) error {

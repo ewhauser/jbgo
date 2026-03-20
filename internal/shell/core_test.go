@@ -973,10 +973,34 @@ func TestParseShebangInterpreterSkipsEnvOptions(t *testing.T) {
 			wantName:        "bash",
 			wantArgs:        []string{"-e"},
 		},
+		{
+			name:            "attached unset",
+			line:            "/usr/bin/env -uFOO sh",
+			wantInterpreter: "/usr/bin/env",
+			wantName:        "sh",
+		},
+		{
+			name:            "long attached unset",
+			line:            "/usr/bin/env --unset=FOO sh",
+			wantInterpreter: "/usr/bin/env",
+			wantName:        "sh",
+		},
+		{
+			name:            "attached chdir",
+			line:            "/usr/bin/env -C/tmp sh",
+			wantInterpreter: "/usr/bin/env",
+			wantName:        "sh",
+		},
+		{
+			name:            "long attached split string",
+			line:            "/usr/bin/env --split-string=bash -e",
+			wantInterpreter: "/usr/bin/env",
+			wantName:        "bash",
+			wantArgs:        []string{"-e"},
+		},
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 

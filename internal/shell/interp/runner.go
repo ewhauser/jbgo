@@ -2037,6 +2037,8 @@ func declOperandFromCallWord(word *syntax.Word) syntax.DeclOperand {
 }
 
 func expandedDeclVariant(fields []string) (variant string, matched bool, needMore bool) {
+	sawWrapperPrefix := false
+	lastWasWrapper := false
 	for i := 0; i < len(fields); i++ {
 		name := fields[i]
 		if isDeclVariantName(name) {
@@ -2044,20 +2046,24 @@ func expandedDeclVariant(fields []string) (variant string, matched bool, needMor
 		}
 		switch name {
 		case "builtin":
+			sawWrapperPrefix = true
+			lastWasWrapper = true
 			continue
 		case "command":
-			if i+1 >= len(fields) {
-				return "", false, true
-			}
-			next := fields[i+1]
-			if strings.HasPrefix(next, "-") || strings.HasPrefix(next, "+") {
+			sawWrapperPrefix = true
+			lastWasWrapper = true
+			continue
+		case "--":
+			if !lastWasWrapper {
 				return "", false, false
 			}
+			lastWasWrapper = false
+			continue
 		default:
 			return "", false, false
 		}
 	}
-	return "", false, true
+	return "", false, sawWrapperPrefix
 }
 
 func (r *Runner) resolveCallExprArgs(args []*syntax.Word) ([]string, *syntax.DeclClause) {

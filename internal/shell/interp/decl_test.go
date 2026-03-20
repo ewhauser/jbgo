@@ -144,7 +144,10 @@ f() {
   'builtin' local quoted_local=quoted
   \command readonly escaped_ro=locked
   command local via_command=seven
-  printf 'locals=%s|%s|%s|%s\n' "$local_var" "$quoted_local" "$escaped_ro" "$via_command"
+  spaced='one two'
+  builtin -- local dashed_local="$spaced"
+  command -- local dashed_command="$spaced"
+  printf 'locals=%s|%s|%s|%s|<%s>|<%s>\n' "$local_var" "$quoted_local" "$escaped_ro" "$via_command" "$dashed_local" "$dashed_command"
 }
 f
 
@@ -162,7 +165,7 @@ printf 'exports=%s|%s|%s|%s|<%s>\n' "$export_var" "$quoted_export" "$dyn_export"
 		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
 	}
 	const want = "" +
-		"locals=wrapped|quoted|locked|seven\n" +
+		"locals=wrapped|quoted|locked|seven|<one two>|<one two>\n" +
 		"exports=one|two|three|four|<a>\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
