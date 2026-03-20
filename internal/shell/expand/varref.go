@@ -20,6 +20,16 @@ func cloneVarRef(ref *syntax.VarRef) *syntax.VarRef {
 	return syntax.CloneVarRef(ref)
 }
 
+func defaultAssociativeSubscript(key string) *syntax.Subscript {
+	return &syntax.Subscript{
+		Kind: syntax.SubscriptExpr,
+		Mode: syntax.SubscriptAssociative,
+		Expr: &syntax.Word{Parts: []syntax.WordPart{
+			&syntax.Lit{Value: key},
+		}},
+	}
+}
+
 func resolveSubscriptAuto(kind ValueKind, index *syntax.Subscript) *syntax.Subscript {
 	if index == nil || index.AllElements() || index.Mode != syntax.SubscriptAuto {
 		return index
@@ -97,6 +107,10 @@ func (cfg *Config) varRef(ref *syntax.VarRef) (string, error) {
 func (cfg *Config) envSetRef(ref *syntax.VarRef, value string) error {
 	if ref == nil {
 		return nil
+	}
+	if resolvedRef, vr, err := cfg.resolveVarRef(ref); err == nil && resolvedRef != nil && resolvedRef.Index == nil && vr.Kind == Associative {
+		ref = cloneVarRef(resolvedRef)
+		ref.Index = defaultAssociativeSubscript("0")
 	}
 	if wenv, ok := cfg.Env.(VarRefWriter); ok {
 		return wenv.SetVarRef(ref, Variable{Set: true, Kind: String, Str: value}, false)

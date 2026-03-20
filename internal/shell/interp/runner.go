@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -944,6 +945,58 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		case "typeset":
 			allowPlusFlags = true
 		}
+		declErrf := func(format string, a ...any) {
+			if r.evalDepth > 0 {
+				r.errf("eval: ")
+			}
+			r.errf(format, a...)
+		}
+		printDeclaredVar := func(name string, vr expand.Variable) {
+			flags := vr.Flags()
+			if flags == "" {
+				flags = "-"
+			}
+			switch vr.Kind {
+			case expand.Indexed:
+				r.outf("declare -%s %s=(", flags, name)
+				for i, index := range vr.IndexedIndices() {
+					if i > 0 {
+						r.out(" ")
+					}
+					val, _ := vr.IndexedGet(index)
+					r.outf("[%d]=%q", index, val)
+				}
+				r.out(")\n")
+			case expand.Associative:
+				r.outf("declare -%s %s=(", flags, name)
+				first := true
+				for _, k := range expand.AssociativeKeys(vr.Map) {
+					v := vr.Map[k]
+					if !first {
+						r.out(" ")
+					}
+					r.outf("[%s]=%q", k, v)
+					first = false
+				}
+				if !first {
+					r.out(" ")
+				}
+				r.out(")\n")
+			default:
+				r.outf("declare -%s %s=%q\n", flags, name, vr.Str)
+			}
+		}
+		arrayConversionError := func(name string, vr expand.Variable) string {
+			switch {
+			case valType == "-A" && vr.Kind == expand.Indexed:
+				return fmt.Sprintf("%s: cannot convert indexed to associative array", name)
+			case valType == "-a" && vr.Kind == expand.Associative:
+				return fmt.Sprintf("%s: cannot convert associative to indexed array", name)
+			default:
+				return ""
+			}
+		}
+		sawNamedOperand := false
 		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool) bool {
 			name := ref.Name.Value
 			if !syntax.ValidName(name) {
@@ -955,6 +1008,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.exit.code = 1
 				return false
 			}
+			sawNamedOperand = true
 			if tracingEnabled && !isAssign {
 				builtinTraceFields = append(builtinTraceFields, name)
 			}
@@ -980,46 +1034,21 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					r.exit.code = 1
 					return true
 				}
-				flags := vr.Flags()
-				if flags == "" {
-					flags = "-"
-				}
-				switch vr.Kind {
-				case expand.Indexed:
-					r.outf("declare -%s %s=(", flags, name)
-					for i, index := range vr.IndexedIndices() {
-						if i > 0 {
-							r.out(" ")
-						}
-						val, _ := vr.IndexedGet(index)
-						r.outf("[%d]=%q", index, val)
-					}
-					r.out(")\n")
-				case expand.Associative:
-					r.outf("declare -%s %s=(", flags, name)
-					first := true
-					for _, k := range expand.AssociativeKeys(vr.Map) {
-						v := vr.Map[k]
-						if !first {
-							r.out(" ")
-						}
-						r.outf("[%s]=%q", k, v)
-						first = false
-					}
-					if !first {
-						r.out(" ")
-					}
-					r.out(")\n")
-				default:
-					r.outf("declare -%s %s=%q\n", flags, name, vr.Str)
-				}
+				printDeclaredVar(name, vr)
 				return true
 			}
 			vr := r.lookupVar(name)
+			if msg := arrayConversionError(name, vr); msg != "" {
+				declErrf("%s\n", msg)
+				r.exit.code = 1
+				return true
+			}
 			arrayAssignTrace := ""
 			if !isAssign {
 				if valType == "-A" {
 					vr.Kind = expand.Associative
+				} else if valType == "-a" {
+					vr.Kind = expand.Indexed
 				} else if valType == "+a" || valType == "+A" {
 					// Remove array/assoc attribute, convert to string.
 					if vr.Kind == expand.Indexed || vr.Kind == expand.Associative {
@@ -1241,6 +1270,29 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return
 			}
 		}
+		if !sawNamedOperand && declQuery == "" && (valType == "-a" || valType == "-A") {
+			names := make([]string, 0)
+			r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+				if !vr.Declared() {
+					return true
+				}
+				switch valType {
+				case "-a":
+					if vr.Kind == expand.Indexed {
+						names = append(names, name)
+					}
+				case "-A":
+					if vr.Kind == expand.Associative {
+						names = append(names, name)
+					}
+				}
+				return true
+			})
+			sort.Strings(names)
+			for _, name := range names {
+				printDeclaredVar(name, r.lookupVar(name))
+			}
+		}
 		if tracingEnabled {
 			for _, line := range leadingTraceLines {
 				trace.string(line)
@@ -1372,6 +1424,9 @@ func (r *Runner) expandAssignsForSideEffects(assigns []*syntax.Assign) bool {
 	for _, as := range assigns {
 		// Just expand the value to trigger side effects; don't set the variable.
 		if _, _, ok := r.assignVal(r.lookupVar(as.Ref.Name.Value), as, ""); !ok || r.exit.fatalExit || r.exit.exiting {
+			return false
+		}
+		if !r.exit.ok() {
 			return false
 		}
 	}

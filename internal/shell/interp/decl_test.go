@@ -147,8 +147,9 @@ func TestDeclPrefixAssignValidationFailureSkipsBuiltin(t *testing.T) {
 	if stdout.String() != "" {
 		t.Fatalf("stdout = %q, want empty", stdout.String())
 	}
-	if stderr.String() != "" {
-		t.Fatalf("stderr = %q, want empty", stderr.String())
+	const wantStderr = "bad: 2: must use subscript when assigning associative array\n"
+	if stderr.String() != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr.String(), wantStderr)
 	}
 }
 
@@ -177,5 +178,82 @@ declare -p a
 	const wantStderr = "declare: `a[': not a valid identifier\ndeclare: `]=Y': not a valid identifier\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestDeclarePrintsKindSpecificListings(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare -a arr=(1 2)
+declare -A assoc=([k]=v)
+declare -A
+declare -a
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "declare -A assoc=([k]=\"v\" )\ndeclare -a arr=([0]=\"1\" [1]=\"2\")\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclareRejectsIndexedAssociativeConversion(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare -a a=(1 2 3 4)
+eval 'declare -A a=([a]=x [b]=y [c]=z)'
+echo status=$?
+printf 'a=%s,%s,%s,%s\n' "${a[0]}" "${a[1]}" "${a[2]}" "${a[3]}"
+
+declare -A A=([a]=x [b]=y [c]=z)
+eval 'declare -a A=(1 2 3 4)'
+echo status=$?
+printf 'A=%s,%s,%s\n' "${A[a]}" "${A[b]}" "${A[c]}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "status=1\na=1,2,3,4\nstatus=1\nA=x,y,z\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "" +
+		"eval: a: cannot convert indexed to associative array\n" +
+		"eval: A: cannot convert associative to indexed array\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestDeclareAssociativeAppendPreservesStringAtZeroKey(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+s1=hello
+s2=world
+
+eval 'declare -A s1=([a]=x [b]=y)'
+echo status1=$?
+printf 's1=%s,%s,%s\n' "${s1[0]-missing}" "${s1[a]}" "${s1[b]}"
+
+eval 'declare -A s2+=([a]=x [b]=y)'
+echo status2=$?
+printf 's2=%s,%s,%s\n' "${s2[0]-missing}" "${s2[a]}" "${s2[b]}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "status1=0\ns1=missing,x,y\nstatus2=0\ns2=world,x,y\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }

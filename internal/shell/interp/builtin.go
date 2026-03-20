@@ -391,6 +391,10 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		// TODO: implement. for now, having this as a no-op is better than nothing.
 	case "eval":
 		src := strings.Join(args, " ")
+		r.evalDepth++
+		defer func() {
+			r.evalDepth--
+		}()
 		err := r.runShellReader(ctx, strings.NewReader(src), "", nil)
 		var status ExitStatus
 		if err != nil && !errors.As(err, &status) {

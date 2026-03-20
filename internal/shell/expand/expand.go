@@ -1458,10 +1458,10 @@ func (cfg *Config) quotedParamWord(word *syntax.Word) ([]string, error) {
 func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, bool) {
 	switch name := pe.Param.Value; name {
 	case "*": // "${*}" or "${*:offset:length}"
-		elems := cfg.sliceElems(pe, cfg.Env.Get(name).IndexedValues(), nil, true)
+		elems := cfg.sliceElems(pe, cfg.Env.Get(name).IndexedValues(), nil, true, false)
 		return []string{cfg.ifsJoin(elems)}, elems, true
 	case "@": // "${@}" or "${@:offset:length}"
-		elems := cfg.sliceElems(pe, cfg.Env.Get(name).IndexedValues(), nil, true)
+		elems := cfg.sliceElems(pe, cfg.Env.Get(name).IndexedValues(), nil, true, false)
 		return elems, elems, true
 	}
 
@@ -1481,10 +1481,10 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 	case "@": // "${name[@]}"
 		switch vr.Kind {
 		case Indexed:
-			elems := cfg.sliceElems(pe, vr.IndexedValues(), vr.IndexedIndices(), false)
+			elems := cfg.sliceElems(pe, vr.IndexedValues(), vr.IndexedIndices(), false, false)
 			return elems, elems, true
 		case Associative:
-			elems := cfg.sliceElems(pe, sortedMapValues(vr.Map), nil, false)
+			elems := cfg.sliceElems(pe, sortedMapValues(vr.Map), nil, false, true)
 			return elems, elems, true
 		case Unknown:
 			if !vr.IsSet() {
@@ -1495,11 +1495,11 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 		}
 	case "*": // "${name[*]}"
 		if vr.Kind == Indexed {
-			elems := cfg.sliceElems(pe, vr.IndexedValues(), vr.IndexedIndices(), false)
+			elems := cfg.sliceElems(pe, vr.IndexedValues(), vr.IndexedIndices(), false, false)
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 		if vr.Kind == Associative {
-			elems := cfg.sliceElems(pe, sortedMapValues(vr.Map), nil, false)
+			elems := cfg.sliceElems(pe, sortedMapValues(vr.Map), nil, false, true)
 			return []string{cfg.ifsJoin(elems)}, elems, true
 		}
 	}
@@ -1508,10 +1508,12 @@ func (cfg *Config) quotedArrayFields(pe *syntax.ParamExp) ([]string, []string, b
 
 // sliceElems applies ${var:offset:length} slicing to a list of elements.
 // When positional is true, $0 is prepended to the list before slicing.
+// When assocAll is true, positive offsets use bash's associative-array quirk:
+// offsets are effectively 1-based, so 0 and 1 both select the first element.
 // In bash, positional parameter offsets ($@ and $*) are 1-based and
 // offset 0 includes $0 (the shell or script name). Negative offsets
 // count from $# + 1, so $0 is reachable via large enough negative values.
-func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indices []int, positional bool) []string {
+func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indices []int, positional bool, assocAll bool) []string {
 	if pe.Slice == nil {
 		return elems
 	}
@@ -1571,6 +1573,9 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indices []int
 		offset, err := Arithm(cfg, pe.Slice.Offset)
 		if err != nil {
 			return elems
+		}
+		if assocAll && offset > 0 {
+			offset--
 		}
 		elems = elems[slicePos(offset):]
 	}

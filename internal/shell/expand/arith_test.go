@@ -221,6 +221,58 @@ func TestArithmArrayElementLValues(t *testing.T) {
 	}
 }
 
+func TestArithmWholeAssociativeWritesUseZeroKey(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"d": {
+			Set:  true,
+			Kind: Associative,
+			Map: map[string]string{
+				"0":   "1",
+				"foo": "hello",
+				"bar": "world",
+			},
+		},
+	}
+	cfg := &Config{Env: env}
+
+	postInc := parseArithmExpr(t, "d++")
+	got, err := Arithm(cfg, postInc)
+	if err != nil {
+		t.Fatalf("Arithm(postInc) error = %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("Arithm(postInc) = %d, want 1", got)
+	}
+
+	preInc := parseArithmExpr(t, "++d")
+	got, err = Arithm(cfg, preInc)
+	if err != nil {
+		t.Fatalf("Arithm(preInc) error = %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("Arithm(preInc) = %d, want 3", got)
+	}
+
+	assign := parseArithmExpr(t, "d+=4")
+	got, err = Arithm(cfg, assign)
+	if err != nil {
+		t.Fatalf("Arithm(assign) error = %v", err)
+	}
+	if got != 7 {
+		t.Fatalf("Arithm(assign) = %d, want 7", got)
+	}
+
+	gotMap := env["d"].Map
+	if gotMap["0"] != "7" {
+		t.Fatalf("d[0] = %q, want 7", gotMap["0"])
+	}
+	if gotMap["foo"] != "hello" || gotMap["bar"] != "world" {
+		t.Fatalf("assoc side keys changed: %#v", gotMap)
+	}
+}
+
 func TestArithmWithSourcePreservesDivisionByZeroSpacing(t *testing.T) {
 	t.Parallel()
 

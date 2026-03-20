@@ -91,29 +91,13 @@
           "mode": "xfail",
           "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database"
         },
-        "oils/array-assoc.test.sh::Slice of associative array doesn't make sense in bash": {
-          "mode": "xfail",
-          "reason": "gbash still slices associative-array values differently from bash's hash-order quirk"
-        },
         "oils/array-assoc.test.sh::bash variable can have an associative array part and a string part": {
           "mode": "xfail",
           "reason": "gbash cannot represent bash's mixed scalar-plus-associative variables"
         },
-        "oils/array-compat.test.sh::value.BashArray internal representation - Assoc (ordering is a problem)": {
-          "mode": "xfail",
-          "reason": "gbash's declare -A listing output still differs from bash's associative-array introspection"
-        },
         "oils/array-compat.test.sh::value.BashArray internal representation - Indexed": {
           "mode": "xfail",
           "reason": "gbash's declare -a listing output still differs from bash's indexed-array introspection"
-        },
-        "oils/array-literal.test.sh::(strict_array) declare -A s+=()": {
-          "mode": "xfail",
-          "reason": "gbash still follows bash's scalar-to-associative append behavior instead of the strict_array expectation"
-        },
-        "oils/array-literal.test.sh::BashArray cannot be changed to BashAssoc and vice versa": {
-          "mode": "xfail",
-          "reason": "gbash still allows indexed and associative array type conversion that bash rejects"
         },
         "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashArray)": {
           "mode": "xfail",
@@ -122,14 +106,6 @@
         "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashAssoc)": {
           "mode": "xfail",
           "reason": "gbash still expands ~ in keyed associative-array literals using the temporary HOME binding unlike bash"
-        },
-        "oils/array-literal.test.sh::append to element (BashAssoc)": {
-          "mode": "xfail",
-          "reason": "gbash preserves the older associative append result that newer bash releases regressed"
-        },
-        "oils/array-literal.test.sh::non-index forms of element (BashAssoc)": {
-          "mode": "xfail",
-          "reason": "gbash is still looser than the Oils spec when bare key/value tails appear in associative literals"
         },
         "oils/array-sparse.test.sh::${@:offset:length}": {
           "mode": "xfail",
@@ -368,10 +344,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/ble-features.test.sh::[bash_unset] localvar-inherit from tempenv": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-features.test.sh::[compat_array] scalar write to associative arrays": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1601,14 +1573,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-vars.test.sh::Unset wrong type": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::can't export array (strict_array)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::can't export associative array (strict_array)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

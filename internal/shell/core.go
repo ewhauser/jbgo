@@ -805,6 +805,10 @@ func envMap(env expand.Environ) map[string]string {
 			delete(out, name)
 			return true
 		}
+		if vr.Kind != expand.String && vr.Kind != expand.NameRef {
+			delete(out, name)
+			return true
+		}
 		out[name] = vr.String()
 		return true
 	})

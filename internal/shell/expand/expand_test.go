@@ -1428,6 +1428,46 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 	}
 }
 
+func TestAssociativeAllElementSliceUsesBashOffsets(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"assoc": {
+			Set:  true,
+			Kind: Associative,
+			Map: map[string]string{
+				"xx": "1",
+				"yy": "2",
+				"zz": "3",
+				"aa": "4",
+				"bb": "5",
+			},
+		},
+	}
+
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{`${assoc[@]:0:3}`, []string{"4", "1", "3"}},
+		{`${assoc[@]:1:3}`, []string{"4", "1", "3"}},
+		{`${assoc[@]:2:3}`, []string{"1", "3", "5"}},
+		{`${assoc[@]: -2:2}`, []string{"5", "2"}},
+		{`"${assoc[*]:1:3}"`, []string{"4 1 3"}},
+	}
+
+	for _, tt := range tests {
+		word := parseCommandWord(t, tt.src)
+		got, err := Fields(&Config{Env: env}, word)
+		if err != nil {
+			t.Fatalf("Fields(%q) error = %v", tt.src, err)
+		}
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Fatalf("Fields(%q) = %q, want %q", tt.src, got, tt.want)
+		}
+	}
+}
+
 type mockFileInfo struct {
 	name        string
 	typ         fs.FileMode

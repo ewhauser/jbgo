@@ -127,6 +127,7 @@ type Runner struct {
 	inLoop       bool
 	inFunc       bool
 	inSource     bool
+	evalDepth    int
 	handlingTrap bool // whether we're currently in a trap callback
 
 	// track if a sourced script set positional parameters

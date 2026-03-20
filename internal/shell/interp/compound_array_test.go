@@ -42,12 +42,34 @@ printf 'eval3=%s,%s,%s,%s,%s,%s\n' "${a[0]}" "${a[1]}" "${a[2]}" "${a[5]}" "${a[
 	const want = "" +
 		"idx=12\n" +
 		"idx-append=12:34:56\n" +
-		"assoc=12\n" +
-		"assoc-append=12:34:56\n" +
+		"assoc=2\n" +
+		"assoc-append=2:34:56\n" +
 		"cursor=a,b,c,d,1,2,3,4\n" +
 		"pairs=2,\n" +
 		"eval1=1,2,3,7\n" +
 		"eval3=new1,new2,new3,old3,old1,old2\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestCompoundAssociativeReplacementAppendUsesOriginalValue(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, err := runInterpScript(t, `
+declare -A assoc=([hello]=old)
+assoc=([hello]=1 [hello]+=2 [hello]+=3)
+printf 'replace=%s\n' "${assoc[hello]}"
+
+unset assoc
+declare -A assoc
+assoc=([hello]=1 [hello]+=2 [hello]+=3)
+printf 'fresh=%s\n' "${assoc[hello]}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const want = "replace=old3\nfresh=3\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
@@ -101,20 +123,21 @@ func TestCompoundAssociativeArrayMixedFormsFail(t *testing.T) {
 	stdout, stderr, err := runInterpScript(t, `
 declare -A assoc=([old]=keep)
 assoc=([j]=1 2 3 4)
-printf 'status=%s count=%s old=%s\n' "$?" "${#assoc[@]}" "${assoc[old]}"
+printf 'status=%s count=%s old=%s j=%s\n' "$?" "${#assoc[@]}" "${assoc[old]-missing}" "${assoc[j]-missing}"
 printf 'after\n'
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
 	const want = "" +
-		"status=1 count=1 old=keep\n" +
+		"status=1 count=1 old=missing j=1\n" +
 		"after\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty", stderr)
+	const wantStderr = "assoc: 2: must use subscript when assigning associative array\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
 

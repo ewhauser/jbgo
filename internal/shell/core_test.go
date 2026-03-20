@@ -594,6 +594,47 @@ func TestCoreRunSyncsShellStateWithoutBootstrapEval(t *testing.T) {
 	}
 }
 
+func TestCoreRunOmitsNonStringVarsFromCommandEnv(t *testing.T) {
+	t.Parallel()
+
+	envProbe := commands.DefineCommand("envprobe", func(ctx context.Context, inv *commands.Invocation) error {
+		presence := func(name string) string {
+			if _, ok := inv.Env[name]; ok {
+				return "set"
+			}
+			return "unset"
+		}
+		_, _ = io.WriteString(inv.Stdout, "scalar="+inv.Env["scalar"]+" array="+presence("array")+" assoc="+presence("assoc")+"\n")
+		return nil
+	})
+
+	registry := newShellTestRegistry(t, envProbe)
+	fsys := newShellTestFS(t, "envprobe")
+	var stdout strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"scalar=value",
+			"typeset -a array=(1 2 3)",
+			"typeset -A assoc=([foo]=bar)",
+			"export scalar array assoc",
+			"envprobe",
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := stdout.String(), "scalar=value array=unset assoc=unset\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
 func newShellTestRegistry(t testing.TB, extras ...commands.Command) *commands.Registry {
 	t.Helper()
 

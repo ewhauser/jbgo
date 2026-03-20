@@ -797,12 +797,12 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 		case Indexed:
 			state.indexAllElements = true
 			state.callVarInd = false
-			state.elems = cfg.sliceElems(pe, state.vr.IndexedValues(), state.vr.IndexedIndices(), state.name == "@" || state.name == "*")
+			state.elems = cfg.sliceElems(pe, state.vr.IndexedValues(), state.vr.IndexedIndices(), state.name == "@" || state.name == "*", false)
 			state.str = cfg.joinArrayElemsForString(pe, state.elems)
 		case Associative:
 			state.indexAllElements = true
 			state.callVarInd = false
-			state.elems = cfg.sliceElems(pe, sortedMapValues(state.vr.Map), nil, false)
+			state.elems = cfg.sliceElems(pe, sortedMapValues(state.vr.Map), nil, false, true)
 			state.str = cfg.joinArrayElemsForString(pe, state.elems)
 		}
 	}
