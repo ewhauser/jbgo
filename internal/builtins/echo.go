@@ -304,10 +304,7 @@ func appendEchoUnicode(dst []byte, value uint32, cLocale bool) []byte {
 	if cLocale {
 		return appendEchoCanonicalUnicode(dst, value)
 	}
-	if encoded, ok := appendEchoUTF8(dst, value); ok {
-		return encoded
-	}
-	return appendEchoCanonicalUnicode(dst, value)
+	return appendEchoUTF8(dst, value)
 }
 
 func appendEchoCanonicalUnicode(dst []byte, value uint32) []byte {
@@ -317,30 +314,47 @@ func appendEchoCanonicalUnicode(dst []byte, value uint32) []byte {
 	return append(dst, fmt.Sprintf("\\U%08X", value)...)
 }
 
-func appendEchoUTF8(dst []byte, value uint32) ([]byte, bool) {
+func appendEchoUTF8(dst []byte, value uint32) []byte {
 	switch {
 	case value <= 0x7f:
-		return append(dst, byte(value)), true
+		return append(dst, byte(value))
 	case value <= 0x7ff:
 		return append(dst,
 			0xc0|byte(value>>6),
 			0x80|byte(value&0x3f),
-		), true
+		)
 	case value <= 0xffff:
 		return append(dst,
 			0xe0|byte(value>>12),
 			0x80|byte((value>>6)&0x3f),
 			0x80|byte(value&0x3f),
-		), true
+		)
 	case value <= 0x1fffff:
 		return append(dst,
 			0xf0|byte(value>>18),
 			0x80|byte((value>>12)&0x3f),
 			0x80|byte((value>>6)&0x3f),
 			0x80|byte(value&0x3f),
-		), true
+		)
+	case value <= 0x3ffffff:
+		return append(dst,
+			0xf8|byte(value>>24),
+			0x80|byte((value>>18)&0x3f),
+			0x80|byte((value>>12)&0x3f),
+			0x80|byte((value>>6)&0x3f),
+			0x80|byte(value&0x3f),
+		)
+	case value <= 0x7fffffff:
+		return append(dst,
+			0xfc|byte(value>>30),
+			0x80|byte((value>>24)&0x3f),
+			0x80|byte((value>>18)&0x3f),
+			0x80|byte((value>>12)&0x3f),
+			0x80|byte((value>>6)&0x3f),
+			0x80|byte(value&0x3f),
+		)
 	default:
-		return dst, false
+		return dst
 	}
 }
 

@@ -79,6 +79,36 @@ func TestEchoSupportsUnicodeEscapesInUTF8Locale(t *testing.T) {
 	}
 }
 
+func TestEchoSupportsLegacyHighUnicodeEscapesInUTF8Locale(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 echo -n -e '\\U00200000|\\U04000000|\\U7fffffff|\\U80000000|\\UFFFFFFFF|Z'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := []byte{
+		0xf8, 0x88, 0x80, 0x80, 0x80,
+		'|',
+		0xfc, 0x84, 0x80, 0x80, 0x80, 0x80,
+		'|',
+		0xfd, 0xbf, 0xbf, 0xbf, 0xbf, 0xbf,
+		'|',
+		'|',
+		'|',
+		'Z',
+	}
+	if got := []byte(result.Stdout); !bytes.Equal(got, want) {
+		t.Fatalf("Stdout bytes = %v, want %v", got, want)
+	}
+}
+
 func TestEchoTreatsDoubleHyphenAsLiteralAndHonorsBackslashC(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
