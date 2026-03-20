@@ -14,7 +14,7 @@ func TestMkdirSupportsModeFlags(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "0700\n0700"; got != want {
+	if got, want := strings.TrimSpace(result.Stdout), "700\n700"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

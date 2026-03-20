@@ -1193,10 +1193,10 @@ func TestChmodSupportsOctalAndSymbolicModes(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("Stdout lines = %v, want 2 lines", lines)
 	}
-	if got, want := lines[0], "0755 -rwxr-xr-x"; got != want {
+	if got, want := lines[0], "755 -rwxr-xr-x"; got != want {
 		t.Fatalf("First stat = %q, want %q", got, want)
 	}
-	if got, want := lines[1], "0755 -rwxr-xr-x"; got != want {
+	if got, want := lines[1], "755 -rwxr-xr-x"; got != want {
 		t.Fatalf("Second stat = %q, want %q", got, want)
 	}
 }
@@ -1209,7 +1209,7 @@ func TestChmodSymbolicModeUsesSandboxUmask(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "0644 -rw-r--r--"; got != want {
+	if got, want := strings.TrimSpace(result.Stdout), "644 -rw-r--r--"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1222,7 +1222,7 @@ func TestChmodSymbolicEqualsHonorsShellUmask(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "0110 ---x--x---"; got != want {
+	if got, want := strings.TrimSpace(result.Stdout), "110 ---x--x---"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1239,13 +1239,13 @@ func TestChmodSupportsNegativeModeOperands(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("Stdout lines = %v, want 3", lines)
 	}
-	if got, want := lines[0], "0444"; got != want {
+	if got, want := lines[0], "444"; got != want {
 		t.Fatalf("first stat = %q, want %q", got, want)
 	}
-	if got, want := lines[1], "0444"; got != want {
+	if got, want := lines[1], "444"; got != want {
 		t.Fatalf("second stat = %q, want %q", got, want)
 	}
-	if got, want := lines[2], "0444"; got != want {
+	if got, want := lines[2], "444"; got != want {
 		t.Fatalf("third stat = %q, want %q", got, want)
 	}
 }
@@ -1265,7 +1265,7 @@ func TestChmodReportsPartialImplicitWhoApplication(t *testing.T) {
 	if got, want := lines[0], "status=1"; got != want {
 		t.Fatalf("status line = %q, want %q", got, want)
 	}
-	if got, want := lines[1], "0655 -rw-r-xr-x"; got != want {
+	if got, want := lines[1], "655 -rw-r-xr-x"; got != want {
 		t.Fatalf("stat line = %q, want %q", got, want)
 	}
 	if !strings.Contains(result.Stderr, "new permissions are rw-r-xr-x, not rw-r--r--") {
@@ -1333,7 +1333,7 @@ func TestChmodSupportsRecursiveMode(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "0700"; got != want {
+	if got, want := strings.TrimSpace(result.Stdout), "700"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1346,7 +1346,7 @@ func TestChmodAcceptsRecursiveOptionAfterMode(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "0644"; got != want {
+	if got, want := strings.TrimSpace(result.Stdout), "644"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -1363,16 +1363,16 @@ func TestChmodSupportsDoubleDashModeAndFiles(t *testing.T) {
 	if len(lines) != 4 {
 		t.Fatalf("Stdout lines = %v, want 4", lines)
 	}
-	if got, want := lines[0], "0644"; got != want {
+	if got, want := lines[0], "644"; got != want {
 		t.Fatalf("first stat = %q, want %q", got, want)
 	}
-	if got, want := lines[1], "0644"; got != want {
+	if got, want := lines[1], "644"; got != want {
 		t.Fatalf("second stat = %q, want %q", got, want)
 	}
-	if got, want := lines[2], "0444"; got != want {
+	if got, want := lines[2], "444"; got != want {
 		t.Fatalf("third stat = %q, want %q", got, want)
 	}
-	if got, want := lines[3], "0444"; got != want {
+	if got, want := lines[3], "444"; got != want {
 		t.Fatalf("fourth stat = %q, want %q", got, want)
 	}
 }
@@ -1898,7 +1898,7 @@ func TestOverlayFactorySupportsHardLinksAndMetadataCopyUp(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := strings.TrimSpace(result.Stdout), "0700"; got != want {
+	if got, want := strings.TrimSpace(result.Stdout), "700"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	if got := readTestFSFile(t, session.FileSystem(), "/copy.txt"); got != "seed\n" {

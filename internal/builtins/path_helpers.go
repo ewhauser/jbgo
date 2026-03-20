@@ -21,6 +21,10 @@ func formatModeOctal(mode stdfs.FileMode) string {
 	return fmt.Sprintf("%04o", mode&(stdfs.ModePerm|stdfs.ModeSetuid|stdfs.ModeSetgid|stdfs.ModeSticky))
 }
 
+func formatModeOctalBare(mode stdfs.FileMode) string {
+	return fmt.Sprintf("%o", mode&(stdfs.ModePerm|stdfs.ModeSetuid|stdfs.ModeSetgid|stdfs.ModeSticky))
+}
+
 func formatModeLong(mode stdfs.FileMode) string {
 	var b strings.Builder
 	switch {

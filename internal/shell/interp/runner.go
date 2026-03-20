@@ -1630,7 +1630,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 					r.errf("%s: Bad file descriptor\n", arg)
 					return nil, errors.New("bad file descriptor")
 				}
-				f, err := r.open(ctx, arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644, true)
+				f, err := r.open(ctx, arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666, true)
 				if err != nil {
 					return nil, err
 				}
@@ -1688,7 +1688,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 		writable = true
 		mode = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
-	f, err := r.open(ctx, arg, mode, 0o644, false)
+	f, err := r.open(ctx, arg, mode, 0o666, false)
 	if err != nil {
 		if rd.Op == syntax.RdrIn && (errors.Is(err, syscall.EISDIR) || strings.Contains(err.Error(), "Is a directory")) {
 			fd := newOwnedShellInputFD(&directoryReadCloser{path: arg})
@@ -1854,6 +1854,7 @@ func (r *Runner) exec(ctx context.Context, pos syntax.Pos, args []string) {
 }
 
 func (r *Runner) open(ctx context.Context, path string, flags int, mode os.FileMode, printErr bool) (io.ReadWriteCloser, error) {
+	mode = r.applyShellUmask(flags, mode)
 	f, err := r.openHandler(r.handlerCtx(ctx, handlerKindOpen, todoPos), path, flags, mode)
 	var pathErr *os.PathError
 	switch {
@@ -1867,6 +1868,28 @@ func (r *Runner) open(ctx context.Context, path string, flags int, mode os.FileM
 		r.exit.fatal(err)
 	}
 	return nil, err
+}
+
+func (r *Runner) applyShellUmask(flags int, mode os.FileMode) os.FileMode {
+	if flags&os.O_CREATE == 0 {
+		return mode
+	}
+	return mode &^ (r.shellUmask() & 0o777)
+}
+
+func (r *Runner) shellUmask() os.FileMode {
+	if r == nil || r.writeEnv == nil {
+		return 0o022
+	}
+	raw := strings.TrimSpace(r.writeEnv.Get("GBASH_UMASK").String())
+	if raw == "" {
+		return 0o022
+	}
+	value, err := strconv.ParseUint(raw, 8, 32)
+	if err != nil || value > 0o777 {
+		return 0o022
+	}
+	return os.FileMode(value)
 }
 
 func (r *Runner) stat(ctx context.Context, name string) (fs.FileInfo, error) {

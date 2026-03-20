@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -euo pipefail
+
+real_stat=/usr/bin/stat
+
+if "$real_stat" --version >/dev/null 2>&1; then
+  exec "$real_stat" "$@"
+fi
+
+render_bsd_format() {
+  local path=$1
+  local format=$2
+  local mode mode_long
+
+  mode=$("$real_stat" -f '%OLp' -- "$path")
+  mode_long=$("$real_stat" -f '%Sp' -- "$path")
+
+  format=${format//%a/$mode}
+  format=${format//%A/$mode_long}
+  printf '%s\n' "$format"
+}
+
+if (($# >= 2)) && [[ $1 == "-c" ]]; then
+  format=$2
+  shift 2
+  if (($# == 0)); then
+    exec "$real_stat" -f "$format"
+  fi
+
+  status=0
+  for path in "$@"; do
+    if ! render_bsd_format "$path" "$format"; then
+      status=1
+    fi
+  done
+  exit "$status"
+fi
+
+exec "$real_stat" "$@"

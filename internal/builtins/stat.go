@@ -240,7 +240,7 @@ func statDirectiveValue(ctx context.Context, inv *Invocation, abs string, info s
 	case 'F':
 		return fileTypeName(info), nil
 	case 'a':
-		return formatModeOctal(info.Mode()), nil
+		return formatModeOctalBare(info.Mode()), nil
 	case 'A':
 		return formatModeLong(info.Mode()), nil
 	case 'u':
