@@ -49,6 +49,26 @@ func TestEchoSupportsUnicodeEscapesInCLocale(t *testing.T) {
 	}
 }
 
+func TestEchoDropsOutOfRangeUnicodeEscapesInCLocale(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "LC_ALL=C LC_CTYPE= LANG= echo -n -e '\\U00110000|\\U7fffffff|\\U80000000|\\UFFFFFFFF|Z'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := `\U00110000|\U7FFFFFFF|||Z`
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestEchoSupportsUnicodeEscapesInUTF8Locale(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -74,6 +94,33 @@ func TestEchoSupportsUnicodeEscapesInUTF8Locale(t *testing.T) {
 		'|',
 		0xf4, 0x90, 0x80, 0x80,
 	)
+	if got := []byte(result.Stdout); !bytes.Equal(got, want) {
+		t.Fatalf("Stdout bytes = %v, want %v", got, want)
+	}
+}
+
+func TestEchoUsesUTF8PathWhenLocaleVarsAreEmpty(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "LC_ALL= LC_CTYPE= LANG= echo -n -e '\\u03bc|\\U00110000|\\U80000000|Z'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := []byte{
+		0xce, 0xbc,
+		'|',
+		0xf4, 0x90, 0x80, 0x80,
+		'|',
+		'|',
+		'Z',
+	}
 	if got := []byte(result.Stdout); !bytes.Equal(got, want) {
 		t.Fatalf("Stdout bytes = %v, want %v", got, want)
 	}

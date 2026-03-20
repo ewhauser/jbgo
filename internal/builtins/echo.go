@@ -298,6 +298,9 @@ func appendEchoUnicode(dst []byte, value uint32, cLocale bool) []byte {
 }
 
 func appendEchoCanonicalUnicode(dst []byte, value uint32) []byte {
+	if value > 0x7fffffff {
+		return dst
+	}
 	if value <= 0xffff {
 		return append(dst, fmt.Sprintf("\\u%04X", value)...)
 	}
