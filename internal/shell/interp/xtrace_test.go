@@ -192,6 +192,7 @@ done
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
+
 func TestXTracePS4ErrorsDoNotChangeCommandStatus(t *testing.T) {
 	t.Parallel()
 
