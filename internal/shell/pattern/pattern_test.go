@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"regexp/syntax"
+	"strings"
 	"testing"
 
 	"github.com/go-quicktest/qt"
@@ -266,6 +267,86 @@ func TestExtendedPatternMatcherEscapesAndCharClasses(t *testing.T) {
 				t.Fatalf("matcher(%q) = true, want false", tt.miss)
 			}
 		})
+	}
+}
+
+// TestExtendedPatternMatcherPathological verifies that patterns which previously
+// caused exponential blowup in groupRepeat now complete in bounded time.
+func TestExtendedPatternMatcherPathological(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		pat   string
+		input string
+		want  bool
+	}{
+		{
+			// +(a|aa) against a long string of 'a's was exponential
+			// before groupRepeat memoization.
+			name:  "repeat with overlapping alts",
+			pat:   `+(a|aa)`,
+			input: strings.Repeat("a", 40),
+			want:  true,
+		},
+		{
+			name:  "repeat with overlapping alts mismatch",
+			pat:   `+(a|aa)`,
+			input: strings.Repeat("a", 39) + "b",
+			want:  false,
+		},
+		{
+			// !(+(a|aa)) against a long string exercised both the
+			// negation fresh-matcher overhead and the repeat blowup.
+			name:  "negated repeat with overlapping alts",
+			pat:   `!(+(a|aa))`,
+			input: strings.Repeat("a", 40),
+			want:  false,
+		},
+		{
+			name:  "negated repeat non-match",
+			pat:   `!(+(a|aa))`,
+			input: "b",
+			want:  true,
+		},
+		{
+			name:  "star group with overlapping alts",
+			pat:   `*(a|aa)`,
+			input: strings.Repeat("a", 50),
+			want:  true,
+		},
+		{
+			name:  "deeply nested repeat",
+			pat:   `+(+(a))`,
+			input: strings.Repeat("a", 30),
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			matcher, err := ExtendedPatternMatcher(tt.pat, EntireString|ExtendedOperators)
+			if err != nil {
+				t.Fatalf("ExtendedPatternMatcher(%q) error = %v", tt.pat, err)
+			}
+			got := matcher(tt.input)
+			if got != tt.want {
+				t.Fatalf("matcher(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func BenchmarkExtglobRepeatOverlappingAlts(b *testing.B) {
+	matcher, err := ExtendedPatternMatcher(`+(a|aa)`, EntireString|ExtendedOperators)
+	if err != nil {
+		b.Fatal(err)
+	}
+	input := strings.Repeat("a", 40)
+	b.ResetTimer()
+	for b.Loop() {
+		matcher(input)
 	}
 }
 

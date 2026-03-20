@@ -5,7 +5,6 @@ package pattern
 
 import (
 	"errors"
-	"io"
 	"regexp"
 	"slices"
 	"strings"
@@ -35,9 +34,10 @@ func ExtendedPatternMatcher(pat string, mode Mode) (func(string) bool, error) {
 	}
 	return func(name string) bool {
 		m := extMatcher{
-			mode:  mode,
-			memo:  make(map[extMemoKey][]int),
-			stack: make(map[extMemoKey]struct{}),
+			mode:       mode,
+			memo:       make(map[extMemoKey][]int),
+			repeatMemo: make(map[extMemoKey][]int),
+			stack:      make(map[extMemoKey]struct{}),
 		}
 		for _, end := range m.ends(root, 0, name, 0) {
 			if end == len(name) {
@@ -231,9 +231,10 @@ type extMemoKey struct {
 }
 
 type extMatcher struct {
-	mode  Mode
-	memo  map[extMemoKey][]int
-	stack map[extMemoKey]struct{}
+	mode       Mode
+	memo       map[extMemoKey][]int
+	repeatMemo map[extMemoKey][]int
+	stack      map[extMemoKey]struct{}
 }
 
 func (m *extMatcher) ends(seq *extSeq, ti int, name string, ni int) []int {
@@ -310,6 +311,10 @@ func (m *extMatcher) groupOnce(tok extToken, seq *extSeq, ti int, name string, n
 }
 
 func (m *extMatcher) groupRepeat(tok extToken, seq *extSeq, ti int, name string, ni int) []int {
+	key := extMemoKey{seqID: seq.id, ti: ti, ni: ni}
+	if cached, ok := m.repeatMemo[key]; ok {
+		return cached
+	}
 	var out []int
 	for _, alt := range tok.alts {
 		for _, end := range m.ends(alt, 0, name, ni) {
@@ -320,19 +325,15 @@ func (m *extMatcher) groupRepeat(tok extToken, seq *extSeq, ti int, name string,
 			out = append(out, m.groupRepeat(tok, seq, ti, name, end)...)
 		}
 	}
+	out = uniqSortedInts(out)
+	m.repeatMemo[key] = out
 	return out
 }
 
 func (m *extMatcher) groupAltMatchesExactly(tok extToken, name string, start, end int) bool {
-	sub := name[start:end]
 	for _, alt := range tok.alts {
-		subMatcher := extMatcher{
-			mode:  m.mode,
-			memo:  make(map[extMemoKey][]int),
-			stack: make(map[extMemoKey]struct{}),
-		}
-		for _, altEnd := range subMatcher.ends(alt, 0, sub, 0) {
-			if altEnd == len(sub) {
+		for _, altEnd := range m.ends(alt, 0, name, start) {
+			if altEnd == end {
 				return true
 			}
 		}
@@ -416,5 +417,3 @@ func uniqSortedInts(values []int) []int {
 	slices.Sort(values)
 	return slices.Compact(values)
 }
-
-var _ = io.EOF
