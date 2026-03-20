@@ -30,6 +30,20 @@ func TestODSupportsSkipReadAndNoAddress(t *testing.T) {
 	}
 }
 
+func TestODAlignsMultipleFormatsWithoutAddressPadding(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.bin", []byte{'a', 0x03, 'b', 0x04, 'c', '\n'})
+
+	result := mustExecSession(t, session, "od -A n -t c -t x1 /tmp/in.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "   a 003   b 004   c  \\n\n  61  03  62  04  63  0a\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestODSuppressesDuplicateLinesUnlessVIsSet(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

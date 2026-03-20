@@ -786,6 +786,22 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 			b.WriteString(strings.Repeat(" ", missing))
 			b.WriteString("  ")
 			b.WriteString(odASCIIDump(raw))
+		} else if len(info.formats) > 1 {
+			leading := odLeadingDelimiter(format.format)
+			if displayPrefix == "" {
+				leading = odNoPrefixLeadingDelimiter(format.format)
+			}
+			b.WriteString(strings.Repeat(" ", leading))
+			for j := 0; j < lineLen; j += format.format.byteSize {
+				if j > 0 {
+					gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
+					if gap > 0 {
+						b.WriteString(strings.Repeat(" ", gap))
+					}
+				}
+				end := min(j+format.format.byteSize, len(padded))
+				b.WriteString(format.format.format(padded[j:end], order))
+			}
 		} else {
 			for j := 0; j < lineLen; j += format.format.byteSize {
 				end := min(j+format.format.byteSize, len(padded))
@@ -813,6 +829,15 @@ func odLeadingDelimiter(format odFormat) int {
 		return 1
 	default:
 		return format.printWidth
+	}
+}
+
+func odNoPrefixLeadingDelimiter(format odFormat) int {
+	switch format.kind {
+	case odFormatASCII, odFormatChar:
+		return 0
+	default:
+		return 1
 	}
 }
 
