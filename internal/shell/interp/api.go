@@ -168,6 +168,7 @@ type Runner struct {
 	origStdout io.Writer
 	origStderr io.Writer
 	origFDs    map[int]*shellFD
+	fdSnapshots []map[int]*shellFD
 	origStart  time.Time
 
 	startTime time.Time

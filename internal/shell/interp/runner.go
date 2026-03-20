@@ -501,6 +501,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	r.ensureFDTable()
 	oldIn, oldOut, oldErr := r.stdin, r.stdout, r.stderr
 	oldFDs := cloneFDTable(r.fds)
+	r.pushFDSnapshot(oldFDs)
 	procSubstStart := len(r.bgProcs)
 	closers := make([]io.Closer, 0, len(st.Redirs))
 	for _, rd := range st.Redirs {
@@ -545,8 +546,11 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	if !keepRedirs {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
 		r.fds = oldFDs
+		r.popFDSnapshot()
 		r.syncStandardFDs()
 	} else {
+		r.popFDSnapshot()
+		r.closeUnusedSnapshotFDs(oldFDs)
 		r.syncStandardFDs()
 	}
 }

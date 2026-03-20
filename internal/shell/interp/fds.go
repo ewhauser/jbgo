@@ -255,7 +255,7 @@ func (r *Runner) setFD(fdNum int, fd *shellFD) {
 	} else {
 		r.fds[fdNum] = fd
 	}
-	if old != nil && old != fd && old.owned && !r.fdReferencedElsewhere(fdNum, old) {
+	if old != nil && old != fd && old.owned && !r.fdReferencedElsewhere(fdNum, old) && !r.fdReferencedInSnapshots(old) {
 		_ = old.Close()
 	}
 	if fdNum >= 0 && fdNum <= 2 {
@@ -263,9 +263,70 @@ func (r *Runner) setFD(fdNum int, fd *shellFD) {
 	}
 }
 
+func (r *Runner) pushFDSnapshot(snapshot map[int]*shellFD) {
+	if snapshot == nil {
+		return
+	}
+	r.fdSnapshots = append(r.fdSnapshots, snapshot)
+}
+
+func (r *Runner) popFDSnapshot() {
+	if len(r.fdSnapshots) == 0 {
+		return
+	}
+	r.fdSnapshots = r.fdSnapshots[:len(r.fdSnapshots)-1]
+}
+
+func (r *Runner) closeUnusedSnapshotFDs(snapshot map[int]*shellFD) {
+	if len(snapshot) == 0 {
+		return
+	}
+	seen := make(map[*shellFD]struct{}, len(snapshot))
+	for _, fd := range snapshot {
+		if fd == nil || !fd.owned {
+			continue
+		}
+		if _, ok := seen[fd]; ok {
+			continue
+		}
+		seen[fd] = struct{}{}
+		if fdReferencedInTable(r.fds, fd) || r.fdReferencedInSnapshots(fd) {
+			continue
+		}
+		_ = fd.Close()
+	}
+}
+
 func (r *Runner) fdReferencedElsewhere(exclude int, target *shellFD) bool {
 	for fdNum, fd := range r.fds {
-		if fdNum != exclude && fd == target {
+		if fdNum == exclude {
+			continue
+		}
+		if fd == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runner) fdReferencedInSnapshots(target *shellFD) bool {
+	if target == nil {
+		return false
+	}
+	for _, snapshot := range r.fdSnapshots {
+		if fdReferencedInTable(snapshot, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func fdReferencedInTable(table map[int]*shellFD, target *shellFD) bool {
+	if target == nil {
+		return false
+	}
+	for _, fd := range table {
+		if fd == target {
 			return true
 		}
 	}

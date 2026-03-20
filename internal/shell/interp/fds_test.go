@@ -2,6 +2,11 @@ package interp
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -69,5 +74,71 @@ func TestSetFDDoesNotCloseNonOwnedStandardDescriptors(t *testing.T) {
 
 	if got := closer.closes; got != 0 {
 		t.Fatalf("closes = %d, want 0", got)
+	}
+}
+
+func TestNestedStdoutRedirectRestoresOuterDescriptor(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inner := filepath.Join(dir, "inner.txt")
+	outer := filepath.Join(dir, "outer.txt")
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, fmt.Sprintf(`
+inner() {
+  echo i1
+  echo i2
+}
+outer() {
+  echo o1
+  inner > %q
+  echo o2
+}
+outer > %q
+printf '%%s\n' "$(< %q)"
+echo --
+printf '%%s\n' "$(< %q)"
+`, inner, outer, inner, outer))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "i1\ni2\n--\no1\no2\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestInnerDupRedirectDoesNotLoseOuterFileRedirect(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "block.txt")
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, fmt.Sprintf(`
+{ echo foo52 1>&2; echo 012345789; } > %q
+IFS= read -r line < %q
+printf '%%d\n' "$(( ${#line} + 1 ))"
+`, outFile, outFile))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "10\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "10\n")
+	}
+	if stderr != "foo52\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "foo52\n")
 	}
 }
