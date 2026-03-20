@@ -187,18 +187,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign-extended.test.sh::eval -- \"$(declare -p arr)\" (restore arrays w/ unset elements)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::function name with /": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::invalid var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign-extended.test.sh::syntax error in array assignment": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -264,14 +252,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/ble-features.test.sh::[bash_unset] localvar-inherit from tempenv": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=(declare v); \"${a[@]}\" fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [56] BUG: declare -p unset does not print any error message": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
