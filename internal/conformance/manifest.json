@@ -576,64 +576,55 @@
         },
         "oils/builtin-echo.test.sh::\\0 \\1 \\8": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
         },
         "oils/builtin-echo.test.sh::\\0377 is the highest octal byte": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
           "goos": [
             "darwin"
           ]
         },
         "oils/builtin-echo.test.sh::\\0400 is one more than the highest octal byte": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
           "goos": [
             "darwin"
           ]
         },
         "oils/builtin-echo.test.sh::\\0777 is out of range": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
           "goos": [
             "darwin"
           ]
         },
         "oils/builtin-echo.test.sh::\\u6": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: darwin's od text formatting still differs from the Linux CI oracle for this echo case",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/builtin-echo.test.sh::\\x": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-echo.test.sh::echo -e with 4 digit unicode escape": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-echo.test.sh::echo -e with 8 digit unicode escape": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-echo.test.sh::echo -e with C escapes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
         },
         "oils/builtin-echo.test.sh::echo builtin should disallow typed args - literal": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: parser stderr still differs from bash for typed-arg syntax rejection"
         },
         "oils/builtin-echo.test.sh::incomplete hex escape": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
         },
         "oils/builtin-echo.test.sh::incomplete octal escape": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
         },
         "oils/builtin-echo.test.sh::incomplete unicode escape": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
         },
         "oils/builtin-eval-source.test.sh::Eval in bash does tilde expansion in array": {
           "mode": "xfail",
@@ -2012,7 +2003,7 @@
         },
         "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - command sub": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: command substitution null-byte handling and byte-dump formatting still differ from bash"
         },
         "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read -n": {
           "mode": "xfail",
@@ -2030,41 +2021,41 @@
         },
         "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - mapfile builtin": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: mapfile null-byte handling still differs from bash"
         },
         "oils/nul-bytes.test.sh::Issue 2269 - Do NUL bytes match ? in ${a#?}": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: command substitution null-byte warning behavior still differs from bash"
         },
         "oils/nul-bytes.test.sh::Issue 2269 Reduction": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: command substitution null-byte warning behavior still differs from bash"
         },
         "oils/nul-bytes.test.sh::NUL bytes and IFS splitting": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: stdout matches bash, but command substitution does not emit bash's ignored-null-byte warning"
         },
         "oils/nul-bytes.test.sh::NUL bytes with echo -e": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
           "goos": [
             "darwin"
           ]
         },
         "oils/nul-bytes.test.sh::Strip ops # ## % %% with NUL bytes": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: command substitution null-byte warning behavior still differs from bash"
         },
         "oils/nul-bytes.test.sh::printf - \\0 escape shows NUL byte": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "conformance: printf bytes match bash; od text formatting still differs on the pinned harness",
           "goos": [
             "darwin"
           ]
         },
         "oils/nul-bytes.test.sh::printf - literal NUL in format string": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: printf literal-NUL format handling still differs from bash"
         },
         "oils/paren-ambiguity.test.sh::$(( closed with ) ) after multiple lines is command - #2337": {
           "mode": "xfail",
@@ -2542,27 +2533,27 @@
         },
         "oils/unicode.test.sh::$'' does NOT check that 0x110000 is too big at parse time": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: ANSI-C $'' parsing still accepts out-of-range Unicode escapes that bash rejects earlier"
         },
         "oils/unicode.test.sh::$'' does not check for surrogate range at parse time": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: ANSI-C $'' parsing still accepts surrogate Unicode escapes that bash rejects earlier"
         },
         "oils/unicode.test.sh::Max code point U+10ffff can escaped with $''  printf  echo -e": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo now matches bash; printf still differs for C-locale Unicode escape preservation"
         },
         "oils/unicode.test.sh::Unicode escapes \\u03bc \\U000003bc in $'', echo -e, printf": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo now matches bash; printf still differs for C-locale Unicode escape preservation"
         },
         "oils/unicode.test.sh::printf / echo -e do NOT check max code point at runtime": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo now matches bash; printf still differs for out-of-range Unicode escape handling"
         },
         "oils/unicode.test.sh::printf / echo -e do NOT check surrogates at runtime": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: echo now matches bash; printf still differs for surrogate Unicode escape handling"
         },
         "oils/var-op-bash.test.sh::${!A@a} and ${!A[@]@a}": {
           "mode": "xfail",
