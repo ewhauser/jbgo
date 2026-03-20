@@ -978,12 +978,12 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 		if err != nil {
 			return nil, false, err
 		}
-		if target != nil && !simpleIndirectTarget(target) {
-			if fields, ok, err := cfg.paramExpFields(target); err != nil {
-				return nil, false, err
-			} else if ok {
-				if len(fields) == 0 {
-					return []fieldPart{}, true, nil
+			if target != nil && !simpleIndirectTarget(target) {
+				if fields, ok, _, err := cfg.paramExpFields(target); err != nil {
+					return nil, false, err
+				} else if ok {
+					if len(fields) == 0 {
+						return []fieldPart{}, true, nil
 				}
 				if len(fields) == 1 {
 					return append([]fieldPart(nil), fields[0]...), true, nil
@@ -1072,25 +1072,43 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 	if pe.Excl {
 		indirectState, err = cfg.paramExpState(indirectHolderParamExp(pe))
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 	}
-	if indirectModeFor(pe, indirectState) == indirectResolve {
+	indMode := indirectModeFor(pe, indirectState)
+	if indMode == indirectResolve {
 		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
-		if target != nil && !simpleIndirectTarget(target) {
-			if fields, ok, err := cfg.paramExpFields(target); err != nil {
-				return nil, false, err
+		if target != nil && quotedIndirectArrayTarget(target) && !paramExpHasOuterOps(pe) {
+			if fields, ok, elideEmpty, err := cfg.paramExpFields(target); err != nil {
+				return nil, false, false, err
 			} else if ok {
-				return fields, true, nil
+				return fields, true, elideEmpty, nil
+			}
+			if parts, ok, err := cfg.paramExpSplitValue(target); err != nil {
+				return nil, false, false, err
+			} else if ok {
+				return cfg.splitFieldParts(parts), true, false, nil
 			}
 			val, err := cfg.paramExp(target, quoteNone)
 			if err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
-			return cfg.splitFieldParts([]fieldPart{{val: val}}), true, nil
+			return cfg.splitFieldParts([]fieldPart{{val: val}}), true, false, nil
+		}
+		if target != nil && !simpleIndirectTarget(target) {
+			if fields, ok, elideEmpty, err := cfg.paramExpFields(target); err != nil {
+				return nil, false, false, err
+			} else if ok {
+				return fields, true, elideEmpty, nil
+			}
+			val, err := cfg.paramExp(target, quoteNone)
+			if err != nil {
+				return nil, false, false, err
+			}
+			return cfg.splitFieldParts([]fieldPart{{val: val}}), true, false, nil
 		}
 		state = resolved
 	} else if pe.Excl {
@@ -1099,7 +1117,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 	if state.swallowedError && !state.indexAllElements {
 		return [][]fieldPart{}, true, false, nil
 	}
-	if pe.Excl {
+	if pe.Excl && indMode != indirectResolve {
 		if pe.Names == 0 && pe.Index == nil {
 			if fields, ok, elideEmpty, err := cfg.indirectParamArrayFields(state); err != nil {
 				return nil, false, false, err
