@@ -236,10 +236,21 @@ func (r *Runner) expandErr(err error) {
 	if err == nil {
 		return
 	}
+	var (
+		cmdArithErr arithmCommandError
+		divErr      *expand.ArithmDivByZeroError
+	)
+	if r.currentChunkSource != "" && !errors.As(err, &cmdArithErr) && errors.As(err, &divErr) {
+		err = expand.WithArithmSource(
+			err,
+			r.currentChunkSource,
+			r.currentChunkSourceBase,
+			r.currentChunkSourceBase+uint(len(r.currentChunkSource)),
+		)
+	}
 	errMsg := err.Error()
 	fatalExpansionErr := r.commandString && !r.interactive
 	var (
-		cmdArithErr    arithmCommandError
 		unboundVarErr  expand.UnboundVariableError
 		unsetErr       expand.UnsetParameterError
 		indirectErr    expand.InvalidIndirectExpansionError
@@ -1701,9 +1712,17 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		// Note that [Runner.exec] below does something similar.
 		origEnv := r.writeEnv
 		r.writeEnv = &overlayEnviron{parent: r.writeEnv, funcScope: true}
+		prevChunkSource := r.currentChunkSource
+		prevChunkSourceBase := r.currentChunkSourceBase
+		if bodySource, ok := r.funcBodySource(name); ok {
+			r.currentChunkSource = bodySource.text
+			r.currentChunkSourceBase = bodySource.base
+		}
 
 		r.stmt(ctx, body)
 
+		r.currentChunkSource = prevChunkSource
+		r.currentChunkSourceBase = prevChunkSourceBase
 		r.writeEnv = origEnv
 		restoreFrame()
 

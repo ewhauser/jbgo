@@ -26,6 +26,7 @@ type BashInvocation struct {
 	Action         string
 	Interactive    bool
 	Source         BashSourceMode
+	Rcfile         string
 	ExecutionName  string
 	CommandString  string
 	ScriptPath     string
@@ -53,6 +54,7 @@ func BashInvocationSpec(cfg BashInvocationConfig) CommandSpec {
 		{Name: "noglob", Short: 'f', Help: "disable pathname expansion"},
 		{Name: "noexec", Short: 'n', Help: "read commands but do not execute them"},
 		{Name: "option", Short: 'o', ValueName: "option", Arity: OptionRequiredValue, Help: "set shell option (allexport, errexit, noglob, noexec, nounset, xtrace, pipefail)"},
+		{Name: "rcfile", Long: "rcfile", ValueName: "file", Arity: OptionRequiredValue, Help: "execute commands from file instead of the standard personal initialization file"},
 		{Name: "stdin", Short: 's', Help: "read commands from standard input"},
 		{Name: "nounset", Short: 'u', Help: "treat unset variables as an error"},
 		{Name: "xtrace", Short: 'x', Help: "print commands and their arguments as they are executed"},
@@ -124,7 +126,7 @@ func bashInvocationUsage(cfg BashInvocationConfig) string {
 	if cfg.AllowInteractive {
 		parts = append(parts, "[-i]")
 	}
-	parts = append(parts, "[-aefnux]", "[-o option]", "[-c command_string [name [arg ...]]]", "[-s]", "[script [arg ...]]")
+	parts = append(parts, "[-aefnux]", "[-o option]", "[--rcfile file]", "[-c command_string [name [arg ...]]]", "[-s]", "[script [arg ...]]")
 	return strings.Join(parts, " ")
 }
 
@@ -144,6 +146,7 @@ func bashInvocationFromParsed(cfg BashInvocationConfig, matches *ParsedCommand, 
 		out.Action = "version"
 	}
 	out.Interactive = matches.Has("interactive")
+	out.Rcfile = matches.Value("rcfile")
 
 	appendStartup := func(name string) {
 		if matches.Has(name) {

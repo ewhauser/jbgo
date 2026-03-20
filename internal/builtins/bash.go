@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+
+	"github.com/ewhauser/gbash/internal/completionutil"
 )
 
 type Bash struct {
@@ -67,7 +69,13 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	case "version":
 		return RenderSimpleVersion(inv.Stdout, c.name)
 	}
-	if parsed.Interactive && parsed.Source == BashSourceStdin {
+	if parsed.Interactive && inv.Stderr != nil {
+		if warning := bashInteractiveJobControlWarning(c.name, inv); warning != "" {
+			_, _ = io.WriteString(inv.Stderr, warning)
+		}
+		_, _ = fmt.Fprintf(inv.Stderr, "%s: no job control in this shell\n", c.name)
+	}
+	if parsed.Interactive && parsed.Source == BashSourceStdin && parsed.Rcfile == "" {
 		if inv.Interact == nil {
 			return fmt.Errorf("%s: interactive callback missing", c.name)
 		}
@@ -116,13 +124,21 @@ func (c *Bash) executeStdinScript(ctx context.Context, inv *Invocation, parsed *
 	if err != nil {
 		return err
 	}
-	if len(data) == 0 {
+	script, err := c.applyRcfile(ctx, inv, parsed, string(data))
+	if err != nil {
+		return err
+	}
+	if script == "" {
 		return nil
 	}
-	return c.executeInlineScript(ctx, inv, parsed, string(data), nil)
+	return c.executeInlineScript(ctx, inv, parsed, script, nil)
 }
 
 func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed *BashInvocation, script string, stdin io.Reader) error {
+	script, err := c.applyRcfile(ctx, inv, parsed, script)
+	if err != nil {
+		return err
+	}
 	result, err := inv.Exec(ctx, parsed.BuildExecutionRequest(inv.Env, inv.Cwd, stdin, script))
 	if err != nil {
 		return err
@@ -133,11 +149,36 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 	}
 	if result != nil && result.Stderr != "" {
 		result.Stderr = prefixNestedShellCommandNotFound(c.name, result.Stderr)
+		result.Stderr = prefixNestedShellBuiltinWarnings(c.name, result.Stderr)
 	}
 	if err := writeExecutionOutputs(inv, result); err != nil {
 		return err
 	}
 	return exitForExecutionResult(result)
+}
+
+func (c *Bash) applyRcfile(ctx context.Context, inv *Invocation, parsed *BashInvocation, script string) (string, error) {
+	if parsed == nil || !parsed.Interactive || strings.TrimSpace(parsed.Rcfile) == "" {
+		return script, nil
+	}
+	data, _, err := readAllFile(ctx, inv, parsed.Rcfile)
+	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) {
+			return "", exitf(inv, 1, "%s: %s: No such file or directory", c.name, parsed.Rcfile)
+		}
+		return "", exitf(inv, 1, "%s: %s: %s", c.name, parsed.Rcfile, readAllErrorText(err))
+	}
+	rc := string(data)
+	switch {
+	case rc == "":
+		return script, nil
+	case script == "":
+		return rc, nil
+	case strings.HasSuffix(rc, "\n"):
+		return rc + script, nil
+	default:
+		return rc + "\n" + script, nil
+	}
 }
 
 func prefixNestedShellCommandNotFound(name, stderr string) string {
@@ -165,6 +206,27 @@ func prefixNestedShellCommandNotFound(name, stderr string) string {
 		} else {
 			lines[i] = target + ": command not found" + suffix
 		}
+	}
+	return strings.Join(lines, "")
+}
+
+func prefixNestedShellBuiltinWarnings(name, stderr string) string {
+	prefix := strings.TrimSpace(name)
+	if prefix == "" || stderr == "" {
+		return stderr
+	}
+	lines := strings.SplitAfter(stderr, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, "\n")
+		if trimmed == "" || strings.HasPrefix(trimmed, prefix+": ") {
+			continue
+		}
+		cmdName, rest, ok := strings.Cut(trimmed, ": ")
+		if !ok || !completionutil.IsBuiltinName(cmdName) || !strings.HasPrefix(rest, "warning:") {
+			continue
+		}
+		suffix := line[len(trimmed):]
+		lines[i] = prefix + ": " + trimmed + suffix
 	}
 	return strings.Join(lines, "")
 }

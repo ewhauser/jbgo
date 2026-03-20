@@ -91,6 +91,21 @@ func (r *Runner) setFuncSource(name, source string) {
 	r.funcSources[name] = source
 }
 
+func (r *Runner) funcBodySource(name string) (funcSourceSpan, bool) {
+	if r == nil || r.funcBodySrc == nil {
+		return funcSourceSpan{}, false
+	}
+	src, ok := r.funcBodySrc[name]
+	return src, ok
+}
+
+func (r *Runner) setFuncBodySource(name, source string, base uint) {
+	if r.funcBodySrc == nil {
+		r.funcBodySrc = make(map[string]funcSourceSpan, 4)
+	}
+	r.funcBodySrc[name] = funcSourceSpan{text: source, base: base}
+}
+
 func (r *Runner) funcInternal(name string) bool {
 	if r == nil || r.funcInternals == nil {
 		return false
@@ -120,6 +135,9 @@ func (r *Runner) delFunc(name string) {
 	}
 	if r.funcInternals != nil {
 		delete(r.funcInternals, name)
+	}
+	if r.funcBodySrc != nil {
+		delete(r.funcBodySrc, name)
 	}
 }
 

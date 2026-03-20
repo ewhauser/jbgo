@@ -20,9 +20,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ewhauser/gbash/internal/completionutil"
 	"github.com/ewhauser/gbash/internal/printfutil"
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/internal/shellstate"
 )
 
 // TODO: given the categories below, perhaps this should be more like:
@@ -38,81 +40,7 @@ import (
 // IsBuiltin returns true if the given word is a POSIX Shell
 // or Bash builtin.
 func IsBuiltin(name string) bool {
-	switch name {
-	case
-		// POSIX Shell builtins, from section 1.d obtained in September 2025 from:
-		// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_09_01_01
-		"alias",
-		"bg",
-		"cd",
-		"command",
-		"false",
-		"fc",
-		"fg",
-		"getopts",
-		"hash",
-		"jobs",
-		"kill",
-		"newgrp",
-		"pwd",
-		"read",
-		"true",
-		"umask",
-		"unalias",
-		"wait",
-
-		// POSIX Shell special built-ins, obtained in September 2025 from:
-		// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_14
-		"break",
-		":",
-		"continue",
-		".",
-		"eval",
-		"exec",
-		"exit",
-		"export",   // NOTE: our parser treats this as a keyword
-		"readonly", // NOTE: our parser treats this as a keyword
-		"return",
-		"set",
-		"shift",
-		"times",
-		"trap",
-		"unset",
-
-		// Bash built-ins which are not present in POSIX, obtained in September 2025 from:
-		// https://man.archlinux.org/man/bash.1.en#SHELL_BUILTIN_COMMANDS
-		"source",
-		"bind",
-		"builtin",
-		"caller",
-		"compgen",
-		"complete",
-		"compopt",
-		"declare", // NOTE: our parser treats this as a keyword
-		"typeset", // NOTE: our parser treats this as a keyword
-		"dirs",
-		"disown",
-		"echo", // TODO: surely this is POSIX? but why is it not in the main POSIX spec page?
-		"enable",
-		"history",
-		"help",
-		"let", // NOTE: our parser treats this as a keyword
-		"local",
-		"logout",
-		"mapfile",
-		"readarray",
-		"popd",
-		"printf", // TODO: surely this is POSIX? but why is it not in the main POSIX spec page?
-		"pushd",
-		"shopt",
-		"suspend",
-		"test",
-		"[", // NOTE: an alias for "test", not explicitly listed
-		"type",
-		"ulimit":
-		return true
-	}
-	return false
+	return completionutil.IsBuiltinName(name)
 }
 
 // TODO: atoi is duplicated in the expand package.
@@ -308,6 +236,60 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				exit.code = result.ExitCode
 			}
 		}
+	case "complete":
+		cfg, err := completionutil.ParseCompleteArgs(args)
+		if err != nil {
+			return failf(2, "%v\n", err)
+		}
+		state := shellstate.CompletionStateFromContext(ctx)
+		if state == nil {
+			state = shellstate.NewCompletionState()
+		}
+		lines, err := completionutil.ApplyComplete(state, newRunnerCompletionBackend(ctx, r, nil), cfg)
+		if err != nil {
+			code := uint8(2)
+			if cfg != nil && cfg.PrintMode {
+				code = 1
+			}
+			return failf(code, "%v\n", err)
+		}
+		for _, line := range lines {
+			r.outf("%s\n", line)
+		}
+	case "compopt":
+		cfg, err := completionutil.ParseCompoptArgs(args)
+		if err != nil {
+			return failf(2, "%v\n", err)
+		}
+		state := shellstate.CompletionStateFromContext(ctx)
+		if state == nil {
+			state = shellstate.NewCompletionState()
+		}
+		if err := completionutil.ApplyCompopt(state, cfg); err != nil {
+			return failf(1, "%v\n", err)
+		}
+	case "compgen":
+		cfg, err := completionutil.ParseCompgenArgs(args)
+		if err != nil {
+			return failf(2, "%v\n", err)
+		}
+		if cfg.HasFunction {
+			r.errf("compgen: warning: -F option may not work as you expect\n")
+		}
+		if cfg.HasCommand {
+			r.errf("compgen: warning: -C option may not work as you expect\n")
+		}
+		lines, status, err := completionutil.GenerateCompgen(newRunnerCompletionBackend(ctx, r, nil), cfg)
+		if err != nil {
+			if status == 0 {
+				status = 2
+			}
+			return failf(uint8(status), "%v\n", err)
+		}
+		for _, line := range lines {
+			r.outf("%s\n", line)
+		}
+		exit.code = uint8(status)
 	case "break", "continue":
 		if !r.inLoop {
 			return failf(0, "%s: only meaningful in a `for', `while', or `until' loop\n", name)

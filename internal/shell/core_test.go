@@ -228,6 +228,46 @@ func TestCoreRunUsesShellPrintfBuiltinForVarRefs(t *testing.T) {
 	}
 }
 
+func TestCoreRunUsesBuiltinCompgenWithoutRegistryWrapper(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"compgen -A builtin g",
+			"echo ---",
+			"builtin compgen -A builtin g",
+			"echo ---",
+			"command compgen -A builtin g",
+			"echo ---",
+			"/bin/compgen -A builtin g",
+			"echo wrapped=$?",
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: commands.NewRegistry(),
+		FS:       newShellTestFS(t),
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	const want = "" +
+		"getopts\n" +
+		"---\n" +
+		"getopts\n" +
+		"---\n" +
+		"getopts\n" +
+		"---\n" +
+		"wrapped=127\n"
+	if got := stdout.String(); got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCoreRunUsesShellTestBuiltinForVarRefs(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +319,29 @@ func TestCoreRunUsesShellTestBuiltinForVarRefs(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestCoreRunPreservesArithmeticDiagnosticsInsideFunctions(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"_f() {",
+			"  COMPREPLY+=( $(( 1 / 0 )) )",
+			"}",
+			"_f",
+			"",
+		}, "\n"),
+		Stdout: io.Discard,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := stderr.String(), "1 / 0 : division by 0 (error token is \"0 \")\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }
 

@@ -227,40 +227,56 @@ func (e *ArithmDivByZeroError) Error() string {
 	return fmt.Sprintf("%s: division by 0 (error token is %s)", exprText, bashQuoteErrorToken(tokenText))
 }
 
-// ArithmWithSource evaluates expr and, when it fails with division by zero,
+// ArithmWithSource evaluates expr and, when it fails,
 // prefers the original arithmetic source text for bash-compatible diagnostics.
 func ArithmWithSource(cfg *Config, expr syntax.ArithmExpr, source string, sourceStart, sourceEnd uint) (int, error) {
 	n, err := Arithm(cfg, expr)
 	if err == nil {
 		return n, nil
 	}
+	return 0, WithArithmSource(err, source, sourceStart, sourceEnd)
+}
+
+func WithArithmSource(err error, source string, sourceStart, sourceEnd uint) error {
+	if err == nil || source == "" {
+		return err
+	}
 	var divErr *ArithmDivByZeroError
 	if errors.As(err, &divErr) {
+		if divErr.Source == source && divErr.SourceStart == sourceStart && divErr.SourceEnd == sourceEnd {
+			return err
+		}
 		cloned := *divErr
 		cloned.Source = source
 		cloned.SourceStart = sourceStart
 		cloned.SourceEnd = sourceEnd
-		return 0, &cloned
+		return &cloned
 	}
 	var diagErr *ArithmDiagnosticError
 	if errors.As(err, &diagErr) {
+		if diagErr.Source == source && diagErr.SourceStart == sourceStart && diagErr.SourceEnd == sourceEnd {
+			return err
+		}
 		cloned := *diagErr
 		cloned.Source = source
 		cloned.SourceStart = sourceStart
 		cloned.SourceEnd = sourceEnd
-		if cloned.Expr != nil && cloned.ExprText != "" && source != "" && !arithExprUsesExpandedValue(cloned.Expr) {
+		if cloned.Expr != nil && cloned.ExprText != "" && !arithExprUsesExpandedValue(cloned.Expr) {
 			cloned.ExprText = source
 		}
-		return 0, &cloned
+		return &cloned
 	}
 	var syntaxErr ArithmSyntaxError
 	if errors.As(err, &syntaxErr) {
+		if syntaxErr.Source == source && syntaxErr.SourceStart == sourceStart && syntaxErr.SourceEnd == sourceEnd {
+			return err
+		}
 		syntaxErr.Source = source
 		syntaxErr.SourceStart = sourceStart
 		syntaxErr.SourceEnd = sourceEnd
-		return 0, syntaxErr
+		return syntaxErr
 	}
-	return 0, err
+	return err
 }
 
 // hasSingleQuote checks if a word contains any single-quoted parts.

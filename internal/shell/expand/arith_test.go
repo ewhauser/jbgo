@@ -261,7 +261,6 @@ func TestArithmWithSourcePreservesExpandedOperands(t *testing.T) {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}
 }
-
 func TestArithmWithSourcePreservesInvalidConstantExpression(t *testing.T) {
 	t.Parallel()
 
@@ -337,5 +336,23 @@ func TestArithmWithSourceUsesExpandedStringForIndexedStringDiagnostics(t *testin
 	const want = `12 34: arithmetic syntax error in expression (error token is "34")`
 	if err.Error() != want {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestWithArithmSourceEnrichesExistingDivisionByZeroErrors(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansion(t, "$(( 1 / 0 ))")
+	cfg := &Config{Env: testEnv{}}
+
+	_, err := Arithm(cfg, exp.X)
+	if err == nil {
+		t.Fatal("Arithm() error = nil, want division-by-zero error")
+	}
+	err = WithArithmSource(err, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+
+	const want = `1 / 0 : division by 0 (error token is "0 ")`
+	if got := err.Error(); got != want {
+		t.Fatalf("WithArithmSource() error = %q, want %q", got, want)
 	}
 }

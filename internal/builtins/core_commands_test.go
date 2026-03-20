@@ -1685,13 +1685,32 @@ func TestBashHelpUsesSpecParser(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := "usage: bash [-i] [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-i] [-aefnux] [-o option] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
+	want := "usage: bash [-i] [-aefnux] [-o option] [--rcfile file] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-i] [-aefnux] [-o option] [--rcfile file] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	if strings.Contains(result.Stdout, "--interactive") {
 		t.Fatalf("Stdout = %q, did not expect long interactive flag", result.Stdout)
 	}
+}
+
+func TestBashRcfileRunsForInteractiveCommandString(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cat > /tmp/rc.sh <<'EOF'\nexport FROM_RCFILE=ready\nEOF\nbash --rcfile /tmp/rc.sh -i -c 'echo ${FROM_RCFILE:-missing}'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "ready\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	assertInteractiveShellStderr(t, result.Stderr, "bash")
 }
 
 func TestBashRunsScriptFileAndPassesArgs(t *testing.T) {
@@ -1963,9 +1982,7 @@ func TestBashInteractiveStdinPersistsStateAndStartupOptions(t *testing.T) {
 			t.Fatalf("Stdout = %q, want substring %q", result.Stdout, want)
 		}
 	}
-	if got := result.Stderr; got != "" {
-		t.Fatalf("Stderr = %q, want empty", got)
-	}
+	assertInteractiveShellStderr(t, result.Stderr, "bash")
 }
 
 func TestBashInteractiveCommandStringUsesInteractiveSemantics(t *testing.T) {
@@ -1984,9 +2001,26 @@ func TestBashInteractiveCommandStringUsesInteractiveSemantics(t *testing.T) {
 	if got, want := result.Stdout, "alias-ok\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if got := result.Stderr; got != "" {
-		t.Fatalf("Stderr = %q, want empty", got)
+	assertInteractiveShellStderr(t, result.Stderr, "bash")
+}
+
+func TestBashInteractiveCommandStringPrefixesBuiltinWarnings(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -ic '_f(){ COMPREPLY=(foo); }\ncompgen -F _f'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "foo\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	assertInteractiveShellStderr(t, result.Stderr, "bash", "bash: compgen: warning: -F option may not work as you expect\n")
 }
 
 func TestBashInteractiveScriptUsesInteractiveSemantics(t *testing.T) {
@@ -2005,9 +2039,7 @@ func TestBashInteractiveScriptUsesInteractiveSemantics(t *testing.T) {
 	if got, want := result.Stdout, "alias-ok\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if got := result.Stderr; got != "" {
-		t.Fatalf("Stderr = %q, want empty", got)
-	}
+	assertInteractiveShellStderr(t, result.Stderr, "bash")
 }
 
 func TestShInteractiveCommandStringUsesInteractiveSemantics(t *testing.T) {
@@ -2026,8 +2058,21 @@ func TestShInteractiveCommandStringUsesInteractiveSemantics(t *testing.T) {
 	if got, want := result.Stdout, "alias-ok\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if got := result.Stderr; got != "" {
-		t.Fatalf("Stderr = %q, want empty", got)
+	assertInteractiveShellStderr(t, result.Stderr, "sh")
+}
+
+func assertInteractiveShellStderr(t *testing.T, got, name string, extra ...string) {
+	t.Helper()
+	wantTail := name + ": no job control in this shell\n" + strings.Join(extra, "")
+	if goruntime.GOOS != "linux" {
+		if got != wantTail {
+			t.Fatalf("Stderr = %q, want %q", got, wantTail)
+		}
+		return
+	}
+	pattern := "^" + regexp.QuoteMeta(name) + `: cannot set terminal process group \([0-9]+\): Inappropriate ioctl for device\n` + regexp.QuoteMeta(wantTail) + "$"
+	if !regexp.MustCompile(pattern).MatchString(got) {
+		t.Fatalf("Stderr = %q, want pattern %q", got, pattern)
 	}
 }
 

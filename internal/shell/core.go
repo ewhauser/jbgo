@@ -131,6 +131,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	if exec.CompletionState == nil {
 		exec.CompletionState = shellstate.NewCompletionState()
 	}
+	ctx = shellstate.WithCompletionState(ctx, exec.CompletionState)
 	budget := newExecutionBudget(exec.Policy)
 
 	effectiveExec := *exec
@@ -519,7 +520,7 @@ func (m *core) callHandler(exec *Execution, budget *executionBudget) interp.Call
 func shouldRewriteBuiltin(name string) bool {
 	switch name {
 	case "true", "false", "pwd", "cd", "dirs", "pushd", "popd", "type", "command", "source", ".",
-		"printf", "test", "[":
+		"printf", "test", "[", "complete", "compgen", "compopt":
 		return false
 	default:
 		return true

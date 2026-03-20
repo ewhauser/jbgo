@@ -13,12 +13,19 @@ const (
 
 type CompletionSpec struct {
 	IsDefault   bool
+	IsEmptyLine bool
 	Wordlist    string
 	HasWordlist bool
 	Function    string
 	HasFunction bool
 	Command     string
 	HasCommand  bool
+	Filter      string
+	HasFilter   bool
+	Prefix      string
+	HasPrefix   bool
+	Suffix      string
+	HasSuffix   bool
 	Options     []string
 	Actions     []string
 }

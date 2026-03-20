@@ -309,6 +309,9 @@ func (r *Runner) setFunc(name string, body *syntax.Stmt) {
 	}
 	r.funcs[name] = body
 	r.setFuncSource(name, r.currentDefinitionSource())
+	if source := r.sourceForNode(body); source != "" {
+		r.setFuncBodySource(name, source, body.Pos().Offset())
+	}
 	r.setFuncInternal(name, r.currentInternal())
 }
 

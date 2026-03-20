@@ -87,6 +87,10 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
+        "oils/builtin-completion.test.sh::compgen -A user": {
+          "mode": "xfail",
+          "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database"
+        },
         "oils/array-assoc.test.sh::Slice of associative array doesn't make sense in bash": {
           "mode": "xfail",
           "reason": "gbash still slices associative-array values differently from bash's hash-order quirk"
@@ -134,10 +138,6 @@
         "oils/array-sparse.test.sh::${a[@]/pat/rep}": {
           "mode": "xfail",
           "reason": "gbash still handles anchored sparse-array replacements differently from bash"
-        },
-        "oils/array-sparse.test.sh::compgen -F _set_COMPREPLY": {
-          "mode": "xfail",
-          "reason": "gbash does not implement bash's compgen -F completion hook behavior"
         },
         "oils/array.test.sh::${mystr[@]} and ${mystr[*]} disallowed with strict_array": {
           "mode": "xfail",
@@ -635,178 +635,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-cd.test.sh::remove pwd dir": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::-A function prints functions": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::-o filenames and -o nospace have no effect with compgen": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::-o plusdirs and -o dirnames with compgen": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::Invalid syntax": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::Parse errors for compgen -W and complete -W": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::Runtime errors for compgen -F func": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::Runtime errors for compgen -W": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A builtin": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A command completes builtins and keywords": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A command completes external commands": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A command completes functions and aliases": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A directory": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A file": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -A user": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -F with scalar COMPREPLY": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -W '' cmd is not a usage error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -W 'one two three'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -W evaluates code in $()": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -W uses IFS, and delimiters are escaped with \\": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -W words -X filter": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -e P": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -e on known, but unexported, var": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -e on unknown var": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -e with global/local exported vars": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -f": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -f -X filter -- $cur": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -f on invalid  dir": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -k completes reserved shell keywords": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -k shows Oils keywords too": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -k shows the same keywords as bash": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -o default completes files and dirs": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -v P": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -v on unknown var": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen -v with local vars": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen doesn't need shell quoting": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen doesn't respect -X for user-defined functions": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen with action and suffix: helptopic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen with actions: alias, setopt": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen with actions: function / variable / file": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::compgen with actions: shopt": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::complete -C vs. compgen -C": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::complete -F f is usage error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-completion.test.sh::how compgen calls completion functions": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1455,10 +1283,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-set.test.sh::set -u with undefined var in interactive shell does NOT exit the interpreter": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::set -u with undefined variable exits the interpreter": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -3372,10 +3196,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/vars-special.test.sh::$BASHPID DOES change with subshell and command sub": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$HOME is NOT set": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

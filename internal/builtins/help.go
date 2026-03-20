@@ -22,6 +22,10 @@ var builtinHelp = map[string]helpTopic{
 		Synopsis: "complete [-pr] [-D] [-o option] [-A action] [-W wordlist] [-F function] [-C command] [name ...]",
 		Body:     "Set, print, or remove programmable completion specifications.",
 	},
+	"compgen": {
+		Synopsis: "compgen [-abcdefjkve] [-o option] [-A action] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] [word]",
+		Body:     "Generate completion matches directly.",
+	},
 	"compopt": {
 		Synopsis: "compopt [-o option] [+o option] [name ...]",
 		Body:     "Modify programmable completion options for a command or completion scope.",
@@ -33,6 +37,10 @@ var builtinHelp = map[string]helpTopic{
 	"export": {
 		Synopsis: "export NAME[=VALUE] ...",
 		Body:     "Set shell variables for child commands.",
+	},
+	"false": {
+		Synopsis: "false",
+		Body:     "Return a non-zero exit status.",
 	},
 	"help": {
 		Synopsis: "help [-s] [pattern]",

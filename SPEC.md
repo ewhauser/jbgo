@@ -140,7 +140,7 @@ The CLI also provides a minimal interactive shell mode. That mode is a front-end
 - it executes each completed entry via `Session.Exec`, using the same runner-backed parser construction that feeds live alias state into parse-time expansion
 - it carries forward the virtual cwd and shell-visible variable state between entries at the CLI layer
 - it may expose session-local command history via the `history` command, with entries stored in `BASH_HISTORY`
-- it supports programmable completion state via the `complete` and `compopt` shell builtins, but the shipped CLI still does not provide a readline/tab-completion frontend
+- it supports programmable completion state via the `complete`, `compgen`, and `compopt` shell builtins; bare calls plus `builtin ...` and `command ...` dispatch resolve to those shell builtins, while `/bin/complete`, `/bin/compgen`, and `/bin/compopt` expose the same shared completion logic as command wrappers; the shipped CLI still does not provide a readline/tab-completion frontend
 
 The normal CLI entrypoint also accepts filesystem selection flags before the shell arguments:
 
@@ -170,7 +170,7 @@ That frontend is also exposed as a public `cli` package so shipped binaries can 
 - `Session` owns the filesystem instance, command registry, policy, base environment, and default working directory
 - each `Exec` call creates a fresh `interp.Runner`
 - shell-local variables, shell functions, and option state are per-execution by default
-- programmable completion specs created by `complete` and modified by `compopt` are runner-local shell state: they persist within one `Exec` call and within an interactive shell session, but not across separate `Session.Exec` calls
+- programmable completion specs created by `complete` and modified by `compopt` are runner-local shell state shared by the shell builtins and the `/bin/complete` and `/bin/compopt` wrappers: they persist within one `Exec` call and within an interactive shell session, but not across separate `Session.Exec` calls
 - filesystem state persists across executions within the same session
 
 This matches the agent workflow we care about: a sequence of shell calls operating on a shared sandboxed workspace, without requiring shell-local state to leak between calls unless we explicitly add that feature later.
@@ -230,6 +230,8 @@ Commands remain registry-backed Go implementations. `/bin/ls` and similar paths 
 
 Ownership name resolution for commands such as `ls`, `chown`, and `chgrp` must come from those runtime identity defaults plus sandbox-visible `/etc/passwd` and `/etc/group` data when present. The runtime must not consult host account databases outside the sandbox contract.
 
+Programmable user completion follows the same boundary: `compgen -A user` may use `USER` plus sandbox-visible `/etc/passwd`, but it must not read host account databases outside the sandbox contract.
+
 The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` are guaranteed by default.
 
 The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
@@ -261,7 +263,7 @@ Package responsibilities:
 - `internal/shell/`: concrete shell core entrypoints plus the in-tree `syntax`, `expand`, `pattern`, and `interp` packages; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with origin- and path-boundary-aware allowlists, method controls, redirect revalidation, and response-size limits
-- `commands/`: registry and Go-native command implementations such as `clear`, `complete`, `compopt`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `pwd`, `strings`, and `xan`
+- `commands/`: registry and Go-native command implementations such as `clear`, `compadjust`, `complete`, `compgen`, `compopt`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `pwd`, `strings`, and `xan`
 - `contrib/`: opt-in command modules that stay outside the root module dependency graph so heavyweight helpers do not inflate the core runtime. The repository may also expose umbrella contrib helpers such as `contrib/extras` to register the stable official contrib command set without changing the default runtime surface, and may ship official opt-in binaries such as `contrib/extras/cmd/gbash-extras` from the corresponding contrib module. Current examples include `awk`, `html-to-markdown`, `jq`, `nodejs`, `sqlite3`, and `yq`.
 - `packages/`: publishable JavaScript and TypeScript packages. `packages/gbash-wasm` owns the `js/wasm` assets plus explicit host entrypoints such as `@ewhauser/gbash-wasm/browser` and `@ewhauser/gbash-wasm/node`.
 - `policy/`: allowlists, root restrictions, size limits, network stance, and decision helpers

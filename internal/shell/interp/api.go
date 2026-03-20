@@ -65,6 +65,7 @@ type Runner struct {
 
 	funcSources   map[string]string
 	funcInternals map[string]bool
+	funcBodySrc   map[string]funcSourceSpan
 
 	alias map[string]alias
 
@@ -193,6 +194,11 @@ type Runner struct {
 	// Fake signal callbacks
 	callbackErr  string
 	callbackExit string
+}
+
+type funcSourceSpan struct {
+	text string
+	base uint
 }
 
 // exitStatus holds the state of the shell after running one command.
