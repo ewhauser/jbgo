@@ -382,10 +382,14 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			r.out("\n")
 		}
 	case "builtin":
+		if len(args) > 0 && args[0] == "--" {
+			args = args[1:]
+		}
 		if len(args) < 1 {
 			break
 		}
 		if !IsBuiltin(args[0]) {
+			r.errf("builtin: %s: not a shell builtin\n", args[0])
 			exit.code = 1
 			return exit
 		}
@@ -1745,14 +1749,19 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 }
 
 func (r *Runner) commandBuiltin(ctx context.Context, pos syntax.Pos, args []string) (exit exitStatus) {
-	show := false
+	showKind := false
+	showVerbose := false
 	useDefaultPath := false
 	forcePath := false
 	fp := flagParser{remaining: args}
 	for fp.more() {
 		switch flag := fp.flag(); flag {
 		case "-v":
-			show = true
+			showKind = true
+			showVerbose = false
+		case "-V":
+			showKind = false
+			showVerbose = true
 		case "-p":
 			useDefaultPath = true
 		case "-P":
@@ -1767,20 +1776,38 @@ func (r *Runner) commandBuiltin(ctx context.Context, pos syntax.Pos, args []stri
 	if len(args) == 0 {
 		return exit
 	}
-	if show {
+	if showKind || showVerbose {
+		mode := shellTypeMode{}
+		if forcePath {
+			mode.output = shellTypeOutputForcePath
+		}
+		restorePath := func() {}
+		if useDefaultPath {
+			restorePath = r.setTemporaryPath(defaultExecPath)
+			defer restorePath()
+		}
 		last := uint8(0)
 		for _, arg := range args {
 			last = 0
-			if !forcePath && !useDefaultPath {
-				if r.funcs[arg] != nil || IsBuiltin(arg) {
-					r.outf("%s\n", arg)
+			matches, found := r.typeMatches(ctx, arg, mode)
+			if !found || len(matches) == 0 {
+				if showVerbose {
+					r.errf("command: %s: not found\n", arg)
+				}
+				last = 1
+				continue
+			}
+			for _, match := range matches {
+				if showVerbose {
+					r.printTypeMatch(arg, match, shellTypeMode{})
 					continue
 				}
-			}
-			if foundPath, err := r.lookPath(ctx, r.Dir, r.writeEnv, arg, true, useDefaultPath); err == nil {
-				r.outf("%s\n", foundPath)
-			} else {
-				last = 1
+				switch match.kind {
+				case shellTypeFile:
+					r.outf("%s\n", match.path)
+				default:
+					r.outf("%s\n", arg)
+				}
 			}
 		}
 		exit.code = last
@@ -2389,19 +2416,40 @@ func (r *Runner) printTypeMatch(name string, match shellTypeMatch, mode shellTyp
 		r.outf("%s is a shell keyword\n", name)
 	case shellTypeFunction:
 		r.outf("%s is a function\n", name)
-		printer := syntax.NewPrinter()
-		var buf bytes.Buffer
-		printer.Print(&buf, &syntax.FuncDecl{
-			Name:   &syntax.Lit{Value: name},
-			Parens: true,
-			Body:   match.body,
-		})
-		r.outf("%s\n", buf.String())
+		r.outf("%s () \n", name)
+		r.out("{ \n")
+		r.out(bashFunctionBody(match.body))
+		r.out("}\n")
 	case shellTypeBuiltin:
 		r.outf("%s is a shell builtin\n", name)
 	case shellTypeFile:
 		r.outf("%s is %s\n", name, match.path)
 	}
+}
+
+func bashFunctionBody(body *syntax.Stmt) string {
+	if body == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter().Print(&buf, body); err != nil {
+		return ""
+	}
+	text := strings.TrimSpace(buf.String())
+	if strings.HasPrefix(text, "{") && strings.HasSuffix(text, "}") {
+		text = strings.TrimSpace(text[1 : len(text)-1])
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSuffix(line, ";")
+		lines[i] = "    " + line + "\n"
+	}
+	return strings.Join(lines, "")
 }
 
 // flagParser is used to parse builtin flags.

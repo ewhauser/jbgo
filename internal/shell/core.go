@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -74,6 +75,8 @@ type resolvedCommand struct {
 	source  string
 	args    []string
 }
+
+const virtualCommandStubPrefix = "# gbash virtual command stub: "
 
 type core struct{}
 
@@ -568,7 +571,7 @@ func commandBuiltinTarget(args []string) []string {
 	rest := append([]string(nil), args...)
 	for len(rest) > 0 {
 		switch rest[0] {
-		case "-v":
+		case "-v", "-V":
 			show = true
 			rest = rest[1:]
 		default:
@@ -946,27 +949,36 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		return nil, false, nil //nolint:nilerr // stat error means the file doesn't exist as a command
 	}
 
+	// When the file lives inside the built-in command directory (default
+	// /bin) and its basename matches a registered command, resolve to the
+	// registry implementation directly. This prevents infinite recursion
+	// when a stub script (e.g. #!/bin/sh\nsort) in the built-in dir calls
+	// the same command name in its body. Files outside the built-in dir
+	// are resolved normally so user scripts can override built-in names.
 	resolvedName := path.Base(fullPath)
-	cmd, ok := lookupRegistryCommand(exec, resolvedName)
-	if ok {
-		return &resolvedCommand{
-			command: cmd,
-			name:    resolvedName,
-			path:    fullPath,
-			source:  source,
-		}, true, nil
+	if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
+		if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {
+			return &resolvedCommand{
+				command: cmd,
+				name:    resolvedName,
+				path:    fullPath,
+				source:  source,
+			}, true, nil
+		}
 	}
 
-	script, ok, err := resolveShebangCommand(ctx, exec, fullPath, commandName)
+	resolved, ok, err := resolveCommandFile(ctx, exec, fullPath, info.Mode(), commandName)
 	if err != nil {
 		return nil, false, err
 	}
 	if !ok {
 		return nil, false, nil
 	}
-	script.path = fullPath
-	script.source = "shebang"
-	return script, true, nil
+	resolved.path = fullPath
+	if resolved.source == "" {
+		resolved.source = source
+	}
+	return resolved, true, nil
 }
 
 func pathDirs(env expand.Environ, dir string) []string {
@@ -1016,6 +1028,104 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invok
 		name:    shebangInterpreter,
 		args:    append(argv, scriptArg),
 	}, true, nil
+}
+
+func resolveCommandFile(ctx context.Context, exec *Execution, fullPath string, mode stdfs.FileMode, invokedPath string) (_ *resolvedCommand, ok bool, err error) {
+	if resolved, ok, err := resolveVirtualCommandStub(ctx, exec, fullPath); ok || err != nil {
+		return resolved, ok, err
+	}
+	if !isExecutableCommandFile(mode) {
+		return nil, false, nil
+	}
+	if script, ok, err := resolveShebangCommand(ctx, exec, fullPath, invokedPath); ok || err != nil {
+		if ok {
+			script.source = "shebang"
+		}
+		return script, ok, err
+	}
+	shellName := defaultScriptInterpreter(exec)
+	cmd, ok := lookupRegistryCommand(exec, shellName)
+	if !ok {
+		return nil, false, nil
+	}
+	return &resolvedCommand{
+		command: cmd,
+		name:    shellName,
+		args:    []string{fullPath},
+		source:  "shell-script",
+	}, true, nil
+}
+
+func resolveVirtualCommandStub(ctx context.Context, exec *Execution, fullPath string) (_ *resolvedCommand, ok bool, err error) {
+	file, err := exec.FS.Open(ctx, fullPath)
+	if err != nil {
+		return nil, false, nil
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	line, err := readCommandFileLine(file)
+	if err != nil {
+		return nil, false, err
+	}
+	name, ok := parseVirtualCommandStub(line)
+	if !ok {
+		return nil, false, nil
+	}
+	cmd, ok := lookupRegistryCommand(exec, name)
+	if !ok {
+		return nil, false, nil
+	}
+	return &resolvedCommand{
+		command: cmd,
+		name:    name,
+	}, true, nil
+}
+
+func isExecutableCommandFile(mode stdfs.FileMode) bool {
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return mode&0o111 != 0
+}
+
+func defaultScriptInterpreter(exec *Execution) string {
+	if exec != nil {
+		switch path.Base(strings.TrimSpace(exec.Interpreter)) {
+		case "bash", "sh":
+			return path.Base(strings.TrimSpace(exec.Interpreter))
+		}
+	}
+	return "bash"
+}
+
+func readCommandFileLine(r io.Reader) (string, error) {
+	var data [256]byte
+	n, err := r.Read(data[:])
+	switch {
+	case err == nil:
+	case errors.Is(err, io.EOF):
+	default:
+		return "", err
+	}
+	line := string(data[:n])
+	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+		line = line[:idx]
+	}
+	return strings.TrimSpace(line), nil
+}
+
+func parseVirtualCommandStub(line string) (string, bool) {
+	name, ok := strings.CutPrefix(line, virtualCommandStubPrefix)
+	if !ok {
+		return "", false
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+	return name, true
 }
 
 func readShebangLine(r io.Reader) (line string, ok bool, err error) {

@@ -135,6 +135,67 @@ func TestDeclInvalidOptionMatchesBashUsage(t *testing.T) {
 	}
 }
 
+func TestWrappedDeclarationBuiltins(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+f() {
+  builtin local local_var=wrapped
+  'builtin' local quoted_local=quoted
+  \command readonly escaped_ro=locked
+  command local via_command=seven
+  printf 'locals=%s|%s|%s|%s\n' "$local_var" "$quoted_local" "$escaped_ro" "$via_command"
+}
+f
+
+builtin export export_var=one
+'builtin' export quoted_export=two
+b=builtin
+c=command
+x='a b'
+$b $c export dyn_export=three
+$b $c declare dyn_assign=$x
+command builtin readonly ro_var=four
+printf 'exports=%s|%s|%s|%s|<%s>\n' "$export_var" "$quoted_export" "$dyn_export" "$ro_var" "$dyn_assign"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "" +
+		"locals=wrapped|quoted|locked|seven\n" +
+		"exports=one|two|three|four|<a>\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestBuiltinDoubleDash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+builtin
+printf 'plain=%d\n' "$?"
+builtin --
+printf 'dashdash=%d\n' "$?"
+builtin -- false
+printf 'false=%d\n' "$?"
+builtin missing
+printf 'missing=%d\n' "$?"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "plain=0\ndashdash=0\nfalse=1\nmissing=1\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "builtin: missing: not a shell builtin\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "builtin: missing: not a shell builtin\n")
+	}
+}
 func TestDeclPrefixAssignValidationFailureSkipsBuiltin(t *testing.T) {
 	t.Parallel()
 

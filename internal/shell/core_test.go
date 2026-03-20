@@ -766,6 +766,71 @@ func TestCoreRunOmitsNonStringVarsFromCommandEnv(t *testing.T) {
 	}
 }
 
+func TestLookupCommandPrefersRealExecutableOverRegistryStub(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "tr")
+	if err := fsys.MkdirAll(context.Background(), "/tmp/bin", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/tmp/bin) error = %v", err)
+	}
+	file, err := fsys.OpenFile(context.Background(), "/tmp/bin/tr", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		t.Fatalf("OpenFile(/tmp/bin/tr) error = %v", err)
+	}
+	if _, err := io.WriteString(file, "echo wrong\n"); err != nil {
+		t.Fatalf("WriteString(/tmp/bin/tr) error = %v", err)
+	}
+	_ = file.Close()
+
+	resolved, ok, err := lookupCommand(context.Background(), &Execution{
+		FS:       fsys,
+		Registry: registry,
+	}, "/tmp", expand.ListEnviron("PATH=/tmp/bin:/bin"), "tr")
+	if err != nil {
+		t.Fatalf("lookupCommand() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("lookupCommand() did not resolve command")
+	}
+	if got, want := resolved.name, "bash"; got != want {
+		t.Fatalf("resolved.name = %q, want %q", got, want)
+	}
+	if got, want := resolved.path, "/tmp/bin/tr"; got != want {
+		t.Fatalf("resolved.path = %q, want %q", got, want)
+	}
+	if got, want := resolved.source, "shell-script"; got != want {
+		t.Fatalf("resolved.source = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(resolved.args, ","), "/tmp/bin/tr"; got != want {
+		t.Fatalf("resolved.args = %q, want %q", got, want)
+	}
+}
+
+func TestLookupCommandUsesStubBackedPathEntry(t *testing.T) {
+	t.Parallel()
+
+	resolved, ok, err := lookupCommand(context.Background(), &Execution{
+		FS:       newShellTestFS(t, "tr"),
+		Registry: newShellTestRegistry(t),
+	}, "/tmp", expand.ListEnviron("PATH=/bin"), "tr")
+	if err != nil {
+		t.Fatalf("lookupCommand() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("lookupCommand() did not resolve command")
+	}
+	if got, want := resolved.name, "tr"; got != want {
+		t.Fatalf("resolved.name = %q, want %q", got, want)
+	}
+	if got, want := resolved.path, "/bin/tr"; got != want {
+		t.Fatalf("resolved.path = %q, want %q", got, want)
+	}
+	if got, want := resolved.source, "path-search"; got != want {
+		t.Fatalf("resolved.source = %q, want %q", got, want)
+	}
+}
+
 func newShellTestRegistry(t testing.TB, extras ...commands.Command) *commands.Registry {
 	t.Helper()
 
@@ -789,6 +854,9 @@ func newShellTestFS(t testing.TB, names ...string) gbfs.FileSystem {
 		file, err := fsys.OpenFile(context.Background(), "/bin/"+name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			t.Fatalf("OpenFile(%s) error = %v", name, err)
+		}
+		if _, err := io.WriteString(file, virtualCommandStubPrefix+name+"\n"); err != nil {
+			t.Fatalf("WriteString(%s) error = %v", name, err)
 		}
 		_ = file.Close()
 	}

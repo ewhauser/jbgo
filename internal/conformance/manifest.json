@@ -255,6 +255,14 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
+        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=(declare v); \"${a[@]}\" fails": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/ble-idioms.test.sh::Issue #1069 [56] BUG: declare -p unset does not print any error message": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
         "oils/ble-idioms.test.sh::Issue #1069 [59] - Assigning Str to BashArray/BashAssoc should not remove BashArray/BashAssoc": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -574,46 +582,7 @@
             "darwin"
           ]
         },
-        "oils/builtin-meta.test.sh::builtin ls not found": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::builtin usage": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::command -V": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::command -V nonexistent": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-meta.test.sh::command -p (find hidden tool in default path)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::command -p (override existing program)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::command -v": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::command -v doesn't find executable dir": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "linux"
-          ]
-        },
-        "oils/builtin-meta.test.sh::command -v doesn't find non-executable file": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta.test.sh::command -v with multiple names": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
