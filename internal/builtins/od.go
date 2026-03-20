@@ -693,23 +693,26 @@ func (o odInputOffset) format() string {
 
 func (o odInputOffset) printFinal(w io.Writer) error {
 	if o.radix == odRadixNone && o.label == nil {
-		return nil
+		_, err := fmt.Fprintln(w)
+		return err
 	}
 	_, err := fmt.Fprintln(w, o.format())
 	return err
 }
 
 type odOutputInfo struct {
-	lineBytes        int
-	printWidthLine   int
-	byteSizeBlock    int
-	outputDuplicates bool
-	formats          []odSpacedFormat
+	lineBytes         int
+	printWidthLine    int
+	byteSizeBlock     int
+	hiddenPrefixWidth int
+	outputDuplicates  bool
+	formats           []odSpacedFormat
 }
 
 type odSpacedFormat struct {
 	format       odFormat
 	spacing      [16]int
+	lineWidth    int
 	addASCIIDump bool
 }
 
@@ -721,24 +724,38 @@ func newODOutputInfo(lineBytes int, formats []odFormat, outputDuplicates bool) o
 		}
 	}
 	out := odOutputInfo{
-		lineBytes:        lineBytes,
-		printWidthLine:   1,
-		byteSizeBlock:    blockSize,
-		outputDuplicates: outputDuplicates,
-		formats:          make([]odSpacedFormat, 0, len(formats)),
+		lineBytes:         lineBytes,
+		printWidthLine:    1,
+		byteSizeBlock:     blockSize,
+		hiddenPrefixWidth: 7,
+		outputDuplicates:  outputDuplicates,
+		formats:           make([]odSpacedFormat, 0, len(formats)),
 	}
 	for _, format := range formats {
 		blockWidth := format.printWidth * (blockSize / format.byteSize)
 		if width := blockWidth * (lineBytes / blockSize); width > out.printWidthLine {
 			out.printWidthLine = width
 		}
+		spacing := odAlignment(format, blockSize, blockWidth)
 		out.formats = append(out.formats, odSpacedFormat{
 			format:       format,
-			spacing:      odAlignment(format, blockSize, blockWidth),
+			spacing:      spacing,
+			lineWidth:    odLineWidth(format, &spacing, lineBytes, blockSize),
 			addASCIIDump: format.addASCIIDump,
 		})
 	}
 	return out
+}
+
+func odLineWidth(format odFormat, spacing *[16]int, lineBytes, blockSize int) int {
+	width := odLeadingDelimiter(format)
+	for j := 0; j < lineBytes; j += format.byteSize {
+		if j > 0 {
+			width += spacing[j%blockSize] + odInterItemSpacing(format)
+		}
+		width += format.printWidth
+	}
+	return width
 }
 
 func odAlignment(format odFormat, blockSize, blockWidth int) [16]int {
@@ -762,6 +779,9 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 	padded := make([]byte, info.lineBytes)
 	copy(padded, raw)
 	displayPrefix := prefix
+	if displayPrefix == "" {
+		displayPrefix = strings.Repeat(" ", info.hiddenPrefixWidth)
+	}
 	first := true
 	for i := range info.formats {
 		format := &info.formats[i]
@@ -787,12 +807,8 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 			b.WriteString(strings.Repeat(" ", missing))
 			b.WriteString("  ")
 			b.WriteString(odASCIIDump(raw))
-		case len(info.formats) > 1:
-			leading := odLeadingDelimiter(format.format)
-			if displayPrefix == "" {
-				leading = odNoPrefixLeadingDelimiter(format.format)
-			}
-			b.WriteString(strings.Repeat(" ", leading))
+		default:
+			b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
 			for j := 0; j < lineLen; j += format.format.byteSize {
 				if j > 0 {
 					gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
@@ -803,11 +819,8 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 				end := min(j+format.format.byteSize, len(padded))
 				b.WriteString(format.format.format(padded[j:end], order))
 			}
-		default:
-			for j := 0; j < lineLen; j += format.format.byteSize {
-				end := min(j+format.format.byteSize, len(padded))
-				b.WriteString(format.format.format(padded[j:end], order))
-			}
+			missing := max(format.lineWidth-utf8RuneCountString(b.String()), 0)
+			b.WriteString(strings.Repeat(" ", missing))
 		}
 		if first {
 			if _, err := fmt.Fprint(w, displayPrefix); err != nil {
@@ -830,15 +843,6 @@ func odLeadingDelimiter(format odFormat) int {
 		return 1
 	default:
 		return format.printWidth
-	}
-}
-
-func odNoPrefixLeadingDelimiter(format odFormat) int {
-	switch format.kind {
-	case odFormatASCII, odFormatChar:
-		return 0
-	default:
-		return 1
 	}
 }
 
