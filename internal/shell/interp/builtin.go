@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -662,8 +663,13 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 
 		if len(args) == 0 {
-			for name, als := range r.alias {
-				show(name, als)
+			names := make([]string, 0, len(r.alias))
+			for name := range r.alias {
+				names = append(names, name)
+			}
+			slices.Sort(names)
+			for _, name := range names {
+				show(name, r.alias[name])
 			}
 		}
 		for _, arg := range args {

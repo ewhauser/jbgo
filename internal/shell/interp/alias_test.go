@@ -65,3 +65,23 @@ a echo hello
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+
+func TestAliasBuiltinListsAliasesSorted(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+alias ll='ls -l'
+alias ex=exit
+alias
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const want = "alias ex='exit'\nalias ll='ls -l'\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
