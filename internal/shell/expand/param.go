@@ -428,12 +428,26 @@ func decodeParamOpEscapes(str string) string {
 func decodePromptEscapes(str string) string {
 	var sb strings.Builder
 	for i := 0; i < len(str); i++ {
-		if str[i] == '\\' && i+1 < len(str) {
-			i++
+		if str[i] != '\\' || i+1 >= len(str) {
 			sb.WriteByte(str[i])
 			continue
 		}
-		sb.WriteByte(str[i])
+		i++
+		switch str[i] {
+		case 'a':
+			sb.WriteByte('\a')
+		case 'e':
+			sb.WriteByte('\x1b')
+		case 'n':
+			sb.WriteByte('\n')
+		case 'r':
+			sb.WriteByte('\r')
+		case '\\':
+			sb.WriteByte('\\')
+		default:
+			sb.WriteByte('\\')
+			sb.WriteByte(str[i])
+		}
 	}
 	return sb.String()
 }
@@ -978,12 +992,12 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 		if err != nil {
 			return nil, false, err
 		}
-			if target != nil && !simpleIndirectTarget(target) {
-				if fields, ok, _, err := cfg.paramExpFields(target); err != nil {
-					return nil, false, err
-				} else if ok {
-					if len(fields) == 0 {
-						return []fieldPart{}, true, nil
+		if target != nil && !simpleIndirectTarget(target) {
+			if fields, ok, _, err := cfg.paramExpFields(target); err != nil {
+				return nil, false, err
+			} else if ok {
+				if len(fields) == 0 {
+					return []fieldPart{}, true, nil
 				}
 				if len(fields) == 1 {
 					return append([]fieldPart(nil), fields[0]...), true, nil

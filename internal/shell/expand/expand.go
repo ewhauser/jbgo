@@ -1306,9 +1306,16 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 				for _, key := range vr.IndexedIndices() {
 					keys = append(keys, strconv.Itoa(key))
 				}
+				if subscriptLit(pe.Index) == "*" {
+					return []string{cfg.ifsJoin(keys)}, true, nil
+				}
 				return keys, true, nil
 			case Associative:
-				return sortedMapKeys(vr.Map), true, nil
+				keys := sortedMapKeys(vr.Map)
+				if subscriptLit(pe.Index) == "*" {
+					return []string{cfg.ifsJoin(keys)}, true, nil
+				}
+				return keys, true, nil
 			}
 		}
 		return nil, false, nil

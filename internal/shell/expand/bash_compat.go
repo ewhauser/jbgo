@@ -33,6 +33,9 @@ func (e InvalidVariableNameError) Error() string {
 func (cfg *Config) bashByteLocale() bool {
 	locale := cfg.envGet("LC_ALL")
 	if locale == "" {
+		locale = cfg.envGet("LC_CTYPE")
+	}
+	if locale == "" {
 		locale = cfg.envGet("LANG")
 	}
 	switch locale {

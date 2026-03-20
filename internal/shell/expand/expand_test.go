@@ -335,6 +335,31 @@ func TestFieldsQuotedSparseArrayParamOpsAreElementWise(t *testing.T) {
 	}
 }
 
+func TestFieldsQuotedAssociativeKeyExpansionStarJoinsOneField(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"A": {Set: true, Kind: Associative, Map: map[string]string{"X X": "xx", "Y Y": "yy"}},
+	}
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{`"${!A[@]}"`, []string{"X X", "Y Y"}},
+		{`"${!A[*]}"`, []string{"X X Y Y"}},
+	}
+	for _, tc := range tests {
+		word := parseCommandWord(t, tc.src)
+		got, err := Fields(&Config{Env: env}, word)
+		if err != nil {
+			t.Fatalf("Fields(%q) error = %v", tc.src, err)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("Fields(%q) = %#v, want %#v", tc.src, got, tc.want)
+		}
+	}
+}
+
 func TestAssociativeSubscriptStringifiesNonWordExpr(t *testing.T) {
 	t.Parallel()
 
@@ -369,6 +394,36 @@ func TestBashQuoteValueMatchesSingleQuoteEdgeCases(t *testing.T) {
 		if got != tc.want {
 			t.Fatalf("bashQuoteValue(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestBashStringHelpersHonorLCCTypeBeforeLang(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Env: testEnv{
+		"LANG":     {Set: true, Kind: String, Str: "C"},
+		"LC_CTYPE": {Set: true, Kind: String, Str: "C.UTF-8"},
+	}}
+
+	if got := cfg.bashStringLen("éx"); got != 2 {
+		t.Fatalf("bashStringLen() = %d, want %d", got, 2)
+	}
+	if got := cfg.bashStringSlice("éx", true, 1, false, 0); got != "x" {
+		t.Fatalf("bashStringSlice() = %q, want %q", got, "x")
+	}
+}
+
+func TestDecodePromptEscapesPreservesUnknownSequences(t *testing.T) {
+	t.Parallel()
+
+	if got := decodePromptEscapes(`\q`); got != `\q` {
+		t.Fatalf("decodePromptEscapes(unknown) = %q, want %q", got, `\q`)
+	}
+	if got := decodePromptEscapes(`\n`); got != "\n" {
+		t.Fatalf("decodePromptEscapes(newline) = %q, want newline", got)
+	}
+	if got := decodePromptEscapes(`\\`); got != `\` {
+		t.Fatalf("decodePromptEscapes(backslash) = %q, want %q", got, `\`)
 	}
 }
 

@@ -462,14 +462,6 @@
           "mode": "xfail",
           "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-bash.test.sh::${!prefix@} ${!prefix*} yields sorted array of var names": {
-          "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
-        },
-        "oils/var-op-bash.test.sh::${!var[@]@X}": {
-          "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
-        },
         "oils/var-op-bash.test.sh::${x@u} U L - upper / lower case (bash 5.1 feature)": {
           "mode": "xfail",
           "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
@@ -482,19 +474,11 @@
           "mode": "xfail",
           "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-bash.test.sh::assoc array and @P @Q @a": {
-          "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
-        },
         "oils/var-op-bash.test.sh::Case folding - multi code point": {
           "mode": "xfail",
           "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
         "oils/var-op-bash.test.sh::Case folding - Unicode characters": {
-          "mode": "xfail",
-          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
-        },
-        "oils/var-op-bash.test.sh::undef and @P @Q @a": {
           "mode": "xfail",
           "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
@@ -554,14 +538,6 @@
           "mode": "xfail",
           "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
         },
-        "oils/var-op-slice.test.sh::${@:offset:length} and ${*:offset:length}": {
-          "mode": "xfail",
-          "reason": "gbash's substring slicing still diverges from bash in this case"
-        },
-        "oils/var-op-slice.test.sh::${@:offset} and ${*:offset}": {
-          "mode": "xfail",
-          "reason": "gbash's substring slicing still diverges from bash in this case"
-        },
         "oils/var-op-slice.test.sh::${array[@]::} has implicit length of zero - for ble.sh": {
           "mode": "xfail",
           "reason": "gbash's substring slicing still diverges from bash in this case"
@@ -598,43 +574,11 @@
           "mode": "xfail",
           "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
         },
-        "oils/var-op-test.test.sh::\"${a[@]+foo}\" and \"${a[@]:+foo}\" - operators are equivalent on arrays?": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::${s+foo} and ${s:+foo} when set -u": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::${v-foo} and ${v:-foo} when set -u": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::$@ (\"\" \"\") and - and +": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::$@ (\"\") and - and +": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::$@ (empty) and - and +": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
         "oils/var-op-test.test.sh::$* (\"\" \"\") and - and + (IFS=)": {
           "mode": "xfail",
           "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
         },
-        "oils/var-op-test.test.sh::array and - and +": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
         "oils/var-op-test.test.sh::Assign default with array": {
-          "mode": "xfail",
-          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
-        },
-        "oils/var-op-test.test.sh::assoc array and - and +": {
           "mode": "xfail",
           "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
         },
@@ -679,10 +623,6 @@
           "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
         },
         "oils/var-sub-quote.test.sh::single quotes work inside character classes": {
-          "mode": "xfail",
-          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
-        },
-        "oils/var-sub-quote.test.sh::substitution of IFS character, quoted and unquoted": {
           "mode": "xfail",
           "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
         },
