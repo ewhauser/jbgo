@@ -273,6 +273,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		format, args := args[0], args[1:]
 		result := printfutil.Format(format, args, printfutil.Options{
 			LookupEnv: r.lookupPrintfEnv,
+			StartTime: r.startTime,
 		})
 		for _, diag := range result.Diagnostics {
 			r.errf("printf: %s\n", diag)

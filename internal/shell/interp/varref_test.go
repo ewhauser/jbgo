@@ -253,6 +253,36 @@ printf '%(%Y-%m-%d)T\n' 1557978599
 	}
 }
 
+func TestPrintfTimeStickyTZSurvivesCommandSubstitutionOnLinux(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" {
+		t.Skip("bash printf time-format timezone process semantics are Linux-specific in conformance")
+	}
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		Env: expand.ListEnviron("HOME=/tmp"),
+	}, `
+export TZ=Portugal
+tz=$(printf '%(%Y-%m-%d %H:%M:%S)T\n' 1557978599)
+unset TZ
+localtime=$(printf '%(%Y-%m-%d %H:%M:%S)T\n' 1557978599)
+if ! test "$localtime" = "$tz"; then
+  echo not-equal
+fi
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestInvalidIndirectExpansionIsNonFatalInSimpleCommand(t *testing.T) {
 	t.Parallel()
 

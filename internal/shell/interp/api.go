@@ -20,6 +20,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -165,6 +166,9 @@ type Runner struct {
 	origStdin  StdinReader
 	origStdout io.Writer
 	origStderr io.Writer
+	origStart  time.Time
+
+	startTime time.Time
 
 	inRedirectWord int
 
@@ -658,6 +662,7 @@ func (r *Runner) Reset() {
 		r.origStdin = r.stdin
 		r.origStdout = r.stdout
 		r.origStderr = r.stderr
+		r.origStart = time.Now()
 
 		if r.execHandler == nil {
 			r.execHandler = closedExecHandler()
@@ -700,10 +705,13 @@ func (r *Runner) Reset() {
 		origStdin:  r.origStdin,
 		origStdout: r.origStdout,
 		origStderr: r.origStderr,
+		origStart:  r.origStart,
+		startTime:  r.origStart,
 
 		funcSources:   r.funcSources,
 		funcInternals: r.funcInternals,
 		funcs:         r.funcs,
+		printfEnv:     make(map[string]string),
 
 		dirStack:               r.dirStack[:0],
 		topLevelScriptPath:     r.topLevelScriptPath,
@@ -894,7 +902,9 @@ func (r *Runner) subshell(background bool) *Runner {
 		suppressXTrace:         r.suppressXTrace,
 		currentChunkSource:     r.currentChunkSource,
 		currentChunkSourceBase: r.currentChunkSourceBase,
-		printfEnv:              maps.Clone(r.printfEnv),
+		printfEnv:              r.printfEnv,
+		origStart:              r.origStart,
+		startTime:              r.startTime,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}

@@ -11,6 +11,7 @@ import (
 type Options struct {
 	LookupEnv func(name string) (string, bool)
 	Now       func() time.Time
+	StartTime time.Time
 }
 
 type Result struct {
@@ -214,14 +215,12 @@ width:
 		spec.verb = format[i]
 		return spec, i + 1, "", false
 	}
-
 	for j := i + 1; j < len(format); j++ {
 		if isSupportedVerb(format[j]) {
-			spec.verb = format[j]
-			return spec, j + 1, "", false
+			return nil, j, fmt.Sprintf("`%c': invalid format character", format[i]), true
 		}
 		if format[j] == '\\' || format[j] == '%' {
-			return nil, j, fmt.Sprintf("`%c': invalid format character", format[j]), true
+			break
 		}
 	}
 	return nil, len(format), fmt.Sprintf("`%s': missing format character", format[start:]), true
