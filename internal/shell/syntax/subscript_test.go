@@ -3,6 +3,7 @@ package syntax
 import (
 	"errors"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -244,8 +245,12 @@ func TestParseArrayLikeEOFBashErrors(t *testing.T) {
 			if !errors.As(err, &parseErr) {
 				t.Fatalf("Parse(%q) error = %T, want ParseError", tc.src, err)
 			}
-			if got := parseErr.BashError(); got != tc.want {
-				t.Fatalf("Parse(%q) BashError() = %q, want %q", tc.src, got, tc.want)
+			want := tc.want
+			if runtime.GOOS != "darwin" {
+				want = strings.Split(tc.want, "\n")[0]
+			}
+			if got := parseErr.BashError(); got != want {
+				t.Fatalf("Parse(%q) BashError() = %q, want %q", tc.src, got, want)
 			}
 		})
 	}

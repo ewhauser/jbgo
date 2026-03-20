@@ -9,6 +9,7 @@ import (
 	"io"
 	"iter"
 	"math/bits"
+	"runtime"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -3246,7 +3247,11 @@ func (p *Parser) normalizeArrayLikeEOFError() {
 		return
 	}
 	parseErr.bashText = "unexpected EOF while looking for matching `]'"
-	parseErr.bashSecondaryText = "syntax error: unexpected end of file"
+	if runtime.GOOS == "darwin" {
+		parseErr.bashSecondaryText = "syntax error: unexpected end of file"
+	} else {
+		parseErr.bashSecondaryText = ""
+	}
 	parseErr.SourceLine = ""
 	parseErr.SourceLinePos = Pos{}
 	parseErr.noSourceLine = true
