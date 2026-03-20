@@ -27,9 +27,17 @@ func (r *Runner) setParams(args ...string) error {
 			continue
 		}
 		if flag == "-" {
-			// TODO: implement "The -x and -v options are turned off."
+			if opt := r.posixOptByFlag('v'); opt != nil {
+				*opt = false
+			}
+			if opt := r.posixOptByFlag('x'); opt != nil {
+				*opt = false
+			}
 			if args := fp.args(); len(args) > 0 {
 				r.Params = args
+				if r.inSource {
+					r.sourceSetParams = true
+				}
 			}
 			return nil
 		}
@@ -37,7 +45,7 @@ func (r *Runner) setParams(args ...string) error {
 		if flag[1] != 'o' {
 			opt := r.posixOptByFlag(flag[1])
 			if opt == nil {
-				return fmt.Errorf("invalid option: %q", flag)
+				return fmt.Errorf("%s: invalid option", flag)
 			}
 			*opt = enable
 			continue
@@ -61,7 +69,7 @@ func (r *Runner) setParams(args ...string) error {
 		}
 		opt := r.posixOptByName(value)
 		if opt == nil {
-			return fmt.Errorf("invalid option: %q", value)
+			return fmt.Errorf("%s: invalid option name", value)
 		}
 		*opt = enable
 	}

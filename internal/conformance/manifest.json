@@ -231,10 +231,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for localvar": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for localvar (mutated from tempenv)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -703,34 +699,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-set.test.sh::'set' and 'eval' round trip": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::A single + is an ignored flag; not an argument": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::can continue after unknown option": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::set - - and so forth": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::set - stops option processing like set --": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::set -eu (flag parsing)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-set.test.sh::set -u with undefined var in interactive shell does NOT exit the interpreter": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-special.test.sh::Prefix assignments persist after readonly, but NOT exported (set -o posix)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -748,10 +716,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-special.test.sh::bash 'type' gets confused - says 'function', but runs builtin": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-special.test.sh::set is special and fails whole script, even if using || true": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1075,34 +1039,6 @@
           ]
         },
         "oils/builtin-type-bash.test.sh::type -t doesn't find non-executable (like command -v)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Dependent export setting": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Export sets a global variable that persists after export -n": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Exporting a parent func variable (dynamic scope)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Unset and scope (bug #653)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Unset wrong type": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::export -n foo=bar not allowed": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::local after readonly": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

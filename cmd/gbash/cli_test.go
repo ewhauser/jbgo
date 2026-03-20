@@ -570,8 +570,8 @@ func TestRunCLICommandStringSupportsGroupedShortFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
-	if exitCode != 127 {
-		t.Fatalf("exitCode = %d, want 127; stderr=%q", exitCode, stderr.String())
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1; stderr=%q", exitCode, stderr.String())
 	}
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout = %q, want empty", got)

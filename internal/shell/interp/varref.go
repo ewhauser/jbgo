@@ -482,7 +482,7 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 	}
 }
 
-func (r *Runner) unsetVarByRef(ref *syntax.VarRef) error {
+func (r *Runner) unsetVarByRef(ref *syntax.VarRef, strictType bool) error {
 	ref, prev, err := r.resolveVarRef(ref)
 	if err != nil {
 		return err
@@ -491,6 +491,11 @@ func (r *Runner) unsetVarByRef(ref *syntax.VarRef) error {
 		return fmt.Errorf("%s: cannot unset: readonly variable", ref.Name.Value)
 	}
 	if ref == nil || ref.Index == nil {
+		if ownerEnv, ownerVar, ok := visibleBindingWriteEnv(r.writeEnv, ref.Name.Value); ok && ownerVar.Local && ownerEnv != r.writeEnv {
+			if deleteCurrentScopeVar(ownerEnv, ref.Name.Value) {
+				return nil
+			}
+		}
 		r.delVar(ref.Name.Value)
 		return nil
 	}
@@ -513,9 +518,13 @@ func (r *Runner) unsetVarByRef(ref *syntax.VarRef) error {
 		delete(prev.Map, key)
 		prev.Set = len(prev.Map) > 0
 		r.setVar(name, prev)
-	case expand.String:
+	case expand.Unknown, expand.String:
 		if r.arithm(ref.Index.Expr) == 0 {
 			r.delVar(name)
+			return nil
+		}
+		if strictType {
+			return fmt.Errorf("%s: not an array variable", ref.Name.Value)
 		}
 	}
 	return nil
