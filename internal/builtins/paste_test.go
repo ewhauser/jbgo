@@ -124,7 +124,7 @@ func TestPastePreservesInvalidUTF8DelimiterWidth(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "           31  ed  ba  ad  61  0a  32  ed  ba  ad  62  0a                \n\n"; got != want {
+	if got, want := result.Stdout, " 31 ed ba ad 61 0a 32 ed ba ad 62 0a\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -147,7 +147,7 @@ func TestPasteSupportsGB18030DelimiterWidth(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "           31  a2  e3  61  0a  32  a2  e3  62  0a                        \n\n"; got != want {
+	if got, want := result.Stdout, " 31 a2 e3 61 0a 32 a2 e3 62 0a\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

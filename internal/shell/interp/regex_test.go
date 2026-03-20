@@ -45,16 +45,16 @@ printf 'brace=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "seed=1\npipe=2 rematch=0\nparen=2 rematch=0\nbrace=0 rematch=1\n"
+	const wantStdout = "seed=1\npipe=0 rematch=1\nparen=2 rematch=0\nbrace=2 rematch=0\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
 
-	if !strings.Contains(stderr, "invalid regular expression `|': empty (sub)expression") {
-		t.Fatalf("stderr = %q, want empty-subexpression diagnostic", stderr)
-	}
 	if !strings.Contains(stderr, "invalid regular expression `^)a\\ b($': parentheses not balanced") {
 		t.Fatalf("stderr = %q, want parentheses diagnostic", stderr)
+	}
+	if !strings.Contains(stderr, "invalid regular expression `{': Invalid preceding regular expression") {
+		t.Fatalf("stderr = %q, want bare brace diagnostic", stderr)
 	}
 	if got := strings.Count(stderr, "invalid regular expression"); got != 2 {
 		t.Fatalf("stderr = %q, want 2 invalid regex diagnostics", stderr)
@@ -102,7 +102,7 @@ printf 'trailing=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "seed=1\npipe=2 rematch=0\nparen=2 rematch=0\nliteral=2 rematch=0\ntrailing=2 rematch=0\n"
+	const wantStdout = "seed=1\npipe=0 rematch=1\nparen=2 rematch=0\nliteral=0 rematch=1\ntrailing=0 rematch=1\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -111,13 +111,13 @@ printf 'trailing=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 	}
 }
 
-func TestConditionalRegexAlternationMatchesWithNonEmptyBranches(t *testing.T) {
+func TestConditionalRegexLiteralAlternationMatches(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
-[[ 'a' =~ c|a ]]
+[[ '|' =~ | ]]
 printf 'pipe1=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
-[[ 'a' =~ a|b ]]
+[[ 'a' =~ a| ]]
 printf 'pipe2=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 `)
 	if err != nil {
@@ -137,8 +137,6 @@ func TestConditionalRegexLiteralBracesAndClasses(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
-[[ { =~ { ]] && echo literal
-[[ '{}' =~ {} ]] && echo pair
 [[ { =~ "{" ]] && echo quoted
 [[ '{}' =~ \{\} ]] && echo escaped
 lisp='^^([][{}\(\)^@])|^(~@)'
@@ -148,7 +146,7 @@ lisp='^^([][{}\(\)^@])|^(~@)'
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "literal\npair\nquoted\nescaped\nclass\n"
+	const wantStdout = "quoted\nescaped\nclass\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}

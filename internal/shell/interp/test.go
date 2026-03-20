@@ -317,14 +317,10 @@ func testExpandErrFatal(err error) bool {
 }
 
 func (r *Runner) regexMatch(subject, expr string) bool {
+	if bashRegexHasInvalidBareBrace(expr) {
+		return r.failInvalidRegex(expr, "Invalid preceding regular expression")
+	}
 	translated := translateBashRegex(expr)
-	parsed, err := resyntax.Parse(translated, resyntax.Perl)
-	if err != nil {
-		return r.failInvalidRegex(expr, bashRegexCompileErrorReason(err))
-	}
-	if parsed.Op == resyntax.OpEmptyMatch || bashRegexHasEmptySubexpression(parsed, false) {
-		return r.failInvalidRegex(expr, "empty (sub)expression")
-	}
 	re, err := regexp.Compile(translated)
 	if err != nil {
 		return r.failInvalidRegex(expr, bashRegexCompileErrorReason(err))
@@ -453,23 +449,6 @@ func translateBashRegex(expr string) string {
 				inClass = false
 			}
 			b.WriteByte(ch)
-		case '{':
-			if inClass {
-				b.WriteByte(ch)
-				continue
-			}
-			if end := bashRegexRepeatEnd(expr, i); end >= 0 {
-				b.WriteString(expr[i : end+1])
-				i = end
-				continue
-			}
-			b.WriteString(`\{`)
-		case '}':
-			if inClass {
-				b.WriteByte(ch)
-				continue
-			}
-			b.WriteString(`\}`)
 		default:
 			b.WriteByte(ch)
 		}
@@ -477,45 +456,83 @@ func translateBashRegex(expr string) string {
 	return b.String()
 }
 
-func bashRegexRepeatEnd(expr string, start int) int {
-	j := start + 1
-	digitsStart := j
-	for j < len(expr) && expr[j] >= '0' && expr[j] <= '9' {
-		j++
-	}
-	if j == digitsStart {
-		return -1
-	}
-	if j < len(expr) && expr[j] == ',' {
-		j++
-		for j < len(expr) && expr[j] >= '0' && expr[j] <= '9' {
-			j++
+func bashRegexHasInvalidBareBrace(expr string) bool {
+	for i := 0; i < len(expr); i++ {
+		if expr[i] != '{' {
+			continue
 		}
+		if bashRegexBraceIsLiteral(expr, i) {
+			continue
+		}
+		return true
 	}
-	if j >= len(expr) || expr[j] != '}' {
-		return -1
-	}
-	return j
+	return false
 }
 
-func bashRegexHasEmptySubexpression(re *resyntax.Regexp, inAlternate bool) bool {
-	if re == nil {
-		return false
-	}
-	if re.Op == resyntax.OpEmptyMatch {
-		return inAlternate
-	}
-	if re.Op == resyntax.OpAlternate {
-		for _, sub := range re.Sub {
-			if bashRegexHasEmptySubexpression(sub, true) {
+func bashRegexBraceIsLiteral(expr string, index int) bool {
+	escaped := false
+	inClass := false
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		if escaped {
+			if i == index {
 				return true
 			}
+			escaped = false
+			continue
 		}
-		return false
-	}
-	for _, sub := range re.Sub {
-		if bashRegexHasEmptySubexpression(sub, false) {
-			return true
+		switch ch {
+		case '\\':
+			if i == index {
+				return false
+			}
+			escaped = true
+		case '[':
+			if i == index {
+				return false
+			}
+			if !inClass {
+				inClass = true
+			}
+		case ']':
+			if i == index && inClass {
+				return true
+			}
+			if inClass {
+				inClass = false
+			}
+		case '{':
+			if i != index {
+				continue
+			}
+			if inClass {
+				return true
+			}
+			j := i + 1
+			start := j
+			for j < len(expr) && expr[j] >= '0' && expr[j] <= '9' {
+				j++
+			}
+			if j == start {
+				if j < len(expr) && expr[j] == ',' {
+					j++
+					for j < len(expr) && expr[j] >= '0' && expr[j] <= '9' {
+						j++
+					}
+				} else {
+					return false
+				}
+			} else if j < len(expr) && expr[j] == ',' {
+				j++
+				for j < len(expr) && expr[j] >= '0' && expr[j] <= '9' {
+					j++
+				}
+			}
+			return j < len(expr) && expr[j] == '}'
+		default:
+			if i == index && inClass {
+				return true
+			}
 		}
 	}
 	return false
