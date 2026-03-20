@@ -54,7 +54,7 @@ func wcMinimumWidth() int {
 	if goruntime.GOOS == "darwin" {
 		return 8
 	}
-	return 7
+	return 1
 }
 
 func (c *WC) Name() string {

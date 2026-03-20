@@ -32,6 +32,7 @@ var bashAnsiCQuotedCommandNotFoundPattern = regexp.MustCompile(`\$'((?:[^'\\]|\\
 var bashQuotedNoSuchFilePattern = regexp.MustCompile(`(?m)^([-.[:alnum:]_]+): '([^']+)': No such file or directory$`)
 var bashCannotOpenNoSuchFilePattern = regexp.MustCompile(`(?m)^([-.[:alnum:]_]+): cannot (?:open|remove) '([^']+)'(?: for reading)?: No such file or directory$`)
 var procFDPathPattern = regexp.MustCompile(`/proc/\d+/fd`)
+var procFDLsMissingPattern = regexp.MustCompile(`(?m)^ls: /proc/PID/fd(?:[^\n]*)?: No such file or directory\n?`)
 
 var (
 	conformanceLocaleOnce sync.Once
@@ -515,6 +516,7 @@ func normalizeOutput(value, workspace, sandboxRoot string) string {
 func normalizeBashStderr(value string) string {
 	value = bashLinePrefixPattern.ReplaceAllString(filepath.ToSlash(value), "")
 	value = normalizeNestedShellPrefixes(value)
+	value = procFDLsMissingPattern.ReplaceAllString(value, "")
 	value = strings.ReplaceAll(value, "shopt: usage: shopt [-pqsu] [-o long-option] optname [optname...]\n", "shopt: usage: shopt [-pqsu] [-o] [optname ...]\n")
 	value = bashCannotOpenNoSuchFilePattern.ReplaceAllString(value, "$1: $2: No such file or directory")
 	value = bashQuotedNoSuchFilePattern.ReplaceAllString(value, "$1: $2: No such file or directory")

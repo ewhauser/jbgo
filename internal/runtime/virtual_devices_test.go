@@ -9,7 +9,7 @@ import (
 )
 
 func wcExpectedField(value int) string {
-	width := 7
+	width := 1
 	if goruntime.GOOS == "darwin" {
 		width = 8
 	}
