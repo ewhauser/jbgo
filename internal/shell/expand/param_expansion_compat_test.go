@@ -21,6 +21,7 @@ func TestParamReplacementAnchorsAndSlashForms(t *testing.T) {
 
 	env := testEnv{
 		"s":         {Set: true, Kind: String, Str: "xx_xx"},
+		"lit":       {Set: true, Kind: String, Str: "#%#"},
 		"x":         {Set: true, Kind: String, Str: "/_/"},
 		"HOST_PATH": {Set: true, Kind: String, Str: "/foo/bar/baz"},
 	}
@@ -31,6 +32,8 @@ func TestParamReplacementAnchorsAndSlashForms(t *testing.T) {
 	}{
 		{`${s/#xx/yy}`, "yy_xx"},
 		{`${s/%xx/yy}`, "xx_yy"},
+		{`${lit//#/X}`, "X%X"},
+		{`${lit//%/Y}`, "#Y#"},
 		{`${x////c}`, "c_c"},
 		{`${x///}`, "_"},
 		{`${HOST_PATH////\\/}`, `\/foo\/bar\/baz`},
@@ -44,6 +47,57 @@ func TestParamReplacementAnchorsAndSlashForms(t *testing.T) {
 		if got != tt.want {
 			t.Fatalf("Literal(%q) = %q, want %q", tt.src, got, tt.want)
 		}
+	}
+}
+
+func TestParamReplacementBackslashesRespectSource(t *testing.T) {
+	t.Parallel()
+
+	literalEnv := testEnv{
+		"x": {Set: true, Kind: String, Str: "a"},
+	}
+	literalTests := []struct {
+		src  string
+		want string
+	}{
+		{`${x/a/\x}`, "x"},
+		{`${x/a/\\x}`, `\x`},
+		{`${x/a/\/}`, `/`},
+		{`${x/a/\\/}`, `\/`},
+	}
+	for _, tt := range literalTests {
+		got, err := literalExpand(t, literalEnv, tt.src)
+		if err != nil {
+			t.Fatalf("Literal(%q) error = %v", tt.src, err)
+		}
+		if got != tt.want {
+			t.Fatalf("Literal(%q) = %q, want %q", tt.src, got, tt.want)
+		}
+	}
+
+	expandedTests := []struct {
+		name string
+		repl string
+		want string
+	}{
+		{name: "SingleBackslashBeforeRune", repl: `\x`, want: `\x`},
+		{name: "DoubleBackslashBeforeRune", repl: `\\x`, want: `\x`},
+		{name: "SingleBackslashBeforeSlash", repl: `\/`, want: `\/`},
+		{name: "DoubleBackslashBeforeSlash", repl: `\\/`, want: `\/`},
+	}
+	for _, tt := range expandedTests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := literalExpand(t, testEnv{
+				"x":    {Set: true, Kind: String, Str: "a"},
+				"repl": {Set: true, Kind: String, Str: tt.repl},
+			}, `${x/a/$repl}`)
+			if err != nil {
+				t.Fatalf("Literal(${x/a/$repl}) error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("Literal(${x/a/$repl}) = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
