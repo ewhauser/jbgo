@@ -89,6 +89,9 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 		if line == "" && readErr == io.EOF && pending.Len() == 0 {
 			break
 		}
+		if r.opts[optVerbose] && line != "" {
+			io.WriteString(r.stderr, line)
+		}
 
 		if pending.Len() == 0 {
 			chunkStartOffset = totalOffset
@@ -130,11 +133,17 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 		pushFrame()
 		prevTopLevel := r.topLevelScriptPath
 		prevSynthetic := r.syntheticPipelineStmts
+		prevChunkSource := r.currentChunkSource
+		prevChunkSourceBase := r.currentChunkSourceBase
 		r.topLevelScriptPath = topLevelScriptPath
 		r.syntheticPipelineStmts = synthetic
+		r.currentChunkSource = pending.String()
+		r.currentChunkSourceBase = chunkStartOffset
 		err = r.run(ctx, file, false, false)
 		r.topLevelScriptPath = prevTopLevel
 		r.syntheticPipelineStmts = prevSynthetic
+		r.currentChunkSource = prevChunkSource
+		r.currentChunkSourceBase = prevChunkSourceBase
 		pending.Reset()
 
 		if err != nil {

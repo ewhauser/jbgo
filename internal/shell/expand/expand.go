@@ -206,6 +206,20 @@ func (cfg *Config) envSet(name, value string) error {
 	return wenv.Set(name, Variable{Set: true, Kind: String, Str: value})
 }
 
+func (cfg *Config) usesCLocale() bool {
+	for _, name := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		switch cfg.envGet(name) {
+		case "":
+			continue
+		case "C", "POSIX":
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
 // Literal expands a single shell word. It is similar to [Fields], but the result
 // is a single string. This is the behavior when a word is used as the value in
 // a shell variable assignment, for example.
@@ -314,7 +328,7 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 	case *syntax.SglQuoted:
 		s := part.Value
 		if part.Dollar {
-			s = decodeANSICString(s)
+			s = cfg.decodeANSICString(s)
 			s, _, _ = strings.Cut(s, "\x00")
 		}
 		sb.WriteString(pattern.QuoteMeta(s, 0))
@@ -436,9 +450,10 @@ func Format(cfg *Config, format string, args []string) (string, int, error) {
 	return sb.String(), consumed, err
 }
 
-func decodeANSICString(src string) string {
+func (cfg *Config) decodeANSICString(src string) string {
 	var sb strings.Builder
 	sb.Grow(len(src))
+	cLocale := cfg != nil && cfg.usesCLocale()
 
 	for i := 0; i < len(src); i++ {
 		if src[i] != '\\' {
@@ -505,6 +520,14 @@ func decodeANSICString(src string) string {
 			n, _ := strconv.ParseUint(src[start:end], 16, 32)
 			if c == 'x' {
 				sb.WriteByte(byte(n))
+				break
+			}
+			if cLocale {
+				if n <= 0xFFFF {
+					fmt.Fprintf(&sb, "\\u%04X", n)
+				} else {
+					fmt.Fprintf(&sb, "\\U%08X", n)
+				}
 				break
 			}
 			r := rune(n)
@@ -981,7 +1004,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 		case *syntax.SglQuoted:
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}
 			if wp.Dollar {
-				fp.val = decodeANSICString(fp.val)
+				fp.val = cfg.decodeANSICString(fp.val)
 				fp.val, _, _ = strings.Cut(fp.val, "\x00") // cut the string if format included \x00
 			}
 			field = append(field, fp)
@@ -1106,7 +1129,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		case *syntax.SglQuoted:
 			fp := fieldPart{quote: quoteSingle, val: wp.Value}
 			if wp.Dollar {
-				fp.val = decodeANSICString(fp.val)
+				fp.val = cfg.decodeANSICString(fp.val)
 				fp.val, _, _ = strings.Cut(fp.val, "\x00") // cut the string if format included \x00
 			}
 			splitter.appendPart(fp)

@@ -284,7 +284,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 					&syntax.Lit{Value: formatted},
 				}},
 			}
-			vr, ok := r.assignVal(prev, as, "")
+			vr, _, ok := r.assignVal(prev, as, "")
 			if !ok || r.exit.fatalExit || r.exit.exiting {
 				return exit
 			}

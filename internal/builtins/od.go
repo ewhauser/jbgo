@@ -166,6 +166,8 @@ func parseODMatches(inv *Invocation, matches *ParsedCommand) (odOptions, error) 
 		lineBytes: 16,
 		radix:     odRadixOctal,
 	}
+	formatValues := matches.Values("format")
+	formatIndex := 0
 
 	for _, name := range matches.OptionOrder() {
 		switch name {
@@ -207,10 +209,14 @@ func parseODMatches(inv *Invocation, matches *ParsedCommand) (odOptions, error) 
 				opts.stringMinLength = &n
 			}
 		case "format":
-			formats, err := parseODTypeString(matches.Value(name))
+			if formatIndex >= len(formatValues) {
+				return odOptions{}, exitf(inv, 1, "od: missing format specification")
+			}
+			formats, err := parseODTypeString(formatValues[formatIndex])
 			if err != nil {
 				return odOptions{}, exitf(inv, 1, "od: %v", err)
 			}
+			formatIndex++
 			opts.formats = append(opts.formats, formats...)
 			opts.offsetParsingOff = true
 		case "output-duplicates":
@@ -687,8 +693,7 @@ func (o odInputOffset) format() string {
 
 func (o odInputOffset) printFinal(w io.Writer) error {
 	if o.radix == odRadixNone && o.label == nil {
-		_, err := fmt.Fprintln(w)
-		return err
+		return nil
 	}
 	_, err := fmt.Fprintln(w, o.format())
 	return err
@@ -715,22 +720,18 @@ func newODOutputInfo(lineBytes int, formats []odFormat, outputDuplicates bool) o
 			blockSize = format.byteSize
 		}
 	}
-	blockWidth := 1
-	for _, format := range formats {
-		width := format.printWidth * (blockSize / format.byteSize)
-		if width > blockWidth {
-			blockWidth = width
-		}
-	}
-
 	out := odOutputInfo{
 		lineBytes:        lineBytes,
-		printWidthLine:   blockWidth * (lineBytes / blockSize),
+		printWidthLine:   1,
 		byteSizeBlock:    blockSize,
 		outputDuplicates: outputDuplicates,
 		formats:          make([]odSpacedFormat, 0, len(formats)),
 	}
 	for _, format := range formats {
+		blockWidth := format.printWidth * (blockSize / format.byteSize)
+		if width := blockWidth * (lineBytes / blockSize); width > out.printWidthLine {
+			out.printWidthLine = width
+		}
 		out.formats = append(out.formats, odSpacedFormat{
 			format:       format,
 			spacing:      odAlignment(format, blockSize, blockWidth),
@@ -761,33 +762,52 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 	padded := make([]byte, info.lineBytes)
 	copy(padded, raw)
 	displayPrefix := prefix
-	if displayPrefix == "" {
-		displayPrefix = strings.Repeat(" ", 7)
-	}
 	first := true
 	for i := range info.formats {
 		format := &info.formats[i]
 		var b strings.Builder
-		b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
-		for j := 0; j < info.lineBytes; j += format.format.byteSize {
-			if j > 0 {
-				gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
-				if gap > 0 {
-					b.WriteString(strings.Repeat(" ", gap))
+		switch {
+		case format.addASCIIDump:
+			b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
+			for j := 0; j < info.lineBytes; j += format.format.byteSize {
+				if j > 0 {
+					gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
+					if gap > 0 {
+						b.WriteString(strings.Repeat(" ", gap))
+					}
 				}
+				if j < lineLen {
+					end := min(j+format.format.byteSize, len(padded))
+					b.WriteString(format.format.format(padded[j:end], order))
+					continue
+				}
+				b.WriteString(strings.Repeat(" ", format.format.printWidth))
 			}
-			if j < lineLen {
-				end := min(j+format.format.byteSize, len(padded))
-				b.WriteString(format.format.format(padded[j:end], order))
-				continue
-			}
-			b.WriteString(strings.Repeat(" ", format.format.printWidth))
-		}
-		if format.addASCIIDump {
 			missing := max(info.printWidthLine-utf8RuneCountString(b.String()), 0)
 			b.WriteString(strings.Repeat(" ", missing))
 			b.WriteString("  ")
 			b.WriteString(odASCIIDump(raw))
+		case len(info.formats) > 1:
+			leading := odLeadingDelimiter(format.format)
+			if displayPrefix == "" {
+				leading = odNoPrefixLeadingDelimiter(format.format)
+			}
+			b.WriteString(strings.Repeat(" ", leading))
+			for j := 0; j < lineLen; j += format.format.byteSize {
+				if j > 0 {
+					gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
+					if gap > 0 {
+						b.WriteString(strings.Repeat(" ", gap))
+					}
+				}
+				end := min(j+format.format.byteSize, len(padded))
+				b.WriteString(format.format.format(padded[j:end], order))
+			}
+		default:
+			for j := 0; j < lineLen; j += format.format.byteSize {
+				end := min(j+format.format.byteSize, len(padded))
+				b.WriteString(format.format.format(padded[j:end], order))
+			}
 		}
 		if first {
 			if _, err := fmt.Fprint(w, displayPrefix); err != nil {
@@ -810,6 +830,15 @@ func odLeadingDelimiter(format odFormat) int {
 		return 1
 	default:
 		return format.printWidth
+	}
+}
+
+func odNoPrefixLeadingDelimiter(format odFormat) int {
+	switch format.kind {
+	case odFormatASCII, odFormatChar:
+		return 0
+	default:
+		return 1
 	}
 }
 

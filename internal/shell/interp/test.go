@@ -18,6 +18,47 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
+type condEval struct {
+	value string
+	trace string
+}
+
+func condBoolString(ok bool) string {
+	if ok {
+		return "1"
+	}
+	return ""
+}
+
+func condTraceArg(trace *tracer, value string) string {
+	if trace == nil {
+		return ""
+	}
+	return trace.traceArg(value)
+}
+
+func condTracePattern(trace *tracer, value string) string {
+	if trace == nil {
+		return ""
+	}
+	return value
+}
+
+func condTraceUnary(op fmt.Stringer, operand string) string {
+	return fmt.Sprintf("%s %s", op, condTraceOperand(operand))
+}
+
+func condTraceBinary(left string, op fmt.Stringer, right string) string {
+	return fmt.Sprintf("%s %s %s", condTraceOperand(left), op, condTraceOperand(right))
+}
+
+func condTraceOperand(operand string) string {
+	if operand == "" {
+		return "''"
+	}
+	return operand
+}
+
 // non-empty string is true, empty string is false
 func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic bool) string {
 	switch x := expr.(type) {
@@ -114,80 +155,113 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 
 // non-empty string is true, empty string is false
 func (r *Runner) bashCond(ctx context.Context, expr syntax.CondExpr) string {
+	return r.evalCond(ctx, expr, nil).value
+}
+
+func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *tracer) condEval {
 	switch x := expr.(type) {
 	case *syntax.CondWord:
-		return r.literal(x.Word)
+		value := r.literal(x.Word)
+		return condEval{value: value, trace: condTraceArg(trace, value)}
 	case *syntax.CondPattern:
-		return r.pattern(x.Pattern)
+		value := r.pattern(x.Pattern)
+		return condEval{value: value, trace: condTracePattern(trace, value)}
 	case *syntax.CondRegex:
-		return r.literal(x.Word)
+		value := r.literal(x.Word)
+		return condEval{value: value, trace: condTraceArg(trace, value)}
 	case *syntax.CondVarRef:
-		return printVarRef(x.Ref)
+		value := printVarRef(x.Ref)
+		if trace == nil {
+			return condEval{value: value}
+		}
+		return condEval{value: value, trace: value}
 	case *syntax.CondParen:
-		return r.bashCond(ctx, x.X)
+		eval := r.evalCond(ctx, x.X, trace)
+		if trace != nil {
+			eval.trace = "( " + eval.trace + " )"
+		}
+		return eval
 	case *syntax.CondBinary:
 		switch x.Op {
 		case syntax.TsReMatch:
 			left, ok := r.testExpandWord(x.X.(*syntax.CondWord).Word, expand.Literal)
 			if !ok {
 				r.clearBASH_REMATCH()
-				return ""
+				return condEval{}
 			}
 			rightWord := x.Y.(*syntax.CondRegex).Word
 			right, ok := r.testExpandWord(rightWord, expand.Regexp)
 			if !ok {
 				r.clearBASH_REMATCH()
-				return ""
+				return condEval{}
 			}
-			if r.regexMatch(left, right) {
-				return "1"
+			return condEval{
+				value: condBoolString(r.regexMatch(left, right)),
+				trace: condTraceBinary(condTraceArg(trace, left), x.Op, condTraceArg(trace, right)),
 			}
-			return ""
 		case syntax.TsMatchShort, syntax.TsMatch, syntax.TsNoMatch:
 			str := r.literal(x.X.(*syntax.CondWord).Word)
 			pattern := r.pattern(x.Y.(*syntax.CondPattern).Pattern)
-			if match(pattern, str) == (x.Op != syntax.TsNoMatch) {
-				return "1"
+			return condEval{
+				value: condBoolString(match(pattern, str) == (x.Op != syntax.TsNoMatch)),
+				trace: condTraceBinary(condTraceArg(trace, str), x.Op, condTracePattern(trace, pattern)),
 			}
-			return ""
 		}
-		if r.binTest(ctx, x.Op, r.bashCond(ctx, x.X), r.bashCond(ctx, x.Y)) {
-			return "1"
+		left := r.evalCond(ctx, x.X, trace)
+		right := r.evalCond(ctx, x.Y, trace)
+		return condEval{
+			value: condBoolString(r.binTest(ctx, x.Op, left.value, right.value)),
+			trace: condTraceBinary(left.trace, x.Op, right.trace),
 		}
-		return ""
 	case *syntax.CondUnary:
 		switch x.Op {
 		case syntax.TsVarSet:
 			switch operand := x.X.(type) {
 			case *syntax.CondVarRef:
 				if r.refIsSet(operand.Ref) {
-					return "1"
+					return condEval{
+						value: "1",
+						trace: condTraceUnary(x.Op, printVarRef(operand.Ref)),
+					}
 				}
 			case *syntax.CondWord:
 				if r.refIsSet(r.looseVarRefWordWithContext(operand.Word, syntax.VarRefVarSet)) {
-					return "1"
+					return condEval{
+						value: "1",
+						trace: condTraceUnary(x.Op, printSyntaxNode(operand.Word)),
+					}
 				}
 			}
-			return ""
+			return condEval{trace: condTraceUnary(x.Op, printSyntaxNode(x.X.(syntax.Node)))}
 		case syntax.TsRefVar:
 			switch operand := x.X.(type) {
 			case *syntax.CondVarRef:
 				if r.refIsNameRef(operand.Ref) {
-					return "1"
+					return condEval{
+						value: "1",
+						trace: condTraceUnary(x.Op, printVarRef(operand.Ref)),
+					}
 				}
 			case *syntax.CondWord:
 				if r.refIsNameRef(r.looseVarRefWord(operand.Word)) {
-					return "1"
+					return condEval{
+						value: "1",
+						trace: condTraceUnary(x.Op, printSyntaxNode(operand.Word)),
+					}
 				}
 			}
-			return ""
+			return condEval{trace: condTraceUnary(x.Op, printSyntaxNode(x.X.(syntax.Node)))}
 		}
-		if r.unTest(ctx, x.Op, r.bashCond(ctx, x.X)) {
-			return "1"
+		operand := r.evalCond(ctx, x.X, trace)
+		return condEval{
+			value: condBoolString(r.unTest(ctx, x.Op, operand.value)),
+			trace: condTraceUnary(x.Op, operand.trace),
 		}
-		return ""
 	}
-	return ""
+	if trace == nil {
+		return condEval{}
+	}
+	return condEval{trace: printSyntaxNode(expr.(syntax.Node))}
 }
 
 func (r *Runner) testExpandWord(word *syntax.Word, expandFunc func(*expand.Config, *syntax.Word) (string, error)) (string, bool) {

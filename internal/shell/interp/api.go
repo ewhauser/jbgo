@@ -129,6 +129,11 @@ type Runner struct {
 	// track if a sourced script set positional parameters
 	sourceSetParams bool
 
+	suppressXTrace bool
+
+	currentChunkSource     string
+	currentChunkSourceBase uint
+
 	// noErrExit prevents failing commands from triggering [optErrExit],
 	// such as the condition in a [syntax.IfClause].
 	noErrExit bool
@@ -482,6 +487,7 @@ var posixOptsTable = [...]posixOpt{
 	{'n', "noexec"},
 	{'f', "noglob"},
 	{'u', "nounset"},
+	{'v', "verbose"},
 	{'x', "xtrace"},
 	{' ', "pipefail"},
 }
@@ -616,6 +622,7 @@ const (
 	optNoExec
 	optNoGlob
 	optNoUnset
+	optVerbose
 	optXTrace
 	optPipeFail
 
@@ -754,6 +761,7 @@ func (r *Runner) Reset() {
 	r.setVarString("PWD", pwd)
 	r.setVarString("IFS", " \t\n")
 	r.setVarString("OPTIND", "1")
+	r.setVarString("PS4", "+ ")
 
 	r.dirStack = append(r.dirStack, pwd)
 
@@ -848,33 +856,36 @@ func (r *Runner) subshell(background bool) *Runner {
 	// Keep in sync with the Runner type. Manually copy fields, to not copy
 	// sensitive ones like [errgroup.Group], and to do deep copies of slices.
 	r2 := &Runner{
-		Dir:                r.Dir,
-		tempDir:            r.tempDir,
-		Params:             r.Params,
-		callHandler:        r.callHandler,
-		execHandler:        r.execHandler,
-		openHandler:        r.openHandler,
-		readDirHandler:     r.readDirHandler,
-		statHandler:        r.statHandler,
-		realpathHandler:    r.realpathHandler,
-		procSubstHandler:   r.procSubstHandler,
-		uid:                r.uid,
-		euid:               r.euid,
-		gid:                r.gid,
-		egid:               r.egid,
-		pid:                r.pid,
-		ppid:               r.ppid,
-		stdin:              r.stdin,
-		stdout:             r.stdout,
-		stderr:             r.stderr,
-		filename:           r.filename,
-		topLevelScriptPath: r.topLevelScriptPath,
-		internalRun:        r.internalRun,
-		opts:               r.opts,
-		interactive:        r.interactive,
-		legacyBashCompat:   r.legacyBashCompat,
-		exit:               r.exit,
-		lastExit:           r.lastExit,
+		Dir:                    r.Dir,
+		tempDir:                r.tempDir,
+		Params:                 r.Params,
+		callHandler:            r.callHandler,
+		execHandler:            r.execHandler,
+		openHandler:            r.openHandler,
+		readDirHandler:         r.readDirHandler,
+		statHandler:            r.statHandler,
+		realpathHandler:        r.realpathHandler,
+		procSubstHandler:       r.procSubstHandler,
+		uid:                    r.uid,
+		euid:                   r.euid,
+		gid:                    r.gid,
+		egid:                   r.egid,
+		pid:                    r.pid,
+		ppid:                   r.ppid,
+		stdin:                  r.stdin,
+		stdout:                 r.stdout,
+		stderr:                 r.stderr,
+		filename:               r.filename,
+		topLevelScriptPath:     r.topLevelScriptPath,
+		internalRun:            r.internalRun,
+		opts:                   r.opts,
+		interactive:            r.interactive,
+		legacyBashCompat:       r.legacyBashCompat,
+		exit:                   r.exit,
+		lastExit:               r.lastExit,
+		suppressXTrace:         r.suppressXTrace,
+		currentChunkSource:     r.currentChunkSource,
+		currentChunkSourceBase: r.currentChunkSourceBase,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
