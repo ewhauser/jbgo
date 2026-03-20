@@ -162,6 +162,34 @@ func TestAssignmentLiteralExpandsColonSeparatedTildes(t *testing.T) {
 	}
 }
 
+func TestAssignmentLiteralHonorsEscapedColonsForTildes(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Env: testEnv{
+			"HOME": {Set: true, Kind: String, Str: "/live"},
+		},
+	}
+	tests := []struct {
+		word string
+		want string
+	}{
+		{word: `\:~`, want: `:~`},
+		{word: `foo\:~:~`, want: `foo:~:/live`},
+		{word: `\\:~`, want: `\:/live`},
+	}
+	for _, test := range tests {
+		word := parseCommandWord(t, test.word)
+		got, err := AssignmentLiteral(cfg, word)
+		if err != nil {
+			t.Fatalf("AssignmentLiteral(%q) error = %v", test.word, err)
+		}
+		if got != test.want {
+			t.Fatalf("AssignmentLiteral(%q) = %q, want %q", test.word, got, test.want)
+		}
+	}
+}
+
 func parseCondPattern(t *testing.T, src string) *syntax.Pattern {
 	t.Helper()
 	p := syntax.NewParser()

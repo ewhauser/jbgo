@@ -1965,15 +1965,11 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 			continue
 		}
 		if as.Array != nil {
-			rendered := r.renderInlineArrayValue(as.Array)
 			vr := expand.Variable{
 				Set:      true,
 				Kind:     expand.String,
-				Str:      rendered,
+				Str:      r.renderInlineArrayValue(as.Array),
 				Exported: true,
-			}
-			if as.Append {
-				vr.Str = prev.String() + vr.Str
 			}
 			resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
 			if err != nil {
@@ -2021,38 +2017,45 @@ func (r *Runner) renderInlineArrayValue(expr *syntax.ArrayExpr) string {
 	}
 	var b strings.Builder
 	b.WriteByte('(')
-	for i, elem := range expr.Elems {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
+	first := true
+	for _, elem := range expr.Elems {
 		switch elem.Kind {
 		case syntax.ArrayElemSequential:
-			b.WriteString(renderInlineArrayNode(elem.Value))
-		case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
-			b.WriteString(renderInlineArrayNode(elem.Index))
-			if elem.Kind == syntax.ArrayElemKeyedAppend {
-				b.WriteString("+=")
-			} else {
-				b.WriteByte('=')
+			for _, field := range r.fields(elem.Value) {
+				if !first {
+					b.WriteByte(' ')
+				}
+				b.WriteString(bashDeclPlainValue(field))
+				first = false
 			}
-			b.WriteString(renderInlineArrayNode(elem.Value))
-		default:
-			return ""
+		case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
+			if !first {
+				b.WriteByte(' ')
+			}
+			key := r.inlineArrayIndexValue(elem.Index)
+			b.WriteByte('[')
+			b.WriteString(bashDeclAssocKey(key))
+			if elem.Kind == syntax.ArrayElemKeyedAppend {
+				b.WriteString("]+=")
+			} else {
+				b.WriteString("]=")
+			}
+			b.WriteString(bashDeclPlainValue(r.assignmentLiteral(elem.Value)))
+			first = false
 		}
 	}
 	b.WriteByte(')')
 	return b.String()
 }
 
-func renderInlineArrayNode(node syntax.Node) string {
-	if node == nil {
+func (r *Runner) inlineArrayIndexValue(index *syntax.Subscript) string {
+	if index == nil || index.Expr == nil {
 		return ""
 	}
-	var buf bytes.Buffer
-	if err := syntax.NewPrinter(syntax.Minify(true)).Print(&buf, node); err != nil {
-		return ""
+	if word, ok := index.Expr.(*syntax.Word); ok {
+		return r.assignmentLiteral(word)
 	}
-	return buf.String()
+	return strconv.Itoa(r.arithm(index.Expr))
 }
 
 func bashDeclDoubleQuote(value string) string {

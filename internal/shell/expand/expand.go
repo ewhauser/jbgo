@@ -403,22 +403,36 @@ func (cfg *Config) expandAssignmentTildeLiteral(s string, moreFields bool) strin
 		return s
 	}
 	var b strings.Builder
-	for {
-		segment, rest, found := strings.Cut(s, ":")
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i < len(s) {
+			if s[i] != ':' || assignmentTildeColonEscaped(s, i) {
+				continue
+			}
+		}
+		segment := s[start:i]
 		if prefix, suffix, expanded := cfg.expandUser(segment, moreFields); expanded {
 			b.WriteString(prefix)
 			b.WriteString(suffix)
 		} else {
 			b.WriteString(segment)
 		}
-		if !found {
+		if i == len(s) {
 			break
 		}
 		b.WriteByte(':')
-		s = rest
+		start = i + 1
 		moreFields = false
 	}
 	return b.String()
+}
+
+func assignmentTildeColonEscaped(s string, colon int) bool {
+	backslashes := 0
+	for i := colon - 1; i >= 0 && s[i] == '\\'; i-- {
+		backslashes++
+	}
+	return backslashes%2 == 1
 }
 
 // Document expands a single shell word as if it were a here-document body.

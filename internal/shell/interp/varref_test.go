@@ -136,7 +136,6 @@ printf '%s\n' "${assoc[i]-missing}"
 	}
 }
 
-<<<<<<< HEAD
 func TestUnsetRevealsOuterScopedBinding(t *testing.T) {
 	t.Parallel()
 
@@ -274,6 +273,34 @@ func TestInlineArrayBindingsReachCommandEnv(t *testing.T) {
 	}
 	if got != "a|(b b)|([k]=v)" {
 		t.Fatalf("env = %q, want %q", got, "a|(b b)|([k]=v)")
+	}
+}
+
+func TestInlineArrayBindingsExpandBeforeCommandEnv(t *testing.T) {
+	t.Parallel()
+
+	var got string
+	_, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		ExecHandler: func(ctx context.Context, args []string) error {
+			hc, ok := LookupHandlerContext(ctx)
+			if !ok {
+				t.Fatal("missing handler context")
+			}
+			got = hc.Env.Get("A").String()
+			return nil
+		},
+	}, `
+A=($(echo side >&2; printf '%s\n' one two)) external
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got != "(one two)" {
+		t.Fatalf("env = %q, want %q", got, "(one two)")
+	}
+	if stderr != "side\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "side\n")
 	}
 }
 func TestIndirectExpansionSupportsPositionalRefs(t *testing.T) {
