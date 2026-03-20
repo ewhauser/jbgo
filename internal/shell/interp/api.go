@@ -103,6 +103,7 @@ type Runner struct {
 	stdin  StdinReader // e.g. the read end of a pipe
 	stdout io.Writer
 	stderr io.Writer
+	fds    map[int]*shellFD
 
 	ecfg *expand.Config
 	ectx context.Context // just so that Runner.Subshell can use it again
@@ -161,13 +162,15 @@ type Runner struct {
 
 	startupHome string
 
-	origDir    string
-	origParams []string
-	origOpts   runnerOpts
-	origStdin  StdinReader
-	origStdout io.Writer
-	origStderr io.Writer
-	origStart  time.Time
+	origDir     string
+	origParams  []string
+	origOpts    runnerOpts
+	origStdin   StdinReader
+	origStdout  io.Writer
+	origStderr  io.Writer
+	origFDs     map[int]*shellFD
+	fdSnapshots []map[int]*shellFD
+	origStart   time.Time
 
 	startTime time.Time
 
@@ -668,6 +671,7 @@ func (r *Runner) Reset() {
 		r.origStdin = r.stdin
 		r.origStdout = r.stdout
 		r.origStderr = r.stderr
+		r.origFDs = cloneFDTable(initialFDTable(r.stdin, r.stdout, r.stderr))
 		r.origStart = time.Now()
 
 		if r.execHandler == nil {
@@ -702,6 +706,7 @@ func (r *Runner) Reset() {
 		stdin:            r.origStdin,
 		stdout:           r.origStdout,
 		stderr:           r.origStderr,
+		fds:              cloneFDTable(r.origFDs),
 		legacyBashCompat: r.legacyBashCompat,
 		commandString:    r.commandString,
 
@@ -711,6 +716,7 @@ func (r *Runner) Reset() {
 		origStdin:  r.origStdin,
 		origStdout: r.origStdout,
 		origStderr: r.origStderr,
+		origFDs:    cloneFDTable(r.origFDs),
 		origStart:  r.origStart,
 		startTime:  r.origStart,
 
@@ -785,6 +791,7 @@ func (r *Runner) Reset() {
 	r.setVarString("PS4", "+ ")
 
 	r.dirStack = append(r.dirStack, pwd)
+	r.syncStandardFDs()
 
 	r.didReset = true
 }
@@ -896,6 +903,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		stdin:                  r.stdin,
 		stdout:                 r.stdout,
 		stderr:                 r.stderr,
+		fds:                    cloneFDTable(r.fds),
 		filename:               r.filename,
 		topLevelScriptPath:     r.topLevelScriptPath,
 		internalRun:            r.internalRun,

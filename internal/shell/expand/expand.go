@@ -1850,59 +1850,122 @@ func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir 
 //
 // The config specifies shell expansion options; nil behaves the same as an
 // empty config.
-func ReadFields(cfg *Config, s string, n int, raw bool) []string {
-	cfg = prepareConfig(cfg)
-	type pos struct {
-		start, end int
-	}
-	var fpos []pos
+type ReadFieldChar struct {
+	Value   byte
+	Escaped bool
+}
 
-	runes := make([]rune, 0, len(s))
-	infield := false
-	esc := false
-	for _, r := range s {
-		if infield {
-			if cfg.ifsRune(r) && (raw || !esc) {
-				fpos[len(fpos)-1].end = len(runes)
-				infield = false
-			}
-		} else {
-			if !cfg.ifsRune(r) && (raw || !esc) {
-				fpos = append(fpos, pos{start: len(runes), end: -1})
-				infield = true
-			}
-		}
-		if r == '\\' {
-			if raw || esc {
-				runes = append(runes, r)
-			}
-			esc = !esc
-			continue
-		}
-		runes = append(runes, r)
-		esc = false
+type readFieldSpan struct {
+	start int
+	end   int
+}
+
+func readFieldString(chars []ReadFieldChar, start, end int) string {
+	if start >= end {
+		return ""
 	}
-	if len(fpos) == 0 {
+	buf := make([]byte, end-start)
+	for i := range buf {
+		buf[i] = chars[start+i].Value
+	}
+	return string(buf)
+}
+
+func readIFSClass(cfg *Config, ch ReadFieldChar) ifsRuneType {
+	if ch.Escaped {
+		return ifsRuneNone
+	}
+	return cfg.classifyIFSByte(ch.Value)
+}
+
+func trimReadLeadingIFSWhitespace(cfg *Config, chars []ReadFieldChar, start, end int) int {
+	for start < end && readIFSClass(cfg, chars[start]) == ifsRuneWhitespace {
+		start++
+	}
+	return start
+}
+
+func trimReadTrailingIFSWhitespace(cfg *Config, chars []ReadFieldChar, start, end int) int {
+	for end > start && readIFSClass(cfg, chars[end-1]) == ifsRuneWhitespace {
+		end--
+	}
+	return end
+}
+
+func ReadFieldsFromChars(cfg *Config, chars []ReadFieldChar, n int) []string {
+	cfg = prepareConfig(cfg)
+	if n == 0 || len(chars) == 0 {
 		return nil
 	}
-	if infield {
-		fpos[len(fpos)-1].end = len(runes)
+
+	start := trimReadLeadingIFSWhitespace(cfg, chars, 0, len(chars))
+	end := trimReadTrailingIFSWhitespace(cfg, chars, start, len(chars))
+	if start >= end {
+		return nil
+	}
+
+	fields := make([]readFieldSpan, 0, 4)
+	fieldStart := start
+	for i := start; i < end; {
+		class := readIFSClass(cfg, chars[i])
+		if class == ifsRuneNone {
+			i++
+			continue
+		}
+
+		fields = append(fields, readFieldSpan{start: fieldStart, end: i})
+		if class == ifsRuneWhitespace {
+			for i < end && readIFSClass(cfg, chars[i]) == ifsRuneWhitespace {
+				i++
+			}
+			if i < end && readIFSClass(cfg, chars[i]) == ifsRuneNonWhitespace {
+				i++
+				for i < end && readIFSClass(cfg, chars[i]) == ifsRuneWhitespace {
+					i++
+				}
+			}
+		} else {
+			i++
+			for i < end && readIFSClass(cfg, chars[i]) == ifsRuneWhitespace {
+				i++
+			}
+		}
+		fieldStart = i
+	}
+	if fieldStart < end {
+		fields = append(fields, readFieldSpan{start: fieldStart, end: end})
+	}
+	if len(fields) == 0 {
+		return nil
 	}
 
 	switch {
-	case n == 1:
-		// include heading/trailing IFSs
-		fpos[0].start, fpos[0].end = 0, len(runes)
-		fpos = fpos[:1]
-	case n != -1 && n < len(fpos):
-		// combine to max n fields
-		fpos[n-1].end = fpos[len(fpos)-1].end
-		fpos = fpos[:n]
+	case n == -1 || len(fields) <= n:
+		out := make([]string, len(fields))
+		for i, field := range fields {
+			out[i] = readFieldString(chars, field.start, field.end)
+		}
+		return out
+	default:
+		out := make([]string, 0, n)
+		for i := 0; i < n-1; i++ {
+			field := fields[i]
+			out = append(out, readFieldString(chars, field.start, field.end))
+		}
+		last := fields[len(fields)-1]
+		combinedEnd := last.end
+		if last.start == last.end {
+			combinedEnd = end
+		}
+		out = append(out, readFieldString(chars, fields[n-1].start, combinedEnd))
+		return out
 	}
+}
 
-	fields := make([]string, len(fpos))
-	for i, p := range fpos {
-		fields[i] = string(runes[p.start:p.end])
+func ReadFields(cfg *Config, s string, n int, raw bool) []string {
+	chars := make([]ReadFieldChar, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		chars = append(chars, ReadFieldChar{Value: s[i]})
 	}
-	return fields
+	return ReadFieldsFromChars(cfg, chars, n)
 }
