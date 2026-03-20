@@ -271,7 +271,7 @@ echo arr=$arr
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "assoc: cannot convert associative to indexed array\n"
+	const wantStderr = "declare: assoc: cannot convert associative to indexed array\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
@@ -451,6 +451,45 @@ f
 	}
 }
 
+func TestDeclareAttributeFiltersIncludeIntegerLowerUpper(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+filter_query() {
+  while IFS= read -r line; do
+    case $line in
+      *int_var*|*lower_var*|*upper_var*) echo "$line" ;;
+    esac
+  done
+}
+declare -i int_var=42
+declare -l lower_var=UPPER
+declare -u upper_var=lower
+echo '[pi]'
+declare -pi | filter_query
+echo '[pl]'
+declare -pl | filter_query
+echo '[pu]'
+declare -pu | filter_query
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"[pi]\n" +
+		"declare -i int_var=\"42\"\n" +
+		"[pl]\n" +
+		"declare -l lower_var=\"upper\"\n" +
+		"[pu]\n" +
+		"declare -u upper_var=\"LOWER\"\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestDeclareUnsetStateAndEvalRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -518,6 +557,29 @@ echo "v2=$v2"
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclarePlusRDoesNotClearReadonly(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+readonly x=1
+declare +r x
+printf 'declare=%d x=%s\n' "$?" "$x"
+x=2
+printf 'assign=%d x=%s\n' "$?" "$x"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "declare=1 x=1\nassign=1 x=1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "x: readonly variable\nx: readonly variable\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
 

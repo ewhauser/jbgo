@@ -989,9 +989,9 @@ func mapfileBuiltinTargetVar(prev expand.Variable, preserveExisting bool) expand
 		}
 	}
 	prev.Kind = expand.Indexed
-	prev.Set = false
+	prev.Set = true
 	prev.Str = ""
-	prev.List = nil
+	prev.List = []string{}
 	prev.Map = nil
 	prev.Indices = nil
 	return prev

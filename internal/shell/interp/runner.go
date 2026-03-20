@@ -316,6 +316,9 @@ func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool, source string,
 		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)
+	if command && err != nil && r.exit.code == 0 {
+		r.exit.code = 1
+	}
 	return n
 }
 
@@ -829,13 +832,25 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		case *syntax.CStyleLoop:
 			if y.Init != nil {
 				r.arithmCmd(y.Init)
+				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+					break
+				}
 			}
-			for y.Cond == nil || r.arithmCmd(y.Cond) != 0 {
-				if !r.exit.ok() || r.loopStmtsBroken(ctx, cm.Do) {
+			for {
+				if y.Cond != nil && r.arithmCmd(y.Cond) == 0 {
+					break
+				}
+				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+					break
+				}
+				if r.loopStmtsBroken(ctx, cm.Do) {
 					break
 				}
 				if y.Post != nil {
 					r.arithmCmd(y.Post)
+					if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+						break
+					}
 				}
 			}
 		}
@@ -1078,6 +1093,18 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					if !vr.Exported {
 						return false
 					}
+				case "-i":
+					if !vr.Integer {
+						return false
+					}
+				case "-l":
+					if !vr.Lower {
+						return false
+					}
+				case "-u":
+					if !vr.Upper {
+						return false
+					}
 				}
 			}
 			return true
@@ -1134,7 +1161,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			return expand.Variable{}
 		}
-		sawNamedOperand := false
+		onlyFlagOperands := true
 		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool, raw string) bool {
 			name := ref.Name.Value
 			if declQuery != "-f" && declQuery != "-F" && !syntax.ValidName(name) {
@@ -1146,7 +1173,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.exit.code = 1
 				return false
 			}
-			sawNamedOperand = true
+			onlyFlagOperands = false
 			if tracingEnabled && !isAssign {
 				builtinTraceFields = append(builtinTraceFields, name)
 			}
@@ -1213,6 +1240,18 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					} else {
 						declErrf("%s: %s\n", declName, msg)
 					}
+					r.exit.code = 1
+					return true
+				}
+				clearReadonly := false
+				for _, mode := range modes {
+					if mode == "+r" {
+						clearReadonly = true
+						break
+					}
+				}
+				if clearReadonly && vr.ReadOnly {
+					r.errf("%s: readonly variable\n", name)
 					r.exit.code = 1
 					return true
 				}
@@ -1450,7 +1489,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			case *syntax.DeclAssign:
 				return processNamedOperand(operand.Assign.Ref, operand.Assign, true, declOperandString(operand))
 			case *syntax.DeclDynamicWord:
-				for _, field := range r.fields(operand.Word) {
+				fields := r.fields(operand.Word)
+				if len(fields) == 0 {
+					fields = []string{r.literal(operand.Word)}
+				}
+				for _, field := range fields {
 					parsed, err := parseDeclOperandField(field)
 					splitFields := []string{field}
 					if strings.ContainsAny(field, "[]") && (err != nil || parsed == nil) {
@@ -1461,6 +1504,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 							parsed, err = parseDeclOperandField(splitField)
 						}
 						if err != nil {
+							onlyFlagOperands = false
 							if strings.ContainsAny(splitField, "[]") {
 								parsed = nil
 								err = nil
@@ -1471,6 +1515,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 							}
 						}
 						if parsed == nil {
+							onlyFlagOperands = false
 							r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, splitField)
 							r.exit.code = 1
 							continue
@@ -1528,7 +1573,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return
 			}
 		}
-		if !sawNamedOperand {
+		if onlyFlagOperands {
 			switch declQuery {
 			case "-f":
 				names := make([]string, 0, len(r.funcs))
@@ -1828,9 +1873,18 @@ func declClauseFromFields(name string, fields []string) *syntax.DeclClause {
 		Variant: &syntax.Lit{Value: name},
 	}
 	for _, field := range fields {
+		if operand, err := parseDeclOperandField(field); err == nil {
+			switch operand.(type) {
+			case *syntax.DeclFlag, *syntax.DeclName, *syntax.DeclAssign:
+				decl.Operands = append(decl.Operands, operand)
+				continue
+			}
+		}
 		decl.Operands = append(decl.Operands, &syntax.DeclDynamicWord{
 			Word: &syntax.Word{
-				Parts: []syntax.WordPart{&syntax.Lit{Value: field}},
+				Parts: []syntax.WordPart{
+					&syntax.DblQuoted{Parts: []syntax.WordPart{&syntax.Lit{Value: field}}},
+				},
 			},
 		})
 	}

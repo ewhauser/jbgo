@@ -925,7 +925,6 @@ func (r *Runner) subshell(background bool) *Runner {
 		legacyBashCompat:       r.legacyBashCompat,
 		inFunc:                 r.inFunc,
 		inSource:               r.inSource,
-		inLoop:                 r.inLoop,
 		exit:                   r.exit,
 		lastExit:               r.lastExit,
 		suppressXTrace:         r.suppressXTrace,

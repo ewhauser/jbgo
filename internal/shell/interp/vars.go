@@ -130,10 +130,10 @@ func (o *overlayEnviron) Each(f func(name string, vr expand.Variable) bool) {
 func execEnv(env expand.Environ) []string {
 	list := make([]string, 0, 64)
 	for name, vr := range env.Each {
-		if !vr.IsSet() || !vr.Exported || vr.Kind != expand.String {
+		if !vr.IsSet() {
 			// If a variable is set globally but unset in the
-			// runner, or no longer exported, we need to ensure it's not part
-			// of the final list. Seems like zeroing the element is enough.
+			// runner, we need to ensure it's not part of the final
+			// list. Seems like zeroing the element is enough.
 			// This is a linear search, but this scenario should be
 			// rare, and the number of variables shouldn't be large.
 			for i, kv := range list {
@@ -143,7 +143,19 @@ func execEnv(env expand.Environ) []string {
 			}
 			continue
 		}
-		list = append(list, name+"="+vr.String())
+		if !vr.Exported || (vr.Kind != expand.String && vr.Kind != expand.NameRef) {
+			for i, kv := range list {
+				if strings.HasPrefix(kv, name+"=") {
+					list[i] = ""
+				}
+			}
+			continue
+		}
+		value := vr.String()
+		if vr.Kind == expand.NameRef {
+			value = vr.Str
+		}
+		list = append(list, name+"="+value)
 	}
 	return list
 }

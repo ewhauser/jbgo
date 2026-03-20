@@ -155,14 +155,6 @@
           "mode": "xfail",
           "reason": "gbash still follows bash's export behavior instead of rejecting array export under strict_array"
         },
-        "oils/assign-deferred.test.sh::'builtin' prefix is allowed on assignments": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-deferred.test.sh::'command' prefix is allowed on assignments": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign-deferred.test.sh::export a[7]=8": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -203,10 +195,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-read.test.sh::mapfile from directory (bash doesn't handle errors)": {
-          "mode": "xfail",
-          "reason": "gbash still surfaces directory read errors for mapfile instead of matching bash's no-op status"
-        },
         "oils/builtin-read.test.sh::read -r -d '' for NUL strings, e.g. find -print0": {
           "mode": "xfail",
           "reason": "gbash's internal find command does not yet implement -print0, so the read builtin never receives the bash-compatible NUL stream"
@@ -228,10 +216,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/assign.test.sh::Test above without 'local' (which is not POSIX)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign.test.sh::aliased assignment doesn't split": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -391,14 +375,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh::unset readonly -- multiple lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::unset readonly -- one line": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-bash.test.sh::help": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -535,10 +511,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-eval-source.test.sh::Source with syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::eval accepts/ignores --": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1199,15 +1171,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-vars.test.sh::Unset a function without -f": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-vars.test.sh::Unset and scope (bug #653)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Unset readonly variable": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1439,10 +1403,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/exit-status.test.sh::func subshell OverflowError https://github.com/oilshell/oil/issues/996": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/exit-status.test.sh::subshell OverflowError https://github.com/oilshell/oil/issues/996": {
           "mode": "xfail",
@@ -2182,10 +2142,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/sh-func.test.sh::Scope of global variable when sourced in function (Shell Functions aren't Closures)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/sh-func.test.sh::Subshell function": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
