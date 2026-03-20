@@ -1,6 +1,9 @@
-.PHONY: lint test conformance-test build fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats nix-build nix-cache
+.PHONY: lint lint-contrib lint-examples lint-all test conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats nix-build nix-cache
 
-GO_PACKAGES := ./... ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/... ./examples/...
+GO_CORE_PACKAGES := ./...
+GO_CONTRIB_PACKAGES := ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/...
+GO_EXAMPLES_PACKAGES := ./examples/...
+GO_PACKAGES := $(GO_CORE_PACKAGES) $(GO_CONTRIB_PACKAGES) $(GO_EXAMPLES_PACKAGES)
 BENCH_PACKAGES := ./internal/runtime ./cmd/gbash ./contrib/jq
 
 FUZZTIME ?= 10s
@@ -154,11 +157,24 @@ FUZZ_FULL_TARGETS := \
 	$(FUZZ_FULL_SHARD_5)
 
 lint:
+	@echo "==> lint ."; \
+	$(GOLANGCI_LINT) run ./...
+
+lint-contrib:
 	@set -eu; \
-	for dir in $$($(LINT_MODULE_DIRS_CMD)); do \
+	for dir in $$($(LINT_MODULE_DIRS_CMD) | grep '/contrib/'); do \
 		echo "==> lint $$dir"; \
 		( cd "$$dir" && $(GOLANGCI_LINT) run ./... ); \
 	done
+
+lint-examples:
+	@set -eu; \
+	for dir in $$($(LINT_MODULE_DIRS_CMD) | grep '/examples'); do \
+		echo "==> lint $$dir"; \
+		( cd "$$dir" && $(GOLANGCI_LINT) run ./... ); \
+	done
+
+lint-all: lint lint-contrib lint-examples
 
 lint-new:
 	@set -eu; \
@@ -181,7 +197,15 @@ ensure-bash:
 	@./scripts/ensure-bash.sh
 
 build:
-	go build $(GO_PACKAGES)
+	go build $(GO_CORE_PACKAGES)
+
+build-contrib:
+	go build $(GO_CONTRIB_PACKAGES)
+
+build-examples:
+	go build $(GO_EXAMPLES_PACKAGES)
+
+build-all: build build-contrib build-examples
 
 fuzz: fuzz-full
 

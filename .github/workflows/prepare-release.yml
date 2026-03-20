@@ -83,7 +83,7 @@ jobs:
         run: make test
 
       - name: Run lint
-        run: make lint
+        run: make lint-all
 
       - name: Check release config
         run: make release-check
