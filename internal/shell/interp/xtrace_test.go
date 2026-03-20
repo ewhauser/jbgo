@@ -72,6 +72,26 @@ echo status=$?
 	}
 }
 
+func TestXTracePS4CommandSubstDoesNotTraceRecursively(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+PS4='+$(echo trace) '
+set -x
+echo one
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "one\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "+trace echo one\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
 func TestXTracePS4ErrorsDoNotChangeCommandStatus(t *testing.T) {
 	t.Parallel()
 

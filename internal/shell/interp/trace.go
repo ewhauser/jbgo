@@ -22,7 +22,7 @@ type tracer struct {
 }
 
 func (r *Runner) tracer() *tracer {
-	if !r.opts[optXTrace] {
+	if !r.opts[optXTrace] || r.suppressXTrace {
 		return nil
 	}
 
@@ -58,11 +58,14 @@ func (r *Runner) tracePrefix() string {
 	savedExit := r.exit
 	savedLastExit := r.lastExit
 	savedLastExpandExit := r.lastExpandExit
+	savedSuppressXTrace := r.suppressXTrace
 	defer func() {
 		r.exit = savedExit
 		r.lastExit = savedLastExit
 		r.lastExpandExit = savedLastExpandExit
+		r.suppressXTrace = savedSuppressXTrace
 	}()
+	r.suppressXTrace = true
 
 	cfg := *r.ecfg
 	cfg.ReportError = func(err error) {

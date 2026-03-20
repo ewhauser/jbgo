@@ -129,6 +129,8 @@ type Runner struct {
 	// track if a sourced script set positional parameters
 	sourceSetParams bool
 
+	suppressXTrace bool
+
 	currentChunkSource     string
 	currentChunkSourceBase uint
 
@@ -881,6 +883,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		legacyBashCompat:       r.legacyBashCompat,
 		exit:                   r.exit,
 		lastExit:               r.lastExit,
+		suppressXTrace:         r.suppressXTrace,
 		currentChunkSource:     r.currentChunkSource,
 		currentChunkSourceBase: r.currentChunkSourceBase,
 
