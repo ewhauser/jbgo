@@ -57,6 +57,7 @@ func TestParserDeclOperandField(t *testing.T) {
 		{src: `foo="1 2"`, wantType: &DeclAssign{}, want: `foo="1 2"`},
 		{src: `arr=("$HOME" $(printf hacked) plain)`, wantType: &DeclAssign{}, want: `arr=("$HOME" $(printf hacked) plain)`},
 		{src: `arr=([k]=v [k]+=x)`, wantType: &DeclAssign{}, want: `arr=([k]=v [k]+=x)`},
+		{src: `-@(*.py)`, wantType: &DeclFlag{}, want: `-@(*.py)`},
 		{src: "$x", wantType: &DeclDynamicWord{}, want: "$x"},
 	}
 

@@ -15,12 +15,15 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/ewhauser/gbash/internal/shell/pattern"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 )
 
 // A Config specifies details about how shell expansion should be performed. The
@@ -79,6 +82,14 @@ type Config struct {
 	// patterns which match nothing to result in zero fields.
 	NullGlob bool
 
+	// FailGlob corresponds to the shell option which treats pathname
+	// expansion patterns which match nothing as errors.
+	FailGlob bool
+
+	// GlobSkipDots corresponds to the shell option which prevents pathname
+	// expansion from matching "." and ".." unless disabled.
+	GlobSkipDots bool
+
 	// NoUnset corresponds to the shell option which treats unset variables
 	// as errors.
 	NoUnset bool
@@ -86,6 +97,9 @@ type Config struct {
 	// ExtGlob corresponds to the shell option which allows using extended
 	// pattern matching features when performing pathname expansion (globbing).
 	ExtGlob bool
+
+	globIgnore         []string
+	globIgnoreMatchers []func(string) bool
 
 	bufferAlloc strings.Builder
 	fieldAlloc  [4]fieldPart
@@ -109,6 +123,14 @@ func (u UnexpectedCommandError) Error() string {
 	return fmt.Sprintf("unexpected command substitution at %s", u.Node.Pos())
 }
 
+type FailGlobError struct {
+	Pattern string
+}
+
+func (e FailGlobError) Error() string {
+	return fmt.Sprintf("no match: %s", e.Pattern)
+}
+
 var zeroConfig = &Config{}
 
 // TODO: note that prepareConfig is modifying the user's config in place,
@@ -126,6 +148,7 @@ func prepareConfig(cfg *Config) *Config {
 	if cfg.reportedParamErrors == nil {
 		cfg.reportedParamErrors = make(map[*syntax.ParamExp]map[string]struct{})
 	}
+	cfg.prepareGlobIgnore()
 
 	return cfg
 }
@@ -240,6 +263,90 @@ func (cfg *Config) envSet(name, value string) error {
 	return wenv.Set(name, Variable{Set: true, Kind: String, Str: value})
 }
 
+func parseGlobIgnore(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var (
+		parts   []string
+		current strings.Builder
+		inClass bool
+		escaped bool
+	)
+	for i := 0; i < len(raw); i++ {
+		b := raw[i]
+		if escaped {
+			current.WriteByte(b)
+			escaped = false
+			continue
+		}
+		switch b {
+		case '\\':
+			current.WriteByte(b)
+			escaped = true
+		case '[':
+			current.WriteByte(b)
+			inClass = true
+		case ']':
+			current.WriteByte(b)
+			inClass = false
+		case ':':
+			if inClass {
+				current.WriteByte(b)
+				continue
+			}
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteByte(b)
+		}
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	return parts
+}
+
+func (cfg *Config) prepareGlobIgnore() {
+	cfg.globIgnore = parseGlobIgnore(cfg.envGet("GLOBIGNORE"))
+	if len(cfg.globIgnore) == 0 {
+		cfg.globIgnoreMatchers = nil
+		return
+	}
+	mode := pattern.Filenames | pattern.EntireString | pattern.GlobLeadingDot
+	if cfg.NoCaseGlob {
+		mode |= pattern.NoGlobCase
+	}
+	if cfg.ExtGlob {
+		mode |= pattern.ExtendedOperators
+	}
+	matchers := make([]func(string) bool, 0, len(cfg.globIgnore))
+	for _, pat := range cfg.globIgnore {
+		matcher, err := pattern.ExtendedPatternMatcher(pat, mode)
+		if err != nil {
+			literal := pat
+			matcher = func(name string) bool {
+				return name == literal
+			}
+		}
+		matchers = append(matchers, matcher)
+	}
+	cfg.globIgnoreMatchers = matchers
+}
+
+func (cfg *Config) globLeadingDot() bool {
+	return cfg.DotGlob || len(cfg.globIgnore) > 0
+}
+
+func (cfg *Config) includeDotDotCandidates() bool {
+	return !cfg.GlobSkipDots && len(cfg.globIgnore) == 0
+}
+
 func (cfg *Config) usesCLocale() bool {
 	for _, name := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
 		switch cfg.envGet(name) {
@@ -335,7 +442,7 @@ func PatternWord(cfg *Config, word *syntax.Word) (string, error) {
 	var sb strings.Builder
 	for _, part := range field {
 		if part.quote > quoteNone {
-			sb.WriteString(pattern.QuoteMeta(part.val, 0))
+			sb.WriteString(pattern.QuoteMeta(part.val, pattern.ExtendedOperators))
 		} else {
 			sb.WriteString(part.val)
 		}
@@ -351,6 +458,19 @@ func (cfg *Config) patternString(pat *syntax.Pattern, allowLeadingTilde bool) (s
 	for i, part := range pat.Parts {
 		leading := allowLeadingTilde && i == 0
 		if err := cfg.appendPatternPart(&sb, part, leading, i+1 < len(pat.Parts)); err != nil {
+			return "", err
+		}
+	}
+	return sb.String(), nil
+}
+
+func (cfg *Config) patternLiteralString(pat *syntax.Pattern) (string, error) {
+	if pat == nil {
+		return "", nil
+	}
+	var sb strings.Builder
+	for _, part := range pat.Parts {
+		if err := cfg.appendPatternLiteralPart(&sb, part); err != nil {
 			return "", err
 		}
 	}
@@ -380,14 +500,14 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 			s = cfg.decodeANSICString(s)
 			s, _, _ = strings.Cut(s, "\x00")
 		}
-		sb.WriteString(pattern.QuoteMeta(s, 0))
+		sb.WriteString(pattern.QuoteMeta(s, pattern.ExtendedOperators))
 	case *syntax.DblQuoted:
 		field, err := cfg.wordField(part.Parts, quoteDouble)
 		if err != nil {
 			return err
 		}
 		for _, fp := range field {
-			sb.WriteString(pattern.QuoteMeta(fp.val, 0))
+			sb.WriteString(pattern.QuoteMeta(fp.val, pattern.ExtendedOperators))
 		}
 	case *syntax.ParamExp:
 		if parts, ok, err := cfg.paramExpWordField(part, quoteNone); err != nil {
@@ -395,7 +515,7 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 		} else if ok {
 			for _, fp := range parts {
 				if fp.quote > quoteNone {
-					sb.WriteString(pattern.QuoteMeta(fp.val, 0))
+					sb.WriteString(pattern.QuoteMeta(fp.val, pattern.ExtendedOperators))
 				} else {
 					sb.WriteString(fp.val)
 				}
@@ -426,7 +546,7 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 		}
 		sb.WriteString(procPath)
 	case *syntax.ExtGlob:
-		s, err := cfg.extGlobString(part)
+		s, err := cfg.extGlobPatternString(part)
 		if err != nil {
 			return err
 		}
@@ -437,7 +557,74 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 	return nil
 }
 
-func (cfg *Config) extGlobString(eg *syntax.ExtGlob) (string, error) {
+func (cfg *Config) appendPatternLiteralPart(sb *strings.Builder, part syntax.PatternPart) error {
+	switch part := part.(type) {
+	case *syntax.PatternAny:
+		sb.WriteByte('*')
+	case *syntax.PatternSingle:
+		sb.WriteByte('?')
+	case *syntax.PatternCharClass:
+		sb.WriteString(part.Value)
+	case *syntax.Lit:
+		s := part.Value
+		s, _, _ = strings.Cut(s, "\x00")
+		sb.WriteString(s)
+	case *syntax.SglQuoted:
+		s := part.Value
+		if part.Dollar {
+			s = cfg.decodeANSICString(s)
+			s, _, _ = strings.Cut(s, "\x00")
+		}
+		sb.WriteString(s)
+	case *syntax.DblQuoted:
+		field, err := cfg.wordField(part.Parts, quoteDouble)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(cfg.fieldJoin(field))
+	case *syntax.ParamExp:
+		if parts, ok, err := cfg.paramExpWordField(part, quoteNone); err != nil {
+			return err
+		} else if ok {
+			sb.WriteString(cfg.fieldJoin(parts))
+		} else {
+			val, err := cfg.paramExp(part, quoteNone)
+			if err != nil {
+				return err
+			}
+			sb.WriteString(val)
+		}
+	case *syntax.CmdSubst:
+		val, err := cfg.cmdSubst(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(val)
+	case *syntax.ArithmExp:
+		n, err := Arithm(cfg, part.X)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(strconv.Itoa(n))
+	case *syntax.ProcSubst:
+		procPath, err := cfg.ProcSubst(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(procPath)
+	case *syntax.ExtGlob:
+		s, err := cfg.extGlobLiteralString(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(s)
+	default:
+		panic(fmt.Sprintf("unhandled pattern literal part: %T", part))
+	}
+	return nil
+}
+
+func (cfg *Config) extGlobPatternString(eg *syntax.ExtGlob) (string, error) {
 	var sb strings.Builder
 	sb.WriteString(eg.Op.String())
 	for i, pat := range eg.Patterns {
@@ -445,6 +632,23 @@ func (cfg *Config) extGlobString(eg *syntax.ExtGlob) (string, error) {
 			sb.WriteByte('|')
 		}
 		str, err := cfg.patternString(pat, false)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(str)
+	}
+	sb.WriteByte(')')
+	return sb.String(), nil
+}
+
+func (cfg *Config) extGlobLiteralString(eg *syntax.ExtGlob) (string, error) {
+	var sb strings.Builder
+	sb.WriteString(eg.Op.String())
+	for i, pat := range eg.Patterns {
+		if i > 0 {
+			sb.WriteByte('|')
+		}
+		str, err := cfg.patternLiteralString(pat)
 		if err != nil {
 			return "", err
 		}
@@ -764,6 +968,27 @@ func (cfg *Config) fieldJoin(parts []fieldPart) string {
 	return sb.String()
 }
 
+func (cfg *Config) fieldJoinGlob(parts []fieldPart) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		if parts[0].glob != "" {
+			return parts[0].glob
+		}
+		return parts[0].val
+	}
+	sb := cfg.strBuilder()
+	for _, part := range parts {
+		if part.glob != "" {
+			sb.WriteString(part.glob)
+			continue
+		}
+		sb.WriteString(part.val)
+	}
+	return sb.String()
+}
+
 type fieldSplitter struct {
 	cfg            *Config
 	fields         [][]fieldPart
@@ -901,13 +1126,17 @@ func (cfg *Config) splitFieldParts(parts []fieldPart) [][]fieldPart {
 
 func (cfg *Config) escapedGlobField(parts []fieldPart) (escaped string, glob bool) {
 	sb := cfg.strBuilder()
+	mode := pattern.Mode(0)
+	if cfg.ExtGlob {
+		mode |= pattern.ExtendedOperators
+	}
 	for _, part := range parts {
 		if part.quote > quoteNone {
-			sb.WriteString(pattern.QuoteMeta(part.val, 0))
+			sb.WriteString(pattern.QuoteMeta(part.val, mode))
 			continue
 		}
 		sb.WriteString(part.val)
-		if pattern.HasMeta(part.val, 0) {
+		if pattern.HasMeta(part.val, mode) {
 			glob = true
 		}
 	}
@@ -915,6 +1144,58 @@ func (cfg *Config) escapedGlobField(parts []fieldPart) (escaped string, glob boo
 		escaped = sb.String()
 	}
 	return escaped, glob
+}
+
+func (cfg *Config) filterGlobIgnore(matches []string) []string {
+	if len(matches) == 0 || len(cfg.globIgnoreMatchers) == 0 {
+		return matches
+	}
+	filtered := matches[:0]
+nextMatch:
+	for _, match := range matches {
+		for _, matcher := range cfg.globIgnoreMatchers {
+			if matcher(match) {
+				continue nextMatch
+			}
+		}
+		filtered = append(filtered, match)
+	}
+	return filtered
+}
+
+func (cfg *Config) expandPathField(dir string, field []fieldPart) ([]string, error) {
+	literal := cfg.fieldJoin(field)
+	globField := slices.Clone(field)
+	for i := range globField {
+		if globField[i].glob != "" {
+			globField[i].val = globField[i].glob
+		}
+	}
+	globPath, doGlob := cfg.escapedGlobField(globField)
+	if !doGlob || cfg.ReadDir == nil {
+		return []string{literal}, nil
+	}
+	matches, err := cfg.glob(dir, globPath)
+	if err != nil {
+		// We avoid [errors.As] as it allocates, and we know that [Config.glob]
+		// returns [pattern.Regexp] errors without wrapping.
+		if _, ok := err.(*pattern.SyntaxError); ok {
+			return []string{literal}, nil
+		}
+		return nil, err
+	}
+	matches = cfg.filterGlobIgnore(matches)
+	if len(matches) > 0 {
+		return matches, nil
+	}
+	switch {
+	case cfg.FailGlob:
+		return nil, FailGlobError{Pattern: globPath}
+	case cfg.NullGlob:
+		return nil, nil
+	default:
+		return []string{literal}, nil
+	}
 }
 
 // Fields is a pre-iterators API which now wraps [FieldsSeq].
@@ -927,6 +1208,16 @@ func Fields(cfg *Config, words ...*syntax.Word) ([]string, error) {
 		fields = append(fields, s)
 	}
 	return fields, nil
+}
+
+// RedirectFields expands a single shell word for use as a file redirect target.
+// Bash applies the normal field expansion pipeline and then treats multiple
+// results as an ambiguous redirect.
+func RedirectFields(cfg *Config, word *syntax.Word) ([]string, error) {
+	if word == nil {
+		return nil, nil
+	}
+	return Fields(cfg, word)
 }
 
 // FieldsSeq expands a number of words as if they were arguments in a shell
@@ -951,29 +1242,15 @@ func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 					return
 				}
 				for _, field := range wfields {
-					globPath, doGlob := cfg.escapedGlobField(field)
-					if doGlob && cfg.ReadDir != nil {
-						// Note that globbing requires keeping a slice state, so it doesn't
-						// really benefit from using an iterator.
-						matches, err := cfg.glob(dir, globPath)
-						if err != nil {
-							// We avoid [errors.As] as it allocates,
-							// and we know that [Config.glob] returns [pattern.Regexp] errors without wrapping.
-							if _, ok := err.(*pattern.SyntaxError); !ok {
-								yield("", err)
-								return
-							}
-						} else if len(matches) > 0 || cfg.NullGlob {
-							for _, m := range matches {
-								if !yield(m, nil) {
-									return
-								}
-							}
-							continue
-						}
-					}
-					if !yield(cfg.fieldJoin(field), nil) {
+					expanded, err := cfg.expandPathField(dir, field)
+					if err != nil {
+						yield("", err)
 						return
+					}
+					for _, s := range expanded {
+						if !yield(s, nil) {
+							return
+						}
 					}
 				}
 			}
@@ -983,6 +1260,7 @@ func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 
 type fieldPart struct {
 	val   string
+	glob  string
 	quote quoteLevel
 }
 
@@ -1130,11 +1408,15 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			// Like how [Config.wordFields] deals with [syntax.ExtGlob],
 			// except that we allow these through even when [Config.ExtGlob]
 			// is false, as it only applies to pathname expansion.
-			pat, err := cfg.extGlobString(wp)
+			pat, err := cfg.extGlobPatternString(wp)
 			if err != nil {
 				return nil, err
 			}
-			field = append(field, fieldPart{val: pat})
+			raw, err := cfg.extGlobLiteralString(wp)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: raw, glob: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
@@ -1174,18 +1456,23 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				}
 			}
 			if strings.Contains(s, "\\") {
-				sb := cfg.strBuilder()
+				start := 0
 				for i := 0; i < len(s); i++ {
-					b := s[i]
-					if b == '\\' {
-						if i++; i >= len(s) {
-							break
-						}
-						b = s[i]
+					if s[i] != '\\' {
+						continue
 					}
-					sb.WriteByte(b)
+					if start < i {
+						splitter.appendPart(fieldPart{val: s[start:i]})
+					}
+					if i+1 >= len(s) {
+						start = len(s)
+						break
+					}
+					i++
+					splitter.appendPart(fieldPart{quote: quoteSingle, val: s[i : i+1]})
+					start = i + 1
 				}
-				s = sb.String()
+				s = s[start:]
 			}
 			if s != "" {
 				splitter.appendPart(fieldPart{val: s})
@@ -1268,9 +1555,6 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			}
 			splitter.appendUnquoted(procPath)
 		case *syntax.ExtGlob:
-			if !cfg.ExtGlob {
-				return nil, fmt.Errorf("extended globbing operator used without the \"extglob\" option set")
-			}
 			// We don't translate or interpret the pattern here in any way;
 			// that's done later when globbing takes place via [pattern.Regexp].
 			// Here, all we do is keep the extended globbing expression in string form.
@@ -1278,11 +1562,15 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			// TODO(v4): perhaps the syntax parser should keep extended globbing expressions
 			// as plain literal strings, because a custom node is not particularly helpful.
 			// It's not like other globbing operators like `*` or `**` get their own nodes.
-			pat, err := cfg.extGlobString(wp)
+			pat, err := cfg.extGlobPatternString(wp)
 			if err != nil {
 				return nil, err
 			}
-			splitter.appendPart(fieldPart{val: pat})
+			raw, err := cfg.extGlobLiteralString(wp)
+			if err != nil {
+				return nil, err
+			}
+			splitter.appendPart(fieldPart{val: raw, glob: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}
@@ -1708,7 +1996,7 @@ func pathSplit(name string) []string {
 // EstimateGlobOperations returns the shell-core budget cost for one pathname
 // glob pattern after quote removal and field splitting.
 func EstimateGlobOperations(pat string) int64 {
-	if pat == "" || !pattern.HasMeta(pat, 0) {
+	if pat == "" || !pattern.HasMeta(pat, pattern.ExtendedOperators) {
 		return 0
 	}
 	ops := int64(1)
@@ -1716,7 +2004,7 @@ func EstimateGlobOperations(pat string) int64 {
 		if part == "" {
 			continue
 		}
-		if pattern.HasMeta(part, 0) {
+		if pattern.HasMeta(part, pattern.ExtendedOperators) {
 			ops++
 		}
 	}
@@ -1739,6 +2027,10 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 	//    ReadDir("/foo") to ensure that "/foo/" exists and only matches a directory
 	//    ReadDir("/foo") glob "*"
 
+	metaMode := pattern.Mode(0)
+	if cfg.ExtGlob {
+		metaMode |= pattern.ExtendedOperators
+	}
 	for i, part := range parts {
 		// Keep around for debugging.
 		// log.Printf("matches %q part %d %q", matches, i, part)
@@ -1750,7 +2042,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 				matches[i] = pathJoin2(dir, part)
 			}
 			continue
-		case !pattern.HasMeta(part, 0):
+		case !pattern.HasMeta(part, metaMode):
 			var newMatches []string
 			for _, dir := range matches {
 				match := dir
@@ -1804,7 +2096,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 				// If dir is not a directory, we keep the stack as-is and continue.
 				newMatches = newMatches[:0]
 				rx := rxGlobStar.MatchString
-				if cfg.DotGlob {
+				if cfg.globLeadingDot() {
 					rx = rxGlobStarDotGlob.MatchString
 				}
 				newMatches, _ = cfg.globDir(base, dir, rx, wantDir, newMatches)
@@ -1818,7 +2110,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 		if cfg.NoCaseGlob {
 			mode |= pattern.NoGlobCase
 		}
-		if cfg.DotGlob {
+		if cfg.globLeadingDot() {
 			mode |= pattern.GlobLeadingDot
 		}
 		if cfg.ExtGlob {
@@ -1839,12 +2131,71 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 	}
 	// Note that the results need to be sorted.
 	// TODO: above we do a BFS; if we did a DFS, the matches would already be sorted.
-	slices.Sort(matches)
+	cfg.sortGlobMatches(matches)
+	matches = slices.Compact(matches)
 	// Remove any empty matches left behind from "**".
 	if len(matches) > 0 && matches[0] == "" {
 		matches = matches[1:]
 	}
 	return matches, nil
+}
+
+func (cfg *Config) sortGlobMatches(matches []string) {
+	if len(matches) < 2 {
+		return
+	}
+	collator := cfg.globCollator()
+	if collator == nil {
+		slices.Sort(matches)
+		return
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		return collator.CompareString(matches[i], matches[j]) < 0
+	})
+}
+
+func (cfg *Config) globCollator() *collate.Collator {
+	locale := cfg.globCollationLocale()
+	if locale == "" || usesByteCollation(locale) {
+		return nil
+	}
+	tag, err := language.Parse(normalizeLocaleTag(locale))
+	if err != nil {
+		return nil
+	}
+	return collate.New(tag)
+}
+
+func (cfg *Config) globCollationLocale() string {
+	if cfg == nil || cfg.Env == nil {
+		return ""
+	}
+	for _, name := range []string{"LC_ALL", "LC_COLLATE", "LANG"} {
+		if value := strings.TrimSpace(cfg.envGet(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func usesByteCollation(locale string) bool {
+	switch strings.ToUpper(strings.TrimSpace(locale)) {
+	case "", "C", "POSIX", "C.UTF-8", "C.UTF_8":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeLocaleTag(locale string) string {
+	locale = strings.TrimSpace(locale)
+	if idx := strings.IndexByte(locale, '@'); idx >= 0 {
+		locale = locale[:idx]
+	}
+	if idx := strings.IndexByte(locale, '.'); idx >= 0 {
+		locale = locale[:idx]
+	}
+	return strings.ReplaceAll(locale, "_", "-")
 }
 
 func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir bool, matches []string) ([]string, error) {
@@ -1876,6 +2227,13 @@ func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir 
 		}
 		if matcher(name) {
 			matches = append(matches, pathJoin2(dir, name))
+		}
+	}
+	if cfg.includeDotDotCandidates() {
+		for _, name := range []string{".", ".."} {
+			if matcher(name) {
+				matches = append(matches, pathJoin2(dir, name))
+			}
 		}
 	}
 	return matches, nil

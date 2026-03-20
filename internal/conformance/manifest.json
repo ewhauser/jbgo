@@ -425,10 +425,7 @@
         },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "xfail",
-          "reason": "darwin host bash pads wc -l output differently in the getcwd survey helper",
-          "goos": [
-            "darwin"
-          ]
+          "reason": "conformance: parse error wording for this builtin-cd probe still differs from bash"
         },
         "oils/builtin-dirs.test.sh::dirs does not take arguments": {
           "mode": "xfail",
@@ -640,10 +637,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-printf.test.sh::Unicode char with '": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-printf.test.sh::bash truncates long strftime string at 128": {
           "mode": "xfail",
           "reason": "darwin bash uses BSD wc, so this portability probe still differs from the linux oracle",
@@ -652,10 +645,6 @@
           ]
         },
         "oils/builtin-printf.test.sh::printf # flag": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-printf.test.sh::printf %b unicode escapes": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -678,10 +667,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-printf.test.sh::printf eE fF gG": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-printf.test.sh::printf unicode backslash escapes": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1195,10 +1180,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/case_.test.sh::Pattern ? matches 1 code point (many bytes), but not multiple code points": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/case_.test.sh::case \\n bug regression": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1325,20 +1306,12 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dbracket.test.sh::\\(\\) in pattern (regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/dbracket.test.sh::tilde expansion with =~ (confusing)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "linux"
           ]
-        },
-        "oils/divergence.test.sh::!( as negation and subshell versus extended glob - #2463": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
@@ -1411,87 +1384,11 @@
             "darwin"
           ]
         },
-        "oils/extglob-files.test.sh::+() matches 1 or more": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Escaping of pipe (glibc bug, see demo/glibc_fnmatch.c)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Extended glob as argument to ${undef:-} (dynamic globbing)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Extended glob in assignment builtin": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Extended glob patterns with spaces": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Filenames with spaces": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Glob other punctuation chars (lexer mode)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::More glob escaping": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Nested extended glob pattern": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::Two adjacent alternations": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::failglob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::no match": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::noglob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-files.test.sh::nullglob with extended glob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-match.test.sh::Matching literal '@(cc)'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-match.test.sh::Turning extglob on changes the meaning of [[ !(str) ]] in bash": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-match.test.sh::extended glob of single unicode char": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/extglob-match.test.sh::regular glob of single unicode char": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in case": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in conditional word": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in redirect word": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1504,134 +1401,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/func-parsing.test.sh::Function name with command sub": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::nocaseglob with nullglob and failglob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::shopt -s failglob behavior on single line with semicolon": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::shopt -s failglob exits properly in command context with set -e": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::shopt -s failglob exits properly in loop context with set -e": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::shopt -s failglob in array literal context": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::shopt -s failglob in command context": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob-bash.test.sh::shopt -s failglob in loop context": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::Glob unicode char": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::glob can expand to command and arg": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::glob escaped": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::glob with char class expression": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::glob with escaped - in char class": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::set -o noglob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/glob.test.sh::shopt -u globskipdots shows . and ..": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::. and .. always filtered when GLOBIGNORE is set": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Don't glob flags on file system with GLOBIGNORE": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Extended glob expansion combined with GLOBIGNORE": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore *": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore *.o:*.h": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore *.txt": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore .:..": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore ?.txt": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore dirs dist/*:node_modules/*": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore globs with char classes like [[:alnum:]]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore globs with char patterns like [!ab]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Ignore single file src/__main__.py": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::Quoting GLOBIGNORE": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::When GLOBIGNORE is set, glob may become empty (nullglob too)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::find files in subdirectory but not the ignored pattern": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::resetting globignore reverts to default behaviour": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globignore.test.sh::treat escaped patterns literally": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/globstar.test.sh::each occurrence of ** recurses through all depths": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1763,10 +1532,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/nul-bytes.test.sh::printf - literal NUL in format string": {
-          "mode": "xfail",
-          "reason": "conformance: printf literal-NUL format handling still differs from bash"
         },
         "oils/paren-ambiguity.test.sh::$(( closed with ) ) after multiple lines is command - #2337": {
           "mode": "xfail",
@@ -1980,42 +1745,6 @@
             "darwin"
           ]
         },
-        "oils/redirect-multi.test.sh::Extended glob that doesn't match anything": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::File redirect to $var with glob char": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::File redirect with extended glob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::File redirect without matching any file, with failglob": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::File redirects have word splitting too!": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::Non-file redirects don't respect glob args (we differe from bash)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::Redirect to $empty (in function body)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::Redirect to ''": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect-multi.test.sh::Redirect with brace expansion isn't allowed": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/redirect.test.sh::1>&2- (Bash bug: fail to restore closed fd)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -2036,31 +1765,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect.test.sh::>&word redirects stdout and stderr when word is not a number or -": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/redirect.test.sh::>| to clobber": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/redirect.test.sh::Descriptor redirect with filename": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/redirect.test.sh::Double digit fd (20> file)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Duplicated named file descriptor shares file position": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Named file descriptor": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/redirect.test.sh::Named read-write file descriptor": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2078,10 +1787,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/redirect.test.sh::Redirect to empty string": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/redirect.test.sh::Redirect to file descriptor that's not open": {
           "mode": "xfail",
@@ -2122,14 +1827,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/serialize.test.sh::declare": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/serialize.test.sh::printf %q invalid unicode": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/serialize.test.sh::printf %q unicode": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2246,10 +1943,6 @@
           "mode": "xfail",
           "reason": "conformance: echo now matches bash; printf still differs for C-locale Unicode escape preservation"
         },
-        "oils/unicode.test.sh::Unicode escapes \\u03bc \\U000003bc in $'', echo -e, printf": {
-          "mode": "xfail",
-          "reason": "conformance: echo now matches bash; printf still differs for C-locale Unicode escape preservation"
-        },
         "oils/unicode.test.sh::printf / echo -e do NOT check max code point at runtime": {
           "mode": "xfail",
           "reason": "conformance: echo now matches bash; printf still differs for out-of-range Unicode escape handling"
@@ -2311,15 +2004,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-op-patsub.test.sh::${x//~homedir/}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-op-patsub.test.sh::Chromium from http://www.oilshell.org/blog/2016/11/07.html": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-patsub.test.sh::Replace char class": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2347,10 +2032,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-op-patsub.test.sh::patsub with single quotes and hyphen in character class (regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-op-slice.test.sh::Cannot take length of substring slice": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -2364,14 +2045,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-op-strip.test.sh::Prepend using replacement of #": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-strip.test.sh::Strip unicode prefix": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-strip.test.sh::strip all unicode": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2431,19 +2104,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-sub-quote.test.sh::single quotes work inside character classes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-sub.test.sh::Bad var sub": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/var-sub.test.sh::Descriptor redirect to bad \"$@\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-sub.test.sh::Filename redirect with \"$@\"": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -2553,10 +2218,19 @@
         },
         "oils/xtrace.test.sh::xtrace with unprintable chars": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
+          "reason": "conformance: xtrace escape style for unprintable bytes still differs from bash"
+        },
+        "oils/builtin-printf.test.sh::Too large": {
+          "mode": "xfail",
+          "reason": "conformance: printf integer formatting for oversized values still differs from bash"
+        },
+        "oils/glob.test.sh::Glob unicode char": {
+          "mode": "xfail",
+          "reason": "conformance: C.UTF-8 pathname collation order still differs from bash for this glob case"
+        },
+        "oils/word-split.test.sh::Unicode in IFS": {
+          "mode": "xfail",
+          "reason": "conformance: Unicode IFS splitting still differs from bash"
         }
       }
     }

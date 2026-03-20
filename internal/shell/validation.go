@@ -114,16 +114,6 @@ func validateSupportedRedirections(program *syntax.File) error {
 		}
 
 		switch redir.Op {
-		case syntax.DplOut:
-			if !isSupportedDupTarget(wordLiteral(redir.Word)) {
-				walkErr = &shellValidationError{message: "invalid redirection"}
-				return false
-			}
-		case syntax.DplIn:
-			if !isSupportedDupTarget(wordLiteral(redir.Word)) {
-				walkErr = &shellValidationError{message: "invalid redirection"}
-				return false
-			}
 		case syntax.RdrClob, syntax.AppClob, syntax.RdrAllClob, syntax.AppAllClob:
 			walkErr = &shellValidationError{message: "invalid redirection"}
 			return false
@@ -169,16 +159,6 @@ func hasSupportedFunctionName(fn *syntax.FuncDecl) bool {
 
 func hasFunctionNameLiteral(name *syntax.Lit) bool {
 	return name != nil && strings.TrimSpace(name.Value) != ""
-}
-
-func isSupportedDupTarget(target string) bool {
-	if target == "-" {
-		return true
-	}
-	if _, err := strconv.Atoi(target); err == nil {
-		return true
-	}
-	return strings.HasPrefix(target, "$")
 }
 
 func isSupportedRedirectFD(fd string) bool {

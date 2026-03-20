@@ -17,6 +17,7 @@ func TestConformance(t *testing.T) {
 			Name:         "bash",
 			SpecDir:      "oils",
 			BinDir:       "bin",
+			FixtureDirs:  []string{"fixtures/spec"},
 			ManifestPath: "manifest.json",
 			OracleMode:   OracleBash,
 		},

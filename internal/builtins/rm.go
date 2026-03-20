@@ -53,6 +53,9 @@ func (c *RM) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 			if force && errors.Is(err, stdfs.ErrNotExist) {
 				continue
 			}
+			if errors.Is(err, stdfs.ErrNotExist) {
+				return exitf(inv, 1, "rm: %s: No such file or directory", name)
+			}
 			return &ExitError{Code: 1, Err: err}
 		}
 		if info.IsDir() && !recursive && !allowDir {
@@ -61,6 +64,9 @@ func (c *RM) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if err := inv.FS.Remove(ctx, abs, recursive); err != nil {
 			if force && errors.Is(err, stdfs.ErrNotExist) {
 				continue
+			}
+			if errors.Is(err, stdfs.ErrNotExist) {
+				return exitf(inv, 1, "rm: %s: No such file or directory", name)
 			}
 			return &ExitError{Code: 1, Err: err}
 		}

@@ -86,6 +86,30 @@ world
 	}
 }
 
+func TestRunShellReaderExtglobChangesBareConditionalMeaning(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+empty=''
+str='x'
+[[ !($empty) ]]  && echo TRUE
+[[ !($str) ]]    || echo FALSE
+shopt -s extglob
+[[ !($empty) ]]  && echo TRUE
+[[ !($str) ]]    && echo TRUE
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "TRUE\nFALSE\nTRUE\nTRUE\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestShiftChunkPositionsDoesNotShiftSharedAliasExpansionTwice(t *testing.T) {
 	t.Parallel()
 

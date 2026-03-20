@@ -29,12 +29,27 @@ func (p *Parser) DeclOperandField(r io.Reader) (DeclOperand, error) {
 	if p.err != nil {
 		return op, p.err
 	}
+	if looksLikeDeclFlagSource(src) {
+		switch typed := op.(type) {
+		case nil:
+			op = &DeclFlag{Word: &Word{Parts: []WordPart{&Lit{Value: src}}}}
+		case *DeclDynamicWord:
+			op = &DeclFlag{Word: literalizeDeclFieldWord(src, typed.Word)}
+		}
+	}
 
 	op = literalizeDeclOperandField(src, op)
 	if p.err == nil && p.tok != _EOF && !declOperandFieldAcceptsTrailing(op) {
 		p.curErr("unexpected token in declaration operand: %#q", p.tok)
 	}
 	return op, p.err
+}
+
+func looksLikeDeclFlagSource(src string) bool {
+	src = strings.TrimSpace(src)
+	return src != "" &&
+		(src[0] == '-' || src[0] == '+') &&
+		!strings.ContainsAny(src, " \t\r\n")
 }
 
 func declOperandFieldAcceptsTrailing(op DeclOperand) bool {

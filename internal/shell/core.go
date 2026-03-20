@@ -957,7 +957,7 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		}, true, nil
 	}
 
-	script, ok, err := resolveShebangCommand(ctx, exec, fullPath)
+	script, ok, err := resolveShebangCommand(ctx, exec, fullPath, commandName)
 	if err != nil {
 		return nil, false, err
 	}
@@ -986,7 +986,7 @@ func pathDirs(env expand.Environ, dir string) []string {
 	return dirs
 }
 
-func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath string) (_ *resolvedCommand, ok bool, err error) {
+func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invokedPath string) (_ *resolvedCommand, ok bool, err error) {
 	file, err := exec.FS.Open(ctx, fullPath)
 	if err != nil {
 		return nil, false, nil
@@ -1007,10 +1007,14 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath string
 	if !ok {
 		return nil, false, nil
 	}
+	scriptArg := fullPath
+	if strings.Contains(invokedPath, "/") {
+		scriptArg = invokedPath
+	}
 	return &resolvedCommand{
 		command: cmd,
 		name:    shebangInterpreter,
-		args:    append(argv, fullPath),
+		args:    append(argv, scriptArg),
 	}, true, nil
 }
 

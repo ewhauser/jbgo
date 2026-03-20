@@ -255,10 +255,17 @@ func LegacyBashCompat(enabled bool) ParserOption {
 	return func(p *Parser) { p.legacyBashCompat = enabled }
 }
 
+// ParseExtGlob controls whether the parser should recognize Bash extended glob
+// operators like `@(foo)` and `!(bar)` as dedicated syntax nodes.
+func ParseExtGlob(enabled bool) ParserOption {
+	return func(p *Parser) { p.parseExtGlob = enabled }
+}
+
 // NewParser allocates a new [Parser] and applies any number of options.
 func NewParser(options ...ParserOption) *Parser {
 	p := &Parser{
-		lang: LangBash,
+		lang:         LangBash,
+		parseExtGlob: true,
 	}
 	for _, opt := range options {
 		opt(p)
@@ -587,6 +594,7 @@ type Parser struct {
 	// legacyBashCompat switches a handful of [[ =~ ]] diagnostics to match
 	// the older bash behavior observed through the bash builtin conformance path.
 	legacyBashCompat bool
+	parseExtGlob     bool
 
 	stopAt []byte
 

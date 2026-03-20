@@ -6,10 +6,12 @@ package expand
 import (
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/ewhauser/gbash/internal/shell/pattern"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
@@ -692,6 +694,222 @@ func Test_glob(t *testing.T) {
 				t.Fatalf("wanted %q, got %q", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestGlobRespectsLocaleCollation(t *testing.T) {
+	t.Parallel()
+
+	readDir := func(string) ([]fs.DirEntry, error) {
+		return []fs.DirEntry{
+			&mockFileInfo{name: "hello"},
+			&mockFileInfo{name: "hello-test.sh"},
+			&mockFileInfo{name: "hello.py"},
+			&mockFileInfo{name: "hello_preamble.sh"},
+		}, nil
+	}
+
+	tests := []struct {
+		name string
+		env  testEnv
+		want []string
+	}{
+		{
+			name: "c locale keeps byte order",
+			env: testEnv{
+				"LC_ALL": {Set: true, Kind: String, Str: "C.UTF-8"},
+			},
+			want: []string{"hello", "hello-test.sh", "hello.py", "hello_preamble.sh"},
+		},
+		{
+			name: "lc_collate uses locale order",
+			env: testEnv{
+				"LC_COLLATE": {Set: true, Kind: String, Str: "en_US.UTF-8"},
+			},
+			want: []string{"hello", "hello_preamble.sh", "hello-test.sh", "hello.py"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := (&Config{
+				Env:     tt.env,
+				ReadDir: readDir,
+			}).glob("/", "h*")
+			if err != nil {
+				t.Fatalf("glob() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("glob() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFieldsGlobEscapedBracketPattern(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, name := range []string{"[abc]", "?"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	cfg := &Config{
+		Env: testEnv{
+			"PWD": {Set: true, Kind: String, Str: dir},
+		},
+		ReadDir:      os.ReadDir,
+		GlobSkipDots: true,
+	}
+	if matches, err := cfg.glob(dir, `\[???\]`); err != nil {
+		t.Fatalf("glob() error = %v", err)
+	} else if !reflect.DeepEqual(matches, []string{"[abc]"}) {
+		t.Fatalf("glob() = %#v, want %#v", matches, []string{"[abc]"})
+	}
+	got, err := Fields(cfg, parseCommandWord(t, `\[???\]`), parseCommandWord(t, `\?`))
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"[abc]", "?"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFieldsGlobEscapedDashInCharClass(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, name := range []string{"foo.-", "c.C"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	cfg := &Config{
+		Env: testEnv{
+			"PWD": {Set: true, Kind: String, Str: dir},
+		},
+		ReadDir:      os.ReadDir,
+		GlobSkipDots: true,
+	}
+	got, err := Fields(cfg, parseCommandWord(t, `*.[C\-D]`))
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"c.C", "foo.-"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFieldsGlobCharClassExpression(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, name := range []string{"foo.-", "e.E"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	cfg := &Config{
+		Env: testEnv{
+			"PWD": {Set: true, Kind: String, Str: dir},
+		},
+		ReadDir:      os.ReadDir,
+		GlobSkipDots: true,
+	}
+	got, err := Fields(cfg, parseCommandWord(t, `*.[[:punct:]E]`))
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"e.E", "foo.-"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFieldsGlobIgnoreCharClass(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, name := range []string{".env", "_testing.py", "20231114.log", "pyproject.toml", "has space.docx"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	cfg := &Config{
+		Env: testEnv{
+			"PWD":        {Set: true, Kind: String, Str: dir},
+			"GLOBIGNORE": {Set: true, Kind: String, Str: "[[:alnum:]]*"},
+		},
+		ReadDir:      os.ReadDir,
+		GlobSkipDots: true,
+	}
+	got, err := Fields(cfg, parseCommandWord(t, `*.*`))
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{".env", "_testing.py"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFilterGlobIgnoreCharClass(t *testing.T) {
+	t.Parallel()
+
+	direct, err := pattern.ExtendedPatternMatcher("[[:alnum:]]*", pattern.Filenames|pattern.EntireString|pattern.GlobLeadingDot)
+	if err != nil {
+		t.Fatalf("direct matcher error = %v", err)
+	}
+	if !direct("20231114.log") || direct(".env") {
+		t.Fatalf("direct matcher did not respect char class prefix")
+	}
+
+	cfg := prepareConfig(&Config{
+		Env: testEnv{
+			"GLOBIGNORE": {Set: true, Kind: String, Str: "[[:alnum:]]*"},
+		},
+	})
+	if len(cfg.globIgnoreMatchers) != 1 {
+		t.Fatalf("len(globIgnoreMatchers) = %d, want 1", len(cfg.globIgnoreMatchers))
+	}
+	if !cfg.globIgnoreMatchers[0]("20231114.log") || cfg.globIgnoreMatchers[0](".env") {
+		t.Fatalf("prepared matcher did not respect char class prefix")
+	}
+	got := cfg.filterGlobIgnore([]string{".env", "20231114.log", "_testing.py", "has space.docx", "pyproject.toml"})
+	want := []string{".env", "_testing.py"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("filterGlobIgnore() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLiteralPreservesEscapedGlobChars(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{`\[???\]`, `\[???\]`},
+		{`*.[C\-D]`, `*.[C\-D]`},
+	}
+	for _, tt := range tests {
+		got, err := Literal(nil, parseCommandWord(t, tt.src))
+		if err != nil {
+			t.Fatalf("Literal(%q) error = %v", tt.src, err)
+		}
+		if got != tt.want {
+			t.Fatalf("Literal(%q) = %q, want %q", tt.src, got, tt.want)
+		}
 	}
 }
 

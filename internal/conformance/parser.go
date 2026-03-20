@@ -2,10 +2,12 @@ package conformance
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -77,7 +79,8 @@ func ParseSpecFile(relPath, content string) (SpecFile, error) {
 
 	var current *SpecCase
 	var scriptLines []string
-	ignoreDirectiveBlock := false
+	var directiveBlock *directiveBlockCapture
+	terminated := false
 
 	flushCase := func() error {
 		if current == nil {
@@ -108,10 +111,12 @@ func ParseSpecFile(relPath, content string) (SpecFile, error) {
 				return SpecFile{}, err
 			}
 			current = &SpecCase{
-				Name:      strings.TrimSpace(strings.TrimPrefix(rawLine, "#### ")),
-				StartLine: lineNo,
+				Name:            strings.TrimSpace(strings.TrimPrefix(rawLine, "#### ")),
+				StartLine:       lineNo,
+				OracleOverrides: make(map[OracleMode]OracleOverride),
 			}
-			ignoreDirectiveBlock = false
+			directiveBlock = nil
+			terminated = false
 			continue
 		}
 
@@ -122,33 +127,45 @@ func ParseSpecFile(relPath, content string) (SpecFile, error) {
 			}
 			continue
 		}
+		if terminated {
+			continue
+		}
 
-		if ignoreDirectiveBlock {
+		if directiveBlock != nil {
 			if trimmed == "## END" {
-				ignoreDirectiveBlock = false
+				directiveBlock.finish(current)
+				directiveBlock = nil
 				continue
 			}
 			if strings.HasPrefix(rawLine, "##") {
-				ignoreDirectiveBlock = false
+				directiveBlock.finish(current)
+				directiveBlock = nil
 			} else {
+				directiveBlock.lines = append(directiveBlock.lines, rawLine)
 				continue
 			}
 		}
 
 		if strings.HasPrefix(rawLine, "##") {
-			if startsIgnoredBlock(rawLine) {
-				ignoreDirectiveBlock = true
+			if applyDirectiveInline(current, rawLine) {
+				continue
+			}
+			if block := parseDirectiveBlockHeader(rawLine); block != nil {
+				directiveBlock = block
 			}
 			continue
 		}
 
 		scriptLines = append(scriptLines, rawLine)
+		if trimmed == "exit" {
+			terminated = true
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		return SpecFile{}, err
 	}
 
-	if ignoreDirectiveBlock {
+	if directiveBlock != nil {
 		return SpecFile{}, fmt.Errorf("unterminated directive block in %s", relPath)
 	}
 	if err := flushCase(); err != nil {
@@ -177,7 +194,218 @@ func parseMetadataLine(line string) (key, value string, ok bool) {
 	return key, value, true
 }
 
-func startsIgnoredBlock(line string) bool {
+type directiveBlockCapture struct {
+	oracle OracleMode
+	kind   OracleOverrideKind
+	field  string
+	lines  []string
+}
+
+func (b *directiveBlockCapture) finish(specCase *SpecCase) {
+	if b == nil || b.field == "" || specCase == nil {
+		return
+	}
+	value := strings.Join(b.lines, "\n")
+	if len(b.lines) > 0 {
+		value += "\n"
+	}
+	if b.oracle == "" {
+		switch b.field {
+		case "stdout":
+			specCase.Expectation.Stdout = &value
+		case "stderr":
+			specCase.Expectation.Stderr = &value
+		}
+		return
+	}
+	override := specCase.OracleOverrides[b.oracle]
+	if override.Kind == "" {
+		override.Kind = b.kind
+	}
+	switch b.field {
+	case "stdout":
+		override.Stdout = &value
+	case "stderr":
+		override.Stderr = &value
+	}
+	specCase.OracleOverrides[b.oracle] = override
+}
+
+func parseOracleMode(value string) (OracleMode, bool) {
+	switch strings.TrimSpace(value) {
+	case string(OracleBash):
+		return OracleBash, true
+	default:
+		return "", false
+	}
+}
+
+func parseOracleOverrideKind(value string) (OracleOverrideKind, bool) {
+	switch strings.TrimSpace(value) {
+	case string(OracleOverrideBug):
+		return OracleOverrideBug, true
+	case string(OracleOverrideOK):
+		return OracleOverrideOK, true
+	case string(OracleOverrideNI):
+		return OracleOverrideNI, true
+	default:
+		return "", false
+	}
+}
+
+func parseDirectiveBlockHeader(line string) *directiveBlockCapture {
 	body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "##"))
-	return strings.HasSuffix(body, "STDOUT:") || strings.HasSuffix(body, "STDERR:")
+	switch body {
+	case "STDOUT:", "STDERR:":
+		field, _, ok := parseDirectiveField(body)
+		if !ok {
+			return nil
+		}
+		return &directiveBlockCapture{field: field}
+	}
+	kind, oracle, fieldToken, ok := parseOracleDirectivePrefix(strings.Fields(body))
+	if !ok {
+		return nil
+	}
+	field, _, ok := parseDirectiveField(fieldToken)
+	if !ok {
+		return nil
+	}
+	return &directiveBlockCapture{oracle: oracle, kind: kind, field: field}
+}
+
+func applyDirectiveInline(specCase *SpecCase, line string) bool {
+	body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "##"))
+	parts := strings.Fields(body)
+	switch {
+	case len(parts) >= 3:
+		kind, oracle, fieldToken, ok := parseOracleDirectivePrefix(parts)
+		if !ok {
+			return false
+		}
+		field, jsonEncoded, ok := parseDirectiveField(fieldToken)
+		if !ok {
+			return false
+		}
+		if len(parts) == 3 {
+			return false
+		}
+		value := strings.TrimSpace(strings.Join(parts[3:], " "))
+		return applyOracleDirectiveValue(specCase, oracle, kind, field, jsonEncoded, value)
+	case len(parts) >= 1:
+		field, jsonEncoded, ok := parseDirectiveField(parts[0])
+		if !ok {
+			return false
+		}
+		if len(parts) == 1 {
+			return false
+		}
+		value := strings.TrimSpace(strings.Join(parts[1:], " "))
+		return applyExpectationValue(specCase, field, jsonEncoded, value)
+	default:
+		return false
+	}
+}
+
+func parseOracleDirectivePrefix(parts []string) (OracleOverrideKind, OracleMode, string, bool) {
+	if len(parts) < 3 {
+		return "", "", "", false
+	}
+	kind, ok := parseOracleOverrideKind(parts[0])
+	if !ok {
+		return "", "", "", false
+	}
+	oracle, ok := parseOracleMode(parts[1])
+	if !ok {
+		return "", "", "", false
+	}
+	return kind, oracle, parts[2], true
+}
+
+func parseDirectiveField(token string) (field string, jsonEncoded, ok bool) {
+	token = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(token), ":"))
+	switch token {
+	case "stdout":
+		return "stdout", false, true
+	case "stderr":
+		return "stderr", false, true
+	case "status":
+		return "status", false, true
+	case "stdout-json":
+		return "stdout", true, true
+	case "stderr-json":
+		return "stderr", true, true
+	default:
+		return "", false, false
+	}
+}
+
+func applyExpectationValue(specCase *SpecCase, field string, jsonEncoded bool, value string) bool {
+	switch field {
+	case "status":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return false
+		}
+		specCase.Expectation.Status = &n
+		return true
+	case "stdout":
+		v, ok := parseDirectiveStringValue(value, jsonEncoded)
+		if !ok {
+			return false
+		}
+		specCase.Expectation.Stdout = &v
+		return true
+	case "stderr":
+		v, ok := parseDirectiveStringValue(value, jsonEncoded)
+		if !ok {
+			return false
+		}
+		specCase.Expectation.Stderr = &v
+		return true
+	default:
+		return false
+	}
+}
+
+func applyOracleDirectiveValue(specCase *SpecCase, oracle OracleMode, kind OracleOverrideKind, field string, jsonEncoded bool, value string) bool {
+	override := specCase.OracleOverrides[oracle]
+	if override.Kind == "" {
+		override.Kind = kind
+	}
+	switch field {
+	case "status":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return false
+		}
+		override.Status = &n
+	case "stdout":
+		v, ok := parseDirectiveStringValue(value, jsonEncoded)
+		if !ok {
+			return false
+		}
+		override.Stdout = &v
+	case "stderr":
+		v, ok := parseDirectiveStringValue(value, jsonEncoded)
+		if !ok {
+			return false
+		}
+		override.Stderr = &v
+	default:
+		return false
+	}
+	specCase.OracleOverrides[oracle] = override
+	return true
+}
+
+func parseDirectiveStringValue(value string, jsonEncoded bool) (string, bool) {
+	if !jsonEncoded {
+		return value, true
+	}
+	var out string
+	if err := json.Unmarshal([]byte(value), &out); err != nil {
+		return "", false
+	}
+	return out, true
 }

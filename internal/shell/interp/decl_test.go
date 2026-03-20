@@ -95,6 +95,46 @@ printf '<%s>\n' "$foo"
 	}
 }
 
+func TestDeclInvalidOptionMatchesBashUsage(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		script     string
+		wantStderr string
+	}{
+		{
+			name:   "declare",
+			script: "declare -@\n",
+			wantStderr: "" +
+				"declare: -@: invalid option\n" +
+				"declare: usage: declare [-aAfFgiIlnrtux] [name[=value] ...] or declare -p [-aAfFilnrtux] [name ...]\n",
+		},
+		{
+			name:   "typeset",
+			script: "typeset -@\n",
+			wantStderr: "" +
+				"typeset: -@: invalid option\n" +
+				"typeset: usage: typeset [-aAfFgiIlnrtux] name[=value] ... or typeset -p [-aAfFilnrtux] [name ...]\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			stdout, stderr, err := runInterpScript(t, tc.script)
+			if err == nil {
+				t.Fatal("Run error = nil, want exit status 2")
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty", stdout)
+			}
+			if stderr != tc.wantStderr {
+				t.Fatalf("stderr = %q, want %q", stderr, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestDeclPrefixAssignValidationFailureSkipsBuiltin(t *testing.T) {
 	t.Parallel()
 

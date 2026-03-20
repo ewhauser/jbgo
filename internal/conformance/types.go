@@ -9,9 +9,32 @@ type SpecFile struct {
 }
 
 type SpecCase struct {
-	Name      string
-	Script    string
-	StartLine int
+	Name            string
+	Script          string
+	StartLine       int
+	Expectation     ExpectedResult
+	OracleOverrides map[OracleMode]OracleOverride
+}
+
+type ExpectedResult struct {
+	Status *int
+	Stdout *string
+	Stderr *string
+}
+
+type OracleOverrideKind string
+
+const (
+	OracleOverrideBug OracleOverrideKind = "BUG"
+	OracleOverrideOK  OracleOverrideKind = "OK"
+	OracleOverrideNI  OracleOverrideKind = "N-I"
+)
+
+type OracleOverride struct {
+	Kind   OracleOverrideKind
+	Status *int
+	Stdout *string
+	Stderr *string
 }
 
 type EntryMode string

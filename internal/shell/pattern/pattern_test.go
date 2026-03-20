@@ -219,3 +219,122 @@ func TestMeta(t *testing.T) {
 		}
 	}
 }
+
+func TestExtendedPatternMatcherEscapesAndCharClasses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pat  string
+		mode Mode
+		hit  string
+		miss string
+	}{
+		{
+			name: "escaped brackets",
+			pat:  `\[???\]`,
+			mode: Filenames | EntireString,
+			hit:  `[abc]`,
+			miss: `?`,
+		},
+		{
+			name: "escaped dash in class",
+			pat:  `[C\-D]`,
+			mode: EntireString,
+			hit:  `-`,
+			miss: `Z`,
+		},
+		{
+			name: "posix class prefix",
+			pat:  `[[:alnum:]]*`,
+			mode: Filenames | EntireString | GlobLeadingDot,
+			hit:  `20231114.log`,
+			miss: `.env`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matcher, err := ExtendedPatternMatcher(tt.pat, tt.mode)
+			if err != nil {
+				t.Fatalf("ExtendedPatternMatcher(%q) error = %v", tt.pat, err)
+			}
+			if !matcher(tt.hit) {
+				t.Fatalf("matcher(%q) = false, want true", tt.hit)
+			}
+			if matcher(tt.miss) {
+				t.Fatalf("matcher(%q) = true, want false", tt.miss)
+			}
+		})
+	}
+}
+
+func TestExtendedPatternMatcherNegatedExtglobs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pat  string
+		mode Mode
+		hits []string
+		miss []string
+	}{
+		{
+			name: "adjacent negated extglob",
+			pat:  `!(b)@(b|c)`,
+			mode: EntireString | ExtendedOperators,
+			hits: []string{`ab`, `ac`, `cb`, `cc`},
+			miss: []string{`bb`, `bc`},
+		},
+		{
+			name: "nested negated extglob",
+			pat:  `a@(!(c|d))`,
+			mode: EntireString | ExtendedOperators,
+			hits: []string{`ab`, `az`},
+			miss: []string{`ac`, `ad`},
+		},
+		{
+			name: "negated extglob does not match leading dot at root",
+			pat:  `!(foo)`,
+			mode: Filenames | EntireString | ExtendedOperators,
+			hits: []string{`bar`},
+			miss: []string{`.hidden`, `foo`},
+		},
+		{
+			name: "negated extglob does not match leading dot after slash",
+			pat:  `dir/!(foo)`,
+			mode: Filenames | EntireString | ExtendedOperators,
+			hits: []string{`dir/bar`},
+			miss: []string{`dir/.hidden`, `dir/foo`},
+		},
+		{
+			name: "negated extglob preserves literal slash path prefix",
+			pat:  `a/!(x)`,
+			mode: Filenames | EntireString | ExtendedOperators,
+			hits: []string{`a/y`},
+			miss: []string{`a/x`, `b/y`},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			matcher, err := ExtendedPatternMatcher(tt.pat, tt.mode)
+			if err != nil {
+				t.Fatalf("ExtendedPatternMatcher(%q) error = %v", tt.pat, err)
+			}
+			for _, hit := range tt.hits {
+				if !matcher(hit) {
+					t.Fatalf("matcher(%q) = false, want true", hit)
+				}
+			}
+			for _, miss := range tt.miss {
+				if matcher(miss) {
+					t.Fatalf("matcher(%q) = true, want false", miss)
+				}
+			}
+		})
+	}
+}

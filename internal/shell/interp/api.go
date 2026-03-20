@@ -153,7 +153,9 @@ type Runner struct {
 	exit     exitStatus
 	lastExit exitStatus
 
-	lastExpandExit exitStatus // used to surface exit statuses while expanding fields
+	lastExpandExit  exitStatus // used to surface exit statuses while expanding fields
+	currentStmtLine uint
+	skipStmtLine    uint
 
 	// bgProcs holds all background shells spawned by this runner.
 	// Their PIDs are 1-indexed, from 1 to len(bgProcs), with a "g" prefix
@@ -539,6 +541,16 @@ var bashOptsTable = [...]bashOpt{
 		supported:    true,
 	},
 	{
+		name:         "failglob",
+		defaultState: false,
+		supported:    true,
+	},
+	{
+		name:         "globskipdots",
+		defaultState: true,
+		supported:    true,
+	},
+	{
 		name:         "globstar",
 		defaultState: false,
 		supported:    true,
@@ -592,7 +604,6 @@ var bashOptsTable = [...]bashOpt{
 		name:         "extquote",
 		defaultState: true,
 	},
-	{name: "failglob"},
 	{
 		name:         "force_fignore",
 		defaultState: true,
@@ -660,6 +671,8 @@ const (
 	optExpandAliases
 	optExtDebug
 	optExtGlob
+	optFailGlob
+	optGlobSkipDots
 	optGlobStar
 	optLastPipe
 	optNoCaseGlob

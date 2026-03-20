@@ -988,11 +988,15 @@ func (cfg *Config) paramArgField(word *syntax.Word, ql quoteLevel) ([]fieldPart,
 			}
 			field = append(field, fieldPart{val: path})
 		case *syntax.ExtGlob:
-			pat, err := cfg.extGlobString(wp)
+			pat, err := cfg.extGlobPatternString(wp)
 			if err != nil {
 				return nil, err
 			}
-			field = append(field, fieldPart{val: pat})
+			raw, err := cfg.extGlobLiteralString(wp)
+			if err != nil {
+				return nil, err
+			}
+			field = append(field, fieldPart{val: raw, glob: pat})
 		default:
 			panic(fmt.Sprintf("unhandled word part: %T", wp))
 		}

@@ -232,6 +232,8 @@ func (r *Runner) updateExpandOpts() {
 	r.ecfg.DotGlob = r.opts[optDotGlob]
 	r.ecfg.NoCaseGlob = r.opts[optNoCaseGlob]
 	r.ecfg.NullGlob = r.opts[optNullGlob]
+	r.ecfg.FailGlob = r.opts[optFailGlob]
+	r.ecfg.GlobSkipDots = r.opts[optGlobSkipDots]
 	r.ecfg.NoUnset = r.opts[optNoUnset]
 	r.ecfg.ExtGlob = r.opts[optExtGlob]
 }
@@ -259,6 +261,7 @@ func (r *Runner) expandErr(err error) {
 		unsetErr       expand.UnsetParameterError
 		indirectErr    expand.InvalidIndirectExpansionError
 		invalidNameErr expand.InvalidVariableNameError
+		failGlobErr    expand.FailGlobError
 		arithSyntaxErr expand.ArithmSyntaxError
 		arithDiagErr   *expand.ArithmDiagnosticError
 	)
@@ -276,6 +279,11 @@ func (r *Runner) expandErr(err error) {
 		r.exit.code = 1
 	case errors.As(err, &invalidNameErr):
 		r.exit.code = 1
+	case errors.As(err, &failGlobErr):
+		r.exit.code = 1
+		if r.currentStmtLine != 0 {
+			r.skipStmtLine = r.currentStmtLine
+		}
 	case errors.As(err, &arithSyntaxErr):
 		r.exit.code = 1
 		r.exit.exiting = fatalExpansionErr
@@ -443,7 +451,20 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	if r.stop(ctx) {
 		return
 	}
+	line := st.Pos().Line()
+	if r.skipStmtLine != 0 {
+		switch {
+		case line == r.skipStmtLine:
+			return
+		case line > r.skipStmtLine:
+			r.skipStmtLine = 0
+		}
+	}
 	r.exit = exitStatus{}
+	r.currentStmtLine = line
+	defer func() {
+		r.currentStmtLine = 0
+	}()
 	if st.Background || st.Disown {
 		r2 := r.subshell(true)
 		st2 := *st
@@ -1473,7 +1494,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						case "-f", "-F", "-p":
 							declQuery = flag
 						default:
-							r.errf("%s: invalid option %q\n", declName, flag)
+							r.errf("%s: %s: invalid option\n", declName, flag)
+							if usage := declUsage(declName); usage != "" {
+								r.errf("%s", usage)
+							}
 							r.exit.code = 2
 							return false
 						}
@@ -1662,6 +1686,17 @@ func prefixAssignDeclClause(args []*syntax.Word, assigns []*syntax.Assign) *synt
 	}
 }
 
+func declUsage(name string) string {
+	switch name {
+	case "declare":
+		return "declare: usage: declare [-aAfFgiIlnrtux] [name[=value] ...] or declare -p [-aAfFilnrtux] [name ...]\n"
+	case "typeset":
+		return "typeset: usage: typeset [-aAfFgiIlnrtux] name[=value] ... or typeset -p [-aAfFilnrtux] [name ...]\n"
+	default:
+		return ""
+	}
+}
+
 func (r *Runner) lastpipeStmt(stmt *syntax.Stmt) (*syntax.Stmt, bool) {
 	if !r.opts[optLastPipe] || r.interactive || stmt == nil {
 		return nil, false
@@ -1711,6 +1746,9 @@ func (r *Runner) newParser(opts ...syntax.ParserOption) *syntax.Parser {
 	base := append([]syntax.ParserOption{}, opts...)
 	if r != nil && r.legacyBashCompat {
 		base = append(base, syntax.LegacyBashCompat(true))
+	}
+	if r != nil {
+		base = append(base, syntax.ParseExtGlob(r.opts[optExtGlob]))
 	}
 	if r != nil && r.opts[optExpandAliases] {
 		base = append(base, syntax.ExpandAliases(r.aliasResolver))
@@ -2022,9 +2060,35 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (StdinReader, error) {
 
 func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, error) {
 	r.ensureFDTable()
-	arg := r.expandingRedirectWord(func() string {
-		return r.literal(rd.Word)
-	})
+	arg := ""
+	wordText := ""
+	if rd.Word != nil {
+		wordText = printSyntaxNode(rd.Word)
+	}
+	switch rd.Op {
+	case syntax.RdrIn, syntax.RdrOut, syntax.AppOut, syntax.RdrInOut,
+		syntax.RdrAll, syntax.AppAll:
+		r.inRedirectWord++
+		fields, err := expand.RedirectFields(r.ecfg, rd.Word)
+		r.inRedirectWord--
+		r.expandErr(err)
+		if err != nil {
+			return nil, err
+		}
+		if len(fields) != 1 {
+			if wordText != "" {
+				r.errf("%s: ambiguous redirect\n", wordText)
+			} else {
+				r.errf("ambiguous redirect\n")
+			}
+			return nil, errors.New("ambiguous redirect")
+		}
+		arg = fields[0]
+	default:
+		arg = r.expandingRedirectWord(func() string {
+			return r.literal(rd.Word)
+		})
+	}
 
 	targetFD, allocated, err := r.redirectTargetFD(rd, arg)
 	if err != nil {
@@ -2125,6 +2189,11 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	case syntax.RdrOut, syntax.RdrAll:
 		writable = true
 		mode = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	}
+	if arg == "" {
+		err := &os.PathError{Op: "open", Path: arg, Err: syscall.ENOENT}
+		r.errf(": No such file or directory\n")
+		return nil, err
 	}
 	f, err := r.open(ctx, arg, mode, 0o666, false)
 	if err != nil {

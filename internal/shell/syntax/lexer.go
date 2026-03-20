@@ -420,6 +420,9 @@ skipSpace:
 // extendedGlob determines whether we're parsing a Bash extended globbing expression.
 // For example, whether `*` or `@` are followed by `(` to form `@(foo)`.
 func (p *Parser) extendedGlob() bool {
+	if !p.parseExtGlob {
+		return false
+	}
 	if p.lang.in(LangZsh) {
 		// Zsh supports Bash extended globs via the KSH_GLOB option.
 		// In Bash we would parse extended globs as [ExtGlob] nodes,

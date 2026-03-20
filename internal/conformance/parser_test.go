@@ -41,12 +41,15 @@ func TestParseSpecFileParsesMetadataAndCases(t *testing.T) {
 	}
 }
 
-func TestParseSpecFileIgnoresAnnotatedExpectationBlocks(t *testing.T) {
+func TestParseSpecFileCapturesAnnotatedOracleOverrides(t *testing.T) {
 	t.Parallel()
 
 	specFile, err := ParseSpecFile("oils/override.test.sh", ""+
 		"#### pipeline\n"+
 		"echo hi\n"+
+		"## STDOUT:\n"+
+		"expected\n"+
+		"## END\n"+
 		"## BUG bash STDOUT:\n"+
 		"hello\n"+
 		"## END\n"+
@@ -60,6 +63,41 @@ func TestParseSpecFileIgnoresAnnotatedExpectationBlocks(t *testing.T) {
 	}
 	if got, want := specFile.Cases[0].Script, "echo hi\necho bye\n"; got != want {
 		t.Fatalf("script = %q, want %q", got, want)
+	}
+	if specFile.Cases[0].Expectation.Stdout == nil || *specFile.Cases[0].Expectation.Stdout != "expected\n" {
+		t.Fatalf("expected stdout = %#v, want expected\\n", specFile.Cases[0].Expectation.Stdout)
+	}
+	override := specFile.Cases[0].OracleOverrides[OracleBash]
+	if override.Kind != OracleOverrideBug {
+		t.Fatalf("bash override kind = %q, want BUG", override.Kind)
+	}
+	if override.Stdout == nil || *override.Stdout != "hello\n" {
+		t.Fatalf("bash stdout override = %#v, want hello\\n", override.Stdout)
+	}
+	if override.Status == nil || *override.Status != 0 {
+		t.Fatalf("bash status override = %#v, want 0", override.Status)
+	}
+}
+
+func TestParseSpecFileIgnoresUnreachableLinesAfterExit(t *testing.T) {
+	t.Parallel()
+
+	specFile, err := ParseSpecFile("oils/exit.test.sh", ""+
+		"#### stop\n"+
+		"echo before\n"+
+		"exit\n"+
+		"echo after\n"+
+		"## N-I bash STDOUT:\n"+
+		"after\n"+
+		"## END\n")
+	if err != nil {
+		t.Fatalf("ParseSpecFile() error = %v", err)
+	}
+	if got, want := specFile.Cases[0].Script, "echo before\nexit\n"; got != want {
+		t.Fatalf("script = %q, want %q", got, want)
+	}
+	if _, ok := specFile.Cases[0].OracleOverrides[OracleBash]; ok {
+		t.Fatalf("unexpected oracle override after exit")
 	}
 }
 

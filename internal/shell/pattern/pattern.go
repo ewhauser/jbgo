@@ -258,15 +258,6 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 		}
 		sb.WriteString(regexp.QuoteMeta(string(c)))
 	case '[':
-		// TODO: surely char classes can be mixed with others, e.g. [[:foo:]xyz]
-		if name, err := charClass(sl.peekRest()); err != nil {
-			return &SyntaxError{msg: "charClass invalid", err: err}
-		} else if name != "" {
-			sb.WriteByte('[')
-			sb.WriteString(name)
-			sl.i += len(name)
-			break
-		}
 		if mode&Filenames != 0 {
 			for i, c := range sl.peekRest() {
 				if i > 0 && c == ']' {
@@ -294,24 +285,44 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				return &SyntaxError{msg: "[ was not matched with a closing ]"}
 			}
 		}
+		var prev byte
 		for {
-			sb.WriteByte(c)
 			switch c {
 			case '\x00':
 				return &SyntaxError{msg: "[ was not matched with a closing ]"}
-			case '\\':
-				if c = sl.next(); c != '0' {
-					sb.WriteByte(c)
+			case '[':
+				if name, consumed, err := charClass(sl.peekRest()); err != nil {
+					return &SyntaxError{msg: "charClass invalid", err: err}
+				} else if name != "" {
+					sb.WriteString(name)
+					sl.i += consumed
+					prev = ']'
+					c = sl.next()
+					continue
 				}
+				sb.WriteByte(c)
+				prev = c
+			case '\\':
+				sb.WriteByte(c)
+				if c = sl.next(); c == '\x00' {
+					return &SyntaxError{msg: "[ was not matched with a closing ]"}
+				}
+				sb.WriteByte(c)
+				prev = c
 			case '-':
-				start := sl.last()
+				sb.WriteByte(c)
 				end := sl.peekNext()
 				// TODO: what about overlapping ranges, like: [a--z]
-				if end != ']' && start > end {
-					return &SyntaxError{msg: fmt.Sprintf("invalid range: %c-%c", start, end)}
+				if prev != 0 && prev != '-' && end != ']' && end != '\x00' && end != '[' && end != '\\' && prev > end {
+					return &SyntaxError{msg: fmt.Sprintf("invalid range: %c-%c", prev, end)}
 				}
+				prev = c
 			case ']':
+				sb.WriteByte(c)
 				return nil
+			default:
+				sb.WriteByte(c)
+				prev = c
 			}
 			c = sl.next()
 		}
@@ -325,25 +336,25 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 	return nil
 }
 
-func charClass(s string) (string, error) {
-	if strings.HasPrefix(s, "[.") || strings.HasPrefix(s, "[=") {
-		return "", fmt.Errorf("collating features not available")
+func charClass(s string) (string, int, error) {
+	if strings.HasPrefix(s, ".") || strings.HasPrefix(s, "=") {
+		return "", 0, fmt.Errorf("collating features not available")
 	}
-	name, ok := strings.CutPrefix(s, "[:")
+	name, ok := strings.CutPrefix(s, ":")
 	if !ok {
-		return "", nil
+		return "", 0, nil
 	}
-	name, _, ok = strings.Cut(name, ":]]")
+	name, _, ok = strings.Cut(name, ":]")
 	if !ok {
-		return "", fmt.Errorf("[[: was not matched with a closing :]]")
+		return "", 0, fmt.Errorf("[[: was not matched with a closing :]]")
 	}
 	switch name {
 	case "alnum", "alpha", "ascii", "blank", "cntrl", "digit", "graph",
 		"lower", "print", "punct", "space", "upper", "word", "xdigit":
 	default:
-		return "", fmt.Errorf("invalid character class: %q", name)
+		return "", 0, fmt.Errorf("invalid character class: %q", name)
 	}
-	return s[:len(name)+5], nil
+	return "[:" + name + ":]", len(name) + 3, nil
 }
 
 // HasMeta returns whether a string contains any unescaped pattern
@@ -365,6 +376,10 @@ func HasMeta(pat string, mode Mode) bool {
 			i++
 		case '*', '?', '[':
 			return true
+		case '@', '!', '+':
+			if mode&ExtendedOperators != 0 && i+1 < len(pat) && pat[i+1] == '(' {
+				return true
+			}
 		}
 	}
 	return false
@@ -381,9 +396,14 @@ func QuoteMeta(pat string, mode Mode) string {
 loop:
 	for _, r := range pat {
 		switch r {
-		case '*', '?', '[', '\\':
+		case '*', '?', '[', ']', '-', '\\':
 			needsEscaping = true
 			break loop
+		case '@', '!', '+', '(', ')', '|':
+			if mode&ExtendedOperators != 0 {
+				needsEscaping = true
+				break loop
+			}
 		}
 	}
 	if !needsEscaping { // short-cut without a string copy
@@ -392,8 +412,12 @@ loop:
 	var sb strings.Builder
 	for _, r := range pat {
 		switch r {
-		case '*', '?', '[', '\\':
+		case '*', '?', '[', ']', '-', '\\':
 			sb.WriteByte('\\')
+		case '@', '!', '+', '(', ')', '|':
+			if mode&ExtendedOperators != 0 {
+				sb.WriteByte('\\')
+			}
 		}
 		sb.WriteRune(r)
 	}

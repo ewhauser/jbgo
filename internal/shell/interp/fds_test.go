@@ -142,3 +142,85 @@ printf '%%d\n' "$(( ${#line} + 1 ))"
 		t.Fatalf("stderr = %q, want %q", stderr, "foo52\n")
 	}
 }
+
+func TestRedirectToEmptyStringUsesBashStyleDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, `
+echo hi > ''
+echo status=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "status=1\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "status=1\n")
+	}
+	if stderr != ": No such file or directory\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, ": No such file or directory\n")
+	}
+}
+
+func TestBraceExpandedFileRedirectIsAmbiguous(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, `
+echo hi > a-{one,two}
+echo status=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "status=1\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "status=1\n")
+	}
+	if stderr != "a-{one,two}: ambiguous redirect\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "a-{one,two}: ambiguous redirect\n")
+	}
+}
+
+func TestDupRedirectTreatsGlobWordLiterally(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tenPath := filepath.Join(dir, "10")
+	literalPath := filepath.Join(dir, "1*")
+	if err := os.WriteFile(tenPath, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", tenPath, err)
+	}
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+		ReadDirHandler: func(_ context.Context, name string) ([]os.DirEntry, error) {
+			return os.ReadDir(name)
+		},
+	}, fmt.Sprintf(`
+echo should-not-be-on-stdout >& %s
+printf 'ten=%%s\n' "$(< %q)"
+printf 'literal=%%s\n' "$(< %q)"
+`, literalPath, tenPath, literalPath))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "ten=\nliteral=should-not-be-on-stdout\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "ten=\nliteral=should-not-be-on-stdout\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}

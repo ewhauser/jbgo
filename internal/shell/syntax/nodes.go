@@ -1361,9 +1361,11 @@ func (a *ArrayElem) End() Pos {
 	}
 }
 
-// ExtGlob represents a Bash extended globbing expression. Note that these are
-// parsed independently of whether or not `shopt -s extglob` has been used,
-// as the parser runs statically and independently of any interpreter.
+// ExtGlob represents a Bash extended globbing expression.
+//
+// Whether these nodes are recognized is controlled by the parser's
+// [ParseExtGlob] option. The gbash interpreter reparses input incrementally so
+// `shopt -s extglob` can affect later chunks in the same script.
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
 type ExtGlob struct {
