@@ -179,6 +179,55 @@ func currentScopeVar(env expand.WriteEnviron, name string) (expand.Variable, boo
 	}
 }
 
+func currentScopeVars(env expand.WriteEnviron, f func(name string, vr expand.Variable) bool) {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		for _, vr := range env.values {
+			if !f(vr.Name, vr.Variable) {
+				return
+			}
+		}
+	case *shadowWriteEnviron:
+		if env.shadowSet && !f(env.shadowName, env.shadow) {
+			return
+		}
+		currentScopeVars(env.parent, f)
+	}
+}
+
+func localScopeEnv(env expand.WriteEnviron) expand.WriteEnviron {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		if env.funcScope {
+			return env
+		}
+		parent, ok := env.parent.(expand.WriteEnviron)
+		if !ok {
+			return env
+		}
+		return localScopeEnv(parent)
+	case *shadowWriteEnviron:
+		return localScopeEnv(env.parent)
+	default:
+		return env
+	}
+}
+
+func globalWriteEnv(env expand.WriteEnviron) expand.WriteEnviron {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		parent, ok := env.parent.(expand.WriteEnviron)
+		if !ok {
+			return env
+		}
+		return globalWriteEnv(parent)
+	case *shadowWriteEnviron:
+		return globalWriteEnv(env.parent)
+	default:
+		return env
+	}
+}
+
 func (r *Runner) lookupVar(name string) expand.Variable {
 	if name == "" {
 		panic("variable name must not be empty")

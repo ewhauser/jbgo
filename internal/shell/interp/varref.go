@@ -487,6 +487,9 @@ func (r *Runner) unsetVarByRef(ref *syntax.VarRef) error {
 	if err != nil {
 		return err
 	}
+	if prev.ReadOnly {
+		return fmt.Errorf("%s: cannot unset: readonly variable", ref.Name.Value)
+	}
 	if ref == nil || ref.Index == nil {
 		r.delVar(ref.Name.Value)
 		return nil

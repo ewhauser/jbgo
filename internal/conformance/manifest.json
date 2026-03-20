@@ -95,10 +95,6 @@
           "mode": "xfail",
           "reason": "gbash cannot represent bash's mixed scalar-plus-associative variables"
         },
-        "oils/array-compat.test.sh::value.BashArray internal representation - Indexed": {
-          "mode": "xfail",
-          "reason": "gbash's declare -a listing output still differs from bash's indexed-array introspection"
-        },
         "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashArray)": {
           "mode": "xfail",
           "reason": "gbash still expands ~ in keyed indexed-array literals using the temporary HOME binding unlike bash"
@@ -159,14 +155,6 @@
           "mode": "xfail",
           "reason": "gbash still follows bash's export behavior instead of rejecting array export under strict_array"
         },
-        "oils/assign-deferred.test.sh::'builtin' prefix is allowed on assignments": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-deferred.test.sh::'command' prefix is allowed on assignments": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign-deferred.test.sh::export a[7]=8": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -175,15 +163,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign-extended.test.sh::ble.sh: eval -- \"$(declare -p var arr)\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign-extended.test.sh::declare": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -F prints function names": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -199,14 +179,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign-extended.test.sh::declare -p and value.Undef": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -p foo=bar doesn't make sense": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign-extended.test.sh::declare -p var": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -215,31 +187,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign-extended.test.sh::eval -- \"$(declare -p arr)\" (restore arrays w/ unset elements)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::function name with /": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::invalid var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::myvar=typeset (another form of dynamic assignment)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign-extended.test.sh::syntax error in array assignment": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/assign-extended.test.sh::typeset +r removes read-only attribute (TODO: documented in bash to do nothing)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::typeset +x": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -255,22 +207,6 @@
           "mode": "xfail",
           "reason": "quoted here-doc content still loses a doubled backslash before read sees it, so this case remains blocked on heredoc handling rather than read itself"
         },
-        "oils/assign-extended.test.sh::typeset -ar makes it readonly": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::typeset -p": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::typeset -r makes a string readonly": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::unset and shell funcs": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign.test.sh::\"readonly -a arr\" and \"readonly -A dict\" should not not remove existing arrays": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -280,10 +216,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/assign.test.sh::Test above without 'local' (which is not POSIX)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign.test.sh::aliased assignment doesn't split": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -323,35 +255,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=(declare v); \"${a[@]}\" fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [40] BUG: a=declare; \"$a\" v=1 fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [52] BUG: \\builtin local v=1 fails": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::Issue #1069 [56] BUG: declare -p unset does not print any error message": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/ble-idioms.test.sh::Issue #1069 [59] - Assigning Str to BashArray/BashAssoc should not remove BashArray/BashAssoc": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/ble-idioms.test.sh::recursive arith: recursion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::shift unshift reverse": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-idioms.test.sh::shopt -u expand_aliases and eval": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -464,14 +372,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/bugs.test.sh::process sub <(echo 42 | tee PWNED) not allowed": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::unset readonly -- multiple lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::unset readonly -- one line": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -614,10 +514,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-eval-source.test.sh::eval accepts/ignores --": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-eval-source.test.sh::eval usage": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -674,48 +570,12 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-meta-assign.test.sh::\\builtin declare - ble.sh relies on it": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::\\command readonly - similar issue": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "darwin"
           ]
-        },
-        "oils/builtin-meta-assign.test.sh::builtin declare,local": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::builtin typeset, export,readonly": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::command export,readonly": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::command local": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::dynamic builtin command ASSIGN, command builtin ASSIGN": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::export, builtin export": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-meta-assign.test.sh::static builtin command ASSIGN, command builtin ASSIGN": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-meta.test.sh::builtin ls not found": {
           "mode": "xfail",
@@ -1311,15 +1171,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-vars.test.sh::Unset a function without -f": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-vars.test.sh::Unset and scope (bug #653)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-vars.test.sh::Unset readonly variable": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1551,10 +1403,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/exit-status.test.sh::func subshell OverflowError https://github.com/oilshell/oil/issues/996": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/exit-status.test.sh::subshell OverflowError https://github.com/oilshell/oil/issues/996": {
           "mode": "xfail",
@@ -2294,10 +2142,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/sh-func.test.sh::Scope of global variable when sourced in function (Shell Functions aren't Closures)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/sh-func.test.sh::Subshell function": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

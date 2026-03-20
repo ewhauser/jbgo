@@ -126,15 +126,21 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 
 		for _, arg := range args {
+			declaredVar := r.lookupVar(arg).Declared()
 			if vars {
 				if ref, err := r.strictVarRef(arg); err == nil {
-					if err := r.unsetVarByRef(ref); err != nil {
-						r.errf("unset: %v\n", err)
-						exit.code = 1
+					if ref.Index == nil && !declaredVar {
+						// Bash's plain `unset foo` falls through to shell functions
+						// when there is no variable by that name.
+					} else {
+						if err := r.unsetVarByRef(ref); err != nil {
+							r.errf("unset: %v\n", err)
+							exit.code = 1
+						}
+						continue
 					}
-					continue
 				}
-				if r.lookupVar(arg).Declared() {
+				if declaredVar {
 					r.delVar(arg)
 					continue
 				}
@@ -384,11 +390,17 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			return exit
 		}
 		exit = r.builtin(ctx, pos, args[0], args[1:])
+	case "declare", "local", "export", "readonly", "typeset", "nameref":
+		r.cmd(ctx, declClauseFromFields(name, args))
+		return r.exit
 	case "type":
 		return r.typeBuiltin(ctx, args)
 	case "hash":
 		// TODO: implement. for now, having this as a no-op is better than nothing.
 	case "eval":
+		if len(args) > 0 && args[0] == "--" {
+			args = args[1:]
+		}
 		src := strings.Join(args, " ")
 		r.evalDepth++
 		defer func() {
@@ -977,9 +989,9 @@ func mapfileBuiltinTargetVar(prev expand.Variable, preserveExisting bool) expand
 		}
 	}
 	prev.Kind = expand.Indexed
-	prev.Set = false
+	prev.Set = true
 	prev.Str = ""
-	prev.List = nil
+	prev.List = []string{}
 	prev.Map = nil
 	prev.Indices = nil
 	return prev

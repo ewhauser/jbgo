@@ -529,6 +529,11 @@ var bashOptsTable = [...]bashOpt{
 		supported:    true,
 	},
 	{
+		name:         "extdebug",
+		defaultState: false,
+		supported:    true,
+	},
+	{
 		name:         "extglob",
 		defaultState: false,
 		supported:    true,
@@ -583,7 +588,6 @@ var bashOptsTable = [...]bashOpt{
 	{name: "direxpand"},
 	{name: "dirspell"},
 	{name: "execfail"},
-	{name: "extdebug"},
 	{
 		name:         "extquote",
 		defaultState: true,
@@ -654,6 +658,7 @@ const (
 	// supported options in [bashOptsTable]
 	optDotGlob
 	optExpandAliases
+	optExtDebug
 	optExtGlob
 	optGlobStar
 	optLastPipe
@@ -918,6 +923,8 @@ func (r *Runner) subshell(background bool) *Runner {
 		interactive:            r.interactive,
 		commandString:          r.commandString,
 		legacyBashCompat:       r.legacyBashCompat,
+		inFunc:                 r.inFunc,
+		inSource:               r.inSource,
 		exit:                   r.exit,
 		lastExit:               r.lastExit,
 		suppressXTrace:         r.suppressXTrace,

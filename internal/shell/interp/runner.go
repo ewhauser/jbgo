@@ -12,7 +12,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -316,7 +316,7 @@ func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool, source string,
 		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)
-	if err != nil && r.exit.ok() {
+	if command && err != nil && r.exit.code == 0 {
 		r.exit.code = 1
 	}
 	return n
@@ -933,12 +933,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		local, global := false, false
 		var modes []string
 		valType := ""
-		declQuery := "" // "-f" or "-p" for query mode
+		declQuery := "" // "-f", "-F", or "-p" for query mode
 		allowPlusFlags := false
-		hadNonFlagOperand := false
 		builtinTraceFields := []string{cm.Variant.Value}
 		var leadingTraceLines []string
 		var trailingTraceLines []string
+		declName := cm.Variant.Value
 		switch cm.Variant.Value {
 		case "declare":
 			// When used in a function, "declare" acts as "local"
@@ -967,6 +967,167 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			r.errf(format, a...)
 		}
+		printFunction := func(name string, body *syntax.Stmt) {
+			r.outf("%s()\n", name)
+			printer := syntax.NewPrinter()
+			var buf bytes.Buffer
+			printer.Print(&buf, body)
+			r.outf("%s\n", buf.String())
+		}
+		printDeclaredVar := func(name string, vr expand.Variable) {
+			flags := vr.Flags()
+			if flags == "" {
+				flags = "--"
+			} else {
+				flags = "-" + flags
+			}
+			switch vr.Kind {
+			case expand.Indexed:
+				r.outf("declare %s %s", flags, name)
+				if !vr.IsSet() {
+					r.out("\n")
+					return
+				}
+				r.out("=(")
+				for i, index := range vr.IndexedIndices() {
+					if i > 0 {
+						r.out(" ")
+					}
+					val, _ := vr.IndexedGet(index)
+					r.outf("[%d]=%s", index, bashDeclPrintValue(val))
+				}
+				r.out(")\n")
+			case expand.Associative:
+				r.outf("declare %s %s", flags, name)
+				if !vr.IsSet() {
+					r.out("\n")
+					return
+				}
+				r.out("=(")
+				first := true
+				for _, k := range expand.AssociativeKeys(vr.Map) {
+					v := vr.Map[k]
+					if !first {
+						r.out(" ")
+					}
+					r.outf("[%s]=%s", bashDeclAssocKey(k), bashDeclPrintValue(v))
+					first = false
+				}
+				if !first {
+					r.out(" ")
+				}
+				r.out(")\n")
+			default:
+				r.outf("declare %s %s", flags, name)
+				if !vr.IsSet() {
+					r.out("\n")
+					return
+				}
+				r.outf("=%s\n", bashDeclPrintValue(vr.Str))
+			}
+		}
+		printPlainVar := func(name string, vr expand.Variable) {
+			switch vr.Kind {
+			case expand.Indexed, expand.Associative:
+				printDeclaredVar(name, vr)
+			default:
+				if !vr.IsSet() {
+					r.outf("%s\n", name)
+					return
+				}
+				r.outf("%s=%s\n", name, bashDeclPlainValue(vr.Str))
+			}
+		}
+		listedVars := func(currentOnly bool) map[string]expand.Variable {
+			seen := make(map[string]expand.Variable)
+			if currentOnly {
+				currentScopeVars(localScopeEnv(r.writeEnv), func(name string, vr expand.Variable) bool {
+					seen[name] = vr
+					return true
+				})
+				return seen
+			}
+			r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+				seen[name] = vr
+				return true
+			})
+			return seen
+		}
+		matchesVarFilter := func(vr expand.Variable) bool {
+			if !vr.Declared() {
+				return false
+			}
+			switch valType {
+			case "-a":
+				if vr.Kind != expand.Indexed {
+					return false
+				}
+			case "-A":
+				if vr.Kind != expand.Associative {
+					return false
+				}
+			case "-n":
+				if vr.Kind != expand.NameRef {
+					return false
+				}
+			}
+			if declQuery == "" {
+				switch declName {
+				case "readonly":
+					return vr.ReadOnly
+				case "export":
+					return vr.Exported
+				case "local":
+					return vr.Local
+				case "nameref":
+					return vr.Kind == expand.NameRef
+				}
+			}
+			for _, mode := range modes {
+				switch mode {
+				case "-r":
+					if !vr.ReadOnly {
+						return false
+					}
+				case "-x":
+					if !vr.Exported {
+						return false
+					}
+				case "-i":
+					if !vr.Integer {
+						return false
+					}
+				case "-l":
+					if !vr.Lower {
+						return false
+					}
+				case "-u":
+					if !vr.Upper {
+						return false
+					}
+				}
+			}
+			return true
+		}
+		printListedVars := func(currentOnly, plain bool) {
+			seen := listedVars(currentOnly)
+			names := make([]string, 0, len(seen))
+			for name, vr := range seen {
+				if !matchesVarFilter(vr) {
+					continue
+				}
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				vr := seen[name]
+				if plain {
+					printPlainVar(name, vr)
+				} else {
+					printDeclaredVar(name, vr)
+				}
+			}
+		}
 		arrayConversionError := func(name string, vr expand.Variable) string {
 			switch {
 			case valType == "-A" && vr.Kind == expand.Indexed:
@@ -977,249 +1138,318 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return ""
 			}
 		}
+		runWithWriteEnv := func(env expand.WriteEnviron, fn func() bool) bool {
+			if env == r.writeEnv {
+				return fn()
+			}
+			origEnv := r.writeEnv
+			r.writeEnv = env
+			defer func() {
+				r.writeEnv = origEnv
+			}()
+			return fn()
+		}
 		declLookupVar := func(name string) expand.Variable {
 			if !local || global {
 				return r.lookupVar(name)
 			}
-			if vr, ok := currentScopeVar(r.writeEnv, name); ok {
+			if vr, ok := currentScopeVar(localScopeEnv(r.writeEnv), name); ok {
+				if !vr.Local {
+					return expand.Variable{}
+				}
 				return vr
 			}
 			return expand.Variable{}
 		}
-		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool) bool {
+		onlyFlagOperands := true
+		processNamedOperand := func(ref *syntax.VarRef, as *syntax.Assign, isAssign bool, raw string) bool {
 			name := ref.Name.Value
-			if !syntax.ValidName(name) {
-				if allowPlusFlags && !strings.ContainsAny(name, "[]") {
-					r.errf("declare: invalid name %q\n", name)
+			if declQuery != "-f" && declQuery != "-F" && !syntax.ValidName(name) {
+				if allowPlusFlags && strings.HasPrefix(raw, "+") && !strings.ContainsAny(name, "[]") {
+					r.errf("%s: invalid name %q\n", declName, name)
 				} else {
-					r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, name)
+					r.errf("%s: `%s': not a valid identifier\n", declName, name)
 				}
 				r.exit.code = 1
 				return false
 			}
+			onlyFlagOperands = false
 			if tracingEnabled && !isAssign {
 				builtinTraceFields = append(builtinTraceFields, name)
+			}
+			if raw == "" {
+				raw = name
 			}
 			if declQuery == "-f" {
 				// declare -f name: print function definition.
 				// Bash silently returns exit 1 for missing functions.
 				if body := r.funcs[name]; body != nil {
-					r.outf("%s()\n", name)
-					printer := syntax.NewPrinter()
-					var buf bytes.Buffer
-					printer.Print(&buf, body)
-					r.outf("%s\n", buf.String())
+					printFunction(name, body)
+				} else {
+					r.exit.code = 1
+				}
+				return true
+			}
+			if declQuery == "-F" {
+				if body := r.funcs[name]; body != nil {
+					if r.opts[optExtDebug] {
+						source := r.funcSource(name)
+						if source == "" {
+							source = "main"
+						}
+						r.outf("%s %d %s\n", name, body.Pos().Line(), source)
+					} else {
+						r.outf("%s\n", name)
+					}
 				} else {
 					r.exit.code = 1
 				}
 				return true
 			}
 			if declQuery == "-p" {
-				// declare -p name: print variable with attributes.
-				vr := r.lookupVar(name)
+				if declName == "readonly" || declName == "export" {
+					return true
+				}
+				var vr expand.Variable
+				if declName == "local" {
+					var ok bool
+					vr, ok = currentScopeVar(localScopeEnv(r.writeEnv), name)
+					if !ok || !vr.Local {
+						vr = expand.Variable{}
+					}
+				} else {
+					vr = r.lookupVar(name)
+				}
 				if !vr.Declared() {
-					r.errf("declare: %s: not found\n", name)
+					declErrf("%s: %s: not found\n", declName, raw)
 					r.exit.code = 1
 					return true
 				}
-				r.printDeclaredVar(name, vr)
+				printDeclaredVar(name, vr)
 				return true
 			}
-			vr := declLookupVar(name)
-			if msg := arrayConversionError(name, vr); msg != "" {
-				declErrf("%s\n", msg)
-				r.exit.code = 1
-				return true
+			targetEnv := r.writeEnv
+			if global && r.inFunc {
+				targetEnv = globalWriteEnv(r.writeEnv)
 			}
-			arrayAssignTrace := ""
-			if !isAssign {
-				if valType == "-A" {
-					vr.Kind = expand.Associative
-				} else if valType == "-a" {
-					vr.Kind = expand.Indexed
-				} else if valType == "-n" {
-					switch vr.Kind {
-					case expand.Indexed, expand.Associative:
-						vr.Kind = expand.NameRef
-						vr.Str = vr.String()
-						vr.List = nil
-						vr.Indices = nil
-						vr.Map = nil
-					case expand.NameRef, expand.String:
-						vr.Kind = expand.NameRef
-					default:
-						vr.Kind = expand.NameRef
-						vr.Str = ""
-					}
-				} else if valType == "+n" {
-					if vr.Kind == expand.NameRef {
-						vr.Kind = expand.String
-						vr.List = nil
-						vr.Indices = nil
-						vr.Map = nil
+			return runWithWriteEnv(targetEnv, func() bool {
+				vr := declLookupVar(name)
+				if msg := arrayConversionError(name, vr); msg != "" {
+					if r.evalDepth > 0 {
+						declErrf("%s\n", msg)
 					} else {
-						vr.Kind = expand.KeepValue
+						declErrf("%s: %s\n", declName, msg)
 					}
-				} else if valType == "+a" || valType == "+A" {
-					// Remove array/assoc attribute, convert to string.
-					if vr.Kind == expand.Indexed || vr.Kind == expand.Associative {
-						vr.Kind = expand.String
-						vr.Str = vr.String()
-						vr.List = nil
-						vr.Indices = nil
-						vr.Map = nil
-					}
-				} else {
-					vr.Kind = expand.KeepValue
+					r.exit.code = 1
+					return true
 				}
-			} else {
-				var ok bool
-				if valType == "+a" || valType == "+A" {
-					// +a/+A with a value: treat as string assignment.
-					vr, arrayAssignTrace, ok = r.assignVal(vr, as, "")
-				} else {
-					vr, arrayAssignTrace, ok = r.assignVal(vr, as, valType)
-					if valType == "-a" && as.Value != nil && as.Array == nil && as.Ref != nil && as.Ref.Index == nil {
+				clearReadonly := false
+				for _, mode := range modes {
+					if mode == "+r" {
+						clearReadonly = true
+						break
+					}
+				}
+				if clearReadonly && vr.ReadOnly {
+					r.errf("%s: readonly variable\n", name)
+					r.exit.code = 1
+					return true
+				}
+				arrayAssignTrace := ""
+				if !isAssign {
+					switch valType {
+					case "-A":
+						vr.Kind = expand.Associative
+					case "-a":
 						vr.Kind = expand.Indexed
-						vr.List = []string{vr.Str}
-						vr.Str = ""
-						vr.Map = nil
-					}
-				}
-				if !ok || r.exit.fatalExit || r.exit.exiting {
-					return false
-				}
-				// For integer append in declare context, redo as arithmetic addition.
-				if as.Append && as.Value != nil && vr.Kind == expand.String {
-					isInt := vr.Integer
-					if !isInt {
-						for _, mode := range modes {
-							if mode == "-i" {
-								isInt = true
-							} else if mode == "+i" {
-								isInt = false
-							}
+					case "-n":
+						switch vr.Kind {
+						case expand.Indexed, expand.Associative:
+							vr.Kind = expand.NameRef
+							vr.Str = vr.String()
+							vr.List = nil
+							vr.Indices = nil
+							vr.Map = nil
+						case expand.NameRef, expand.String:
+							vr.Kind = expand.NameRef
+						default:
+							vr.Kind = expand.NameRef
+							vr.Str = ""
+						}
+					case "+n":
+						if vr.Kind == expand.NameRef {
+							vr.Kind = expand.String
+							vr.List = nil
+							vr.Indices = nil
+							vr.Map = nil
+						} else {
+							vr.Kind = expand.KeepValue
+						}
+					case "+a", "+A":
+						// Remove array/assoc attribute, convert to string.
+						if vr.Kind == expand.Indexed || vr.Kind == expand.Associative {
+							vr.Kind = expand.String
+							vr.Str = vr.String()
+							vr.List = nil
+							vr.Indices = nil
+							vr.Map = nil
+						}
+					default:
+						if !vr.Declared() {
+							vr.Kind = expand.String
+						} else {
+							vr.Kind = expand.KeepValue
 						}
 					}
-					if isInt {
-						oldVal := r.evalIntegerAttr(r.lookupVar(name).String())
-						newVal := r.evalIntegerAttr(r.assignLiteral(as))
-						vr.Str = strconv.Itoa(oldVal + newVal)
+				} else {
+					var ok bool
+					if valType == "+a" || valType == "+A" {
+						// +a/+A with a value: treat as string assignment.
+						vr, arrayAssignTrace, ok = r.assignVal(vr, as, "")
+					} else {
+						vr, arrayAssignTrace, ok = r.assignVal(vr, as, valType)
+						if valType == "-a" && as.Value != nil && as.Array == nil && as.Ref != nil && as.Ref.Index == nil {
+							vr.Kind = expand.Indexed
+							vr.List = []string{vr.Str}
+							vr.Str = ""
+							vr.Map = nil
+						}
+					}
+					if !ok || r.exit.fatalExit || r.exit.exiting {
+						return false
+					}
+					// For integer append in declare context, redo as arithmetic addition.
+					if as.Append && as.Value != nil && vr.Kind == expand.String {
+						isInt := vr.Integer
+						if !isInt {
+							for _, mode := range modes {
+								if mode == "-i" {
+									isInt = true
+								} else if mode == "+i" {
+									isInt = false
+								}
+							}
+						}
+						if isInt {
+							oldVal := r.evalIntegerAttr(r.lookupVar(name).String())
+							newVal := r.evalIntegerAttr(r.assignLiteral(as))
+							vr.Str = strconv.Itoa(oldVal + newVal)
+						}
 					}
 				}
-			}
-			updates := attrUpdate{}
-			// Apply attribute modes before transforming the value,
-			// so that "declare -i foo=2+3" evaluates arithmetic.
-			for _, mode := range modes {
-				switch mode {
-				case "-i":
-					updates.hasInteger = true
-					updates.integer = true
-					vr.Integer = true
-				case "+i":
-					updates.hasInteger = true
-					updates.integer = false
-					vr.Integer = false
-				case "-l":
-					updates.hasLower = true
-					updates.lower = true
-					updates.hasUpper = true
-					updates.upper = false
-					vr.Lower = true
-					vr.Upper = false // -l and -u are mutually exclusive
-				case "+l":
-					updates.hasLower = true
-					updates.lower = false
-					vr.Lower = false
-				case "-u":
-					updates.hasUpper = true
-					updates.upper = true
-					updates.hasLower = true
-					updates.lower = false
-					vr.Upper = true
-					vr.Lower = false // -l and -u are mutually exclusive
-				case "+u":
-					updates.hasUpper = true
-					updates.upper = false
-					vr.Upper = false
+				updates := attrUpdate{}
+				// Apply attribute modes before transforming the value,
+				// so that "declare -i foo=2+3" evaluates arithmetic.
+				for _, mode := range modes {
+					switch mode {
+					case "-i":
+						updates.hasInteger = true
+						updates.integer = true
+						vr.Integer = true
+					case "+i":
+						updates.hasInteger = true
+						updates.integer = false
+						vr.Integer = false
+					case "-l":
+						updates.hasLower = true
+						updates.lower = true
+						updates.hasUpper = true
+						updates.upper = false
+						vr.Lower = true
+						vr.Upper = false // -l and -u are mutually exclusive
+					case "+l":
+						updates.hasLower = true
+						updates.lower = false
+						vr.Lower = false
+					case "-u":
+						updates.hasUpper = true
+						updates.upper = true
+						updates.hasLower = true
+						updates.lower = false
+						vr.Upper = true
+						vr.Lower = false // -l and -u are mutually exclusive
+					case "+u":
+						updates.hasUpper = true
+						updates.upper = false
+						vr.Upper = false
+					}
 				}
-			}
-			if global {
-				updates.hasLocal = true
-				updates.local = false
-				vr.Local = false
-			} else if local {
-				updates.hasLocal = true
-				updates.local = true
-				vr.Local = true
-			}
-			for _, mode := range modes {
-				switch mode {
-				case "-x":
-					updates.hasExported = true
-					updates.exported = true
-					vr.Exported = true
-				case "+x":
-					updates.hasExported = true
-					updates.exported = false
-					vr.Exported = false
-				case "-r":
-					updates.hasReadOnly = true
-					updates.readOnly = true
-					vr.ReadOnly = true
-				case "+r":
-					updates.hasReadOnly = true
-					updates.readOnly = false
-					vr.ReadOnly = false
+				if global {
+					updates.hasLocal = true
+					updates.local = false
+					vr.Local = false
+				} else if local {
+					updates.hasLocal = true
+					updates.local = true
+					vr.Local = true
 				}
-			}
-			r.applyVarAttrs(&vr)
-			var nameRefErr error
-			if vr.Kind == expand.NameRef {
-				nameRefErr = validateNameRefTarget(vr.Str)
-			}
-			if !isAssign {
-				r.setVar(name, vr)
-				if nameRefErr != nil {
-					r.errf("%s: %v\n", cm.Variant.Value, nameRefErr)
+				for _, mode := range modes {
+					switch mode {
+					case "-x":
+						updates.hasExported = true
+						updates.exported = true
+						vr.Exported = true
+					case "+x":
+						updates.hasExported = true
+						updates.exported = false
+						vr.Exported = false
+					case "-r":
+						updates.hasReadOnly = true
+						updates.readOnly = true
+						vr.ReadOnly = true
+					case "+r":
+						updates.hasReadOnly = true
+						updates.readOnly = false
+						vr.ReadOnly = false
+					}
+				}
+				r.applyVarAttrs(&vr)
+				var nameRefErr error
+				if vr.Kind == expand.NameRef {
+					nameRefErr = validateNameRefTarget(vr.Str)
+				}
+				if !isAssign {
+					r.setVar(name, vr)
+					if nameRefErr != nil {
+						r.errf("%s: %v\n", cm.Variant.Value, nameRefErr)
+						r.exit.code = 1
+					}
+					return true
+				}
+				if vr.Kind == expand.NameRef && as.Ref != nil && as.Ref.Index == nil {
+					r.setVar(name, vr)
+					if nameRefErr != nil {
+						r.errf("%s: %v\n", cm.Variant.Value, nameRefErr)
+						r.exit.code = 1
+					}
+					if tracingEnabled {
+						builtinTraceFields = append(builtinTraceFields, traceAssignFieldRaw(as.Ref, vr, as.Append))
+					}
+					return true
+				}
+				if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr, as.Append, updates); err != nil {
+					r.errf("%v\n", err)
 					r.exit.code = 1
-				}
-				return true
-			}
-			if vr.Kind == expand.NameRef && as.Ref != nil && as.Ref.Index == nil {
-				r.setVar(name, vr)
-				if nameRefErr != nil {
-					r.errf("%s: %v\n", cm.Variant.Value, nameRefErr)
-					r.exit.code = 1
+					return false
 				}
 				if tracingEnabled {
-					builtinTraceFields = append(builtinTraceFields, traceAssignFieldRaw(as.Ref, vr, as.Append))
+					switch {
+					case cm.Variant.Value == "readonly":
+						builtinTraceFields = append(builtinTraceFields, traceAssignFieldRaw(as.Ref, vr, as.Append))
+						if as.Array != nil {
+							trailingTraceLines = append(trailingTraceLines, arrayAssignTrace)
+						} else if as.Value != nil {
+							trailingTraceLines = append(trailingTraceLines, r.traceAssignString(as.Ref, vr, as.Append))
+						}
+					case (cm.Variant.Value == "declare" || cm.Variant.Value == "typeset") && as.Array != nil:
+						leadingTraceLines = append(leadingTraceLines, arrayAssignTrace)
+						builtinTraceFields = append(builtinTraceFields, name)
+					default:
+						builtinTraceFields = append(builtinTraceFields, traceAssignFieldRaw(as.Ref, vr, as.Append))
+					}
 				}
 				return true
-			}
-			if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr, as.Append, updates); err != nil {
-				r.errf("%v\n", err)
-				r.exit.code = 1
-				return false
-			}
-			if tracingEnabled {
-				switch {
-				case cm.Variant.Value == "readonly":
-					builtinTraceFields = append(builtinTraceFields, traceAssignFieldRaw(as.Ref, vr, as.Append))
-					if as.Array != nil {
-						trailingTraceLines = append(trailingTraceLines, arrayAssignTrace)
-					} else if as.Value != nil {
-						trailingTraceLines = append(trailingTraceLines, r.traceAssignString(as.Ref, vr, as.Append))
-					}
-				case (cm.Variant.Value == "declare" || cm.Variant.Value == "typeset") && as.Array != nil:
-					leadingTraceLines = append(leadingTraceLines, arrayAssignTrace)
-					builtinTraceFields = append(builtinTraceFields, name)
-				default:
-					builtinTraceFields = append(builtinTraceFields, traceAssignFieldRaw(as.Ref, vr, as.Append))
-				}
-			}
-			return true
+			})
 		}
 		var processOperand func(syntax.DeclOperand) bool
 		processOperand = func(operand syntax.DeclOperand) bool {
@@ -1232,7 +1462,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						switch flag := fp.flag(); flag {
 						case "-x", "-r", "-i", "-l", "-u":
 							modes = append(modes, flag)
-						case "+i", "+l", "+u":
+						case "+x", "+r", "+i", "+l", "+u":
 							modes = append(modes, flag)
 						case "-a", "-A", "-n":
 							valType = flag
@@ -1240,10 +1470,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 							valType = flag
 						case "-g":
 							global = true
-						case "-f", "-p":
+						case "-f", "-F", "-p":
 							declQuery = flag
 						default:
-							r.errf("declare: invalid option %q\n", flag)
+							r.errf("%s: invalid option %q\n", declName, flag)
 							r.exit.code = 2
 							return false
 						}
@@ -1253,16 +1483,17 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					}
 					return true
 				}
-				hadNonFlagOperand = true
-				return processNamedOperand(&syntax.VarRef{Name: &syntax.Lit{Value: name}}, nil, false)
+				return processNamedOperand(&syntax.VarRef{Name: &syntax.Lit{Value: name}}, nil, false, name)
 			case *syntax.DeclName:
-				hadNonFlagOperand = true
-				return processNamedOperand(operand.Ref, nil, false)
+				return processNamedOperand(operand.Ref, nil, false, declOperandString(operand))
 			case *syntax.DeclAssign:
-				hadNonFlagOperand = true
-				return processNamedOperand(operand.Assign.Ref, operand.Assign, true)
+				return processNamedOperand(operand.Assign.Ref, operand.Assign, true, declOperandString(operand))
 			case *syntax.DeclDynamicWord:
-				for _, field := range r.fields(operand.Word) {
+				fields := r.fields(operand.Word)
+				if len(fields) == 0 {
+					fields = []string{r.literal(operand.Word)}
+				}
+				for _, field := range fields {
 					parsed, err := parseDeclOperandField(field)
 					splitFields := []string{field}
 					if strings.ContainsAny(field, "[]") && (err != nil || parsed == nil) {
@@ -1273,6 +1504,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 							parsed, err = parseDeclOperandField(splitField)
 						}
 						if err != nil {
+							onlyFlagOperands = false
 							if strings.ContainsAny(splitField, "[]") {
 								parsed = nil
 								err = nil
@@ -1283,6 +1515,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 							}
 						}
 						if parsed == nil {
+							onlyFlagOperands = false
 							r.errf("%s: `%s': not a valid identifier\n", cm.Variant.Value, splitField)
 							r.exit.code = 1
 							continue
@@ -1311,8 +1544,19 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 								Ref: &syntax.VarRef{Name: &syntax.Lit{Value: r.literal(dyn.Word)}},
 							}
 						}
-						if !processOperand(parsed) {
-							return false
+						switch parsed := parsed.(type) {
+						case *syntax.DeclName:
+							if !processNamedOperand(parsed.Ref, nil, false, splitField) {
+								return false
+							}
+						case *syntax.DeclAssign:
+							if !processNamedOperand(parsed.Assign.Ref, parsed.Assign, true, splitField) {
+								return false
+							}
+						default:
+							if !processOperand(parsed) {
+								return false
+							}
 						}
 						if r.exit.fatalExit || r.exit.exiting {
 							return false
@@ -1329,8 +1573,38 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return
 			}
 		}
-		if !hadNonFlagOperand && (declQuery == "-p" || valType != "" || len(modes) > 0) {
-			r.printDeclaredVars(valType, modes)
+		if onlyFlagOperands {
+			switch declQuery {
+			case "-f":
+				names := make([]string, 0, len(r.funcs))
+				for name := range r.funcs {
+					names = append(names, name)
+				}
+				sort.Strings(names)
+				for _, name := range names {
+					printFunction(name, r.funcs[name])
+				}
+			case "-F":
+				names := make([]string, 0, len(r.funcs))
+				for name := range r.funcs {
+					names = append(names, name)
+				}
+				sort.Strings(names)
+				for _, name := range names {
+					r.outf("declare -f %s\n", name)
+				}
+			case "-p":
+				printListedVars(declName == "local", false)
+			case "":
+				switch declName {
+				case "declare", "typeset":
+					printListedVars(false, true)
+				case "local":
+					printListedVars(true, false)
+				case "readonly", "export", "nameref":
+					printListedVars(false, false)
+				}
+			}
 		}
 		if tracingEnabled {
 			for _, line := range leadingTraceLines {
@@ -1362,106 +1636,6 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.outf(format, "sys", elapsedString(0, cm.PosixFormat))
 	default:
 		panic(fmt.Sprintf("unhandled command node: %T", cm))
-	}
-}
-
-func (r *Runner) printDeclaredVar(name string, vr expand.Variable) {
-	flags := vr.Flags()
-	if flags == "" {
-		flags = "-"
-	}
-	switch vr.Kind {
-	case expand.Indexed:
-		r.outf("declare -%s %s=(", flags, name)
-		for i, index := range vr.IndexedIndices() {
-			if i > 0 {
-				r.out(" ")
-			}
-			val, _ := vr.IndexedGet(index)
-			r.outf("[%d]=%q", index, val)
-		}
-		r.out(")\n")
-	case expand.Associative:
-		r.outf("declare -%s %s=(", flags, name)
-		first := true
-		for _, k := range expand.AssociativeKeys(vr.Map) {
-			v := vr.Map[k]
-			if !first {
-				r.out(" ")
-			}
-			r.outf("[%s]=%q", k, v)
-			first = false
-		}
-		if !first {
-			r.out(" ")
-		}
-		r.out(")\n")
-	default:
-		r.outf("declare -%s %s=%q\n", flags, name, vr.Str)
-	}
-}
-
-func declaredVarMatches(vr expand.Variable, valType string, modes []string) bool {
-	if !vr.Declared() {
-		return false
-	}
-	switch valType {
-	case "-a":
-		if vr.Kind != expand.Indexed {
-			return false
-		}
-	case "-A":
-		if vr.Kind != expand.Associative {
-			return false
-		}
-	case "-n":
-		if vr.Kind != expand.NameRef {
-			return false
-		}
-	}
-	for _, mode := range modes {
-		switch mode {
-		case "-i":
-			if !vr.Integer {
-				return false
-			}
-		case "-l":
-			if !vr.Lower {
-				return false
-			}
-		case "-r":
-			if !vr.ReadOnly {
-				return false
-			}
-		case "-u":
-			if !vr.Upper {
-				return false
-			}
-		case "-x":
-			if !vr.Exported {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (r *Runner) printDeclaredVars(valType string, modes []string) {
-	names := make([]string, 0, 16)
-	seen := make(map[string]struct{})
-	r.writeEnv.Each(func(name string, _ expand.Variable) bool {
-		if _, ok := seen[name]; ok {
-			return true
-		}
-		seen[name] = struct{}{}
-		if declaredVarMatches(r.lookupVar(name), valType, modes) {
-			names = append(names, name)
-		}
-		return true
-	})
-	slices.Sort(names)
-	for _, name := range names {
-		r.printDeclaredVar(name, r.lookupVar(name))
 	}
 }
 
@@ -1643,6 +1817,80 @@ func (r *Runner) renderInlineArrayValue(expr *syntax.ArrayExpr) string {
 	return buf.String()
 }
 
+func bashDeclDoubleQuote(value string) string {
+	var b strings.Builder
+	b.Grow(len(value) + 2)
+	b.WriteByte('"')
+	for i := 0; i < len(value); i++ {
+		switch c := value[i]; c {
+		case '"', '\\', '$', '`':
+			b.WriteByte('\\')
+		}
+		b.WriteByte(value[i])
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+func bashDeclPrintValue(value string) string {
+	if needsTraceANSIQuote(value) {
+		return traceANSIQuote(value)
+	}
+	return bashDeclDoubleQuote(value)
+}
+
+func bashDeclPlainValue(value string) string {
+	if needsTraceANSIQuote(value) {
+		return traceANSIQuote(value)
+	}
+	quoted, err := syntax.Quote(value, syntax.LangBash)
+	if err != nil {
+		return bashDeclDoubleQuote(value)
+	}
+	return quoted
+}
+
+func bashDeclAssocKey(key string) string {
+	if !needsTraceANSIQuote(key) {
+		quoted, err := syntax.Quote(key, syntax.LangBash)
+		if err == nil && quoted == key {
+			return key
+		}
+	}
+	return bashDeclPrintValue(key)
+}
+
+func declOperandString(operand syntax.DeclOperand) string {
+	var buf bytes.Buffer
+	if err := syntax.NewPrinter().Print(&buf, operand); err != nil {
+		return ""
+	}
+	return buf.String()
+}
+
+func declClauseFromFields(name string, fields []string) *syntax.DeclClause {
+	decl := &syntax.DeclClause{
+		Variant: &syntax.Lit{Value: name},
+	}
+	for _, field := range fields {
+		if operand, err := parseDeclOperandField(field); err == nil {
+			switch operand.(type) {
+			case *syntax.DeclFlag, *syntax.DeclName, *syntax.DeclAssign:
+				decl.Operands = append(decl.Operands, operand)
+				continue
+			}
+		}
+		decl.Operands = append(decl.Operands, &syntax.DeclDynamicWord{
+			Word: &syntax.Word{
+				Parts: []syntax.WordPart{
+					&syntax.DblQuoted{Parts: []syntax.WordPart{&syntax.Lit{Value: field}}},
+				},
+			},
+		})
+	}
+	return decl
+}
+
 func callExprDeclClause(args []*syntax.Word) *syntax.DeclClause {
 	if len(args) == 0 {
 		return nil
@@ -1653,13 +1901,9 @@ func callExprDeclClause(args []*syntax.Word) *syntax.DeclClause {
 	default:
 		return nil
 	}
-	decl := &syntax.DeclClause{
-		Variant: &syntax.Lit{
-			ValuePos: args[0].Pos(),
-			ValueEnd: args[0].End(),
-			Value:    name,
-		},
-	}
+	decl := declClauseFromFields(name, nil)
+	decl.Variant.ValuePos = args[0].Pos()
+	decl.Variant.ValueEnd = args[0].End()
 	for _, arg := range args[1:] {
 		decl.Operands = append(decl.Operands, &syntax.DeclDynamicWord{Word: arg})
 	}

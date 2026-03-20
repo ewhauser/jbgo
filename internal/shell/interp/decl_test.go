@@ -271,7 +271,7 @@ echo arr=$arr
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "assoc: cannot convert associative to indexed array\n"
+	const wantStderr = "declare: assoc: cannot convert associative to indexed array\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
@@ -350,6 +350,259 @@ printf 's2=%s,%s,%s\n' "${s2[0]-missing}" "${s2[a]}" "${s2[b]}"
 		t.Fatalf("Run error = %v", err)
 	}
 	const wantStdout = "status1=0\ns1=missing,x,y\nstatus2=0\ns2=world,x,y\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclareListAndQueryModesMatchBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+filter_decl() {
+  while IFS= read -r line; do
+    case $line in
+      test_var*) echo "$line" ;;
+    esac
+  done
+}
+filter_query() {
+  while IFS= read -r line; do
+    case $line in
+      *test_var*) echo "$line" ;;
+    esac
+  done
+}
+test_var1=111
+readonly test_var2=222
+export test_var3=333
+declare -n test_var4=test_var1
+declare -a test_var6=()
+declare -A test_var7=()
+f() {
+  local test_var5=555
+  {
+    echo '[declare]'
+    declare | filter_decl
+    echo '[declare-p]'
+    declare -p | filter_query
+    echo '[readonly]'
+    readonly | filter_query
+    echo '[export]'
+    export | filter_query
+    echo '[local]'
+    local | filter_query
+    echo '[pn]'
+    declare -pn | filter_query
+    echo '[pr]'
+    declare -pr | filter_query
+    echo '[px]'
+    declare -px | filter_query
+    echo '[pa]'
+    declare -pa | filter_query
+    echo '[pA]'
+    declare -pA | filter_query
+  }
+}
+f
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"[declare]\n" +
+		"test_var1=111\n" +
+		"test_var2=222\n" +
+		"test_var3=333\n" +
+		"test_var4=test_var1\n" +
+		"test_var5=555\n" +
+		"[declare-p]\n" +
+		"declare -- test_var1=\"111\"\n" +
+		"declare -r test_var2=\"222\"\n" +
+		"declare -x test_var3=\"333\"\n" +
+		"declare -n test_var4=\"test_var1\"\n" +
+		"declare -- test_var5=\"555\"\n" +
+		"declare -a test_var6=()\n" +
+		"declare -A test_var7=()\n" +
+		"[readonly]\n" +
+		"declare -r test_var2=\"222\"\n" +
+		"[export]\n" +
+		"declare -x test_var3=\"333\"\n" +
+		"[local]\n" +
+		"declare -- test_var5=\"555\"\n" +
+		"[pn]\n" +
+		"declare -n test_var4=\"test_var1\"\n" +
+		"[pr]\n" +
+		"declare -r test_var2=\"222\"\n" +
+		"[px]\n" +
+		"declare -x test_var3=\"333\"\n" +
+		"[pa]\n" +
+		"declare -a test_var6=()\n" +
+		"[pA]\n" +
+		"declare -A test_var7=()\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclareAttributeFiltersIncludeIntegerLowerUpper(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+filter_query() {
+  while IFS= read -r line; do
+    case $line in
+      *int_var*|*lower_var*|*upper_var*) echo "$line" ;;
+    esac
+  done
+}
+declare -i int_var=42
+declare -l lower_var=UPPER
+declare -u upper_var=lower
+echo '[pi]'
+declare -pi | filter_query
+echo '[pl]'
+declare -pl | filter_query
+echo '[pu]'
+declare -pu | filter_query
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"[pi]\n" +
+		"declare -i int_var=\"42\"\n" +
+		"[pl]\n" +
+		"declare -l lower_var=\"upper\"\n" +
+		"[pu]\n" +
+		"declare -u upper_var=\"LOWER\"\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclareUnsetStateAndEvalRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare x
+declare -p x
+eval -- "$(arr=(); arr[3]= arr[4]=foo; declare -p arr)"
+for i in {0..4}; do
+  echo "arr[$i]: ${arr[$i]+set ... [}${arr[$i]-unset}${arr[$i]+]}"
+done
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"declare -- x\n" +
+		"arr[0]: unset\n" +
+		"arr[1]: unset\n" +
+		"arr[2]: unset\n" +
+		"arr[3]: set ... []\n" +
+		"arr[4]: set ... [foo]\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclarationBuiltinsViaBuiltinAndDynamicDispatch(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+x='a b'
+builtin declare c=$x
+echo "c=$c"
+
+v=x
+f() {
+  \builtin local v=1
+  echo "l:v=$v"
+}
+f
+echo "g:v=$v"
+
+a=typeset
+"$a" v=1
+echo "v=$v"
+
+cmd=(typeset v2=1)
+"${cmd[@]}"
+echo "v2=$v2"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"c=a\n" +
+		"l:v=1\n" +
+		"g:v=x\n" +
+		"v=1\n" +
+		"v2=1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDeclarePlusRDoesNotClearReadonly(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+readonly x=1
+declare +r x
+printf 'declare=%d x=%s\n' "$?" "$x"
+x=2
+printf 'assign=%d x=%s\n' "$?" "$x"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "declare=1 x=1\nassign=1 x=1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "x: readonly variable\nx: readonly variable\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestDeclareFListsFunctionNames(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+add() { :; }
+ble/foo() { :; }
+declare -F
+echo ---
+declare -F add
+declare -F ble/foo
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"declare -f add\n" +
+		"declare -f ble/foo\n" +
+		"---\n" +
+		"add\n" +
+		"ble/foo\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
