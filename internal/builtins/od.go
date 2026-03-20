@@ -693,8 +693,7 @@ func (o odInputOffset) format() string {
 
 func (o odInputOffset) printFinal(w io.Writer) error {
 	if o.radix == odRadixNone && o.label == nil {
-		_, err := fmt.Fprintln(w)
-		return err
+		return nil
 	}
 	_, err := fmt.Fprintln(w, o.format())
 	return err
@@ -763,33 +762,35 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 	padded := make([]byte, info.lineBytes)
 	copy(padded, raw)
 	displayPrefix := prefix
-	if displayPrefix == "" {
-		displayPrefix = strings.Repeat(" ", 7)
-	}
 	first := true
 	for i := range info.formats {
 		format := &info.formats[i]
 		var b strings.Builder
-		b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
-		for j := 0; j < info.lineBytes; j += format.format.byteSize {
-			if j > 0 {
-				gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
-				if gap > 0 {
-					b.WriteString(strings.Repeat(" ", gap))
-				}
-			}
-			if j < lineLen {
-				end := min(j+format.format.byteSize, len(padded))
-				b.WriteString(format.format.format(padded[j:end], order))
-				continue
-			}
-			b.WriteString(strings.Repeat(" ", format.format.printWidth))
-		}
 		if format.addASCIIDump {
+			b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
+			for j := 0; j < info.lineBytes; j += format.format.byteSize {
+				if j > 0 {
+					gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
+					if gap > 0 {
+						b.WriteString(strings.Repeat(" ", gap))
+					}
+				}
+				if j < lineLen {
+					end := min(j+format.format.byteSize, len(padded))
+					b.WriteString(format.format.format(padded[j:end], order))
+					continue
+				}
+				b.WriteString(strings.Repeat(" ", format.format.printWidth))
+			}
 			missing := max(info.printWidthLine-utf8RuneCountString(b.String()), 0)
 			b.WriteString(strings.Repeat(" ", missing))
 			b.WriteString("  ")
 			b.WriteString(odASCIIDump(raw))
+		} else {
+			for j := 0; j < lineLen; j += format.format.byteSize {
+				end := min(j+format.format.byteSize, len(padded))
+				b.WriteString(format.format.format(padded[j:end], order))
+			}
 		}
 		if first {
 			if _, err := fmt.Fprint(w, displayPrefix); err != nil {

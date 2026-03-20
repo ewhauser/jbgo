@@ -11,7 +11,7 @@ func TestODHexByteDumpMatchesEchoHelperShape(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "0000000    07  08  1b  0c  0a  0d  09  0b                                \n0000010\n"; got != want {
+	if got, want := result.Stdout, "0000000 07 08 1b 0c 0a 0d 09 0b\n0000010\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -25,7 +25,7 @@ func TestODSupportsSkipReadAndNoAddress(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "           02  03                                                        \n\n"; got != want {
+	if got, want := result.Stdout, " 02 03\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -39,7 +39,7 @@ func TestODSuppressesDuplicateLinesUnlessVIsSet(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "           41  42  43  44  45  46  47  48\n*\n           69  6a  6b  6c  6d  6e  6f  70\n\n---\n           41  42  43  44  45  46  47  48\n           41  42  43  44  45  46  47  48\n           69  6a  6b  6c  6d  6e  6f  70\n\n"; got != want {
+	if got, want := result.Stdout, " 41 42 43 44 45 46 47 48\n*\n 69 6a 6b 6c 6d 6e 6f 70\n---\n 41 42 43 44 45 46 47 48\n 41 42 43 44 45 46 47 48\n 69 6a 6b 6c 6d 6e 6f 70\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -53,7 +53,7 @@ func TestODSupportsEndianWordFormatting(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "             0102    0304                                                \n\n---\n             0201    0403                                                \n\n"; got != want {
+	if got, want := result.Stdout, " 0102 0304\n---\n 0201 0403\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -67,7 +67,7 @@ func TestODRespectsReadLimitOnSharedStdin(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "           a   b   c                                                    \n\n           d   e   f                                                    \n\n"; got != want {
+	if got, want := result.Stdout, "   a   b   c\n   d   e   f\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -81,7 +81,7 @@ func TestODAcceptsInferredEndianLongOption(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "             0102    0304                                                \n\n"; got != want {
+	if got, want := result.Stdout, " 0102 0304\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
