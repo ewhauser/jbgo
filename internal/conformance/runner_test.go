@@ -41,7 +41,7 @@ func TestGbashEnvMatchesDefaultPathOrder(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		want = "/bin:/usr/bin"
 	}
-	if got := gbashEnv()["PATH"]; got != want {
+	if got := gbashEnv("")["PATH"]; got != want {
 		t.Fatalf("gbashEnv()[PATH] = %q, want %q", got, want)
 	}
 }
