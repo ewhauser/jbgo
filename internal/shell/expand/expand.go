@@ -39,6 +39,11 @@ type Config struct {
 	// variables.
 	Env Environ
 
+	// StartupHome, when set, overrides the home directory used for plain
+	// current-user tilde expansion. Callers must only set this from a trusted
+	// sandbox boundary.
+	StartupHome string
+
 	// CmdSubst expands a command substitution node, writing its standard
 	// output to the provided [io.Writer].
 	//
@@ -79,11 +84,6 @@ type Config struct {
 	// ExtGlob corresponds to the shell option which allows using extended
 	// pattern matching features when performing pathname expansion (globbing).
 	ExtGlob bool
-
-	// CurrentUserHome overrides the home directory used for current-user
-	// tilde expansion. If empty, tilde expansion falls back to the live HOME
-	// environment variable and then platform defaults.
-	CurrentUserHome string
 
 	bufferAlloc strings.Builder
 	fieldAlloc  [4]fieldPart
@@ -1532,8 +1532,8 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
 		// that's overkill. We can't use [os.UserHomeDir], because we want
 		// to use cfg.Env, and we always want to check "HOME" first.
 
-		if cfg.CurrentUserHome != "" {
-			return joinTildeHome(cfg.CurrentUserHome, rest)
+		if cfg.StartupHome != "" {
+			return joinTildeHome(cfg.StartupHome, rest)
 		}
 		if vr := cfg.Env.Get("HOME"); vr.IsSet() {
 			return joinTildeHome(vr.String(), rest)

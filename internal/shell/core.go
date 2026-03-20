@@ -36,6 +36,7 @@ type Execution struct {
 	Command           []string
 	Args              []string
 	StartupOptions    []string
+	StartupHome       string
 	Interactive       bool
 	Env               map[string]string
 	Dir               string
@@ -209,6 +210,7 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	if exec == nil {
 		return cfg
 	}
+	cfg.StartupHome = exec.StartupHome
 	cfg.Dir = exec.Dir
 	cfg.Stdin = exec.Stdin
 	cfg.Stdout = exec.Stdout

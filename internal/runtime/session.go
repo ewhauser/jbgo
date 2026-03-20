@@ -105,6 +105,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Command:        cloneStrings(req.Command),
 		Args:           req.Args,
 		StartupOptions: req.StartupOptions,
+		StartupHome:    req.StartupHome,
 		Interactive:    req.Interactive,
 		Env:            execEnv,
 		Dir:            workDir,

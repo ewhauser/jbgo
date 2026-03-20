@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ewhauser/gbash"
 	gbfs "github.com/ewhauser/gbash/fs"
+	gbruntime "github.com/ewhauser/gbash/internal/runtime"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/testutil"
 )
@@ -263,7 +263,7 @@ func copyFile(src, dst string) error {
 }
 
 func runGBash(ctx context.Context, workspace, script string) (ExecutionResult, error) {
-	rt, err := gbash.New(gbash.WithFileSystem(virtualWorkspaceFileSystem(workspace)))
+	rt, err := gbruntime.New(gbruntime.WithFileSystem(virtualWorkspaceFileSystem(workspace)))
 	if err != nil {
 		return ExecutionResult{}, err
 	}
@@ -271,11 +271,17 @@ func runGBash(ctx context.Context, workspace, script string) (ExecutionResult, e
 	if err != nil {
 		return ExecutionResult{}, err
 	}
-	result, err := session.Exec(ctx, &gbash.ExecutionRequest{
-		Script:     script,
-		WorkDir:    "/",
-		ReplaceEnv: true,
-		Env:        gbashEnv(),
+	env := gbashEnv()
+	startupHome := ""
+	if runtime.GOOS == "darwin" {
+		startupHome = env["HOME"]
+	}
+	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
+		Script:      script,
+		WorkDir:     "/",
+		ReplaceEnv:  true,
+		StartupHome: startupHome,
+		Env:         env,
 	})
 	if err != nil {
 		errMsg := err.Error()
@@ -298,8 +304,8 @@ func runGBash(ctx context.Context, workspace, script string) (ExecutionResult, e
 	}, nil
 }
 
-func virtualWorkspaceFileSystem(workspace string) gbash.FileSystemConfig {
-	return gbash.CustomFileSystem(gbfs.FactoryFunc(func(ctx context.Context) (gbfs.FileSystem, error) {
+func virtualWorkspaceFileSystem(workspace string) gbruntime.FileSystemConfig {
+	return gbruntime.CustomFileSystem(gbfs.FactoryFunc(func(ctx context.Context) (gbfs.FileSystem, error) {
 		return loadWorkspaceIntoMemory(ctx, workspace)
 	}), "/")
 }

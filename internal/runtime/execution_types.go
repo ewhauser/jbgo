@@ -18,6 +18,7 @@ type ExecutionRequest struct {
 	Command         []string
 	Args            []string
 	StartupOptions  []string
+	StartupHome     string
 	Env             map[string]string
 	WorkDir         string
 	Timeout         time.Duration

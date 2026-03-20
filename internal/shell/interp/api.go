@@ -152,8 +152,9 @@ type Runner struct {
 
 	opts runnerOpts
 
+	startupHome string
+
 	origDir    string
-	origHome   string
 	origParams []string
 	origOpts   runnerOpts
 	origStdin  StdinReader
@@ -284,6 +285,11 @@ const (
 type RunnerConfig struct {
 	Env expand.Environ
 
+	// StartupHome overrides the home directory used for plain current-user
+	// tilde expansion. Callers should only populate this from a trusted
+	// sandbox boundary.
+	StartupHome string
+
 	// Dir is the authoritative virtual current directory.
 	Dir string
 
@@ -391,6 +397,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	}
 	r := newRunnerBase()
 	r.Env = cfg.Env
+	r.startupHome = cfg.StartupHome
 	r.Dir = cfg.Dir
 	r.callHandler = cfg.CallHandler
 	r.execHandler = cfg.ExecHandler
@@ -633,10 +640,6 @@ const (
 func (r *Runner) Reset() {
 	if !r.didReset {
 		r.origDir = r.Dir
-		r.origHome = r.Env.Get("HOME").String()
-		if r.origHome == "" {
-			r.origHome = defaultVirtualHomeDir
-		}
 		r.origParams = r.Params
 		r.origOpts = r.opts
 		r.origStdin = r.stdin
@@ -664,6 +667,7 @@ func (r *Runner) Reset() {
 		egid:             r.egid,
 		pid:              r.pid,
 		ppid:             r.ppid,
+		startupHome:      r.startupHome,
 
 		// These can be set by functions like [Dir] or [Params], but
 		// builtins can overwrite them; reset the fields to whatever the
@@ -677,7 +681,6 @@ func (r *Runner) Reset() {
 		legacyBashCompat: r.legacyBashCompat,
 
 		origDir:    r.origDir,
-		origHome:   r.origHome,
 		origParams: r.origParams,
 		origOpts:   r.origOpts,
 		origStdin:  r.origStdin,

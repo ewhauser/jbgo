@@ -1169,7 +1169,7 @@ func TestFieldsUnquotedParamOperatorWordKeepsOuterLiteralBoundaries(t *testing.T
 	}
 }
 
-func TestLiteralCurrentUserHomeOverride(t *testing.T) {
+func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1187,9 +1187,9 @@ func TestLiteralCurrentUserHomeOverride(t *testing.T) {
 			want: "/live/src",
 		},
 		{
-			name: "CurrentUserHomeOverride",
+			name: "StartupHomeOverride",
 			cfg: &Config{
-				CurrentUserHome: "/startup",
+				StartupHome: "/startup",
 				Env: testEnv{
 					"HOME": {Set: true, Kind: String, Str: "/live"},
 				},
@@ -1199,9 +1199,8 @@ func TestLiteralCurrentUserHomeOverride(t *testing.T) {
 		{
 			name: "RootHomeAvoidsDoubleSlash",
 			cfg: &Config{
-				CurrentUserHome: "/",
 				Env: testEnv{
-					"HOME": {Set: true, Kind: String, Str: "/live"},
+					"HOME": {Set: true, Kind: String, Str: "/"},
 				},
 			},
 			want: "/src",
