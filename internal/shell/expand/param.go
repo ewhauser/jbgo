@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ewhauser/gbash/internal/shell/pattern"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -93,8 +92,57 @@ func indirectPositionalParam(name string) bool {
 	return true
 }
 
+func looseIndirectVarRef(name string) (*syntax.VarRef, error) {
+	if ref, err := parseVarRef(name); err == nil {
+		return ref, nil
+	}
+	if !strings.Contains(name, "[") {
+		return nil, InvalidVariableNameError{Ref: name}
+	}
+	left := strings.IndexByte(name, '[')
+	if left <= 0 || !strings.HasSuffix(name, "]") {
+		return nil, InvalidVariableNameError{Ref: name}
+	}
+	base := name[:left]
+	if !syntax.ValidName(base) {
+		return nil, InvalidVariableNameError{Ref: name}
+	}
+	content := name[left+1 : len(name)-1]
+	ref := &syntax.VarRef{Name: &syntax.Lit{Value: base}}
+	switch content {
+	case "@":
+		ref.Index = &syntax.Subscript{
+			Kind: syntax.SubscriptAt,
+			Mode: syntax.SubscriptAuto,
+			Expr: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "@"}}},
+		}
+		return ref, nil
+	case "*":
+		ref.Index = &syntax.Subscript{
+			Kind: syntax.SubscriptStar,
+			Mode: syntax.SubscriptAuto,
+			Expr: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "*"}}},
+		}
+		return ref, nil
+	}
+
+	var words []*syntax.Word
+	if err := syntax.NewParser().Words(strings.NewReader(content), func(word *syntax.Word) bool {
+		words = append(words, word)
+		return true
+	}); err != nil || len(words) != 1 {
+		return nil, InvalidVariableNameError{Ref: name}
+	}
+	ref.Index = &syntax.Subscript{
+		Kind: syntax.SubscriptExpr,
+		Mode: syntax.SubscriptAuto,
+		Expr: words[0],
+	}
+	return ref, nil
+}
+
 func indirectParamExp(name string) (*syntax.ParamExp, error) {
-	ref, err := parseVarRef(name)
+	ref, err := looseIndirectVarRef(name)
 	if err == nil {
 		return &syntax.ParamExp{
 			Param: ref.Name,
@@ -106,7 +154,7 @@ func indirectParamExp(name string) (*syntax.ParamExp, error) {
 			Param: &syntax.Lit{Value: name},
 		}, nil
 	}
-	return nil, fmt.Errorf("invalid indirect expansion")
+	return nil, InvalidVariableNameError{Ref: name}
 }
 
 func (cfg *Config) indirectValue(name string) (string, error) {
@@ -114,17 +162,29 @@ func (cfg *Config) indirectValue(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	switch target.Param.Value {
-	case "@":
-		return strings.Join(cfg.Env.Get(target.Param.Value).IndexedValues(), " "), nil
-	case "*":
-		return cfg.ifsJoin(cfg.Env.Get(target.Param.Value).IndexedValues()), nil
+	return cfg.paramExp(target, quoteNone)
+}
+
+func indirectHolderParamExp(pe *syntax.ParamExp) *syntax.ParamExp {
+	if pe == nil {
+		return nil
 	}
-	ref := &syntax.VarRef{
-		Name:  target.Param,
-		Index: target.Index,
+	holder := *pe
+	holder.Length = false
+	holder.Width = false
+	holder.IsSet = false
+	holder.Names = 0
+	holder.Slice = nil
+	holder.Repl = nil
+	holder.Exp = nil
+	return &holder
+}
+
+func (cfg *Config) envSetParam(state paramExpState, value string) error {
+	if state.ref != nil {
+		return cfg.envSetRef(state.ref, value)
 	}
-	return cfg.varRef(ref)
+	return cfg.envSet(state.name, value)
 }
 
 // fnv1Hash computes the FNV-1 hash for a string.
@@ -191,7 +251,7 @@ type UnsetParameterError struct {
 }
 
 func (u UnsetParameterError) Error() string {
-	return fmt.Sprintf("%s: %s", u.Node.Param.Value, u.Message)
+	return fmt.Sprintf("%s: %s", paramExpOperandString(u.Node), u.Message)
 }
 
 func overridingUnset(pe *syntax.ParamExp) bool {
@@ -211,12 +271,97 @@ func overridingUnset(pe *syntax.ParamExp) bool {
 type paramExpState struct {
 	name             string
 	orig             Variable
+	ref              *syntax.VarRef
 	vr               Variable
 	str              string
 	elems            []string
 	indexAllElements bool
 	callVarInd       bool
 	swallowedError   bool
+}
+
+type indirectMode uint8
+
+const (
+	indirectNone indirectMode = iota
+	indirectResolve
+	indirectNames
+	indirectKeys
+	indirectNameRef
+)
+
+func paramExpHasOuterOps(pe *syntax.ParamExp) bool {
+	return pe.Length || pe.Width || pe.IsSet || pe.Slice != nil || pe.Repl != nil || pe.Exp != nil
+}
+
+func indirectModeFor(pe *syntax.ParamExp, state paramExpState) indirectMode {
+	if pe == nil || !pe.Excl {
+		return indirectNone
+	}
+	if !paramExpHasOuterOps(pe) {
+		switch {
+		case pe.Names != 0:
+			return indirectNames
+		case state.orig.Kind == NameRef && pe.Index == nil:
+			return indirectNameRef
+		case pe.Index != nil && pe.Index.AllElements():
+			switch state.vr.Kind {
+			case Indexed, Associative:
+				return indirectKeys
+			}
+		}
+	}
+	return indirectResolve
+}
+
+func simpleIndirectTarget(pe *syntax.ParamExp) bool {
+	return pe != nil &&
+		pe.Flags == nil &&
+		!pe.Excl && !pe.Length && !pe.Width && !pe.IsSet &&
+		pe.NestedParam == nil &&
+		len(pe.Modifiers) == 0 &&
+		pe.Slice == nil &&
+		pe.Repl == nil &&
+		pe.Names == 0 &&
+		pe.Exp == nil
+}
+
+func (cfg *Config) resolveIndirectTargetState(state paramExpState) (paramExpState, *syntax.ParamExp, error) {
+	name := state.str
+	if state.indexAllElements {
+		switch len(state.elems) {
+		case 0:
+			return state, nil, InvalidIndirectExpansionError{Ref: varRefString(state.ref)}
+		case 1:
+			name = state.elems[0]
+		default:
+			return state, nil, InvalidVariableNameError{Ref: strings.Join(state.elems, " ")}
+		}
+	} else if !state.orig.IsSet() {
+		return state, nil, InvalidIndirectExpansionError{Ref: varRefString(state.ref)}
+	}
+	if name == "" {
+		if state.orig.Kind == Indexed || state.orig.Kind == Associative {
+			state.vr = Variable{Set: true, Kind: String, Str: ""}
+			state.str = ""
+			state.elems = []string{""}
+			state.indexAllElements = false
+			state.callVarInd = false
+			state.swallowedError = false
+			return state, nil, nil
+		}
+		return state, nil, InvalidVariableNameError{Ref: name}
+	}
+
+	target, err := indirectParamExp(name)
+	if err != nil {
+		return state, nil, err
+	}
+	if !simpleIndirectTarget(target) {
+		return state, target, nil
+	}
+	targetState, err := cfg.paramExpState(target)
+	return targetState, target, err
 }
 
 func arrayExpansionIsAt(pe *syntax.ParamExp) bool {
@@ -281,6 +426,35 @@ func decodeParamOpEscapes(str string) string {
 		tail = rest
 	}
 	return string(rns)
+}
+
+func decodePromptEscapes(str string) string {
+	var sb strings.Builder
+	for i := 0; i < len(str); i++ {
+		if str[i] != '\\' || i+1 >= len(str) {
+			sb.WriteByte(str[i])
+			continue
+		}
+		i++
+		switch str[i] {
+		case 'a':
+			sb.WriteByte('\a')
+		case 'e':
+			sb.WriteByte('\x1b')
+		case 'n':
+			sb.WriteByte('\n')
+		case 'r':
+			sb.WriteByte('\r')
+		case '$':
+			sb.WriteByte('$')
+		case '\\':
+			sb.WriteByte('\\')
+		default:
+			sb.WriteByte('\\')
+			sb.WriteByte(str[i])
+		}
+	}
+	return sb.String()
 }
 
 func bashQuoteValue(str string) (string, error) {
@@ -413,7 +587,9 @@ func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState,
 				elems[i] = flags
 			}
 		case "P":
-			// TODO: implement prompt expansion (\u, \h, \w, etc.).
+			for i, elem := range elems {
+				elems[i] = decodePromptEscapes(elem)
+			}
 		default:
 			return elems, nil
 		}
@@ -569,6 +745,10 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 		state.vr = cfg.Env.Get(state.name)
 	}
 	state.orig = state.vr
+	state.ref = &syntax.VarRef{
+		Name:  pe.Param,
+		Index: index,
+	}
 	resolvedRef, resolvedVar, err := state.vr.ResolveRef(cfg.Env, &syntax.VarRef{
 		Name:  pe.Param,
 		Index: index,
@@ -579,10 +759,11 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 	state.vr = resolvedVar
 	if resolvedRef != nil {
 		index = resolvedRef.Index
+		state.ref = resolvedRef
 	} else {
 		index = nil
 	}
-	if cfg.NoUnset && !state.vr.IsSet() && !overridingUnset(pe) {
+	if cfg.NoUnset && !pe.Excl && !state.vr.IsSet() && !overridingUnset(pe) {
 		return state, UnsetParameterError{
 			Node:    pe,
 			Message: "unbound variable",
@@ -804,6 +985,39 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 	if err != nil {
 		return nil, false, err
 	}
+	indirectState := state
+	if pe.Excl {
+		indirectState, err = cfg.paramExpState(indirectHolderParamExp(pe))
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	if indirectModeFor(pe, indirectState) == indirectResolve {
+		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
+		if err != nil {
+			return nil, false, err
+		}
+		if target != nil && !simpleIndirectTarget(target) {
+			if fields, ok, _, err := cfg.paramExpFields(target); err != nil {
+				return nil, false, err
+			} else if ok {
+				if len(fields) == 0 {
+					return []fieldPart{}, true, nil
+				}
+				if len(fields) == 1 {
+					return append([]fieldPart(nil), fields[0]...), true, nil
+				}
+			}
+			val, err := cfg.paramExp(target, ql)
+			if err != nil {
+				return nil, false, err
+			}
+			return []fieldPart{{val: val}}, true, nil
+		}
+		state = resolved
+	} else if pe.Excl {
+		state = indirectState
+	}
 	argField := func() ([]fieldPart, string, error) {
 		var parts []fieldPart
 		if pe.Exp.Word != nil {
@@ -873,10 +1087,56 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 	if err != nil {
 		return nil, false, false, err
 	}
+	indirectState := state
+	if pe.Excl {
+		indirectState, err = cfg.paramExpState(indirectHolderParamExp(pe))
+		if err != nil {
+			return nil, false, false, err
+		}
+	}
+	indMode := indirectModeFor(pe, indirectState)
+	if indMode == indirectResolve {
+		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
+		if err != nil {
+			return nil, false, false, err
+		}
+		if target != nil && quotedIndirectArrayTarget(target) && !paramExpHasOuterOps(pe) {
+			if fields, ok, elideEmpty, err := cfg.paramExpFields(target); err != nil {
+				return nil, false, false, err
+			} else if ok {
+				return fields, true, elideEmpty, nil
+			}
+			if parts, ok, err := cfg.paramExpSplitValue(target); err != nil {
+				return nil, false, false, err
+			} else if ok {
+				return cfg.splitFieldParts(parts), true, false, nil
+			}
+			val, err := cfg.paramExp(target, quoteNone)
+			if err != nil {
+				return nil, false, false, err
+			}
+			return cfg.splitFieldParts([]fieldPart{{val: val}}), true, false, nil
+		}
+		if target != nil && !simpleIndirectTarget(target) {
+			if fields, ok, elideEmpty, err := cfg.paramExpFields(target); err != nil {
+				return nil, false, false, err
+			} else if ok {
+				return fields, true, elideEmpty, nil
+			}
+			val, err := cfg.paramExp(target, quoteNone)
+			if err != nil {
+				return nil, false, false, err
+			}
+			return cfg.splitFieldParts([]fieldPart{{val: val}}), true, false, nil
+		}
+		state = resolved
+	} else if pe.Excl {
+		state = indirectState
+	}
 	if state.swallowedError && !state.indexAllElements {
 		return [][]fieldPart{}, true, false, nil
 	}
-	if pe.Excl {
+	if pe.Excl && indMode != indirectResolve {
 		if pe.Names == 0 && pe.Index == nil {
 			if fields, ok, elideEmpty, err := cfg.indirectParamArrayFields(state); err != nil {
 				return nil, false, false, err
@@ -988,7 +1248,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 					if err != nil {
 						return nil, false, false, err
 					}
-					if err := cfg.envSet(state.name, arg); err != nil {
+					if err := cfg.envSetParam(state, arg); err != nil {
 						return nil, false, false, err
 					}
 					return fields, true, false, nil
@@ -999,7 +1259,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 					if err != nil {
 						return nil, false, false, err
 					}
-					if err := cfg.envSet(state.name, arg); err != nil {
+					if err := cfg.envSetParam(state, arg); err != nil {
 						return nil, false, false, err
 					}
 					return fields, true, false, nil
@@ -1055,7 +1315,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 			if err != nil {
 				return nil, false, false, err
 			}
-			if err := cfg.envSet(state.name, arg); err != nil {
+			if err := cfg.envSetParam(state, arg); err != nil {
 				return nil, false, false, err
 			}
 			return fields, true, false, nil
@@ -1066,7 +1326,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 			if err != nil {
 				return nil, false, false, err
 			}
-			if err := cfg.envSet(state.name, arg); err != nil {
+			if err := cfg.envSetParam(state, arg); err != nil {
 				return nil, false, false, err
 			}
 			return fields, true, false, nil
@@ -1083,6 +1343,26 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 	state, err := cfg.paramExpState(pe)
 	if err != nil {
 		return "", err
+	}
+	indirectState := state
+	if pe.Excl {
+		indirectState, err = cfg.paramExpState(indirectHolderParamExp(pe))
+		if err != nil {
+			return "", err
+		}
+	}
+	indMode := indirectModeFor(pe, indirectState)
+	if indMode == indirectResolve {
+		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
+		if err != nil {
+			return "", err
+		}
+		if target != nil && !simpleIndirectTarget(target) && !paramExpHasOuterOps(pe) {
+			return cfg.paramExp(target, ql)
+		}
+		state = resolved
+	} else if pe.Excl {
+		state = indirectState
 	}
 	name := state.name
 	orig := state.orig
@@ -1116,34 +1396,24 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		switch {
 		case name == "@", name == "*", subscriptLit(pe.Index) == "@", subscriptLit(pe.Index) == "*":
 		default:
-			n = utf8.RuneCountInString(str)
+			n = cfg.bashStringLen(str)
 		}
 		str = strconv.Itoa(n)
-	case pe.Excl:
+	case indMode == indirectNames || indMode == indirectKeys || indMode == indirectNameRef:
 		var strs []string
 		assocKeys := false
 		switch {
-		case pe.Names != 0:
+		case indMode == indirectNames:
 			strs = cfg.namesByPrefix(pe.Param.Value)
-		case orig.Kind == NameRef:
+		case indMode == indirectNameRef:
 			strs = append(strs, orig.Str)
-		case pe.Index != nil && vr.Kind == Indexed:
+		case vr.Kind == Indexed:
 			for _, index := range vr.IndexedIndices() {
 				strs = append(strs, strconv.Itoa(index))
 			}
-		case pe.Index != nil && vr.Kind == Associative:
+		case vr.Kind == Associative:
 			strs = sortedMapKeys(vr.Map)
 			assocKeys = true
-		case !vr.IsSet():
-			return "", fmt.Errorf("invalid indirect expansion")
-		case str == "":
-			return "", nil
-		default:
-			val, err := cfg.indirectValue(str)
-			if err != nil {
-				return "", err
-			}
-			strs = append(strs, val)
 		}
 		if !assocKeys {
 			slices.Sort(strs)
@@ -1155,23 +1425,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		return "", fmt.Errorf("unsupported")
 	case pe.Slice != nil:
 		if callVarInd {
-			slicePos := func(n int) int {
-				if n < 0 {
-					n = len(str) + n
-					if n < 0 {
-						n = len(str)
-					}
-				} else if n > len(str) {
-					n = len(str)
-				}
-				return n
-			}
-			if pe.Slice.Offset != nil {
-				str = str[slicePos(sliceOffset):]
-			}
-			if pe.Slice.Length != nil {
-				str = str[:slicePos(sliceLen)]
-			}
+			str = cfg.bashStringSlice(str, pe.Slice.Offset != nil, sliceOffset, pe.Slice.Length != nil, sliceLen)
 		} // else, elems are already sliced
 	case pe.Repl != nil:
 		orig, err := Pattern(cfg, pe.Repl.Orig)
@@ -1238,7 +1492,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 				fallthrough
 			case syntax.AssignUnsetOrNull:
 				if str == "" {
-					if err := cfg.envSet(name, arg); err != nil {
+					if err := cfg.envSetParam(state, arg); err != nil {
 						return "", err
 					}
 					str = arg
@@ -1311,9 +1565,23 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 			case syntax.OtherParamOps:
 				switch arg {
 				case "Q":
-					str, err = syntax.Quote(str, syntax.LangBash)
-					if err != nil {
-						panic(err)
+					if !vr.IsSet() {
+						break
+					}
+					if ql == quoteDouble || ql == quoteHeredoc {
+						if !arrayExpansionIsAt(pe) && !arrayExpansionIsStar(pe) {
+							str, err = syntax.Quote(str, syntax.LangBash)
+							if err != nil {
+								return "", err
+							}
+							break
+						}
+					}
+					if vr.IsSet() {
+						str, err = bashQuoteValue(str)
+						if err != nil {
+							return "", err
+						}
 					}
 				case "E":
 					tail := str
@@ -1338,7 +1606,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 						str = fmt.Sprintf("declare -%s %s=%s", flags, name, quoted)
 					}
 				case "P":
-					// TODO: implement prompt expansion (\u, \h, \w, etc.).
+					str = decodePromptEscapes(str)
 				default:
 					panic(fmt.Sprintf("unexpected @%s param expansion", arg))
 				}

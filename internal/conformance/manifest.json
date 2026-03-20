@@ -426,41 +426,185 @@
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
         },
-        "oils/var-op-bash.test.sh": {
+        "oils/var-op-bash.test.sh::${#var@X} is a parse error": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-len.test.sh": {
+        "oils/var-op-bash.test.sh::${!A@a} and ${!A[@]@a}": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-patsub.test.sh": {
+        "oils/var-op-bash.test.sh::${x@u} U L - upper / lower case (bash 5.1 feature)": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-slice.test.sh": {
+        "oils/var-op-bash.test.sh::-o nounset with var ops": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-strip.test.sh": {
+        "oils/var-op-bash.test.sh::argv array and @P @Q @a": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-op-test.test.sh": {
+        "oils/var-op-bash.test.sh::undef vs. empty string in var ops": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's bash-specific parameter operators still diverge from bash in this case"
         },
-        "oils/var-ref.test.sh": {
+        "oils/var-op-len.test.sh::Length operator can't be followed by test operator": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's `${#...}` length semantics still diverge from bash in this case"
         },
-        "oils/var-sub-quote.test.sh": {
+        "oils/var-op-patsub.test.sh::${v//} is empty search and replacement": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
         },
-        "oils/var-sub.test.sh": {
+        "oils/var-op-patsub.test.sh::${x//~homedir/}": {
           "mode": "xfail",
-          "reason": "known gbash divergence from bash semantics in this upstream spec file"
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::Chromium from http://www.oilshell.org/blog/2016/11/07.html": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::patsub with [^]]": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::patsub with single quotes and hyphen in character class (regression)": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::Replace char class": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::Replace fixed strings": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::Right Anchored Pattern replacement with %": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::Substitute one unicode character (UTF-8)": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::Synthesized ${x///} bug (similar to above)": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-patsub.test.sh::When LC_ALL=C, pattern ? doesn't match multibyte character": {
+          "mode": "xfail",
+          "reason": "gbash's parameter pattern substitution still diverges from bash in this case"
+        },
+        "oils/var-op-slice.test.sh::${array[@]::} has implicit length of zero - for ble.sh": {
+          "mode": "xfail",
+          "reason": "gbash's substring slicing still diverges from bash in this case"
+        },
+        "oils/var-op-slice.test.sh::Cannot take length of substring slice": {
+          "mode": "xfail",
+          "reason": "gbash's substring slicing still diverges from bash in this case"
+        },
+        "oils/var-op-slice.test.sh::Permutations of implicit begin and length": {
+          "mode": "xfail",
+          "reason": "gbash's substring slicing still diverges from bash in this case"
+        },
+        "oils/var-op-strip.test.sh::Append using replacement of %": {
+          "mode": "xfail",
+          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+        },
+        "oils/var-op-strip.test.sh::Prepend using replacement of #": {
+          "mode": "xfail",
+          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+        },
+        "oils/var-op-strip.test.sh::strip all unicode": {
+          "mode": "xfail",
+          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+        },
+        "oils/var-op-strip.test.sh::Strip unicode prefix": {
+          "mode": "xfail",
+          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+        },
+        "oils/var-op-strip.test.sh::strip unquoted and quoted [": {
+          "mode": "xfail",
+          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+        },
+        "oils/var-op-strip.test.sh::strip unquoted and quoted []": {
+          "mode": "xfail",
+          "reason": "gbash's prefix/suffix pattern removal still diverges from bash in this case"
+        },
+        "oils/var-op-test.test.sh::$* (\"\" \"\") and - and + (IFS=)": {
+          "mode": "xfail",
+          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+        },
+        "oils/var-op-test.test.sh::Assign default with array": {
+          "mode": "xfail",
+          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+        },
+        "oils/var-op-test.test.sh::Lazy Evaluation of Alternative": {
+          "mode": "xfail",
+          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+        },
+        "oils/var-op-test.test.sh::op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"": {
+          "mode": "xfail",
+          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+        },
+        "oils/var-op-test.test.sh::op-test for unquoted ${a[*]:-empty} with IFS=": {
+          "mode": "xfail",
+          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+        },
+        "oils/var-op-test.test.sh::Unquoted with array as default value": {
+          "mode": "xfail",
+          "reason": "gbash's `${var:-word}` and related test-operator behavior still diverges from bash in this case"
+        },
+        "oils/var-ref.test.sh::Bizarre tilde expansion in array index": {
+          "mode": "xfail",
+          "reason": "gbash's indirect expansion still diverges from bash in this case"
+        },
+        "oils/var-ref.test.sh::Indirect expansion TO fancy expansion features bash disallows": {
+          "mode": "xfail",
+          "reason": "gbash's indirect expansion still diverges from bash in this case"
+        },
+        "oils/var-ref.test.sh::var ref doesn't need cycle detection": {
+          "mode": "xfail",
+          "reason": "gbash's indirect expansion still diverges from bash in this case"
+        },
+        "oils/var-ref.test.sh::var ref TO array with arbitrary subscripts": {
+          "mode": "xfail",
+          "reason": "gbash's indirect expansion still diverges from bash in this case"
+        },
+        "oils/var-sub-quote.test.sh::Multiple words: outer double quotes, inner single quotes with var": {
+          "mode": "xfail",
+          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+        },
+        "oils/var-sub-quote.test.sh::Right Brace as argument (similar to #702)": {
+          "mode": "xfail",
+          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+        },
+        "oils/var-sub-quote.test.sh::single quotes work inside character classes": {
+          "mode": "xfail",
+          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+        },
+        "oils/var-sub-quote.test.sh::Syntax error for single quote in double quote": {
+          "mode": "xfail",
+          "reason": "gbash's quoted parameter-expansion argument parsing still diverges from bash in this case"
+        },
+        "oils/var-sub.test.sh::Bad var sub": {
+          "mode": "xfail",
+          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+        },
+        "oils/var-sub.test.sh::Descriptor redirect to bad \"$@\"": {
+          "mode": "xfail",
+          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+        },
+        "oils/var-sub.test.sh::Filename redirect with \"$@\"": {
+          "mode": "xfail",
+          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
+        },
+        "oils/var-sub.test.sh::Here doc with bad \"$@\" delimiter": {
+          "mode": "xfail",
+          "reason": "gbash's parameter-substitution and redirect error handling still diverges from bash in this case"
         },
         "oils/vars-bash.test.sh": {
           "mode": "xfail",

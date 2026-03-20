@@ -1296,40 +1296,52 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 	}
 	name := pe.Param.Value
 	if pe.Excl {
-		if pe.Names == 0 && pe.Index == nil {
-			state, err := cfg.paramExpState(pe)
+		state, err := cfg.paramExpState(indirectHolderParamExp(pe))
+		if err != nil {
+			return nil, false, err
+		}
+		switch indirectModeFor(pe, state) {
+		case indirectResolve:
+			_, target, err := cfg.resolveIndirectTargetState(state)
 			if err != nil {
 				return nil, false, err
 			}
-			if state.orig.Kind != NameRef && state.str != "" {
-				target, err := indirectParamExp(state.str)
-				if err != nil {
+			if target != nil {
+				resolvedPE := *pe
+				resolvedPE.Excl = false
+				resolvedPE.Param = target.Param
+				resolvedPE.Index = target.Index
+				if fields, ok, err := cfg.quotedElemFields(&resolvedPE); err != nil {
 					return nil, false, err
-				}
-				if quotedIndirectArrayTarget(target) {
-					if fields, _, ok := cfg.quotedArrayFields(target); ok {
-						return fields, true, nil
-					}
+				} else if ok {
+					return fields, true, nil
 				}
 			}
-		}
-		switch pe.Names {
-		case syntax.NamesPrefixWords: // "${!prefix@}"
-			return cfg.namesByPrefix(pe.Param.Value), true, nil
-		case syntax.NamesPrefix: // "${!prefix*}"
 			return nil, false, nil
-		}
-		switch subscriptLit(pe.Index) {
-		case "@": // "${!name[@]}"
+		case indirectNames:
+			switch pe.Names {
+			case syntax.NamesPrefixWords: // "${!prefix@}"
+				return cfg.namesByPrefix(pe.Param.Value), true, nil
+			case syntax.NamesPrefix: // "${!prefix*}"
+				return nil, false, nil
+			}
+		case indirectKeys:
 			switch vr := cfg.Env.Get(name); vr.Kind {
 			case Indexed:
 				keys := make([]string, 0, vr.IndexedCount())
 				for _, key := range vr.IndexedIndices() {
 					keys = append(keys, strconv.Itoa(key))
 				}
+				if subscriptLit(pe.Index) == "*" {
+					return []string{cfg.ifsJoin(keys)}, true, nil
+				}
 				return keys, true, nil
 			case Associative:
-				return sortedMapKeys(vr.Map), true, nil
+				keys := sortedMapKeys(vr.Map)
+				if subscriptLit(pe.Index) == "*" {
+					return []string{cfg.ifsJoin(keys)}, true, nil
+				}
+				return keys, true, nil
 			}
 		}
 		return nil, false, nil

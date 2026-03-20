@@ -240,14 +240,15 @@ func (r *Runner) expandErr(err error) {
 	fmt.Fprintln(r.stderr, errMsg)
 	switch {
 	case errors.As(err, &expand.UnsetParameterError{}):
-	case errMsg == "invalid indirect expansion":
-		// TODO: These errors are treated as fatal by bash.
-		// Make the error type reflect that.
+		r.exit.code = 127
+		r.exit.exiting = true
+	case errors.As(err, &expand.InvalidIndirectExpansionError{}):
+		r.exit.code = 1
+	case errors.As(err, &expand.InvalidVariableNameError{}):
+		r.exit.code = 1
 	default:
 		return // other cases do not exit
 	}
-	r.exit.code = 127
-	r.exit.exiting = true
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {

@@ -134,7 +134,7 @@ var='a b c'
 argv.sh "${Unset:-"$var"}"
 ## stdout: ['a b c']
 
-#### Multiple words: outer double quotes, inner single quotes
+#### Multiple words: outer double quotes, inner single quotes with var
 # WEIRD ONE.
 #
 # I think I should just disallow any word with single quotes inside double

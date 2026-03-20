@@ -188,7 +188,7 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 		if hasSingleQuote(expr) != nil {
 			return 0, ArithmSyntaxError{Expr: root, Token: expr}
 		}
-		str, err := Literal(cfg, expr)
+		str, err := Document(cfg, expr)
 		if err != nil {
 			return 0, err
 		}
@@ -206,11 +206,16 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 		}
 		if depth < maxNameRefDepth {
 			p := syntax.NewParser()
-			if nested, err := p.Arithmetic(strings.NewReader(str)); err == nil {
-				if nested != nil {
-					if word, ok := nested.(*syntax.Word); !ok || word.Lit() != str {
-						return arithm(cfg, root, nested, depth+1)
-					}
+			nested, err := p.Arithmetic(strings.NewReader(str))
+			if err != nil {
+				if strings.TrimSpace(str) == "" {
+					return 0, nil
+				}
+				return 0, err
+			}
+			if nested != nil {
+				if word, ok := nested.(*syntax.Word); !ok || word.Lit() != str {
+					return arithm(cfg, root, nested, depth+1)
 				}
 			}
 		}
