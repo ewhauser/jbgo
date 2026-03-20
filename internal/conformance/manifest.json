@@ -25,9 +25,8 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/alias.test.sh::Invalid syntax of alias": {
-        "oils/array-assign.test.sh::More fragments like a[  a[5  a[5 +  a[5 + 3]": {
           "mode": "xfail",
-          "reason": "gbash's parser diagnostics for incomplete array-assignment words still differ from bash"
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/alias.test.sh::Loop split across both iterative and recursive aliases": {
           "mode": "xfail",
@@ -88,137 +87,9 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/arith-context.test.sh::Empty expression (( ))  $(( ))": {
+        "oils/array-assign.test.sh::More fragments like a[  a[5  a[5 +  a[5 + 3]": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-context.test.sh::Empty expression a[]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-context.test.sh::Empty expression in ${a[@]: : }": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-dynamic.test.sh::Double quotes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-dynamic.test.sh::Single quotes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith-dynamic.test.sh::Substitutions": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Comment not allowed in the middle of multiline arithmetic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Constant with quotes like '1'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Constants in base 36": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Constants in bases 2 to 64": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Double subscript": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Dynamic base constants": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Dynamic parsing of arithmetic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Increment undefined variables with nounset": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Integer constant parsing": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Integer constant validation": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid LValue": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid LValue that looks like array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid LValue: two sets of brackets": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Invalid constant": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Logical Ops Short Circuit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Multiple digit constants with base N": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Negative exponent": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::Negative numbers with bit shift": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::No floating point": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::array assignment with dynamic array name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::assignment with dynamic var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::nested ternary (bug fix)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::nounset with arithmetic": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::s[0] with string '12 34'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::unary array assignment with dynamic var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::unary assignment with dynamic var name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/arith.test.sh::undef[0] with nounset": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "gbash's parser diagnostics for incomplete array-assignment words still differ from bash"
         },
         "oils/array-assoc.test.sh::BashAssoc ${a[@]@Q}": {
           "mode": "xfail",
@@ -3447,7 +3318,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/unicode.test.sh": {
+        "oils/unicode.test.sh::$'' does NOT check that 0x110000 is too big at parse time": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
