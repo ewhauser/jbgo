@@ -3,7 +3,7 @@ module github.com/ewhauser/gbash/contrib/sqlite3
 go 1.26.1
 
 require (
-	github.com/ewhauser/gbash v0.0.21
+	github.com/ewhauser/gbash v0.0.22
 	github.com/ncruces/go-sqlite3 v0.31.1
 )
 
