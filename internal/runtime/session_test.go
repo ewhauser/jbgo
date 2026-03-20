@@ -221,6 +221,44 @@ func TestSessionInteractPersistsStateAcrossEntries(t *testing.T) {
 	}
 }
 
+func TestSessionInteractNounsetSkipsCurrentLineButContinues(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	result, err := session.Interact(context.Background(), &InteractiveRequest{
+		Stdin: strings.NewReader("" +
+			"set -u\n" +
+			"echo before; echo $missing; echo after\n" +
+			"echo line2\n" +
+			"exit 7\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Interact() error = %v", err)
+	}
+	if result == nil {
+		t.Fatalf("Interact() result = nil")
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7; stdout=%q stderr=%q", result.ExitCode, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{"before\n", "line2\n"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
+		}
+	}
+	if strings.Contains(stdout.String(), "after\n") {
+		t.Fatalf("stdout = %q, want current-line remainder to be skipped", stdout.String())
+	}
+	if got, want := stderr.String(), "missing: unbound variable\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestSessionInteractTracksHistoryCommand(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

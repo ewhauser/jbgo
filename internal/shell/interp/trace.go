@@ -362,9 +362,6 @@ func (t *tracer) call(cmd string, args ...string) {
 	if t == nil {
 		return
 	}
-	if cmd == "set" {
-		return
-	}
 
 	t.string(cmd)
 	for _, arg := range args {

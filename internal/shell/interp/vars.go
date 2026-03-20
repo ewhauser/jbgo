@@ -102,11 +102,6 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 		return fmt.Errorf("readonly variable")
 	}
 	if !vr.IsSet() { // unsetting
-		if prev.Local {
-			vr.Local = true
-			o.values[normalized] = namedVariable{name, vr}
-			return nil
-		}
 		o.values[normalized] = namedVariable{name, vr}
 		return nil
 	}
@@ -195,6 +190,53 @@ func currentScopeVars(env expand.WriteEnviron, f func(name string, vr expand.Var
 	}
 }
 
+func visibleBindingWriteEnv(env expand.WriteEnviron, name string) (expand.WriteEnviron, expand.Variable, bool) {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		normalized := env.normalize(name)
+		vr, ok := env.values[normalized]
+		if ok {
+			return env, vr.Variable, true
+		}
+		parent, ok := env.parent.(expand.WriteEnviron)
+		if !ok {
+			return nil, expand.Variable{}, false
+		}
+		return visibleBindingWriteEnv(parent, name)
+	case *shadowWriteEnviron:
+		if env.shadowSet && name == env.shadowName {
+			return env, env.shadow, true
+		}
+		return visibleBindingWriteEnv(env.parent, name)
+	default:
+		return nil, expand.Variable{}, false
+	}
+}
+
+func deleteCurrentScopeVar(env expand.WriteEnviron, name string) bool {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		if env.values == nil {
+			return false
+		}
+		normalized := env.normalize(name)
+		if _, ok := env.values[normalized]; !ok {
+			return false
+		}
+		delete(env.values, normalized)
+		return true
+	case *shadowWriteEnviron:
+		if env.shadowSet && name == env.shadowName {
+			env.shadow = expand.Variable{}
+			env.shadowSet = false
+			return true
+		}
+		return deleteCurrentScopeVar(env.parent, name)
+	default:
+		return false
+	}
+}
+
 func localScopeEnv(env expand.WriteEnviron) expand.WriteEnviron {
 	switch env := env.(type) {
 	case *overlayEnviron:
@@ -225,6 +267,89 @@ func globalWriteEnv(env expand.WriteEnviron) expand.WriteEnviron {
 		return globalWriteEnv(env.parent)
 	default:
 		return env
+	}
+}
+
+func (r *Runner) optionFlags() string {
+	var flags strings.Builder
+	for _, opt := range posixOptsTable {
+		if opt.flag == ' ' {
+			continue
+		}
+		enabled := r.posixOptByFlag(opt.flag)
+		if enabled == nil || !*enabled {
+			continue
+		}
+		flags.WriteByte(opt.flag)
+	}
+	if r.interactive {
+		flags.WriteByte('i')
+	}
+	return flags.String()
+}
+
+func (r *Runner) printSetVar(name string, vr expand.Variable) {
+	switch vr.Kind {
+	case expand.Indexed:
+		r.outf("declare -a %s", name)
+		if !vr.IsSet() {
+			r.out("\n")
+			return
+		}
+		r.out("=(")
+		for i, index := range vr.IndexedIndices() {
+			if i > 0 {
+				r.out(" ")
+			}
+			val, _ := vr.IndexedGet(index)
+			r.outf("[%d]=%s", index, bashDeclPrintValue(val))
+		}
+		r.out(")\n")
+	case expand.Associative:
+		r.outf("declare -A %s", name)
+		if !vr.IsSet() {
+			r.out("\n")
+			return
+		}
+		r.out("=(")
+		first := true
+		for _, k := range expand.AssociativeKeys(vr.Map) {
+			v := vr.Map[k]
+			if !first {
+				r.out(" ")
+			}
+			r.outf("[%s]=%s", bashDeclAssocKey(k), bashDeclPrintValue(v))
+			first = false
+		}
+		if !first {
+			r.out(" ")
+		}
+		r.out(")\n")
+	default:
+		if !vr.IsSet() {
+			r.outf("%s\n", name)
+			return
+		}
+		r.outf("%s=%s\n", name, bashDeclPlainValue(vr.String()))
+	}
+}
+
+func (r *Runner) printSetVars() {
+	seen := make(map[string]expand.Variable)
+	r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+		seen[name] = vr
+		return true
+	})
+	names := make([]string, 0, len(seen))
+	for name, vr := range seen {
+		if !vr.Declared() {
+			continue
+		}
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		r.printSetVar(name, seen[name])
 	}
 }
 
@@ -266,6 +391,8 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		if n := len(r.bgProcs); n > 0 {
 			vr.Kind, vr.Str = expand.String, "g"+strconv.Itoa(n)
 		}
+	case "-":
+		vr.Kind, vr.Str = expand.String, r.optionFlags()
 	case "?":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(int(r.lastExit.code))
 	case "$":

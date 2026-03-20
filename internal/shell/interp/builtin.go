@@ -83,6 +83,10 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 		exit.exiting = true
 	case "set":
+		if len(args) == 0 {
+			r.printSetVars()
+			return exit
+		}
 		if err := r.setParams(args...); err != nil {
 			return failf(2, "set: %v\n", err)
 		}
@@ -133,7 +137,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 						// Bash's plain `unset foo` falls through to shell functions
 						// when there is no variable by that name.
 					} else {
-						if err := r.unsetVarByRef(ref); err != nil {
+						if err := r.unsetVarByRef(ref, !funcs); err != nil {
 							r.errf("unset: %v\n", err)
 							exit.code = 1
 						}

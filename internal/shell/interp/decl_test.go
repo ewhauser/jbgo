@@ -356,6 +356,126 @@ f
 	}
 }
 
+func TestDeclAssignmentsUsePreBuiltinExpansionSnapshot(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+foo=old
+export foo=new v=$foo
+printf 'export=%s,%s\n' "$foo" "$v"
+
+unset foo v
+declare foo=new v=$foo
+printf 'declare=%s,%s\n' "$foo" "$v"
+
+readonly ro=new rv=$ro
+printf 'readonly=%s,%s\n' "$ro" "$rv"
+
+f() {
+  local local_var=new seen=$local_var
+  printf 'local=%s,%s\n' "$local_var" "$seen"
+}
+f
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"export=new,old\n" +
+		"declare=new,\n" +
+		"readonly=new,\n" +
+		"local=new,\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestExportMinusNClearsExportAndPreservesAssignedValue(t *testing.T) {
+	t.Parallel()
+
+	runner, stdout, stderr, err := runInterpScriptWithRunner(t, `
+foo=old
+export -n foo=new
+printf 'value=%s\n' "$foo"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "value=new\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	vr := runner.lookupVar("foo")
+	if !vr.IsSet() || vr.Str != "new" || vr.Exported {
+		t.Fatalf("foo = %#v, want set string value and exported=false", vr)
+	}
+}
+
+func TestExportTargetsCallerLocalBinding(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+report_export() {
+  found=no
+  while IFS= read -r line; do
+    case $line in
+      'declare -x outer_var='*) found=yes ;;
+    esac
+  done
+  echo "$found"
+}
+inner() {
+  export outer_var
+  printf 'inner=%s\n' "$(export -p | report_export)"
+}
+outer() {
+  local outer_var=X
+  printf 'before=%s\n' "$(export -p | report_export)"
+  inner
+  printf 'after=%s\n' "$(export -p | report_export)"
+}
+outer
+printf 'global=%s\n' "$(export -p | report_export)"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "before=no\ninner=yes\nafter=yes\nglobal=no\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestLocalReadonlyErrorIncludesBuiltinName(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+readonly y=1
+f() {
+  local y=2
+  echo status=$?
+}
+f
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "status=1\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, "local: y: readonly variable\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestDeclareRejectsIndexedAssociativeConversion(t *testing.T) {
 	t.Parallel()
 

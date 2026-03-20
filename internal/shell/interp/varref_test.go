@@ -134,6 +134,70 @@ printf '%s\n' "${assoc[i]-missing}"
 	}
 }
 
+func TestUnsetRevealsOuterScopedBinding(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+unlocal() { unset "$@"; }
+
+level2() {
+  local hello=yy
+  echo level2=$hello
+  unlocal hello
+  echo level2=$hello
+}
+
+level1() {
+  local hello=xx
+  level2
+  echo level1=$hello
+  unlocal hello
+  echo level1=$hello
+  level2
+}
+
+hello=global
+level1
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"level2=yy\n" +
+		"level2=xx\n" +
+		"level1=xx\n" +
+		"level1=global\n" +
+		"level2=yy\n" +
+		"level2=global\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestUnsetWrongTypeMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare undef
+unset -v 'undef[1]'
+echo undef1=$?
+unset -v 'undef["key"]'
+echo undef_key=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "undef1=1\nundef_key=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, "unset: undef: not an array variable\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestIndirectExpansionSupportsPositionalRefs(t *testing.T) {
 	t.Parallel()
 

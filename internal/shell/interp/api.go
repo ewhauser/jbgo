@@ -856,6 +856,11 @@ func (r *Runner) run(ctx context.Context, node syntax.Node, runExitTrap, manageM
 	if !r.didReset {
 		r.Reset()
 	}
+	if r.interactive && !r.commandString {
+		defer func() {
+			r.skipStmtLine = 0
+		}()
+	}
 	r.fillExpandConfig(ctx)
 	r.exit = exitStatus{}
 	r.filename = ""

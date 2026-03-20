@@ -271,10 +271,28 @@ func (r *Runner) expandErr(err error) {
 		r.exit.code = 1
 	case errors.As(err, &unboundVarErr):
 		r.exit.code = 127
-		r.exit.exiting = true
+		if r.opts[optErrExit] {
+			r.exit.code = 1
+		}
+		if r.interactive {
+			if r.currentStmtLine != 0 {
+				r.skipStmtLine = r.currentStmtLine
+			}
+		} else {
+			r.exit.exiting = true
+		}
 	case errors.As(err, &unsetErr):
 		r.exit.code = 127
-		r.exit.exiting = true
+		if r.opts[optErrExit] {
+			r.exit.code = 1
+		}
+		if r.interactive {
+			if r.currentStmtLine != 0 {
+				r.skipStmtLine = r.currentStmtLine
+			}
+		} else {
+			r.exit.exiting = true
+		}
 	case errors.As(err, &indirectErr):
 		r.exit.code = 1
 	case errors.As(err, &invalidNameErr):
@@ -1161,11 +1179,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}()
 			return fn()
 		}
-		declLookupVar := func(name string) expand.Variable {
+		declEvalEnv := newOverlayEnviron(r.writeEnv, true)
+		declLookupVar := func(env expand.WriteEnviron, name string) expand.Variable {
 			if !local || global {
-				return r.lookupVar(name)
+				return env.Get(name)
 			}
-			if vr, ok := currentScopeVar(localScopeEnv(r.writeEnv), name); ok {
+			if vr, ok := currentScopeVar(localScopeEnv(env), name); ok {
 				if !vr.Local {
 					return expand.Variable{}
 				}
@@ -1243,9 +1262,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			targetEnv := r.writeEnv
 			if global && r.inFunc {
 				targetEnv = globalWriteEnv(r.writeEnv)
+			} else if !local {
+				if ownerEnv, _, ok := visibleBindingWriteEnv(r.writeEnv, name); ok {
+					targetEnv = ownerEnv
+				}
 			}
 			return runWithWriteEnv(targetEnv, func() bool {
-				vr := declLookupVar(name)
+				vr := declLookupVar(targetEnv, name)
 				if msg := arrayConversionError(name, vr); msg != "" {
 					if r.evalDepth > 0 {
 						declErrf("%s\n", msg)
@@ -1263,7 +1286,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					}
 				}
 				if clearReadonly && vr.ReadOnly {
-					r.errf("%s: readonly variable\n", name)
+					if declName == "local" {
+						declErrf("local: %s: readonly variable\n", name)
+					} else {
+						declErrf("%s: readonly variable\n", name)
+					}
 					r.exit.code = 1
 					return true
 				}
@@ -1315,18 +1342,21 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					}
 				} else {
 					var ok bool
-					if valType == "+a" || valType == "+A" {
-						// +a/+A with a value: treat as string assignment.
-						vr, arrayAssignTrace, ok = r.assignVal(vr, as, "")
-					} else {
-						vr, arrayAssignTrace, ok = r.assignVal(vr, as, valType)
-						if valType == "-a" && as.Value != nil && as.Array == nil && as.Ref != nil && as.Ref.Index == nil {
-							vr.Kind = expand.Indexed
-							vr.List = []string{vr.Str}
-							vr.Str = ""
-							vr.Map = nil
+					runWithWriteEnv(declEvalEnv, func() bool {
+						if valType == "+a" || valType == "+A" {
+							// +a/+A with a value: treat as string assignment.
+							vr, arrayAssignTrace, ok = r.assignVal(vr, as, "")
+						} else {
+							vr, arrayAssignTrace, ok = r.assignVal(vr, as, valType)
+							if valType == "-a" && as.Value != nil && as.Array == nil && as.Ref != nil && as.Ref.Index == nil {
+								vr.Kind = expand.Indexed
+								vr.List = []string{vr.Str}
+								vr.Str = ""
+								vr.Map = nil
+							}
 						}
-					}
+						return ok
+					})
 					if !ok || r.exit.fatalExit || r.exit.exiting {
 						return false
 					}
@@ -1344,7 +1374,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						}
 						if isInt {
 							oldVal := r.evalIntegerAttr(r.lookupVar(name).String())
-							newVal := r.evalIntegerAttr(r.assignLiteral(as))
+							newVal := 0
+							runWithWriteEnv(declEvalEnv, func() bool {
+								newVal = r.evalIntegerAttr(r.assignLiteral(as))
+								return true
+							})
 							vr.Str = strconv.Itoa(oldVal + newVal)
 						}
 					}
@@ -1440,7 +1474,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					return true
 				}
 				if err := r.setVarByRef(r.lookupVar(as.Ref.Name.Value), as.Ref, vr, as.Append, updates); err != nil {
-					r.errf("%v\n", err)
+					if declName == "local" && strings.HasSuffix(err.Error(), ": readonly variable") {
+						declErrf("local: %v\n", err)
+					} else {
+						r.errf("%v\n", err)
+					}
 					r.exit.code = 1
 					return false
 				}
@@ -1476,8 +1514,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 							modes = append(modes, flag)
 						case "+x", "+r", "+i", "+l", "+u":
 							modes = append(modes, flag)
-						case "-a", "-A", "-n":
+						case "-a", "-A":
 							valType = flag
+						case "-n":
+							if declName == "export" {
+								modes = append(modes, "+x")
+							} else {
+								valType = flag
+							}
 						case "+a", "+A", "+n":
 							valType = flag
 						case "-g":
@@ -1504,10 +1548,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			case *syntax.DeclAssign:
 				return processNamedOperand(operand.Assign.Ref, operand.Assign, true, declOperandString(operand))
 			case *syntax.DeclDynamicWord:
-				fields := r.fields(operand.Word)
-				if len(fields) == 0 {
-					fields = []string{r.literal(operand.Word)}
-				}
+				var fields []string
+				runWithWriteEnv(declEvalEnv, func() bool {
+					fields = r.fields(operand.Word)
+					if len(fields) == 0 {
+						fields = []string{r.literal(operand.Word)}
+					}
+					return true
+				})
 				for _, field := range fields {
 					parsed, err := parseDeclOperandField(field)
 					splitFields := []string{field}
