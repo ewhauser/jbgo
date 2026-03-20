@@ -132,7 +132,7 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 		prefixNestedShellDiagnostic(result, parsed.Name)
 	}
 	if result != nil && result.Stderr != "" {
-		result.Stderr = prefixNestedShellCommandNotFound(c.name, result.Stderr, commandString)
+		result.Stderr = prefixNestedShellCommandNotFound(c.name, result.Stderr)
 	}
 	if err := writeExecutionOutputs(inv, result); err != nil {
 		return err
@@ -140,25 +140,19 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 	return exitForExecutionResult(result)
 }
 
-func prefixNestedShellCommandNotFound(name, stderr string, commandString bool) string {
+func prefixNestedShellCommandNotFound(name, stderr string) string {
 	prefix := strings.TrimSpace(name)
 	if prefix == "" || stderr == "" {
 		return stderr
 	}
-	linePrefix := prefix + ": "
-	if commandString {
-		linePrefix = prefix + ": line 1: "
-	}
 	lines := strings.SplitAfter(stderr, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimRight(line, "\n")
-		if trimmed == "" || strings.HasPrefix(trimmed, linePrefix) || strings.HasPrefix(trimmed, prefix+": ") {
+		if trimmed == "" || strings.HasPrefix(trimmed, prefix+": ") {
 			continue
 		}
 		targetLine := trimmed
-		if rest, ok := strings.CutPrefix(targetLine, linePrefix); ok {
-			targetLine = rest
-		} else if rest, ok := strings.CutPrefix(targetLine, prefix+": "); ok {
+		if rest, ok := strings.CutPrefix(targetLine, prefix+": "); ok {
 			targetLine = rest
 		}
 		target, ok := strings.CutSuffix(targetLine, ": command not found")
@@ -167,7 +161,7 @@ func prefixNestedShellCommandNotFound(name, stderr string, commandString bool) s
 		}
 		suffix := line[len(trimmed):]
 		if shouldPrefixNestedCommandNotFound(target) {
-			lines[i] = linePrefix + target + ": command not found" + suffix
+			lines[i] = prefix + ": " + target + ": command not found" + suffix
 		} else {
 			lines[i] = target + ": command not found" + suffix
 		}

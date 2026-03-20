@@ -1631,7 +1631,7 @@ func TestBashCommandNotFoundFromCommandStringUsesInvocationPrefix(t *testing.T) 
 	if result.ExitCode != 127 {
 		t.Fatalf("ExitCode = %d, want 127; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stderr, "bash: line 1: missing-cmd: command not found\n"; got != want {
+	if got, want := result.Stderr, "bash: missing-cmd: command not found\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
