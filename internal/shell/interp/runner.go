@@ -2066,7 +2066,14 @@ func (r *Runner) inlineArrayIndexValue(index *syntax.Subscript) string {
 	if word, ok := index.Expr.(*syntax.Word); ok {
 		return r.assignmentWordLiteral(word)
 	}
-	return strconv.Itoa(r.arithm(index.Expr))
+	if raw := index.RawText(); raw != "" {
+		return raw
+	}
+	var sb strings.Builder
+	if err := syntax.NewPrinter(syntax.Minify(true)).Print(&sb, index.Expr); err == nil {
+		return sb.String()
+	}
+	return ""
 }
 
 func bashDeclDoubleQuote(value string) string {

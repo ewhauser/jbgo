@@ -361,6 +361,30 @@ A=([\~]=v [$HOME]=x [$(printf '%s' key)]=y) external
 		t.Fatalf("env = %q, want %q", got, "([~]=v [/home/live]=x [key]=y)")
 	}
 }
+func TestInlineArrayBindingPreservesLiteralArithmeticSubscripts(t *testing.T) {
+	t.Parallel()
+
+	var got string
+	_, _, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		ExecHandler: func(ctx context.Context, args []string) error {
+			hc, ok := LookupHandlerContext(ctx)
+			if !ok {
+				t.Fatal("missing handler context")
+			}
+			got = hc.Env.Get("A").String()
+			return nil
+		},
+	}, `
+A=([1+1]=x [ 1+2 ]=y) external
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got != "([1+1]=x [ 1+2 ]=y)" {
+		t.Fatalf("env = %q, want %q", got, "([1+1]=x [ 1+2 ]=y)")
+	}
+}
 func TestIndirectExpansionSupportsPositionalRefs(t *testing.T) {
 	t.Parallel()
 
