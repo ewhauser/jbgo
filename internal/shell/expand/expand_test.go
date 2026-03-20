@@ -783,6 +783,57 @@ func TestFieldsQuotedIndirectAllElementsTargets(t *testing.T) {
 	}
 }
 
+func TestFieldsUnquotedIndirectAllElementsTargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  testEnv
+		want []string
+	}{
+		{
+			name: "SpecialAtCustomIFS",
+			env: testEnv{
+				"IFS":  {Set: true, Kind: String, Str: "zx"},
+				"name": {Set: true, Kind: String, Str: "@"},
+				"@":    {Set: true, Kind: Indexed, List: []string{"a b", "c"}},
+			},
+			want: []string{"a b", "c"},
+		},
+		{
+			name: "ArrayAtCustomIFS",
+			env: testEnv{
+				"IFS":  {Set: true, Kind: String, Str: "zx"},
+				"name": {Set: true, Kind: String, Str: "arr[@]"},
+				"arr":  {Set: true, Kind: Indexed, List: []string{"a b", "c"}},
+			},
+			want: []string{"a b", "c"},
+		},
+		{
+			name: "SpecialAtEmptyIFS",
+			env: testEnv{
+				"IFS":  {Set: true, Kind: String, Str: ""},
+				"name": {Set: true, Kind: String, Str: "@"},
+				"@":    {Set: true, Kind: Indexed, List: []string{"a", "b"}},
+			},
+			want: []string{"a", "b"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, `${!name}`)
+			got, err := Fields(&Config{Env: tc.env}, word)
+			if err != nil {
+				t.Fatalf("did not want error, got %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("wanted %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestFieldsQuotedIndirectNamerefTargetStaysSingleField(t *testing.T) {
 	t.Parallel()
 
@@ -1169,16 +1220,50 @@ func TestFieldsUnquotedParamOperatorWordKeepsOuterLiteralBoundaries(t *testing.T
 	}
 }
 
+func TestFieldsUnquotedArrayOperatorWordKeepsQuotedBoundaries(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `1${arr[@]:-"2 3" "4 5"}6`)
+	got, err := Fields(&Config{Env: testEnv{}}, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"12 3", "4 56"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFieldsCurrentUserHomeEmptyPreservesEmptyField(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `~`)
+	got, err := Fields(&Config{
+		Env: testEnv{
+			"HOME": {Set: true, Kind: String, Str: ""},
+		},
+	}, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{""}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
 func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
+		src  string
 		cfg  *Config
 		want string
 	}{
 		{
 			name: "LiveHOME",
+			src:  `~/src`,
 			cfg: &Config{
 				Env: testEnv{
 					"HOME": {Set: true, Kind: String, Str: "/live"},
@@ -1188,6 +1273,7 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 		},
 		{
 			name: "StartupHomeOverride",
+			src:  `~/src`,
 			cfg: &Config{
 				StartupHome: "/startup",
 				Env: testEnv{
@@ -1198,6 +1284,7 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 		},
 		{
 			name: "RootHomeAvoidsDoubleSlash",
+			src:  `~/src`,
 			cfg: &Config{
 				Env: testEnv{
 					"HOME": {Set: true, Kind: String, Str: "/"},
@@ -1205,11 +1292,31 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 			},
 			want: "/src",
 		},
+		{
+			name: "TrailingSlashHomePreserved",
+			src:  `~/src`,
+			cfg: &Config{
+				Env: testEnv{
+					"HOME": {Set: true, Kind: String, Str: "/tmp/"},
+				},
+			},
+			want: "/tmp//src",
+		},
+		{
+			name: "EmptyHomeExpandsToEmptyString",
+			src:  `~`,
+			cfg: &Config{
+				Env: testEnv{
+					"HOME": {Set: true, Kind: String, Str: ""},
+				},
+			},
+			want: "",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			word := parseCommandWord(t, `~/src`)
+			word := parseCommandWord(t, tc.src)
 			got, err := Literal(tc.cfg, word)
 			if err != nil {
 				t.Fatalf("Literal() error = %v", err)

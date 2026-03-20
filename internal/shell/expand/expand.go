@@ -305,7 +305,7 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 	case *syntax.Lit:
 		s := part.Value
 		if leading {
-			if prefix, rest := cfg.expandUser(s, more); prefix != "" {
+			if prefix, rest, expanded := cfg.expandUser(s, more); expanded {
 				s = prefix + rest
 			}
 		}
@@ -950,7 +950,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 		case *syntax.Lit:
 			s := wp.Value
 			if i == 0 && ql == quoteNone {
-				if prefix, rest := cfg.expandUser(s, len(wps) > 1); prefix != "" {
+				if prefix, rest, expanded := cfg.expandUser(s, len(wps) > 1); expanded {
 					// TODO: return two separate fieldParts,
 					// like in wordFields?
 					s = prefix + rest
@@ -1075,14 +1075,16 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 		case *syntax.Lit:
 			s := wp.Value
 			if i == 0 {
-				prefix, rest := cfg.expandUser(s, len(wps) > 1)
-				if prefix != "" {
+				prefix, rest, expanded := cfg.expandUser(s, len(wps) > 1)
+				if expanded && (prefix != "" || rest == "") {
 					splitter.appendPart(fieldPart{
 						quote: quoteSingle,
 						val:   prefix,
 					})
 				}
-				s = rest
+				if expanded {
+					s = rest
+				}
 			}
 			if strings.Contains(s, "\\") {
 				sb := cfg.strBuilder()
@@ -1132,10 +1134,10 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				return nil, err
 			} else if ok {
 				splitter.appendSplitFields(fields2, elideEmpty)
-			} else if val, ok, err := cfg.paramExpSplitValue(wp); err != nil {
+			} else if parts, ok, err := cfg.paramExpSplitValue(wp); err != nil {
 				return nil, err
 			} else if ok {
-				splitter.appendUnquoted(val)
+				splitter.appendFieldParts(parts)
 			} else {
 				val, err := cfg.paramExp(wp, quoteNone)
 				if err != nil {
@@ -1510,17 +1512,17 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indices []int
 	return elems
 }
 
-func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest string) {
+func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest string, expanded bool) {
 	name, ok := strings.CutPrefix(field, "~")
 	if !ok {
 		// No tilde prefix to expand, e.g. "foo".
-		return "", field
+		return "", field, false
 	}
 	i := strings.IndexByte(name, '/')
 	if i < 0 && moreFields {
 		// There is a tilde prefix, but followed by more fields, e.g. "~'foo'".
 		// We only proceed if an unquoted slash was found in this field, e.g. "~/'foo'".
-		return "", field
+		return "", field, false
 	}
 	if i >= 0 {
 		rest = name[i:]
@@ -1533,28 +1535,32 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
 		// to use cfg.Env, and we always want to check "HOME" first.
 
 		if cfg.StartupHome != "" {
-			return joinTildeHome(cfg.StartupHome, rest)
+			prefix, rest := joinTildeHome(cfg.StartupHome, rest)
+			return prefix, rest, true
 		}
 		if vr := cfg.Env.Get("HOME"); vr.IsSet() {
-			return joinTildeHome(vr.String(), rest)
+			prefix, rest := joinTildeHome(vr.String(), rest)
+			return prefix, rest, true
 		}
 
 		if runtime.GOOS == "windows" {
 			if vr := cfg.Env.Get("USERPROFILE"); vr.IsSet() {
-				return joinTildeHome(vr.String(), rest)
+				prefix, rest := joinTildeHome(vr.String(), rest)
+				return prefix, rest, true
 			}
 		}
-		return "", field
+		return "", field, false
 	}
 
 	if vr := cfg.Env.Get("HOME " + name); vr.IsSet() {
-		return joinTildeHome(vr.String(), rest)
+		prefix, rest := joinTildeHome(vr.String(), rest)
+		return prefix, rest, true
 	}
-	return "", field
+	return "", field, false
 }
 
 func joinTildeHome(home, rest string) (string, string) {
-	if strings.HasSuffix(home, "/") && strings.HasPrefix(rest, "/") {
+	if home == "/" && strings.HasPrefix(rest, "/") {
 		rest = strings.TrimPrefix(rest, "/")
 	}
 	return home, rest

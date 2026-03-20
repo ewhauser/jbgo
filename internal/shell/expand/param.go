@@ -429,33 +429,53 @@ func (cfg *Config) arrayParamFields(pe *syntax.ParamExp, state paramExpState, el
 	return cfg.splitElemsAsFields(elems), true, nil
 }
 
-func (cfg *Config) paramExpSplitValue(pe *syntax.ParamExp) (string, bool, error) {
+func (cfg *Config) indirectParamArrayFields(state paramExpState) ([][]fieldPart, bool, bool, error) {
+	if state.orig.Kind == NameRef || state.str == "" {
+		return nil, false, false, nil
+	}
+	target, err := indirectParamExp(state.str)
+	if err != nil {
+		return nil, false, false, err
+	}
+	if !quotedIndirectArrayTarget(target) {
+		return nil, false, false, nil
+	}
+	if fields, ok, elideEmpty, err := cfg.paramExpFields(target); err != nil {
+		return nil, false, false, err
+	} else if ok {
+		return fields, true, elideEmpty, nil
+	}
+	if parts, ok, err := cfg.paramExpSplitValue(target); err != nil {
+		return nil, false, false, err
+	} else if ok {
+		return cfg.splitFieldParts(parts), true, false, nil
+	}
+	return nil, false, false, nil
+}
+
+func (cfg *Config) paramExpSplitValue(pe *syntax.ParamExp) ([]fieldPart, bool, error) {
 	if cfg.ifs == "" || pe == nil || pe.Length || pe.Width || pe.IsSet || pe.Excl {
-		return "", false, nil
+		return nil, false, nil
 	}
 
 	fields0, elems, isArray := cfg.quotedArrayFields(pe)
 	if !isArray {
-		return "", false, nil
+		return nil, false, nil
 	}
 
 	state, err := cfg.paramExpState(pe)
 	if err != nil {
-		return "", false, err
+		return nil, false, err
 	}
 	if state.swallowedError && !state.indexAllElements {
-		return "", true, nil
+		return nil, true, nil
 	}
 
-	wordValue := func(word *syntax.Word) (string, error) {
+	wordParts := func(word *syntax.Word) ([]fieldPart, error) {
 		if word == nil {
-			return "", nil
+			return nil, nil
 		}
-		parts, err := cfg.paramArgField(word, quoteNone)
-		if err != nil {
-			return "", err
-		}
-		return cfg.fieldJoin(parts), nil
+		return cfg.paramArgField(word, quoteNone)
 	}
 
 	hasElems := len(elems) > 0
@@ -464,56 +484,58 @@ func (cfg *Config) paramExpSplitValue(pe *syntax.ParamExp) (string, bool, error)
 		switch pe.Exp.Op {
 		case syntax.AlternateUnset:
 			if hasElems {
-				val, err := wordValue(pe.Exp.Word)
-				return val, true, err
+				parts, err := wordParts(pe.Exp.Word)
+				return parts, true, err
 			}
 		case syntax.AlternateUnsetOrNull:
 			if !null {
-				val, err := wordValue(pe.Exp.Word)
-				return val, true, err
+				parts, err := wordParts(pe.Exp.Word)
+				return parts, true, err
 			}
 		case syntax.DefaultUnset:
 			if !hasElems {
-				val, err := wordValue(pe.Exp.Word)
-				return val, true, err
+				parts, err := wordParts(pe.Exp.Word)
+				return parts, true, err
 			}
 		case syntax.DefaultUnsetOrNull:
 			if null {
-				val, err := wordValue(pe.Exp.Word)
-				return val, true, err
+				parts, err := wordParts(pe.Exp.Word)
+				return parts, true, err
 			}
 		case syntax.AssignUnset:
 			if !hasElems {
-				val, err := wordValue(pe.Exp.Word)
+				parts, err := wordParts(pe.Exp.Word)
 				if err != nil {
-					return "", false, err
+					return nil, false, err
 				}
+				val := cfg.fieldJoin(parts)
 				if err := cfg.envSet(state.name, val); err != nil {
-					return "", false, err
+					return nil, false, err
 				}
-				return val, true, nil
+				return parts, true, nil
 			}
 		case syntax.AssignUnsetOrNull:
 			if null {
-				val, err := wordValue(pe.Exp.Word)
+				parts, err := wordParts(pe.Exp.Word)
 				if err != nil {
-					return "", false, err
+					return nil, false, err
 				}
+				val := cfg.fieldJoin(parts)
 				if err := cfg.envSet(state.name, val); err != nil {
-					return "", false, err
+					return nil, false, err
 				}
-				return val, true, nil
+				return parts, true, nil
 			}
 		case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
-			return "", false, nil
+			return nil, false, nil
 		}
 	}
 
 	elems, err = cfg.transformArrayElems(pe, state, elems)
 	if err != nil {
-		return "", false, err
+		return nil, false, err
 	}
-	return cfg.ifsJoin(elems), true, nil
+	return []fieldPart{{val: cfg.ifsJoin(elems)}}, true, nil
 }
 
 func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
@@ -674,7 +696,7 @@ func (cfg *Config) paramArgField(word *syntax.Word, ql quoteLevel) ([]fieldPart,
 		case *syntax.Lit:
 			s := wp.Value
 			if i == 0 && ql == quoteNone {
-				if prefix, rest := cfg.expandUser(s, len(word.Parts) > 1); prefix != "" {
+				if prefix, rest, expanded := cfg.expandUser(s, len(word.Parts) > 1); expanded {
 					s = prefix + rest
 				}
 			}
@@ -855,6 +877,13 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 		return [][]fieldPart{}, true, false, nil
 	}
 	if pe.Excl {
+		if pe.Names == 0 && pe.Index == nil {
+			if fields, ok, elideEmpty, err := cfg.indirectParamArrayFields(state); err != nil {
+				return nil, false, false, err
+			} else if ok {
+				return fields, true, elideEmpty, nil
+			}
+		}
 		switch pe.Names {
 		case syntax.NamesPrefixWords:
 			return cfg.splitElemsAsFields(cfg.namesByPrefix(pe.Param.Value)), true, false, nil
