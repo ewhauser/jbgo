@@ -543,10 +543,11 @@ func wrappedBuiltinInvocations(args []string) []builtinInvocation {
 	for len(current) > 0 {
 		switch current[0] {
 		case "builtin":
-			if len(current) < 2 || !interp.IsBuiltin(current[1]) {
+			next := builtinCommandTarget(current[1:])
+			if len(next) == 0 || !interp.IsBuiltin(next[0]) {
 				return invocations
 			}
-			current = append([]string(nil), current[1:]...)
+			current = append([]string(nil), next...)
 			invocations = append(invocations, builtinInvocation{
 				name: current[0],
 				argv: append([]string(nil), current...),
@@ -568,6 +569,14 @@ func wrappedBuiltinInvocations(args []string) []builtinInvocation {
 	return invocations
 }
 
+func builtinCommandTarget(args []string) []string {
+	rest := append([]string(nil), args...)
+	if len(rest) > 0 && rest[0] == "--" {
+		rest = rest[1:]
+	}
+	return rest
+}
+
 func commandBuiltinTarget(args []string) []string {
 	show := false
 	rest := append([]string(nil), args...)
@@ -576,6 +585,12 @@ func commandBuiltinTarget(args []string) []string {
 		case "-v", "-V":
 			show = true
 			rest = rest[1:]
+		case "--":
+			rest = rest[1:]
+			if show || len(rest) == 0 {
+				return nil
+			}
+			return rest
 		default:
 			if show || len(rest) == 0 {
 				return nil

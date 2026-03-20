@@ -2075,6 +2075,9 @@ func (r *Runner) resolveCallExprArgs(args []*syntax.Word) ([]string, *syntax.Dec
 	canDetectDecl := true
 	for i, arg := range args {
 		expanded := r.fields(arg)
+		if !r.exit.ok() || r.exit.exiting || r.exit.fatalExit || r.exit.err != nil {
+			return nil, nil
+		}
 		fields = append(fields, expanded...)
 		if !canDetectDecl {
 			continue

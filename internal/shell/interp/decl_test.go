@@ -3,6 +3,7 @@ package interp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io/fs"
 	"strings"
 	"testing"
@@ -199,6 +200,31 @@ printf 'missing=%d\n' "$?"
 		t.Fatalf("stderr = %q, want %q", stderr, "builtin: missing: not a shell builtin\n")
 	}
 }
+
+func TestResolveCallExprArgsStopsAfterExpansionError(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+${missing?boom} "$(printf side-effect >&2)"
+`)
+	var status ExitStatus
+	if !errors.As(err, &status) {
+		t.Fatalf("Run error = %v, want exit status, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if status != 127 {
+		t.Fatalf("exit status = %d, want 127", status)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if strings.Contains(stderr, "side-effect") {
+		t.Fatalf("stderr = %q, want no later-expansion side effects", stderr)
+	}
+	if !strings.Contains(stderr, "boom") {
+		t.Fatalf("stderr = %q, want unset-parameter diagnostic", stderr)
+	}
+}
+
 func TestDeclPrefixAssignValidationFailureSkipsBuiltin(t *testing.T) {
 	t.Parallel()
 

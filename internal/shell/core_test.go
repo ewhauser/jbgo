@@ -14,6 +14,7 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
 	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
 )
 
@@ -315,6 +316,29 @@ func TestCoreRunUsesBuiltinCompgenWithoutRegistryWrapper(t *testing.T) {
 		"wrapped=127\n"
 	if got := stdout.String(); got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCoreRunBuiltinDoubleDashHonorsBuiltinPolicy(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: "builtin -- false\n",
+		Policy: policy.NewStatic(&policy.Config{
+			AllowedBuiltins: []string{"builtin"},
+		}),
+		Stderr: &stderr,
+	})
+	var status interp.ExitStatus
+	if !errors.As(err, &status) {
+		t.Fatalf("Run() error = %v, want exit status", err)
+	}
+	if status != 126 {
+		t.Fatalf("exit status = %d, want 126", status)
+	}
+	if got := stderr.String(); !strings.Contains(got, `builtin "false" denied: not in allowlist`) {
+		t.Fatalf("stderr = %q, want false policy denial", got)
 	}
 }
 
