@@ -22,6 +22,7 @@ func TestParamReplacementAnchorsAndSlashForms(t *testing.T) {
 	env := testEnv{
 		"s":         {Set: true, Kind: String, Str: "xx_xx"},
 		"lit":       {Set: true, Kind: String, Str: "#%#"},
+		"special":   {Set: true, Kind: String, Str: "%abc#def#"},
 		"x":         {Set: true, Kind: String, Str: "/_/"},
 		"HOST_PATH": {Set: true, Kind: String, Str: "/foo/bar/baz"},
 	}
@@ -34,6 +35,8 @@ func TestParamReplacementAnchorsAndSlashForms(t *testing.T) {
 		{`${s/%xx/yy}`, "xx_yy"},
 		{`${lit//#/X}`, "X%X"},
 		{`${lit//%/Y}`, "#Y#"},
+		{`${special//#/H}`, "%abcHdefH"},
+		{`${special//%/P}`, "Pabc#def#"},
 		{`${x////c}`, "c_c"},
 		{`${x///}`, "_"},
 		{`${HOST_PATH////\\/}`, `\/foo\/bar\/baz`},

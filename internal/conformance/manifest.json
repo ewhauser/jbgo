@@ -1762,46 +1762,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-op-len.test.sh::Length operator can't be followed by test operator": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-patsub.test.sh::${v//} is empty search and replacement": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-patsub.test.sh::Chromium from http://www.oilshell.org/blog/2016/11/07.html": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-patsub.test.sh::Synthesized ${x///} bug (similar to above)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-patsub.test.sh::When LC_ALL=C, pattern ? doesn't match multibyte character": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-patsub.test.sh::patsub with [^]]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-slice.test.sh::Cannot take length of substring slice": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-slice.test.sh::Permutations of implicit begin and length": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-strip.test.sh::strip unquoted and quoted [": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-strip.test.sh::strip unquoted and quoted []": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-op-test.test.sh::$* (\"\" \"\") and - and + (IFS=)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

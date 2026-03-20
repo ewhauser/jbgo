@@ -303,6 +303,64 @@ A=($(echo side >&2; printf '%s\n' one two)) external
 		t.Fatalf("stderr = %q, want %q", stderr, "side\n")
 	}
 }
+func TestInlineArrayBindingAppendOverwritesCommandEnvValue(t *testing.T) {
+	t.Parallel()
+
+	var got []string
+	_, _, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		ExecHandler: func(ctx context.Context, args []string) error {
+			hc, ok := LookupHandlerContext(ctx)
+			if !ok {
+				t.Fatal("missing handler context")
+			}
+			got = append(got, hc.Env.Get("A").String())
+			return nil
+		},
+	}, `
+A=foo A+=(bar baz) external
+A=foo
+A+=(bar baz) external
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	want := []string{"(bar baz)", "(bar baz)"}
+	if len(got) != len(want) {
+		t.Fatalf("env values = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("env[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestInlineAssocArrayBindingKeepsLiteralTildeKeys(t *testing.T) {
+	t.Parallel()
+
+	var got string
+	_, _, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		Env: expand.ListEnviron("HOME=/home/live"),
+		ExecHandler: func(ctx context.Context, args []string) error {
+			hc, ok := LookupHandlerContext(ctx)
+			if !ok {
+				t.Fatal("missing handler context")
+			}
+			got = hc.Env.Get("A").String()
+			return nil
+		},
+	}, `
+A=([\~]=v [$HOME]=x [$(printf '%s' key)]=y) external
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got != "([~]=v [/home/live]=x [key]=y)" {
+		t.Fatalf("env = %q, want %q", got, "([~]=v [/home/live]=x [key]=y)")
+	}
+}
 func TestIndirectExpansionSupportsPositionalRefs(t *testing.T) {
 	t.Parallel()
 

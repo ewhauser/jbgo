@@ -398,6 +398,20 @@ func AssignmentLiteral(cfg *Config, word *syntax.Word) (string, error) {
 	return cfg.fieldJoin(field), nil
 }
 
+// AssignmentWordLiteral expands a single shell word using assignment-word
+// backslash rules without applying assignment-style tilde expansion.
+func AssignmentWordLiteral(cfg *Config, word *syntax.Word) (string, error) {
+	if word == nil {
+		return "", nil
+	}
+	cfg = prepareConfig(cfg)
+	field, err := cfg.wordField(word.Parts, quoteAssignNoTilde)
+	if err != nil {
+		return "", err
+	}
+	return cfg.fieldJoin(field), nil
+}
+
 func (cfg *Config) expandAssignmentTildeLiteral(s string, moreFields bool) string {
 	if !strings.ContainsRune(s, '~') {
 		return s
@@ -1310,6 +1324,7 @@ type quoteLevel uint
 const (
 	quoteNone quoteLevel = iota
 	quoteAssign
+	quoteAssignNoTilde
 	quoteDouble
 	quoteHeredoc
 	quoteSingle
@@ -1350,7 +1365,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 					s = prefix + rest
 				}
 			}
-			if ql == quoteAssign && strings.Contains(s, "\\") {
+			if (ql == quoteAssign || ql == quoteAssignNoTilde) && strings.Contains(s, "\\") {
 				sb := cfg.strBuilder()
 				for i := 0; i < len(s); i++ {
 					b := s[i]
@@ -2020,26 +2035,6 @@ func findAllIndex(pat, name string, n int) [][]int {
 	expr, err := pattern.Regexp(pat, pattern.ExtendedOperators)
 	if err != nil {
 		return nil
-	}
-	rx := regexp.MustCompile(expr)
-	return rx.FindAllStringIndex(name, n)
-}
-
-func findReplaceIndex(pat, name string, n int) [][]int {
-	anchorStart := strings.HasPrefix(pat, "#")
-	anchorEnd := strings.HasPrefix(pat, "%")
-	if anchorStart || anchorEnd {
-		pat = pat[1:]
-	}
-	expr, err := pattern.Regexp(pat, pattern.ExtendedOperators)
-	if err != nil {
-		return nil
-	}
-	if anchorStart {
-		expr = "^" + expr
-	}
-	if anchorEnd {
-		expr += "$"
 	}
 	rx := regexp.MustCompile(expr)
 	return rx.FindAllStringIndex(name, n)

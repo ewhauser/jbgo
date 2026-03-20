@@ -390,6 +390,17 @@ func (r *Runner) assignmentLiteral(word *syntax.Word) string {
 	return str
 }
 
+func (r *Runner) assignmentWordLiteral(word *syntax.Word) string {
+	if r.ecfg == nil {
+		r.fillExpandConfig(context.Background())
+	}
+	cfg := *r.ecfg
+	cfg.StartupHome = ""
+	str, err := expand.AssignmentWordLiteral(&cfg, word)
+	r.expandErr(err)
+	return str
+}
+
 func (r *Runner) document(word *syntax.Word) string {
 	str, err := expand.Document(r.ecfg, word)
 	r.expandErr(err)
@@ -2053,7 +2064,7 @@ func (r *Runner) inlineArrayIndexValue(index *syntax.Subscript) string {
 		return ""
 	}
 	if word, ok := index.Expr.(*syntax.Word); ok {
-		return r.assignmentLiteral(word)
+		return r.assignmentWordLiteral(word)
 	}
 	return strconv.Itoa(r.arithm(index.Expr))
 }
@@ -2092,11 +2103,8 @@ func bashDeclPlainValue(value string) string {
 }
 
 func bashDeclAssocKey(key string) string {
-	if !needsTraceANSIQuote(key) {
-		quoted, err := syntax.Quote(key, syntax.LangBash)
-		if err == nil && quoted == key {
-			return key
-		}
+	if key != "" && !needsTraceANSIQuote(key) && !strings.ContainsAny(key, "\\]\"'\n\r") {
+		return key
 	}
 	return bashDeclPrintValue(key)
 }
