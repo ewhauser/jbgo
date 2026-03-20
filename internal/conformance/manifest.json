@@ -243,10 +243,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-read.test.sh::mapfile from directory (bash doesn't handle errors)": {
-          "mode": "xfail",
-          "reason": "gbash still surfaces directory read errors for mapfile instead of matching bash's no-op status"
-        },
         "oils/builtin-read.test.sh::read -r -d '' for NUL strings, e.g. find -print0": {
           "mode": "xfail",
           "reason": "gbash's internal find command does not yet implement -print0, so the read builtin never receives the bash-compatible NUL stream"
@@ -480,22 +476,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-bash.test.sh::help": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bash.test.sh::mapfile (delimiter): -d '' (null-separated)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bash.test.sh::mapfile (input range): -s start -n count": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bash.test.sh::mapfile (store position): -O start": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bash.test.sh::mapfile -u with named file descriptor": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1917,7 +1897,10 @@
         },
         "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - mapfile builtin": {
           "mode": "xfail",
-          "reason": "conformance: mapfile null-byte handling still differs from bash"
+          "reason": "darwin's byte-dump formatting still differs from the Linux CI oracle for this mapfile case",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/nul-bytes.test.sh::Issue 2269 - Do NUL bytes match ? in ${a#?}": {
           "mode": "xfail",

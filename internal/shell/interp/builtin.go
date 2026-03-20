@@ -4,7 +4,6 @@
 package interp
 
 import (
-	"bufio"
 	"bytes"
 	"cmp"
 	"context"
@@ -729,30 +728,10 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 
 	case "readarray", "mapfile":
-		dropDelim := false
-		delim := "\n"
-		fp := flagParser{remaining: args}
-		for fp.more() {
-			switch flag := fp.flag(); flag {
-			case "-t":
-				// Remove the delim from each line read
-				dropDelim = true
-			case "-d":
-				if len(fp.remaining) == 0 {
-					return failf(2, "%s: -d: option requires an argument\n", name)
-				}
-				delim = fp.value()
-				if delim == "" {
-					// Bash sets the delim to an ASCII NUL if provided with an empty
-					// string.
-					delim = "\x00"
-				}
-			default:
-				return failf(2, "%s: invalid option %q\n", name, flag)
-			}
+		opts, args, parseErr := parseMapfileBuiltinArgs(name, args)
+		if parseErr != nil {
+			return failf(parseErr.code, "%s", parseErr.msg)
 		}
-
-		args := fp.args()
 		var arrayName string
 		switch len(args) {
 		case 0:
@@ -766,17 +745,51 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			return failf(2, "%s: Only one array name may be specified, %v\n", name, args)
 		}
 
-		var vr expand.Variable
-		vr.Kind = expand.Indexed
-		scanner := bufio.NewScanner(r.stdin)
-		scanner.Split(mapfileSplit(delim[0], dropDelim))
-		for scanner.Scan() {
-			vr.List = append(vr.List, scanner.Text())
+		fd := r.getFD(opts.fd)
+		if fd == nil || fd.reader == nil {
+			return failf(1, "%s: %d: invalid file descriptor: Bad file descriptor\n", name, opts.fd)
 		}
-		if err := scanner.Err(); err != nil {
-			return failf(2, "%s: unable to read, %v\n", name, err)
+
+		var target expand.Variable
+		initialized := false
+		firstRead := true
+		nextIndex := opts.origin
+		skipped := 0
+		stored := 0
+		for {
+			if opts.maxLines > 0 && stored >= opts.maxLines {
+				break
+			}
+			record, err := mapfileBuiltinReadRecord(fd, opts.delimiter)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				if firstRead && mapfileBuiltinSuppressReadError(err) {
+					break
+				}
+				return failf(1, "%s: %d: read error: %s\n", name, opts.fd, readBuiltinErrorText(err))
+			}
+			firstRead = false
+			if !initialized {
+				target = mapfileBuiltinTargetVar(r.lookupVar(arrayName), opts.hasOrigin)
+				initialized = true
+			}
+			if skipped < opts.skipLines {
+				skipped++
+				continue
+			}
+			target = target.IndexedSet(nextIndex, mapfileBuiltinRecordValue(record, opts.delimiter, opts.stripDelimiter), false)
+			nextIndex++
+			stored++
 		}
-		r.setVar(arrayName, vr)
+		if !initialized && !opts.hasOrigin {
+			target = mapfileBuiltinTargetVar(r.lookupVar(arrayName), false)
+			initialized = true
+		}
+		if initialized {
+			r.setVar(arrayName, target)
+		}
 
 	default:
 		return failf(2, "%s: unimplemented builtin\n", name)
@@ -784,28 +797,172 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	return exit
 }
 
-// mapfileSplit returns a suitable Split function for a [bufio.Scanner];
-// the code is mostly stolen from [bufio.ScanLines].
-func mapfileSplit(delim byte, dropDelim bool) bufio.SplitFunc {
-	return func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
+const mapfileBuiltinUsage = "mapfile: usage: mapfile [-d delim] [-n count] [-O origin] [-s count] [-t] [-u fd] [array]\n"
+
+type mapfileBuiltinOptions struct {
+	stripDelimiter bool
+	delimiter      byte
+	maxLines       int
+	origin         int
+	skipLines      int
+	fd             int
+	hasOrigin      bool
+}
+
+type mapfileBuiltinParseError struct {
+	code uint8
+	msg  string
+}
+
+func parseMapfileBuiltinArgs(name string, args []string) (mapfileBuiltinOptions, []string, *mapfileBuiltinParseError) {
+	opts := mapfileBuiltinOptions{
+		delimiter: '\n',
+		fd:        0,
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return opts, args[i+1:], nil
 		}
-		if i := bytes.IndexByte(data, delim); i >= 0 {
-			// We have a full newline-terminated line.
-			if dropDelim {
-				return i + 1, data[0:i], nil
-			} else {
-				return i + 1, data[0 : i+1], nil
+		if len(arg) < 2 || arg[0] != '-' {
+			return opts, args[i:], nil
+		}
+		for j := 1; j < len(arg); j++ {
+			switch arg[j] {
+			case 't':
+				opts.stripDelimiter = true
+			case 'd':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &mapfileBuiltinParseError{code: 2, msg: fmt.Sprintf("%s: -d: option requires an argument\n", name)}
+				}
+				if value == "" {
+					opts.delimiter = 0
+				} else {
+					opts.delimiter = value[0]
+				}
+				i = next
+				j = len(arg)
+			case 'n':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &mapfileBuiltinParseError{code: 2, msg: fmt.Sprintf("%s: -n: option requires an argument\n", name)}
+				}
+				count, err := strconv.Atoi(value)
+				if err != nil || count < 0 {
+					return opts, nil, &mapfileBuiltinParseError{code: 1, msg: fmt.Sprintf("%s: %s: invalid line count\n", name, value)}
+				}
+				opts.maxLines = count
+				i = next
+				j = len(arg)
+			case 'O':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &mapfileBuiltinParseError{code: 2, msg: fmt.Sprintf("%s: -O: option requires an argument\n", name)}
+				}
+				origin, err := strconv.Atoi(value)
+				if err != nil || origin < 0 {
+					return opts, nil, &mapfileBuiltinParseError{code: 1, msg: fmt.Sprintf("%s: %s: invalid array origin\n", name, value)}
+				}
+				opts.origin = origin
+				opts.hasOrigin = true
+				i = next
+				j = len(arg)
+			case 's':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &mapfileBuiltinParseError{code: 2, msg: fmt.Sprintf("%s: -s: option requires an argument\n", name)}
+				}
+				count, err := strconv.Atoi(value)
+				if err != nil || count < 0 {
+					return opts, nil, &mapfileBuiltinParseError{code: 1, msg: fmt.Sprintf("%s: %s: invalid line count\n", name, value)}
+				}
+				opts.skipLines = count
+				i = next
+				j = len(arg)
+			case 'u':
+				value, next, ok := readBuiltinOptionArg(args, i, arg, j)
+				if !ok {
+					return opts, nil, &mapfileBuiltinParseError{code: 2, msg: fmt.Sprintf("%s: -u: option requires an argument\n", name)}
+				}
+				fd, err := strconv.Atoi(value)
+				if err != nil || fd < 0 {
+					return opts, nil, &mapfileBuiltinParseError{code: 1, msg: fmt.Sprintf("%s: %s: invalid file descriptor specification\n", name, value)}
+				}
+				opts.fd = fd
+				i = next
+				j = len(arg)
+			default:
+				return opts, nil, &mapfileBuiltinParseError{
+					code: 2,
+					msg:  fmt.Sprintf("%s: -%c: invalid option\n%s", name, arg[j], mapfileBuiltinUsage),
+				}
 			}
 		}
-		// If we're at EOF, we have a final, non-terminated line. Return it.
-		if atEOF {
-			return len(data), data, nil
-		}
-		// Request more data.
-		return 0, nil, nil
 	}
+	return opts, nil, nil
+}
+
+func mapfileBuiltinReadRecord(fd *shellFD, delim byte) ([]byte, error) {
+	if fd == nil || fd.reader == nil {
+		return nil, errors.New("bad file descriptor")
+	}
+	var buf []byte
+	for {
+		b, err := fd.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if len(buf) == 0 {
+					return nil, io.EOF
+				}
+				return buf, nil
+			}
+			return nil, err
+		}
+		buf = append(buf, b)
+		if b == delim {
+			return buf, nil
+		}
+	}
+}
+
+func mapfileBuiltinSuppressReadError(err error) bool {
+	return errors.Is(err, syscall.EISDIR) || readBuiltinErrorText(err) == "Is a directory"
+}
+
+func mapfileBuiltinRecordValue(record []byte, delim byte, stripDelimiter bool) string {
+	if nul := bytes.IndexByte(record, 0); nul >= 0 {
+		record = record[:nul]
+	}
+	if stripDelimiter && len(record) > 0 && record[len(record)-1] == delim {
+		record = record[:len(record)-1]
+	}
+	return string(record)
+}
+
+func mapfileBuiltinTargetVar(prev expand.Variable, preserveExisting bool) expand.Variable {
+	if preserveExisting {
+		switch prev.Kind {
+		case expand.Indexed:
+			return prev
+		case expand.String:
+			if prev.IsSet() {
+				prev.Kind = expand.Indexed
+				prev.List = []string{prev.Str}
+				prev.Str = ""
+				prev.Map = nil
+				prev.Indices = nil
+				return prev
+			}
+		}
+	}
+	prev.Kind = expand.Indexed
+	prev.Set = false
+	prev.Str = ""
+	prev.List = nil
+	prev.Map = nil
+	prev.Indices = nil
+	return prev
 }
 
 func (r *Runner) printOptLine(name string, enabled, supported bool) {
