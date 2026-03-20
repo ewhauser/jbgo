@@ -149,6 +149,28 @@ readonly x=3
 	}
 }
 
+func TestXTracePS4SideEffectsPersistInCurrentShell(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+unset x
+PS4='<${x:=1}> '
+set -x
+echo one
+echo x=$x
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "one\nx=1\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "<1> echo one\n<1> echo x=1\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
 func TestXTracePS4ErrorsDoNotChangeCommandStatus(t *testing.T) {
 	t.Parallel()
 

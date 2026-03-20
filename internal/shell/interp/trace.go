@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
@@ -16,7 +18,9 @@ type tracer struct {
 	buf          bytes.Buffer
 	printer      *syntax.Printer
 	output       io.Writer
+	activeRunner *Runner
 	prefixRunner *Runner
+	syncedVars   map[string]expand.Variable
 	needsPrefix  bool
 	cLocale      bool
 }
@@ -29,7 +33,9 @@ func (r *Runner) tracer() *tracer {
 	return &tracer{
 		printer:      syntax.NewPrinter(),
 		output:       r.stderr,
+		activeRunner: r,
 		prefixRunner: r.subshell(true),
+		syncedVars:   traceVarsSnapshot(r.writeEnv),
 		needsPrefix:  true,
 		cLocale:      runnerUsesCLocale(r),
 	}
@@ -146,12 +152,73 @@ func runnerUsesCLocale(r *Runner) bool {
 	return false
 }
 
+func cloneTraceVar(vr expand.Variable) expand.Variable {
+	vr.List = slices.Clone(vr.List)
+	vr.Indices = slices.Clone(vr.Indices)
+	vr.Map = maps.Clone(vr.Map)
+	return vr
+}
+
+func sameTraceVar(a, b expand.Variable) bool {
+	return a.Set == b.Set &&
+		a.Local == b.Local &&
+		a.Exported == b.Exported &&
+		a.ReadOnly == b.ReadOnly &&
+		a.Integer == b.Integer &&
+		a.Lower == b.Lower &&
+		a.Upper == b.Upper &&
+		a.Kind == b.Kind &&
+		a.Str == b.Str &&
+		slices.Equal(a.List, b.List) &&
+		slices.Equal(a.Indices, b.Indices) &&
+		maps.Equal(a.Map, b.Map)
+}
+
+func traceVarsSnapshot(env expand.Environ) map[string]expand.Variable {
+	vars := make(map[string]expand.Variable)
+	if env == nil {
+		return vars
+	}
+	env.Each(func(name string, vr expand.Variable) bool {
+		vars[name] = cloneTraceVar(vr)
+		return true
+	})
+	return vars
+}
+
+func (t *tracer) syncPrefixSideEffects() {
+	if t == nil || t.activeRunner == nil || t.prefixRunner == nil {
+		return
+	}
+
+	current := traceVarsSnapshot(t.prefixRunner.writeEnv)
+	active := t.activeRunner
+	savedExit := active.exit
+	savedLastExit := active.lastExit
+	savedLastExpandExit := active.lastExpandExit
+	defer func() {
+		active.exit = savedExit
+		active.lastExit = savedLastExit
+		active.lastExpandExit = savedLastExpandExit
+	}()
+
+	for name, vr := range current {
+		prev, ok := t.syncedVars[name]
+		if ok && sameTraceVar(prev, vr) {
+			continue
+		}
+		active.setVar(name, cloneTraceVar(vr))
+		t.syncedVars[name] = cloneTraceVar(vr)
+	}
+}
+
 func (t *tracer) startLine() {
 	if t == nil || !t.needsPrefix {
 		return
 	}
 	if t.prefixRunner != nil {
 		t.buf.WriteString(t.prefixRunner.tracePrefix())
+		t.syncPrefixSideEffects()
 	}
 	t.needsPrefix = false
 }

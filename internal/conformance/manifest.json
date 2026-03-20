@@ -501,7 +501,6 @@
         "oils/whitespace.test.sh": {
           "mode": "xfail",
           "reason": "known gbash divergence from bash semantics in this upstream spec file"
-        },
         }
       }
     }
