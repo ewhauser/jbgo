@@ -105,34 +105,53 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 		if err != nil {
 			return err
 		}
-		output := runSedProgram(program, textLines(data), opts.quiet)
+		trailingNL := len(data) > 0 && data[len(data)-1] == '\n'
+		output := runSedProgram(program, textLines(data), opts.quiet, trailingNL)
 		if _, err := inv.Stdout.Write(output); err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
 		return nil
 	}
 
-	for _, file := range files {
-		data, abs, err := readAllFile(ctx, inv, file)
-		if err != nil {
-			_, _ = fmt.Fprintf(inv.Stderr, "sed: %s: %s\n", file, readAllErrorText(err))
-			exitCode = 1
-			continue
+	if opts.inPlace {
+		for _, file := range files {
+			data, abs, err := readAllFile(ctx, inv, file)
+			if err != nil {
+				_, _ = fmt.Fprintf(inv.Stderr, "sed: %s: %s\n", file, readAllErrorText(err))
+				exitCode = 1
+				continue
+			}
+			trailingNL := len(data) > 0 && data[len(data)-1] == '\n'
+			output := runSedProgram(program, textLines(data), opts.quiet, trailingNL)
+
+			info, _, err := statPath(ctx, inv, abs)
+			if err != nil {
+				return err
+			}
+			if err := writeFileContents(ctx, inv, abs, output, info.Mode().Perm()); err != nil {
+				return err
+			}
 		}
-		output := runSedProgram(program, textLines(data), opts.quiet)
-		if !opts.inPlace {
+	} else {
+		// Non-in-place: concatenate all files into a single stream,
+		// matching GNU sed behavior where line numbers, $ address,
+		// and trailing-newline state span across files.
+		var combined []byte
+		for _, file := range files {
+			data, _, err := readAllFile(ctx, inv, file)
+			if err != nil {
+				_, _ = fmt.Fprintf(inv.Stderr, "sed: %s: %s\n", file, readAllErrorText(err))
+				exitCode = 1
+				continue
+			}
+			combined = append(combined, data...)
+		}
+		if len(combined) > 0 {
+			trailingNL := combined[len(combined)-1] == '\n'
+			output := runSedProgram(program, textLines(combined), opts.quiet, trailingNL)
 			if _, err := inv.Stdout.Write(output); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
-			continue
-		}
-
-		info, _, err := statPath(ctx, inv, abs)
-		if err != nil {
-			return err
-		}
-		if err := writeFileContents(ctx, inv, abs, output, info.Mode().Perm()); err != nil {
-			return err
 		}
 	}
 
@@ -380,10 +399,11 @@ func parseSedDelimited(input string, delimiter rune) (value, remainder string, e
 	return "", "", fmt.Errorf("unterminated expression")
 }
 
-func runSedProgram(program []sedCommand, lines []string, quiet bool) []byte {
+func runSedProgram(program []sedCommand, lines []string, quiet, trailingNewline bool) []byte {
 	output := make([]string, 0, len(lines))
 	active := make([]bool, len(program))
 	totalLines := len(lines)
+	lastEmittedIndex := -1
 
 	for index, original := range lines {
 		current := original
@@ -414,9 +434,13 @@ func runSedProgram(program []sedCommand, lines []string, quiet bool) []byte {
 			}
 		}
 
-		output = append(output, printed...)
+		if len(printed) > 0 {
+			output = append(output, printed...)
+			lastEmittedIndex = index
+		}
 		if !quiet && !deleted {
 			output = append(output, current)
+			lastEmittedIndex = index
 		}
 		if quit {
 			break
@@ -426,7 +450,18 @@ func runSedProgram(program []sedCommand, lines []string, quiet bool) []byte {
 	if len(output) == 0 {
 		return nil
 	}
-	return []byte(strings.Join(output, "\n") + "\n")
+	joined := strings.Join(output, "\n")
+	// The trailing newline depends on the last emitted line's position:
+	// if it came from before the final input line, it was newline-terminated
+	// in the input, so output gets a trailing newline. Only when the last
+	// emitted line IS the last input line do we use the input file's own
+	// trailing-newline status.
+	if lastEmittedIndex >= 0 && lastEmittedIndex+1 < totalLines {
+		joined += "\n"
+	} else if trailingNewline {
+		joined += "\n"
+	}
+	return []byte(joined)
 }
 
 func sedCommandApplies(command sedCommand, active bool, line string, lineNumber, totalLines int) (applies, nextActive bool) {

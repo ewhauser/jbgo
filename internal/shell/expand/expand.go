@@ -886,7 +886,7 @@ func (cfg *Config) decodeANSICString(src string) string {
 			}
 			r := rune(n)
 			if !utf8.ValidRune(r) {
-				sb.WriteString(src[start-2 : end])
+				writeRawUTF8(&sb, uint32(n))
 				break
 			}
 			sb.WriteRune(r)
@@ -900,6 +900,46 @@ func (cfg *Config) decodeANSICString(src string) string {
 
 func isHex(b byte) bool {
 	return '0' <= b && b <= '9' || 'a' <= b && b <= 'f' || 'A' <= b && b <= 'F'
+}
+
+// writeRawUTF8 encodes a codepoint value as raw UTF-8 bytes, even for
+// invalid Unicode (surrogates, values above U+10FFFF). This matches bash
+// behavior for $”, printf, and echo -e with out-of-range escapes.
+func writeRawUTF8(sb *strings.Builder, v uint32) {
+	// Values above 0x7FFFFFFF exceed the 31-bit ceiling of 6-byte extended
+	// UTF-8. Bash produces no output for these, so we silently drop them.
+	if v > 0x7fffffff {
+		return
+	}
+	switch {
+	case v <= 0x7f: // 1-byte: ASCII (U+0000..U+007F)
+		sb.WriteByte(byte(v))
+	case v <= 0x7ff: // 2-byte (U+0080..U+07FF)
+		sb.WriteByte(0xc0 | byte(v>>6))
+		sb.WriteByte(0x80 | byte(v&0x3f))
+	case v <= 0xffff: // 3-byte (U+0800..U+FFFF)
+		sb.WriteByte(0xe0 | byte(v>>12))
+		sb.WriteByte(0x80 | byte((v>>6)&0x3f))
+		sb.WriteByte(0x80 | byte(v&0x3f))
+	case v <= 0x1fffff: // 4-byte (U+10000..U+1FFFFF), includes valid Unicode max U+10FFFF
+		sb.WriteByte(0xf0 | byte(v>>18))
+		sb.WriteByte(0x80 | byte((v>>12)&0x3f))
+		sb.WriteByte(0x80 | byte((v>>6)&0x3f))
+		sb.WriteByte(0x80 | byte(v&0x3f))
+	case v <= 0x3ffffff: // 5-byte (U+200000..U+3FFFFFF), beyond Unicode but bash encodes these
+		sb.WriteByte(0xf8 | byte(v>>24))
+		sb.WriteByte(0x80 | byte((v>>18)&0x3f))
+		sb.WriteByte(0x80 | byte((v>>12)&0x3f))
+		sb.WriteByte(0x80 | byte((v>>6)&0x3f))
+		sb.WriteByte(0x80 | byte(v&0x3f))
+	default: // 6-byte (U+4000000..U+7FFFFFFF), beyond Unicode but bash encodes these
+		sb.WriteByte(0xfc | byte(v>>30))
+		sb.WriteByte(0x80 | byte((v>>24)&0x3f))
+		sb.WriteByte(0x80 | byte((v>>18)&0x3f))
+		sb.WriteByte(0x80 | byte((v>>12)&0x3f))
+		sb.WriteByte(0x80 | byte((v>>6)&0x3f))
+		sb.WriteByte(0x80 | byte(v&0x3f))
+	}
 }
 
 func formatInto(sb *strings.Builder, format string, args []string) (int, error) {
@@ -973,8 +1013,10 @@ func formatInto(sb *strings.Builder, format string, args []string) (int, error) 
 					if c == 'x' {
 						// always as a single byte
 						sb.WriteByte(byte(n))
-					} else {
+					} else if utf8.ValidRune(rune(n)) {
 						sb.WriteRune(rune(n))
+					} else {
+						writeRawUTF8(sb, uint32(n))
 					}
 					break
 				}
