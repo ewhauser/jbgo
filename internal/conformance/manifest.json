@@ -421,14 +421,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::exit codes for traps are isolated": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap EXIT with PARSE error and explicit exit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
