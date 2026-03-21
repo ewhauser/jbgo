@@ -117,7 +117,7 @@ printf 'missing=%d\n' "$?"
 func TestUnaliasBuiltinFlagsUsageAndMissingNames(t *testing.T) {
 	t.Parallel()
 
-	stdout, stderr, err := runInterpScript(t, `
+stdout, stderr, err := runInterpScript(t, `
 alias e=echo ll='ls -l' foo=bar spam=eggs
 unalias e missing ll
 printf 'partial=%d\n' "$?"
@@ -125,13 +125,17 @@ alias
 unalias -a
 printf 'clear=%d\n' "$?"
 alias
+alias after=echo
+unalias -a ignored
+printf 'clear-with-args=%d\n' "$?"
+alias
 unalias
 printf 'usage=%d\n' "$?"
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "partial=1\nalias foo='bar'\nalias spam='eggs'\nclear=0\nusage=2\n"
+	const wantStdout = "partial=1\nalias foo='bar'\nalias spam='eggs'\nclear=0\nclear-with-args=0\nusage=2\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}

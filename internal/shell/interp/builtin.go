@@ -732,11 +732,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		args = fp.args()
 		if removeAll {
 			clear(r.alias)
+			break
 		}
 		if len(args) == 0 {
-			if removeAll {
-				break
-			}
 			return failf(2, "unalias: usage: unalias [-a] name [name ...]\n")
 		}
 		for _, name := range args {
