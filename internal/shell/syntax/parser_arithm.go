@@ -289,12 +289,12 @@ func (p *Parser) arithmWordSuffixEnd(compact bool) Pos {
 }
 
 func (p *Parser) arithmSuffixWord(start, end Pos, src string) *Word {
-	if src == "" {
-		return nil
-	}
 	doc := NewParser(Variant(p.lang), KeepComments(p.keepComments))
 	if len(p.stopAt) > 0 {
 		doc.stopAt = append([]byte(nil), p.stopAt...)
+	}
+	if src == "" {
+		return p.wordOne(p.rawLit(start, end, ""))
 	}
 	if word, err := doc.document(strings.NewReader(src), start); err == nil && word != nil {
 		return word
@@ -309,15 +309,27 @@ func (p *Parser) appendArithmSuffix(expr ArithmExpr, start, end Pos, src string)
 	word := p.arithmSuffixWord(start, end, src)
 	switch expr := expr.(type) {
 	case *Word:
+		if expr == nil {
+			return word
+		}
 		expr.Parts = append(expr.Parts, word.Parts...)
 		return expr
 	case *BinaryArithm:
+		if expr == nil {
+			return word
+		}
 		expr.Y = p.appendArithmSuffix(expr.Y, start, end, src)
 		return expr
 	case *UnaryArithm:
+		if expr == nil {
+			return word
+		}
 		expr.X = p.appendArithmSuffix(expr.X, start, end, src)
 		return expr
 	case *ParenArithm:
+		if expr == nil {
+			return word
+		}
 		expr.X = p.appendArithmSuffix(expr.X, start, end, src)
 		return expr
 	default:
@@ -338,17 +350,31 @@ func arithmExprEnd(expr ArithmExpr) Pos {
 	switch expr := expr.(type) {
 	case nil:
 		return Pos{}
+	case *Word:
+		if expr == nil {
+			return Pos{}
+		}
+		return expr.End()
 	case *BinaryArithm:
+		if expr == nil {
+			return Pos{}
+		}
 		if end := arithmExprEnd(expr.Y); end.IsValid() {
 			return end
 		}
 		return arithmExprEnd(expr.X)
 	case *UnaryArithm:
+		if expr == nil {
+			return Pos{}
+		}
 		return arithmExprEnd(expr.X)
 	case *ParenArithm:
+		if expr == nil {
+			return Pos{}
+		}
 		return arithmExprEnd(expr.X)
 	default:
-		return expr.End()
+		return Pos{}
 	}
 }
 
