@@ -786,7 +786,7 @@ func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr,
 	if err != nil {
 		return nil, false, err
 	}
-	if strings.HasPrefix(src, "\r") {
+	if arithHasLeadingInvalidControl(src) {
 		return nil, false, &ArithmDiagnosticError{
 			Expr:         expr,
 			Token:        expr,
@@ -814,6 +814,19 @@ func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr,
 		return nil, false, nil
 	}
 	return parsed, true, nil
+}
+
+func arithHasLeadingInvalidControl(src string) bool {
+	trimmed := trimArithLeftSpace(src)
+	if trimmed == "" {
+		return false
+	}
+	switch trimmed[0] {
+	case '\r', '\v', '\f':
+		return true
+	default:
+		return false
+	}
 }
 
 func arithRuntimeDiagnosticReplacements(cfg *Config, expr syntax.ArithmExpr, sourceCache map[syntax.ArithmExpr]string) ([]arithDiagnosticReplacement, error) {
