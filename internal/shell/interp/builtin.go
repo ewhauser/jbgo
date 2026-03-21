@@ -1784,6 +1784,7 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, name string,
 	if err != nil {
 		r.errf("%s", sourceBuiltinOpenError(name, sourceArg, err))
 		exit.code = 1
+		r.runSourceReturnTrap(ctx, pos.Line(), exit.code)
 		return exit
 	}
 	defer f.Close()
@@ -1811,12 +1812,12 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, name string,
 		internal:    internal,
 		allowErr:    r.opts[optErrTrace],
 		allowDebug:  r.opts[optFuncTrace],
-		allowReturn: r.opts[optFuncTrace],
+		allowReturn: true,
 	}
 	r.inSource = true
 	runErr := r.runShellReader(ctx, f, sourceName, frame)
-	if r.opts[optFuncTrace] && !r.exit.fatalExit {
-		r.maybeRunReturnTrap(ctx, pos.Line(), r.exit.code)
+	if !r.exit.fatalExit {
+		r.runSourceReturnTrap(ctx, pos.Line(), r.exit.code)
 	}
 
 	if sourceArgs && !r.sourceSetParams {

@@ -327,6 +327,15 @@ type trapRunResult struct {
 	ran     bool
 }
 
+func trapUsesLineOverride(id trapID) bool {
+	switch id {
+	case trapIDDebug, trapIDErr, trapIDReturn:
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *Runner) runTrap(ctx context.Context, id trapID, line uint, status uint8) trapRunResult {
 	action := r.trapAction(id)
 	if !action.active() || action.kind != trapActionCommand {
@@ -349,7 +358,10 @@ func (r *Runner) runTrap(ctx context.Context, id trapID, line uint, status uint8
 	oldLine := r.trapLineOverride
 	oldSignal := r.traps.currentSignalNumber
 	r.lastExit = exitStatus{code: status}
-	r.trapLineOverride = line
+	r.trapLineOverride = 0
+	if trapUsesLineOverride(id) {
+		r.trapLineOverride = line
+	}
 	if info, ok := trapSignalInfoByID(id); ok {
 		r.traps.currentSignalNumber = info.number
 	} else {
@@ -501,6 +513,7 @@ func (r *Runner) runDebugTrap(ctx context.Context, line uint) bool {
 	if !r.debugTrapAllowed() {
 		return false
 	}
+	line = r.currentVisibleLine(line)
 	result := r.runTrap(ctx, trapIDDebug, line, r.lastExit.code)
 	if !result.ran {
 		return false
@@ -516,6 +529,15 @@ func (r *Runner) maybeRunReturnTrap(ctx context.Context, line uint, status uint8
 	if !r.returnTrapAllowed() {
 		return
 	}
+	line = r.currentVisibleLine(line)
+	result := r.runTrap(ctx, trapIDReturn, line, status)
+	if result.handler.exiting || result.handler.fatalExit {
+		r.exit = result.handler
+	}
+}
+
+func (r *Runner) runSourceReturnTrap(ctx context.Context, line uint, status uint8) {
+	line = r.currentVisibleLine(line)
 	result := r.runTrap(ctx, trapIDReturn, line, status)
 	if result.handler.exiting || result.handler.fatalExit {
 		r.exit = result.handler
@@ -527,6 +549,7 @@ func (r *Runner) maybeRunErrTrap(ctx context.Context, line uint) {
 		return
 	}
 	if r.errTrapAllowed() {
+		line = r.currentVisibleLine(line)
 		result := r.runTrap(ctx, trapIDErr, line, r.exit.code)
 		if result.handler.exiting || result.handler.fatalExit {
 			r.exit = result.handler

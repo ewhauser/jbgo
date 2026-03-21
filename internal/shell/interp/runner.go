@@ -44,6 +44,22 @@ func (r *Runner) newPipe() (StdinReader, io.WriteCloser) {
 	return NewVirtualPipe()
 }
 
+func (r *Runner) currentVisibleLine(line uint) uint {
+	if r == nil {
+		return line
+	}
+	if r.trapLineOverride != 0 {
+		return r.trapLineOverride
+	}
+	if line != 0 {
+		return line
+	}
+	if r.currentStmtLine != 0 {
+		return r.currentStmtLine
+	}
+	return 0
+}
+
 func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ectx = ctx
 	r.ecfg = &expand.Config{
@@ -51,13 +67,7 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 		TildeEnv:    tildeExpandEnv{r},
 		StartupHome: r.startupHome,
 		CurrentLine: func() uint {
-			if r.trapLineOverride != 0 {
-				return r.trapLineOverride
-			}
-			if r.currentStmtLine != 0 {
-				return r.currentStmtLine
-			}
-			return 0
+			return r.currentVisibleLine(0)
 		},
 		ReportError: func(err error) {
 			r.expandErr(err)

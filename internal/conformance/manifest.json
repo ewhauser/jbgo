@@ -241,18 +241,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::Combine DEBUG trap and ERR trap": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::Combine ERR trap and USR1 trap": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap RETURN": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -596,6 +597,164 @@ echo ok
 		"err [] status=1 [0 1]\n" +
 		"err [] status=1 [0 1 0]\n" +
 		"ok\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestTrapDebugVsErrLineNumbersMatchBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "trap 'echo dbg $LINENO' DEBUG\n"+
+		"\n"+
+		"false | false | false\n"+
+		"\n"+
+		"false || false || false\n"+
+		"\n"+
+		"! true\n"+
+		"\n"+
+		"trap - DEBUG\n"+
+		"\n"+
+		"trap 'echo err $LINENO' ERR\n"+
+		"\n"+
+		"false | false | false\n"+
+		"\n"+
+		"false || false || false\n"+
+		"\n"+
+		"! true\n"+
+		"echo ok\n")
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "" +
+		"dbg 3\n" +
+		"dbg 3\n" +
+		"dbg 3\n" +
+		"dbg 5\n" +
+		"dbg 5\n" +
+		"dbg 5\n" +
+		"dbg 7\n" +
+		"dbg 9\n" +
+		"err 13\n" +
+		"err 15\n" +
+		"ok\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestSignalTrapLINENOUsesTrapBodyLine(t *testing.T) {
+	t.Parallel()
+
+	usr1, err := resolveTrapID("USR1")
+	if err != nil {
+		t.Fatalf("resolveTrapID(USR1) error = %v", err)
+	}
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		ExecHandler: func(ctx context.Context, args []string) error {
+			if len(args) == 1 && args[0] == "emit-usr1" {
+				hc := mustHandlerCtx(ctx)
+				hc.runner.queueSignalTrap(usr1)
+				return nil
+			}
+			return ExitStatus(127)
+		},
+	}, "trap 'false; echo $LINENO usr1' USR1\n"+
+		"trap 'false; echo $LINENO err' ERR\n"+
+		"\n"+
+		"emit-usr1\n"+
+		"echo after=$?\n")
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "1 err\n1 usr1\nafter=0\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDebugAndErrTrapShareTriggerLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "trap 'false; echo $LINENO err' ERR\n"+
+		"trap 'false; echo $LINENO debug' DEBUG\n"+
+		"\n"+
+		"false\n"+
+		"echo after=$?\n")
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "" +
+		"4 err\n" +
+		"4 debug\n" +
+		"4 debug\n" +
+		"4 debug\n" +
+		"4 err\n" +
+		"5 err\n" +
+		"5 debug\n" +
+		"after=1\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestSourceReturnTrapRunsWithoutFunctrace(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	helperPath := filepath.Join(dir, "return-helper.sh")
+	if err := os.WriteFile(helperPath, []byte("echo return-helper.sh\nreturn 42\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", helperPath, err)
+	}
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir:         dir,
+		OpenHandler: sourceTestOpenHandler,
+	}, "profile() {\n"+
+		"  echo \"profile [$@]\"\n"+
+		"}\n"+
+		"g() {\n"+
+		"  echo --\n"+
+		"  echo g\n"+
+		"  echo --\n"+
+		"  return\n"+
+		"}\n"+
+		"f() {\n"+
+		"  echo --\n"+
+		"  echo f\n"+
+		"  echo --\n"+
+		"  g\n"+
+		"}\n"+
+		"trap 'profile x y' RETURN\n"+
+		"f\n"+
+		fmt.Sprintf(". %q\n", helperPath))
+	var status ExitStatus
+	if !errors.As(err, &status) || status != 42 {
+		t.Fatalf("Run error = %v, want exit status 42", err)
+	}
+	const want = "" +
+		"--\n" +
+		"f\n" +
+		"--\n" +
+		"--\n" +
+		"g\n" +
+		"--\n" +
+		"return-helper.sh\n" +
+		"profile [x y]\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
