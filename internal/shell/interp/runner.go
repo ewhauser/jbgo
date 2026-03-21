@@ -343,7 +343,7 @@ func (r *Runner) expandErr(err error) {
 		r.exit.code = 1
 	case errors.As(err, &invalidNameErr):
 		r.exit.code = 1
-		if r.inAssignment > 0 && (r.inFunc || r.inSource) {
+		if r.inAssignment > 0 && r.inFunc {
 			r.exit.returning = true
 		}
 	case errors.As(err, &failGlobErr):

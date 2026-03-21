@@ -1934,7 +1934,7 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 		}
 		switch indirectModeFor(pe, state) {
 		case indirectResolve:
-			_, target, err := cfg.resolveIndirectTargetState(state)
+			resolved, target, err := cfg.resolveIndirectTargetState(state)
 			if err != nil {
 				return nil, false, err
 			}
@@ -1944,12 +1944,18 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 						pe.Exp.Op == syntax.DefaultUnset || pe.Exp.Op == syntax.DefaultUnsetOrNull ||
 						pe.Exp.Op == syntax.AssignUnset || pe.Exp.Op == syntax.AssignUnsetOrNull ||
 						pe.Exp.Op == syntax.ErrorUnset || pe.Exp.Op == syntax.ErrorUnsetOrNull) {
-					_, elems, ok := cfg.quotedArrayFields(target)
-					if !ok {
-						return nil, false, nil
-					}
+					_, elems, isArr := cfg.quotedArrayFields(target)
 					hasElems := len(elems) > 0
 					null := !hasElems
+					if !isArr {
+						if resolved.vr.IsSet() {
+							hasElems = true
+							null = resolved.str == ""
+							elems = []string{resolved.str}
+						} else {
+							return nil, false, nil
+						}
+					}
 					switch pe.Exp.Op {
 					case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
 						if pe.Exp.Op == syntax.AlternateUnset && hasElems || pe.Exp.Op == syntax.AlternateUnsetOrNull && !null {

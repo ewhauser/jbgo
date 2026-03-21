@@ -1549,9 +1549,13 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 			if err != nil {
 				return nil, false, err
 			}
-			_, targetElems, _ := cfg.quotedArrayFields(target)
+			_, targetElems, isArr := cfg.quotedArrayFields(target)
 			hasElems := len(targetElems) > 0
 			null := !hasElems
+			if !isArr && targetState.vr.IsSet() {
+				hasElems = true
+				null = targetState.str == ""
+			}
 			argField := func() ([]fieldPart, string, error) {
 				return cfg.paramOpArg(pe.Exp.Word, ql)
 			}
@@ -1699,9 +1703,14 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 			return nil, false, false, err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
-			_, targetElems, _ := cfg.quotedArrayFields(target)
+			_, targetElems, isArr := cfg.quotedArrayFields(target)
 			hasElems := len(targetElems) > 0
 			null := !hasElems
+			if !isArr && resolved.vr.IsSet() {
+				hasElems = true
+				null = resolved.str == ""
+				targetElems = []string{resolved.str}
+			}
 			indirectArgFields := func() ([][]fieldPart, error) {
 				if pe.Exp.Word == nil {
 					return nil, nil
@@ -2047,9 +2056,13 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 			if err != nil {
 				return "", err
 			}
-			_, targetElems, _ := cfg.quotedArrayFields(target)
+			_, targetElems, isArr := cfg.quotedArrayFields(target)
 			hasElems := len(targetElems) > 0
 			null := !hasElems
+			if !isArr && targetState.vr.IsSet() {
+				hasElems = true
+				null = targetState.str == ""
+			}
 			arg := func() (string, error) {
 				_, arg, err := cfg.paramOpArg(pe.Exp.Word, ql)
 				return arg, err
