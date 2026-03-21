@@ -1,6 +1,9 @@
 package builtins_test
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestODHexByteDumpMatchesEchoHelperShape(t *testing.T) {
 	t.Parallel()
@@ -96,6 +99,61 @@ func TestODAcceptsInferredEndianLongOption(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, " 0102 0304\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestODPreservesEchoConformanceFormattingOnPartialLines(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"echo -en '\\03777' | od -A n -t x1 | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"echo -en '\\04000' | od -A n -t x1 | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"flags='-en'",
+		"echo $flags '\\0777' | od -A n -t x1 | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"echo -en 'abcd\\x6' | od -A n -c | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"echo -e '\\x' '\\xg' | od -A n -c | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"flags='-en'",
+		"echo $flags 'abcd\\04' | od -A n -c | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"echo -en 'abcd\\u006' | od -A n -c | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"flags='-en'",
+		"echo $flags '\\u6' | od -A n -c | sed 's/ \\+/ /g'",
+		"printf '%s\\n' '---'",
+		"flags='-en'",
+		"echo $flags '\\0' '\\1' '\\8' | od -A n -c | sed 's/ \\+/ /g'",
+		"",
+	}, "\n"))
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, strings.Join([]string{
+		" ff 37",
+		"---",
+		" 00 30",
+		"---",
+		" ff",
+		"---",
+		" a b c d 006",
+		"---",
+		" \\ x \\ x g \\n",
+		"---",
+		" a b c d 004",
+		"---",
+		" a b c d 006",
+		"---",
+		" 006",
+		"---",
+		" \\0 \\ 1 \\ 8",
+		"",
+	}, "\n"); got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

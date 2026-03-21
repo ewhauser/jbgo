@@ -234,6 +234,16 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			want: "stdin: line 1: syntax error near unexpected token `newline'\nstdin: line 1: `echo hi; for'",
 		},
 		{
+			name: "function-like open paren without token",
+			src:  "foo(\n",
+			want: "stdin: line 1: syntax error near unexpected token `newline'\nstdin: line 1: `foo('",
+		},
+		{
+			name: "function-like open paren with literal token",
+			src:  "foo(bar\n",
+			want: "stdin: line 1: syntax error near unexpected token `bar'\nstdin: line 1: `foo(bar'",
+		},
+		{
 			name: "incomplete if",
 			src:  "echo hi; if\n",
 			want: "stdin: line 1: syntax error: unexpected end of file from `if' command on line 1",
@@ -267,6 +277,11 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			name: "left brace without separator",
 			src:  "{ls; }\n",
 			want: "stdin: line 1: syntax error near unexpected token `}'\nstdin: line 1: `{ls; }'",
+		},
+		{
+			name: "typed args literal after command",
+			src:  "echo (42)\n",
+			want: "stdin: line 1: syntax error near unexpected token `42'\nstdin: line 1: `echo (42)'",
 		},
 		{
 			name: "empty conditional clause",

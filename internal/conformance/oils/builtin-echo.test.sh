@@ -137,14 +137,14 @@ abcdef
 ## END
 
 #### \0377 is the highest octal byte
-echo -en '\03777' | od -A n -t x1 | sed 's/ \+/ /g'
+echo -en '\03777' | od -A n -t x1 | sed -E 's/ +/ /g'
 ## STDOUT:
  ff 37
 ## END
 
 #### \0400 is one more than the highest octal byte
 # It is 256 % 256 which gets interpreted as a NUL byte.
-echo -en '\04000' | od -A n -t x1 | sed 's/ \+/ /g'
+echo -en '\04000' | od -A n -t x1 | sed -E 's/ +/ /g'
 ## STDOUT:
  00 30
 ## END
@@ -152,19 +152,19 @@ echo -en '\04000' | od -A n -t x1 | sed 's/ \+/ /g'
 #### \0777 is out of range
 flags='-en'
 
-echo $flags '\0777' | od -A n -t x1 | sed 's/ \+/ /g'
+echo $flags '\0777' | od -A n -t x1 | sed -E 's/ +/ /g'
 ## STDOUT:
  ff
 ## END
 
 #### incomplete hex escape
-echo -en 'abcd\x6' | od -A n -c | sed 's/ \+/ /g'
+echo -en 'abcd\x6' | od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  a b c d 006
 ## END
 
 #### \x
-echo -e '\x' '\xg' | od -A n -c | sed 's/ \+/ /g'
+echo -e '\x' '\xg' | od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  \ x \ x g \n
 ## END
@@ -172,13 +172,13 @@ echo -e '\x' '\xg' | od -A n -c | sed 's/ \+/ /g'
 #### incomplete octal escape
 flags='-en'
 
-echo $flags 'abcd\04' | od -A n -c | sed 's/ \+/ /g'
+echo $flags 'abcd\04' | od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  a b c d 004
 ## END
 
 #### incomplete unicode escape
-echo -en 'abcd\u006' | od -A n -c | sed 's/ \+/ /g'
+echo -en 'abcd\u006' | od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  a b c d 006
 ## END
@@ -186,7 +186,7 @@ echo -en 'abcd\u006' | od -A n -c | sed 's/ \+/ /g'
 #### \u6
 flags='-en'
 
-echo $flags '\u6' | od -A n -c | sed 's/ \+/ /g'
+echo $flags '\u6' | od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  006
 ## END
@@ -195,7 +195,7 @@ echo $flags '\u6' | od -A n -c | sed 's/ \+/ /g'
 # \0 is special, but \1 isn't in bash
 flags='-en'
 
-echo $flags '\0' '\1' '\8' | od -A n -c | sed 's/ \+/ /g'
+echo $flags '\0' '\1' '\8' | od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  \0 \ 1 \ 8
 ## END
@@ -212,4 +212,3 @@ echo status=$?
 status=1
 status=1
 ## END
-

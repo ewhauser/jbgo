@@ -335,58 +335,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-echo.test.sh::\\0 \\1 \\8": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
-        },
-        "oils/builtin-echo.test.sh::\\0377 is the highest octal byte": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/builtin-echo.test.sh::\\0400 is one more than the highest octal byte": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/builtin-echo.test.sh::\\0777 is out of range": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/builtin-echo.test.sh::\\u6": {
-          "mode": "xfail",
-          "reason": "conformance: darwin's od text formatting still differs from the Linux CI oracle for this echo case",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/builtin-echo.test.sh::\\x": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
-        },
-        "oils/builtin-echo.test.sh::echo builtin should disallow typed args - literal": {
-          "mode": "xfail",
-          "reason": "conformance: parser stderr still differs from bash for typed-arg syntax rejection"
-        },
-        "oils/builtin-echo.test.sh::incomplete hex escape": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
-        },
-        "oils/builtin-echo.test.sh::incomplete octal escape": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
-        },
-        "oils/builtin-echo.test.sh::incomplete unicode escape": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness"
-        },
         "oils/builtin-eval-source.test.sh::Eval in bash does tilde expansion in array": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1347,21 +1295,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/quote.test.sh::$'' octal escapes don't have leading 0": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/quote.test.sh::$'' octal escapes with fewer than 3 chars": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/quote.test.sh::$'' supports \\cA escape for Ctrl-A - mask with 0x1f": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [

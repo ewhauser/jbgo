@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if GNU_OD="$(command -v god 2>/dev/null)" && [[ -n ${GNU_OD} ]]; then
+  exec "${GNU_OD}" "$@"
+fi
+
+for candidate in \
+  /opt/homebrew/bin/god \
+  /usr/local/bin/god \
+  /nix/var/nix/profiles/default/bin/god \
+  /run/current-system/sw/bin/god
+do
+  if [[ -x ${candidate} ]]; then
+    exec "${candidate}" "$@"
+  fi
+done
+
+exec /usr/bin/od "$@"

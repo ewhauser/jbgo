@@ -24,3 +24,21 @@ func TestSedSupportsScriptFileFlagIsolated(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestSedBasicRegexpPlusMatchesOneOrMoreSpaces(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a   b\\n' | sed 's/ \\+/ /g'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a b\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

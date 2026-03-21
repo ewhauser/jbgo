@@ -156,13 +156,13 @@ col3
 
 #### $'' octal escapes don't have leading 0
 # echo -e syntax is echo -e \0377
-echo -n $'\001' $'\377' | od -A n -c | sed 's/ \+/ /g'
+echo -n $'\001' $'\377' | LC_ALL=C od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  001 377
 ## END
 
 #### $'' octal escapes with fewer than 3 chars
-echo $'\1 \11 \11 \111' | od -A n -c | sed 's/ \+/ /g'
+echo $'\1 \11 \11 \111' | LC_ALL=C od -A n -c | sed -E 's/ +/ /g'
 ## STDOUT:
  001 \t \t I \n
 ## END

@@ -258,6 +258,29 @@ func TestSyntaxErrorsIncludeSourceSnippet(t *testing.T) {
 	}
 }
 
+func TestSyntaxErrorsRejectTypedArgsLikeBash(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "echo (42)\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d", got, want)
+	}
+	if got, want := result.Stderr, strings.Join([]string{
+		"stdin: line 1: syntax error near unexpected token `42'",
+		"stdin: line 1: `echo (42)'",
+		"",
+	}, "\n"); got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestSyntaxErrorsUseRealUserLineNumbers(t *testing.T) {
 	t.Parallel()
 

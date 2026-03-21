@@ -10,9 +10,10 @@ import (
 type Sed struct{}
 
 type sedOptions struct {
-	quiet   bool
-	inPlace bool
-	scripts []string
+	quiet         bool
+	inPlace       bool
+	regexExtended bool
+	scripts       []string
 }
 
 type sedCommand struct {
@@ -89,7 +90,7 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 	if err != nil {
 		return err
 	}
-	program, err := parseSedProgram(opts.scripts)
+	program, err := parseSedProgram(opts.scripts, opts.regexExtended)
 	if err != nil {
 		return exitf(inv, 1, "sed: %v", err)
 	}
@@ -143,8 +144,9 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 
 func parseSedMatches(ctx context.Context, inv *Invocation, matches *ParsedCommand) (sedOptions, []string, error) {
 	opts := sedOptions{
-		quiet:   matches.Has("quiet"),
-		inPlace: matches.Has("in-place"),
+		quiet:         matches.Has("quiet"),
+		inPlace:       matches.Has("in-place"),
+		regexExtended: matches.Has("regexp-extended"),
 	}
 	for _, source := range matches.Values("expression") {
 		appendSedScriptSource(&opts.scripts, source)
@@ -186,10 +188,10 @@ func appendSedScriptSource(scripts *[]string, source string) {
 	}
 }
 
-func parseSedProgram(scripts []string) ([]sedCommand, error) {
+func parseSedProgram(scripts []string, regexExtended bool) ([]sedCommand, error) {
 	program := make([]sedCommand, 0, len(scripts))
 	for _, script := range scripts {
-		command, err := parseSedCommand(strings.TrimSpace(script))
+		command, err := parseSedCommand(strings.TrimSpace(script), regexExtended)
 		if err != nil {
 			return nil, err
 		}
@@ -198,10 +200,10 @@ func parseSedProgram(scripts []string) ([]sedCommand, error) {
 	return program, nil
 }
 
-func parseSedCommand(script string) (sedCommand, error) {
+func parseSedCommand(script string, regexExtended bool) (sedCommand, error) {
 	command := sedCommand{}
 
-	first, rest, ok, err := parseSedAddress(script)
+	first, rest, ok, err := parseSedAddress(script, regexExtended)
 	if err != nil {
 		return sedCommand{}, err
 	}
@@ -209,7 +211,7 @@ func parseSedCommand(script string) (sedCommand, error) {
 		command.first = first
 		script = strings.TrimSpace(rest)
 		if strings.HasPrefix(script, ",") {
-			second, rest, ok, err := parseSedAddress(strings.TrimSpace(script[1:]))
+			second, rest, ok, err := parseSedAddress(strings.TrimSpace(script[1:]), regexExtended)
 			if err != nil {
 				return sedCommand{}, err
 			}
@@ -240,10 +242,7 @@ func parseSedCommand(script string) (sedCommand, error) {
 		command.kind = sedCommandSubstitute
 		command.replacement = replacement
 		command.global = strings.ContainsRune(flags, 'g')
-		if strings.ContainsRune(flags, 'i') {
-			pattern = "(?i)" + pattern
-		}
-		command.pattern, err = regexp.Compile(pattern)
+		command.pattern, err = compileSedRegexp(pattern, regexExtended, strings.ContainsRune(flags, 'i'))
 		if err != nil {
 			return sedCommand{}, err
 		}
@@ -254,7 +253,7 @@ func parseSedCommand(script string) (sedCommand, error) {
 	return command, nil
 }
 
-func parseSedAddress(script string) (address *sedAddress, remainder string, ok bool, err error) {
+func parseSedAddress(script string, regexExtended bool) (address *sedAddress, remainder string, ok bool, err error) {
 	script = strings.TrimSpace(script)
 	if script == "" {
 		return nil, "", false, nil
@@ -268,7 +267,7 @@ func parseSedAddress(script string) (address *sedAddress, remainder string, ok b
 		if err != nil {
 			return nil, "", false, err
 		}
-		re, err := regexp.Compile(pattern)
+		re, err := compileSedRegexp(pattern, regexExtended, false)
 		if err != nil {
 			return nil, "", false, err
 		}
@@ -308,6 +307,55 @@ func parseSedSubstitute(script string) (pattern, replacement, flags string, err 
 		}
 	}
 	return pattern, replacement, flags, nil
+}
+
+func compileSedRegexp(pattern string, regexExtended, ignoreCase bool) (*regexp.Regexp, error) {
+	if !regexExtended {
+		pattern = sedBasicRegexp(pattern)
+	}
+	if ignoreCase {
+		pattern = "(?i)" + pattern
+	}
+	return regexp.Compile(pattern)
+}
+
+func sedBasicRegexp(pattern string) string {
+	var out strings.Builder
+	out.Grow(len(pattern))
+	inClass := false
+	escape := false
+	for _, r := range pattern {
+		switch {
+		case escape:
+			switch r {
+			case '+', '?', '|', '(', ')', '{', '}':
+				out.WriteRune(r)
+			default:
+				out.WriteRune('\\')
+				out.WriteRune(r)
+			}
+			escape = false
+		case r == '\\':
+			escape = true
+		case inClass:
+			out.WriteRune(r)
+			if r == ']' {
+				inClass = false
+			}
+		case r == '[':
+			inClass = true
+			out.WriteRune(r)
+		case strings.ContainsRune("+?|(){}", r):
+			out.WriteRune('\\')
+			out.WriteRune(r)
+		default:
+			out.WriteRune(r)
+		}
+	}
+	if escape {
+		out.WriteRune('\\')
+	}
+	return out.String()
 }
 
 func parseSedDelimited(input string, delimiter rune) (value, remainder string, err error) {

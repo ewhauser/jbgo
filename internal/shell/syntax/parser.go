@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -1502,8 +1503,59 @@ func (e ParseError) bashCompat() ParseError {
 		e.bashText = "syntax error near unexpected token `;;'"
 	case e.Text == "`}` can only be used to close a block":
 		e.bashText = "syntax error near unexpected token `}'"
+	case bashCompatFuncOpenError(e.Text):
+		if token, ok := bashCompatFuncOpenToken(sourceLine); ok {
+			if token == "newline" {
+				e.bashText = "syntax error near unexpected token `newline'"
+			} else {
+				e.bashText = fmt.Sprintf("syntax error near unexpected token %s", bashQuoteString(token))
+			}
+		}
 	}
 	return e
+}
+
+func bashCompatFuncOpenError(text string) bool {
+	switch text {
+	case "`foo(` must be followed by `)`", "`function foo(` must be followed by `)`":
+		return true
+	default:
+		return false
+	}
+}
+
+func bashCompatFuncOpenToken(sourceLine string) (string, bool) {
+	open := strings.IndexRune(sourceLine, '(')
+	if open < 0 {
+		return "", false
+	}
+	rest := strings.TrimLeftFunc(sourceLine[open+1:], unicode.IsSpace)
+	if rest == "" {
+		return "newline", true
+	}
+	switch rest[0] {
+	case '&', '|', ';', '<', '>', ')':
+		return bashCompatOperatorToken(rest), true
+	}
+	for i, r := range rest {
+		if unicode.IsSpace(r) || strings.ContainsRune("&|;<>)", r) {
+			if i == 0 {
+				return "newline", true
+			}
+			return rest[:i], true
+		}
+	}
+	return rest, true
+}
+
+func bashCompatOperatorToken(rest string) string {
+	if len(rest) >= 2 {
+		switch rest[:2] {
+		case "&&", "||", ";;", "<<", ">>", "<&", ">&", "<>":
+			return rest[:2]
+		}
+	}
+	return rest[:1]
 }
 
 // BashError returns the error message formatted like bash does.
