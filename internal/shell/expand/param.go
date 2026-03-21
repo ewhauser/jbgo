@@ -420,7 +420,7 @@ func looseIndirectVarRef(name string) (*syntax.VarRef, error) {
 	if !ok {
 		return nil, InvalidVariableNameError{Ref: name}
 	}
-	if indirectSubscriptHasBareQuote(word) {
+	if indirectSubscriptHasLiteralQuote(word) {
 		return nil, InvalidVariableNameError{Ref: name}
 	}
 	ref.Index = &syntax.Subscript{
@@ -443,23 +443,22 @@ func validateIndirectVarRef(name string, ref *syntax.VarRef) error {
 		return nil
 	}
 	word, ok := parseIndirectSubscriptWord(raw)
-	if !ok || indirectSubscriptHasBareQuote(word) {
+	if !ok || indirectSubscriptHasLiteralQuote(word) {
 		return InvalidVariableNameError{Ref: name}
 	}
 	return nil
 }
 
-func indirectSubscriptHasBareQuote(word *syntax.Word) bool {
+func indirectSubscriptHasLiteralQuote(word *syntax.Word) bool {
 	if word == nil {
 		return false
 	}
 	for _, part := range word.Parts {
-		switch part := part.(type) {
-		case *syntax.Lit:
-			if strings.ContainsAny(part.Value, `"'`) {
-				return true
-			}
-		case *syntax.SglQuoted, *syntax.DblQuoted:
+		lit, ok := part.(*syntax.Lit)
+		if !ok {
+			continue
+		}
+		if strings.ContainsAny(lit.Value, `"'`) {
 			return true
 		}
 	}

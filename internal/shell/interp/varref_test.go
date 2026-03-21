@@ -834,6 +834,7 @@ f() {
 }
 a=(x y)
 f 'a[1]'
+f 'a["1"]'
 f 'a[{1,0}]'
 f 'a[<(echo x)]'
 aa="1 0"
@@ -849,7 +850,7 @@ f 'a[$(( 3 - 2 ))]'
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "works: a[1]\nworks: a[$b]\nworks: a[${c:-1}]\nworks: a[$(echo 1)]\nworks: a[$(( 3 - 2 ))]\n"
+	const wantStdout = "works: a[1]\nworks: a[\"1\"]\nworks: a[$b]\nworks: a[${c:-1}]\nworks: a[$(echo 1)]\nworks: a[$(( 3 - 2 ))]\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
