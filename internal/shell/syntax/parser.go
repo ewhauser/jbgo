@@ -554,7 +554,7 @@ func (p *Parser) DeclOperand(r io.Reader) (DeclOperand, error) {
 	p.src = r
 	p.rune()
 	p.next()
-	op := p.declOperand()
+	op := p.declOperand(false)
 	if p.err == nil && p.tok != _EOF {
 		p.curErr("unexpected token in declaration operand: %#q", p.tok)
 	}
@@ -2778,6 +2778,11 @@ func (p *Parser) paramExp() *ParamExp {
 		p.quote = old
 		return nil // just "$"
 	}
+	if pe.Invalid != "" {
+		p.quote = old
+		p.next()
+		return pe
+	}
 	// In short mode, any indexing or suffixes is not allowed, and we don't require '}'.
 	// Zsh is an exception: $foo[1] and $foo[1,3] are valid.
 	if pe.Short {
@@ -3045,6 +3050,13 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 			if !numberLiteral(p.val) && !ValidName(p.val) {
 				if pe.Short {
 					return nil // just "$"
+				}
+				if p.val == "" && p.r != utf8.RuneSelf && p.peek() == '}' {
+					pe.Rbrace = posAddCol(p.nextPos(), 1)
+					pe.Invalid = p.sourceRange(pe.Dollar, posAddCol(pe.Rbrace, 1))
+					p.rune()
+					p.rune()
+					return pe
 				}
 				p.posErr(pos, "invalid parameter name")
 			}
@@ -3732,7 +3744,7 @@ func declArrayModeFromFlagWord(word *Word, current ArrayExprMode) ArrayExprMode 
 	return current
 }
 
-func (p *Parser) declOperand() DeclOperand {
+func (p *Parser) declOperand(allowInvalidAssign bool) DeclOperand {
 	if eqIndex := p.validEqlOffs(); eqIndex > 0 {
 		nameEnd := eqIndex
 		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[eqIndex-1] == '+' {
@@ -3741,6 +3753,12 @@ func (p *Parser) declOperand() DeclOperand {
 		name := p.val[:nameEnd]
 		if !ValidName(name) {
 			if !strings.ContainsAny(name, "[]") && !strings.Contains(name, "{") {
+				if allowInvalidAssign {
+					if w := p.getWord(); w != nil {
+						return &DeclDynamicWord{Word: w}
+					}
+					return nil
+				}
 				p.curErr("invalid var name")
 				return nil
 			}
@@ -5339,7 +5357,8 @@ func (p *Parser) declClause(s *Stmt) {
 	arrayMode := ArrayExprInherit
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
-		if op := p.declOperand(); op != nil {
+		allowInvalidAssign := ds.Variant.Value == "export" || ds.Variant.Value == "local"
+		if op := p.declOperand(allowInvalidAssign); op != nil {
 			subMode := subscriptModeFromArrayExprMode(arrayMode)
 			switch op := op.(type) {
 			case *DeclFlag:

@@ -136,6 +136,44 @@ func TestDeclInvalidOptionMatchesBashUsage(t *testing.T) {
 	}
 }
 
+func TestExportInvalidAssignmentLikeIdentifierMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "export FOO-BAR=foo\n")
+	var status ExitStatus
+	if !errors.As(err, &status) {
+		t.Fatalf("Run error = %v, want exit status", err)
+	}
+	if status != 1 {
+		t.Fatalf("exit status = %d, want 1", status)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if got, want := stderr, "export: `FOO-BAR=foo': not a valid identifier\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestLocalInvalidAssignmentLikeIdentifierMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "f() {\n  local FOO-BAR=foo\n}\nf\n")
+	var status ExitStatus
+	if !errors.As(err, &status) {
+		t.Fatalf("Run error = %v, want exit status", err)
+	}
+	if status != 1 {
+		t.Fatalf("exit status = %d, want 1", status)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if got, want := stderr, "local: `FOO-BAR=foo': not a valid identifier\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestWrappedDeclarationBuiltins(t *testing.T) {
 	t.Parallel()
 

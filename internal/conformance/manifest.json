@@ -1323,14 +1323,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh::Bad braced var sub -- not allowed": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::Bad var sub caught at parse time": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/parse-errors.test.sh::Incomplete for": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1367,11 +1359,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh::bad var name in export": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::bad var name in local": {
+        "oils/parse-errors.test.sh::do unexpected": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

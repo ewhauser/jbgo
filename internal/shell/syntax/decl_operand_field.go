@@ -25,7 +25,7 @@ func (p *Parser) DeclOperandField(r io.Reader) (DeclOperand, error) {
 	p.src = strings.NewReader(src)
 	p.rune()
 	p.next()
-	op := p.declOperand()
+	op := p.declOperand(false)
 	if p.err != nil {
 		return op, p.err
 	}

@@ -194,6 +194,27 @@ func TestParseErrorLegacyBashConditionalDiagnostics(t *testing.T) {
 	}
 }
 
+func TestParseInvalidBracedParamExpansionPreservedForRuntimeError(t *testing.T) {
+	t.Parallel()
+
+	parser := NewParser(Variant(LangBash))
+	file, err := parser.Parse(strings.NewReader("echo ${%}"), "")
+	if err != nil {
+		t.Fatalf("Parse() error = %v, want nil", err)
+	}
+	call, ok := file.Stmts[0].Cmd.(*CallExpr)
+	if !ok {
+		t.Fatalf("command = %T, want *CallExpr", file.Stmts[0].Cmd)
+	}
+	pe, ok := call.Args[1].Parts[0].(*ParamExp)
+	if !ok {
+		t.Fatalf("arg = %T, want *ParamExp", call.Args[1].Parts[0])
+	}
+	if got, want := pe.Invalid, "${%}"; got != want {
+		t.Fatalf("Invalid = %q, want %q", got, want)
+	}
+}
+
 func TestParseHeredocDelimiterMetadata(t *testing.T) {
 	t.Parallel()
 

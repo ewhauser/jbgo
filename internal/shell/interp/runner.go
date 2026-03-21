@@ -1645,14 +1645,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					return true
 				})
 				for _, field := range fields {
-					parsed, err := parseDeclOperandField(field)
+					parsed, err := parseDeclOperandField(cm.Variant.Value, field)
 					splitFields := []string{field}
 					if strings.ContainsAny(field, "[]") && (err != nil || parsed == nil) {
 						splitFields = splitDeclDynamicField(field)
 					}
 					for i, splitField := range splitFields {
 						if i > 0 || len(splitFields) > 1 {
-							parsed, err = parseDeclOperandField(splitField)
+							parsed, err = parseDeclOperandField(cm.Variant.Value, splitField)
 						}
 						if err != nil {
 							onlyFlagOperands = false
@@ -2179,7 +2179,7 @@ func declClauseFromFields(name string, fields []string) *syntax.DeclClause {
 		Variant: &syntax.Lit{Value: name},
 	}
 	for _, field := range fields {
-		if operand, err := parseDeclOperandField(field); err == nil {
+		if operand, err := parseDeclOperandField(name, field); err == nil {
 			switch operand.(type) {
 			case *syntax.DeclFlag, *syntax.DeclName, *syntax.DeclAssign:
 				decl.Operands = append(decl.Operands, operand)
@@ -2299,7 +2299,20 @@ func (r *Runner) resolveCallExprArgs(args []*syntax.Word) ([]string, *syntax.Dec
 	return fields, nil
 }
 
-func parseDeclOperandField(field string) (syntax.DeclOperand, error) {
+func parseDeclOperandField(variant, field string) (syntax.DeclOperand, error) {
+	if variant == "export" || variant == "local" {
+		if eqIndex := strings.IndexByte(field, '='); eqIndex > 0 {
+			name := field[:eqIndex]
+			if strings.HasSuffix(name, "+") {
+				name = name[:len(name)-1]
+			}
+			if !syntax.ValidName(name) && !strings.ContainsAny(name, "[]") && !strings.Contains(name, "{") {
+				return &syntax.DeclDynamicWord{
+					Word: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: field}}},
+				}, nil
+			}
+		}
+	}
 	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
 	return p.DeclOperandField(strings.NewReader(field))
 }
