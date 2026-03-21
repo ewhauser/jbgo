@@ -184,9 +184,25 @@ func ListSignals() []SignalInfo {
 }
 
 func trapQuotedCommand(command string) string {
-	quoted := bashDeclPlainValue(command)
-	if quoted == "" {
+	if command == "" {
 		return "''"
 	}
-	return quoted
+	if trapCanUseSingleQuotes(command) {
+		return "'" + command + "'"
+	}
+	return bashDeclPlainValue(command)
+}
+
+func trapCanUseSingleQuotes(command string) bool {
+	for i := 0; i < len(command); i++ {
+		switch c := command[i]; {
+		case c == '\'':
+			return false
+		case c == '\n':
+			continue
+		case c < 0x20 || c == 0x7f:
+			return false
+		}
+	}
+	return true
 }

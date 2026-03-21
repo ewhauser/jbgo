@@ -261,6 +261,7 @@ type funcInfo struct {
 
 type trapState struct {
 	actions             map[trapID]trapAction
+	display             map[trapID]trapAction
 	active              map[trapID]int
 	pending             []pendingSignalTrap
 	currentSignalNumber int
@@ -914,6 +915,7 @@ func (r *Runner) Reset() {
 		signalParentBASHPID:    r.signalParentBASHPID,
 	}
 	r.traps.actions = nil
+	r.traps.display = nil
 	r.traps.active = nil
 	r.traps.pending = nil
 	r.traps.currentSignalNumber = 0

@@ -425,31 +425,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::Remove multiple handlers with trap -": {
+        "oils/builtin-trap.test.sh::exit codes for traps are isolated": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::Remove trap with an unsigned integer": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::exit 1 when trap code string is invalid": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::print trap handler with multiple lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap 0 2 resets EXIT AND SIGINT": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap foo gives non-zero error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::traps are not active inside subshells $() ()  trap | cat": {
+        "oils/builtin-trap.test.sh::trap EXIT with PARSE error and explicit exit": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

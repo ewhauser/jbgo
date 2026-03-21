@@ -1489,6 +1489,8 @@ func (e ParseError) bashCompat() ParseError {
 		e.bashText = "syntax error near unexpected token `newline'"
 	case e.Text == "`case` must be followed by a word" && strings.HasSuffix(sourceLine, "case"):
 		e.bashText = "syntax error near unexpected token `newline'"
+	case e.Text == "`<` must be followed by a word" && strings.HasSuffix(sourceLine, "<"):
+		e.bashText = "syntax error near unexpected token `newline'"
 	case e.Text == "reached EOF without matching `$(` with `)`":
 		e.bashText = "unexpected EOF while looking for matching `)'"
 		e.SourceLine = ""
