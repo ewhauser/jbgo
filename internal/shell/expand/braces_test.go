@@ -71,6 +71,10 @@ var braceTests = []struct {
 		want: []string{"a1", "a2", "a3", "a4", "a5"},
 	},
 	{
+		src:  "-{a,b,1..3}-",
+		want: []string{"-a-", "-b-", "-1..3-"},
+	},
+	{
 		src:  "a{1..",
 		want: []string{"a{1.."},
 	},

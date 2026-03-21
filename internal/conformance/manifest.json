@@ -122,23 +122,23 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh::Mixed comma and range doesn't work": {
+        "oils/brace-expansion.test.sh::Ascending number range expansion with negative step is invalid": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh::Tilde expansion with brace expansion": {
+        "oils/brace-expansion.test.sh::Char ranges with steps of the wrong sign": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh::Two kinds of tilde expansion": {
+        "oils/brace-expansion.test.sh::Descending number range expansion with positive step is invalid": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh::double expansion with literal and simple var": {
+        "oils/brace-expansion.test.sh::Fixed width number range expansion": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh::double expansion with simple var -- bash bug": {
+        "oils/brace-expansion.test.sh::Mixed case char expansion is invalid": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

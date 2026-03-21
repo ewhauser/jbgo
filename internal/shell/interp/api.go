@@ -419,6 +419,11 @@ func (r *Runner) applyConstructorDefaults() error {
 	if r.Env == nil {
 		r.Env = expand.ListEnviron()
 	}
+	if r.startupHome == "" {
+		if home := r.Env.Get("HOME").String(); path.IsAbs(home) {
+			r.startupHome = path.Clean(home)
+		}
+	}
 	if r.Dir == "" {
 		if home := r.Env.Get("HOME").String(); path.IsAbs(home) {
 			r.Dir = path.Clean(home)

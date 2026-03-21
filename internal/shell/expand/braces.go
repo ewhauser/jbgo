@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -83,13 +84,16 @@ func Braces(word *syntax.Word) ([]*syntax.Word, error) {
 				} else {
 					lit.Value = formatBraceSequenceNumber(n, fixedWidth, targetWidth)
 				}
-				next.Parts = append([]syntax.WordPart{lit}, next.Parts...)
+				parts := make([]syntax.WordPart, 0, 1+len(next.Parts))
+				parts = append(parts, lit)
+				parts = append(parts, next.Parts...)
+				next.Parts = parts
 				exp, err := Braces(&next)
 				if err != nil {
 					return nil, err
 				}
 				for _, w := range exp {
-					w.Parts = append(left, w.Parts...)
+					w.Parts = prependWordParts(left, w.Parts)
 				}
 				all = append(all, exp...)
 				n += incr
@@ -99,13 +103,16 @@ func Braces(word *syntax.Word) ([]*syntax.Word, error) {
 		for _, elem := range br.Elems {
 			next := *word
 			next.Parts = next.Parts[i+1:]
-			next.Parts = append(elem.Parts, next.Parts...)
+			parts := make([]syntax.WordPart, 0, len(elem.Parts)+len(next.Parts))
+			parts = append(parts, elem.Parts...)
+			parts = append(parts, next.Parts...)
+			next.Parts = parts
 			exp, err := Braces(&next)
 			if err != nil {
 				return nil, err
 			}
 			for _, w := range exp {
-				w.Parts = append(left, w.Parts...)
+				w.Parts = prependWordParts(left, w.Parts)
 			}
 			all = append(all, exp...)
 		}
@@ -119,6 +126,47 @@ func formatBraceSequenceNumber(n int, fixedWidth bool, targetWidth int) string {
 		return strconv.Itoa(n)
 	}
 	return fmt.Sprintf("%0*d", targetWidth, n)
+}
+
+func prependWordParts(prefix, parts []syntax.WordPart) []syntax.WordPart {
+	combined := make([]syntax.WordPart, 0, len(prefix)+len(parts))
+	combined = append(combined, prefix...)
+	combined = append(combined, parts...)
+	return combined
+}
+
+func reparseBraceWord(word *syntax.Word) (*syntax.Word, error) {
+	if len(word.Parts) == 0 {
+		return word, nil
+	}
+	src, err := braceWordSource(word)
+	if err != nil {
+		return nil, err
+	}
+	parser := syntax.NewParser()
+	file, err := parser.Parse(strings.NewReader("x "+src+"\n"), "")
+	if err != nil {
+		return nil, err
+	}
+	if len(file.Stmts) != 1 {
+		return nil, fmt.Errorf("brace reparse: unexpected statement count %d", len(file.Stmts))
+	}
+	call, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) != 2 {
+		return nil, fmt.Errorf("brace reparse: unexpected parse shape")
+	}
+	return call.Args[1], nil
+}
+
+func braceWordSource(word *syntax.Word) (string, error) {
+	var buf bytes.Buffer
+	printer := syntax.NewPrinter()
+	for _, part := range word.Parts {
+		if err := printer.Print(&buf, part); err != nil {
+			return "", err
+		}
+	}
+	return buf.String(), nil
 }
 
 func hasLeadingZero(s string) bool {
@@ -148,13 +196,13 @@ func mixedCaseBraceRangeError(suffix string) error {
 func literalBrace(word *syntax.Word, left []syntax.WordPart, i int, br *syntax.BraceExp) ([]*syntax.Word, error) {
 	next := *word
 	next.Parts = next.Parts[i+1:]
-	next.Parts = append([]syntax.WordPart{&syntax.Lit{Value: wordPartsSource([]syntax.WordPart{br})}}, next.Parts...)
+	next.Parts = prependWordParts([]syntax.WordPart{&syntax.Lit{Value: wordPartsSource([]syntax.WordPart{br})}}, next.Parts)
 	exp, err := Braces(&next)
 	if err != nil {
 		return nil, err
 	}
 	for _, w := range exp {
-		w.Parts = append(left, w.Parts...)
+		w.Parts = prependWordParts(left, w.Parts)
 	}
 	return exp, nil
 }

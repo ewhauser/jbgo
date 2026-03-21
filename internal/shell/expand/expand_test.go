@@ -1649,6 +1649,75 @@ func TestFieldsCurrentUserHomeEmptyPreservesEmptyField(t *testing.T) {
 	}
 }
 
+func TestFieldsDoubleQuotedScalarWord(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `"== $y"`)
+	got, err := Fields(&Config{
+		Env: testEnv{
+			"y": {Set: true, Kind: String, Str: "foo"},
+		},
+	}, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"== foo"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
+func TestFieldsReparseBraceExpandedWords(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Env: testEnv{
+			"a":         {Set: true, Kind: String, Str: "A"},
+			"HOME":      {Set: true, Kind: String, Str: "/home/bob"},
+			"HOME root": {Set: true, Kind: String, Str: "/root"},
+		},
+	}
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "SimpleVarAbsorbsBraceSuffix",
+			src:  `{$a,b}_{c,d}`,
+			want: []string{"b_c", "b_d"},
+		},
+		{
+			name: "LiteralPrefixVarAbsorbsBraceSuffix",
+			src:  `{_$a,b}_{c,d}`,
+			want: []string{"_", "_", "b_c", "b_d"},
+		},
+		{
+			name: "TildeExpandsAfterBraceSplit",
+			src:  `{foo~,~}/bar`,
+			want: []string{"foo~/bar", "/home/bob/bar"},
+		},
+		{
+			name: "NamedUserTildeExpandsAfterBraceSplit",
+			src:  `~{/src,root}`,
+			want: []string{"/home/bob/src", "/root"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Fields(cfg, word)
+			if err != nil {
+				t.Fatalf("Fields() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("Fields() = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 	t.Parallel()
 

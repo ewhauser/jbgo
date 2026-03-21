@@ -179,25 +179,36 @@ func braceCandidateNode(br *braceCandidate) (*BraceExp, bool) {
 	if br == nil || br.Rbrace == nil || len(br.Elems) <= 1 {
 		return nil, false
 	}
-	kind := br.Seps[0].kind
-	for _, sep := range br.Seps[1:] {
-		if sep.kind != kind {
-			return nil, false
-		}
-	}
 	exp := &BraceExp{
 		Lbrace: br.Lbrace.ValuePos,
 		Rbrace: br.Rbrace.ValuePos,
-		Elems:  br.Elems,
 	}
-	if kind == braceSepComma {
+	if slices.ContainsFunc(br.Seps, func(sep braceSep) bool {
+		return sep.kind == braceSepComma
+	}) {
+		exp.Elems = braceCommaElems(br)
 		return exp, true
 	}
+	exp.Elems = br.Elems
 	exp.Sequence = true
 	if !validBraceSequence(exp.Elems) {
 		return nil, false
 	}
 	return exp, true
+}
+
+func braceCommaElems(br *braceCandidate) []*Word {
+	elems := []*Word{{Parts: append([]WordPart(nil), br.Elems[0].Parts...)}}
+	for i, sep := range br.Seps {
+		if sep.kind == braceSepComma {
+			elems = append(elems, &Word{Parts: append([]WordPart(nil), br.Elems[i+1].Parts...)})
+			continue
+		}
+		cur := elems[len(elems)-1]
+		cur.Parts = append(cur.Parts, sep.lit)
+		cur.Parts = append(cur.Parts, br.Elems[i+1].Parts...)
+	}
+	return elems
 }
 
 func validBraceSequence(elems []*Word) bool {
