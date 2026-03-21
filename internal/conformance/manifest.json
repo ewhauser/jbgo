@@ -1374,13 +1374,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/sh-options-bash.test.sh::SHELLOPTS is updated when options are changed": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/sh-options-bash.test.sh::export SHELLOPTS does cross-process tracing": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
