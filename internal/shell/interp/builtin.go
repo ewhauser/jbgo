@@ -2313,7 +2313,7 @@ type shellTypeMatch struct {
 }
 
 func (r *Runner) typeMatches(ctx context.Context, name string, mode shellTypeMode) ([]shellTypeMatch, bool) {
-	files := r.typeFileMatches(ctx, name, mode.all)
+	files := r.typeFileMatches(ctx, name, mode.all, mode.output != shellTypeOutputKind)
 	if mode.output == shellTypeOutputForcePath {
 		return files, len(files) > 0
 	}
@@ -2373,7 +2373,7 @@ func (r *Runner) typeMatches(ctx context.Context, name string, mode shellTypeMod
 	return matches, foundNonFile || len(files) > 0
 }
 
-func (r *Runner) typeFileMatches(ctx context.Context, name string, all bool) []shellTypeMatch {
+func (r *Runner) typeFileMatches(ctx context.Context, name string, all, requireExec bool) []shellTypeMatch {
 	pathList := filepath.SplitList(r.writeEnv.Get("PATH").String())
 	if len(pathList) == 0 {
 		pathList = []string{""}
@@ -2384,7 +2384,7 @@ func (r *Runner) typeFileMatches(ctx context.Context, name string, all bool) []s
 	}
 	exts := pathExts(r.writeEnv)
 	if strings.ContainsAny(name, chars) {
-		if path, err := r.typeExecutablePath(ctx, name, exts); err == nil {
+		if path, err := r.typeExecutablePath(ctx, name, exts, requireExec); err == nil {
 			return []shellTypeMatch{{kind: shellTypeFile, path: path}}
 		}
 		return nil
@@ -2396,7 +2396,7 @@ func (r *Runner) typeFileMatches(ctx context.Context, name string, all bool) []s
 		if elem != "" && elem != "." {
 			path = filepath.Join(elem, name)
 		}
-		if found, err := r.typeExecutablePath(ctx, path, exts); err == nil {
+		if found, err := r.typeExecutablePath(ctx, path, exts, requireExec); err == nil {
 			matches = append(matches, shellTypeMatch{kind: shellTypeFile, path: found})
 			if !all {
 				break
@@ -2406,24 +2406,24 @@ func (r *Runner) typeFileMatches(ctx context.Context, name string, all bool) []s
 	return matches
 }
 
-func (r *Runner) typeExecutablePath(ctx context.Context, name string, exts []string) (string, error) {
+func (r *Runner) typeExecutablePath(ctx context.Context, name string, exts []string, requireExec bool) (string, error) {
 	if len(exts) == 0 {
-		return r.typeStatExecutable(ctx, name)
+		return r.typeStatExecutable(ctx, name, requireExec)
 	}
 	if winHasExt(name) {
-		if path, err := r.typeStatExecutable(ctx, name); err == nil {
+		if path, err := r.typeStatExecutable(ctx, name, requireExec); err == nil {
 			return path, nil
 		}
 	}
 	for _, ext := range exts {
-		if path, err := r.typeStatExecutable(ctx, name+ext); err == nil {
+		if path, err := r.typeStatExecutable(ctx, name+ext, requireExec); err == nil {
 			return path, nil
 		}
 	}
 	return "", fmt.Errorf("not found")
 }
 
-func (r *Runner) typeStatExecutable(ctx context.Context, name string) (string, error) {
+func (r *Runner) typeStatExecutable(ctx context.Context, name string, requireExec bool) (string, error) {
 	info, err := r.stat(ctx, name)
 	if err != nil {
 		return "", err
@@ -2432,7 +2432,7 @@ func (r *Runner) typeStatExecutable(ctx context.Context, name string) (string, e
 	if mode.IsDir() {
 		return "", fmt.Errorf("is a directory")
 	}
-	if runtime.GOOS != "windows" && mode&0o111 == 0 {
+	if requireExec && runtime.GOOS != "windows" && mode&0o111 == 0 {
 		return "", fmt.Errorf("permission denied")
 	}
 	return name, nil
