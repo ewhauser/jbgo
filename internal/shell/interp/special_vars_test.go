@@ -2,6 +2,9 @@ package interp
 
 import (
 	"context"
+	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -62,7 +65,7 @@ func TestBASHPIDAndPPIDTrackSubshells(t *testing.T) {
 	if got, want := subshell.lookupVar("$").String(), rootPID; got != want {
 		t.Fatalf("subshell $$ = %q, want %q", got, want)
 	}
-	if got, want := subshell.lookupVar("PPID").String(), rootBASHPID; got != want {
+	if got, want := subshell.lookupVar("PPID").String(), rootPPID.String(); got != want {
 		t.Fatalf("subshell PPID = %q, want %q", got, want)
 	}
 	if got, wantNot := subshell.lookupVar("BASHPID").String(), rootBASHPID; got == wantNot {
@@ -110,6 +113,33 @@ func TestPIPESTATUSTracksSimpleCommandsAndPipelines(t *testing.T) {
 		"three:55 44\n" +
 		"four:1 2 3\n"
 	if got := stdout; got != want {
+		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
+	}
+	if got := stderr; got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestPIPESTATUSResetsAfterRedirectionOnlyStatement(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	stdout, stderr, err := runSpecialVarScript(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			if !filepath.IsAbs(name) {
+				name = filepath.Join(dir, name)
+			}
+			return os.OpenFile(name, flag, perm)
+		},
+	}, ""+
+		"false\n"+
+		">out\n"+
+		"printf '%s\\n' \"${PIPESTATUS[@]}\"\n")
+	if err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", err, stderr)
+	}
+	if got, want := stdout, "0\n"; got != want {
 		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
 	}
 	if got := stderr; got != "" {
@@ -168,6 +198,27 @@ func TestRunnerStartupVarsOwnShellDefaults(t *testing.T) {
 	}
 	if got := runner.lookupVar("SHELLOPTS"); !got.ReadOnly || got.String() != "braceexpand:hashall:interactive-comments" {
 		t.Fatalf("SHELLOPTS = %#v, want readonly default value", got)
+	}
+}
+
+func TestUnsetHostnameAndOSTYPEStayUnset(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runSpecialVarScript(t, nil, ""+
+		"unset HOSTNAME OSTYPE\n"+
+		"printf 'H=%s set=%s\\n' \"$HOSTNAME\" \"${HOSTNAME+set}\"\n"+
+		"printf 'O=%s set=%s\\n' \"$OSTYPE\" \"${OSTYPE+set}\"\n")
+	if err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", err, stderr)
+	}
+	const want = "" +
+		"H= set=\n" +
+		"O= set=\n"
+	if got := stdout; got != want {
+		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
+	}
+	if got := stderr; got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
 

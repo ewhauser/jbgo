@@ -632,7 +632,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	if r.exit.ok() && st.Cmd != nil {
 		r.cmd(ctx, st.Cmd)
 	}
-	if st.Cmd != nil && !r.pipeStatusSet {
+	if !r.pipeStatusSet {
 		r.setPipeStatuses(r.exit.code)
 	}
 	keepRedirs := r.keepRedirs

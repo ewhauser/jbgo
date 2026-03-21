@@ -356,6 +356,11 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	switch name {
 	case "HOSTNAME", "OSTYPE":
 		if r.writeEnv != nil {
+			if oenv, ok := r.writeEnv.(*overlayEnviron); ok {
+				if _, shadowed := oenv.values[oenv.normalize(name)]; shadowed {
+					return oenv.Get(name)
+				}
+			}
 			if vr := r.writeEnv.Get(name); vr.Declared() {
 				return vr
 			}

@@ -1001,7 +1001,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		egid:                    r.egid,
 		pid:                     r.pid,
 		bashPID:                 r.allocateSubshellPID(),
-		ppid:                    r.bashPID,
+		ppid:                    r.ppid,
 		nextVirtualPID:          r.nextVirtualPID,
 		stdin:                   r.stdin,
 		stdout:                  r.stdout,
