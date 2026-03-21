@@ -1,0 +1,103 @@
+# POSIX Shell
+
+POSIX Shell Command Language compliance matrix for `gbash`.
+
+import PosixCompatibilityReport from "@/app/components/docs/PosixCompatibilityReport";
+
+## Scope
+
+This page tracks `gbash` conformance to the **POSIX Shell Command Language** as defined in XCU Chapter 2 of IEEE Std 1003.1-2024. It covers shell syntax, expansion, control flow, redirections, builtins, and variable semantics.
+
+This is **not** a claim of formal POSIX certification. `gbash` targets practical compatibility with the shell command language for the features within its supported scope. Where POSIX and bash diverge, `gbash` generally follows bash unless its sandbox model requires otherwise.
+
+### What is in scope
+
+- Tokenization, quoting, and all expansion types
+- Field splitting and pathname expansion (globbing)
+- Redirections (file, heredoc, here-string, descriptor operations)
+- Simple commands, pipelines, lists, and compound commands
+- Shell functions and variable scoping
+- Special and regular builtins
+- Exit status semantics and `errexit` behavior
+- Trap handling for EXIT, ERR, DEBUG, and RETURN
+- Variable assignment, export, readonly, and environment passing
+- Shell options (`set -e`, `set -u`, `set -o pipefail`, etc.)
+
+### What is out of scope
+
+- Job control (bg, fg, jobs, suspend, process groups)
+- Real process model (fork, exec, wait on host PIDs)
+- TTY and terminal handling (stty, readline, interactive line editing)
+- Host signal delivery beyond pseudo-signals routed through the trap system
+- Host filesystem access (virtual filesystem by default)
+- Utilities outside the command registry (no PATH-based host binary search)
+
+### How conformance is measured
+
+Each feature in the matrix below is classified as one of:
+
+- **required** -- POSIX mandates this behavior
+- **unspecified** -- POSIX leaves the behavior undefined; `gbash` documents its choice
+- **implementation defined** -- POSIX requires a behavior but lets the shell choose
+- **extension** -- bash extension beyond POSIX that `gbash` supports
+- **out of scope** -- POSIX requires it but `gbash` deliberately omits it
+
+Status is determined by:
+
+1. Reviewing the existing OILS conformance test results and manifest
+2. Cross-referencing against the shell interpreter, expander, and builtin implementations
+3. Differential testing against a pinned version of bash
+
+<PosixCompatibilityReport />
+
+## Deliberate Deviations
+
+`gbash` is a sandbox-only runtime. Several POSIX requirements are fundamentally incompatible with this model. The table below catalogs every known deviation with rationale.
+
+### Sandbox-imposed limitations
+
+**No real process model** -- POSIX assumes fork/exec semantics. `gbash` uses Go goroutines and a command registry. Subshells are simulated via state cloning. `$$`, `$BASHPID`, and `$PPID` are virtual. `exec` with a command does not replace the process; `exec` with only redirections works normally.
+
+**No host filesystem** -- `gbash` defaults to an in-memory virtual filesystem. Device files are limited to `/dev/null`, `/dev/zero`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`. No `/proc` or `/sys`. Symlink traversal is denied by default.
+
+**No job control** -- `bg`, `fg`, `jobs`, `disown`, `suspend` are not available. `set -m` has no effect. Job specifications (`%1`, `%%`) are not supported. Background `&` works with virtual job IDs but jobs cannot be suspended or resumed.
+
+**No real signal delivery** -- `kill` only sends to virtual PIDs within the shell family. Signal masking is not implemented. `SIGPIPE` behavior in pipelines may differ.
+
+**No TTY** -- No `stty`, terminal capabilities, readline, or `SIGWINCH`. `test -t` returns false for sandbox descriptors.
+
+### Intentional behavioral divergences
+
+**Determinism over compatibility** -- Glob results use deterministic UTF-8 sorting (may differ from locale collation). `$RANDOM` is seedable. Process IDs are stable and predictable.
+
+**Command-not-found** -- `gbash` returns exit 127 for any command not in the registry. No host binary fallthrough.
+
+**Sandbox metadata** -- `uname`, `hostname`, `whoami`, `id` return sandbox values. Environment inheritance is controlled. Output size, loop iterations, and substitution depth are bounded by policy.
+
+**Error messages** -- Arithmetic errors, `xtrace` escaping, parse errors, and coreutils error messages may differ from bash's exact format.
+
+**Variable scoping** -- Dynamic scoping with `unset` in nested functions, temporary bindings before builtins, and `FUNCNAME` substring operators have minor behavioral differences.
+
+### Deviation table
+
+| ID | POSIX Requirement | gbash Behavior | Rationale |
+|---|---|---|---|
+| SCMD-004 | Search PATH for external commands | Registry lookup only | Sandbox: no host fallthrough |
+| SCMD-006 | Exit 126 for permission denied | Not applicable | All registered commands are executable |
+| SCMD-008 | `exec` replaces the shell | Redirections only | No real process replacement |
+| PIPE-009 | Background `&` with real PIDs | Virtual job IDs | No fork/exec model |
+| PNAME-008 | Glob sorted by locale collation | Deterministic UTF-8 sort | Determinism over locale |
+| COMP-015 | Empty compound bodies | Partially accepted | Unspecified by POSIX |
+| BTIN-002 | Special builtin errors exit shell | May not exit on all cases | Conservative error handling |
+| BTIN-010 | `times` shows CPU times | Synthetic times | No process accounting |
+| BTIN-021 | `command -p` uses default PATH | Sandbox PATH | No host PATH |
+| BTIN-024 | `wait` for real PIDs | Virtual jobs only | No real PIDs |
+| BTIN-025 | `kill` sends to real processes | Virtual PIDs only | Sandbox isolation |
+| EXIT-005 | Exit > 128 for signal death | Trapped signals only | Virtual signal model |
+| TRAP-002 | Signal handlers for all signals | Subset deliverable | Virtual mechanism |
+| TRAP-010 | Job control (bg, fg, jobs) | Not implemented | Out of scope |
+| TRAP-011 | Monitor mode (set -m) | No effect | Out of scope |
+| TRAP-012 | Job specifications | Not implemented | Out of scope |
+| TRAP-013 | SIGPIPE in pipelines | May differ | Virtual pipeline model |
+| ENV-007 | PATH controls command search | Source file lookup only | Registry model |
+| ENV-015 | Dynamic scoping with unset | Edge cases differ | Known limitation |

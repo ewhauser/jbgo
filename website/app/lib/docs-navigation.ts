@@ -65,6 +65,7 @@ export const docsNavigation: NavItem[] = [
     title: "Compatibility",
     items: [
       { title: "Overview", href: "/docs/compatibility" },
+      { title: "POSIX Shell", href: "/docs/compatibility/posix" },
       { title: "Bash", href: "/docs/compatibility/bash" },
       { title: "Coreutils", href: "/docs/compatibility/coreutils" },
     ],

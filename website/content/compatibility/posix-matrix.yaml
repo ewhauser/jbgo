@@ -1,0 +1,2385 @@
+# POSIX Shell Command Language Compliance Matrix
+#
+# This matrix catalogs gbash's conformance to the POSIX Shell Command Language
+# (IEEE Std 1003.1-2024, XCU Chapter 2). All feature names and summaries are
+# original descriptions derived from reading the specification requirements.
+# No specification text is reproduced verbatim.
+#
+# Classifications:
+#   required            - POSIX mandates this behavior
+#   unspecified         - POSIX leaves the behavior undefined
+#   implementation_defined - POSIX requires a behavior but lets the shell choose
+#   extension           - Bash extension beyond POSIX
+#   out_of_scope        - POSIX requires it but gbash deliberately omits it
+#
+# gbash_status:
+#   pass          - gbash matches the required behavior
+#   partial       - some aspects work, others do not
+#   fail          - gbash does not match the required behavior
+#   not_applicable - not relevant to gbash's execution model
+#   not_tested    - no automated verification yet
+
+version: "1.0"
+spec_edition: "IEEE Std 1003.1-2024, XCU Chapter 2"
+generated: "2026-03-21"
+
+categories:
+  # ---------------------------------------------------------------------------
+  # LEX: Lexical Conventions and Tokenization
+  # ---------------------------------------------------------------------------
+  - id: LEX
+    name: Lexical Conventions and Tokenization
+    posix_sections: ["2.3"]
+    features:
+      - id: LEX-001
+        name: Token boundary recognition at newlines and operators
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The shell splits input into tokens at newline characters, operator
+          characters, and whitespace boundaries following a defined precedence.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-002
+        name: Operator token recognition
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Multi-character operators (&&, ||, <<, >>, etc.) are recognized as
+          single tokens rather than sequences of single-character operators.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-003
+        name: Word formation from non-operator, non-delimiter characters
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Contiguous characters that are not operators or unquoted whitespace
+          form a single word token.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-004
+        name: Comment recognition with leading hash
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A # character that is not quoted and appears where a new token could
+          begin introduces a comment that extends to the next newline.
+        test_priority: medium
+        notes: ""
+
+      - id: LEX-005
+        name: Reserved word recognition in command position
+        posix_section: "2.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Words like if, then, else, fi, do, done, case, esac, while, until,
+          for, in, and function are recognized as reserved when they appear
+          where a command name is expected.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-006
+        name: Reserved words not recognized mid-argument
+        posix_section: "2.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A reserved word that appears as an argument to a command (not in
+          command position) is treated as an ordinary word.
+        test_priority: medium
+        notes: ""
+
+      - id: LEX-007
+        name: Alias substitution before token recognition
+        posix_section: "2.3.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When alias expansion is enabled, the shell replaces alias names
+          with their definitions before further token processing.
+        test_priority: medium
+        notes: "Alias expansion is off by default in non-interactive mode per POSIX."
+
+      - id: LEX-008
+        name: Recursive alias expansion
+        posix_section: "2.3.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          If an alias definition ends with a blank, the next word after the
+          alias is also checked for alias substitution. Self-referencing
+          aliases must not loop infinitely.
+        test_priority: medium
+        notes: "Tricky edge case: alias a='b ' with alias b='a ' must terminate."
+
+      - id: LEX-009
+        name: IO_NUMBER token for redirection file descriptors
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A sequence of digits immediately preceding a redirection operator
+          (< or >) is recognized as a file descriptor number, not a word.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-010
+        name: Newline as command terminator and list separator
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          An unquoted newline terminates the current command, functioning
+          equivalently to a semicolon in most contexts.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-011
+        name: Line continuation with backslash-newline
+        posix_section: "2.2.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A backslash immediately followed by a newline is removed, joining
+          the next line to the current one before tokenization.
+        test_priority: high
+        notes: ""
+
+      - id: LEX-012
+        name: Here-document token recognition
+        posix_section: "2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The << and <<- operators are recognized as introducing here-documents.
+          The delimiter word follows on the same line; the body extends to a
+          line matching the delimiter exactly.
+        test_priority: high
+        notes: ""
+
+  # ---------------------------------------------------------------------------
+  # QUOT: Quoting
+  # ---------------------------------------------------------------------------
+  - id: QUOT
+    name: Quoting
+    posix_sections: ["2.2"]
+    features:
+      - id: QUOT-001
+        name: Backslash escaping of single characters
+        posix_section: "2.2.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A backslash preserves the literal value of the following character,
+          except when followed by a newline (which triggers line continuation).
+        test_priority: high
+        notes: ""
+
+      - id: QUOT-002
+        name: Single quotes preserve all characters literally
+        posix_section: "2.2.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Characters enclosed in single quotes retain their literal meaning.
+          No expansion or substitution occurs inside single quotes.
+        test_priority: high
+        notes: ""
+
+      - id: QUOT-003
+        name: Double quotes allow parameter and command substitution
+        posix_section: "2.2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Double quotes preserve literal values except for $, `, \, and !.
+          Parameter expansion, command substitution, and arithmetic expansion
+          are performed inside double quotes.
+        test_priority: high
+        notes: ""
+
+      - id: QUOT-004
+        name: Backslash inside double quotes
+        posix_section: "2.2.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Inside double quotes, backslash retains its escaping meaning only
+          before $, `, \, ", and newline. Before other characters the
+          backslash is preserved literally.
+        test_priority: high
+        notes: ""
+
+      - id: QUOT-005
+        name: Dollar-single-quote ANSI-C escaping
+        posix_section: "2.2.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The $'...' form interprets backslash escape sequences (\\n, \\t,
+          \\xHH, \\uHHHH, etc.) within single quotes, producing the
+          corresponding byte values.
+        test_priority: high
+        notes: "Added to POSIX in 2024 edition. Was previously a bash/ksh extension."
+
+      - id: QUOT-006
+        name: Dollar-double-quote locale translation
+        posix_section: "2.2.5"
+        classification: implementation_defined
+        gbash_status: pass
+        summary: >
+          The $"..." form is intended for locale-dependent string translation.
+          The shell may translate the enclosed string or treat it as a plain
+          double-quoted string.
+        test_priority: low
+        notes: "gbash treats $\"...\" identically to \"...\". Most shells do the same in practice."
+
+      - id: QUOT-007
+        name: Quote removal as final expansion step
+        posix_section: "2.6.7"
+        classification: required
+        gbash_status: pass
+        summary: >
+          After all expansions, unquoted quote characters (single, double,
+          backslash) that were not produced by expansion are removed from
+          the final word.
+        test_priority: high
+        notes: ""
+
+      - id: QUOT-008
+        name: Quoting prevents reserved word recognition
+        posix_section: "2.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Any form of quoting (backslash, single quotes, double quotes) on
+          any character of a reserved word prevents it from being recognized
+          as reserved.
+        test_priority: medium
+        notes: ""
+
+  # ---------------------------------------------------------------------------
+  # EXP: Expansions
+  # ---------------------------------------------------------------------------
+  - id: EXP
+    name: Expansions
+    posix_sections: ["2.6"]
+    features:
+      - id: EXP-001
+        name: Tilde expansion to home directory
+        posix_section: "2.6.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          An unquoted tilde at the start of a word or after an unquoted colon
+          in an assignment is replaced with the value of HOME (for bare ~) or
+          the home directory of the named user (for ~user).
+        test_priority: high
+        notes: "gbash uses sandbox user metadata; ~user resolves within the sandbox."
+
+      - id: EXP-002
+        name: Tilde expansion in assignments after colons
+        posix_section: "2.6.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          In variable assignments, tilde expansion also occurs after unquoted
+          colons, enabling paths like PATH=~:~/bin to expand each tilde.
+        test_priority: medium
+        notes: ""
+
+      - id: EXP-003
+        name: Simple parameter expansion ($var and ${var})
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A dollar sign followed by a name or braced name is replaced with
+          the variable's value, or the empty string if unset (unless nounset
+          is active).
+        test_priority: high
+        notes: ""
+
+      - id: EXP-004
+        name: Positional parameters ($1 through $9 and ${N})
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Shell parameters set from command-line arguments or function
+          invocations are accessed as $1-$9 and ${10}, ${11}, etc.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-005
+        name: Special parameters ($@, $*, $#, $?, $$, $!, $0, $-)
+        posix_section: "2.5.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The shell provides read-only special parameters for argument lists,
+          argument count, last exit status, shell PID, last background PID,
+          invocation name, and current option flags.
+        test_priority: high
+        notes: "$$ and $! are virtual PIDs in gbash."
+
+      - id: EXP-006
+        name: "$@" preserves individual arguments in double quotes
+        posix_section: "2.5.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When "$@" is expanded inside double quotes, each positional
+          parameter becomes a separate field, preserving argument boundaries.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-007
+        name: "$*" joins arguments with first character of IFS
+        posix_section: "2.5.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Inside double quotes, "$*" expands to a single field with all
+          positional parameters joined by the first character of IFS.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-008
+        name: "Default value expansion ${var:-word} and ${var-word}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Substitutes the expansion of word when var is unset (or unset/null
+          with the colon form). The variable itself is not modified.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-009
+        name: "Assign default ${var:=word} and ${var=word}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Like default value, but also assigns the expanded word to var when
+          the substitution triggers.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-010
+        name: "Error if unset ${var:?word} and ${var?word}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          If var is unset (or unset/null with the colon form), the shell
+          writes word to stderr and exits (in non-interactive shells).
+        test_priority: high
+        notes: ""
+
+      - id: EXP-011
+        name: "Alternate value ${var:+word} and ${var+word}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Substitutes the expansion of word when var IS set (and non-null
+          with the colon form). Returns empty otherwise.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-012
+        name: "String length ${#var}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Expands to the length in characters of the variable's value.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-013
+        name: "Prefix removal ${var#pattern} and ${var##pattern}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Removes the shortest (# form) or longest (## form) prefix matching
+          the pattern from the variable's value.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-014
+        name: "Suffix removal ${var%pattern} and ${var%%pattern}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Removes the shortest (% form) or longest (%% form) suffix matching
+          the pattern from the variable's value.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-015
+        name: "Substring extraction ${var:offset:length}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Extracts a substring starting at the given offset for the given
+          length. Negative offsets count from the end (requires a space or
+          parentheses to disambiguate from default-value syntax).
+        test_priority: high
+        notes: "Added in POSIX 2024. Negative offset edge cases differ across shells."
+
+      - id: EXP-016
+        name: "Pattern substitution ${var/pattern/replacement}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Replaces the first match of pattern in the variable's value with
+          the replacement string. The // form replaces all matches. The /#
+          and /% forms anchor to the start or end respectively.
+        test_priority: high
+        notes: "Added in POSIX 2024. Anchored forms are tested in OILS patsub tests."
+
+      - id: EXP-017
+        name: "Case transformation ${var^}, ${var^^}, ${var,}, ${var,,}"
+        posix_section: "2.6.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Converts the first character (^ or ,) or all characters (^^ or ,,)
+          of the variable's value to uppercase or lowercase respectively.
+        test_priority: medium
+        notes: "Added in POSIX 2024."
+
+      - id: EXP-018
+        name: Command substitution with $(command)
+        posix_section: "2.6.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Executes command in a subshell and replaces the construct with the
+          command's standard output, with trailing newlines removed.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-019
+        name: Command substitution with backticks
+        posix_section: "2.6.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The older `command` form performs the same substitution as $(command)
+          but has different quoting rules for nested backslashes and backticks.
+        test_priority: high
+        notes: "Nested backtick quoting is a common edge-case source."
+
+      - id: EXP-020
+        name: Nested command substitution
+        posix_section: "2.6.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The $(...) form can be nested to arbitrary depth. Each level starts
+          a new parsing context.
+        test_priority: medium
+        notes: ""
+
+      - id: EXP-021
+        name: Arithmetic expansion $((expression))
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The shell evaluates the arithmetic expression and replaces the
+          construct with the decimal result. Standard integer operators
+          (+, -, *, /, %, comparisons, bitwise, logical) are supported.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-022
+        name: Arithmetic variable references without $
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Inside arithmetic expressions, variable names are recognized and
+          expanded without requiring a $ prefix.
+        test_priority: high
+        notes: ""
+
+      - id: EXP-023
+        name: Arithmetic assignment operators
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Arithmetic expressions support = and compound assignment operators
+          (+=, -=, *=, /=, %=, <<=, >>=, &=, ^=, |=).
+        test_priority: high
+        notes: ""
+
+      - id: EXP-024
+        name: Arithmetic ternary operator
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The expr ? expr : expr ternary conditional is supported in
+          arithmetic expressions.
+        test_priority: medium
+        notes: ""
+
+      - id: EXP-025
+        name: Arithmetic comma operator
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The comma operator evaluates both operands and returns the value
+          of the right operand.
+        test_priority: medium
+        notes: ""
+
+      - id: EXP-026
+        name: Arithmetic pre/post increment and decrement
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The ++var, var++, --var, and var-- operators modify a variable
+          and return the value before or after modification.
+        test_priority: medium
+        notes: "Added in POSIX 2024."
+
+      - id: EXP-027
+        name: Arithmetic exponentiation operator
+        posix_section: "2.6.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The ** operator raises the left operand to the power of the right.
+        test_priority: medium
+        notes: "Added in POSIX 2024. Right-associative."
+
+      - id: EXP-028
+        name: Expansion order (tilde, parameter, command, arith, field split, pathname, quote removal)
+        posix_section: "2.6"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Expansions are performed in a defined sequence. Tilde expansion
+          first, then parameter/command/arithmetic in a single pass
+          left-to-right, then field splitting, then pathname expansion,
+          then quote removal.
+        test_priority: high
+        notes: "The ordering is a frequent source of subtle bugs across shells."
+
+      - id: EXP-029
+        name: Brace expansion {a,b,c} and {1..10}
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Brace expansion generates multiple words from comma-separated
+          alternatives or numeric/alphabetic sequences. Not part of POSIX;
+          originated in csh/bash.
+        test_priority: medium
+        notes: "Bash extension. Controlled by set -B / set +B."
+
+      - id: EXP-030
+        name: Process substitution <(cmd) and >(cmd)
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Process substitution connects a command's output or input to a
+          file-like path that other commands can read from or write to.
+        test_priority: medium
+        notes: "Bash/ksh extension. gbash implements this with sandbox-owned pipes."
+
+      - id: EXP-031
+        name: "Indirect expansion ${!var}"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Expands to the value of the variable whose name is stored in var.
+        test_priority: medium
+        notes: "Bash extension. POSIX uses namerefs instead."
+
+      - id: EXP-032
+        name: "Expansion of $LINENO"
+        posix_section: "2.5.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          $LINENO expands to the current line number within the script or
+          function being executed.
+        test_priority: medium
+        notes: ""
+
+  # ---------------------------------------------------------------------------
+  # FSPLIT: Field Splitting
+  # ---------------------------------------------------------------------------
+  - id: FSPLIT
+    name: Field Splitting
+    posix_sections: ["2.6.5"]
+    features:
+      - id: FSPLIT-001
+        name: Field splitting on IFS whitespace characters
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          After expansion, unquoted results of parameter expansion, command
+          substitution, and arithmetic expansion are split into fields at
+          sequences of IFS whitespace characters (space, tab, newline by
+          default).
+        test_priority: high
+        notes: ""
+
+      - id: FSPLIT-002
+        name: IFS non-whitespace characters as field delimiters
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Non-whitespace characters in IFS act as explicit delimiters. Each
+          occurrence produces a field boundary. Adjacent IFS non-whitespace
+          characters produce empty fields between them.
+        test_priority: high
+        notes: "Common pitfall: IFS=: with value 'a::b' must produce three fields."
+
+      - id: FSPLIT-003
+        name: Empty IFS disables field splitting
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When IFS is set to the empty string, no field splitting occurs.
+          The entire expansion result becomes a single field.
+        test_priority: high
+        notes: ""
+
+      - id: FSPLIT-004
+        name: Unset IFS behaves as default (space/tab/newline)
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When IFS is unset, field splitting behaves as if IFS were set to
+          space, tab, and newline.
+        test_priority: high
+        notes: ""
+
+      - id: FSPLIT-005
+        name: Leading and trailing IFS whitespace trimming
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Sequences of IFS whitespace at the beginning or end of an expansion
+          result do not produce empty leading or trailing fields.
+        test_priority: medium
+        notes: ""
+
+      - id: FSPLIT-006
+        name: Field splitting suppressed inside double quotes
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Expansions occurring within double quotes are not subject to field
+          splitting (except "$@" which splits on argument boundaries).
+        test_priority: high
+        notes: ""
+
+      - id: FSPLIT-007
+        name: IFS with mixed whitespace and non-whitespace
+        posix_section: "2.6.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When IFS contains both whitespace and non-whitespace characters, IFS
+          whitespace is trimmed around non-whitespace delimiters, and the
+          non-whitespace character alone acts as the delimiter.
+        test_priority: high
+        notes: "Subtle interaction. IFS=' :' with '  a : b  ' should produce [a, b]."
+
+  # ---------------------------------------------------------------------------
+  # PNAME: Pathname Expansion (Globbing)
+  # ---------------------------------------------------------------------------
+  - id: PNAME
+    name: Pathname Expansion
+    posix_sections: ["2.6.6", "2.13"]
+    features:
+      - id: PNAME-001
+        name: "Asterisk * matches any string"
+        posix_section: "2.13"
+        classification: required
+        gbash_status: pass
+        summary: >
+          An unquoted * in a word matches any string of zero or more
+          characters in filenames.
+        test_priority: high
+        notes: ""
+
+      - id: PNAME-002
+        name: "Question mark ? matches single character"
+        posix_section: "2.13"
+        classification: required
+        gbash_status: pass
+        summary: >
+          An unquoted ? matches exactly one character in filenames.
+        test_priority: high
+        notes: ""
+
+      - id: PNAME-003
+        name: "Bracket expression [abc] character class matching"
+        posix_section: "2.13"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Bracket expressions match a single character from a set or range.
+          Supports character ranges [a-z], negation [!abc] or [^abc], and
+          named classes like [:alpha:].
+        test_priority: high
+        notes: ""
+
+      - id: PNAME-004
+        name: Dot files excluded from * and ? by default
+        posix_section: "2.6.6"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Filenames beginning with a period are not matched by * or ? unless
+          the pattern also begins with a literal period.
+        test_priority: high
+        notes: "dotglob shopt overrides this behavior (bash extension)."
+
+      - id: PNAME-005
+        name: Slash characters never matched by wildcards
+        posix_section: "2.13"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A slash in a pathname can only be matched by a literal slash in the
+          pattern, never by *, ?, or bracket expressions.
+        test_priority: high
+        notes: ""
+
+      - id: PNAME-006
+        name: Pattern that matches no files expands to itself
+        posix_section: "2.6.6"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When a glob pattern matches no files, the pattern word is left
+          unchanged (unless nullglob or failglob are enabled).
+        test_priority: high
+        notes: "nullglob and failglob are bash extensions."
+
+      - id: PNAME-007
+        name: Pathname expansion disabled by set -f (noglob)
+        posix_section: "2.6.6"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When the noglob option is set, pathname expansion is not performed
+          and glob characters are treated as literal.
+        test_priority: high
+        notes: ""
+
+      - id: PNAME-008
+        name: Glob results sorted in collation order
+        posix_section: "2.6.6"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Pathnames generated by globbing are sorted according to the current
+          locale's collation sequence.
+        test_priority: medium
+        notes: "gbash uses deterministic UTF-8 sorting which may differ from locale-based collation in some edge cases."
+
+      - id: PNAME-009
+        name: Extended glob patterns ?(pat), *(pat), +(pat), @(pat), !(pat)
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          When extglob is enabled, extended pattern matching operators allow
+          matching zero-or-one, zero-or-more, one-or-more, exactly-one, or
+          none of the given patterns.
+        test_priority: medium
+        notes: "Bash/ksh extension enabled by shopt -s extglob."
+
+      - id: PNAME-010
+        name: "Recursive glob with ** (globstar)"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          When globstar is enabled, ** in a pathname matches zero or more
+          directories recursively.
+        test_priority: medium
+        notes: "Bash extension enabled by shopt -s globstar."
+
+  # ---------------------------------------------------------------------------
+  # REDIR: Redirection
+  # ---------------------------------------------------------------------------
+  - id: REDIR
+    name: Redirection
+    posix_sections: ["2.7"]
+    features:
+      - id: REDIR-001
+        name: "Input redirection with < file"
+        posix_section: "2.7.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Opens the named file for reading on stdin (fd 0) or the specified
+          file descriptor.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-002
+        name: "Output redirection with > file"
+        posix_section: "2.7.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Opens the named file for writing on stdout (fd 1) or the specified
+          file descriptor. Creates the file if it does not exist; truncates
+          it if it does.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-003
+        name: "Append redirection with >> file"
+        posix_section: "2.7.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Opens the named file for appending on stdout or the specified
+          file descriptor. Creates the file if it does not exist.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-004
+        name: "Noclobber protection with set -C and >|"
+        posix_section: "2.7.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When the noclobber option is set, > fails if the target file
+          exists and is a regular file. The >| operator overrides this
+          protection.
+        test_priority: medium
+        notes: ""
+
+      - id: REDIR-005
+        name: "Here-document << delimiter"
+        posix_section: "2.7.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Reads input until a line containing only the delimiter is found.
+          If the delimiter is unquoted, parameter expansion, command
+          substitution, and arithmetic expansion occur in the body.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-006
+        name: "Here-document with quoted delimiter (no expansion)"
+        posix_section: "2.7.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When any part of the delimiter word is quoted, no expansion is
+          performed in the here-document body.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-007
+        name: "Here-document tab stripping with <<-"
+        posix_section: "2.7.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The <<- form strips leading tab characters from each line of the
+          here-document body and from the closing delimiter line.
+        test_priority: medium
+        notes: ""
+
+      - id: REDIR-008
+        name: "Here-string <<< word"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Provides the expansion of word as stdin to a command, with a
+          trailing newline appended.
+        test_priority: medium
+        notes: "Bash/ksh/zsh extension, not in POSIX."
+
+      - id: REDIR-009
+        name: "Descriptor duplication with n>&m and n<&m"
+        posix_section: "2.7.5", "2.7.6"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Duplicates file descriptor m onto descriptor n. The >&m form is
+          for output descriptors; <&m is for input descriptors.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-010
+        name: "Descriptor closing with n>&- and n<&-"
+        posix_section: "2.7.5", "2.7.6"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Closes file descriptor n.
+        test_priority: medium
+        notes: ""
+
+      - id: REDIR-011
+        name: "Read-write redirection with <> file"
+        posix_section: "2.7.7"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Opens the named file for both reading and writing on the specified
+          descriptor (default fd 0).
+        test_priority: medium
+        notes: ""
+
+      - id: REDIR-012
+        name: Multiple redirections on a single command
+        posix_section: "2.7"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A command may have multiple redirections which are applied
+          left-to-right before the command executes.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-013
+        name: Redirection applied to compound commands
+        posix_section: "2.7"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Redirections may be placed after compound commands (if, while,
+          for, case, brace groups, subshells) and apply to all commands
+          within the construct.
+        test_priority: high
+        notes: ""
+
+      - id: REDIR-014
+        name: "Named file descriptor allocation with {varname}> and {varname}<"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The shell allocates a file descriptor >= 10 and assigns the number
+          to the named variable.
+        test_priority: medium
+        notes: "Bash 4.1+ extension."
+
+  # ---------------------------------------------------------------------------
+  # SCMD: Simple Commands
+  # ---------------------------------------------------------------------------
+  - id: SCMD
+    name: Simple Commands
+    posix_sections: ["2.9.1"]
+    features:
+      - id: SCMD-001
+        name: Simple command execution with argument list
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A simple command is a sequence of variable assignments and
+          redirections, optionally followed by a command name and arguments.
+          The command name is looked up and executed.
+        test_priority: high
+        notes: ""
+
+      - id: SCMD-002
+        name: Variable assignments as prefix to a command
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Variable assignments preceding a command name are placed in the
+          environment of that command only (temporary bindings). If the
+          command is a special builtin, the assignments persist.
+        test_priority: high
+        notes: "temp-binding behavior has known xfails for edge cases."
+
+      - id: SCMD-003
+        name: Variable assignment without a command name
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When a simple command has assignments but no command name, the
+          assignments take effect in the current shell environment.
+        test_priority: high
+        notes: ""
+
+      - id: SCMD-004
+        name: Command search order (special builtins, functions, builtins, PATH)
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: partial
+        summary: >
+          The shell searches for commands in order: special builtins,
+          shell functions, regular builtins, then external commands via PATH.
+        test_priority: high
+        notes: "gbash has no PATH-based external command search; all commands are registry-backed."
+
+      - id: SCMD-005
+        name: Command not found exits with status 127
+        posix_section: "2.8.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          If a command cannot be found, the exit status is 127.
+        test_priority: high
+        notes: ""
+
+      - id: SCMD-006
+        name: Command found but not executable exits with status 126
+        posix_section: "2.8.2"
+        classification: required
+        gbash_status: not_applicable
+        summary: >
+          If a command is found but cannot be executed (e.g., missing execute
+          permission), the exit status is 126.
+        test_priority: low
+        notes: "Not applicable to gbash's registry model; all registered commands are executable."
+
+      - id: SCMD-007
+        name: Empty command (only redirections or assignments)
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A command consisting only of redirections applies them in the current
+          environment. A command of only assignments sets variables in the
+          current environment.
+        test_priority: medium
+        notes: ""
+
+      - id: SCMD-008
+        name: exec builtin replaces shell or applies redirections
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: partial
+        summary: >
+          The exec builtin with a command argument replaces the shell process.
+          Without a command argument, redirections are applied to the current
+          shell.
+        test_priority: medium
+        notes: "exec with a command does not replace the process in gbash (no real exec). exec with redirections works."
+
+  # ---------------------------------------------------------------------------
+  # PIPE: Pipelines and Lists
+  # ---------------------------------------------------------------------------
+  - id: PIPE
+    name: Pipelines and Lists
+    posix_sections: ["2.9.2", "2.9.3"]
+    features:
+      - id: PIPE-001
+        name: Pipeline connects stdout of left command to stdin of right
+        posix_section: "2.9.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The | operator creates a pipeline where the standard output of the
+          command on the left is connected to the standard input of the
+          command on the right.
+        test_priority: high
+        notes: ""
+
+      - id: PIPE-002
+        name: Pipeline exit status is the last command's exit status
+        posix_section: "2.9.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The exit status of a pipeline is the exit status of the last
+          command in the pipeline.
+        test_priority: high
+        notes: ""
+
+      - id: PIPE-003
+        name: Pipeline negation with ! prefix
+        posix_section: "2.9.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Prefixing a pipeline with ! inverts its exit status: zero becomes
+          one, and non-zero becomes zero.
+        test_priority: medium
+        notes: ""
+
+      - id: PIPE-004
+        name: "Pipefail option (set -o pipefail)"
+        posix_section: "2.9.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When pipefail is set, the pipeline exit status is the rightmost
+          command that exited with non-zero status, or zero if all succeeded.
+        test_priority: high
+        notes: "Added to POSIX in 2024. Was previously a bash extension."
+
+      - id: PIPE-005
+        name: PIPESTATUS array captures per-stage exit codes
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The PIPESTATUS array variable contains the exit status of each
+          command in the most recent pipeline.
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: PIPE-006
+        name: "Sequential list with semicolon (cmd1 ; cmd2)"
+        posix_section: "2.9.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Commands separated by ; are executed sequentially. The shell waits
+          for each command to complete before starting the next.
+        test_priority: high
+        notes: ""
+
+      - id: PIPE-007
+        name: "AND list (cmd1 && cmd2)"
+        posix_section: "2.9.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The right command executes only if the left command exits with
+          status zero.
+        test_priority: high
+        notes: ""
+
+      - id: PIPE-008
+        name: "OR list (cmd1 || cmd2)"
+        posix_section: "2.9.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The right command executes only if the left command exits with
+          non-zero status.
+        test_priority: high
+        notes: ""
+
+      - id: PIPE-009
+        name: "Asynchronous list with & (background execution)"
+        posix_section: "2.9.3"
+        classification: required
+        gbash_status: partial
+        summary: >
+          A command terminated by & is executed asynchronously. The shell
+          does not wait for it to complete and sets $! to its process ID.
+        test_priority: medium
+        notes: "gbash supports basic background execution but with virtual PIDs and no job control."
+
+      - id: PIPE-010
+        name: Pipeline components execute in subshell environment
+        posix_section: "2.9.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Each command in a pipeline may execute in a subshell. Variable
+          assignments in pipeline stages do not affect the parent shell
+          (unless lastpipe is enabled for the final stage).
+        test_priority: high
+        notes: "lastpipe support is a bash extension that gbash implements."
+
+  # ---------------------------------------------------------------------------
+  # COMP: Compound Commands
+  # ---------------------------------------------------------------------------
+  - id: COMP
+    name: Compound Commands
+    posix_sections: ["2.9.4", "2.9.5"]
+    features:
+      - id: COMP-001
+        name: "if/then/elif/else/fi conditional"
+        posix_section: "2.9.4.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Executes the then-body if the condition command list exits with
+          status zero. Supports elif chains and a final else clause.
+        test_priority: high
+        notes: ""
+
+      - id: COMP-002
+        name: "while loop (while/do/done)"
+        posix_section: "2.9.4.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Repeatedly executes the body while the condition command list
+          exits with status zero.
+        test_priority: high
+        notes: ""
+
+      - id: COMP-003
+        name: "until loop (until/do/done)"
+        posix_section: "2.9.4.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Repeatedly executes the body until the condition command list
+          exits with status zero (opposite of while).
+        test_priority: high
+        notes: ""
+
+      - id: COMP-004
+        name: "for loop iterating over word list"
+        posix_section: "2.9.4.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The for var in word... form iterates over the expanded word list,
+          assigning each word to the variable and executing the body.
+        test_priority: high
+        notes: ""
+
+      - id: COMP-005
+        name: "for loop without word list (iterates over positional parameters)"
+        posix_section: "2.9.4.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The for var (without in) iterates over the positional parameters,
+          equivalent to for var in \"$@\".
+        test_priority: medium
+        notes: ""
+
+      - id: COMP-006
+        name: "C-style for loop for (( init; cond; step ))"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Arithmetic for loop that evaluates init once, tests cond before
+          each iteration, and evaluates step after each iteration.
+        test_priority: medium
+        notes: "Bash/ksh extension."
+
+      - id: COMP-007
+        name: "case/esac pattern matching"
+        posix_section: "2.9.4.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Matches a word against patterns and executes the corresponding
+          command list for the first matching pattern. Patterns support
+          shell wildcards. Multiple patterns per clause are separated by |.
+        test_priority: high
+        notes: ""
+
+      - id: COMP-008
+        name: "case fall-through with ;& and ;;&"
+        posix_section: "2.9.4.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The ;& terminator falls through to the next clause's commands
+          unconditionally. The ;;& terminator continues testing subsequent
+          patterns.
+        test_priority: medium
+        notes: "Added to POSIX in 2024. Previously a bash extension."
+
+      - id: COMP-009
+        name: "Brace group { list; }"
+        posix_section: "2.9.4.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Groups commands for execution in the current shell environment.
+          Unlike a subshell, variable assignments and redirections persist.
+        test_priority: high
+        notes: ""
+
+      - id: COMP-010
+        name: "Subshell ( list )"
+        posix_section: "2.9.4.4"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Executes the command list in a subshell environment. Variable
+          changes, directory changes, and other state modifications do not
+          affect the parent shell.
+        test_priority: high
+        notes: "gbash simulates subshells with state cloning, not fork."
+
+      - id: COMP-011
+        name: "Arithmetic command (( expression ))"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Evaluates an arithmetic expression. Returns exit status 0 if the
+          result is non-zero, and status 1 if the result is zero.
+        test_priority: medium
+        notes: "Bash/ksh extension."
+
+      - id: COMP-012
+        name: "Conditional expression [[ expression ]]"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Extended test command with pattern matching (==), regex matching
+          (=~), and logical operators (&&, ||, !) without the quoting
+          pitfalls of the [ command.
+        test_priority: high
+        notes: "Bash/ksh extension. Not in POSIX (which uses test/[ only)."
+
+      - id: COMP-013
+        name: "select loop for menu generation"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Displays a numbered menu from a word list, reads the user's choice,
+          and assigns the selected word to a variable.
+        test_priority: low
+        notes: "Bash/ksh extension. Limited utility in sandbox/non-interactive mode."
+
+      - id: COMP-014
+        name: break and continue in loops
+        posix_section: "2.9.4.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          break exits the innermost (or Nth) enclosing loop. continue skips
+          to the next iteration of the innermost (or Nth) enclosing loop.
+        test_priority: high
+        notes: "break/continue in loop conditions has a known xfail."
+
+      - id: COMP-015
+        name: Empty compound command bodies
+        posix_section: "2.9.4"
+        classification: unspecified
+        gbash_status: partial
+        summary: >
+          Whether empty bodies in if/then/fi or while/do/done are accepted
+          or rejected is not specified by POSIX. Bash accepts them.
+        test_priority: low
+        notes: "gbash has xfails for empty then/fi and empty do/done cases."
+
+  # ---------------------------------------------------------------------------
+  # FUNC: Shell Functions
+  # ---------------------------------------------------------------------------
+  - id: FUNC
+    name: Shell Functions
+    posix_sections: ["2.9.5"]
+    features:
+      - id: FUNC-001
+        name: "Function definition with name() compound-command"
+        posix_section: "2.9.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Defines a shell function that can be invoked as a simple command.
+          The body is any compound command (typically a brace group).
+        test_priority: high
+        notes: ""
+
+      - id: FUNC-002
+        name: "Function definition with function keyword"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The function name { ... } syntax is an alternative way to define
+          functions.
+        test_priority: medium
+        notes: "Bash/ksh extension."
+
+      - id: FUNC-003
+        name: Functions receive positional parameters from caller
+        posix_section: "2.9.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When a function is invoked, the arguments become the function's
+          positional parameters. The caller's positional parameters are
+          saved and restored when the function returns.
+        test_priority: high
+        notes: ""
+
+      - id: FUNC-004
+        name: return builtin exits function with specified status
+        posix_section: "2.9.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The return builtin causes the function to exit with the given
+          status (or the status of the last command if no argument).
+        test_priority: high
+        notes: ""
+
+      - id: FUNC-005
+        name: Local variables with local/declare in functions
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The local builtin creates function-scoped variables that are
+          destroyed when the function returns. POSIX does not require local
+          variables but most shells support them.
+        test_priority: high
+        notes: "local is a bash extension. POSIX added it in 2024 as an XSI extension."
+
+      - id: FUNC-006
+        name: Functions share the shell's execution environment
+        posix_section: "2.9.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Functions execute in the current shell environment (not a subshell).
+          Variable assignments in a function are visible to the caller
+          unless the variable is declared local.
+        test_priority: high
+        notes: ""
+
+      - id: FUNC-007
+        name: Recursive function calls
+        posix_section: "2.9.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Functions can call themselves recursively. Each invocation gets
+          its own positional parameters.
+        test_priority: medium
+        notes: ""
+
+      - id: FUNC-008
+        name: "Function names with special characters"
+        posix_section: "2.9.5"
+        classification: unspecified
+        gbash_status: partial
+        summary: >
+          POSIX requires function names to be valid shell names. Whether
+          names containing $, -, or other non-name characters are accepted
+          is unspecified.
+        test_priority: low
+        notes: "Known xfails for function names with $ and command sub."
+
+  # ---------------------------------------------------------------------------
+  # BTIN: Special and Regular Builtins
+  # ---------------------------------------------------------------------------
+  - id: BTIN
+    name: Builtins
+    posix_sections: ["2.14", "2.15"]
+    features:
+      - id: BTIN-001
+        name: "Special builtins persist variable assignments"
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Variable assignments preceding special builtins (break, :, .,
+          continue, eval, exec, exit, export, readonly, return, set, shift,
+          times, trap, unset) persist in the shell environment after the
+          builtin completes.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-002
+        name: "Special builtin errors may cause non-interactive shell to exit"
+        posix_section: "2.14"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Certain errors in special builtins (like a redirection error) may
+          cause a non-interactive shell to exit, unlike regular builtins.
+        test_priority: medium
+        notes: "gbash may not exit on all POSIX-required special-builtin errors."
+
+      - id: BTIN-003
+        name: "colon (:) null command"
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The : command does nothing and exits with status 0. Used for
+          side effects of expansions in its arguments.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-004
+        name: "dot (.) source a script file"
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Reads and executes commands from a file in the current shell
+          environment. The file is searched for in PATH if not found by
+          pathname.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-005
+        name: eval concatenates and executes arguments
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Concatenates all arguments with spaces and executes the result
+          as a shell command in the current environment.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-006
+        name: export marks variables for child environments
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Marks named variables to be included in the environment of
+          subsequently executed commands.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-007
+        name: readonly prevents variable modification
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Marks named variables as readonly. Subsequent attempts to assign
+          or unset them produce an error.
+        test_priority: high
+        notes: "Some readonly assignment edge cases have known xfails."
+
+      - id: BTIN-008
+        name: set modifies shell options and positional parameters
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          With option flags, enables or disables shell behaviors. With
+          arguments after --, replaces positional parameters. Without
+          arguments, lists all shell variables.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-009
+        name: shift removes leading positional parameters
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Shifts positional parameters by the specified count (default 1).
+          $1 becomes the value of $(1+n), and $# decreases by n.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-010
+        name: times displays accumulated process times
+        posix_section: "2.14"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Prints accumulated user and system CPU times for the shell and
+          its children.
+        test_priority: low
+        notes: "gbash reports synthetic times. Known xfail for format differences."
+
+      - id: BTIN-011
+        name: trap sets signal and event handlers
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Associates a command string with a signal or pseudo-signal. When
+          the signal arrives, the command is executed. Supports EXIT, ERR,
+          DEBUG, and RETURN traps.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-012
+        name: unset removes variables or functions
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Removes the named variable from the shell environment. With -f,
+          removes the named function.
+        test_priority: high
+        notes: "Dynamic scoping with unset has known edge-case xfails."
+
+      - id: BTIN-013
+        name: exit terminates the shell
+        posix_section: "2.14"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Exits the shell with the given status (or the status of the last
+          command executed). EXIT traps are executed before termination.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-014
+        name: "test / [ conditional expression evaluation"
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Evaluates a conditional expression and returns 0 (true) or 1
+          (false). Supports file tests, string tests, integer comparisons,
+          and logical operators.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-015
+        name: echo outputs arguments
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Writes its arguments separated by spaces to stdout, followed by
+          a newline.
+        test_priority: high
+        notes: "echo -n and -e behavior is implementation-defined in POSIX. gbash follows bash."
+
+      - id: BTIN-016
+        name: printf formatted output
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Formats and prints arguments according to a format string, similar
+          to C printf. Supports %s, %d, %o, %x, %f, %e, %g, %b, %q, etc.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-017
+        name: read reads a line from stdin
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Reads a line from standard input and splits it according to IFS
+          into the named variables. The last variable receives the remainder.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-018
+        name: "cd changes working directory"
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Changes the current working directory. Supports -, CDPATH search,
+          and -P (physical) vs -L (logical) path handling.
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-019
+        name: pwd prints working directory
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Prints the absolute pathname of the current working directory.
+          Supports -P (physical, no symlinks) and -L (logical, default).
+        test_priority: high
+        notes: ""
+
+      - id: BTIN-020
+        name: type describes command type
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Indicates how each argument would be interpreted as a command name
+          (alias, function, builtin, file, or keyword).
+        test_priority: medium
+        notes: "type -P and type -a have known xfails on Darwin."
+
+      - id: BTIN-021
+        name: command bypasses functions
+        posix_section: "2.15"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Executes a command bypassing shell function lookup. With -v,
+          describes the command. With -p, searches only the default PATH.
+        test_priority: medium
+        notes: "command -p has a known xfail (default PATH differs in sandbox)."
+
+      - id: BTIN-022
+        name: getopts parses positional parameters
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Parses option flags from positional parameters according to an
+          option string. Sets OPTARG and OPTIND.
+        test_priority: medium
+        notes: ""
+
+      - id: BTIN-023
+        name: umask sets file creation mask
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Gets or sets the file mode creation mask. Supports both symbolic
+          and octal notation.
+        test_priority: medium
+        notes: ""
+
+      - id: BTIN-024
+        name: wait waits for background processes
+        posix_section: "2.15"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Waits for the specified process or job to complete and returns
+          its exit status. Without arguments, waits for all background children.
+        test_priority: medium
+        notes: "gbash wait works for virtual background jobs only."
+
+      - id: BTIN-025
+        name: kill sends signals to processes
+        posix_section: "2.15"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Sends a signal (default SIGTERM) to the specified process IDs
+          or job specifications.
+        test_priority: medium
+        notes: "gbash kill only operates on virtual PIDs within the shell family."
+
+      - id: BTIN-026
+        name: hash remembers command locations
+        posix_section: "2.15"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Remembers the locations of commands found via PATH search. With -r,
+          clears the remembered locations.
+        test_priority: low
+        notes: "In gbash, all commands are registry-backed so hashing is a no-op concept."
+
+      - id: BTIN-027
+        name: "declare/typeset sets variable attributes"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Sets variable attributes such as integer (-i), readonly (-r),
+          export (-x), lowercase (-l), uppercase (-u), array (-a),
+          associative (-A), and nameref (-n).
+        test_priority: high
+        notes: "Bash extension. Core to bash scripting patterns."
+
+      - id: BTIN-028
+        name: mapfile/readarray reads lines into array
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Reads lines from stdin into an indexed array variable.
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: BTIN-029
+        name: let evaluates arithmetic expressions
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Evaluates each argument as an arithmetic expression.
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: BTIN-030
+        name: enable enables or disables builtins
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Enables or disables shell builtin commands by name.
+        test_priority: low
+        notes: "Bash extension."
+
+  # ---------------------------------------------------------------------------
+  # INVOC: Shell Invocation and Options
+  # ---------------------------------------------------------------------------
+  - id: INVOC
+    name: Shell Invocation and Options
+    posix_sections: ["2.1", "2.5"]
+    features:
+      - id: INVOC-001
+        name: "Shell reads commands from -c string argument"
+        posix_section: "2.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When invoked with -c, the shell reads commands from the provided
+          string operand rather than from a file or stdin.
+        test_priority: high
+        notes: ""
+
+      - id: INVOC-002
+        name: Shell reads commands from a script file
+        posix_section: "2.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When invoked with a filename argument, the shell reads and executes
+          commands from that file.
+        test_priority: high
+        notes: ""
+
+      - id: INVOC-003
+        name: "Shell reads from stdin when no file or -c"
+        posix_section: "2.1"
+        classification: required
+        gbash_status: not_applicable
+        summary: >
+          In interactive mode, the shell reads commands from standard input
+          when no script file or -c string is provided.
+        test_priority: low
+        notes: "gbash is non-interactive by design; stdin reading is through the API."
+
+      - id: INVOC-004
+        name: "errexit option (set -e)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, the shell exits immediately if a simple command fails,
+          unless the command is part of a condition (if, while, until,
+          && / || chain, or negated with !).
+        test_priority: high
+        notes: "Numerous edge cases. Existing OILS tests cover many of them."
+
+      - id: INVOC-005
+        name: "nounset option (set -u)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, expanding an unset variable (other than $@ and $*)
+          produces an error and causes the shell to exit.
+        test_priority: high
+        notes: ""
+
+      - id: INVOC-006
+        name: "verbose option (set -v)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, the shell writes each input line to stderr before
+          executing it.
+        test_priority: medium
+        notes: ""
+
+      - id: INVOC-007
+        name: "xtrace option (set -x)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, the shell writes each command to stderr (prefixed by
+          the expansion of PS4) before execution.
+        test_priority: high
+        notes: "Known xfail for escape style of unprintable characters."
+
+      - id: INVOC-008
+        name: "noexec option (set -n)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, the shell reads commands but does not execute them.
+          Used for syntax checking.
+        test_priority: medium
+        notes: ""
+
+      - id: INVOC-009
+        name: "allexport option (set -a)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, all variable assignments are automatically exported.
+        test_priority: medium
+        notes: ""
+
+      - id: INVOC-010
+        name: "noclobber option (set -C)"
+        posix_section: "2.5"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When set, output redirection with > fails if the file already
+          exists and is a regular file.
+        test_priority: medium
+        notes: ""
+
+  # ---------------------------------------------------------------------------
+  # EXIT: Exit Status and Error Handling
+  # ---------------------------------------------------------------------------
+  - id: EXIT
+    name: Exit Status and Error Handling
+    posix_sections: ["2.8"]
+    features:
+      - id: EXIT-001
+        name: Exit status 0 indicates success
+        posix_section: "2.8.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          An exit status of zero indicates the command completed successfully.
+        test_priority: high
+        notes: ""
+
+      - id: EXIT-002
+        name: Exit status 1-125 indicate command-specific failures
+        posix_section: "2.8.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Non-zero exit statuses from 1 to 125 indicate various
+          command-defined error conditions.
+        test_priority: high
+        notes: ""
+
+      - id: EXIT-003
+        name: Exit status 126 for permission denied
+        posix_section: "2.8.2"
+        classification: required
+        gbash_status: not_applicable
+        summary: >
+          A command found but not executable (permission denied) should
+          produce exit status 126.
+        test_priority: low
+        notes: "Not applicable to gbash registry model."
+
+      - id: EXIT-004
+        name: Exit status 127 for command not found
+        posix_section: "2.8.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A command that cannot be found produces exit status 127.
+        test_priority: high
+        notes: ""
+
+      - id: EXIT-005
+        name: Exit status > 128 for signal termination
+        posix_section: "2.8.2"
+        classification: required
+        gbash_status: partial
+        summary: >
+          When a command is terminated by a signal, the exit status is
+          128 plus the signal number.
+        test_priority: medium
+        notes: "gbash implements this for trapped signals on virtual PIDs."
+
+      - id: EXIT-006
+        name: "errexit interactions with compound commands"
+        posix_section: "2.8.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          In the context of errexit, failures in conditions of if/while/until,
+          in commands negated with !, and in the left side of && or || do
+          not trigger an immediate exit.
+        test_priority: high
+        notes: "Complex area. Tested extensively in OILS errexit tests."
+
+      - id: EXIT-007
+        name: "$? reflects last command's exit status"
+        posix_section: "2.5.2"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The $? special parameter always holds the exit status of the most
+          recently completed foreground command or pipeline.
+        test_priority: high
+        notes: ""
+
+      - id: EXIT-008
+        name: "errtrace option (set -E) for ERR trap inheritance"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          When set, shell functions, command substitutions, and subshell
+          environments inherit the ERR trap from the parent.
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: EXIT-009
+        name: Syntax errors cause non-interactive shell to exit
+        posix_section: "2.8.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A syntax error in a non-interactive shell causes it to exit with
+          a non-zero status.
+        test_priority: high
+        notes: ""
+
+  # ---------------------------------------------------------------------------
+  # TRAP: Traps, Signals, and Job Control
+  # ---------------------------------------------------------------------------
+  - id: TRAP
+    name: Traps, Signals, and Job Control
+    posix_sections: ["2.11", "2.12"]
+    features:
+      - id: TRAP-001
+        name: "EXIT trap fires on shell exit"
+        posix_section: "2.11"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A trap registered for EXIT is executed when the shell terminates,
+          whether by reaching the end of input, executing exit, or receiving
+          a fatal signal.
+        test_priority: high
+        notes: ""
+
+      - id: TRAP-002
+        name: "Signal traps (SIGINT, SIGTERM, etc.)"
+        posix_section: "2.11"
+        classification: required
+        gbash_status: partial
+        summary: >
+          The shell can register handlers for standard signals. When the
+          signal is received, the handler command is executed.
+        test_priority: high
+        notes: "gbash routes signals through a virtual mechanism; not all signals are deliverable."
+
+      - id: TRAP-003
+        name: "trap with no arguments lists active traps"
+        posix_section: "2.11"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Invoking trap without arguments outputs the currently set traps
+          in a form suitable for re-evaluation.
+        test_priority: medium
+        notes: ""
+
+      - id: TRAP-004
+        name: "trap '' SIGNAL ignores the signal"
+        posix_section: "2.11"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Setting a trap action to the empty string causes the signal to be
+          ignored.
+        test_priority: high
+        notes: ""
+
+      - id: TRAP-005
+        name: "trap - SIGNAL resets to default"
+        posix_section: "2.11"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Setting a trap action to - resets the signal disposition to the
+          default.
+        test_priority: medium
+        notes: ""
+
+      - id: TRAP-006
+        name: Traps inherited across subshells
+        posix_section: "2.11"
+        classification: required
+        gbash_status: pass
+        summary: >
+          When a subshell is created, traps that were set to be ignored are
+          inherited. Traps set to a command string are reset to default in
+          the subshell.
+        test_priority: high
+        notes: ""
+
+      - id: TRAP-007
+        name: "ERR trap fires on command failure"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The ERR trap fires after any simple command exits with non-zero
+          status, subject to errexit-like exemptions.
+        test_priority: high
+        notes: "Bash extension."
+
+      - id: TRAP-008
+        name: "DEBUG trap fires before each command"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The DEBUG trap fires before each simple command, for command, case
+          command, and select command.
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: TRAP-009
+        name: "RETURN trap fires on function/source return"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The RETURN trap fires each time a function or sourced script
+          returns.
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: TRAP-010
+        name: "Job control with bg, fg, jobs"
+        posix_section: "2.12"
+        classification: out_of_scope
+        gbash_status: not_applicable
+        summary: >
+          POSIX job control allows suspending, resuming, and switching
+          between foreground and background jobs using bg, fg, and jobs.
+        test_priority: low
+        notes: "gbash does not implement job control. No process suspension or TTY."
+
+      - id: TRAP-011
+        name: "Job control monitor mode (set -m)"
+        posix_section: "2.12"
+        classification: out_of_scope
+        gbash_status: not_applicable
+        summary: >
+          When monitor mode is enabled, the shell places each pipeline in
+          its own process group and reports job completions.
+        test_priority: low
+        notes: "gbash does not implement process groups or job monitoring."
+
+      - id: TRAP-012
+        name: "Job specifications (%1, %%, %string)"
+        posix_section: "2.12"
+        classification: out_of_scope
+        gbash_status: not_applicable
+        summary: >
+          POSIX defines job specifications for referring to background jobs
+          by number, by current/previous status, or by command prefix.
+        test_priority: low
+        notes: "gbash does not implement job specifications."
+
+      - id: TRAP-013
+        name: "SIGPIPE handling in pipelines"
+        posix_section: "2.11"
+        classification: required
+        gbash_status: partial
+        summary: >
+          When a pipeline reader exits, writers should receive SIGPIPE and
+          terminate rather than blocking or accumulating output.
+        test_priority: medium
+        notes: "Known xfail for SIGPIPE regression test."
+
+  # ---------------------------------------------------------------------------
+  # ENV: Environment and Variable Assignment Semantics
+  # ---------------------------------------------------------------------------
+  - id: ENV
+    name: Environment and Variable Assignment
+    posix_sections: ["2.5.3", "2.9.1"]
+    features:
+      - id: ENV-001
+        name: Variable assignment with simple name=value syntax
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Variables are assigned using name=value syntax. The value undergoes
+          tilde expansion, parameter expansion, command substitution,
+          arithmetic expansion, and quote removal.
+        test_priority: high
+        notes: ""
+
+      - id: ENV-002
+        name: "Append assignment with +="
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          The += operator appends to an existing variable's value (or adds
+          to an array).
+        test_priority: medium
+        notes: "Bash extension."
+
+      - id: ENV-003
+        name: Exported variables passed to child commands
+        posix_section: "2.5.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Variables marked with export are included in the environment of
+          all subsequently executed commands.
+        test_priority: high
+        notes: ""
+
+      - id: ENV-004
+        name: Subshell inherits full variable environment
+        posix_section: "2.12"
+        classification: required
+        gbash_status: pass
+        summary: >
+          A subshell receives a copy of the parent's variables, functions,
+          traps, and other state. Modifications in the subshell do not
+          affect the parent.
+        test_priority: high
+        notes: ""
+
+      - id: ENV-005
+        name: Temporary variable assignments for simple commands
+        posix_section: "2.9.1"
+        classification: required
+        gbash_status: pass
+        summary: >
+          Variable assignments before a command name are placed in the
+          environment of that command only and do not persist (unless the
+          command is a special builtin).
+        test_priority: high
+        notes: "Edge cases around temp bindings have known xfails in OILS tests."
+
+      - id: ENV-006
+        name: "IFS variable controls field splitting"
+        posix_section: "2.5.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The IFS variable determines the characters used for field splitting
+          after expansion and by the read builtin.
+        test_priority: high
+        notes: ""
+
+      - id: ENV-007
+        name: PATH variable controls command search
+        posix_section: "2.5.3"
+        classification: required
+        gbash_status: partial
+        summary: >
+          The PATH variable contains a colon-separated list of directories
+          to search for external commands.
+        test_priority: medium
+        notes: "gbash does not search PATH for host binaries. PATH is used for . (source) file lookup."
+
+      - id: ENV-008
+        name: HOME variable used for tilde expansion
+        posix_section: "2.5.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          The HOME variable's value is substituted for ~ in tilde expansion.
+        test_priority: high
+        notes: ""
+
+      - id: ENV-009
+        name: "PWD and OLDPWD track working directory"
+        posix_section: "2.5.3"
+        classification: required
+        gbash_status: pass
+        summary: >
+          PWD holds the current working directory pathname. OLDPWD holds
+          the previous working directory (set by cd).
+        test_priority: high
+        notes: ""
+
+      - id: ENV-010
+        name: Indexed arrays
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Bash-style indexed arrays with arr[i]=val syntax, ${arr[@]},
+          ${arr[*]}, ${#arr[@]}, and ${!arr[@]}.
+        test_priority: high
+        notes: "Bash extension. Core to many bash scripts."
+
+      - id: ENV-011
+        name: Associative arrays
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Associative arrays declared with declare -A, supporting arbitrary
+          string keys.
+        test_priority: high
+        notes: "Bash extension."
+
+      - id: ENV-012
+        name: Name references (declare -n)
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          A nameref variable acts as an alias for another variable. Reading
+          or assigning the nameref operates on the referenced variable.
+        test_priority: medium
+        notes: "Bash 4.3+ extension."
+
+      - id: ENV-013
+        name: "RANDOM variable produces pseudo-random integers"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          Each expansion of $RANDOM yields a pseudo-random integer between
+          0 and 32767. Assigning to RANDOM seeds the generator.
+        test_priority: low
+        notes: "Bash extension. gbash's RANDOM is seedable for deterministic replay."
+
+      - id: ENV-014
+        name: "SECONDS tracks elapsed time"
+        posix_section: "N/A"
+        classification: extension
+        gbash_status: pass
+        summary: >
+          SECONDS expands to the number of seconds since the shell started
+          (or since last assigned).
+        test_priority: low
+        notes: "Bash extension."
+
+      - id: ENV-015
+        name: Dynamic scoping for shell variables
+        posix_section: "2.9.5"
+        classification: required
+        gbash_status: partial
+        summary: >
+          Shell variables use dynamic scoping in functions. A function sees
+          the caller's variables unless local is used. Unset in dynamic
+          scope reveals the previous scope's value.
+        test_priority: high
+        notes: "Multiple known xfails for dynamic-unset and tempenv interactions."
