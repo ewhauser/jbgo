@@ -552,27 +552,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dbracket.test.sh::more tilde expansion": {
-          "mode": "xfail",
-          "reason": "conformance: darwin bash keeps startup-home tilde semantics inside [[ ]]",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/dbracket.test.sh::tilde expansion in [[": {
-          "mode": "xfail",
-          "reason": "conformance: darwin bash keeps startup-home tilde semantics inside [[ ]]",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/dbracket.test.sh::tilde expansion with =~ (confusing)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "linux"
-          ]
-        },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
