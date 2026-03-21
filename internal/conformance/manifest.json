@@ -337,6 +337,14 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
+        "oils/builtin-special.test.sh::Non-special builtins CAN be redefined as functions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash does not support set -o posix"
+        },
+        "oils/builtin-special.test.sh::set is special and fails whole script, even if using || true": {
+          "mode": "xfail",
+          "reason": "conformance: gbash does not support set -o posix"
+        },
         "oils/builtin-special.test.sh::bash 'type' gets confused - says 'function', but runs builtin": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -594,26 +602,6 @@
           "goos": [
             "linux"
           ]
-        },
-        "oils/nix-idioms.test.sh::${!ref} to undefined array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nix-idioms.test.sh::${!ref} to undefined string var is fatal, INCONSISTENT with array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nix-idioms.test.sh::Similar to above with set -u": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nix-idioms.test.sh::export with dynamic var name +=": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nix-idioms.test.sh::var ref to array 'preHooks[@]'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/nocasematch-match.test.sh::[[ equality matching": {
           "mode": "xfail",
