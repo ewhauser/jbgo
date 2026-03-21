@@ -43,6 +43,38 @@ func IsBuiltin(name string) bool {
 	return completionutil.IsBuiltinName(name)
 }
 
+var posixSpecialBuiltins = map[string]struct{}{
+	":":        {},
+	".":        {},
+	"break":    {},
+	"continue": {},
+	"eval":     {},
+	"exec":     {},
+	"exit":     {},
+	"export":   {},
+	"readonly": {},
+	"return":   {},
+	"set":      {},
+	"shift":    {},
+	"times":    {},
+	"trap":     {},
+	"unset":    {},
+}
+
+func IsPOSIXSpecialBuiltin(name string) bool {
+	_, ok := posixSpecialBuiltins[name]
+	return ok
+}
+
+func (r *Runner) posixMode() bool {
+	opt := r.posixOptByName("posix")
+	return opt != nil && *opt
+}
+
+func (r *Runner) posixSpecialBuiltinActive(name string) bool {
+	return r.posixMode() && IsPOSIXSpecialBuiltin(name)
+}
+
 // TODO: atoi is duplicated in the expand package.
 
 // atoi is like [strconv.ParseInt](s, 10, 64), but it ignores errors and trims whitespace.
@@ -93,6 +125,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		r.updateExpandOpts()
 	case "shift":
 		n := 1
+		label := "1"
 		switch len(args) {
 		case 0:
 		case 1:
@@ -103,12 +136,20 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				return exit
 			}
 			n = n2
+			label = args[0]
 		default:
 			exit = failf(1, "shift: too many arguments\n")
 			exit.exiting = true
 			return exit
 		}
-		if n >= len(r.Params) {
+		if n < 0 || n > len(r.Params) {
+			if r.legacyBashCompat && r.posixMode() {
+				return failf(1, "shift: %s: shift count out of range\n", label)
+			}
+			exit.code = 1
+			return exit
+		}
+		if n == len(r.Params) {
 			r.Params = nil
 		} else {
 			r.Params = r.Params[n:]
@@ -2344,6 +2385,7 @@ const (
 	shellTypeAlias shellTypeMatchKind = iota + 1
 	shellTypeKeyword
 	shellTypeFunction
+	shellTypeSpecialBuiltin
 	shellTypeBuiltin
 	shellTypeFile
 )
@@ -2394,22 +2436,56 @@ func (r *Runner) typeMatches(ctx context.Context, name string, mode shellTypeMod
 			return matches, true
 		}
 	}
+	appendOrderedMatch := func(match shellTypeMatch) ([]shellTypeMatch, bool) {
+		if appendMatch(match) {
+			return nil, false
+		}
+		if mode.output == shellTypeOutputPath {
+			return nil, true
+		}
+		return matches, true
+	}
+
+	functionMatch := shellTypeMatch{}
+	hasFunction := false
 	if !mode.suppressFuncs {
 		if body := r.funcBody(name); body != nil && !r.funcInternal(name) {
-			if !appendMatch(shellTypeMatch{kind: shellTypeFunction, body: body}) {
-				if mode.output == shellTypeOutputPath {
-					return nil, true
-				}
-				return matches, true
-			}
+			functionMatch = shellTypeMatch{kind: shellTypeFunction, body: body}
+			hasFunction = true
 		}
 	}
-	if IsBuiltin(name) {
-		if !appendMatch(shellTypeMatch{kind: shellTypeBuiltin}) {
-			if mode.output == shellTypeOutputPath {
-				return nil, true
+	builtinMatch := shellTypeMatch{}
+	hasBuiltin := false
+	switch {
+	case IsPOSIXSpecialBuiltin(name):
+		builtinMatch = shellTypeMatch{kind: shellTypeSpecialBuiltin}
+		hasBuiltin = true
+	case IsBuiltin(name):
+		builtinMatch = shellTypeMatch{kind: shellTypeBuiltin}
+		hasBuiltin = true
+	}
+
+	if r.posixSpecialBuiltinActive(name) {
+		if hasBuiltin {
+			if result, done := appendOrderedMatch(builtinMatch); done {
+				return result, true
 			}
-			return matches, true
+		}
+		if hasFunction {
+			if result, done := appendOrderedMatch(functionMatch); done {
+				return result, true
+			}
+		}
+	} else {
+		if hasFunction {
+			if result, done := appendOrderedMatch(functionMatch); done {
+				return result, true
+			}
+		}
+		if hasBuiltin {
+			if result, done := appendOrderedMatch(builtinMatch); done {
+				return result, true
+			}
 		}
 	}
 
@@ -2499,6 +2575,8 @@ func (r *Runner) printTypeMatch(name string, match shellTypeMatch, mode shellTyp
 			r.out("keyword\n")
 		case shellTypeFunction:
 			r.out("function\n")
+		case shellTypeSpecialBuiltin:
+			r.out("builtin\n")
 		case shellTypeBuiltin:
 			r.out("builtin\n")
 		case shellTypeFile:
@@ -2524,6 +2602,8 @@ func (r *Runner) printTypeMatch(name string, match shellTypeMatch, mode shellTyp
 		r.out("{ \n")
 		r.out(bashFunctionBody(match.body))
 		r.out("}\n")
+	case shellTypeSpecialBuiltin:
+		r.outf("%s is a shell builtin\n", name)
 	case shellTypeBuiltin:
 		r.outf("%s is a shell builtin\n", name)
 	case shellTypeFile:

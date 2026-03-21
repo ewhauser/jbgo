@@ -149,10 +149,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-misc.test.sh::Shifting too far": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-misc.test.sh::history builtin usage": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -240,34 +236,6 @@
         "oils/builtin-process.test.sh::write big file with ulimit": {
           "mode": "skip",
           "reason": "gbash does not implement process tables"
-        },
-        "oils/builtin-special.test.sh::Prefix assignments persist after readonly, but NOT exported (set -o posix)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-special.test.sh::Prefix assignments persist after special builtins, like : (set -o posix)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-special.test.sh::Shift is special and fails whole script": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-special.test.sh::Special builtins can't be redefined as shell functions (set -o posix)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-special.test.sh::Non-special builtins CAN be redefined as functions": {
-          "mode": "xfail",
-          "reason": "conformance: gbash does not support set -o posix"
-        },
-        "oils/builtin-special.test.sh::set is special and fails whole script, even if using || true": {
-          "mode": "xfail",
-          "reason": "conformance: gbash does not support set -o posix"
-        },
-        "oils/builtin-special.test.sh::bash 'type' gets confused - says 'function', but runs builtin": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-times.test.sh::times shows two formatted lines": {
           "mode": "xfail",
@@ -551,10 +519,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/smoke.test.sh::failed command": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/temp-binding.test.sh::Temp bindings with unset": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

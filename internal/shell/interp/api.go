@@ -674,6 +674,7 @@ var posixOptsTable = [...]posixOpt{
 	{'f', "noglob"},
 	{'u', "nounset"},
 	{' ', "pipefail"},
+	{' ', "posix"},
 	{'v', "verbose"},
 	{'x', "xtrace"},
 }
@@ -825,10 +826,11 @@ const (
 	optNoGlob
 	optNoUnset
 	optPipeFail
+	optPosix
 	optVerbose
 	optXTrace
 
-	// These correspond to indexes (offset by the above seven items) of
+	// These correspond to indexes (offset by the POSIX options above) of
 	// supported options in [bashOptsTable]
 	optDotGlob
 	optExpandAliases

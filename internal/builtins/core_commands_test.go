@@ -2049,6 +2049,27 @@ func TestBashGroupedShortFlagsSetShellOptionsForCommandString(t *testing.T) {
 	}
 }
 
+func TestBashCommandStringPreservesPosixShiftDiagnostic(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash -c 'set -o posix; set -- a b; shift 3; echo status=$?'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "shift: 3: shift count out of range\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestBashCommandStringPrefixesFatalArithmeticDiagnostic(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
