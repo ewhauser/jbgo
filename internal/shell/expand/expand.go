@@ -44,9 +44,8 @@ type Config struct {
 	// variables.
 	Env Environ
 
-	// StartupHome, when set, overrides the home directory used for scalar
-	// assignment tilde expansion (for example `foo=~`). Callers must only set
-	// this from a trusted sandbox boundary.
+	// StartupHome carries the shell's trusted startup home for callers that
+	// need startup-sensitive tilde semantics.
 	StartupHome string
 
 	// TildeEnv is used for ~ and ~user lookup. If nil, Env is used.
