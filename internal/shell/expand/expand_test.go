@@ -1838,6 +1838,19 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 	}
 }
 
+func TestLiteralNamedUserTildeRequiresSandboxMapping(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `~root/src`)
+	got, err := Literal(&Config{Env: testEnv{}}, word)
+	if err != nil {
+		t.Fatalf("Literal() error = %v", err)
+	}
+	if got != "~root/src" {
+		t.Fatalf("Literal() = %q, want %q", got, "~root/src")
+	}
+}
+
 func TestReparseBraceWordSpecialLeadingTokens(t *testing.T) {
 	t.Parallel()
 

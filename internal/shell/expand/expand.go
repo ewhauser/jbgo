@@ -11,9 +11,7 @@ import (
 	"io/fs"
 	"iter"
 	"os"
-	"os/user"
 	"path"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -2107,10 +2105,6 @@ func (cfg *Config) expandUserWithHome(field string, moreFields bool, startupHome
 
 	if vr := cfg.TildeEnv.Get("HOME " + name); vr.IsSet() {
 		prefix, rest := joinTildeHome(vr.String(), rest)
-		return prefix, rest, true
-	}
-	if u, err := user.Lookup(name); err == nil && u.HomeDir != "" {
-		prefix, rest := joinTildeHome(filepath.ToSlash(u.HomeDir), rest)
 		return prefix, rest, true
 	}
 	return "", field, false
