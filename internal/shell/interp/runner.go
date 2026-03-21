@@ -352,9 +352,7 @@ func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool, source string,
 	}
 	var syntaxErr expand.ArithmSyntaxError
 	var diagErr *expand.ArithmDiagnosticError
-	if command && (errors.As(err, &syntaxErr) ||
-		(errors.As(err, &diagErr) &&
-			(runtime.GOOS != "darwin" || diagErr.Message != "syntax error in expression"))) {
+	if command && (errors.As(err, &syntaxErr) || errors.As(err, &diagErr)) {
 		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)
@@ -373,6 +371,10 @@ type arithmCommandError struct {
 }
 
 func (e arithmCommandError) Error() string {
+	var diagErr *expand.ArithmDiagnosticError
+	if runtime.GOOS == "darwin" && errors.As(e.err, &diagErr) && diagErr.Message == "syntax error in expression" {
+		return e.err.Error()
+	}
 	return fmt.Sprintf("((: %s", e.err)
 }
 

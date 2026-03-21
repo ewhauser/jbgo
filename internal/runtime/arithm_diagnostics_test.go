@@ -115,3 +115,19 @@ func TestArithmCommandRegressionPreservesParenAmbiguityParseError(t *testing.T) 
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestArithmCommandRegressionDoesNotAbortFollowingCommands(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "(( echo 1\necho 2\n(( x ))\n: $(( x ))\necho 3\n))\necho after\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "after\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got == "" {
+		t.Fatal("Stderr = empty, want arithmetic diagnostic")
+	}
+}
