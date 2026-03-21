@@ -731,18 +731,41 @@ func TestNounsetVarOpsReturnStatusOne(t *testing.T) {
 
 	stdout, stderr, err := runInterpScript(t, `
 set -u
+(echo ${undef}); echo "stat: $?"
 (echo ${undef@Q}); echo "stat: $?"
 (echo ${undef@P}); echo "stat: $?"
 (echo ${undef@a}); echo "stat: $?"
+x=$(echo ${undef@Q}); echo "stat: $?"
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
 	}
-	if stdout != "stat: 1\nstat: 1\nstat: 1\n" {
-		t.Fatalf("stdout = %q, want %q", stdout, "stat: 1\nstat: 1\nstat: 1\n")
+	const wantStdout = "stat: 1\nstat: 1\nstat: 1\nstat: 1\nstat: 1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	if stderr != "undef: unbound variable\nundef: unbound variable\nundef: unbound variable\n" {
-		t.Fatalf("stderr = %q, want %q", stderr, "undef: unbound variable\nundef: unbound variable\nundef: unbound variable\n")
+	const wantStderr = "undef: unbound variable\nundef: unbound variable\nundef: unbound variable\nundef: unbound variable\nundef: unbound variable\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestTopLevelNounsetStillExits127(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+echo ${undef}
+echo after
+`)
+	if status, ok := err.(ExitStatus); !ok || status != 127 {
+		t.Fatalf("Run error = %v, want exit status 127", err)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "undef: unbound variable\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "undef: unbound variable\n")
 	}
 }
 

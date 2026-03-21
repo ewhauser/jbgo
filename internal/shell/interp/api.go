@@ -129,6 +129,7 @@ type Runner struct {
 	ectx context.Context // just so that Runner.Subshell can use it again
 
 	legacyBashCompat bool
+	inSubshell       bool
 
 	// didReset remembers whether the runner has ever been reset. This is
 	// used so that Reset is automatically called when running any program
@@ -962,6 +963,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		interactive:             r.interactive,
 		commandString:           r.commandString,
 		legacyBashCompat:        r.legacyBashCompat,
+		inSubshell:              true,
 		inFunc:                  r.inFunc,
 		inSource:                r.inSource,
 		exit:                    r.exit,
