@@ -42,22 +42,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/blog1.test.sh::${####}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/blog1.test.sh::${###2}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/blog1.test.sh::${###}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/blog1.test.sh::${##2}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/bugs.test.sh::#2640 Hanging when reading from character devices": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

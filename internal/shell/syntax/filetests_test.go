@@ -2508,6 +2508,38 @@ var fileTests = []fileTestCase{
 		)),
 	),
 	fileTest(
+		[]string{`${###} ${####} ${##2} ${###2}`},
+		langFile(call(
+			word(&ParamExp{
+				Param: lit("#"),
+				Exp: &Expansion{
+					Op: RemLargePrefix,
+				},
+			}),
+			word(&ParamExp{
+				Param: lit("#"),
+				Exp: &Expansion{
+					Op:      RemLargePrefix,
+					Pattern: litPattern("#"),
+				},
+			}),
+			word(&ParamExp{
+				Param: lit("#"),
+				Exp: &Expansion{
+					Op:      RemSmallPrefix,
+					Pattern: litPattern("2"),
+				},
+			}),
+			word(&ParamExp{
+				Param: lit("#"),
+				Exp: &Expansion{
+					Op:      RemLargePrefix,
+					Pattern: litPattern("2"),
+				},
+			}),
+		)),
+	),
+	fileTest(
 		[]string{`${foo}`},
 		langFile(&ParamExp{Param: lit("foo")}),
 	),

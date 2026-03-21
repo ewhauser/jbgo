@@ -3585,9 +3585,12 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 	}
 	// The parameter name itself, like $foo or $?.
 	switch p.r {
-	case '?', '-':
+	case '?', '-', '#':
 		if pe.Length && p.peek() != '}' {
-			// actually ${#-default}, not ${#-}; fix the ambiguity
+			// actually ${#-default} or ${###}, not ${#-} or ${##};
+			// fix the ambiguity in bash-compatible parses by treating the
+			// leading '#' as the parameter name and the current rune as the
+			// start of the expansion operator.
 			pe.Length = false
 			pos := p.nextPos()
 			pe.Param = p.lit(posAddCol(pos, -1), "#")
@@ -3595,7 +3598,7 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 			break
 		}
 		fallthrough
-	case '@', '*', '#', '!', '$':
+	case '@', '*', '!', '$':
 		r, pos := p.r, p.nextPos()
 		p.rune()
 		pe.Param = p.lit(pos, string(r))

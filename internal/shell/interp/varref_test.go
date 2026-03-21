@@ -1764,3 +1764,22 @@ echo regex=$?
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+
+func TestHashLengthDisambiguationMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -- 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
+printf '%s\n' "${##}" "${###}" "${####}" "${##2}" "${###2}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "2\n25\n25\n5\n5\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
