@@ -182,7 +182,9 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 			break
 		}
 		pe := &ParenArithm{Lparen: p.pos}
-		p.nextArithOp(compact)
+		if spaced := p.nextArith(compact); spaced && !(compact && p.quote == arithmExprLet) {
+			p.followErrExp(pe.Lparen, leftParen)
+		}
 		pe.X = p.followArithm(leftParen, pe.Lparen)
 		pe.Rparen = p.matched(pe.Lparen, leftParen, rightParen)
 		if p.quote == paramExpArithm && p.tok == _LitWord {

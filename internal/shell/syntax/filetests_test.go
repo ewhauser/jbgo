@@ -5487,6 +5487,63 @@ var fileTestsNoPrint = []fileTestCase{
 		langFile(litWord("\r")),
 	),
 	fileTest(
+		[]string{`let a=( 1 + 2 ) b=3+4`},
+		langFile(letClause(
+			&BinaryArithm{
+				Op: Assgn,
+				X:  litWord("a"),
+				Y: parenArit(&BinaryArithm{
+					Op: Add,
+					X:  litWord("1"),
+					Y:  litWord("2"),
+				}),
+			},
+			&BinaryArithm{
+				Op: Assgn,
+				X:  litWord("b"),
+				Y: &BinaryArithm{
+					Op: Add,
+					X:  litWord("3"),
+					Y:  litWord("4"),
+				},
+			},
+		), LangBash),
+	),
+	fileTest(
+		[]string{`let x=( 1 )`},
+		langFile(letClause(
+			&BinaryArithm{
+				Op: Assgn,
+				X:  litWord("x"),
+				Y:  parenArit(litWord("1")),
+			},
+		), LangBash),
+	),
+	fileTest(
+		[]string{`let y=( x + 2 )`},
+		langFile(letClause(
+			&BinaryArithm{
+				Op: Assgn,
+				X:  litWord("y"),
+				Y: parenArit(&BinaryArithm{
+					Op: Add,
+					X:  litWord("x"),
+					Y:  litWord("2"),
+				}),
+			},
+		), LangBash),
+	),
+	fileTest(
+		[]string{`let z2='y*3'  # comment`},
+		langFile(letClause(
+			&BinaryArithm{
+				Op: Assgn,
+				X:  litWord("z2"),
+				Y:  word(sglQuoted("y*3")),
+			},
+		), LangBash),
+	),
+	fileTest(
 		[]string{`$[foo]`},
 		langFile(word(lit("$"), lit("[foo]")), LangPOSIX),
 	),

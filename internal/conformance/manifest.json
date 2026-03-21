@@ -389,14 +389,6 @@
           "mode": "xfail",
           "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics"
         },
-        "oils/let.test.sh::let": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/let.test.sh::let with ()": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/loop.test.sh::break in condition of loop": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

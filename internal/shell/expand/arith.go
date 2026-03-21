@@ -307,6 +307,22 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 	return arithm(cfg, expr, expr, 0)
 }
 
+// ArithmLet evaluates a let expression after shell quote removal, matching
+// bash's let builtin semantics without widening general arithmetic behavior.
+func ArithmLet(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+	if expr == nil {
+		return 0, nil
+	}
+	parsed, err := arithmLetParse(cfg, expr)
+	if err != nil {
+		return 0, err
+	}
+	if parsed == nil {
+		return 0, nil
+	}
+	return Arithm(cfg, parsed)
+}
+
 const arithWhitespace = " \t\n"
 
 func trimArithSpace(str string) string {
@@ -315,6 +331,68 @@ func trimArithSpace(str string) string {
 
 func trimArithLeftSpace(str string) string {
 	return strings.TrimLeft(str, arithWhitespace)
+}
+
+func arithmLetParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr, error) {
+	src, err := arithmLetSource(cfg, expr)
+	if err != nil {
+		return nil, err
+	}
+	if arithHasLeadingInvalidControl(src) {
+		return nil, &ArithmDiagnosticError{
+			ExprText:  src,
+			TokenText: src,
+			Message:   "syntax error: operand expected",
+		}
+	}
+	p := syntax.NewParser()
+	parsed, err := p.Arithmetic(strings.NewReader(src))
+	if err != nil {
+		var parseErr syntax.ParseError
+		if errors.As(err, &parseErr) {
+			return nil, arithRuntimeParseError(src, parseErr)
+		}
+		return nil, &ArithmDiagnosticError{
+			ExprText:  src,
+			TokenText: src,
+			Message:   "arithmetic syntax error: invalid arithmetic operator",
+		}
+	}
+	return parsed, nil
+}
+
+func arithmLetSource(cfg *Config, expr syntax.ArithmExpr) (string, error) {
+	switch expr := expr.(type) {
+	case *syntax.Word:
+		return AssignmentWordLiteral(cfg, expr)
+	case *syntax.BinaryArithm:
+		left, err := arithmLetSource(cfg, expr.X)
+		if err != nil {
+			return "", err
+		}
+		right, err := arithmLetSource(cfg, expr.Y)
+		if err != nil {
+			return "", err
+		}
+		return left + expr.Op.String() + right, nil
+	case *syntax.UnaryArithm:
+		inner, err := arithmLetSource(cfg, expr.X)
+		if err != nil {
+			return "", err
+		}
+		if expr.Post {
+			return inner + expr.Op.String(), nil
+		}
+		return expr.Op.String() + inner, nil
+	case *syntax.ParenArithm:
+		inner, err := arithmLetSource(cfg, expr.X)
+		if err != nil {
+			return "", err
+		}
+		return "(" + inner + ")", nil
+	default:
+		return arithExprSource(expr), nil
+	}
 }
 
 func (cfg *Config) arithmStringValue(root, tokenExpr syntax.ArithmExpr, word *syntax.Word, str string, depth int) (int, error) {

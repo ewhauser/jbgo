@@ -6105,6 +6105,12 @@ func (p *Parser) letClause(s *Stmt) {
 	old := p.preNested(arithmExprLet)
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
+		if p.spaced && p.tok == hash {
+			for p.tok != _Newl && p.tok != _EOF {
+				p.next()
+			}
+			break
+		}
 		x := p.arithmExpr(true)
 		if x == nil {
 			break

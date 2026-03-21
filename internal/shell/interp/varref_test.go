@@ -972,6 +972,47 @@ printf 'unreachable\n'
 	}
 }
 
+func TestLetStripsQuotedWords(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+let x=1
+let y=x+2
+let z=y*3
+let z2='y*3'
+echo $x $y $z $z2
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "1 3 9 9\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestLetAcceptsSpacedGrouping(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+let x=( 1 )
+let y=( x + 2 )
+let z=( y * 3 )
+echo $x $y $z
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "1 3 9\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestCommandStringArithmeticErrorsUseShellNamePrefix(t *testing.T) {
 	t.Parallel()
 

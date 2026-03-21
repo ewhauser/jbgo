@@ -53,6 +53,20 @@ func parseArithmExpansionScript(t *testing.T, script string) *syntax.ArithmExp {
 	return part
 }
 
+func parseLetArithmExpr(t *testing.T, src string) syntax.ArithmExpr {
+	t.Helper()
+	p := syntax.NewParser()
+	file, err := p.Parse(strings.NewReader("let "+src+"\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	let := file.Stmts[0].Cmd.(*syntax.LetClause)
+	if got, want := len(let.Exprs), 1; got != want {
+		t.Fatalf("len(let.Exprs) = %d, want %d", got, want)
+	}
+	return let.Exprs[0]
+}
+
 func TestArithmSingleQuoteRejection(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -126,7 +140,7 @@ func TestArithmSingleQuoteRejection(t *testing.T) {
 		{
 			name:    "double quoted number",
 			src:     `"1"`,
-			wantErr: false, // double quotes are allowed in arithmetic
+			wantErr: false,
 		},
 		{
 			name:    "variable",
@@ -167,10 +181,65 @@ func TestArithmSingleQuoteRejection(t *testing.T) {
 				if got := syntaxErr.Error(); got != tt.errMessage {
 					t.Errorf("Arithm(%q) error message = %q, want %q", tt.src, got, tt.errMessage)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Arithm(%q) unexpected error: %v", tt.src, err)
-				}
+			} else if err != nil {
+				t.Errorf("Arithm(%q) unexpected error: %v", tt.src, err)
+			}
+		})
+	}
+}
+
+func TestArithmLetUsesShellDequotedSource(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		src         string
+		env         testEnv
+		want        int
+		wantVarName string
+		wantVar     string
+	}{
+		{
+			name:        "single quoted rhs",
+			src:         "z2='y*3'",
+			env:         testEnv{"y": {Set: true, Kind: String, Str: "3"}},
+			want:        9,
+			wantVarName: "z2",
+			wantVar:     "9",
+		},
+		{
+			name:        "grouping with spaces",
+			src:         "x=( 1 )",
+			want:        1,
+			wantVarName: "x",
+			wantVar:     "1",
+		},
+		{
+			name:        "grouping with spaces around variables",
+			src:         "y=( x + 2 )",
+			env:         testEnv{"x": {Set: true, Kind: String, Str: "1"}},
+			want:        3,
+			wantVarName: "y",
+			wantVar:     "3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr := parseLetArithmExpr(t, tt.src)
+			env := tt.env
+			if env == nil {
+				env = testEnv{}
+			}
+			got, err := ArithmLet(&Config{Env: env}, expr)
+			if err != nil {
+				t.Fatalf("ArithmLet(%q) unexpected error: %v", tt.src, err)
+			}
+			if got != tt.want {
+				t.Fatalf("ArithmLet(%q) = %d, want %d", tt.src, got, tt.want)
+			}
+			if got := env.Get(tt.wantVarName).String(); got != tt.wantVar {
+				t.Fatalf("%s = %q, want %q", tt.wantVarName, got, tt.wantVar)
 			}
 		})
 	}
