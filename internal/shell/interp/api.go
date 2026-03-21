@@ -877,6 +877,7 @@ func (r *Runner) Reset() {
 	r.setVarString("IFS", " \t\n")
 	r.setVarString("OPTIND", "1")
 	r.setVarString("PS4", "+ ")
+	r.setPipeStatuses(0)
 	if r.interactive && !r.writeEnv.Get("HISTFILE").IsSet() {
 		home := strings.TrimSpace(r.writeEnv.Get("HOME").String())
 		if home == "" {
@@ -981,6 +982,8 @@ func (r *Runner) subshell(background bool) *Runner {
 	if !r.didReset {
 		r.Reset()
 	}
+	bashPID := r.allocateSubshellPID()
+	random := randomSeed(bashPID, r.origStart)
 	// Keep in sync with the Runner type. Manually copy fields, to not copy
 	// sensitive ones like [errgroup.Group], and to do deep copies of slices.
 	r2 := &Runner{
@@ -1000,7 +1003,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		gid:                     r.gid,
 		egid:                    r.egid,
 		pid:                     r.pid,
-		bashPID:                 r.allocateSubshellPID(),
+		bashPID:                 bashPID,
 		ppid:                    r.ppid,
 		nextVirtualPID:          r.nextVirtualPID,
 		stdin:                   r.stdin,
@@ -1030,8 +1033,8 @@ func (r *Runner) subshell(background bool) *Runner {
 		hiddenReadonlyArrayDecl: maps.Clone(r.hiddenReadonlyArrayDecl),
 		origStart:               r.origStart,
 		startTime:               r.startTime,
-		random:                  r.random,
-		origRandom:              r.origRandom,
+		random:                  random,
+		origRandom:              random,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}

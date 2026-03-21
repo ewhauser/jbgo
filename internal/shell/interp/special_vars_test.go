@@ -120,6 +120,21 @@ func TestPIPESTATUSTracksSimpleCommandsAndPipelines(t *testing.T) {
 	}
 }
 
+func TestPIPESTATUSStartsAtZero(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runSpecialVarScript(t, nil, "printf '%s\\n' \"${PIPESTATUS[@]}\"\n")
+	if err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", err, stderr)
+	}
+	if got, want := stdout, "0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
+	}
+	if got := stderr; got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestPIPESTATUSResetsAfterRedirectionOnlyStatement(t *testing.T) {
 	t.Parallel()
 
@@ -163,6 +178,46 @@ func TestSECONDSReportsElapsedTime(t *testing.T) {
 	}
 	if value < 3 || value > 4 {
 		t.Fatalf("SECONDS = %d, want 3 or 4", value)
+	}
+}
+
+func TestSECONDSAssignmentResetsBaseline(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runSpecialVarScript(t, nil, ""+
+		"SECONDS=5\n"+
+		"x=$SECONDS\n"+
+		"if (( x < 5 || x > 6 )); then\n"+
+		"  echo bad:$x\n"+
+		"else\n"+
+		"  echo ok\n"+
+		"fi\n")
+	if err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", err, stderr)
+	}
+	if got, want := stdout, "ok\n"; got != want {
+		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
+	}
+	if got := stderr; got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestSubshellRandomIsReseeded(t *testing.T) {
+	t.Parallel()
+
+	runner, err := NewRunner(&RunnerConfig{Dir: "/tmp"})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	runner.Reset()
+
+	subshell := runner.subshell(false)
+	if got, wantNot := subshell.random, runner.random; got == wantNot {
+		t.Fatalf("subshell random state = %d, want it to differ from parent %d", got, wantNot)
+	}
+	if got, wantNot := subshell.origRandom, runner.origRandom; got == wantNot {
+		t.Fatalf("subshell origRandom = %d, want it to differ from parent %d", got, wantNot)
 	}
 }
 

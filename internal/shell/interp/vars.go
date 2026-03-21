@@ -517,6 +517,13 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.exit.code = 1
 		return
 	}
+	if name == "SECONDS" && vr.IsSet() {
+		seconds, err := strconv.ParseInt(strings.TrimSpace(vr.String()), 10, 64)
+		if err != nil {
+			seconds = 0
+		}
+		r.startTime = time.Now().Add(-time.Duration(seconds) * time.Second)
+	}
 }
 
 func (r *Runner) nextRandom() int {
