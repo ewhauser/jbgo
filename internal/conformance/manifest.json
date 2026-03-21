@@ -453,10 +453,6 @@
             "darwin"
           ]
         },
-        "oils/builtin-type-bash.test.sh::type -t doesn't find non-executable (like command -v)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/command-sub.test.sh::Double Quotes in Command Sub in Double Quotes": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
