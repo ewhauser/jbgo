@@ -1569,7 +1569,12 @@ func (cfg *Config) cmdSubst(cs *syntax.CmdSubst) (string, error) {
 		return "", err
 	}
 	out := sb.String()
-	out = strings.ReplaceAll(out, "\x00", "")
+	if strings.Contains(out, "\x00") {
+		if cfg.ReportError != nil {
+			cfg.ReportError(fmt.Errorf("warning: command substitution: ignored null byte in input"))
+		}
+		out = strings.ReplaceAll(out, "\x00", "")
+	}
 	return strings.TrimRight(out, "\n"), nil
 }
 

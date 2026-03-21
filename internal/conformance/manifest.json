@@ -675,61 +675,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - command sub": {
-          "mode": "xfail",
-          "reason": "conformance: command substitution null-byte handling and byte-dump formatting still differ from bash"
-        },
-        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read -n": {
-          "mode": "xfail",
-          "reason": "darwin's byte-dump formatting still differs from the Linux CI oracle for this read -n case",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - read builtin": {
-          "mode": "xfail",
-          "reason": "darwin's byte-dump formatting still differs from the Linux CI oracle for this read builtin case",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/nul-bytes.test.sh::Compare \\x00 byte versus \\x01 byte - mapfile builtin": {
-          "mode": "xfail",
-          "reason": "darwin's byte-dump formatting still differs from the Linux CI oracle for this mapfile case",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/nul-bytes.test.sh::Issue 2269 - Do NUL bytes match ? in ${a#?}": {
-          "mode": "xfail",
-          "reason": "conformance: command substitution null-byte warning behavior still differs from bash"
-        },
-        "oils/nul-bytes.test.sh::Issue 2269 Reduction": {
-          "mode": "xfail",
-          "reason": "conformance: command substitution null-byte warning behavior still differs from bash"
-        },
-        "oils/nul-bytes.test.sh::NUL bytes and IFS splitting": {
-          "mode": "xfail",
-          "reason": "conformance: stdout matches bash, but command substitution does not emit bash's ignored-null-byte warning"
-        },
-        "oils/nul-bytes.test.sh::NUL bytes with echo -e": {
-          "mode": "xfail",
-          "reason": "conformance: echo bytes match bash; od text formatting still differs on the pinned harness",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/nul-bytes.test.sh::Strip ops # ## % %% with NUL bytes": {
-          "mode": "xfail",
-          "reason": "conformance: command substitution null-byte warning behavior still differs from bash"
-        },
-        "oils/nul-bytes.test.sh::printf - \\0 escape shows NUL byte": {
-          "mode": "xfail",
-          "reason": "conformance: printf bytes match bash; od text formatting still differs on the pinned harness",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/parse-errors.test.sh::Invalid for loop variable name": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
