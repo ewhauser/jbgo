@@ -2805,14 +2805,14 @@ func bashDeclDoubleQuote(value string) string {
 
 func bashDeclPrintValue(value string) string {
 	if needsTraceANSIQuote(value) {
-		return traceANSIQuote(value)
+		return traceANSIQuote(value, true)
 	}
 	return bashDeclDoubleQuote(value)
 }
 
 func bashDeclPlainValue(value string) string {
 	if needsTraceANSIQuote(value) {
-		return traceANSIQuote(value)
+		return traceANSIQuote(value, true)
 	}
 	quoted, err := syntax.Quote(value, syntax.LangBash)
 	if err != nil {

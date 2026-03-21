@@ -305,7 +305,7 @@ func (t *tracer) traceArg(arg string) string {
 		return `\'`
 	}
 	if needsTraceControlQuote(arg) || (t.cLocale && needsTraceANSIQuote(arg)) {
-		return traceANSIQuote(arg)
+		return traceANSIQuote(arg, t.cLocale)
 	}
 	quoted, err := syntax.Quote(arg, syntax.LangBash)
 	if err != nil {
@@ -351,16 +351,18 @@ func needsTraceControlQuote(arg string) bool {
 	return false
 }
 
-func traceANSIQuote(arg string) string {
+func traceANSIQuote(arg string, cLocale bool) string {
 	var b strings.Builder
 	b.WriteString("$'")
 	for i := 0; i < len(arg); {
-		r, size := utf8.DecodeRuneInString(arg[i:])
-		if size > 1 && r != utf8.RuneError {
-			// Valid multi-byte UTF-8: preserve as-is.
-			b.WriteString(arg[i : i+size])
-			i += size
-			continue
+		if !cLocale {
+			r, size := utf8.DecodeRuneInString(arg[i:])
+			if size > 1 && r != utf8.RuneError {
+				// Valid multi-byte UTF-8: preserve as-is.
+				b.WriteString(arg[i : i+size])
+				i += size
+				continue
+			}
 		}
 		c := arg[i]
 		i++
