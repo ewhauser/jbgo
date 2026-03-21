@@ -30,7 +30,19 @@ func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
 		for name, vr := range parent.Each {
 			oenv.Set(name, vr)
 		}
-		if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+	}
+	if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+		if optEnv, optVar, ok := visibleBindingWriteEnv(parentWrite, "OPTIND"); ok {
+			if state := getoptsStateForEnv(optEnv); state != nil {
+				oenv.optState = *state
+			}
+			if !background {
+				if err := oenv.Set("OPTIND", optVar); err != nil {
+					panic(fmt.Sprintf("copy OPTIND into overlay: %v", err))
+				}
+			}
+		}
+		if background {
 			if secondsEnv, _, ok := visibleSecondsBinding(parentWrite); ok {
 				if started, ok := secondsStartTimeForEnv(secondsEnv); ok {
 					oenv.secondsStartTime = started

@@ -278,3 +278,29 @@ printf 'OPTIND=%s\n' "$OPTIND"
 		t.Fatalf("OPTIND = %#v, want exported string 2", got)
 	}
 }
+
+func TestGetoptsSubshellKeepsParentStateIsolated(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -- -ab
+getopts "ab" opt
+printf 'outer1=%s OPTIND=%s\n' "$opt" "$OPTIND"
+(
+  getopts "ab" inner
+  printf 'sub=%s OPTIND=%s\n' "$inner" "$OPTIND"
+)
+getopts "ab" opt
+printf 'outer2=%s OPTIND=%s\n' "$opt" "$OPTIND"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "outer1=a OPTIND=1\nsub=b OPTIND=2\nouter2=b OPTIND=2\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
