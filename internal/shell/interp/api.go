@@ -1022,7 +1022,12 @@ func (r *Runner) Reset() {
 
 	// When a parent shell exports SHELLOPTS, apply the inherited
 	// options so that the child mirrors the parent's set -o state.
+	// Clear all POSIX options first so that default-on options (e.g.
+	// braceexpand) are disabled when absent from the inherited value.
 	if shellOpts := r.writeEnv.Get("SHELLOPTS"); shellOpts.IsSet() && shellOpts.Exported {
+		for i := range posixOptsTable {
+			r.opts[i] = false
+		}
 		for _, optName := range strings.Split(shellOpts.String(), ":") {
 			if opt := r.posixOptByName(optName); opt != nil {
 				*opt = true
@@ -1032,7 +1037,12 @@ func (r *Runner) Reset() {
 
 	// Similarly, when a parent shell exports BASHOPTS, apply the
 	// inherited shopt options so the child mirrors the parent's state.
+	// Clear all bash options first so that default-on options (e.g.
+	// globskipdots) are disabled when absent from the inherited value.
 	if bashOpts := r.writeEnv.Get("BASHOPTS"); bashOpts.IsSet() && bashOpts.Exported {
+		for i := range bashOptsTable {
+			r.opts[len(posixOptsTable)+i] = false
+		}
 		for _, optName := range strings.Split(bashOpts.String(), ":") {
 			if opt, _ := r.bashOptByName(optName); opt != nil {
 				*opt = true
