@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-20
+Last updated: 2026-03-21
 
 ## 1. Purpose
 
@@ -224,6 +224,7 @@ The default in-memory sandbox should look Unix-like enough for agent scripts:
 - `/tmp` for scratch files, created with sticky-bit semantics
 - `/dev` as a small runtime-owned device namespace
 - `/dev/null` as a character device that always reads EOF and discards writes
+- `/dev/urandom` as a character device that yields a deterministic pseudo-random byte stream and discards writes
 - `/dev/zero` as a character device that yields zero bytes on reads and discards writes
 - `/bin` and `/usr/bin` as virtual command locations
 - deterministic identity defaults via `USER=agent`, `LOGNAME=agent`, `GROUP=agent`, `GROUPS=1000`, `UID=1000`, `EUID=1000`, `GID=1000`, and `EGID=1000`
@@ -234,7 +235,7 @@ Ownership name resolution for commands such as `ls`, `chown`, and `chgrp` must c
 
 Programmable user completion follows the same boundary: `compgen -A user` may use `USER` plus sandbox-visible `/etc/passwd`, but it must not read host account databases outside the sandbox contract.
 
-The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` and `/dev/zero` are guaranteed by default.
+The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null`, `/dev/urandom`, and `/dev/zero` are guaranteed by default.
 
 The shell initializes shell-owned startup state rather than inheriting host defaults. When callers omit them, the runner must synthesize `PATH=/usr/bin:/bin`, exported `PWD` matching the virtual working directory, `PS4="+ "`, the default `IFS`, readonly `SHELLOPTS`, and `SHELL=/bin/sh`; `HISTFILE` is only initialized for interactive shells. `HOME` is not synthesized by the shell, so an execution with a cleared environment still observes `HOME` as unset unless the caller explicitly provides it.
 
@@ -649,7 +650,7 @@ Important properties:
 - paths use POSIX semantics internally
 - the default backend is in-memory
 - the default backend exposes a Unix-like virtual layout rooted at `/`
-- the runtime may reserve a small synthetic namespace such as `/dev/null` and `/dev/zero` above any backend so shell-visible device behavior stays consistent across in-memory and host-backed filesystems
+- the runtime may reserve a small synthetic namespace such as `/dev/null`, `/dev/urandom`, and `/dev/zero` above any backend so shell-visible device behavior stays consistent across in-memory and host-backed filesystems
 - host-backed filesystems must still satisfy policy checks and must never imply host command execution
 - a read-write host-backed filesystem may be enabled explicitly for external test harnesses or advanced embedding, but it is not the default runtime backend
 - shell redirects and command file access share the same filesystem view
@@ -664,7 +665,7 @@ Implementation detail for the current runtime:
 - command-facing copy semantics stay in `commands/`, where policy and shell-facing errors already live
 - `mkfifo` is a shipped registry command, so the filesystem interface exposes named-pipe creation directly and `MemoryFS` can persist FIFO entries alongside regular files and symlinks
 - `fs/` may use private clone helpers internally for backend composition, but that is not the same as moving user-visible `cp` semantics into the filesystem layer
-- the runtime wraps the configured backend with a tiny virtual-device layer; today that layer reserves `/dev`, `/dev/null`, and `/dev/zero`, while non-reserved `/dev/*` entries still come from the underlying sandbox filesystem when present
+- the runtime wraps the configured backend with a tiny virtual-device layer; today that layer reserves `/dev`, `/dev/null`, `/dev/urandom`, and `/dev/zero`, while non-reserved `/dev/*` entries still come from the underlying sandbox filesystem when present
 - `MemoryFS` stores symlink entries directly for testing and path-safety enforcement, but the runtime still defaults to `SymlinkDeny`
 - `MemoryFS.Stat`, `Open`, `ReadDir`, `Chdir`, and `Realpath` follow symlinks; `Lstat`, `Readlink`, `Remove`, and `Rename` operate on the symlink entry itself
 - `MemoryFS` may also hold lazy regular-file providers that materialize on first content-sensitive access such as `Open`, `Stat`, `Lstat`, or `DirEntry.Info`

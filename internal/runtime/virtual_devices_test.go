@@ -80,7 +80,7 @@ func TestVirtualDeviceDirectoryMergesSandboxEntries(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "null\ntty1\nzero\n"; got != want {
+	if got, want := result.Stdout, "null\ntty1\nurandom\nzero\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -108,7 +108,7 @@ func TestVirtualDeviceChildrenCanBeCreatedOnHostReadWriteFS(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "null\ntty1\nzero\ntty1\n"; got != want {
+	if got, want := result.Stdout, "null\ntty1\nurandom\nzero\ntty1\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -204,6 +204,85 @@ func TestZeroDeviceSemanticsAcrossSandboxBackends(t *testing.T) {
 			}
 			if !bytes.Equal(buf, make([]byte, len(buf))) {
 				t.Fatalf("Read(/dev/zero) = %v, want all zeros", buf)
+			}
+		})
+	}
+}
+
+func TestUrandomDeviceSemanticsAcrossSandboxBackends(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  Config
+	}{
+		{
+			name: "in-memory",
+			cfg:  Config{},
+		},
+		{
+			name: "host-readwrite",
+			cfg: Config{
+				FileSystem: ReadWriteDirectoryFileSystem(t.TempDir(), ReadWriteDirectoryOptions{}),
+				BaseEnv: map[string]string{
+					"HOME": "/",
+					"PATH": "/bin",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rt := newRuntime(t, &tt.cfg)
+			session, err := rt.NewSession(context.Background())
+			if err != nil {
+				t.Fatalf("NewSession() error = %v", err)
+			}
+
+			info, err := session.FileSystem().Stat(context.Background(), "/dev/urandom")
+			if err != nil {
+				t.Fatalf("Stat(/dev/urandom) error = %v", err)
+			}
+			if info.Mode()&os.ModeDevice == 0 || info.Mode()&os.ModeCharDevice == 0 {
+				t.Fatalf("Mode = %v, want character device bits", info.Mode())
+			}
+
+			firstFile, err := session.FileSystem().Open(context.Background(), "/dev/urandom")
+			if err != nil {
+				t.Fatalf("Open(/dev/urandom first) error = %v", err)
+			}
+			defer func() {
+				if err := firstFile.Close(); err != nil {
+					t.Errorf("Close(/dev/urandom first) error = %v", err)
+				}
+			}()
+
+			secondFile, err := session.FileSystem().Open(context.Background(), "/dev/urandom")
+			if err != nil {
+				t.Fatalf("Open(/dev/urandom second) error = %v", err)
+			}
+			defer func() {
+				if err := secondFile.Close(); err != nil {
+					t.Errorf("Close(/dev/urandom second) error = %v", err)
+				}
+			}()
+
+			first := make([]byte, 16)
+			if _, err := io.ReadFull(firstFile, first); err != nil {
+				t.Fatalf("ReadFull(/dev/urandom first) error = %v", err)
+			}
+			second := make([]byte, len(first))
+			if _, err := io.ReadFull(secondFile, second); err != nil {
+				t.Fatalf("ReadFull(/dev/urandom second) error = %v", err)
+			}
+			if bytes.Equal(first, make([]byte, len(first))) {
+				t.Fatalf("Read(/dev/urandom) = %v, want non-zero pseudo-random bytes", first)
+			}
+			if !bytes.Equal(first, second) {
+				t.Fatalf("Read(/dev/urandom) differs across opens: %v vs %v", first, second)
 			}
 		})
 	}
