@@ -2455,6 +2455,23 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 			return result, errors.New("ambiguous redirect")
 		}
 		arg = fields[0]
+	case syntax.DplIn:
+		r.inRedirectWord++
+		fields, err := expand.Fields(r.ecfg, rd.Word)
+		r.inRedirectWord--
+		r.expandErr(err)
+		if err != nil {
+			return result, err
+		}
+		if len(fields) != 1 {
+			if wordText != "" {
+				r.errf("%s: ambiguous redirect\n", wordText)
+			} else {
+				r.errf("ambiguous redirect\n")
+			}
+			return result, errors.New("ambiguous redirect")
+		}
+		arg = fields[0]
 	default:
 		arg = r.expandingRedirectWord(func() string {
 			return r.literal(rd.Word)

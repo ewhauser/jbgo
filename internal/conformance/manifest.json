@@ -1548,27 +1548,7 @@
           "mode": "xfail",
           "reason": "conformance: echo now matches bash; printf still differs for surrogate Unicode escape handling"
         },
-        "oils/var-op-test.test.sh::$* (\"\" \"\") and - and + (IFS=)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-test.test.sh::Assign default with array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-test.test.sh::Lazy Evaluation of Alternative": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-test.test.sh::Unquoted with array as default value": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-op-test.test.sh::op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-test.test.sh::op-test for unquoted ${a[*]:-empty} with IFS=": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1580,15 +1560,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-sub-quote.test.sh::Multiple words: outer double quotes, inner single quotes with var": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-sub-quote.test.sh::Right Brace as argument (similar to #702)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-sub-quote.test.sh::Syntax error for single quote in double quote": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

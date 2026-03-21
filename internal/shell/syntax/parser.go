@@ -1486,6 +1486,11 @@ func (e ParseError) bashCompat() ParseError {
 		e.SourceLine = ""
 		e.SourceLinePos = Pos{}
 		e.noSourceLine = true
+	case e.Text == "reached EOF without closing quote `'`":
+		e.bashText = "unexpected EOF while looking for matching `''"
+		e.SourceLine = ""
+		e.SourceLinePos = Pos{}
+		e.noSourceLine = true
 	case e.Text == "reached EOF without closing quote \"`\"":
 		e.bashText = "unexpected EOF while looking for matching ``'"
 		e.SourceLine = ""
@@ -2950,6 +2955,8 @@ func (p *Parser) paramExp() *ParamExp {
 	case plus, colPlus, minus, colMinus, quest, colQuest, assgn, colAssgn,
 		perc, dblPerc, hash, dblHash, colHash, colPipe, colStar:
 		pe.Exp = p.paramExpExp()
+	case and:
+		return p.invalidParamExp(pe, old)
 	case _EOF:
 	default:
 		if tokRune == '[' && pe.Index != nil {
