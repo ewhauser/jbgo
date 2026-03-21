@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-03-21T19:34:32.676Z",
-  "total_cases": 2377,
-  "xfail_cases": 102,
+  "generated_at": "2026-03-21T19:54:02.927Z",
+  "total_cases": 2378,
+  "xfail_cases": 99,
   "skip_cases": 20,
-  "passing_cases": 2255,
+  "passing_cases": 2259,
   "file_count": 116,
   "files": [
     {
@@ -1364,28 +1364,9 @@
     {
       "name": "oils/sh-func.test.sh",
       "total": 12,
-      "xfail": 3,
+      "xfail": 0,
       "skip": 0,
-      "entries": [
-        {
-          "name": "return \"\" (a lot of disagreement)",
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": null
-        },
-        {
-          "name": "Return without args gives previous",
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": null
-        },
-        {
-          "name": "Scope of global variable when sourced in function (Shell Functions aren't Closures)",
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": null
-        }
-      ]
+      "entries": []
     },
     {
       "name": "oils/sh-options-bash.test.sh",
@@ -1450,7 +1431,7 @@
     },
     {
       "name": "oils/tilde.test.sh",
-      "total": 14,
+      "total": 15,
       "xfail": 0,
       "skip": 0,
       "entries": []
