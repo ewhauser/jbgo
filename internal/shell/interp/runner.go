@@ -2755,8 +2755,14 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (StdinReader, error) {
 	// as pipe writes may block once the buffer gets full.
 	// We still construct and buffer the entire heredoc first,
 	// as doing it concurrently would lead to different semantics and be racy.
+	quotedHdoc := rd.HdocDelim != nil && !rd.HdocDelim.BodyExpands
 	if rd.Op != syntax.DashHdoc {
-		hdoc := r.document(rd.Hdoc)
+		var hdoc string
+		if quotedHdoc {
+			hdoc = hdocLiteral(rd.Hdoc)
+		} else {
+			hdoc = r.document(rd.Hdoc)
+		}
 		go func() {
 			io.WriteString(pw, hdoc)
 			pw.Close()
@@ -2769,7 +2775,11 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (StdinReader, error) {
 		if buf.Len() > 0 {
 			buf.WriteByte('\n')
 		}
-		buf.WriteString(r.document(&syntax.Word{Parts: cur}))
+		if quotedHdoc {
+			buf.WriteString(hdocLiteral(&syntax.Word{Parts: cur}))
+		} else {
+			buf.WriteString(r.document(&syntax.Word{Parts: cur}))
+		}
 		cur = cur[:0]
 	}
 	for _, wp := range rd.Hdoc.Parts {
@@ -2795,6 +2805,21 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (StdinReader, error) {
 		pw.Close()
 	}()
 	return pr, nil
+}
+
+// hdocLiteral extracts the verbatim content of a quoted heredoc Word
+// without any backslash processing or expansion.
+func hdocLiteral(word *syntax.Word) string {
+	if word == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, part := range word.Parts {
+		if lit, ok := part.(*syntax.Lit); ok {
+			sb.WriteString(lit.Value)
+		}
+	}
+	return sb.String()
 }
 
 func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, error) {

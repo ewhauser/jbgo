@@ -90,6 +90,8 @@ func evaluateFindExpr(expr findExpr, ctx *findEvalContext) findEvalResult {
 		return findEvalResult{matches: true, pruned: true}
 	case *findPrintExpr:
 		return findEvalResult{matches: true, printed: true}
+	case *findPrint0Expr:
+		return findEvalResult{matches: true, printed: true}
 	case *findNotExpr:
 		inner := evaluateFindExpr(e.expr, ctx)
 		return findEvalResult{matches: !inner.matches, pruned: inner.pruned}

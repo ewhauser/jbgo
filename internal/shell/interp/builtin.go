@@ -1985,6 +1985,7 @@ func (r *Runner) dirsBuiltin(args []string) uint8 {
 			r.dirsUsage()
 			return 2
 		default:
+			r.errf("dirs: %s: invalid option\n", arg)
 			r.dirsUsage()
 			return 2
 		}
@@ -2055,7 +2056,7 @@ func (r *Runner) pushdBuiltin(ctx context.Context, args []string) uint8 {
 			return 2
 		default:
 			if operand != "" {
-				r.pushdUsage()
+				r.errf("pushd: too many arguments\n")
 				return 2
 			}
 			operand = arg
@@ -2168,6 +2169,7 @@ func (r *Runner) popdBuiltin(ctx context.Context, args []string) uint8 {
 			r.popdUsage()
 			return 2
 		default:
+			r.errf("popd: %s: invalid argument\n", arg)
 			r.popdUsage()
 			return 2
 		}

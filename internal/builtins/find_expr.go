@@ -71,6 +71,8 @@ type findPruneExpr struct{}
 
 type findPrintExpr struct{}
 
+type findPrint0Expr struct{}
+
 type findNotExpr struct {
 	expr findExpr
 }

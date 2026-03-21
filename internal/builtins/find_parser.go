@@ -187,6 +187,7 @@ func parseFindExpressionArgs(inv *Invocation, args []string) (findCommandOptions
 			tokens = append(tokens, findToken{kind: findTokenExpr, expr: &findPrintExpr{}})
 			actions = append(actions, &findPrintAction{})
 		case "-print0":
+			tokens = append(tokens, findToken{kind: findTokenExpr, expr: &findPrint0Expr{}})
 			actions = append(actions, &findPrint0Action{})
 		case "-printf":
 			if i+1 >= len(args) {

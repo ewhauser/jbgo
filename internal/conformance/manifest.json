@@ -22,17 +22,9 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-read.test.sh::read -r -d '' for NUL strings, e.g. find -print0": {
-          "mode": "xfail",
-          "reason": "gbash's internal find command does not yet implement -print0, so the read builtin never receives the bash-compatible NUL stream"
-        },
         "oils/builtin-read.test.sh::read bash bug": {
           "mode": "xfail",
           "reason": "gbash intentionally keeps the space-preserving result instead of reproducing bash's historical control-character bug"
-        },
-        "oils/builtin-read.test.sh::read multiple lines with IFS=:": {
-          "mode": "xfail",
-          "reason": "quoted here-doc content still loses a doubled backslash before read sees it, so this case remains blocked on heredoc handling rather than read itself"
         },
         "oils/assign.test.sh::Test above without 'local' (which is not POSIX)": {
           "mode": "xfail",
@@ -137,18 +129,6 @@
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "xfail",
           "reason": "conformance: parse error wording for this builtin-cd probe still differs from bash"
-        },
-        "oils/builtin-dirs.test.sh::dirs does not take arguments": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-dirs.test.sh::popd usage error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-dirs.test.sh::pushd does not take more than one argument": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
           "mode": "xfail",
