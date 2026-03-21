@@ -208,7 +208,9 @@ CONFORMANCE_RUN ?= TestConformance
 
 conformance-test:
 	@BASH_PATH=$$(./scripts/ensure-bash.sh) || exit 1; \
+	BASH_VERSION_LINE=$$($$BASH_PATH --version | sed -n '1p') || exit 1; \
 	GBASH_RUN_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
+	GBASH_CONFORMANCE_BASH_VERSION_LINE="$$BASH_VERSION_LINE" \
 	  go test ./internal/conformance -run "$(CONFORMANCE_RUN)" -count=1 -timeout=20m
 
 ensure-bash:

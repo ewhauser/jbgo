@@ -123,6 +123,14 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			return failf(2, "set: %v\n", err)
 		}
 		r.updateExpandOpts()
+	case "times":
+		selfUser, selfSystem, childUser, childSystem, err := shellTimesUsage()
+		if err != nil {
+			return failf(1, "times: %v\n", err)
+		}
+		r.outf("%s %s\n", selfUser, selfSystem)
+		r.outf("%s %s\n", childUser, childSystem)
+		return exit
 	case "shift":
 		n := 1
 		label := "1"

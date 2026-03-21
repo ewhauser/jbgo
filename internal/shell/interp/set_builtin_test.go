@@ -126,6 +126,40 @@ printf '%s|%s|%s\n' "$foo_seen" "$arr_seen" "$ex_seen"
 	}
 }
 
+func TestBareSetIncludesBashLineNoAndSuppressesGroupIDs(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+saved=$(set)
+lineno=0
+uid=0
+euid=0
+gid=0
+egid=0
+while IFS= read -r line; do
+  case $line in
+    'BASH_LINENO=()') lineno=1 ;;
+    UID=*) uid=1 ;;
+    EUID=*) euid=1 ;;
+    GID=*) gid=1 ;;
+    EGID=*) egid=1 ;;
+  esac
+done <<EOF
+$saved
+EOF
+printf '%s|%s|%s|%s|%s\n' "$lineno" "$uid" "$euid" "$gid" "$egid"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if got, want := stdout, "1|1|1|0|0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestSetRejectsUnknownOptionNameLikeBash(t *testing.T) {
 	t.Parallel()
 

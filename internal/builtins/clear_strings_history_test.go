@@ -107,6 +107,11 @@ func TestHistoryRejectsInvalidCountArguments(t *testing.T) {
 				"history -- -1\n",
 			stderr: "history: -1: numeric argument required\n",
 		},
+		{
+			name:   "invalid option",
+			script: "history -5\n",
+			stderr: "history: -5: invalid option\nhistory: usage: history [-c] [-d offset] [n] or history -anrw [filename] or history -ps arg [arg...]\n",
+		},
 	}
 
 	for _, tc := range tests {
@@ -116,7 +121,7 @@ func TestHistoryRejectsInvalidCountArguments(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run() error = %v", err)
 			}
-			if got, want := result.ExitCode, 1; got != want {
+			if got, want := result.ExitCode, 2; got != want {
 				t.Fatalf("ExitCode = %d, want %d", got, want)
 			}
 			if got := result.Stdout; got != "" {

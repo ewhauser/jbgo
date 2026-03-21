@@ -122,10 +122,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-bash.test.sh::help": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "xfail",
           "reason": "conformance: parse error wording for this builtin-cd probe still differs from bash"
@@ -136,26 +132,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/builtin-meta.test.sh::command -p (find hidden tool in default path)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-misc.test.sh::Print shell strings with normal chars: set and printf %q and ${x@Q}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-misc.test.sh::Print shell strings with weird chars: set and printf %q and ${x@Q}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-misc.test.sh::history builtin usage": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-misc.test.sh::time pipeline": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-process.test.sh::Changing resource limit is denied": {
           "mode": "skip",
@@ -236,10 +212,6 @@
         "oils/builtin-process.test.sh::write big file with ulimit": {
           "mode": "skip",
           "reason": "gbash does not implement process tables"
-        },
-        "oils/builtin-times.test.sh::times shows two formatted lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
           "mode": "xfail",

@@ -224,8 +224,11 @@ command -p hello
 
 #### command -p (find hidden tool in default path)
 export PATH=''
-command -p ls
-## status: 0
+command -p ls >/dev/null
+echo status=$?
+## STDOUT:
+status=0
+## END
 
 #### $(command type ls)
 type() { echo FUNCTION; }

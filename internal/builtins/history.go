@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/ewhauser/gbash/internal/shellstate"
 )
 
 const historyEnvVar = "BASH_HISTORY"
+const historyUsageMessage = "history: usage: history [-c] [-d offset] [n] or history -anrw [filename] or history -ps arg [arg...]\n"
 
 type History struct{}
 
@@ -49,6 +51,34 @@ func (c *History) Spec() CommandSpec {
 	}
 }
 
+func (c *History) NormalizeParseError(inv *Invocation, err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.TrimSpace(strings.TrimSuffix(err.Error(), "\nTry 'history --help' for more information."))
+	switch {
+	case strings.HasPrefix(msg, "history: invalid option -- '") && strings.HasSuffix(msg, "'"):
+		opt := strings.TrimSuffix(strings.TrimPrefix(msg, "history: invalid option -- '"), "'")
+		if inv != nil && inv.Stderr != nil {
+			_, _ = fmt.Fprintf(inv.Stderr, "history: -%s: invalid option\n%s", opt, historyUsageMessage)
+		}
+		return &ExitError{Code: 2}
+	case strings.HasPrefix(msg, "history: unrecognized option '"):
+		opt := strings.TrimSuffix(strings.TrimPrefix(msg, "history: unrecognized option '"), "'")
+		if inv != nil && inv.Stderr != nil {
+			_, _ = fmt.Fprintf(inv.Stderr, "history: %s: invalid option\n%s", opt, historyUsageMessage)
+		}
+		return &ExitError{Code: 2}
+	case strings.HasPrefix(msg, "history: option ") || strings.HasPrefix(msg, "history: extra operand "):
+		if inv != nil && inv.Stderr != nil {
+			_, _ = io.WriteString(inv.Stderr, historyUsageMessage)
+		}
+		return &ExitError{Code: 2}
+	default:
+		return err
+	}
+}
+
 func (c *History) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	history := parseHistoryEntries(ctx, inv)
 	if matches.Has("clear") {
@@ -67,7 +97,7 @@ func (c *History) RunParsed(ctx context.Context, inv *Invocation, matches *Parse
 	if args := matches.Args("arg"); len(args) > 0 {
 		n, err := strconv.Atoi(args[0])
 		if err != nil || n < 0 {
-			return exitf(inv, 1, "history: %s: numeric argument required", args[0])
+			return exitf(inv, 2, "history: %s: numeric argument required", args[0])
 		}
 		if n < count {
 			count = n
@@ -106,3 +136,4 @@ func parseHistoryEntries(ctx context.Context, inv *Invocation) []string {
 var _ Command = (*History)(nil)
 var _ SpecProvider = (*History)(nil)
 var _ ParsedRunner = (*History)(nil)
+var _ ParseErrorNormalizer = (*History)(nil)

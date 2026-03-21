@@ -20,21 +20,13 @@ status=2
 status=2
 status=2
 ## END
-## OK bash STDOUT:
-status=0
-status=0
-status=2
-status=1
-status=1
-## END
 
 #### Print shell strings with weird chars: set and printf %q and ${x@Q}
 
+# Use printf here; /bin/echo -e varies across platforms.
 # bash declare -p will print binary data, which makes this invalid UTF-8!
-foo=$(/bin/echo -e 'a\nb\xffc'\'d)
-
-# let's test the easier \x01, which doesn't give bash problems
-foo=$(/bin/echo -e 'a\nb\x01c'\'d)
+# let's test the easier \x01, which doesn't give bash problems.
+foo=$(printf 'a\nb\001c'\''d')
 
 #   only supports 'set'; prints it on multiple lines with binary data
 #   switches to "'" for single quotes, not \'
@@ -55,12 +47,6 @@ printf 'pf  %q\n' "$foo"
 echo '@Q ' ${foo@Q}
 
 ## STDOUT:
-foo=$'a\nb\u0001c\'d'
-pf  $'a\nb\u0001c\'d'
-@Q  $'a\nb\u0001c\'d'
-## END
-
-## OK bash STDOUT:
 foo=$'a\nb\001c\'d'
 pf  $'a\nb\001c\'d'
 @Q  $'a\nb\001c\'d'
@@ -83,21 +69,21 @@ echo '@Q ' ${foo@Q}
 
 ## STDOUT:
 foo=spam
-declare -- foo=spam
-pf  spam
-@Q  spam
-## END
-
-## OK bash STDOUT:
-foo=spam
 declare -- foo="spam"
 pf  spam
 @Q  'spam'
 ## END
 
 #### time pipeline
-time echo hi | wc -c
-## stdout: 3
+time_err=$TMP/time-pipeline.err
+{ time echo hi | wc -c; } 2>"$time_err"
+sed -E -e '/^[[:space:]]*$/d' -e 's/[0-9]+m[0-9]+\.[0-9]+s/XmY.ZZZs/g' "$time_err" | tr '\t' ' '
+## STDOUT:
+       3
+real XmY.ZZZs
+user XmY.ZZZs
+sys XmY.ZZZs
+## END
 ## status: 0
 
 #### shift

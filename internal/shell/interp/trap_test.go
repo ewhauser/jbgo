@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -870,6 +871,90 @@ f
 	}
 	if !strings.Contains(stdout, "dbg:") {
 		t.Fatalf("stdout = %q, want DEBUG output", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestReturnTrapRunsAfterSourceFailureWithoutFunctrace(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `profile() {
+  echo "profile [$@]"
+}
+trap 'profile x y' RETURN
+f() {
+  echo --
+  echo f
+  echo --
+}
+f
+. ./return-helper.sh
+`)
+	if status, ok := err.(ExitStatus); !ok || status != 1 {
+		t.Fatalf("Run error = %v, want exit status 1", err)
+	}
+	const wantStdout = "--\nf\n--\nprofile [x y]\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if !strings.Contains(stderr, "return-helper.sh") {
+		t.Fatalf("stderr = %q, want missing helper diagnostic", stderr)
+	}
+}
+
+func TestErrAndUSR1TrapPreserveHandlerLocalLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	usr1, err := ResolveSignal("USR1")
+	if err != nil {
+		t.Fatalf("ResolveSignal(USR1) error = %v", err)
+	}
+	var runner *Runner
+	runner, err = NewRunner(&RunnerConfig{
+		Dir:    "/tmp",
+		Stdout: &stdout,
+		Stderr: &stderr,
+		ExecHandler: func(context.Context, []string) error {
+			return runner.DispatchSignal(strconv.Itoa(runner.bashPID), usr1.Number)
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+	err = runner.runShellReader(context.Background(), strings.NewReader(`trap 'false; echo $LINENO usr1' USR1
+trap 'false; echo $LINENO err' ERR
+signalme
+echo after=$?
+`), "trap-usr1.sh", nil)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	const want = "1 err\n1 usr1\nafter=0\n"
+	if got := stdout.String(); got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestDebugAndErrTrapReuseTriggeringStatementLine(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `trap 'false; echo $LINENO err' ERR
+trap 'false; echo $LINENO debug' DEBUG
+false
+echo after=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "3 err\n3 debug\n3 debug\n3 debug\n3 err\n4 err\n4 debug\nafter=1\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)

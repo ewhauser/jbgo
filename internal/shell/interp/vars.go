@@ -403,7 +403,7 @@ func (r *Runner) printSetVar(name string, vr expand.Variable) {
 	}
 	switch vr.Kind {
 	case expand.Indexed:
-		r.outf("declare -a %s", name)
+		r.outf("%s", name)
 		r.out("=(")
 		for i, index := range vr.IndexedIndices() {
 			if i > 0 {
@@ -414,7 +414,7 @@ func (r *Runner) printSetVar(name string, vr expand.Variable) {
 		}
 		r.out(")\n")
 	case expand.Associative:
-		r.outf("declare -A %s", name)
+		r.outf("%s", name)
 		r.out("=(")
 		first := true
 		for _, k := range expand.AssociativeKeys(vr.Map) {
@@ -440,9 +440,17 @@ func (r *Runner) printSetVars() {
 		seen[name] = vr
 		return true
 	})
+	for _, name := range []string{"BASH_LINENO"} {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		if vr, ok := r.setBuiltinSpecialVar(name); ok {
+			seen[name] = vr
+		}
+	}
 	names := make([]string, 0, len(seen))
 	for name, vr := range seen {
-		if !vr.Declared() || !vr.IsSet() {
+		if !r.printSetVarVisible(name, vr) {
 			continue
 		}
 		names = append(names, name)
@@ -450,6 +458,31 @@ func (r *Runner) printSetVars() {
 	slices.Sort(names)
 	for _, name := range names {
 		r.printSetVar(name, seen[name])
+	}
+}
+
+func (r *Runner) printSetVarVisible(name string, vr expand.Variable) bool {
+	if !vr.Declared() || !vr.IsSet() {
+		return false
+	}
+	switch name {
+	case "GID", "EGID":
+		return false
+	default:
+		return true
+	}
+}
+
+func (r *Runner) setBuiltinSpecialVar(name string) (expand.Variable, bool) {
+	switch name {
+	case "BASH_LINENO":
+		vr := r.lookupVar(name)
+		if vr.IsSet() {
+			return vr, true
+		}
+		return expand.Variable{Set: true, Kind: expand.Indexed, List: []string{}}, true
+	default:
+		return expand.Variable{}, false
 	}
 }
 

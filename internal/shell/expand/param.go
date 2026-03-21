@@ -868,6 +868,9 @@ func bashQuoteValue(str string) (string, error) {
 	if _, err := syntax.Quote(str, syntax.LangBash); err != nil {
 		return "", err
 	}
+	if bashQuoteNeedsANSI(str) {
+		return bashANSIQuote(str), nil
+	}
 	if !strings.Contains(str, "'") {
 		return "'" + str + "'", nil
 	}
@@ -882,6 +885,49 @@ func bashQuoteValue(str string) (string, error) {
 		}
 	}
 	return sb.String(), nil
+}
+
+func bashQuoteNeedsANSI(str string) bool {
+	for i := 0; i < len(str); i++ {
+		if str[i] < 0x20 || str[i] >= 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func bashANSIQuote(str string) string {
+	var sb strings.Builder
+	sb.WriteString("$'")
+	for i := 0; i < len(str); i++ {
+		switch c := str[i]; c {
+		case '\a':
+			sb.WriteString(`\a`)
+		case '\b':
+			sb.WriteString(`\b`)
+		case '\f':
+			sb.WriteString(`\f`)
+		case '\n':
+			sb.WriteString(`\n`)
+		case '\r':
+			sb.WriteString(`\r`)
+		case '\t':
+			sb.WriteString(`\t`)
+		case '\v':
+			sb.WriteString(`\v`)
+		case '\\', '\'':
+			sb.WriteByte('\\')
+			sb.WriteByte(c)
+		default:
+			if c >= 0x20 && c < 0x7f {
+				sb.WriteByte(c)
+				continue
+			}
+			fmt.Fprintf(&sb, "\\%03o", c)
+		}
+	}
+	sb.WriteByte('\'')
+	return sb.String()
 }
 
 func transformCasePattern(arg string, op syntax.ParExpOperator) (func(string) string, error) {
