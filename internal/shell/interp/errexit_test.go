@@ -266,6 +266,38 @@ echo four
 	}
 }
 
+func TestErrExitFailGlobForLoopExpansionStillExits(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+		ReadDirHandler: func(_ context.Context, name string) ([]os.DirEntry, error) {
+			return os.ReadDir(name)
+		},
+	}, `
+set -o errexit
+for x in *.ZZ; do echo "$x"; done
+echo status=$?
+
+shopt -s failglob
+for x in *.ZZ; do echo "$x"; done
+echo bad
+`)
+	requireInterpExitStatus(t, err, 1)
+	const wantStdout = "*.ZZ\nstatus=0\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "no match: *.ZZ\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
 func TestErrTrapConditionalListsOnlyTrapOnOuterFailure(t *testing.T) {
 	t.Parallel()
 

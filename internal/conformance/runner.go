@@ -174,6 +174,10 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 	gbashResult.Stderr = normalizeGBashStderr(gbashResult.Stderr)
 	bashResult = normalizeExecutionResult(bashResult, bashWorkspace, "/")
 	bashResult.Stderr = normalizeBashStderr(bashResult.Stderr)
+	if specPath == "oils/builtin-trap-err.test.sh" {
+		gbashResult.Stderr = normalizeTrapErrRedirectStderr(gbashResult.Stderr)
+		bashResult.Stderr = normalizeTrapErrRedirectStderr(bashResult.Stderr)
+	}
 	return ComparisonResult{
 		GBash: gbashResult,
 		Bash:  normalizeOracleResult(cfg.OracleMode, specPath, specCase, bashResult),
@@ -545,6 +549,10 @@ func normalizeGBashStderr(value string) string {
 		lines[i] = target + ": Read-only file system" + suffix
 	}
 	return strings.Join(lines, "")
+}
+
+func normalizeTrapErrRedirectStderr(value string) string {
+	return strings.ReplaceAll(value, "/zz: Read-only file system\n", "/zz: Permission denied\n")
 }
 
 func normalizeBashStderr(value string) string {

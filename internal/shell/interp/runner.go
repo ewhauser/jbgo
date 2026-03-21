@@ -837,7 +837,7 @@ func (r *Runner) shouldRunStmtErrTrap(st *syntax.Stmt, ranCmd bool) bool {
 	}
 	switch st.Cmd.(type) {
 	case *syntax.Block, *syntax.ForClause, *syntax.CaseClause:
-		return false
+		return r.skipStmtLine == st.Pos().Line()
 	default:
 		return true
 	}

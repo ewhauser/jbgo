@@ -100,6 +100,12 @@ func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	if got, want := normalizeGBashStderr("/zz: open /zz: read-only file system\n"), "/zz: Read-only file system\n"; got != want {
 		t.Fatalf("normalizeGBashStderr() = %q, want %q", got, want)
 	}
+	if got, want := normalizeTrapErrRedirectStderr("/zz: Read-only file system\n"), "/zz: Permission denied\n"; got != want {
+		t.Fatalf("normalizeTrapErrRedirectStderr(read-only) = %q, want %q", got, want)
+	}
+	if got, want := normalizeTrapErrRedirectStderr("/zz: Permission denied\n"), "/zz: Permission denied\n"; got != want {
+		t.Fatalf("normalizeTrapErrRedirectStderr(permission denied) = %q, want %q", got, want)
+	}
 	if got, want := normalizeBashStderr("/tmp/x/bash: line 2: parse error\n"), "parse error\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
 	}
