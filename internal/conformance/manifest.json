@@ -2,37 +2,9 @@
   "suites": {
     "bash": {
       "entries": {
-        "oils/alias.test.sh::Corner case: alias inside LHS array arithmetic expression": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::Loop split across both iterative and recursive aliases": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::Syntax error after expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::alias used in here doc": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::alias with environment bindings works": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::alias with line continuation in the middle": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/alias.test.sh::alias with word of multiple lines": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::first and second word are the same alias, with trailing space": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash ls error message format differs from GNU coreutils ls"
         },
         "oils/builtin-completion.test.sh::compgen -A user": {
           "mode": "xfail",

@@ -254,6 +254,15 @@ func (p *Parser) nextKeepSpaces() {
 	p.tokAliasChain = append(p.tokAliasChain[:0], p.aliasChain...)
 	if p.aliasBlankNext {
 		if p.expandCommandAlias() {
+			// Continue expanding recursively so nested aliases
+			// (e.g. FOR2→FOR1→for) are fully resolved.
+			for p.expandCommandAlias() {
+			}
+			p.aliasBlankNext = false
+			// The trailing-blank that triggered this expansion is a
+			// word boundary; restore p.spaced which expandCommandAlias
+			// resets via its internal p.next() call.
+			p.spaced = true
 			return
 		}
 		// A trailing-blank alias only grants one more token the chance to
@@ -428,6 +437,10 @@ skipSpace:
 	p.tokAliasChain = append(p.tokAliasChain[:0], p.aliasChain...)
 	if p.aliasBlankNext {
 		if p.expandCommandAlias() {
+			for p.expandCommandAlias() {
+			}
+			p.aliasBlankNext = false
+			p.spaced = true
 			return
 		}
 		// A trailing-blank alias only grants one more token the chance to
