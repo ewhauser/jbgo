@@ -142,6 +142,20 @@ decodeRune:
 	if p.r == utf8.RuneError && w == 1 {
 		p.posErr(p.nextPos(), "invalid UTF-8 encoding")
 	}
+	// Substitute runes that collide with internal sentinel values.
+	// U+0080 (128) collides with utf8.RuneSelf used as EOF sentinel;
+	// U+0081 (129) collides with escNewl used as escaped-newline sentinel.
+	// The raw bytes are already in litBs/wordRawBs; p.r only drives control flow.
+	// We pick substitute runes with the same UTF-8 byte width (2) so that
+	// newLit/endLit byte arithmetic remains correct.
+	// Only substitute for valid multi-byte decodes (w > 1); when w == 1 and
+	// p.r == utf8.RuneSelf it was set by errPass to signal EOF/error.
+	switch {
+	case p.r == utf8.RuneSelf && w > 1:
+		p.r = '\u00A0' // same 2-byte UTF-8 width as U+0080
+	case p.r == escNewl && w > 1:
+		p.r = '\u00A1' // same 2-byte UTF-8 width as U+0081
+	}
 	p.w = w
 	return p.r
 }
