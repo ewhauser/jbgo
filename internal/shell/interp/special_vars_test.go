@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
+	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
 func runSpecialVarScript(t *testing.T, cfg *RunnerConfig, src string) (string, string, error) {
@@ -200,6 +201,39 @@ func TestSECONDSAssignmentResetsBaseline(t *testing.T) {
 	}
 	if got := stderr; got != "" {
 		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestSECONDSPrefixAssignmentRestoreKeepsElapsedTime(t *testing.T) {
+	t.Parallel()
+
+	runner, err := NewRunner(&RunnerConfig{Dir: "/tmp"})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	runner.Reset()
+	runner.fillExpandConfig(context.Background())
+	runner.startTime = time.Now().Add(-time.Second)
+
+	file, err := syntax.NewParser().Parse(strings.NewReader("SECONDS=5 external\n"), "seconds-prefix.sh")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	cm, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		t.Fatalf("command = %T, want *syntax.CallExpr", file.Stmts[0].Cmd)
+	}
+
+	restores := runner.runCallAssigns(cm.Assigns)
+	time.Sleep(1100 * time.Millisecond)
+	runner.restoreCallAssigns(restores)
+
+	value, err := strconv.Atoi(runner.lookupVar("SECONDS").String())
+	if err != nil {
+		t.Fatalf("Atoi(SECONDS) error = %v", err)
+	}
+	if value < 2 || value > 3 {
+		t.Fatalf("SECONDS = %d, want 2 or 3", value)
 	}
 }
 

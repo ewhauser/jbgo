@@ -1125,13 +1125,6 @@
             "darwin"
           ]
         },
-        "oils/paren-ambiguity.test.sh::((gzip example - zdiff package - #2337": {
-          "mode": "xfail",
-          "reason": "linux CI still reports stderr ordering differences for this nested pipeline fd-close case",
-          "goos": [
-            "linux"
-          ]
-        },
         "oils/parse-errors.test.sh::Invalid for loop variable name": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
