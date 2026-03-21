@@ -33,6 +33,7 @@ const pages: Record<string, () => Promise<{ default: React.ComponentType; metada
   compatibility: () => import("@/content/compatibility/index.mdx"),
   "compatibility/bash": () => import("@/content/compatibility/bash.mdx"),
   "compatibility/coreutils": () => import("@/content/compatibility/coreutils.mdx"),
+  "compatibility/posix": () => import("@/content/compatibility/posix.mdx"),
   security: () => import("@/content/security/index.mdx"),
   "security/policy": () => import("@/content/security/policy.mdx"),
   "security/threat-model": () => import("@/content/security/threat-model.mdx"),

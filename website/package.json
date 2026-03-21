@@ -5,8 +5,9 @@
   "scripts": {
     "build:wasm": "node scripts/sync-gbash-wasm.mjs .",
     "build:bash-compat": "node scripts/gen-bash-compat.mjs",
-    "dev": "pnpm build:wasm && pnpm build:bash-compat && next dev",
-    "build": "pnpm build:wasm && pnpm build:bash-compat && next build",
+    "build:posix-compat": "node scripts/gen-posix-compat.mjs",
+    "dev": "pnpm build:wasm && pnpm build:bash-compat && pnpm build:posix-compat && next dev",
+    "build": "pnpm build:wasm && pnpm build:bash-compat && pnpm build:posix-compat && next build",
     "start": "next start",
     "lint": "next lint"
   },

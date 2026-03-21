@@ -25,6 +25,7 @@ dist/
 node_modules/
 website/out/
 website/content/compatibility/bash-compat-data.json
+website/content/compatibility/posix-compat-data.json
 *.wasm
 
 # Editor and OS files
