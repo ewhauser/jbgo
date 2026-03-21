@@ -97,5 +97,5 @@ jobs:
           EXPORT_ROOT: ${{ runner.temp }}/github-pages
         run: |
           set -euo pipefail
-          test -f "$EXPORT_ROOT/docs/performance/compatibility/index.html"
+          test -f "$EXPORT_ROOT/docs/compatibility/coreutils/index.html"
           test ! -e "$EXPORT_ROOT/compat/latest/index.html"

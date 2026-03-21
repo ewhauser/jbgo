@@ -206,7 +206,7 @@ jobs:
           set -euo pipefail
           if [ "$COMPAT_AVAILABLE" = "true" ] \
             && [ "${WEBSITE_BUILD_OUTCOME:-}" = "success" ] \
-            && [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ] \
+            && [ -f "$PAGES_ROOT/docs/compatibility/coreutils/index.html" ] \
             && [ -f "$PAGES_ROOT/compat/latest/summary.json" ] \
             && [ -f "$PAGES_ROOT/compat/latest/badge.svg" ] \
             && [ ! -e "$PAGES_ROOT/compat/latest/index.html" ]; then

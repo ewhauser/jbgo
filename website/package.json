@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "build:wasm": "node scripts/sync-gbash-wasm.mjs .",
-    "dev": "pnpm build:wasm && next dev",
-    "build": "pnpm build:wasm && next build",
+    "build:bash-compat": "node scripts/gen-bash-compat.mjs",
+    "dev": "pnpm build:wasm && pnpm build:bash-compat && next dev",
+    "build": "pnpm build:wasm && pnpm build:bash-compat && next build",
     "start": "next start",
     "lint": "next lint"
   },
