@@ -66,17 +66,14 @@ func (r *Runner) trapAction(id trapID) trapAction {
 }
 
 func (r *Runner) setTrapAction(id trapID, action trapAction) {
+	if r.traps.display != nil {
+		r.traps.display = nil
+	}
 	if !action.active() {
 		if r.traps.actions != nil {
 			delete(r.traps.actions, id)
 		}
-		if r.traps.display != nil {
-			delete(r.traps.display, id)
-		}
 		return
-	}
-	if r.traps.display != nil {
-		delete(r.traps.display, id)
 	}
 	r.trapActions()[id] = action
 }

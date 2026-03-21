@@ -346,6 +346,25 @@ trap -- 'echo bye' EXIT
 	}
 }
 
+func TestTrapBuiltinDropsInheritedDisplayTrapsAfterSubshellMutation(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+trap 'echo parent' EXIT
+
+( trap - INT; trap )
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestRunDebugTrapTreatsParseErrorAsFailureWithExtdebug(t *testing.T) {
 	t.Parallel()
 
