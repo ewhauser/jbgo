@@ -55,7 +55,6 @@ declare -f ek
 ## END
 
 #### declare -F with shopt -s extdebug prints more info
-
 source $REPO_ROOT/spec/testdata/bash-source-2.sh
 
 shopt -s extdebug
@@ -139,21 +138,6 @@ declare -x test_var3=333
 [local]
 test_var5=555
 ## END
-## OK bash STDOUT:
-[declare]
-test_var1=111
-test_var2=222
-test_var3=333
-test_var4=test_var1
-test_var5=555
-[readonly]
-declare -r test_var2="222"
-[export]
-declare -x test_var3="333"
-[local]
-test_var5=555
-## END
-
 #### declare -p
 # BUG: bash doesn't output flags with "local -p", which seems to contradict
 #   with manual.
@@ -189,21 +173,6 @@ declare -x test_var3=333
 [local]
 declare -- test_var5=555
 ## END
-## BUG bash STDOUT:
-[declare]
-declare -- test_var1="111"
-declare -r test_var2="222"
-declare -x test_var3="333"
-declare -n test_var4="test_var1"
-declare -- test_var5="555"
-[readonly]
-declare -r test_var2="222"
-[export]
-declare -x test_var3="333"
-[local]
-test_var5=555
-## END
-
 #### declare -p doesn't print binary data, but can be loaded into bash
 
 # bash prints binary data!
@@ -280,18 +249,6 @@ declare -x test_var3=333
 [local]
 declare -- test_var5=555
 ## END
-## BUG bash STDOUT:
-[declare]
-declare -- test_var1="111"
-declare -r test_var2="222"
-declare -x test_var3="333"
-declare -n test_var4="test_var1"
-declare -- test_var5="555"
-[readonly]
-[export]
-[local]
-## END
-
 #### declare -p arr
 test_arr1=()
 declare -a test_arr2=()
@@ -454,7 +411,7 @@ f1
 ## STDOUT:
 declare -- test_var1=global
 ## END
-## N-I bash STDOUT:
+## OK bash STDOUT:
 declare -- test_var1="local"
 ## END
 
@@ -693,8 +650,8 @@ a=x b[0+]=y c=z
 echo $a $b $c
 ## status: 2
 ## stdout-json: ""
-## BUG bash stdout: x
-## BUG bash status: 0
+## OK bash stdout-json: ""
+## OK bash status: 1
 
 #### declare -g (bash-specific; bash-completion uses it)
 f() {

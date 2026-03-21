@@ -899,7 +899,30 @@ printf 'assign=%d x=%s\n' "$?" "$x"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "x: readonly variable\nx: readonly variable\n"
+	const wantStderr = "declare: x: readonly variable\nx: readonly variable\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestTypesetPlusRDoesNotClearReadonly(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+readonly x=1
+typeset +r x
+printf 'typeset=%d x=%s\n' "$?" "$x"
+x=2
+printf 'assign=%d x=%s\n' "$?" "$x"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "typeset=1 x=1\nassign=1 x=1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "typeset: x: readonly variable\nx: readonly variable\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}

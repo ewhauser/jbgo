@@ -73,7 +73,7 @@ We do not reimplement parsing, quoting, command substitution, loops, or shell AS
 
 The parser, expansion, pattern, and interpreter packages live in-tree as `internal/shell/syntax`, `internal/shell/expand`, `internal/shell/pattern`, and `internal/shell/interp`, and `internal/runtime` only calls the concrete `internal/shell` entrypoints.
 
-The shell core also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the in-tree interpreter rather than synthesized in a shell prelude.
+The shell core also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `BASH_EXECUTION_STRING`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the in-tree interpreter rather than synthesized in a shell prelude.
 
 The shell core also owns trap and signal semantics. `trap`, pseudo-signals such as `EXIT`, `ERR`, `DEBUG`, and `RETURN`, real-signal registration and printing, subshell trap inheritance rules, and shell-visible signal routing for `kill $$`, `kill $BASHPID`, and background-job targets are implemented in the in-tree interpreter rather than delegated to host process behavior. Catchable host signals such as Ctrl-C are bridged into the active foreground shell family through runtime-owned signal handlers, while non-catchable signals and job control remain outside the product contract.
 
@@ -238,7 +238,7 @@ The runtime owns the reserved `/dev` entries rather than relying on each filesys
 
 The shell initializes shell-owned startup state rather than inheriting host defaults. When callers omit them, the runner must synthesize `PATH=/usr/bin:/bin`, exported `PWD` matching the virtual working directory, `PS4="+ "`, the default `IFS`, readonly `SHELLOPTS`, and `SHELL=/bin/sh`; `HISTFILE` is only initialized for interactive shells. `HOME` is not synthesized by the shell, so an execution with a cleared environment still observes `HOME` as unset unless the caller explicitly provides it.
 
-The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, shell-owned startup state, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
+The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, shell-owned startup state, `BASH_HISTORY`, `BASH_EXECUTION_STRING`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
 
 Sandbox-facing machine metadata is also runtime-owned: `HOSTNAME`, `hostname`, `OSTYPE`, `BASHPID`, and `PPID` must resolve from sandbox metadata and runner state rather than from host uname or host process inspection.
 
@@ -558,7 +558,7 @@ Implementation detail for the current runtime:
 - the runner reset path initializes shell-owned startup variables (`PATH`, exported `PWD`, `PS4`, `IFS`, `SHELLOPTS`, `SHELL`, and interactive `HISTFILE`) while preserving an unset `HOME` when the execution environment omits it
 - `let` is handled natively by the in-tree `syntax.LetClause` AST node
 - all project path handlers resolve relative paths from virtual `PWD`, not from host cwd
-- the in-tree runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, and `caller` from that stack
+- the in-tree runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `BASH_EXECUTION_STRING`, `FUNCNAME`, and `caller` from that stack
 - shell vars, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized through direct runner mutation APIs rather than bootstrap `eval` calls
 - redirect compatibility work must not implicitly expand the product contract for background execution: job control remains unsupported, and this runtime does not promise separate asynchronous redirect-restoration semantics for `cmd &`
 

@@ -77,6 +77,9 @@ func (r *Runner) currentDefinitionSource() string {
 	if r.currentInternal() {
 		return internalBootstrapSource
 	}
+	if r.filename != "" && r.filename != "stdin" {
+		return r.filename
+	}
 	return ""
 }
 

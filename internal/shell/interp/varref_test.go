@@ -1028,6 +1028,25 @@ declare -p a
 	}
 }
 
+func TestIndexedAssignInvalidSubscriptDefersFailureToRuntime(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+a=x b[0+]=y c=z
+echo "$a" "${b-unset}" "${c-unset}"
+`)
+	if status, ok := err.(ExitStatus); !ok || status != 1 {
+		t.Fatalf("Run error = %v, want exit status 1", err)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	const wantStderr = "0+: arithmetic syntax error: operand expected (error token is \"+\")\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
 func TestArrayAssignmentTildeUsesCurrentShellHome(t *testing.T) {
 	t.Parallel()
 

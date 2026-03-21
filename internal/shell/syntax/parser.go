@@ -3552,7 +3552,25 @@ func (p *Parser) eitherIndex() *Subscript {
 			p.next()
 			break
 		}
+		arithSaved := *p
 		sub.Expr = p.followArithm(leftBrack, lpos)
+		if p.err != nil && p.lang.in(langBashLike) {
+			scan := arithSaved
+			for scan.tok != rightBrack && scan.tok != _EOF && scan.tok != _Newl {
+				scan.nextArith(false)
+			}
+			if scan.tok == rightBrack {
+				next := scan
+				next.next()
+				if next.tok == assgn || next.tok == assgnParen || (next.val != "" && next.val[0] == '+') {
+					*p = scan
+					p.err = nil
+					if raw := p.sourceBetween(innerStart, p.pos); raw != "" {
+						sub.Expr = p.wordOne(p.rawLit(innerStart, p.pos, raw))
+					}
+				}
+			}
+		}
 	}
 	if p.lang.in(langBashLike) && p.tok == hash {
 		for p.tok != rightBrack && p.tok != _EOF && p.tok != _Newl {

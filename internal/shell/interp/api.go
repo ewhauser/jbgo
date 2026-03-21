@@ -217,6 +217,7 @@ type Runner struct {
 
 	interactive            bool
 	commandString          bool
+	commandStringValue     string
 	syntheticPipelineStmts map[*syntax.Stmt]*syntax.Stmt
 
 	// keepRedirs is used so that "exec" can make any redirections
@@ -389,8 +390,9 @@ type RunnerConfig struct {
 	Stderr io.Writer
 	Params []string
 
-	Interactive   bool
-	CommandString bool
+	Interactive        bool
+	CommandString      bool
+	CommandStringValue string
 
 	LegacyBashCompat bool
 
@@ -504,6 +506,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.procSubstHandler = cfg.ProcSubstHandler
 	r.legacyBashCompat = cfg.LegacyBashCompat
 	r.commandString = cfg.CommandString
+	r.commandStringValue = cfg.CommandStringValue
 	if err := r.setStdIO(cfg.Stdin, cfg.Stdout, cfg.Stderr); err != nil {
 		return nil, err
 	}
@@ -797,15 +800,16 @@ func (r *Runner) Reset() {
 		// These can be set by functions like [Dir] or [Params], but
 		// builtins can overwrite them; reset the fields to whatever the
 		// constructor set up.
-		Dir:              r.origDir,
-		Params:           r.origParams,
-		opts:             r.origOpts,
-		stdin:            r.origStdin,
-		stdout:           r.origStdout,
-		stderr:           r.origStderr,
-		fds:              cloneFDTable(r.origFDs),
-		legacyBashCompat: r.legacyBashCompat,
-		commandString:    r.commandString,
+		Dir:                r.origDir,
+		Params:             r.origParams,
+		opts:               r.origOpts,
+		stdin:              r.origStdin,
+		stdout:             r.origStdout,
+		stderr:             r.origStderr,
+		fds:                cloneFDTable(r.origFDs),
+		legacyBashCompat:   r.legacyBashCompat,
+		commandString:      r.commandString,
+		commandStringValue: r.commandStringValue,
 
 		origDir:    r.origDir,
 		origParams: r.origParams,
@@ -881,6 +885,14 @@ func (r *Runner) Reset() {
 		ReadOnly: true,
 		Str:      strconv.Itoa(r.egid),
 	})
+	if r.commandStringValue != "" {
+		r.setVar("BASH_EXECUTION_STRING", expand.Variable{
+			Set:      true,
+			Kind:     expand.String,
+			ReadOnly: true,
+			Str:      r.commandStringValue,
+		})
+	}
 	pwd := r.Dir
 	if candidate := r.writeEnv.Get("PWD").String(); r.pwdCandidateMatchesDir(candidate) {
 		pwd = candidate
@@ -1032,6 +1044,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		opts:                    r.opts,
 		interactive:             r.interactive,
 		commandString:           r.commandString,
+		commandStringValue:      r.commandStringValue,
 		legacyBashCompat:        r.legacyBashCompat,
 		inSubshell:              true,
 		inFunc:                  r.inFunc,

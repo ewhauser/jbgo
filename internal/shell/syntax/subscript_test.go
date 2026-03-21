@@ -236,6 +236,7 @@ func TestParseArrayLikeAssignmentRawText(t *testing.T) {
 	}{
 		{src: "a[5 + 3]=\n", wantRefRaw: "a[5 + 3]", wantSubRaw: "5 + 3"},
 		{src: "a[5 # 1]=\n", wantRefRaw: "a[5 # 1]", wantSubRaw: "5 # 1"},
+		{src: "a[0+]=\n", wantRefRaw: "a[0+]", wantSubRaw: "0+"},
 	}
 
 	for _, tc := range tests {

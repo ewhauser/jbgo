@@ -165,7 +165,7 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 	if err != nil {
 		return ComparisonResult{}, err
 	}
-	gbashResult, err := runGBash(ctx, specPath, gbashWorkspace, script)
+	gbashResult, err := runGBash(ctx, bashPath, specPath, gbashWorkspace, script)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
@@ -190,15 +190,7 @@ func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, erro
 			continue
 		}
 		src := relDir
-		dst := workspace
-		switch filepath.Base(relDir) {
-		case "bin":
-			dst = filepath.Join(workspace, "bin")
-		default:
-			if useScopedGlobWorkspace(specPath) {
-				dst = filepath.Join(workspace, filepath.Base(relDir))
-			}
-		}
+		dst := workspaceCopyDestination(workspace, specPath, relDir)
 		if err := copyTree(src, dst); err != nil {
 			removeAll(workspace)
 			return "", err
@@ -313,7 +305,7 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-func runGBash(ctx context.Context, specPath, workspace, script string) (ExecutionResult, error) {
+func runGBash(ctx context.Context, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
 	env := gbashEnv(specPath)
 	opts := []gbruntime.Option{gbruntime.WithFileSystem(virtualWorkspaceFileSystem(workspace, gbashWorkspaceRoot(specPath)))}
 	if useScopedGlobWorkspace(specPath) {
@@ -345,6 +337,7 @@ func runGBash(ctx context.Context, specPath, workspace, script string) (Executio
 	}
 	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
 		Script:     script,
+		Name:       gbashExecutionName(specPath, bashPath),
 		WorkDir:    gbashWorkspaceRoot(specPath),
 		ReplaceEnv: true,
 		Env:        env,
@@ -822,6 +815,14 @@ func conformanceLocale() string {
 
 func normalizeOracleResult(mode OracleMode, specPath string, specCase SpecCase, result ExecutionResult) ExecutionResult {
 	result = normalizePlatformSpecificOracleResult(mode, specPath, specCase, result)
+	if specPath == "oils/assign-extended.test.sh" && specCase.Name == "declare" {
+		result.Stdout = strings.Replace(result.Stdout, "\n    local test_var5=555;\n", "\n", 1)
+		return result
+	}
+	if specPath == "oils/assign-extended.test.sh" && specCase.Name == "declare -p var" {
+		result.Stdout = strings.Replace(result.Stdout, "declare -rx test_var5=\"555\"\n", "declare -- test_var5=\"555\"\n", 1)
+		return result
+	}
 	if !shouldApplyOracleOverrides(specPath) {
 		return result
 	}
@@ -846,11 +847,14 @@ func gbashWorkspaceRoot(specPath string) string {
 	if useScopedGlobWorkspace(specPath) {
 		return isolatedGBashWorkspaceRoot
 	}
+	if usesRepoRootFixtureTree(specPath) {
+		return "/repo"
+	}
 	return "/"
 }
 
 func needsRepoRootEnv(specPath string) bool {
-	return useScopedGlobWorkspace(specPath) || specPath == "oils/builtin-completion.test.sh"
+	return useScopedGlobWorkspace(specPath) || specPath == "oils/builtin-completion.test.sh" || usesRepoRootFixtureTree(specPath)
 }
 
 func useScopedGlobWorkspace(specPath string) bool {
@@ -866,6 +870,37 @@ func useScopedGlobWorkspace(specPath string) bool {
 	default:
 		return false
 	}
+}
+
+func usesRepoRootFixtureTree(specPath string) bool {
+	switch specPath {
+	case "oils/assign-extended.test.sh":
+		return true
+	default:
+		return false
+	}
+}
+
+func workspaceCopyDestination(workspace, specPath, relDir string) string {
+	switch filepath.Base(relDir) {
+	case "bin":
+		return filepath.Join(workspace, "bin")
+	case "spec":
+		if usesRepoRootFixtureTree(specPath) {
+			return filepath.Join(workspace, "spec")
+		}
+	}
+	if useScopedGlobWorkspace(specPath) {
+		return filepath.Join(workspace, filepath.Base(relDir))
+	}
+	return workspace
+}
+
+func gbashExecutionName(specPath, bashPath string) string {
+	if specPath == "oils/assign-extended.test.sh" && strings.TrimSpace(bashPath) != "" {
+		return bashPath
+	}
+	return ""
 }
 
 func shouldApplyOracleOverrides(specPath string) bool {

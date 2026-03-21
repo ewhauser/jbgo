@@ -231,6 +231,9 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	cfg.Interactive = exec.Interactive
 	cfg.LegacyBashCompat = exec.Interpreter == "bash" || exec.Interpreter == "sh"
 	cfg.CommandString = executionUsesCommandString(exec)
+	if exec.ScriptPath == "" && exec.Script != "" {
+		cfg.CommandStringValue = exec.Script
+	}
 	return cfg
 }
 

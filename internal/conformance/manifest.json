@@ -50,38 +50,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/assign-extended.test.sh::declare": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -F with shopt -s extdebug prints more info": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -p": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -p UNDEF (and typeset) -- prints something to stderr": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -p var": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::declare -pg": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::syntax error in array assignment": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-extended.test.sh::typeset +r removes read-only attribute (TODO: documented in bash to do nothing)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-read.test.sh::read -r -d '' for NUL strings, e.g. find -print0": {
           "mode": "xfail",
           "reason": "gbash's internal find command does not yet implement -print0, so the read builtin never receives the bash-compatible NUL stream"
