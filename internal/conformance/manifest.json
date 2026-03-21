@@ -262,84 +262,84 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-process.test.sh::Changing resource limit is denied": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::Exit builtin with invalid arg": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::Exit builtin with too many args": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::arg that would overflow 64 bits is detected": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::exec -- 2>&1": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::exec -a sets argv[0]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::exec builtin accepts --": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::time with brace group argument": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit -S for soft limit (default), -H for hard limit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit -f 1 prevents files larger 512 bytes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit -n limits file descriptors": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit accepts 'unlimited'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit doesn't accept multiple flags - reduce confusion between shells": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit negative arg": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit negative flag": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit of 2**32, 2**31 (int overflow)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit that is 64 bits": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit too many args": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit with no flags is like -f": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::write big file with ulimit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
         },
         "oils/builtin-special.test.sh::Prefix assignments persist after readonly, but NOT exported (set -o posix)": {
           "mode": "xfail",
