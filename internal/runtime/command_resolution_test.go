@@ -113,7 +113,68 @@ func TestUnknownCommandPathReturnsCommandNotFound(t *testing.T) {
 	if result.ExitCode != 127 {
 		t.Fatalf("ExitCode = %d, want 127", result.ExitCode)
 	}
-	if !strings.Contains(result.Stderr, "/bin/missing-command: command not found") {
-		t.Fatalf("Stderr = %q, want command-not-found message", result.Stderr)
+	if !strings.Contains(result.Stderr, "No such file or directory") {
+		t.Fatalf("Stderr = %q, want No such file or directory message", result.Stderr)
+	}
+}
+
+func TestExplicitPathNonExecutableFileReturns126(t *testing.T) {
+	t.Parallel()
+	session, err := newRuntime(t, &Config{}).NewSession(context.Background())
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	// writeSessionFile creates the file with mode 0o644 (not executable).
+	writeSessionFile(t, session, "/tmp/text-file", []byte("not a script\n"))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "/tmp/text-file\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "Permission denied") {
+		t.Fatalf("Stderr = %q, want Permission denied message", result.Stderr)
+	}
+}
+
+func TestExplicitPathMissingDirectoryReturns127(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "/tmp/not-a-dir/text-file\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 127 {
+		t.Fatalf("ExitCode = %d, want 127", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "No such file or directory") {
+		t.Fatalf("Stderr = %q, want No such file or directory message", result.Stderr)
+	}
+}
+
+func TestExplicitPathTooLongReturns126(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	longName := strings.Repeat("0123456789", 52) // 520 chars, exceeds NAME_MAX (255)
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script:  "./" + longName + "\n",
+		WorkDir: "/tmp",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "File name too long") {
+		t.Fatalf("Stderr = %q, want File name too long message", result.Stderr)
 	}
 }

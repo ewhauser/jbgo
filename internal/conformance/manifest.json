@@ -453,18 +453,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::trap EXIT, sleep, SIGINT: non-interactively": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap INT, sleep, SIGINT: non-interactively": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap USR1, sleep, SIGINT: non-interactively": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap.test.sh::trap foo gives non-zero error": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -523,18 +511,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/command_.test.sh::Name too long": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/command_.test.sh::Not a dir": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/command_.test.sh::Permission denied": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/command_.test.sh::filling $PATH cache, then deleting command": {
           "mode": "xfail",

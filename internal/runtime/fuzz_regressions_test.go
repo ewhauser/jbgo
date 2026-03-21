@@ -76,7 +76,8 @@ func TestCommandPathBelowFileDoesNotEscapeAsInternalError(t *testing.T) {
 	if result.ExitCode == 0 {
 		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
 	}
-	if !strings.Contains(result.Stderr, "command not found") {
-		t.Fatalf("Stderr = %q, want command-not-found message", result.Stderr)
+	// Explicit-path invocations produce "No such file or directory", not "command not found".
+	if !strings.Contains(result.Stderr, "No such file or directory") && !strings.Contains(result.Stderr, "command not found") {
+		t.Fatalf("Stderr = %q, want no-such-file or command-not-found message", result.Stderr)
 	}
 }

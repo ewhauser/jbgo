@@ -984,13 +984,31 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		}
 		return nil, false, nil
 	}
-	if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, fullPath); err != nil {
-		recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), fullPath, commandName, source)
-		return nil, false, err
+	// For explicit-path invocations (source == "path"), errors are surfaced as
+	// shell exit-status failures rather than silently returning "not found".
+	explicitPath := source == "path"
+	if explicitPath && hasLongPathComponent(name) {
+		// Check before stat: filesystems may normalize ENAMETOOLONG to ErrNotExist,
+		// so we detect over-long components proactively. Use the original invocation
+		// name (name) not the resolved fullPath so the message matches bash's output.
+		return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: File name too long", name)
+	}
+	if pathErr := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, fullPath); pathErr != nil {
+		recordPolicyDenied(exec.Trace, pathErr, string(policy.FileActionStat), fullPath, commandName, source)
+		if explicitPath && !policy.IsDenied(pathErr) {
+			return nil, false, classifyExplicitPathError(ctx, exec, fullPath, pathErr)
+		}
+		return nil, false, pathErr
 	}
 	info, err := exec.FS.Stat(ctx, fullPath)
-	if err != nil || info.IsDir() {
+	if err != nil {
+		if explicitPath {
+			return nil, false, classifyExplicitPathError(ctx, exec, fullPath, err)
+		}
 		return nil, false, nil //nolint:nilerr // stat error means the file doesn't exist as a command
+	}
+	if info.IsDir() {
+		return nil, false, nil
 	}
 	if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
 		if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {
@@ -1008,6 +1026,10 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		return nil, false, err
 	}
 	if !ok {
+		if explicitPath {
+			// File exists but lacks execute permission.
+			return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: Permission denied", fullPath)
+		}
 		return nil, false, nil
 	}
 	resolved.path = fullPath
@@ -1015,6 +1037,44 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		resolved.source = source
 	}
 	return resolved, true, nil
+}
+
+// classifyExplicitPathError maps a stat/access error for an explicit-path
+// command invocation to the appropriate shell exit-status error, preserving
+// the original errno rather than collapsing everything to ENOENT.
+//
+// Exit 126 (command found but not executable):
+//   - ENAMETOOLONG → "File name too long"
+//   - ELOOP        → "Too many levels of symbolic links"
+//   - EACCES/EPERM → "Permission denied"
+//
+// Exit 127 (command not found):
+//   - ENOENT, ENOTDIR, ErrNotExist, and any unrecognized error → "No such file or directory"
+func classifyExplicitPathError(ctx context.Context, exec *Execution, fullPath string, err error) error {
+	stderr := handlerState(ctx, exec).Stderr
+	switch {
+	case errors.Is(err, syscall.ENAMETOOLONG):
+		return shellFailureToWriter(ctx, stderr, 126, "%s: File name too long", fullPath)
+	case errors.Is(err, syscall.ELOOP):
+		return shellFailureToWriter(ctx, stderr, 126, "%s: Too many levels of symbolic links", fullPath)
+	case errors.Is(err, syscall.EACCES), errors.Is(err, syscall.EPERM):
+		return shellFailureToWriter(ctx, stderr, 126, "%s: Permission denied", fullPath)
+	default:
+		return shellFailureToWriter(ctx, stderr, 127, "%s: No such file or directory", fullPath)
+	}
+}
+
+// hasLongPathComponent reports whether any component of p exceeds the POSIX
+// NAME_MAX limit of 255 bytes.  Used to detect ENAMETOOLONG before stat,
+// because some filesystem layers normalize that error to ErrNotExist.
+func hasLongPathComponent(p string) bool {
+	const nameMax = 255
+	for component := range strings.SplitSeq(p, "/") {
+		if len(component) > nameMax {
+			return true
+		}
+	}
+	return false
 }
 
 func pathDirs(env expand.Environ, dir string) []string {
