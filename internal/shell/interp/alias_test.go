@@ -133,17 +133,22 @@ unalias +a
 printf 'plus=%d\n' "$?"
 unalias -
 printf 'dash=%d\n' "$?"
+alias keep=echo
+unalias -a -z
+printf 'badflag=%d\n' "$?"
+alias keep
+printf 'keep=%d\n' "$?"
 unalias
 printf 'usage=%d\n' "$?"
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "partial=1\nalias foo='bar'\nalias spam='eggs'\nclear=0\nclear-with-args=0\nplus=1\ndash=1\nusage=2\n"
+	const wantStdout = "partial=1\nalias foo='bar'\nalias spam='eggs'\nclear=0\nclear-with-args=0\nplus=1\ndash=1\nbadflag=2\nalias keep='echo'\nkeep=0\nusage=2\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "unalias: missing: not found\nunalias: +a: not found\nunalias: -: not found\nunalias: usage: unalias [-a] name [name ...]\n"
+	const wantStderr = "unalias: missing: not found\nunalias: +a: not found\nunalias: -: not found\nunalias: -z: invalid option\nunalias: usage: unalias [-a] name [name ...]\nunalias: usage: unalias [-a] name [name ...]\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}

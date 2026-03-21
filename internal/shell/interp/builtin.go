@@ -729,6 +729,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				args = args[1:]
 				goto unaliasArgs
 			default:
+				if strings.HasPrefix(args[0], "-") && args[0] != "-" {
+					return failf(2, "unalias: %s: invalid option\nunalias: usage: unalias [-a] name [name ...]\n", args[0])
+				}
 				goto unaliasArgs
 			}
 		}
