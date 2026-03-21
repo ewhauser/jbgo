@@ -52,6 +52,14 @@ cat $HOME/tilde1.txt | wc -c
 ## BUG bash STDERR:
 ## END
 
+#### No assignment-like tilde expansion in redirect target
+HOME=/home/bob
+echo hi > $TMP/x=~
+cat "$TMP/x=~"
+## STDOUT:
+hi
+## END
+
 #### other user
 echo ~nonexistent
 ## stdout: ~nonexistent

@@ -1378,18 +1378,30 @@ func Fields(cfg *Config, words ...*syntax.Word) ([]string, error) {
 
 // RedirectFields expands a single shell word for use as a file redirect target.
 // Bash applies the normal field expansion pipeline and then treats multiple
-// results as an ambiguous redirect.
+// results as an ambiguous redirect.  Unlike command arguments, redirect targets
+// do not receive assignment-like tilde expansion (e.g. x=~ stays literal).
 func RedirectFields(cfg *Config, word *syntax.Word) ([]string, error) {
 	if word == nil {
 		return nil, nil
 	}
-	return Fields(cfg, word)
+	var fields []string
+	for s, err := range fieldsSeq(cfg, false, word) {
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, s)
+	}
+	return fields, nil
 }
 
 // FieldsSeq expands a number of words as if they were arguments in a shell
 // command. This includes brace expansion, tilde expansion, parameter expansion,
 // command substitution, arithmetic expansion, quote removal, and globbing.
 func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
+	return fieldsSeq(cfg, true, words...)
+}
+
+func fieldsSeq(cfg *Config, allowAssignLike bool, words ...*syntax.Word) iter.Seq2[string, error] {
 	cfg = prepareConfig(cfg)
 	dir := cfg.envGet("PWD")
 	return func(yield func(string, error) bool) {
@@ -1418,7 +1430,7 @@ func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 					}
 					word2 = reparsed
 				}
-				wfields, err := cfg.wordFields(word2.Parts)
+				wfields, err := cfg.wordFieldsOpt(word2.Parts, allowAssignLike)
 				if err != nil {
 					yield("", err)
 					return
@@ -1644,12 +1656,24 @@ func (cfg *Config) cmdSubst(cs *syntax.CmdSubst) (string, error) {
 }
 
 func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
+	return cfg.wordFieldsOpt(wps, true)
+}
+
+// wordFieldsNoAssign is like wordFields but does not enable assignment-like
+// tilde expansion (name=~/... → name=/home/.../...).  Use it for contexts
+// where bash would not treat the word as a potential assignment, such as
+// redirect targets.
+func (cfg *Config) wordFieldsNoAssign(wps []syntax.WordPart) ([][]fieldPart, error) {
+	return cfg.wordFieldsOpt(wps, false)
+}
+
+func (cfg *Config) wordFieldsOpt(wps []syntax.WordPart, allowAssignLike bool) ([][]fieldPart, error) {
 	splitter := newFieldSplitter(cfg)
 	assignmentLike := false
 	assignmentPrefix := ""
 	assignmentValue := ""
 	paramQL := quoteNone
-	if len(wps) > 0 {
+	if allowAssignLike && len(wps) > 0 {
 		if lit, ok := wps[0].(*syntax.Lit); ok {
 			assignmentPrefix, assignmentValue, assignmentLike = assignmentLikeWordPrefix(lit.Value)
 			if assignmentLike {

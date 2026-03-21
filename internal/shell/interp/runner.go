@@ -2905,7 +2905,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 		arg = fields[0]
 	case syntax.DplIn:
 		r.inRedirectWord++
-		fields, err := expand.Fields(r.ecfg, rd.Word)
+		fields, err := expand.RedirectFields(r.ecfg, rd.Word)
 		r.inRedirectWord--
 		r.expandErr(err)
 		if err != nil {
