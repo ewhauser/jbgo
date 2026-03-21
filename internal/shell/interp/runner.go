@@ -872,6 +872,15 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.lastExpandExit = exitStatus{}
 		fields, decl := r.resolveCallExprArgs(args)
 		if decl != nil {
+			if r.posixMode() && IsPOSIXSpecialBuiltin(decl.Variant.Value) {
+				restores := r.runSpecialCallAssigns(cm.Assigns)
+				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+					r.restoreCallAssigns(restores)
+					return
+				}
+				r.cmd(ctx, decl)
+				return
+			}
 			if !r.expandAssignsForSideEffects(cm.Assigns) {
 				return
 			}
@@ -946,7 +955,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			break
 		}
 
-		restores := r.runCallAssigns(cm.Assigns)
+		specialCallAssigns := r.posixSpecialBuiltinActive(fields[0])
+		var restores []restoreVar
+		if specialCallAssigns {
+			restores = r.runSpecialCallAssigns(cm.Assigns)
+		} else {
+			restores = r.runCallAssigns(cm.Assigns)
+		}
 		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 			r.restoreCallAssigns(restores)
 			break
@@ -959,7 +974,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 
 		r.call(ctx, cm.Args[0].Pos(), fields)
 		r.exit.errExitIgnored = false
-		r.restoreCallAssigns(restores)
+		if !specialCallAssigns {
+			r.restoreCallAssigns(restores)
+		}
 	case *syntax.BinaryCmd:
 		switch cm.Op {
 		case syntax.AndStmt, syntax.OrStmt:
@@ -967,6 +984,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.noErrExit = true
 			r.stmt(ctx, cm.X)
 			r.noErrExit = oldNoErrExit
+			if r.stop(ctx) {
+				break
+			}
 			if r.exit.ok() == (cm.Op == syntax.AndStmt) {
 				r.stmt(ctx, cm.Y)
 			}
@@ -1151,6 +1171,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		}
 	case *syntax.FuncDecl:
+		if r.posixMode() && IsPOSIXSpecialBuiltin(cm.Name.Value) {
+			r.errf("`%s': is a special builtin\n", cm.Name.Value)
+			r.exit.code = 2
+			if !r.interactive {
+				r.exit.exiting = true
+			}
+			break
+		}
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
 		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
@@ -2326,6 +2354,33 @@ func (r *Runner) expandAssignsForSideEffects(assigns []*syntax.Assign) bool {
 }
 
 func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
+	return r.runCallAssignsWithExport(assigns, true)
+}
+
+func (r *Runner) runSpecialCallAssigns(assigns []*syntax.Assign) []restoreVar {
+	return r.runCallAssignsWithExport(assigns, true)
+}
+
+func (r *Runner) callAssignRestoreVar(name string, vr expand.Variable) restoreVar {
+	restore := restoreVar{name: name, vr: vr}
+	if restore.name == "SECONDS" {
+		restore.vr = expand.Variable{}
+		if secondsEnv, secondsVR, ok := visibleSecondsBinding(r.writeEnv); ok {
+			restore.secondsEnv = secondsEnv
+			restore.vr = secondsVR
+		}
+		restore.secondsStartTime = r.startTime
+		if restore.secondsEnv != nil {
+			if started, ok := secondsStartTimeForEnv(restore.secondsEnv); ok {
+				restore.secondsStartTime = started
+			}
+		}
+		restore.restoreSeconds = true
+	}
+	return restore
+}
+
+func (r *Runner) runCallAssignsWithExport(assigns []*syntax.Assign, forceExport bool) []restoreVar {
 	var restores []restoreVar
 	for _, as := range assigns {
 		name := as.Ref.Name.Value
@@ -2336,10 +2391,9 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 		}
 		if as.Array != nil {
 			vr := expand.Variable{
-				Set:      true,
-				Kind:     expand.String,
-				Str:      r.renderInlineArrayValue(as.Array),
-				Exported: true,
+				Set:  true,
+				Kind: expand.String,
+				Str:  r.renderInlineArrayValue(as.Array),
 			}
 			resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
 			if err != nil {
@@ -2347,22 +2401,17 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 				r.exit.code = 1
 				return restores
 			}
-			restore := restoreVar{name: resolvedRef.Name.Value, vr: resolvedPrev}
-			if restore.name == "SECONDS" {
-				restore.vr = expand.Variable{}
-				if secondsEnv, secondsVR, ok := visibleSecondsBinding(r.writeEnv); ok {
-					restore.secondsEnv = secondsEnv
-					restore.vr = secondsVR
-				}
-				restore.secondsStartTime = r.startTime
-				if restore.secondsEnv != nil {
-					if started, ok := secondsStartTimeForEnv(restore.secondsEnv); ok {
-						restore.secondsStartTime = started
-					}
-				}
-				restore.restoreSeconds = true
+			if forceExport {
+				vr.Exported = true
+			} else {
+				vr.Exported = resolvedPrev.Exported
 			}
-			r.setVar(resolvedRef.Name.Value, vr)
+			restore := r.callAssignRestoreVar(resolvedRef.Name.Value, resolvedPrev)
+			if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
+				r.errf("%v\n", err)
+				r.exit.code = 1
+				return restores
+			}
 			if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 				return restores
 			}
@@ -2374,8 +2423,6 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 		if !ok || r.exit.fatalExit || r.exit.exiting {
 			return restores
 		}
-		// Inline command vars are always exported.
-		vr.Exported = true
 
 		resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
 		if err != nil {
@@ -2383,21 +2430,12 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 			r.exit.code = 1
 			return restores
 		}
-		restore := restoreVar{name: resolvedRef.Name.Value, vr: resolvedPrev}
-		if restore.name == "SECONDS" {
-			restore.vr = expand.Variable{}
-			if secondsEnv, secondsVR, ok := visibleSecondsBinding(r.writeEnv); ok {
-				restore.secondsEnv = secondsEnv
-				restore.vr = secondsVR
-			}
-			restore.secondsStartTime = r.startTime
-			if restore.secondsEnv != nil {
-				if started, ok := secondsStartTimeForEnv(restore.secondsEnv); ok {
-					restore.secondsStartTime = started
-				}
-			}
-			restore.restoreSeconds = true
+		if forceExport {
+			vr.Exported = true
+		} else {
+			vr.Exported = resolvedPrev.Exported
 		}
+		restore := r.callAssignRestoreVar(resolvedRef.Name.Value, resolvedPrev)
 		if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
 			r.errf("%v\n", err)
 			r.exit.code = 1
@@ -3213,6 +3251,10 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		}
 	}
 	name := args[0]
+	if r.posixSpecialBuiltinActive(name) {
+		r.exit = r.builtin(ctx, pos, name, args[1:])
+		return
+	}
 	if info, ok := r.funcInfo(name); ok && info.body != nil {
 		source := info.definitionSource
 		isInternal := info.internal
