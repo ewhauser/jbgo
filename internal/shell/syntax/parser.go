@@ -1459,8 +1459,47 @@ func (e ParseError) Error() string {
 	return fmt.Sprintf("%s:%s: %s", e.Filename, e.Pos, e.Text)
 }
 
+func (e ParseError) bashCompat() ParseError {
+	if e.bashText != "" || e.bashSecondaryText != "" || e.SecondaryText != "" || e.noSourceLine {
+		return e
+	}
+	sourceLine := strings.TrimSpace(e.SourceLine)
+	switch {
+	case (e.Text == "`if` must be followed by a statement list" || e.Text == "`if <cond>` must be followed by `then`") && strings.HasSuffix(sourceLine, "if"):
+		e.bashText = fmt.Sprintf("syntax error: unexpected end of file from `if' command on line %d", e.Pos.Line())
+		e.SourceLine = ""
+		e.SourceLinePos = Pos{}
+		e.noSourceLine = true
+	case (e.Text == "`while` must be followed by a statement list" || e.Text == "`while <cond>` must be followed by `do`") && strings.HasSuffix(sourceLine, "while"):
+		e.bashText = fmt.Sprintf("syntax error: unexpected end of file from `while' command on line %d", e.Pos.Line())
+		e.SourceLine = ""
+		e.SourceLinePos = Pos{}
+		e.noSourceLine = true
+	case e.Text == "`for` must be followed by a literal" && strings.HasSuffix(sourceLine, "for"):
+		e.bashText = "syntax error near unexpected token `newline'"
+	case e.Text == "reached EOF without matching `$(` with `)`":
+		e.bashText = "unexpected EOF while looking for matching `)'"
+		e.SourceLine = ""
+		e.SourceLinePos = Pos{}
+		e.noSourceLine = true
+	case e.Text == "reached EOF without closing quote \"`\"":
+		e.bashText = "unexpected EOF while looking for matching ``'"
+		e.SourceLine = ""
+		e.SourceLinePos = Pos{}
+		e.noSourceLine = true
+	case e.Text == "`do` can only be used in a loop":
+		e.bashText = "syntax error near unexpected token `do'"
+	case e.Text == "`;;` can only be used in a case clause":
+		e.bashText = "syntax error near unexpected token `;;'"
+	case e.Text == "`}` can only be used to close a block":
+		e.bashText = "syntax error near unexpected token `}'"
+	}
+	return e
+}
+
 // BashError returns the error message formatted like bash does.
 func (e ParseError) BashError() string {
+	e = e.bashCompat()
 	secondaryPos := e.Pos
 	if e.SecondaryPos.IsValid() {
 		secondaryPos = e.SecondaryPos
@@ -4453,6 +4492,16 @@ func (p *Parser) testClause(s *Stmt) {
 		if p.tok == rightParen {
 			p.curErrSecondary(
 				fmt.Sprintf("syntax error near %s", p.tok.bashQuote()),
+				"unexpected token %s in conditional command",
+				p.tok.bashQuote(),
+			)
+		} else if p.tok == andAnd || p.tok == orOr {
+			near := "&"
+			if p.tok == orOr {
+				near = "|"
+			}
+			p.curErrSecondary(
+				fmt.Sprintf("syntax error near %s", bashQuoteString(near)),
 				"unexpected token %s in conditional command",
 				p.tok.bashQuote(),
 			)

@@ -215,6 +215,89 @@ func TestParseInvalidBracedParamExpansionPreservedForRuntimeError(t *testing.T) 
 	}
 }
 
+func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "incomplete while",
+			src:  "echo hi; while\n",
+			want: "stdin: line 1: syntax error: unexpected end of file from `while' command on line 1",
+		},
+		{
+			name: "incomplete for",
+			src:  "echo hi; for\n",
+			want: "stdin: line 1: syntax error near unexpected token `newline'\nstdin: line 1: `echo hi; for'",
+		},
+		{
+			name: "incomplete if",
+			src:  "echo hi; if\n",
+			want: "stdin: line 1: syntax error: unexpected end of file from `if' command on line 1",
+		},
+		{
+			name: "incomplete backticks",
+			src:  "`x\n",
+			want: "stdin: line 1: unexpected EOF while looking for matching ``'",
+		},
+		{
+			name: "incomplete command sub",
+			src:  "$(x\n",
+			want: "stdin: line 1: unexpected EOF while looking for matching `)'",
+		},
+		{
+			name: "do unexpected",
+			src:  "do echo hi\n",
+			want: "stdin: line 1: syntax error near unexpected token `do'\nstdin: line 1: `do echo hi'",
+		},
+		{
+			name: "misplaced double semicolon",
+			src:  "echo 1 ;; echo 2\n",
+			want: "stdin: line 1: syntax error near unexpected token `;;'\nstdin: line 1: `echo 1 ;; echo 2'",
+		},
+		{
+			name: "bare right brace",
+			src:  "}\n",
+			want: "stdin: line 1: syntax error near unexpected token `}'\nstdin: line 1: `}'",
+		},
+		{
+			name: "left brace without separator",
+			src:  "{ls; }\n",
+			want: "stdin: line 1: syntax error near unexpected token `}'\nstdin: line 1: `{ls; }'",
+		},
+		{
+			name: "empty conditional clause",
+			src:  "[[ || true ]]\n",
+			want: "stdin: line 1: unexpected token `||' in conditional command\nstdin: line 1: syntax error near `|'\nstdin: line 1: `[[ || true ]]'",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parser := NewParser(Variant(LangBash))
+			_, err := parser.Parse(strings.NewReader(tc.src), "stdin")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want parse error")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if parseErr.SourceLine == "" {
+				parseErr.SourceLine = sourceLineForTest(tc.src, parseErr.Pos.Line())
+			}
+			if got := parseErr.BashError(); got != tc.want {
+				t.Fatalf("BashError() mismatch\nwant: %s\ngot:  %s", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestParseHeredocDelimiterMetadata(t *testing.T) {
 	t.Parallel()
 

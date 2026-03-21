@@ -1323,15 +1323,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh::Incomplete for": {
+        "oils/parse-errors.test.sh::Bad braced var sub -- not allowed": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh::Incomplete if": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::Incomplete while": {
+        "oils/parse-errors.test.sh::Bad var sub caught at parse time": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -1359,31 +1355,15 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh::empty clause in [[": {
+        "oils/parse-errors.test.sh::bad var name in export": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/parse-errors.test.sh::incomplete backticks": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::incomplete command sub": {
+        "oils/parse-errors.test.sh::bad var name in local": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/parse-errors.test.sh::interactive parse error (regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::misplaced ;;": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::{ is its own word, needs a space": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::} is a parse error": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
