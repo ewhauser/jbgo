@@ -15,6 +15,9 @@ jobs:
       matrix:
         goos: [darwin, linux, windows]
         goarch: [amd64, arm64]
+        exclude:
+          - goos: darwin
+            goarch: amd64
     env:
       CGO_ENABLED: "0"
       GOOS: ${{ matrix.goos }}
