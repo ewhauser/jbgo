@@ -134,6 +134,13 @@ func trimTrapParseError(err syntax.ParseError) string {
 		if line == "" {
 			continue
 		}
+		if strings.HasPrefix(line, "line ") {
+			_, text, ok := strings.Cut(line, ": ")
+			if ok {
+				lines[i] = text
+			}
+			continue
+		}
 		prefix, rest, ok := strings.Cut(line, ": line ")
 		if !ok || prefix == "" {
 			continue

@@ -150,38 +150,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-eval-source.test.sh::Eval in bash does tilde expansion in array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::Eval in does tilde expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::Eval with syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::Source with no arguments": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::Source with syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::eval usage": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::source accepts/ignores --": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-eval-source.test.sh::source doesn't crash when targeting a directory": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",

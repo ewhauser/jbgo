@@ -174,3 +174,26 @@ echo status=$?
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
+
+func TestEvalTildeExpansionMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+HOME=/home/bob
+x="~"
+eval y="$x"
+test "$x" = "$y" || echo FALSE
+[[ $x == /* ]] || echo FALSE
+[[ $y == /* ]] && echo TRUE
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "FALSE\nFALSE\nTRUE\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}

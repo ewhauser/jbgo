@@ -137,7 +137,8 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 			str := r.literal(x.X.(*syntax.Word))
 			yw := x.Y.(*syntax.Word)
 			if classic { // test, [
-				lit := r.literal(yw)
+				str = r.document(x.X.(*syntax.Word))
+				lit := r.document(yw)
 				if (str == lit) == (x.Op != syntax.TsNoMatch) {
 					return "1"
 				}
