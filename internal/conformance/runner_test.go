@@ -286,10 +286,8 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(globWorkspace, "spec", "testdata", "echo.sz")); err != nil {
 		t.Fatalf("Stat(glob spec/testdata/echo.sz) error = %v", err)
 	}
-	if info, err := os.Stat(filepath.Join(globWorkspace, "bin", "bash")); err != nil {
-		t.Fatalf("Stat(glob bin/bash) error = %v", err)
-	} else if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
-		t.Fatalf("Stat(glob bin/bash).Mode().Perm() = %v, want %v", got, want)
+	if _, err := os.Stat(filepath.Join(globWorkspace, "bin", "bash")); !os.IsNotExist(err) {
+		t.Fatalf("Stat(glob bin/bash) error = %v, want not exist", err)
 	}
 
 	defaultWorkspace, err := prepareWorkspace(cfg, "oils/assign-extended.test.sh", bashPath)
@@ -302,6 +300,20 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(defaultWorkspace, "spec", "testdata", "echo.sz")); !os.IsNotExist(err) {
 		t.Fatalf("Stat(default spec/testdata/echo.sz) error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(defaultWorkspace, "bin", "bash")); !os.IsNotExist(err) {
+		t.Fatalf("Stat(default bin/bash) error = %v, want not exist", err)
+	}
+
+	varOpWorkspace, err := prepareWorkspace(cfg, "oils/var-op-bash.test.sh", bashPath)
+	if err != nil {
+		t.Fatalf("prepareWorkspace(var-op-bash) error = %v", err)
+	}
+	defer removeAll(varOpWorkspace)
+	if info, err := os.Stat(filepath.Join(varOpWorkspace, "bin", "bash")); err != nil {
+		t.Fatalf("Stat(var-op-bash bin/bash) error = %v", err)
+	} else if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+		t.Fatalf("Stat(var-op-bash bin/bash).Mode().Perm() = %v, want %v", got, want)
 	}
 }
 

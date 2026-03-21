@@ -214,11 +214,22 @@ func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, erro
 		removeAll(workspace)
 		return "", err
 	}
-	if err := installPinnedBash(workspace, bashPath); err != nil {
-		removeAll(workspace)
-		return "", err
+	if needsPinnedBashWorkspace(specPath) {
+		if err := installPinnedBash(workspace, bashPath); err != nil {
+			removeAll(workspace)
+			return "", err
+		}
 	}
 	return workspace, nil
+}
+
+func needsPinnedBashWorkspace(specPath string) bool {
+	switch specPath {
+	case "oils/var-op-bash.test.sh":
+		return true
+	default:
+		return false
+	}
 }
 
 func installPinnedBash(workspace, bashPath string) error {
