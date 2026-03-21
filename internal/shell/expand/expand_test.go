@@ -1413,13 +1413,13 @@ func TestFieldsWordSplittingPreservesCustomIFSEmpties(t *testing.T) {
 			want: []string{"", "a", ""},
 		},
 		{
-			name: "UnicodeDelimiterUsesIFSBytes",
+			name: "UnicodeDelimiterUsesIFSRune",
 			src:  `$x`,
 			env: testEnv{
 				"IFS": {Set: true, Kind: String, Str: "ç"},
 				"x":   {Set: true, Kind: String, Str: "çx"},
 			},
-			want: []string{"", "", "x"},
+			want: []string{"", "x"},
 		},
 	}
 

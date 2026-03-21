@@ -150,7 +150,7 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 	}
 	commandString := parsed != nil && parsed.Source == BashSourceCommandString
 	if commandString {
-		prefixNestedShellDiagnostic(result, parsed.Name)
+		prefixNestedShellDiagnostic(result, parsed.ExecutionName)
 	}
 	if result != nil && result.Stderr != "" {
 		result.Stderr = prefixNestedShellCommandNotFound(c.name, result.Stderr)
@@ -346,11 +346,12 @@ func prefixNestedShellDiagnostic(result *ExecutionResult, shellName string) {
 		if line == "" {
 			continue
 		}
-		if !shouldPrefixNestedShellDiagnostic(line, shellName) {
+		normalized := strings.TrimRight(strings.TrimLeft(lines[i], " \t"), " \t")
+		prefixed, ok := nestedShellDiagnosticLine(normalized, shellName)
+		if !ok {
 			return
 		}
-		normalized := strings.TrimRight(strings.TrimLeft(lines[i], " \t"), " \t")
-		lines[i] = shellName + ": line 1: " + normalized
+		lines[i] = prefixed
 		result.Stderr = strings.Join(lines, "\n")
 		if hadTrailingNewline {
 			result.Stderr += "\n"
@@ -359,13 +360,25 @@ func prefixNestedShellDiagnostic(result *ExecutionResult, shellName string) {
 	}
 }
 
-func shouldPrefixNestedShellDiagnostic(line, shellName string) bool {
+func nestedShellDiagnosticLine(line, shellName string) (string, bool) {
 	if line == "" {
-		return false
+		return "", false
 	}
-	if shellName != "" && strings.HasPrefix(line, shellName+": ") {
-		return false
+	if shellName != "" {
+		if rest, ok := strings.CutPrefix(line, shellName+": "); ok {
+			if isNestedShellDiagnosticText(rest) {
+				return shellName + ": line 1: " + rest, true
+			}
+			return "", false
+		}
 	}
+	if !isNestedShellDiagnosticText(line) {
+		return "", false
+	}
+	return shellName + ": line 1: " + line, true
+}
+
+func isNestedShellDiagnosticText(line string) bool {
 	switch {
 	case strings.Contains(line, "unbound variable"):
 		return true
@@ -378,6 +391,8 @@ func shouldPrefixNestedShellDiagnostic(line, shellName string) bool {
 	case strings.Contains(line, "arithmetic syntax error"):
 		return true
 	case strings.Contains(line, "syntax error: operand expected"):
+		return true
+	case strings.Contains(line, "syntax error in expression"):
 		return true
 	case strings.Contains(line, "division by 0"):
 		return true

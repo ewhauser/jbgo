@@ -26,9 +26,9 @@ func TestPrefixNestedShellDiagnosticPreservesOperandSpacing(t *testing.T) {
 		Stderr:   "dummy0: \r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")\n",
 	}
 
-	prefixNestedShellDiagnostic(result, "bash")
+	prefixNestedShellDiagnostic(result, "dummy0")
 
-	const want = "bash: line 1: dummy0: \r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")\n"
+	const want = "dummy0: line 1: \r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")\n"
 	if got := result.Stderr; got != want {
 		t.Fatalf("result.Stderr = %q, want %q", got, want)
 	}

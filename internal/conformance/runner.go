@@ -537,6 +537,8 @@ func normalizeOutput(value, workspace, sandboxRoot string) string {
 func normalizeBashStderr(value string) string {
 	value = bashLinePrefixPattern.ReplaceAllString(filepath.ToSlash(value), "")
 	value = normalizeNestedShellPrefixes(value)
+	value = normalizeMultiLineNestedShellPrefixes(value)
+	value = normalizeCommandStringOperandPrefix(value)
 	value = procFDLsMissingPattern.ReplaceAllString(value, "")
 	value = strings.ReplaceAll(value, "shopt: usage: shopt [-pqsu] [-o long-option] optname [optname...]\n", "shopt: usage: shopt [-pqsu] [-o] [optname ...]\n")
 	value = bashCannotOpenNoSuchFilePattern.ReplaceAllString(value, "$1: $2: No such file or directory")
@@ -555,6 +557,25 @@ func normalizeBashStderr(value string) string {
 		}
 		return unquoted + ": command not found"
 	})
+}
+
+func normalizeCommandStringOperandPrefix(value string) string {
+	lines := strings.SplitAfter(value, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, "\n")
+		if !strings.Contains(trimmed, "syntax error: operand expected") {
+			continue
+		}
+		prefix, rest, ok := strings.Cut(trimmed, ": ")
+		if !ok || prefix == "" || strings.ContainsAny(prefix, " \t\r\n") || rest == "" {
+			continue
+		}
+		if rest[0] != '\r' {
+			continue
+		}
+		lines[i] = rest + line[len(trimmed):]
+	}
+	return strings.Join(lines, "")
 }
 
 func normalizeBadFDInterleave(value string) string {
@@ -602,6 +623,39 @@ func normalizeNestedShellPrefixes(value string) string {
 	return strings.Join(lines, "")
 }
 
+func normalizeMultiLineNestedShellPrefixes(value string) string {
+	lines := strings.SplitAfter(value, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, "\n")
+		if trimmed == "" {
+			continue
+		}
+		match := bashShellPrefixPattern.FindString(trimmed)
+		if match == "" {
+			continue
+		}
+		rest := strings.TrimPrefix(trimmed, match)
+		if isNestedShellDiagnostic(rest) || !hasNestedShellDiagnosticLater(lines[i+1:]) {
+			continue
+		}
+		lines[i] = rest + line[len(trimmed):]
+	}
+	return strings.Join(lines, "")
+}
+
+func hasNestedShellDiagnosticLater(lines []string) bool {
+	for _, line := range lines {
+		trimmed := strings.TrimRight(line, "\n")
+		if trimmed == "" {
+			break
+		}
+		if isNestedShellDiagnostic(trimmed) {
+			return true
+		}
+	}
+	return false
+}
+
 func isNestedShellDiagnostic(line string) bool {
 	switch {
 	case strings.Contains(line, "unbound variable"):
@@ -613,6 +667,10 @@ func isNestedShellDiagnostic(line string) bool {
 	case strings.Contains(line, "invalid number"):
 		return true
 	case strings.Contains(line, "arithmetic syntax error"):
+		return true
+	case strings.Contains(line, "syntax error: operand expected"):
+		return true
+	case strings.Contains(line, "syntax error in expression"):
 		return true
 	case strings.Contains(line, "division by 0"):
 		return true

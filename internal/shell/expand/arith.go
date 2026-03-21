@@ -188,10 +188,23 @@ func (e *ArithmDiagnosticError) Error() string {
 			tokenText = fromSource
 		}
 	}
+	exprText = arithDiagnosticExprText(e.Message, exprText)
 	if exprText == "" {
 		return fmt.Sprintf("%s (error token is %s)", e.Message, bashQuoteErrorToken(tokenText))
 	}
 	return fmt.Sprintf("%s: %s (error token is %s)", exprText, e.Message, bashQuoteErrorToken(tokenText))
+}
+
+func arithDiagnosticExprText(message, exprText string) string {
+	if exprText == "" {
+		return exprText
+	}
+	switch message {
+	case "value too great for base", "invalid number":
+		return trimArithSpace(exprText)
+	default:
+		return exprText
+	}
 }
 
 // ArithmDivByZeroError preserves the AST context for bash-style
@@ -700,41 +713,59 @@ func arithRuntimeParseError(src string, parseErr syntax.ParseError) error {
 	}
 }
 
-func arithRuntimeSource(cfg *Config, expr syntax.ArithmExpr) (string, error) {
+func arithRuntimeSource(cfg *Config, expr syntax.ArithmExpr, cache map[syntax.ArithmExpr]string) (string, error) {
+	if cache != nil {
+		if cached, ok := cache[expr]; ok {
+			return cached, nil
+		}
+	}
+	var (
+		val string
+		err error
+	)
 	switch expr := expr.(type) {
 	case *syntax.Word:
 		if arithExprUsesExpandedValue(expr) {
-			return Literal(cfg, expr)
+			val, err = Literal(cfg, expr)
+			break
 		}
-		return arithExprSource(expr), nil
+		val = arithExprSource(expr)
 	case *syntax.BinaryArithm:
-		left, err := arithRuntimeSource(cfg, expr.X)
+		left, err := arithRuntimeSource(cfg, expr.X, cache)
 		if err != nil {
 			return "", err
 		}
-		right, err := arithRuntimeSource(cfg, expr.Y)
+		right, err := arithRuntimeSource(cfg, expr.Y, cache)
 		if err != nil {
 			return "", err
 		}
-		return left + expr.Op.String() + right, nil
+		val = left + expr.Op.String() + right
 	case *syntax.UnaryArithm:
-		val, err := arithRuntimeSource(cfg, expr.X)
+		inner, err := arithRuntimeSource(cfg, expr.X, cache)
 		if err != nil {
 			return "", err
 		}
 		if expr.Post {
-			return val + expr.Op.String(), nil
+			val = inner + expr.Op.String()
+			break
 		}
-		return expr.Op.String() + val, nil
+		val = expr.Op.String() + inner
 	case *syntax.ParenArithm:
-		val, err := arithRuntimeSource(cfg, expr.X)
+		inner, err := arithRuntimeSource(cfg, expr.X, cache)
 		if err != nil {
 			return "", err
 		}
-		return "(" + val + ")", nil
+		val = "(" + inner + ")"
 	default:
-		return arithExprSource(expr), nil
+		val = arithExprSource(expr)
 	}
+	if err != nil {
+		return "", err
+	}
+	if cache != nil {
+		cache[expr] = val
+	}
+	return val, nil
 }
 
 func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr, bool, error) {
@@ -746,11 +777,12 @@ func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr,
 	if !arithExprUsesExpandedValue(expr) {
 		return nil, false, nil
 	}
-	src, err := arithRuntimeSource(cfg, expr)
+	sourceCache := make(map[syntax.ArithmExpr]string)
+	src, err := arithRuntimeSource(cfg, expr, sourceCache)
 	if err != nil {
 		return nil, false, err
 	}
-	replacements, err := arithRuntimeDiagnosticReplacements(cfg, expr)
+	replacements, err := arithRuntimeDiagnosticReplacements(cfg, expr, sourceCache)
 	if err != nil {
 		return nil, false, err
 	}
@@ -784,13 +816,13 @@ func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr,
 	return parsed, true, nil
 }
 
-func arithRuntimeDiagnosticReplacements(cfg *Config, expr syntax.ArithmExpr) ([]arithDiagnosticReplacement, error) {
+func arithRuntimeDiagnosticReplacements(cfg *Config, expr syntax.ArithmExpr, sourceCache map[syntax.ArithmExpr]string) ([]arithDiagnosticReplacement, error) {
 	switch expr := expr.(type) {
 	case *syntax.Word:
 		if !arithExprUsesExpandedValue(expr) {
 			return nil, nil
 		}
-		text, err := arithRuntimeSource(cfg, expr)
+		text, err := arithRuntimeSource(cfg, expr, sourceCache)
 		if err != nil {
 			return nil, err
 		}
@@ -799,19 +831,19 @@ func arithRuntimeDiagnosticReplacements(cfg *Config, expr syntax.ArithmExpr) ([]
 		}
 		return nil, nil
 	case *syntax.BinaryArithm:
-		left, err := arithRuntimeDiagnosticReplacements(cfg, expr.X)
+		left, err := arithRuntimeDiagnosticReplacements(cfg, expr.X, sourceCache)
 		if err != nil {
 			return nil, err
 		}
-		right, err := arithRuntimeDiagnosticReplacements(cfg, expr.Y)
+		right, err := arithRuntimeDiagnosticReplacements(cfg, expr.Y, sourceCache)
 		if err != nil {
 			return nil, err
 		}
 		return append(left, right...), nil
 	case *syntax.UnaryArithm:
-		return arithRuntimeDiagnosticReplacements(cfg, expr.X)
+		return arithRuntimeDiagnosticReplacements(cfg, expr.X, sourceCache)
 	case *syntax.ParenArithm:
-		return arithRuntimeDiagnosticReplacements(cfg, expr.X)
+		return arithRuntimeDiagnosticReplacements(cfg, expr.X, sourceCache)
 	default:
 		return nil, nil
 	}
