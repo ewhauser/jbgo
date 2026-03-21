@@ -143,10 +143,6 @@
           "mode": "xfail",
           "reason": "quoted here-doc content still loses a doubled backslash before read sees it, so this case remains blocked on heredoc handling rather than read itself"
         },
-        "oils/assign.test.sh::Env binding not allowed before compound command": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/assign.test.sh::Test above without 'local' (which is not POSIX)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -320,10 +316,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-bracket.test.sh::test -c": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-bracket.test.sh::test -p named pipe": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -994,10 +986,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/command-sub.test.sh::Making keyword out of command sub should NOT work": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1384,10 +1372,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/parse-errors.test.sh::bad var name in local": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/parse-errors.test.sh::do unexpected": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

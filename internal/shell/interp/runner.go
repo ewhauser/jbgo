@@ -590,7 +590,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		r.traceOutput = oldTraceOutput
 		r.expandBaseFDs = oldExpandBaseFDs
 	}()
-	if len(st.Redirs) > 0 {
+	if len(st.Redirs) > 0 && usesPreRedirectExpandFDs(st.Cmd) {
 		if r.traceOutput == nil {
 			r.traceOutput = oldErr
 		}
@@ -654,6 +654,15 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		r.popFDSnapshot()
 		r.closeUnusedSnapshotFDs(oldFDs)
 		r.syncStandardFDs()
+	}
+}
+
+func usesPreRedirectExpandFDs(cmd syntax.Command) bool {
+	switch cmd.(type) {
+	case *syntax.CallExpr, *syntax.DeclClause:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -2514,7 +2523,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 				return result, nil
 			}
 			src := r.getFD(dup.sourceFD)
-			if src == nil || src.reader == nil {
+			if src == nil {
 				diag := redirectBadFDText(rd, arg, wordText)
 				r.errf("%s: Bad file descriptor\n", diag)
 				return result, errors.New("bad file descriptor")

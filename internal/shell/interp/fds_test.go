@@ -243,14 +243,126 @@ func TestSelfDupRedirectOnClosedFDIsNoOp(t *testing.T) {
 func TestDupRedirectRequiresCompatibleDescriptorMode(t *testing.T) {
 	t.Parallel()
 
-	stdout, stderr, err := runInterpScript(t, "echo hi 1>&0\necho status=$?\nread x 0<&1\necho read_status=$?\n")
+	stdout, stderr, err := runInterpScript(t, "echo hi 1>&0\necho status=$?\n")
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	if stdout != "status=1\nread_status=1\n" {
-		t.Fatalf("stdout = %q, want %q", stdout, "status=1\nread_status=1\n")
+	if stdout != "status=1\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "status=1\n")
 	}
-	if stderr != "0: Bad file descriptor\n1: Bad file descriptor\n" {
-		t.Fatalf("stderr = %q, want %q", stderr, "0: Bad file descriptor\n1: Bad file descriptor\n")
+	if stderr != "0: Bad file descriptor\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "0: Bad file descriptor\n")
+	}
+}
+
+func TestInputDupRedirectCanReuseOutputDescriptor(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "echo one 1>&2\necho two 1<&2\n")
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "one\ntwo\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "one\ntwo\n")
+	}
+}
+
+func TestArithmeticCommandRedirectCoversCommandSubstitution(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	errFile := filepath.Join(dir, "arith.err")
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, fmt.Sprintf(`
+emit_num() {
+  echo 42
+  echo STDERR >&2
+}
+(( a = $(emit_num) + 10 )) 2> %q
+printf 'a=%%s\n' "$a"
+printf '%%s\n' --
+printf '%%s\n' "$(< %q)"
+`, errFile, errFile))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "a=52\n--\nSTDERR\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "a=52\n--\nSTDERR\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestConditionalRedirectCoversCommandSubstitution(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	errFile := filepath.Join(dir, "cond.err")
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, fmt.Sprintf(`
+emit_word() {
+  echo STDOUT
+  echo STDERR >&2
+}
+[[ $(emit_word) == STDOUT ]] 2> %q
+printf '%%s\n' "$?"
+printf '%%s\n' --
+printf '%%s\n' "$(< %q)"
+`, errFile, errFile))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "0\n--\nSTDERR\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "0\n--\nSTDERR\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestLoopRedirectCoversCommandSubstitution(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	errFile := filepath.Join(dir, "loop.err")
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, fmt.Sprintf(`
+emit_item() {
+  echo item
+  echo LOOPERR >&2
+}
+for item in $(emit_item); do
+  printf '%%s\n' "$item"
+done 2> %q
+printf '%%s\n' --
+printf '%%s\n' "$(< %q)"
+`, errFile, errFile))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "item\n--\nLOOPERR\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "item\n--\nLOOPERR\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
