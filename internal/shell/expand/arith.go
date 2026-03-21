@@ -279,17 +279,6 @@ func WithArithmSource(err error, source string, sourceStart, sourceEnd uint) err
 	return err
 }
 
-// hasSingleQuote checks if a word contains any single-quoted parts.
-// Bash rejects both '...' and $'...' (ANSI-C) strings in arithmetic context.
-func hasSingleQuote(word *syntax.Word) *syntax.SglQuoted {
-	for _, part := range word.Parts {
-		if sq, ok := part.(*syntax.SglQuoted); ok {
-			return sq
-		}
-	}
-	return nil
-}
-
 func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 	return arithm(cfg, expr, expr, 0)
 }
@@ -382,14 +371,6 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 	}
 	switch expr := expr.(type) {
 	case *syntax.Word:
-		// Bash rejects single-quoted strings in arithmetic context.
-		if hasSingleQuote(expr) != nil {
-			token := syntax.ArithmExpr(expr)
-			if root != nil && root.Pos() == expr.Pos() {
-				token = root
-			}
-			return 0, ArithmSyntaxError{Expr: root, Token: token}
-		}
 		if !containsShellExpansion(expr) {
 			src := arithExprSource(expr)
 			p := syntax.NewParser()

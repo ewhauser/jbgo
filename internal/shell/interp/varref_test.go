@@ -953,21 +953,21 @@ printf 'status=%d x=%s\n' "$?" "${x-unset}"
 	}
 }
 
-func TestIndexedAssignQuotedSubscriptIsFatal(t *testing.T) {
+func TestIndexedAssignQuotedSubscriptUsesArithmeticValue(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
 a['2']=3
-printf 'unreachable\n'
+printf 'value=%s\n' "${a[2]}"
 `)
-	if err == nil {
-		t.Fatal("Run error = nil, want fatal assignment failure")
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
 	}
-	if stdout != "" {
-		t.Fatalf("stdout = %q, want empty", stdout)
+	if got, want := stdout, "value=3\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
 	}
-	if stderr == "" {
-		t.Fatal("stderr = empty, want arithmetic diagnostic")
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
 

@@ -4820,6 +4820,8 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 	wi := &WordIter{}
 	if wi.Name = p.getLit(); wi.Name == nil {
 		p.followErr(fpos, ftok, noQuote("a literal"))
+	} else if !ValidName(wi.Name.Value) {
+		p.curErr("%q is not a valid name", wi.Name.Value)
 	}
 	if p.got(semicolon) {
 		p.got(_Newl)

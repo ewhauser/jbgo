@@ -1031,7 +1031,10 @@
         },
         "oils/for-expr.test.sh::Arith lexer mode": {
           "mode": "xfail",
-          "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case"
+          "reason": "darwin bash still rejects quoted arithmetic-for operands that the Linux oracle accepts",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/func-parsing.test.sh::Function name with $": {
           "mode": "xfail",
@@ -1061,26 +1064,18 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/loop.test.sh::break in condition of loop": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/loop.test.sh::for loop with invalid identifier": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/loop.test.sh::top-level break/continue/return (without strict_control_flow)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "darwin bash reports a different status and diagnostic for invalid for-loop identifiers than the Linux oracle",
           "goos": [
             "darwin"
           ]
         },
-        "oils/loop.test.sh::while in pipe": {
+        "oils/loop.test.sh::top-level break/continue/return (without strict_control_flow)": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
+          "reason": "darwin bash still disagrees with the Linux oracle for top-level loop-control behavior",
           "goos": [
-            "linux"
+            "darwin"
           ]
         },
         "oils/nix-idioms.test.sh::${!ref} to undefined array": {

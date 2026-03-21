@@ -844,6 +844,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			} else {
 				r2.setStderrWriter(r.stderr)
 			}
+			oldStdin := r.stdin
 			r.setStdinReader(pr)
 			var wg sync.WaitGroup
 			wg.Go(func() {
@@ -868,6 +869,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			combined := append(append([]string(nil), leftStatuses...), rightStatuses...)
 			r.setPipeStatusValues(combined)
+			r.setStdinReader(oldStdin)
 			if r.opts[optPipeFail] && !r2.exit.ok() && r.exit.ok() {
 				r.exit = r2.exit
 			}
@@ -892,9 +894,22 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.WhileClause:
 		for !r.stop(ctx) {
 			oldNoErrExit := r.noErrExit
+			oldInLoop := r.inLoop
 			r.noErrExit = true
+			r.inLoop = true
 			r.stmts(ctx, cm.Cond)
+			r.inLoop = oldInLoop
 			r.noErrExit = oldNoErrExit
+			if r.breakEnclosing > 0 {
+				r.breakEnclosing = 0
+				r.exit.clear()
+				break
+			}
+			if r.contnEnclosing > 0 {
+				r.contnEnclosing = 0
+				r.exit.clear()
+				continue
+			}
 
 			stop := r.exit.ok() == cm.Until
 			r.exit.clear()

@@ -199,6 +199,111 @@ func TestLoopRegressionSupportsForControlFlow(t *testing.T) {
 	}
 }
 
+func TestLoopRegressionAllowsTopLevelBreakContinueAndStopsOnTopLevelReturn(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"break\n"+
+		"printf 'break=%s\\n' \"$?\"\n"+
+		"continue\n"+
+		"printf 'continue=%s\\n' \"$?\"\n"+
+		"return\n"+
+		"printf 'after-return\\n'\n")
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "break=0\ncontinue=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; !strings.Contains(got, "return: can only `return' from a function or sourced script") {
+		t.Fatalf("Stderr = %q, want top-level return diagnostic", got)
+	}
+}
+
+func TestLoopRegressionBreakInConditionStopsCurrentLoopOnly(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"while break; do\n"+
+		"  echo x\n"+
+		"done\n"+
+		"for i in 1 2 3; do\n"+
+		"  echo i=$i\n"+
+		"  while break; do\n"+
+		"    echo nested\n"+
+		"  done\n"+
+		"done\n"+
+		"echo done\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "i=1\ni=2\ni=3\ndone\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, ""; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestLoopRegressionRejectsInvalidForVariableName(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "for - in a b c; do\n  echo hi\n done\n")
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, ""; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got == "" {
+		t.Fatal("Stderr = empty, want invalid for-variable diagnostic")
+	}
+}
+
+func TestPipelineRegressionPreservesNestedWhilePipeOutputCount(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"y=$(printf '%s\\n' alpha beta gamma | while read path; do\n"+
+		"  echo $path\n"+
+		"done | wc -l)\n"+
+		"test \"$y\" -eq 3\n"+
+		"printf 'status=%s\\n' \"$?\"\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, ""; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArithmForLoopRegressionAcceptsQuotedNumericOperands(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, ""+
+		"for ((i = '3';  i < '5';  ++i)); do echo $i; done\n"+
+		"for ((i = \"3\";  i < \"5\";  ++i)); do echo $i; done\n"+
+		"for ((i = $'3'; i < $'5'; ++i)); do echo $i; done\n"+
+		"for ((i = $\"3\"; i < $\"5\"; ++i)); do echo $i; done\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "3\n4\n3\n4\n3\n4\n3\n4\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, ""; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestLetRegressionSupportsLiteralArithmeticExpressions(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

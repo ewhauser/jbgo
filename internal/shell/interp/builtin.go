@@ -301,9 +301,6 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 		exit.code = uint8(status)
 	case "break", "continue":
-		if !r.inLoop {
-			return failf(0, "%s: only meaningful in a `for', `while', or `until' loop\n", name)
-		}
 		enclosing := &r.breakEnclosing
 		if name == "continue" {
 			enclosing = &r.contnEnclosing
@@ -322,6 +319,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		default:
 			exit = failf(1, "%s: too many arguments\n", name)
 			exit.exiting = true
+			return exit
+		}
+		if !r.inLoop {
 			return exit
 		}
 	case "pwd":
@@ -480,7 +480,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		return exit
 	case "return":
 		if !r.inFunc && !r.inSource {
-			return failf(2, "return: can only `return' from a function or sourced script\n")
+			exit = failf(2, "return: can only `return' from a function or sourced script\n")
+			exit.exiting = true
+			return exit
 		}
 		switch len(args) {
 		case 0:
