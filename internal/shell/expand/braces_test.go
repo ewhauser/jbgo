@@ -119,12 +119,24 @@ var braceTests = []struct {
 		want: []string{"a1", "a4", "a7", "a10"},
 	},
 	{
+		src:  "a{1..8..-3}",
+		want: []string{"a1", "a4", "a7"},
+	},
+	{
 		src:  "a{1..4..0}",
+		want: []string{"a1", "a2", "a3", "a4"},
+	},
+	{
+		src:  "a{1..4..-1}",
 		want: []string{"a1", "a2", "a3", "a4"},
 	},
 	{
 		src:  "a{4..1}",
 		want: []string{"a4", "a3", "a2", "a1"},
+	},
+	{
+		src:  "a{8..1..3}",
+		want: []string{"a8", "a5", "a2"},
 	},
 	{
 		src:  "a{4..1..-2}",
@@ -139,6 +151,22 @@ var braceTests = []struct {
 		want: []string{"001", "002", "003", "004", "005"},
 	},
 	{
+		src:  "{09..12}",
+		want: []string{"09", "10", "11", "12"},
+	},
+	{
+		src:  "{12..07}",
+		want: []string{"12", "11", "10", "09", "08", "07"},
+	},
+	{
+		src:  "{-02..4}",
+		want: []string{"-02", "-01", "000", "001", "002", "003", "004"},
+	},
+	{
+		src:  "{+02..4}",
+		want: []string{"2", "3", "4"},
+	},
+	{
 		src:  "{0001..05..2}",
 		want: []string{"0001", "0003", "0005"},
 	},
@@ -151,12 +179,20 @@ var braceTests = []struct {
 		want: []string{"ad", "ag", "aj"},
 	},
 	{
+		src:  "a{a..e..-2}",
+		want: []string{"aa", "ac", "ae"},
+	},
+	{
 		src:  "a{d..k..n}",
 		want: []string{"a{d..k..n}"},
 	},
 	{
 		src:  "a{k..d..-2}",
 		want: []string{"ak", "ai", "ag", "ae"},
+	},
+	{
+		src:  "a{e..a..2}",
+		want: []string{"ae", "ac", "aa"},
 	},
 	{
 		src:  "{1..1}",
@@ -173,11 +209,143 @@ func TestBraces(t *testing.T) {
 			wantStr := printWords(litWords(tc.want...)...)
 			wantBraceExpParts(t, word, inStr != wantStr)
 
-			got := Braces(word)
+			got, err := Braces(word)
+			if err != nil {
+				t.Fatalf("Braces(%q) error = %v", tc.src, err)
+			}
 			gotStr := printWords(got...)
 			if gotStr != wantStr {
 				t.Fatalf("mismatch in %q\nwant:\n%s\ngot: %s",
 					inStr, wantStr, gotStr)
+			}
+		})
+	}
+}
+
+func TestBracesMixedCaseCharRangeErrors(t *testing.T) {
+	t.Parallel()
+
+	const wantMixedCaseErr = "bad substitution: no closing \"`\" in `-"
+
+	tests := []struct {
+		src  string
+		want string
+	}{
+		{
+			src:  `-{z..A}-`,
+			want: wantMixedCaseErr,
+		},
+		{
+			src:  `-{z..A..2}-`,
+			want: wantMixedCaseErr,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.src, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Braces(word)
+			if err == nil {
+				t.Fatalf("Braces(%q) unexpectedly succeeded with %q", tc.src, printWords(got...))
+			}
+			if err.Error() != tc.want {
+				t.Fatalf("Braces(%q) error = %q, want %q", tc.src, err.Error(), tc.want)
+			}
+		})
+	}
+}
+
+func TestFieldsMixedCaseCharRangeError(t *testing.T) {
+	t.Parallel()
+
+	_, err := Fields(nil, parseCommandWord(t, `-{z..A}-`))
+	if err == nil {
+		t.Fatal("Fields() unexpectedly succeeded")
+	}
+	const want = "bad substitution: no closing \"`\" in `-"
+	if err.Error() != want {
+		t.Fatalf("Fields() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestBracesMixedCaseCharRangeWithoutSuffixExpands(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		src    string
+		prefix string
+		from   rune
+		to     rune
+		step   int
+	}{
+		{
+			src:  `{z..A}`,
+			from: 'z',
+			to:   'A',
+			step: 1,
+		},
+		{
+			src:    `-{z..A}`,
+			prefix: "-",
+			from:   'z',
+			to:     'A',
+			step:   1,
+		},
+		{
+			src:  `{z..A..2}`,
+			from: 'z',
+			to:   'A',
+			step: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.src, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Braces(word)
+			if err != nil {
+				t.Fatalf("Braces(%q) error = %v", tc.src, err)
+			}
+
+			var want []string
+			for r := tc.from; r >= tc.to; r -= rune(tc.step) {
+				want = append(want, tc.prefix+string(r))
+			}
+			wantStr := printWords(litWords(want...)...)
+			if gotStr := printWords(got...); gotStr != wantStr {
+				t.Fatalf("Braces(%q) = %q, want %q", tc.src, gotStr, wantStr)
+			}
+		})
+	}
+}
+
+func TestBracesInvalidSequenceStepLiteralizes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{
+			src:  "a{1..2..-9223372036854775808}b{c,d}",
+			want: []string{"a{1..2..-9223372036854775808}bc", "a{1..2..-9223372036854775808}bd"},
+		},
+		{
+			src:  "a{1..2..9223372036854775808}b{c,d}",
+			want: []string{"a{1..2..9223372036854775808}bc", "a{1..2..9223372036854775808}bd"},
+		},
+	}
+
+	for _, src := range tests {
+		t.Run(src.src, func(t *testing.T) {
+			word := parseCommandWord(t, src.src)
+			got, err := Braces(word)
+			if err != nil {
+				t.Fatalf("Braces(%q) error = %v", src.src, err)
+			}
+			want := printWords(litWords(src.want...)...)
+			if gotStr := printWords(got...); gotStr != want {
+				t.Fatalf("Braces(%q) = %q, want %q", src.src, gotStr, want)
 			}
 		})
 	}

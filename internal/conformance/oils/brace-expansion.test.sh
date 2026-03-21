@@ -227,15 +227,11 @@ echo -{1..10..3}-
 
 #### Ascending number range expansion with negative step is invalid
 echo -{1..8..-3}-
-## stdout-json: ""
-## status: 2
-## BUG bash stdout: -1- -4- -7-
+## stdout: -1- -4- -7-
 
 #### regression: -1 step disallowed
 echo -{1..4..-1}-
-## stdout-json: ""
-## status: 2
-## BUG bash stdout: -1- -2- -3- -4-
+## stdout: -1- -2- -3- -4-
 
 #### regression: 0 step disallowed
 echo -{1..4..0}-
@@ -245,8 +241,7 @@ echo -{1..4..0}-
 
 #### Descending number range expansion with positive step is invalid
 echo -{8..1..3}-
-## stdout-json: ""
-## status: 2
+## stdout: -8- -5- -2-
 
 #### Descending number range expansion with negative step
 echo -{8..1..-3}-
@@ -285,22 +280,17 @@ echo -{a..e..2}-
 #### Char ranges with steps of the wrong sign
 echo -{a..e..-2}-
 echo -{e..a..2}-
-## stdout-json: ""
-## status: 2
-## BUG bash STDOUT:
+## STDOUT:
 -a- -c- -e-
 -e- -c- -a-
 ## END
-## BUG bash status: 0
 
 #### Mixed case char expansion is invalid
 echo -{z..A}-
 echo -{z..A..2}-
 ## stdout-json: ""
-## status: 2
-# This is exposed a weird bash bug!!!
-## BUG bash stdout-json: ""
-## BUG bash status: 1
+## status: 1
+# Bash 5.3 also prints bad substitution diagnostics on both lines.
 
 #### Descending char range expansion
 echo -{e..a..-2}-
@@ -386,4 +376,3 @@ echo {z..3}
 {1..a}
 {z..3}
 ## END
-

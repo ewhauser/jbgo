@@ -1306,7 +1306,12 @@ func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
 				_, ok := part.(*syntax.BraceExp)
 				return ok
 			}) {
-				afterBraces = Braces(word)
+				var err error
+				afterBraces, err = Braces(word)
+				if err != nil {
+					yield("", err)
+					return
+				}
 			}
 			for _, word2 := range afterBraces {
 				wfields, err := cfg.wordFields(word2.Parts)

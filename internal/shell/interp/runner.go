@@ -331,7 +331,9 @@ func (r *Runner) expandErr(err error) {
 	case errors.As(err, &arithDiagErr):
 		r.exit.code = 1
 		r.exit.exiting = fatalExpansionErr
-	case errMsg == "bad substitution" || strings.Contains(errMsg, ": bad substitution"):
+	case errMsg == "bad substitution" ||
+		strings.HasPrefix(errMsg, "bad substitution:") ||
+		strings.Contains(errMsg, ": bad substitution"):
 		r.exit.code = 1
 		r.exit.exiting = fatalExpansionErr
 	case strings.Contains(errMsg, "substring expression < 0"):

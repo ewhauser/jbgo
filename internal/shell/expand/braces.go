@@ -4,8 +4,9 @@
 package expand
 
 import (
+	"bytes"
+	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -14,8 +15,9 @@ import (
 // [syntax.BraceExp] parts. For example, the word with a brace expansion
 // "foo{bar,baz}" will return two literal words, "foobar" and "foobaz".
 //
-// Note that the resulting words may share word parts.
-func Braces(word *syntax.Word) []*syntax.Word {
+// Note that the resulting words may share word parts. Invalid sequence forms
+// may surface expansion errors.
+func Braces(word *syntax.Word) ([]*syntax.Word, error) {
 	var all []*syntax.Word
 	var left []syntax.WordPart
 	for i, wp := range word.Parts {
@@ -29,14 +31,24 @@ func Braces(word *syntax.Word) []*syntax.Word {
 
 			fromLit := br.Elems[0].Lit()
 			toLit := br.Elems[1].Lit()
-			zeros := max(extraLeadingZeros(fromLit), extraLeadingZeros(toLit))
 
 			from, err1 := strconv.Atoi(fromLit)
 			to, err2 := strconv.Atoi(toLit)
+			fixedWidth := false
+			targetWidth := 0
 			if err1 != nil || err2 != nil {
 				chars = true
 				from = int(br.Elems[0].Lit()[0])
 				to = int(br.Elems[1].Lit()[0])
+				if mixedCaseBraceRange(br.Elems[0].Lit()[0], br.Elems[1].Lit()[0]) {
+					suffix := wordPartsSource(word.Parts[i+1:])
+					if suffix != "" {
+						return nil, mixedCaseBraceRangeError(suffix)
+					}
+				}
+			} else if hasLeadingZero(fromLit) || hasLeadingZero(toLit) {
+				fixedWidth = true
+				targetWidth = max(len(fromLit), len(toLit))
 			}
 			upward := from <= to
 			incr := 1
@@ -44,9 +56,15 @@ func Braces(word *syntax.Word) []*syntax.Word {
 				incr = -1
 			}
 			if len(br.Elems) > 2 {
-				n, _ := strconv.Atoi(br.Elems[2].Lit())
-				if n != 0 && n > 0 == upward {
-					incr = n
+				n, ok := braceSequenceStep(br.Elems[2].Lit())
+				if !ok {
+					return literalBrace(word, left, i, br)
+				}
+				if n != 0 {
+					incr = absInt(n)
+					if !upward {
+						incr = -incr
+					}
 				}
 			}
 			n := from
@@ -63,38 +81,111 @@ func Braces(word *syntax.Word) []*syntax.Word {
 				if chars {
 					lit.Value = string(rune(n))
 				} else {
-					lit.Value = strings.Repeat("0", zeros) + strconv.Itoa(n)
+					lit.Value = formatBraceSequenceNumber(n, fixedWidth, targetWidth)
 				}
 				next.Parts = append([]syntax.WordPart{lit}, next.Parts...)
-				exp := Braces(&next)
+				exp, err := Braces(&next)
+				if err != nil {
+					return nil, err
+				}
 				for _, w := range exp {
 					w.Parts = append(left, w.Parts...)
 				}
 				all = append(all, exp...)
 				n += incr
 			}
-			return all
+			return all, nil
 		}
 		for _, elem := range br.Elems {
 			next := *word
 			next.Parts = next.Parts[i+1:]
 			next.Parts = append(elem.Parts, next.Parts...)
-			exp := Braces(&next)
+			exp, err := Braces(&next)
+			if err != nil {
+				return nil, err
+			}
 			for _, w := range exp {
 				w.Parts = append(left, w.Parts...)
 			}
 			all = append(all, exp...)
 		}
-		return all
+		return all, nil
 	}
-	return []*syntax.Word{{Parts: left}}
+	return []*syntax.Word{{Parts: left}}, nil
 }
 
-func extraLeadingZeros(s string) int {
-	for i, r := range s {
-		if r != '0' {
-			return i
-		}
+func formatBraceSequenceNumber(n int, fixedWidth bool, targetWidth int) string {
+	if !fixedWidth {
+		return strconv.Itoa(n)
 	}
-	return 0 // "0" has no extra leading zeros
+	return fmt.Sprintf("%0*d", targetWidth, n)
+}
+
+func hasLeadingZero(s string) bool {
+	if len(s) > 0 && s[0] == '-' {
+		s = s[1:]
+	}
+	return len(s) > 1 && s[0] == '0'
+}
+
+func mixedCaseBraceRange(from, to byte) bool {
+	return asciiLower(from) && asciiUpper(to) || asciiUpper(from) && asciiLower(to)
+}
+
+func wordPartsSource(parts []syntax.WordPart) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	_ = syntax.NewPrinter().Print(&buf, &syntax.Word{Parts: parts})
+	return buf.String()
+}
+
+func mixedCaseBraceRangeError(suffix string) error {
+	return fmt.Errorf("bad substitution: no closing %q in `%s", "`", suffix)
+}
+
+func literalBrace(word *syntax.Word, left []syntax.WordPart, i int, br *syntax.BraceExp) ([]*syntax.Word, error) {
+	next := *word
+	next.Parts = next.Parts[i+1:]
+	next.Parts = append([]syntax.WordPart{&syntax.Lit{Value: wordPartsSource([]syntax.WordPart{br})}}, next.Parts...)
+	exp, err := Braces(&next)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range exp {
+		w.Parts = append(left, w.Parts...)
+	}
+	return exp, nil
+}
+
+func braceSequenceStep(s string) (int, bool) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n == minInt() {
+		return 0, false
+	}
+	return n, true
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+func minInt() int {
+	return -maxInt() - 1
+}
+
+func maxInt() int {
+	return int(^uint(0) >> 1)
+}
+
+func asciiLower(b byte) bool {
+	return b >= 'a' && b <= 'z'
+}
+
+func asciiUpper(b byte) bool {
+	return b >= 'A' && b <= 'Z'
 }
