@@ -85,13 +85,20 @@ trap
 	if err != nil {
 		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
 	}
-	const want = "" +
-		"trap -- 'echo hup' SIGHUP\n" +
-		"trap -- 'echo term' SIGTERM\n" +
-		"trap -- '' SIGUSR1\n" +
-		"---\n"
-	if stdout != want {
-		t.Fatalf("stdout = %q, want %q", stdout, want)
+	linesBySignal := map[string]string{
+		"SIGHUP":  "trap -- 'echo hup' SIGHUP\n",
+		"SIGTERM": "trap -- 'echo term' SIGTERM\n",
+		"SIGUSR1": "trap -- '' SIGUSR1\n",
+	}
+	var want strings.Builder
+	for _, info := range trapSignalOrder {
+		if line, ok := linesBySignal[info.name]; ok {
+			want.WriteString(line)
+		}
+	}
+	want.WriteString("---\n")
+	if stdout != want.String() {
+		t.Fatalf("stdout = %q, want %q", stdout, want.String())
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
