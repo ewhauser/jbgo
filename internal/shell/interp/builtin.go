@@ -406,8 +406,12 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	case "hash":
 		return r.hashBuiltin(ctx, args)
 	case "eval":
-		if len(args) > 0 && args[0] == "--" {
-			args = args[1:]
+		if len(args) > 0 {
+			if args[0] == "--" {
+				args = args[1:]
+			} else if strings.HasPrefix(args[0], "-") && args[0] != "-" {
+				return failf(2, "eval: %s: invalid option\neval: usage: eval [arg ...]\n", args[0])
+			}
 		}
 		src := strings.Join(args, " ")
 		r.evalDepth++
@@ -415,13 +419,23 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 			r.evalDepth--
 		}()
 		err := r.runShellReader(ctx, strings.NewReader(src), "", nil)
-		var status ExitStatus
-		if err != nil && !errors.As(err, &status) {
-			return failf(1, "eval: %v\n", err)
+		if err != nil {
+			var status ExitStatus
+			switch {
+			case errors.As(err, &status):
+			default:
+				var parseErr syntax.ParseError
+				if errors.As(err, &parseErr) {
+					r.errf("%s\n", trimTrapParseError(parseErr))
+					exit.code = 2
+					return exit
+				}
+				return failf(1, "eval: %v\n", err)
+			}
 		}
 		exit = r.exit
 	case "source", ".":
-		return r.sourceBuiltin(ctx, pos, args)
+		return r.sourceBuiltin(ctx, pos, name, args)
 	case "[":
 		if len(args) == 0 || args[len(args)-1] != "]" {
 			r.errf("[: missing `]'\n")
@@ -1689,14 +1703,30 @@ func (r *Runner) typeBuiltin(ctx context.Context, args []string) (exit exitStatu
 	return exit
 }
 
-func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []string) (exit exitStatus) {
+func sourceBuiltinUsageLine(name string) string {
+	return fmt.Sprintf("%s: usage: %s [-p path] filename [arguments]\n", name, name)
+}
+
+func sourceBuiltinOpenError(name, path string, err error) string {
+	if strings.Contains(strings.ToLower(err.Error()), "is a directory") {
+		return fmt.Sprintf("%s: %s: is a directory\n", name, path)
+	}
+	return fmt.Sprintf("%v\n", err)
+}
+
+func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, name string, args []string) (exit exitStatus) {
+	if len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
 	if len(args) < 1 {
-		r.errf("%v: source: need filename\n", pos)
+		r.errf("%s: filename argument required\n", name)
+		r.errf("%s", sourceBuiltinUsageLine(name))
 		exit.code = 2
 		return exit
 	}
-	sourceName := args[0]
-	sourcePath := args[0]
+	sourceArg := args[0]
+	sourceName := sourceArg
+	sourcePath := sourceArg
 	sourcepathOpt, _ := r.bashOptByName("sourcepath")
 	if !strings.ContainsRune(args[0], '/') && sourcepathOpt != nil && *sourcepathOpt {
 		if resolved, err := r.lookPath(ctx, r.Dir, r.writeEnv, args[0], false, false); err == nil {
@@ -1706,7 +1736,7 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 	}
 	f, err := r.open(ctx, sourcePath, os.O_RDONLY, 0, false)
 	if err != nil {
-		r.errf("%v\n", err)
+		r.errf("%s", sourceBuiltinOpenError(name, sourceArg, err))
 		exit.code = 1
 		return exit
 	}
@@ -1750,10 +1780,20 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 	r.inSource = oldInSource
 
 	var status ExitStatus
-	if runErr != nil && !errors.As(runErr, &status) {
-		r.errf("source: %v\n", runErr)
-		exit.code = 1
-		return exit
+	if runErr != nil {
+		switch {
+		case errors.As(runErr, &status):
+		default:
+			var parseErr syntax.ParseError
+			if errors.As(runErr, &parseErr) {
+				r.errf("%s\n", parseErr.BashError())
+				exit.code = 2
+				return exit
+			}
+			r.errf("%s: %v\n", name, runErr)
+			exit.code = 1
+			return exit
+		}
 	}
 	exit = r.exit
 	exit.returning = false
