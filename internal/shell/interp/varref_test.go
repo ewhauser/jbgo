@@ -1074,3 +1074,97 @@ typeset -p a b
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+func TestScalarAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Env: expand.ListEnviron("HOME=/home/spec-test"),
+		Dir: "/tmp",
+	}, `
+foo=~
+echo "$foo"
+foo='~'
+echo "$foo"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "/home/spec-test\n~\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestReadonlyAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Env: expand.ListEnviron("HOME=/home/bob"),
+		Dir: "/tmp",
+	}, `
+readonly const=~/src
+echo "$const"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "/home/bob/src\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestAssignmentKeywordTildeUsesCurrentShellHome(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Env: expand.ListEnviron("HOME=/home/bar"),
+		Dir: "/tmp",
+	}, `
+f() {
+  local x=foo:~
+  echo "$x"
+}
+f
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "foo:/home/bar\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestTempAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Env: expand.ListEnviron("HOME=/home/bar"),
+		Dir: "/tmp",
+	}, `
+show() {
+  echo "$xx"
+}
+xx=~ show
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "/home/bar\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
