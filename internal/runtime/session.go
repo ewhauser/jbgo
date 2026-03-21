@@ -263,13 +263,7 @@ func executionEnv(baseEnv map[string]string, req *ExecutionRequest) map[string]s
 		return mergeEnv(baseEnv, nil)
 	}
 	if req.ReplaceEnv {
-		env := mergeEnv(nil, req.Env)
-		for key, value := range defaultBaseEnv() {
-			if _, ok := env[key]; !ok {
-				env[key] = value
-			}
-		}
-		return env
+		return mergeEnv(nil, req.Env)
 	}
 	return mergeEnv(baseEnv, req.Env)
 }

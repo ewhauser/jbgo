@@ -299,6 +299,18 @@ func (cfg *Config) arithmStringValue(root, tokenExpr syntax.ArithmExpr, word *sy
 	if s == "" || isEmptyArithWord(word) {
 		return 0, nil
 	}
+	if s == "LINENO" {
+		if cfg.CurrentLine != nil {
+			if line := cfg.CurrentLine(); line != 0 {
+				return int(line), nil
+			}
+		}
+		if tokenExpr != nil {
+			if line := tokenExpr.Pos().Line(); line != 0 {
+				return int(line), nil
+			}
+		}
+	}
 
 	i := 0
 	for syntax.ValidName(s) {

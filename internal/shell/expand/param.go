@@ -1092,7 +1092,13 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 	case "LINENO":
 		// This is the only parameter expansion that the environment
 		// interface cannot satisfy.
-		line := uint64(cfg.curParam.Pos().Line())
+		line := uint64(0)
+		if cfg.CurrentLine != nil {
+			line = uint64(cfg.CurrentLine())
+		}
+		if line == 0 && cfg.curParam != nil {
+			line = uint64(cfg.curParam.Pos().Line())
+		}
 		state.vr = Variable{Set: true, Kind: String, Str: strconv.FormatUint(line, 10)}
 	default:
 		state.vr = cfg.Env.Get(state.name)

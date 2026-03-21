@@ -26,7 +26,7 @@ func newSandboxLayoutState(env map[string]string, workDir string) *sandboxLayout
 	return &sandboxLayoutState{
 		initialized: true,
 		home:        strings.TrimSpace(env["HOME"]),
-		path:        strings.TrimSpace(env["PATH"]),
+		path:        startupPathValue(env["PATH"]),
 		workDir:     gbfs.Clean(workDir),
 	}
 }
@@ -37,7 +37,7 @@ func (s *sandboxLayoutState) ensure(ctx context.Context, fsys gbfs.FileSystem, e
 	}
 
 	home := strings.TrimSpace(env["HOME"])
-	pathValue := strings.TrimSpace(env["PATH"])
+	pathValue := startupPathValue(env["PATH"])
 	workDir = gbfs.Clean(workDir)
 
 	s.mu.Lock()

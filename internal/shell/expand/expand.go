@@ -110,6 +110,11 @@ type Config struct {
 	// Necessary for ${LINENO}.
 	curParam *syntax.ParamExp
 
+	// CurrentLine overrides the line number reported by special parameters such
+	// as LINENO when expansion should be anchored to the containing statement
+	// rather than the current token.
+	CurrentLine func() uint
+
 	reportedParamErrors map[*syntax.ParamExp]map[string]struct{}
 }
 

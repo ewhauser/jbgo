@@ -1,6 +1,13 @@
 package builtins
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+const hostnameEnvKey = "GBASH_UNAME_NODENAME"
+const defaultHostname = "gbash"
 
 type Hostname struct{}
 
@@ -13,7 +20,16 @@ func (c *Hostname) Name() string {
 }
 
 func (c *Hostname) Run(_ context.Context, inv *Invocation) error {
-	return runNotImplemented(inv, c.Name())
+	name := defaultHostname
+	if inv != nil && inv.Env != nil {
+		if value := strings.TrimSpace(inv.Env[hostnameEnvKey]); value != "" {
+			name = value
+		}
+	}
+	if _, err := fmt.Fprintln(inv.Stdout, name); err != nil {
+		return &ExitError{Code: 1, Err: err}
+	}
+	return nil
 }
 
 var _ Command = (*Hostname)(nil)

@@ -223,8 +223,7 @@ The default in-memory sandbox should look Unix-like enough for agent scripts:
 - `/dev` as a small runtime-owned device namespace
 - `/dev/null` as a character device that always reads EOF and discards writes
 - `/bin` and `/usr/bin` as virtual command locations
-- `PATH=/usr/bin:/bin`
-- deterministic identity defaults via `USER=agent`, `LOGNAME=agent`, `GROUP=agent`, `GROUPS=1000`, `UID=1000`, `EUID=1000`, `GID=1000`, `EGID=1000`, and `SHELL=/bin/sh`
+- deterministic identity defaults via `USER=agent`, `LOGNAME=agent`, `GROUP=agent`, `GROUPS=1000`, `UID=1000`, `EUID=1000`, `GID=1000`, and `EGID=1000`
 
 Commands remain registry-backed Go implementations. `/bin/ls` and similar paths are virtual command identities, not host executables.
 
@@ -234,7 +233,11 @@ Programmable user completion follows the same boundary: `compgen -A user` may us
 
 The runtime owns the reserved `/dev` entries rather than relying on each filesystem backend to create backend-specific stand-ins. Additional `/dev/*` paths may exist when tests or callers seed them, but only runtime-defined entries such as `/dev/null` are guaranteed by default.
 
-The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
+The shell initializes shell-owned startup state rather than inheriting host defaults. When callers omit them, the runner must synthesize `PATH=/usr/bin:/bin`, exported `PWD` matching the virtual working directory, `PS4="+ "`, the default `IFS`, readonly `SHELLOPTS`, and `SHELL=/bin/sh`; `HISTFILE` is only initialized for interactive shells. `HOME` is not synthesized by the shell, so an execution with a cleared environment still observes `HOME` as unset unless the caller explicitly provides it.
+
+The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, shell-owned startup state, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
+
+Sandbox-facing machine metadata is also runtime-owned: `HOSTNAME`, `hostname`, `OSTYPE`, `BASHPID`, and `PPID` must resolve from sandbox metadata and runner state rather than from host uname or host process inspection.
 
 ## 7. Proposed Package Layout
 
@@ -547,6 +550,7 @@ Implementation detail for the current runtime:
 
 - the runner's virtual directory is authoritative for filesystem behavior
 - shell-visible `PWD` may differ from the cleaned virtual directory when a visible logical path is still valid
+- the runner reset path initializes shell-owned startup variables (`PATH`, exported `PWD`, `PS4`, `IFS`, `SHELLOPTS`, `SHELL`, and interactive `HISTFILE`) while preserving an unset `HOME` when the execution environment omits it
 - `let` is handled natively by the in-tree `syntax.LetClause` AST node
 - all project path handlers resolve relative paths from virtual `PWD`, not from host cwd
 - the in-tree runner keeps an execution-frame stack for `main`, `source`, and shell-function calls and derives `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, and `caller` from that stack

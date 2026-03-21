@@ -48,6 +48,12 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ecfg = &expand.Config{
 		Env:         expandEnv{r},
 		StartupHome: r.startupHome,
+		CurrentLine: func() uint {
+			if r.currentStmtLine != 0 {
+				return r.currentStmtLine
+			}
+			return 0
+		},
 		ReportError: func(err error) {
 			r.expandErr(err)
 		},
@@ -520,6 +526,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	}
 	r.exit = exitStatus{}
 	r.currentStmtLine = line
+	r.pipeStatusSet = false
 	defer func() {
 		r.currentStmtLine = 0
 	}()
@@ -539,6 +546,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 			*bg.exit = r2.exit
 			close(bg.done)
 		}()
+		r.setPipeStatuses(0)
 	} else {
 		r.stmtSync(ctx, st)
 	}
@@ -628,6 +636,9 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	}
 	if r.exit.ok() && st.Cmd != nil {
 		r.cmd(ctx, st.Cmd)
+	}
+	if !r.pipeStatusSet {
+		r.setPipeStatuses(r.exit.code)
 	}
 	keepRedirs := r.keepRedirs
 	r.keepRedirs = false
@@ -847,6 +858,16 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			pr.Close()
 			wg.Wait()
+			leftStatuses := r2.pipeStatusValues()
+			if len(leftStatuses) == 0 {
+				leftStatuses = []string{strconv.Itoa(int(r2.exit.code))}
+			}
+			rightStatuses := r.pipeStatusValues()
+			if len(rightStatuses) == 0 {
+				rightStatuses = []string{strconv.Itoa(int(r.exit.code))}
+			}
+			combined := append(append([]string(nil), leftStatuses...), rightStatuses...)
+			r.setPipeStatusValues(combined)
 			if r.opts[optPipeFail] && !r2.exit.ok() && r.exit.ok() {
 				r.exit = r2.exit
 			}

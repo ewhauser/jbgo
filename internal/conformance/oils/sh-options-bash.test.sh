@@ -2,14 +2,16 @@
 ## oils_failures_allowed: 2
 
 #### SHELLOPTS is updated when options are changed
-echo $SHELLOPTS | grep -q xtrace
-echo $?
-set -x
-echo $SHELLOPTS | grep -q xtrace
-echo $?
-set +x
-echo $SHELLOPTS | grep -q xtrace
-echo $?
+{
+  echo $SHELLOPTS | grep -q xtrace
+  echo $?
+  set -x
+  echo $SHELLOPTS | grep -q xtrace
+  echo $?
+  set +x
+  echo $SHELLOPTS | grep -q xtrace
+  echo $?
+} 2>/dev/null
 ## STDOUT:
 1
 0

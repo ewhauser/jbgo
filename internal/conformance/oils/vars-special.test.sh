@@ -98,17 +98,17 @@ sh_prefix=$sh_path
 
 # bash exports PWD, but not PATH PS4
 
-/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p PATH PWD PS4' >&2
+/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p PATH PWD PS4 >/dev/null'
 echo path pwd ps4 $?
 
-/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p SHELLOPTS' >&2
+/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p SHELLOPTS >/dev/null'
 echo shellopts $?
 
-/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p HOME PS1' >&2
+/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p HOME PS1 >/dev/null' >/dev/null 2>&1
 echo home ps1 $?
 
 # IFS is set, but not exported
-/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p IFS' >&2
+/usr/bin/env -i PYTHONPATH=$PYTHONPATH $sh_prefix $flags -c 'typeset -p IFS >/dev/null'
 echo ifs $?
 
 ## STDOUT:
@@ -263,8 +263,11 @@ echo status=$?
 ## stdout: status=0
 
 #### $PPID
-echo $PPID | egrep '[0-9]+'
-## status: 0
+echo $PPID | egrep -q '[0-9]+'
+echo status=$?
+## STDOUT:
+status=0
+## END
 
 # NOTE: There is also $BASHPID
 
@@ -277,8 +280,28 @@ argv.sh "${PIPESTATUS[@]}"
 ## END
 
 #### $RANDOM
-echo $RANDOM | egrep '[0-9]+'
-## status: 0
+a=$RANDOM
+b=$RANDOM
+
+case $a in
+  ''|*[!0-9]*)
+    echo status=1
+    ;;
+  *)
+    case $b in
+      ''|*[!0-9]*)
+        echo status=1
+        ;;
+      *)
+        test "$a" != "$b"
+        echo status=$?
+        ;;
+    esac
+    ;;
+esac
+## STDOUT:
+status=0
+## END
 
 #### $UID and $EUID
 # These are both bash-specific.
@@ -572,10 +595,9 @@ matched=0
 
 #### $SECONDS
 
-# most likely 0 seconds, but in CI I've seen 1 second
-echo $SECONDS | awk '/[0-9]+/ { print "ok" }'
-
-## status: 0
-## STDOUT:
-ok
-## END
+start=$SECONDS
+sleep 1.1
+end=$SECONDS
+test "$end" -gt "$start"
+echo status=$?
+## stdout: status=0

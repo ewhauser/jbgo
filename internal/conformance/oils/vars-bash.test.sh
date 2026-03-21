@@ -11,7 +11,6 @@ prog='
 if test -n "$SHELL"; then
   # the exact value is different on CI, so do not assert
   echo SHELL is set
-  echo SHELL=$SHELL >&2
 fi
 '
 

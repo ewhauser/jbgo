@@ -25,6 +25,9 @@ type BashInvocation struct {
 	Name           string
 	Action         string
 	Interactive    bool
+	LoginShell     bool
+	NoRc           bool
+	NoProfile      bool
 	Source         BashSourceMode
 	Rcfile         string
 	ExecutionName  string
@@ -52,7 +55,10 @@ func BashInvocationSpec(cfg BashInvocationConfig) CommandSpec {
 		{Name: "command", Short: 'c', ValueName: "command_string", Arity: OptionRequiredValue, Help: "read commands from command_string"},
 		{Name: "errexit", Short: 'e', Help: "exit immediately if a command exits non-zero"},
 		{Name: "noglob", Short: 'f', Help: "disable pathname expansion"},
+		{Name: "login", Short: 'l', Long: "login", Help: "act as if invoked as a login shell"},
 		{Name: "noexec", Short: 'n', Help: "read commands but do not execute them"},
+		{Name: "noprofile", Long: "noprofile", Help: "do not read the system-wide or personal startup files"},
+		{Name: "norc", Long: "norc", Help: "do not read ~/.bashrc for interactive shells"},
 		{Name: "option", Short: 'o', ValueName: "option", Arity: OptionRequiredValue, Help: "set shell option (allexport, errexit, noglob, noexec, nounset, xtrace, pipefail)"},
 		{Name: "rcfile", Long: "rcfile", ValueName: "file", Arity: OptionRequiredValue, Help: "execute commands from file instead of the standard personal initialization file"},
 		{Name: "stdin", Short: 's', Help: "read commands from standard input"},
@@ -126,7 +132,7 @@ func bashInvocationUsage(cfg BashInvocationConfig) string {
 	if cfg.AllowInteractive {
 		parts = append(parts, "[-i]")
 	}
-	parts = append(parts, "[-aefnux]", "[-o option]", "[--rcfile file]", "[-c command_string [name [arg ...]]]", "[-s]", "[script [arg ...]]")
+	parts = append(parts, "[-aeflnux]", "[-o option]", "[--login]", "[--noprofile]", "[--norc]", "[--rcfile file]", "[-c command_string [name [arg ...]]]", "[-s]", "[script [arg ...]]")
 	return strings.Join(parts, " ")
 }
 
@@ -146,6 +152,9 @@ func bashInvocationFromParsed(cfg BashInvocationConfig, matches *ParsedCommand, 
 		out.Action = "version"
 	}
 	out.Interactive = matches.Has("interactive")
+	out.LoginShell = matches.Has("login")
+	out.NoProfile = matches.Has("noprofile")
+	out.NoRc = matches.Has("norc")
 	out.Rcfile = matches.Value("rcfile")
 
 	appendStartup := func(name string) {

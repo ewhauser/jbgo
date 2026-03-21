@@ -20,6 +20,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
@@ -106,7 +107,15 @@ type Runner struct {
 	gid  int
 	egid int
 	pid  int
-	ppid int
+
+	// bashPID is the current shell's PID-like identity. Unlike $$, BASHPID
+	// changes for subshells and command substitutions.
+	bashPID int
+	ppid    int
+
+	// nextVirtualPID is shared by a shell family so BASHPID changes across
+	// subshells while $$ remains stable.
+	nextVirtualPID *virtualPIDState
 
 	stdin  StdinReader // e.g. the read end of a pipe
 	stdout io.Writer
@@ -173,6 +182,8 @@ type Runner struct {
 	lastExpandExit  exitStatus // used to surface exit statuses while expanding fields
 	currentStmtLine uint
 	skipStmtLine    uint
+	pipeStatuses    []string
+	pipeStatusSet   bool
 
 	// bgProcs holds all background shells spawned by this runner.
 	// Their PIDs are 1-indexed, from 1 to len(bgProcs), with a "g" prefix
@@ -195,8 +206,10 @@ type Runner struct {
 	origFDs     map[int]*shellFD
 	fdSnapshots []map[int]*shellFD
 	origStart   time.Time
+	origRandom  uint32
 
 	startTime time.Time
+	random    uint32
 
 	inRedirectWord int
 
@@ -226,6 +239,23 @@ type Runner struct {
 type funcSourceSpan struct {
 	text string
 	base uint
+}
+
+type virtualPIDState struct {
+	next atomic.Int64
+}
+
+func newVirtualPIDState(next int) *virtualPIDState {
+	state := &virtualPIDState{}
+	state.next.Store(int64(next))
+	return state
+}
+
+func (s *virtualPIDState) allocate() int {
+	if s == nil {
+		return defaultVirtualPID
+	}
+	return int(s.next.Add(1) - 1)
 }
 
 // exitStatus holds the state of the shell after running one command.
@@ -322,6 +352,8 @@ func (a alias) blank() bool {
 const (
 	defaultVirtualHomeDir = "/home/agent"
 	defaultVirtualTempDir = "/tmp"
+	defaultVirtualPath    = "/usr/bin:/bin"
+	defaultVirtualShell   = "/bin/sh"
 	defaultVirtualID      = 1000
 	defaultVirtualPID     = 1
 	defaultVirtualPPID    = 0
@@ -421,7 +453,11 @@ func (r *Runner) normalizeVirtualState() {
 	r.gid = firstVirtualInt(r.gid, r.Env, "GID", defaultVirtualID)
 	r.egid = firstVirtualInt(r.egid, r.Env, "EGID", r.gid)
 	r.pid = firstVirtualInt(r.pid, nil, "", defaultVirtualPID)
+	r.bashPID = firstVirtualInt(r.bashPID, nil, "", r.pid)
 	r.ppid = firstVirtualInt(r.ppid, nil, "", defaultVirtualPPID)
+	if r.nextVirtualPID == nil {
+		r.nextVirtualPID = newVirtualPIDState(max(r.pid, r.bashPID) + 1)
+	}
 }
 
 func firstVirtualInt(current int, env expand.Environ, name string, fallback int) int {
@@ -715,6 +751,7 @@ func (r *Runner) Reset() {
 		r.origStderr = r.stderr
 		r.origFDs = cloneFDTable(initialFDTable(r.stdin, r.stdout, r.stderr))
 		r.origStart = time.Now()
+		r.origRandom = randomSeed(r.bashPID, r.origStart)
 
 		if r.execHandler == nil {
 			r.execHandler = closedExecHandler()
@@ -736,6 +773,7 @@ func (r *Runner) Reset() {
 		gid:              r.gid,
 		egid:             r.egid,
 		pid:              r.pid,
+		bashPID:          r.bashPID,
 		ppid:             r.ppid,
 		startupHome:      r.startupHome,
 
@@ -760,7 +798,9 @@ func (r *Runner) Reset() {
 		origStderr: r.origStderr,
 		origFDs:    cloneFDTable(r.origFDs),
 		origStart:  r.origStart,
+		origRandom: r.origRandom,
 		startTime:  r.origStart,
+		random:     r.origRandom,
 
 		funcSources:   r.funcSources,
 		funcInternals: r.funcInternals,
@@ -772,6 +812,7 @@ func (r *Runner) Reset() {
 		interactive:            r.interactive,
 		syntheticPipelineStmts: r.syntheticPipelineStmts,
 	}
+	r.nextVirtualPID = newVirtualPIDState(max(r.pid, r.bashPID) + 1)
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
 	r.bgProcs = r.bgProcs[:0]
@@ -793,11 +834,14 @@ func (r *Runner) Reset() {
 	}
 	// TODO(v4): Use the supplied Env directly if it implements enough methods.
 	r.writeEnv = &overlayEnviron{parent: r.Env}
-	if !r.writeEnv.Get("HOME").IsSet() {
-		r.setVarString("HOME", defaultVirtualHomeDir)
-	}
 	if !r.writeEnv.Get("TMPDIR").IsSet() {
 		r.setVarString("TMPDIR", r.tempDir)
+	}
+	if !r.writeEnv.Get("PATH").IsSet() {
+		r.setVarString("PATH", defaultVirtualPath)
+	}
+	if !r.writeEnv.Get("SHELL").IsSet() {
+		r.setVarString("SHELL", defaultVirtualShell)
 	}
 	r.setVar("UID", expand.Variable{
 		Set:      true,
@@ -833,6 +877,13 @@ func (r *Runner) Reset() {
 	r.setVarString("IFS", " \t\n")
 	r.setVarString("OPTIND", "1")
 	r.setVarString("PS4", "+ ")
+	if r.interactive && !r.writeEnv.Get("HISTFILE").IsSet() {
+		home := strings.TrimSpace(r.writeEnv.Get("HOME").String())
+		if home == "" {
+			home = defaultVirtualHomeDir
+		}
+		r.setVarString("HISTFILE", path.Join(home, ".bash_history"))
+	}
 
 	r.dirStack = append(r.dirStack, r.logicalDir)
 	r.syncStandardFDs()
@@ -949,7 +1000,9 @@ func (r *Runner) subshell(background bool) *Runner {
 		gid:                     r.gid,
 		egid:                    r.egid,
 		pid:                     r.pid,
+		bashPID:                 r.allocateSubshellPID(),
 		ppid:                    r.ppid,
+		nextVirtualPID:          r.nextVirtualPID,
 		stdin:                   r.stdin,
 		stdout:                  r.stdout,
 		stderr:                  r.stderr,
@@ -969,6 +1022,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		inSource:                r.inSource,
 		exit:                    r.exit,
 		lastExit:                r.lastExit,
+		pipeStatuses:            append([]string(nil), r.pipeStatuses...),
 		suppressXTrace:          r.suppressXTrace,
 		currentChunkSource:      r.currentChunkSource,
 		currentChunkSourceBase:  r.currentChunkSourceBase,
@@ -976,6 +1030,8 @@ func (r *Runner) subshell(background bool) *Runner {
 		hiddenReadonlyArrayDecl: maps.Clone(r.hiddenReadonlyArrayDecl),
 		origStart:               r.origStart,
 		startTime:               r.startTime,
+		random:                  r.random,
+		origRandom:              r.origRandom,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
@@ -992,4 +1048,27 @@ func (r *Runner) subshell(background bool) *Runner {
 	r2.fillExpandConfig(r.ectx)
 	r2.didReset = true
 	return r2
+}
+
+func (r *Runner) allocateSubshellPID() int {
+	if r == nil {
+		return defaultVirtualPID
+	}
+	if r.nextVirtualPID == nil {
+		r.nextVirtualPID = newVirtualPIDState(max(r.pid, r.bashPID) + 1)
+	}
+	return r.nextVirtualPID.allocate()
+}
+
+func randomSeed(pid int, started time.Time) uint32 {
+	seed := uint32(pid)
+	if !started.IsZero() {
+		nanos := started.UnixNano()
+		seed ^= uint32(nanos)
+		seed ^= uint32(nanos >> 32)
+	}
+	if seed == 0 {
+		return 1
+	}
+	return seed
 }

@@ -68,6 +68,7 @@ func layoutDirectories(env map[string]string, workDir string) []string {
 }
 
 func layoutDirectoriesForValues(home, pathValue, workDir string) []string {
+	pathValue = startupPathValue(pathValue)
 	dirs := []string{
 		defaultTempDir,
 		workDir,
@@ -86,10 +87,7 @@ func commandDirectories(env map[string]string) []string {
 }
 
 func commandDirectoriesForPath(pathValue string) []string {
-	pathValue = strings.TrimSpace(pathValue)
-	if pathValue == "" {
-		return nil
-	}
+	pathValue = startupPathValue(pathValue)
 
 	dirs := make([]string, 0, strings.Count(pathValue, ":")+1)
 	for dir := range strings.SplitSeq(pathValue, ":") {
@@ -100,6 +98,14 @@ func commandDirectoriesForPath(pathValue string) []string {
 		dirs = append(dirs, gbfs.Clean(dir))
 	}
 	return uniqueSortedPaths(dirs)
+}
+
+func startupPathValue(pathValue string) string {
+	pathValue = strings.TrimSpace(pathValue)
+	if pathValue == "" {
+		return defaultPath
+	}
+	return pathValue
 }
 
 func ensureCommandStub(ctx context.Context, fsys gbfs.FileSystem, dir, name string) error {

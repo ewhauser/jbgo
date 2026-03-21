@@ -158,7 +158,7 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 }
 
 func (c *Bash) applyRcfile(ctx context.Context, inv *Invocation, parsed *BashInvocation, script string) (string, error) {
-	if parsed == nil || !parsed.Interactive || strings.TrimSpace(parsed.Rcfile) == "" {
+	if parsed == nil || !parsed.Interactive || parsed.NoRc || strings.TrimSpace(parsed.Rcfile) == "" {
 		return script, nil
 	}
 	data, _, err := readAllFile(ctx, inv, parsed.Rcfile)

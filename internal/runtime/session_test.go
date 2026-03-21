@@ -189,6 +189,25 @@ func TestReplaceEnvDoesNotUseSessionBaseEnv(t *testing.T) {
 	}
 }
 
+func TestReplaceEnvLetsShellInitializeShellOwnedStartupVars(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		ReplaceEnv: true,
+		Env: map[string]string{
+			"PWD": "/home/agent",
+		},
+		Script: "printf 'PATH=%s\\nSHELL=%s\\nHOME=%q\\n' \"$PATH\" \"$SHELL\" \"$HOME\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.Stdout, "PATH=/usr/bin:/bin\nSHELL=/bin/sh\nHOME=''\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestSessionInteractPersistsStateAcrossEntries(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

@@ -8,11 +8,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"maps"
-	mathrand "math/rand/v2"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -353,15 +353,28 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	if name == "" {
 		panic("variable name must not be empty")
 	}
+	switch name {
+	case "HOSTNAME", "OSTYPE":
+		if r.writeEnv != nil {
+			if oenv, ok := r.writeEnv.(*overlayEnviron); ok {
+				if _, shadowed := oenv.values[oenv.normalize(name)]; shadowed {
+					return oenv.Get(name)
+				}
+			}
+			if vr := r.writeEnv.Get(name); vr.Declared() {
+				return vr
+			}
+		}
+	}
 	var vr expand.Variable
 	if i, ok := positionalParamIndex(name); ok {
 		switch {
 		case i == 0:
 			vr.Kind = expand.String
-			if r.filename != "" {
+			if r.filename != "" && r.filename != "stdin" {
 				vr.Str = r.filename
 			} else {
-				vr.Str = "gosh"
+				vr.Str = "gbash"
 			}
 			vr.Set = true
 			return vr
@@ -393,16 +406,36 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(int(r.lastExit.code))
 	case "$":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.pid)
+	case "BASHPID":
+		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.bashPID)
 	case "PPID":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.ppid)
-	case "RANDOM": // not for cryptographic use
-		vr.Kind, vr.Str = expand.String, strconv.Itoa(mathrand.IntN(32767))
+		vr.ReadOnly = true
+	case "PIPESTATUS":
+		if len(r.pipeStatuses) > 0 {
+			vr.Kind, vr.List = expand.Indexed, append([]string(nil), r.pipeStatuses...)
+		}
+	case "RANDOM":
+		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.nextRandom())
 		// TODO: support setting RANDOM to seed it
 	case "SRANDOM": // pseudo-random generator from the system
 		var p [4]byte
 		cryptorand.Read(p[:])
 		n := binary.NativeEndian.Uint32(p[:])
 		vr.Kind, vr.Str = expand.String, strconv.FormatUint(uint64(n), 10)
+	case "SECONDS":
+		seconds := 0
+		if !r.startTime.IsZero() {
+			seconds = int(time.Since(r.startTime) / time.Second)
+		}
+		vr.Kind, vr.Str = expand.String, strconv.Itoa(seconds)
+	case "HOSTNAME":
+		vr.Kind, vr.Str = expand.String, r.defaultHostname()
+	case "OSTYPE":
+		vr.Kind, vr.Str = expand.String, r.defaultOSType()
+	case "SHELLOPTS":
+		vr.Kind, vr.Str = expand.String, r.shellOptsValue()
+		vr.ReadOnly = true
 	case "DIRSTACK":
 		vr.Kind, vr.List = expand.Indexed, r.dirStack
 	case "BASH_SOURCE":
@@ -484,6 +517,82 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.exit.code = 1
 		return
 	}
+}
+
+func (r *Runner) nextRandom() int {
+	if r.random == 0 {
+		started := r.startTime
+		if started.IsZero() {
+			started = r.origStart
+		}
+		r.random = randomSeed(r.bashPID, started)
+	}
+	r.random = r.random*1103515245 + 12345
+	return int((r.random >> 16) & 0x7fff)
+}
+
+func (r *Runner) setPipeStatuses(statuses ...uint8) {
+	values := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		values = append(values, strconv.Itoa(int(status)))
+	}
+	r.setPipeStatusValues(values)
+}
+
+func (r *Runner) setPipeStatusValues(values []string) {
+	r.pipeStatuses = append(r.pipeStatuses[:0], values...)
+	r.pipeStatusSet = true
+}
+
+func (r *Runner) pipeStatusValues() []string {
+	return append([]string(nil), r.pipeStatuses...)
+}
+
+func (r *Runner) defaultHostname() string {
+	if r.writeEnv != nil {
+		if vr := r.writeEnv.Get("GBASH_UNAME_NODENAME"); vr.IsSet() {
+			if value := strings.TrimSpace(vr.String()); value != "" {
+				return value
+			}
+		}
+	}
+	return "gbash"
+}
+
+func (r *Runner) defaultOSType() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "linux-gnu"
+	case "darwin":
+		return "darwin"
+	case "windows":
+		return "msys"
+	case "freebsd":
+		return "freebsd"
+	case "openbsd":
+		return "openbsd"
+	case "netbsd":
+		return "netbsd"
+	default:
+		return runtime.GOOS
+	}
+}
+
+func (r *Runner) shellOptsValue() string {
+	names := []string{
+		"braceexpand",
+		"hashall",
+		"interactive-comments",
+	}
+	for _, opt := range posixOptsTable {
+		enabled := r.posixOptByName(opt.name)
+		if enabled == nil || !*enabled {
+			continue
+		}
+		names = append(names, opt.name)
+	}
+	slices.Sort(names)
+	return strings.Join(names, ":")
 }
 
 // applyVarAttrs transforms the variable's value based on its attributes

@@ -1864,7 +1864,7 @@ func TestBashHelpUsesSpecParser(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := "usage: bash [-i] [-aefnux] [-o option] [--rcfile file] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-i] [-aefnux] [-o option] [--rcfile file] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
+	want := "usage: bash [-i] [-aeflnux] [-o option] [--login] [--noprofile] [--norc] [--rcfile file] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\nusage: sh [-i] [-aeflnux] [-o option] [--login] [--noprofile] [--norc] [--rcfile file] [-c command_string [name [arg ...]]] [-s] [script [arg ...]]\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
@@ -1890,6 +1890,70 @@ func TestBashRcfileRunsForInteractiveCommandString(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	assertInteractiveShellStderr(t, result.Stderr, "bash")
+}
+
+func TestBashNorcSuppressesRcfileForInteractiveCommandString(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cat > /tmp/rc.sh <<'EOF'\nexport FROM_RCFILE=ready\nEOF\nbash --norc --rcfile /tmp/rc.sh -i -c 'echo ${FROM_RCFILE:-missing}'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "missing\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	assertInteractiveShellStderr(t, result.Stderr, "bash")
+}
+
+func TestBashAcceptsLongStartupCompatibilityFlags(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "bash --noprofile --norc --login -c 'echo ok'\nsh --noprofile --norc --login -c 'echo ok'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "ok\nok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestHostnameBuiltinUsesRuntimeNodename(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Env: map[string]string{
+			"GBASH_UNAME_NODENAME": "sandbox-host",
+		},
+		Script: "hostname\necho $HOSTNAME\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "sandbox-host\nsandbox-host\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
 }
 
 func TestBashRunsScriptFileAndPassesArgs(t *testing.T) {
