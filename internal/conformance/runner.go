@@ -766,9 +766,6 @@ func gbashEnv(specPath string) map[string]string {
 }
 
 func gbashPathValue() string {
-	if runtime.GOOS == "darwin" {
-		return "/bin:/usr/bin"
-	}
 	return "/usr/bin:/bin"
 }
 

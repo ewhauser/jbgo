@@ -638,6 +638,13 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.exit.code = 1
 		return
 	}
+	r.afterSetVar(name, vr)
+}
+
+func (r *Runner) afterSetVar(name string, vr expand.Variable) {
+	if name == "PATH" {
+		r.commandHashClear()
+	}
 	if name == "OPTIND" {
 		r.currentGetoptsState().reset()
 	}

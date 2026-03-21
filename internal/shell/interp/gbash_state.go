@@ -118,6 +118,7 @@ func (r *Runner) SetShellVar(name string, vr expand.Variable) error {
 	if err := r.writeEnv.Set(name, vr); err != nil {
 		return err
 	}
+	r.afterSetVar(name, vr)
 	return nil
 }
 
@@ -125,9 +126,11 @@ func (r *Runner) UnsetShellVar(name string) error {
 	if !r.didReset {
 		r.Reset()
 	}
-	if err := r.writeEnv.Set(name, expand.Variable{}); err != nil {
+	vr := expand.Variable{}
+	if err := r.writeEnv.Set(name, vr); err != nil {
 		return err
 	}
+	r.afterSetVar(name, vr)
 	return nil
 }
 

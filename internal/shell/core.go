@@ -70,11 +70,12 @@ type InteractiveResult struct {
 }
 
 type resolvedCommand struct {
-	command commands.Command
-	name    string
-	path    string
-	source  string
-	args    []string
+	command  commands.Command
+	name     string
+	path     string
+	source   string
+	args     []string
+	hashPath string
 }
 
 const virtualCommandStubPrefix = "# gbash virtual command stub: "
@@ -954,18 +955,51 @@ func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.
 		return lookupCommandPath(ctx, exec, dir, name, "path", name)
 	}
 
-	for _, pathDir := range pathDirs(env, dir) {
-		fullPath := gbfs.Resolve(pathDir, name)
-		resolved, ok, err := lookupCommandPath(ctx, exec, dir, fullPath, "path-search", name)
+	if hc, ok := optionalHandlerCtx(ctx); ok {
+		if cachedPath, ok := hc.LookupCommandHash(name); ok {
+			return lookupCachedCommand(ctx, exec, dir, name, cachedPath)
+		}
+	}
+
+	for _, candidate := range pathCandidates(env, name) {
+		resolved, ok, err := lookupCommandPath(ctx, exec, dir, candidate.display, "path-search", name)
 		if err != nil {
 			return nil, false, err
 		}
 		if ok {
+			resolved.hashPath = candidate.display
 			return resolved, true, nil
 		}
 	}
 
 	return nil, false, nil
+}
+
+func lookupCachedCommand(ctx context.Context, exec *Execution, dir, name, cachedPath string) (_ *resolvedCommand, ok bool, err error) {
+	fullPath := gbfs.Resolve(dir, cachedPath)
+	if exec != nil && exec.FS != nil {
+		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, fullPath); err != nil {
+			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), fullPath, name, "path-cache")
+			return nil, false, err
+		}
+		info, err := exec.FS.Stat(ctx, fullPath)
+		if err != nil {
+			return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 127, "%s: %s", cachedPath, shellPathErrorText(err))
+		}
+		if info.IsDir() {
+			return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: Is a directory", cachedPath)
+		}
+	}
+
+	resolved, ok, err := lookupCommandPath(ctx, exec, dir, cachedPath, "path-cache", name)
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: Permission denied", cachedPath)
+	}
+	resolved.hashPath = cachedPath
+	return resolved, true, nil
 }
 
 func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, commandName string) (_ *resolvedCommand, ok bool, err error) {
@@ -1077,21 +1111,27 @@ func hasLongPathComponent(p string) bool {
 	return false
 }
 
-func pathDirs(env expand.Environ, dir string) []string {
+type pathCandidate struct {
+	display string
+}
+
+func pathCandidates(env expand.Environ, name string) []pathCandidate {
 	pathValue := strings.TrimSpace(env.Get("PATH").String())
 	if pathValue == "" {
 		return nil
 	}
 
-	dirs := make([]string, 0, strings.Count(pathValue, ":")+1)
+	candidates := make([]pathCandidate, 0, strings.Count(pathValue, ":")+1)
 	for entry := range strings.SplitSeq(pathValue, ":") {
 		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			entry = "."
+		switch entry {
+		case "", ".":
+			candidates = append(candidates, pathCandidate{display: "./" + name})
+		default:
+			candidates = append(candidates, pathCandidate{display: path.Join(entry, name)})
 		}
-		dirs = append(dirs, gbfs.Resolve(dir, entry))
 	}
-	return dirs
+	return candidates
 }
 
 type shebangResolution struct {

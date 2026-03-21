@@ -70,6 +70,8 @@ type Runner struct {
 
 	alias map[string]alias
 
+	commandHash map[string]commandHashEntry
+
 	// readonly -a/-A on a new unset variable preserves array semantics while bash
 	// still omits the array type from `declare -p` output.
 	hiddenReadonlyArrayDecl map[string]expand.ValueKind
@@ -233,6 +235,11 @@ type Runner struct {
 	signalOwner      *Runner
 }
 
+type commandHashEntry struct {
+	path string
+	hits int
+}
+
 type funcSourceSpan struct {
 	text string
 	base uint
@@ -256,6 +263,54 @@ type trapState struct {
 
 type virtualPIDState struct {
 	next atomic.Int64
+}
+
+func (r *Runner) commandHashLookup(name string) (commandHashEntry, bool) {
+	if r == nil || r.commandHash == nil {
+		return commandHashEntry{}, false
+	}
+	entry, ok := r.commandHash[name]
+	return entry, ok
+}
+
+func (r *Runner) commandHashRemember(name, path string) {
+	if r == nil || name == "" || path == "" {
+		return
+	}
+	if r.commandHash == nil {
+		r.commandHash = make(map[string]commandHashEntry)
+	}
+	r.commandHash[name] = commandHashEntry{path: path}
+}
+
+func (r *Runner) commandHashIncrement(name string) {
+	if r == nil || r.commandHash == nil {
+		return
+	}
+	entry, ok := r.commandHash[name]
+	if !ok {
+		return
+	}
+	entry.hits++
+	r.commandHash[name] = entry
+}
+
+func (r *Runner) commandHashClear() {
+	if r == nil || r.commandHash == nil {
+		return
+	}
+	clear(r.commandHash)
+}
+
+func (r *Runner) commandHashEntries() []commandHashEntry {
+	if r == nil || len(r.commandHash) == 0 {
+		return nil
+	}
+	entries := make([]commandHashEntry, 0, len(r.commandHash))
+	for _, entry := range r.commandHash {
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 func newVirtualPIDState(next int) *virtualPIDState {
@@ -853,6 +908,11 @@ func (r *Runner) Reset() {
 	if r.signalOwner == nil {
 		r.signalOwner = r
 	}
+	if r.commandHash == nil {
+		r.commandHash = make(map[string]commandHashEntry)
+	} else {
+		clear(r.commandHash)
+	}
 	r.nextVirtualPID = newVirtualPIDState(max(r.pid, r.bashPID) + 1)
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
@@ -1070,6 +1130,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		currentChunkSourceBase:  r.currentChunkSourceBase,
 		printfEnv:               r.printfEnv,
 		hiddenReadonlyArrayDecl: maps.Clone(r.hiddenReadonlyArrayDecl),
+		commandHash:             maps.Clone(r.commandHash),
 		origStart:               r.origStart,
 		startTime:               r.startTime,
 		random:                  random,

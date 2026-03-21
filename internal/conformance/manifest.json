@@ -512,22 +512,6 @@
             "darwin"
           ]
         },
-        "oils/command_.test.sh::filling $PATH cache, then deleting command": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/command_.test.sh::filling $PATH cache, then insert the same command earlier in cache": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/command_.test.sh::hash with args": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/command_.test.sh::hash without args prints the cache": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

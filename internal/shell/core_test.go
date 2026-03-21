@@ -345,7 +345,7 @@ func TestCoreRunUsesShellPrintfBuiltinForFormatting(t *testing.T) {
 		Stderr:   &stderr,
 	})
 	if err != nil {
-		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+		t.Fatalf("Run() error = %v", err)
 	}
 	const want = "65|1F|1.2|a\\ b\n<65|1F|1.2|a\\ b>\n"
 	if got := stdout.String(); got != want {
@@ -383,7 +383,7 @@ func TestCoreRunUsesShellPrintfBuiltinForVarRefs(t *testing.T) {
 		Stderr:   &stderr,
 	})
 	if err != nil {
-		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+		t.Fatalf("Run() error = %v", err)
 	}
 	if got, want := stdout.String(), "assoc=65 status=0\narray=1F status=0\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
@@ -418,7 +418,7 @@ func TestCoreRunUsesBuiltinCompgenWithoutRegistryWrapper(t *testing.T) {
 		Stderr:   &stderr,
 	})
 	if err != nil {
-		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+		t.Fatalf("Run() error = %v", err)
 	}
 	const want = "" +
 		"getopts\n" +
@@ -975,6 +975,161 @@ func TestCoreRunStringifiesInlineArrayBindingsForCommandEnv(t *testing.T) {
 		t.Fatalf("stdout = %q, want %q (stderr=%q)", got, want, stderr.String())
 	}
 }
+
+func TestCoreRunHashPrintsCache(t *testing.T) {
+	t.Parallel()
+
+	fsys := newShellTestFS(t, "echo", "whoami")
+	mkdirAllShellTestFS(t, fsys, "/tmp")
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script:   "whoami >/tmp/whoami.out\nhash\necho status=$?\n",
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: newShellTestRegistry(t),
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "hits\tcommand\n   1\t/bin/whoami\nstatus=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestCoreRunHashWithArgs(t *testing.T) {
+	t.Parallel()
+
+	fsys := newShellTestFS(t, "echo", "whoami")
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script:   "hash whoami\necho status=$?\nhash\nhash _nonexistent_\necho status=$?\n",
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: newShellTestRegistry(t),
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "status=0\nhits\tcommand\n   0\t/bin/whoami\nstatus=1\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "hash: _nonexistent_: not found\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestCoreRunPathCachePrefersCachedEntryUntilHashReset(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "chmod", "echo")
+	mkdirAllShellTestFS(t, fsys, "/tmp/one")
+	mkdirAllShellTestFS(t, fsys, "/tmp/two")
+	writeShellTestFile(t, fsys, "/tmp/two/mycmd", "echo two\n", 0o755)
+
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"cd /tmp",
+			`PATH="one:two:$PATH"`,
+			"mycmd",
+			`echo 'echo one' > one/mycmd`,
+			"chmod +x one/mycmd",
+			"mycmd",
+			"hash -r",
+			"mycmd",
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Exec:     newCoreTestExec(registry, fsys),
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "two\ntwo\none\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestCoreRunPathCacheKeepsDeletedEntryStale(t *testing.T) {
+	t.Parallel()
+
+	registry := newShellTestRegistry(t)
+	fsys := newShellTestFS(t, "chmod", "echo", "rm")
+	mkdirAllShellTestFS(t, fsys, "/tmp/one")
+	mkdirAllShellTestFS(t, fsys, "/tmp/two")
+	writeShellTestFile(t, fsys, "/tmp/two/mycmd", "echo two\n", 0o755)
+
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"cd /tmp",
+			`PATH="one:two:$PATH"`,
+			"mycmd",
+			"echo status=$?",
+			`echo 'echo one' > one/mycmd`,
+			"chmod +x one/mycmd",
+			"rm two/mycmd",
+			"mycmd",
+			"echo status=$?",
+			"",
+		}, "\n"),
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: registry,
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Exec:     newCoreTestExec(registry, fsys),
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "two\nstatus=0\nstatus=127\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "two/mycmd: No such file or directory\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestCoreRunPathAssignmentClearsHashTable(t *testing.T) {
+	t.Parallel()
+
+	fsys := newShellTestFS(t, "echo", "whoami")
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Script:   "hash whoami\nPATH=/tmp\nhash\necho status=$?\n",
+		Env:      map[string]string{"PATH": "/bin"},
+		Registry: newShellTestRegistry(t),
+		FS:       fsys,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, stdout=%q, stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "hash: hash table empty\nstatus=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func newShellTestRegistry(t testing.TB, extras ...commands.Command) *commands.Registry {
 	t.Helper()
 
@@ -1005,4 +1160,27 @@ func newShellTestFS(t testing.TB, names ...string) gbfs.FileSystem {
 		_ = file.Close()
 	}
 	return fsys
+}
+
+func mkdirAllShellTestFS(t testing.TB, fsys gbfs.FileSystem, dir string) {
+	t.Helper()
+
+	if err := fsys.MkdirAll(context.Background(), dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", dir, err)
+	}
+}
+
+func writeShellTestFile(t testing.TB, fsys gbfs.FileSystem, name, contents string, mode os.FileMode) {
+	t.Helper()
+
+	file, err := fsys.OpenFile(context.Background(), name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		t.Fatalf("OpenFile(%s) error = %v", name, err)
+	}
+	if _, err := io.WriteString(file, contents); err != nil {
+		t.Fatalf("WriteString(%s) error = %v", name, err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close(%s) error = %v", name, err)
+	}
 }

@@ -83,6 +83,38 @@ type HandlerContext struct {
 	Stderr io.Writer
 }
 
+func (hc *HandlerContext) LookupCommandHash(name string) (string, bool) {
+	if hc == nil || hc.runner == nil {
+		return "", false
+	}
+	entry, ok := hc.runner.commandHashLookup(name)
+	if !ok {
+		return "", false
+	}
+	return entry.path, true
+}
+
+func (hc *HandlerContext) RememberCommandHash(name, path string) {
+	if hc == nil || hc.runner == nil {
+		return
+	}
+	hc.runner.commandHashRemember(name, path)
+}
+
+func (hc *HandlerContext) IncrementCommandHash(name string) {
+	if hc == nil || hc.runner == nil {
+		return
+	}
+	hc.runner.commandHashIncrement(name)
+}
+
+func (hc *HandlerContext) ClearCommandHash() {
+	if hc == nil || hc.runner == nil {
+		return
+	}
+	hc.runner.commandHashClear()
+}
+
 // CallHandlerFunc is a handler which runs on every [syntax.CallExpr].
 // It is called once variable assignments and field expansion have occurred.
 // The context includes a [HandlerContext] value.
@@ -181,19 +213,52 @@ func (r *Runner) lookPath(ctx context.Context, cwd string, env expand.Environ, f
 	if pathValue == "" {
 		return "", fmt.Errorf("%q: executable file not found in $PATH", file)
 	}
-	for elem := range strings.SplitSeq(pathValue, ":") {
-		candidate := file
-		switch elem {
-		case "", ".":
-			candidate = "./" + file
-		default:
-			candidate = path.Join(elem, file)
-		}
+	for _, candidate := range pathSearchCandidates(pathValue, file) {
 		if found, err := r.findPathCandidate(ctx, cwd, candidate, exts, requireExec); err == nil {
 			return found, nil
 		}
 	}
 	return "", fmt.Errorf("%q: executable file not found in $PATH", file)
+}
+
+func (r *Runner) lookPathForHash(ctx context.Context, cwd string, env expand.Environ, file string) (string, error) {
+	if file == "" {
+		return "", fmt.Errorf("%q: executable file not found in $PATH", file)
+	}
+	exts := pathExts(env)
+	if strings.ContainsRune(file, '/') {
+		if _, err := r.findPathCandidate(ctx, cwd, file, exts, true); err != nil {
+			return "", err
+		}
+		return file, nil
+	}
+	pathValue := env.Get("PATH").String()
+	if pathValue == "" {
+		return "", fmt.Errorf("%q: executable file not found in $PATH", file)
+	}
+	for _, candidate := range pathSearchCandidates(pathValue, file) {
+		if _, err := r.findPathCandidate(ctx, cwd, candidate, exts, true); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("%q: executable file not found in $PATH", file)
+}
+
+func pathSearchCandidates(pathValue, file string) []string {
+	if pathValue == "" {
+		return nil
+	}
+	candidates := make([]string, 0, strings.Count(pathValue, ":")+1)
+	for elem := range strings.SplitSeq(pathValue, ":") {
+		elem = strings.TrimSpace(elem)
+		switch elem {
+		case "", ".":
+			candidates = append(candidates, "./"+file)
+		default:
+			candidates = append(candidates, path.Join(elem, file))
+		}
+	}
+	return candidates
 }
 
 func (r *Runner) findPathCandidate(ctx context.Context, cwd, file string, exts []string, requireExec bool) (string, error) {

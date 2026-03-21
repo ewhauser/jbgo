@@ -404,7 +404,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	case "type":
 		return r.typeBuiltin(ctx, args)
 	case "hash":
-		// TODO: implement. for now, having this as a no-op is better than nothing.
+		return r.hashBuiltin(ctx, args)
 	case "eval":
 		if len(args) > 0 && args[0] == "--" {
 			args = args[1:]
@@ -1843,7 +1843,47 @@ func (r *Runner) setTemporaryPath(pathValue string) func() {
 	r.setVar("PATH", expand.Variable{Set: true, Kind: expand.String, Str: pathValue})
 	return func() {
 		_ = r.writeEnv.Set("PATH", prev)
+		r.afterSetVar("PATH", prev)
 	}
+}
+
+func (r *Runner) hashBuiltin(ctx context.Context, args []string) (exit exitStatus) {
+	if len(args) > 0 && args[0] == "-r" {
+		r.commandHashClear()
+		args = args[1:]
+		if len(args) == 0 {
+			return exit
+		}
+	}
+	if len(args) == 0 {
+		entries := r.commandHashEntries()
+		if len(entries) == 0 {
+			r.out("hash: hash table empty\n")
+			return exit
+		}
+		slices.SortFunc(entries, func(a, b commandHashEntry) int {
+			if diff := cmp.Compare(a.path, b.path); diff != 0 {
+				return diff
+			}
+			return cmp.Compare(a.hits, b.hits)
+		})
+		r.out("hits\tcommand\n")
+		for _, entry := range entries {
+			r.outf("%4d\t%s\n", entry.hits, entry.path)
+		}
+		return exit
+	}
+
+	for _, name := range args {
+		path, err := r.lookPathForHash(ctx, r.Dir, r.writeEnv, name)
+		if err != nil {
+			r.errf("hash: %s: not found\n", name)
+			exit.code = 1
+			continue
+		}
+		r.commandHashRemember(name, path)
+	}
+	return exit
 }
 
 func (r *Runner) dirsBuiltin(args []string) uint8 {

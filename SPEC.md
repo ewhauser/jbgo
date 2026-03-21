@@ -620,6 +620,10 @@ This preserves shell syntax while keeping all execution inside Go.
 User-visible command lookup rules for MVP:
 
 - bare command names only resolve if the current `PATH` includes a virtual command stub for that name
+- bare-name resolution is cached per shell session in a Bash-style hash table keyed by command name
+- cached bare-name entries store the shell-visible path candidate, so relative PATH entries stay relative until invalidated
+- `hash` exposes that table: `hash` prints it, `hash name ...` pre-resolves entries with zero hits, and `hash -r` clears it before optionally re-hashing any remaining names
+- cached entries are invalidated only by `hash -r` or any reassignment/unset of `PATH`; otherwise the shell keeps using the cached path even if a different earlier PATH entry appears later
 - changing `PATH` can intentionally disable bare-name resolution
 - explicit virtual paths such as `/bin/ls` bypass `PATH`
 - there is no direct registry fallback for user-visible commands

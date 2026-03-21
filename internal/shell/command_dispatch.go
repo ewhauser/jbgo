@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ewhauser/gbash/commands"
@@ -57,6 +58,12 @@ func (m *core) executeCommand(ctx context.Context, exec *Execution, req *command
 		if err := allowCommand(ctx, exec.Policy, resolved.name, req.Argv); err != nil {
 			recordPolicyDenied(exec.Trace, err, "", resolved.path, resolved.name, resolved.source)
 			return req.CurrentEnv, shellFailureToWriter(ctx, req.Stderr, 126, "%v", err)
+		}
+		if hc, ok := interp.LookupHandlerContext(ctx); ok && !strings.Contains(req.Argv[0], "/") && resolved.hashPath != "" {
+			if resolved.source != "path-cache" {
+				hc.RememberCommandHash(req.Argv[0], resolved.hashPath)
+			}
+			hc.IncrementCommandHash(req.Argv[0])
 		}
 		if !req.FromBootstrap {
 			recordCommand(exec.Trace, trace.EventCommandStart, traceCommandInfo(req.Argv, false, &commandTraceResolution{
