@@ -1048,12 +1048,13 @@ echo "$a" "${b-unset}" "${c-unset}"
 	}
 }
 
-func TestArrayAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+func TestArrayAssignmentTildeUsesStartupHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Env: expand.ListEnviron("HOME=/"),
-		Dir: "/tmp",
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/"),
+		Dir:         "/tmp",
 	}, `
 a=(0 1 2)
 b=(3 4 5)
@@ -1066,7 +1067,7 @@ typeset -p a b
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "declare -a a=([0]=\"0\" [1]=\"\" [2]=\"2\")\ndeclare -a b=([0]=\"3\" [1]=\"4\" [2]=\"/home/spec-test/src\")\n"
+	const wantStdout = "declare -a a=([0]=\"0\" [1]=\"\" [2]=\"2\")\ndeclare -a b=([0]=\"3\" [1]=\"4\" [2]=\"/startup/src\")\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1074,12 +1075,14 @@ typeset -p a b
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
-func TestScalarAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+
+func TestScalarAssignmentTildeUsesStartupHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Env: expand.ListEnviron("HOME=/home/spec-test"),
-		Dir: "/tmp",
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/home/spec-test"),
+		Dir:         "/tmp",
 	}, `
 foo=~
 echo "$foo"
@@ -1089,7 +1092,7 @@ echo "$foo"
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "/home/spec-test\n~\n"
+	const wantStdout = "/startup\n~\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1098,12 +1101,13 @@ echo "$foo"
 	}
 }
 
-func TestReadonlyAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+func TestReadonlyAssignmentTildeUsesStartupHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Env: expand.ListEnviron("HOME=/home/bob"),
-		Dir: "/tmp",
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/home/bob"),
+		Dir:         "/tmp",
 	}, `
 readonly const=~/src
 echo "$const"
@@ -1111,7 +1115,7 @@ echo "$const"
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "/home/bob/src\n"
+	const wantStdout = "/startup/src\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1120,12 +1124,13 @@ echo "$const"
 	}
 }
 
-func TestAssignmentKeywordTildeUsesCurrentShellHome(t *testing.T) {
+func TestAssignmentKeywordTildeUsesStartupHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Env: expand.ListEnviron("HOME=/home/bar"),
-		Dir: "/tmp",
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/home/bar"),
+		Dir:         "/tmp",
 	}, `
 f() {
   local x=foo:~
@@ -1136,7 +1141,7 @@ f
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "foo:/home/bar\n"
+	const wantStdout = "foo:/startup\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1145,12 +1150,13 @@ f
 	}
 }
 
-func TestTempAssignmentTildeUsesCurrentShellHome(t *testing.T) {
+func TestTempAssignmentTildeUsesStartupHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Env: expand.ListEnviron("HOME=/home/bar"),
-		Dir: "/tmp",
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/home/bar"),
+		Dir:         "/tmp",
 	}, `
 show() {
   echo "$xx"
@@ -1160,7 +1166,7 @@ xx=~ show
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "/home/bar\n"
+	const wantStdout = "/startup\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}

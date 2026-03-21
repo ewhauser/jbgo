@@ -162,6 +162,24 @@ func TestAssignmentLiteralExpandsColonSeparatedTildes(t *testing.T) {
 	}
 }
 
+func TestAssignmentLiteralUsesStartupHome(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `~:~/src`)
+	got, err := AssignmentLiteral(&Config{
+		StartupHome: "/startup",
+		Env: testEnv{
+			"HOME": {Set: true, Kind: String, Str: "/live"},
+		},
+	}, word)
+	if err != nil {
+		t.Fatalf("AssignmentLiteral() error = %v", err)
+	}
+	if got != "/startup:/startup/src" {
+		t.Fatalf("AssignmentLiteral() = %q, want %q", got, "/startup:/startup/src")
+	}
+}
+
 func TestAssignmentLiteralHonorsEscapedColonsForTildes(t *testing.T) {
 	t.Parallel()
 
@@ -1671,6 +1689,7 @@ func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
+		StartupHome: "/startup",
 		Env: testEnv{
 			"a":         {Set: true, Kind: String, Str: "A"},
 			"HOME":      {Set: true, Kind: String, Str: "/home/bob"},
@@ -1695,12 +1714,12 @@ func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 		{
 			name: "TildeExpandsAfterBraceSplit",
 			src:  `{foo~,~}/bar`,
-			want: []string{"foo~/bar", "/home/bob/bar"},
+			want: []string{"foo~/bar", "/startup/bar"},
 		},
 		{
 			name: "NamedUserTildeExpandsAfterBraceSplit",
 			src:  `~{/src,root}`,
-			want: []string{"/home/bob/src", "/root"},
+			want: []string{"/startup/src", "/root"},
 		},
 		{
 			name: "QuotedBraceElementsStillQuoteAfterReparse",
@@ -1761,6 +1780,17 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 				},
 			},
 			want: "/live/src",
+		},
+		{
+			name: "StartupHomeOverride",
+			src:  `~/src`,
+			cfg: &Config{
+				StartupHome: "/startup",
+				Env: testEnv{
+					"HOME": {Set: true, Kind: String, Str: "/live"},
+				},
+			},
+			want: "/startup/src",
 		},
 		{
 			name: "RootHomeAvoidsDoubleSlash",

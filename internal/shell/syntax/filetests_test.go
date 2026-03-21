@@ -5292,7 +5292,7 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{"echo {a,b,1..3}"},
 		langFile(call(litWord("echo"), word(
-			braceExp(litWord("a"), litWord("b"), litWord("1..3")),
+			braceExp(litWord("a"), litWord("b"), word(lit("1"), lit(".."), lit("3"))),
 		)), langBashLike|LangMirBSDKorn|LangZsh),
 		langFile(litCall("echo", "{a,b,1..3}"), LangPOSIX),
 	),

@@ -171,7 +171,7 @@ printf 'after\n'
 	}
 }
 
-func TestCompoundArrayKeyedValuesUseLiveHomeForAssignmentTildes(t *testing.T) {
+func TestCompoundArrayKeyedValuesUseStartupHomeForAssignmentTildes(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -189,7 +189,7 @@ printf '%s\n%s\n' "${assoc[home]}" "${assoc[hello]}"
 	if err != nil {
 		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
 	}
-	const want = "/home/user\n/home/user:/home/user:/home/user\n/home/user\n/home/user:/home/user:/home/user\n"
+	const want = "/startup\n/startup:/startup:/startup\n/startup\n/startup:/startup:/startup\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}

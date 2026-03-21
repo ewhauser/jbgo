@@ -435,7 +435,6 @@ func (r *Runner) assignmentLiteral(word *syntax.Word) string {
 		r.fillExpandConfig(context.Background())
 	}
 	cfg := *r.ecfg
-	cfg.StartupHome = ""
 	str, err := expand.AssignmentLiteral(&cfg, word)
 	r.expandErr(err)
 	return str
@@ -446,7 +445,6 @@ func (r *Runner) assignmentWordLiteral(word *syntax.Word) string {
 		r.fillExpandConfig(context.Background())
 	}
 	cfg := *r.ecfg
-	cfg.StartupHome = ""
 	str, err := expand.AssignmentWordLiteral(&cfg, word)
 	r.expandErr(err)
 	return str

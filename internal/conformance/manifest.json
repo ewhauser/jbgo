@@ -798,10 +798,6 @@
             "darwin"
           ]
         },
-        "oils/paren-ambiguity.test.sh::((gzip example - zdiff package - #2337": {
-          "mode": "xfail",
-          "reason": "conformance: external gzip stderr differs from bash on Linux CI"
-        },
         "oils/regex.test.sh::Operator chars ; & but not |": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -855,13 +851,6 @@
         "oils/tilde.test.sh::No tilde expansion in word that looks like assignment but isn't": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/tilde.test.sh::tilde expansion of word after redirect": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
         },
         "oils/tilde.test.sh::x=${undef-~:~}": {
           "mode": "xfail",
