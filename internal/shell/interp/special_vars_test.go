@@ -237,6 +237,75 @@ func TestSECONDSPrefixAssignmentRestoreKeepsElapsedTime(t *testing.T) {
 	}
 }
 
+func TestSECONDSPrefixAssignmentRestoreIsLIFO(t *testing.T) {
+	t.Parallel()
+
+	runner, err := NewRunner(&RunnerConfig{Dir: "/tmp"})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	runner.Reset()
+	runner.fillExpandConfig(context.Background())
+	runner.startTime = time.Now().Add(-time.Second)
+
+	file, err := syntax.NewParser().Parse(strings.NewReader("SECONDS=5 SECONDS=7 external\n"), "seconds-prefix-lifo.sh")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	cm, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		t.Fatalf("command = %T, want *syntax.CallExpr", file.Stmts[0].Cmd)
+	}
+
+	restores := runner.runCallAssigns(cm.Assigns)
+	time.Sleep(1100 * time.Millisecond)
+	runner.restoreCallAssigns(restores)
+
+	value, err := strconv.Atoi(runner.lookupVar("SECONDS").String())
+	if err != nil {
+		t.Fatalf("Atoi(SECONDS) error = %v", err)
+	}
+	if value < 2 || value > 3 {
+		t.Fatalf("SECONDS = %d, want 2 or 3", value)
+	}
+}
+
+func TestSECONDSLocalAssignmentDoesNotLeak(t *testing.T) {
+	t.Parallel()
+
+	runner, err := NewRunner(&RunnerConfig{Dir: "/tmp"})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	runner.Reset()
+	runner.startTime = time.Now().Add(-time.Second)
+
+	origEnv := runner.writeEnv
+	runner.writeEnv = &overlayEnviron{parent: runner.writeEnv, funcScope: true}
+	runner.setVar("SECONDS", expand.Variable{
+		Set:   true,
+		Local: true,
+		Kind:  expand.String,
+		Str:   "5",
+	})
+	inside, err := strconv.Atoi(runner.lookupVar("SECONDS").String())
+	if err != nil {
+		t.Fatalf("Atoi(inside SECONDS) error = %v", err)
+	}
+	if inside < 5 || inside > 6 {
+		t.Fatalf("inside SECONDS = %d, want 5 or 6", inside)
+	}
+
+	runner.writeEnv = origEnv
+	outside, err := strconv.Atoi(runner.lookupVar("SECONDS").String())
+	if err != nil {
+		t.Fatalf("Atoi(outside SECONDS) error = %v", err)
+	}
+	if outside < 1 || outside > 2 {
+		t.Fatalf("outside SECONDS = %d, want 1 or 2", outside)
+	}
+}
+
 func TestSubshellRandomIsReseeded(t *testing.T) {
 	t.Parallel()
 

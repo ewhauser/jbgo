@@ -2067,17 +2067,22 @@ func (r *Runner) newParser(opts ...syntax.ParserOption) *syntax.Parser {
 type restoreVar struct {
 	name             string
 	vr               expand.Variable
+	secondsEnv       expand.WriteEnviron
 	secondsStartTime time.Time
 	restoreSeconds   bool
 }
 
 func (r *Runner) restoreCallAssigns(restores []restoreVar) {
-	for _, restore := range restores {
+	for i := len(restores) - 1; i >= 0; i-- {
+		restore := restores[i]
 		if restore.restoreSeconds {
 			if err := r.writeEnv.Set(restore.name, restore.vr); err != nil {
 				r.errf("%s: %v\n", restore.name, err)
 				r.exit.code = 1
 				return
+			}
+			if restore.secondsEnv != nil && setSecondsStartTimeForEnv(restore.secondsEnv, restore.secondsStartTime) {
+				continue
 			}
 			r.startTime = restore.secondsStartTime
 			continue
@@ -2127,7 +2132,17 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 			}
 			restore := restoreVar{name: resolvedRef.Name.Value, vr: resolvedPrev}
 			if restore.name == "SECONDS" {
+				restore.vr = expand.Variable{}
+				if secondsEnv, secondsVR, ok := visibleSecondsBinding(r.writeEnv); ok {
+					restore.secondsEnv = secondsEnv
+					restore.vr = secondsVR
+				}
 				restore.secondsStartTime = r.startTime
+				if restore.secondsEnv != nil {
+					if started, ok := secondsStartTimeForEnv(restore.secondsEnv); ok {
+						restore.secondsStartTime = started
+					}
+				}
 				restore.restoreSeconds = true
 			}
 			r.setVar(resolvedRef.Name.Value, vr)
@@ -2153,7 +2168,17 @@ func (r *Runner) runCallAssigns(assigns []*syntax.Assign) []restoreVar {
 		}
 		restore := restoreVar{name: resolvedRef.Name.Value, vr: resolvedPrev}
 		if restore.name == "SECONDS" {
+			restore.vr = expand.Variable{}
+			if secondsEnv, secondsVR, ok := visibleSecondsBinding(r.writeEnv); ok {
+				restore.secondsEnv = secondsEnv
+				restore.vr = secondsVR
+			}
 			restore.secondsStartTime = r.startTime
+			if restore.secondsEnv != nil {
+				if started, ok := secondsStartTimeForEnv(restore.secondsEnv); ok {
+					restore.secondsStartTime = started
+				}
+			}
 			restore.restoreSeconds = true
 		}
 		if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
