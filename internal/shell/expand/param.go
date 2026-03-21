@@ -597,6 +597,17 @@ const (
 	indirectNameRef
 )
 
+// indirectStarNounsetError returns an UnsetParameterError when an indirect [*]
+// expansion resolves to an unset variable and no outer operator handles the
+// unset case. bash errors for ${!ref} where ref='arr[*]' and arr is unset
+// under set -u, but not when an operator like :- or - is present.
+func indirectStarNounsetError(cfg *Config, pe *syntax.ParamExp, target *syntax.ParamExp, resolved paramExpState) error {
+	if cfg.NoUnset && !overridingUnset(pe) && target != nil && subscriptLit(target.Index) == "*" && !resolved.vr.IsSet() {
+		return UnsetParameterError{Node: pe, Message: "unbound variable"}
+	}
+	return nil
+}
+
 func paramExpHasOuterOps(pe *syntax.ParamExp) bool {
 	return pe.Length || pe.Width || pe.IsSet || pe.Slice != nil || pe.Repl != nil || pe.Exp != nil
 }
@@ -671,7 +682,9 @@ func (cfg *Config) resolveIndirectTargetState(state paramExpState) (paramExpStat
 	if err != nil {
 		var unsetErr UnsetParameterError
 		if errors.As(err, &unsetErr) && (subscriptLit(target.Index) == "@" || subscriptLit(target.Index) == "*") {
-			// Indirect ref to undefined array[@] is empty, not an error.
+			// Return empty indexed state so outer operators (:-/- etc.) can
+			// handle the unset case. Callers emit the nounset error for [*]
+			// when no overriding operator is present.
 			targetState.vr = Variable{Kind: Indexed}
 			targetState.indexAllElements = true
 			return targetState, target, nil
@@ -1443,6 +1456,9 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 			}
 			return nil, false, err
 		}
+		if err := indirectStarNounsetError(cfg, pe, target, resolved); err != nil {
+			return nil, false, err
+		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil && (ql == quoteDouble || ql == quoteHeredoc) {
 			targetState, err := cfg.paramExpState(target)
 			if err != nil {
@@ -1590,6 +1606,9 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 			if errors.As(err, &unsetErr) {
 				return nil, false, false, UnsetParameterError{Node: pe, Message: unsetErr.Message}
 			}
+			return nil, false, false, err
+		}
+		if err := indirectStarNounsetError(cfg, pe, target, resolved); err != nil {
 			return nil, false, false, err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
@@ -1881,6 +1900,9 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 			if errors.As(err, &unsetErr) {
 				return "", UnsetParameterError{Node: pe, Message: unsetErr.Message}
 			}
+			return "", err
+		}
+		if err := indirectStarNounsetError(cfg, pe, target, resolved); err != nil {
 			return "", err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
