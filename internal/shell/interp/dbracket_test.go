@@ -52,7 +52,11 @@ printf 'status=%d rematch=%d\n' "$?" "${#BASH_REMATCH[@]}"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	if !strings.Contains(stderr, "invalid regular expression `*': repetition-operator operand invalid") {
+	wantReason := "Invalid preceding regular expression"
+	if runtime.GOOS == "darwin" {
+		wantReason = "repetition-operator operand invalid"
+	}
+	if !strings.Contains(stderr, "invalid regular expression `*': "+wantReason) {
 		t.Fatalf("stderr = %q, want bare-star regex diagnostic", stderr)
 	}
 }

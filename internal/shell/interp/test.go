@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	resyntax "regexp/syntax"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -111,13 +112,19 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 			if classic {
 				break
 			}
-			left, ok := r.testExpandWord(x.X.(*syntax.Word), expand.Literal)
+			expandLeft := expand.Literal
+			expandRight := expand.Regexp
+			if !condTildeExpandsInDBrackets() {
+				expandLeft = expand.LiteralNoTilde
+				expandRight = expand.RegexpNoTilde
+			}
+			left, ok := r.testExpandWord(x.X.(*syntax.Word), expandLeft)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return ""
 			}
 			rightWord := x.Y.(*syntax.Word)
-			right, ok := r.testExpandWord(rightWord, expand.Regexp)
+			right, ok := r.testExpandWord(rightWord, expandRight)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return ""
@@ -245,8 +252,10 @@ func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *trac
 		switch x.Op {
 		case syntax.TsReMatch:
 			expandLeft := expand.Literal
+			expandRight := expand.Regexp
 			if !condTildeExpandsInDBrackets() {
 				expandLeft = expand.LiteralNoTilde
+				expandRight = expand.RegexpNoTilde
 			}
 			left, ok := r.testExpandWord(x.X.(*syntax.CondWord).Word, expandLeft)
 			if !ok {
@@ -254,7 +263,7 @@ func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *trac
 				return condEval{}
 			}
 			rightWord := x.Y.(*syntax.CondRegex).Word
-			right, ok := r.testExpandWord(rightWord, expand.Regexp)
+			right, ok := r.testExpandWord(rightWord, expandRight)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return condEval{}
@@ -513,7 +522,10 @@ func bashRegexCompileErrorReason(err error) string {
 	case resyntax.ErrMissingBracket:
 		return "brackets ([ ]) not balanced"
 	case resyntax.ErrMissingRepeatArgument, resyntax.ErrInvalidRepeatOp:
-		return "repetition-operator operand invalid"
+		if runtime.GOOS == "darwin" {
+			return "repetition-operator operand invalid"
+		}
+		return "Invalid preceding regular expression"
 	case resyntax.ErrInvalidRepeatSize:
 		return "invalid repetition count(s)"
 	default:

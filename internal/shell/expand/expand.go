@@ -753,15 +753,12 @@ func (cfg *Config) extGlobLiteralString(eg *syntax.ExtGlob) (string, error) {
 	return sb.String(), nil
 }
 
-// Regexp expands a single shell word for use as a Bash [[ =~ ]] regular
-// expression, preserving regex semantics in unquoted parts while treating
-// quoted parts as literals.
-func Regexp(cfg *Config, word *syntax.Word) (string, error) {
+func regexpWord(cfg *Config, word *syntax.Word, ql quoteLevel) (string, error) {
 	if word == nil {
 		return "", nil
 	}
 	cfg = prepareConfig(cfg)
-	field, err := cfg.wordField(word.Parts, quoteNoTilde)
+	field, err := cfg.wordField(word.Parts, ql)
 	if err != nil {
 		return "", err
 	}
@@ -774,6 +771,19 @@ func Regexp(cfg *Config, word *syntax.Word) (string, error) {
 		}
 	}
 	return sb.String(), nil
+}
+
+// Regexp expands a single shell word for use as a Bash [[ =~ ]] regular
+// expression, preserving regex semantics in unquoted parts while treating
+// quoted parts as literals.
+func Regexp(cfg *Config, word *syntax.Word) (string, error) {
+	return regexpWord(cfg, word, quoteNone)
+}
+
+// RegexpNoTilde expands a single shell word like [Regexp], but leaves a
+// leading bare `~` untouched.
+func RegexpNoTilde(cfg *Config, word *syntax.Word) (string, error) {
+	return regexpWord(cfg, word, quoteNoTilde)
 }
 
 // Format expands a format string with a number of arguments, following the
