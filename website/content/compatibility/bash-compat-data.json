@@ -1,0 +1,1631 @@
+{
+  "generated_at": "2026-03-21T19:34:32.676Z",
+  "total_cases": 2377,
+  "xfail_cases": 102,
+  "skip_cases": 20,
+  "passing_cases": 2255,
+  "file_count": 116,
+  "files": [
+    {
+      "name": "oils/alias.test.sh",
+      "total": 48,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "alias with word of multiple lines",
+          "mode": "xfail",
+          "reason": "conformance: gbash ls error message format differs from GNU coreutils ls",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/append.test.sh",
+      "total": 20,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/arg-parse.test.sh",
+      "total": 3,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/arith-context.test.sh",
+      "total": 16,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/arith-div-zero.test.sh",
+      "total": 5,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/arith-dynamic.test.sh",
+      "total": 4,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/arith.test.sh",
+      "total": 74,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array-assign.test.sh",
+      "total": 11,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array-assoc.test.sh",
+      "total": 41,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array-basic.test.sh",
+      "total": 5,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array-compat.test.sh",
+      "total": 10,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array-literal.test.sh",
+      "total": 19,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array-sparse.test.sh",
+      "total": 35,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/array.test.sh",
+      "total": 76,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "array with invalid token",
+          "mode": "xfail",
+          "reason": "gbash stops invalid array literals earlier than bash's parser",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/assign-deferred.test.sh",
+      "total": 7,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "export a[7]=8",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "readonly a[7]=8",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/assign-dialects.test.sh",
+      "total": 4,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/assign-extended.test.sh",
+      "total": 39,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/assign.test.sh",
+      "total": 43,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "local a=loc $var c=loc",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Test above without 'local' (which is not POSIX)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/ble-features.test.sh",
+      "total": 9,
+      "xfail": 4,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "[bash_unset] function call with tempenv vs tempenv-eval",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[bash_unset] local-unset / dynamic-unset for localvar (mutated from tempenv)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[bash_unset] local-unset / dynamic-unset for tempenv",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[bash_unset] localvar-inherit from tempenv",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/ble-idioms.test.sh",
+      "total": 26,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "recursive arith: recursion",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/ble-unset.test.sh",
+      "total": 5,
+      "xfail": 4,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "[bash_unset] dynamic-unset for nested localvars",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[bash_unset] dynamic-unset for nested tempenvs",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[bash_unset] local-unset / dynamic-unset for localvar on nested-context",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[bash_unset] local-unset for nested tempenvs",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/blog1.test.sh",
+      "total": 9,
+      "xfail": 4,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "${###}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "${####}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "${###2}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "${##2}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/blog2.test.sh",
+      "total": 8,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/bool-parse.test.sh",
+      "total": 8,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/brace-expansion.test.sh",
+      "total": 54,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/bugs.test.sh",
+      "total": 28,
+      "xfail": 9,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "'echo' and printf fail on writing to full disk",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "#2640 Hanging when reading from character devices",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "assign readonly -- multiple lines -- set -o posix",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "assign readonly -- one line",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "file with NUL byte",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "First word like foo$x() and foo$[1+2] (regression)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Function names",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "other builtins fail on writing to full disk",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "process sub <(echo 42 | tee PWNED) not allowed",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-bash.test.sh",
+      "total": 14,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "help",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-bracket.test.sh",
+      "total": 52,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-cd.test.sh",
+      "total": 26,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Survey of getcwd() syscall",
+          "mode": "xfail",
+          "reason": "conformance: parse error wording for this builtin-cd probe still differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-completion.test.sh",
+      "total": 51,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "compgen -A user",
+          "mode": "xfail",
+          "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-dirs.test.sh",
+      "total": 18,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-echo.test.sh",
+      "total": 26,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-eval-source.test.sh",
+      "total": 23,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-getopts.test.sh",
+      "total": 31,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-meta-assign.test.sh",
+      "total": 10,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "builtin declare a=(x y) is allowed",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-meta.test.sh",
+      "total": 18,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "command -p (find hidden tool in default path)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-misc.test.sh",
+      "total": 7,
+      "xfail": 4,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "history builtin usage",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Print shell strings with normal chars: set and printf %q and ${x@Q}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Print shell strings with weird chars: set and printf %q and ${x@Q}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "time pipeline",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-printf.test.sh",
+      "total": 62,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-process.test.sh",
+      "total": 25,
+      "xfail": 0,
+      "skip": 20,
+      "entries": [
+        {
+          "name": "arg that would overflow 64 bits is detected",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "Changing resource limit is denied",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "exec -- 2>&1",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "exec -a sets argv[0]",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "exec builtin accepts --",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "Exit builtin with invalid arg",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "Exit builtin with too many args",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "time with brace group argument",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit -f 1 prevents files larger 512 bytes",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit -n limits file descriptors",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit -S for soft limit (default), -H for hard limit",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit accepts 'unlimited'",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit doesn't accept multiple flags - reduce confusion between shells",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit negative arg",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit negative flag",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit of 2**32, 2**31 (int overflow)",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit that is 64 bits",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit too many args",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "ulimit with no flags is like -f",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        },
+        {
+          "name": "write big file with ulimit",
+          "mode": "skip",
+          "reason": "gbash does not implement process tables",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-read.test.sh",
+      "total": 65,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "read bash bug",
+          "mode": "xfail",
+          "reason": "gbash intentionally keeps the space-preserving result instead of reproducing bash's historical control-character bug",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-set.test.sh",
+      "total": 23,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-special.test.sh",
+      "total": 12,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-times.test.sh",
+      "total": 1,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "times shows two formatted lines",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-trap-bash.test.sh",
+      "total": 23,
+      "xfail": 7,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Combine DEBUG trap and ERR trap",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Combine ERR trap and USR1 trap",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Compare trap DEBUG vs. trap ERR",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "One 'echo' in first pipeline part - why does bash behave differently from case above?",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "trap DEBUG and pipeline (lastpipe difference)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "trap DEBUG not run in forked interpreter for first pipeline part",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "trap RETURN",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-trap-err.test.sh",
+      "total": 22,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-trap.test.sh",
+      "total": 33,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-type-bash.test.sh",
+      "total": 31,
+      "xfail": 4,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "type -a -> builtin",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "type -ap -> builtin",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "type -P builtin -> not a file",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "type -P builtin -> not a file but file found",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/builtin-type.test.sh",
+      "total": 6,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-umask.test.sh",
+      "total": 24,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/builtin-vars.test.sh",
+      "total": 41,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/case_.test.sh",
+      "total": 13,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/command_.test.sh",
+      "total": 16,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Command block",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/command-parsing.test.sh",
+      "total": 3,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/command-sub.test.sh",
+      "total": 30,
+      "xfail": 3,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Double Quotes in Command Sub in Double Quotes",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Escaped quote in [[ ]]",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Syntax errors with double quotes within backticks",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/comments.test.sh",
+      "total": 2,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/dbracket.test.sh",
+      "total": 48,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/divergence.test.sh",
+      "total": 4,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "builtin cat crashes a subshell (#2530)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/dparen.test.sh",
+      "total": 14,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/empty-bodies.test.sh",
+      "total": 3,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Empty do/done",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Empty then/fi",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/errexit.test.sh",
+      "total": 35,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "bash atoms [[ (( - redir failure checked",
+          "mode": "xfail",
+          "reason": "darwin's pinned bash oracle differs from the Linux CI oracle for these redirect-errexit cases",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "simple command that's an alias - redir failure checked",
+          "mode": "xfail",
+          "reason": "darwin's pinned bash oracle differs from the Linux CI oracle for this redirect-errexit alias case",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/exit-status.test.sh",
+      "total": 11,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "subshell OverflowError https://github.com/oilshell/oil/issues/996",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/explore-parsing.test.sh",
+      "total": 5,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/extglob-files.test.sh",
+      "total": 22,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/extglob-match.test.sh",
+      "total": 29,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/fatal-errors.test.sh",
+      "total": 5,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Unrecoverable: divide by zero in case",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Unrecoverable: divide by zero in conditional word",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/for-expr.test.sh",
+      "total": 9,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Arith lexer mode",
+          "mode": "xfail",
+          "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/func-parsing.test.sh",
+      "total": 15,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Function name with $",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Function name with command sub",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/glob-bash.test.sh",
+      "total": 10,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/glob.test.sh",
+      "total": 38,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Glob unicode char",
+          "mode": "xfail",
+          "reason": "conformance: C.UTF-8 pathname collation order still differs from bash for this glob case",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/globignore.test.sh",
+      "total": 18,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/globstar.test.sh",
+      "total": 4,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/here-doc.test.sh",
+      "total": 32,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/if_.test.sh",
+      "total": 5,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/introspect.test.sh",
+      "total": 14,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "${FUNCNAME} with prefix/suffix operators",
+          "mode": "xfail",
+          "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics",
+          "goos": null
+        },
+        {
+          "name": "operators on FUNCNAME",
+          "mode": "xfail",
+          "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/known-differences.test.sh",
+      "total": 2,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/let.test.sh",
+      "total": 2,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/loop.test.sh",
+      "total": 29,
+      "xfail": 4,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "break in condition of loop",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "for loop with invalid identifier",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "top-level break/continue/return (without strict_control_flow)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "while in pipe",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "linux"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/nameref.test.sh",
+      "total": 31,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/nix-idioms.test.sh",
+      "total": 6,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/nocasematch-match.test.sh",
+      "total": 6,
+      "xfail": 3,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "[[ equality matching",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "[[ regex matching",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "case matching",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/nul-bytes.test.sh",
+      "total": 13,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/paren-ambiguity.test.sh",
+      "total": 9,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/parse-errors.test.sh",
+      "total": 27,
+      "xfail": 7,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "array literal in case",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "array literal inside array is a parse error",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "array literal inside loop is a parse error",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "interactive parse error (regression)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Invalid for loop variable name",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Long Token - 65535 bytes",
+          "mode": "xfail",
+          "reason": "conformance: Darwin wc still differs from GNU bash harness behavior for this case",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "Token that's too long for Oils - 65536 bytes",
+          "mode": "xfail",
+          "reason": "conformance: Darwin wc still differs from GNU bash harness behavior for this case",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/pipeline.test.sh",
+      "total": 23,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "shopt -s lastpipe and shopt -s no_last_fork interaction",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "SIGPIPE causes pipeline to die (regression for issue #295)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/print-source-code.test.sh",
+      "total": 4,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/process-substitution.test.sh",
+      "total": 4,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/quote.test.sh",
+      "total": 33,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/redirect-command.test.sh",
+      "total": 23,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/redirect-multi.test.sh",
+      "total": 10,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/redirect.test.sh",
+      "total": 38,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/regex.test.sh",
+      "total": 36,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Operator chars ; & but not |",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "Unquoted { is a regex parse error",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "oils/serialize.test.sh",
+      "total": 10,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "${var@Q}",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/sh-func.test.sh",
+      "total": 12,
+      "xfail": 3,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "return \"\" (a lot of disagreement)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Return without args gives previous",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Scope of global variable when sourced in function (Shell Functions aren't Closures)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/sh-options-bash.test.sh",
+      "total": 7,
+      "xfail": 3,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "export SHELLOPTS does cross-process tracing",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "export SHELLOPTS does cross-process tracing with bash",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "SHELLOPTS and BASHOPTS are non-empty",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/smoke.test.sh",
+      "total": 18,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "failed command",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/strict-options.test.sh",
+      "total": 9,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/subshell.test.sh",
+      "total": 2,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/temp-binding.test.sh",
+      "total": 4,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/tilde.test.sh",
+      "total": 14,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/type-compat.test.sh",
+      "total": 7,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/unicode.test.sh",
+      "total": 6,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/var-op-bash.test.sh",
+      "total": 27,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/var-op-len.test.sh",
+      "total": 9,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/var-op-patsub.test.sh",
+      "total": 27,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/var-op-slice.test.sh",
+      "total": 21,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/var-op-strip.test.sh",
+      "total": 29,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/var-op-test.test.sh",
+      "total": 37,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/var-ref.test.sh",
+      "total": 31,
+      "xfail": 2,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Indirect expansion TO fancy expansion features bash disallows",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "var ref TO array with arbitrary subscripts",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/var-sub-quote.test.sh",
+      "total": 39,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Right Brace as argument (similar to #702)",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/var-sub.test.sh",
+      "total": 6,
+      "xfail": 3,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "Bad var sub",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Descriptor redirect to bad \"$@\"",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        },
+        {
+          "name": "Here doc with bad \"$@\" delimiter",
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": null
+        }
+      ]
+    },
+    {
+      "name": "oils/vars-bash.test.sh",
+      "total": 1,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/vars-special.test.sh",
+      "total": 42,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/whitespace.test.sh",
+      "total": 5,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/word-eval.test.sh",
+      "total": 8,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/word-split.test.sh",
+      "total": 55,
+      "xfail": 0,
+      "skip": 0,
+      "entries": []
+    },
+    {
+      "name": "oils/xtrace.test.sh",
+      "total": 19,
+      "xfail": 1,
+      "skip": 0,
+      "entries": [
+        {
+          "name": "xtrace with unprintable chars",
+          "mode": "xfail",
+          "reason": "conformance: xtrace escape style for unprintable bytes still differs from bash",
+          "goos": null
+        }
+      ]
+    }
+  ]
+}

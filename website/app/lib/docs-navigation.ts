@@ -62,10 +62,17 @@ export const docsNavigation: NavItem[] = [
     ],
   },
   {
+    title: "Compatibility",
+    items: [
+      { title: "Overview", href: "/docs/compatibility" },
+      { title: "Bash", href: "/docs/compatibility/bash" },
+      { title: "Coreutils", href: "/docs/compatibility/coreutils" },
+    ],
+  },
+  {
     title: "Performance",
     items: [
       { title: "Benchmarks", href: "/docs/performance/benchmarks" },
-      { title: "Compatibility", href: "/docs/performance/compatibility" },
     ],
   },
   {

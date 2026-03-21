@@ -30,7 +30,9 @@ const pages: Record<string, () => Promise<{ default: React.ComponentType; metada
   "guides/examples": () => import("@/content/guides/examples.mdx"),
   "observability/tracing-and-logging": () => import("@/content/api/tracing-and-logging.mdx"),
   "performance/benchmarks": () => import("@/content/performance/benchmarks.mdx"),
-  "performance/compatibility": () => import("@/content/performance/compatibility.mdx"),
+  compatibility: () => import("@/content/compatibility/index.mdx"),
+  "compatibility/bash": () => import("@/content/compatibility/bash.mdx"),
+  "compatibility/coreutils": () => import("@/content/compatibility/coreutils.mdx"),
   security: () => import("@/content/security/index.mdx"),
   "security/policy": () => import("@/content/security/policy.mdx"),
   "security/threat-model": () => import("@/content/security/threat-model.mdx"),
@@ -38,6 +40,7 @@ const pages: Record<string, () => Promise<{ default: React.ComponentType; metada
 
 const canonicalSlugs: Record<string, string> = {
   "observability/tracing-and-logging": "api/tracing-and-logging",
+  "performance/compatibility": "compatibility/coreutils",
 };
 
 interface Props {
