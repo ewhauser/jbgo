@@ -135,13 +135,10 @@ func (e FailGlobError) Error() string {
 	return fmt.Sprintf("no match: %s", e.Pattern)
 }
 
-var zeroConfig = &Config{}
-
-// TODO: note that prepareConfig is modifying the user's config in place,
-// which doesn't feel right - we should make a copy.
-
 func prepareConfig(cfg *Config) *Config {
-	cfg = cmp.Or(cfg, zeroConfig)
+	if cfg == nil {
+		cfg = &Config{}
+	}
 	cfg.Env = cmp.Or(cfg.Env, FuncEnviron(func(string) string { return "" }))
 	cfg.TildeEnv = cmp.Or(cfg.TildeEnv, cfg.Env)
 
