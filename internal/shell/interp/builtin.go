@@ -720,16 +720,19 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 	case "unalias":
 		removeAll := false
-		fp := flagParser{remaining: args}
-		for fp.more() {
-			switch flag := fp.flag(); flag {
+		for len(args) > 0 {
+			switch args[0] {
 			case "-a":
 				removeAll = true
+				args = args[1:]
+			case "--":
+				args = args[1:]
+				goto unaliasArgs
 			default:
-				return failf(2, "unalias: %s: invalid option\nunalias: usage: unalias [-a] name [name ...]\n", flag)
+				goto unaliasArgs
 			}
 		}
-		args = fp.args()
+	unaliasArgs:
 		if removeAll {
 			clear(r.alias)
 			break
