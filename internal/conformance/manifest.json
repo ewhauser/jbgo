@@ -2,25 +2,7 @@
   "suites": {
     "bash": {
       "entries": {
-        "oils/alias.test.sh::Alias that is && || ;": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/alias.test.sh::Alias that is pipeline": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/alias.test.sh::Corner case: alias inside LHS array arithmetic expression": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::Invalid syntax of alias": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -29,21 +11,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/alias.test.sh::Syntax error after expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::Two aliases in pipeline": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/alias.test.sh::Usage of builtins": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::alias not defined": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -64,18 +31,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/alias.test.sh::first and second word are the same alias, with trailing space": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::unalias -a": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::unalias not defined": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/alias.test.sh::unalias without args is a usage error": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
