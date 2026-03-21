@@ -66,6 +66,7 @@ func (r *Runner) trapAction(id trapID) trapAction {
 }
 
 func (r *Runner) setTrapAction(id trapID, action trapAction) {
+	r.traps.generation++
 	if r.traps.display != nil {
 		r.traps.display = nil
 	}
@@ -536,7 +537,15 @@ func (r *Runner) maybeRunReturnTrap(ctx context.Context, line uint, status uint8
 	}
 }
 
-func (r *Runner) runSourceReturnTrap(ctx context.Context, line uint, status uint8) {
+func (r *Runner) runSourceReturnTrap(ctx context.Context, line uint, status uint8, preSourceGen uint64) {
+	if !r.returnTrapAllowed() {
+		// The caller frame (e.g. an untraced function) doesn't allow
+		// inherited RETURN traps.  Still fire the trap if any trap was
+		// set or reset during the source execution itself.
+		if r.traps.generation == preSourceGen {
+			return
+		}
+	}
 	line = r.currentVisibleLine(line)
 	result := r.runTrap(ctx, trapIDReturn, line, status)
 	if result.handler.exiting || result.handler.fatalExit {

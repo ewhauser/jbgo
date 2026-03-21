@@ -280,6 +280,7 @@ type trapState struct {
 	active              map[trapID]int
 	pending             []pendingSignalTrap
 	currentSignalNumber int
+	generation          uint64 // bumped on every setTrapAction call
 }
 
 type pendingSignalTrap struct {
