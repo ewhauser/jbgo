@@ -199,8 +199,10 @@ lint-new:
 		( cd "$$dir" && $(GOLANGCI_LINT) run --new-from-rev=HEAD ./... ); \
 	done
 
+RACE := $(if $(CI),-race,$(if $(filter Darwin,$(shell uname -s)),,-race))
+
 test:
-	go test -race $(GO_PACKAGES)
+	go test $(RACE) $(GO_PACKAGES)
 
 CONFORMANCE_RUN ?= TestConformance
 
