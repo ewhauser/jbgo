@@ -225,6 +225,30 @@ printf 'literal=%%s\n' "$(< %q)"
 	}
 }
 
+func TestDupRedirectToQuotedAtIsAmbiguous(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		Params: []string{
+			"2 3",
+			"c d",
+		},
+	}, `
+echo hi 1>& "$@"
+echo status=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "status=1\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "status=1\n")
+	}
+	if stderr != "\"$@\": ambiguous redirect\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "\"$@\": ambiguous redirect\n")
+	}
+}
+
 func TestSelfDupRedirectOnClosedFDIsNoOp(t *testing.T) {
 	t.Parallel()
 

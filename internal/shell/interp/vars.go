@@ -1251,6 +1251,10 @@ func (r *Runner) assignLiteral(as *syntax.Assign) string {
 	if r.ecfg == nil {
 		r.fillExpandConfig(context.Background())
 	}
+	r.inAssignment++
+	defer func() {
+		r.inAssignment--
+	}()
 	str, err := expand.AssignmentLiteral(r.ecfg, as.Value)
 	r.expandErr(err)
 	return str

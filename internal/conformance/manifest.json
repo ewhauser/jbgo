@@ -426,34 +426,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/var-op-test.test.sh::op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-ref.test.sh::Indirect expansion TO fancy expansion features bash disallows": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-ref.test.sh::var ref TO array with arbitrary subscripts": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-sub-quote.test.sh::Right Brace as argument (similar to #702)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-sub.test.sh::Bad var sub": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-sub.test.sh::Descriptor redirect to bad \"$@\"": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-sub.test.sh::Here doc with bad \"$@\" delimiter": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/xtrace.test.sh::xtrace with unprintable chars": {
           "mode": "xfail",
           "reason": "conformance: xtrace escape style for unprintable bytes still differs from bash"

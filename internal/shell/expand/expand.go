@@ -1398,6 +1398,26 @@ func RedirectFields(cfg *Config, word *syntax.Word) ([]string, error) {
 	return fields, nil
 }
 
+// DupFields expands a single shell word for use as a descriptor-dup redirect
+// target like `>&word`. Bash performs shell expansion and field splitting here,
+// but gbash intentionally keeps pathname-like literals as-is for this redirect
+// family, matching the project conformance suite.
+func DupFields(cfg *Config, word *syntax.Word) ([]string, error) {
+	if word == nil {
+		return nil, nil
+	}
+	cfg = prepareConfig(cfg)
+	fields, err := cfg.wordFields(word.Parts)
+	if err != nil {
+		return nil, err
+	}
+	strs := make([]string, len(fields))
+	for i, field := range fields {
+		strs[i] = cfg.fieldJoin(field)
+	}
+	return strs, nil
+}
+
 // FieldsSeq expands a number of words as if they were arguments in a shell
 // command. This includes brace expansion, tilde expansion, parameter expansion,
 // command substitution, arithmetic expansion, quote removal, and globbing.
@@ -1919,6 +1939,50 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 				return nil, false, err
 			}
 			if target != nil {
+				if quotedIndirectArrayTarget(target) && pe.Exp != nil &&
+					(pe.Exp.Op == syntax.AlternateUnset || pe.Exp.Op == syntax.AlternateUnsetOrNull ||
+						pe.Exp.Op == syntax.DefaultUnset || pe.Exp.Op == syntax.DefaultUnsetOrNull ||
+						pe.Exp.Op == syntax.AssignUnset || pe.Exp.Op == syntax.AssignUnsetOrNull ||
+						pe.Exp.Op == syntax.ErrorUnset || pe.Exp.Op == syntax.ErrorUnsetOrNull) {
+					_, elems, ok := cfg.quotedArrayFields(target)
+					if !ok {
+						return nil, false, nil
+					}
+					hasElems := len(elems) > 0
+					null := !hasElems
+					switch pe.Exp.Op {
+					case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
+						if pe.Exp.Op == syntax.AlternateUnset && hasElems || pe.Exp.Op == syntax.AlternateUnsetOrNull && !null {
+							word, err := cfg.quotedParamWord(pe.Exp.Word)
+							return word, true, err
+						}
+					case syntax.DefaultUnset, syntax.DefaultUnsetOrNull:
+						if pe.Exp.Op == syntax.DefaultUnset && !hasElems || pe.Exp.Op == syntax.DefaultUnsetOrNull && null {
+							word, err := cfg.quotedParamWord(pe.Exp.Word)
+							return word, true, err
+						}
+					case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+						if pe.Exp.Op == syntax.ErrorUnset && !hasElems || pe.Exp.Op == syntax.ErrorUnsetOrNull && null {
+							return nil, false, nil
+						}
+					case syntax.AssignUnset, syntax.AssignUnsetOrNull:
+						if pe.Exp.Op == syntax.AssignUnset && !hasElems || pe.Exp.Op == syntax.AssignUnsetOrNull && null {
+							return nil, false, nil
+						}
+					}
+					targetState, err := cfg.paramExpState(target)
+					if err != nil {
+						return nil, false, err
+					}
+					elems, err = cfg.transformArrayElems(target, targetState, elems)
+					if err != nil {
+						return nil, false, err
+					}
+					if arrayExpansionIsStar(target) {
+						return []string{cfg.ifsJoin(elems)}, true, nil
+					}
+					return elems, true, nil
+				}
 				resolvedPE := *pe
 				resolvedPE.Excl = false
 				resolvedPE.Param = target.Param

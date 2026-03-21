@@ -381,6 +381,9 @@ func indirectPositionalParam(name string) bool {
 
 func looseIndirectVarRef(name string) (*syntax.VarRef, error) {
 	if ref, err := parseVarRef(name); err == nil {
+		if err := validateIndirectVarRef(name, ref); err != nil {
+			return nil, err
+		}
 		return ref, nil
 	}
 	if !strings.Contains(name, "[") {
@@ -417,12 +420,49 @@ func looseIndirectVarRef(name string) (*syntax.VarRef, error) {
 	if !ok {
 		return nil, InvalidVariableNameError{Ref: name}
 	}
+	if indirectSubscriptHasLiteralQuote(word) {
+		return nil, InvalidVariableNameError{Ref: name}
+	}
 	ref.Index = &syntax.Subscript{
 		Kind: syntax.SubscriptExpr,
 		Mode: syntax.SubscriptAuto,
 		Expr: word,
 	}
 	return ref, nil
+}
+
+func validateIndirectVarRef(name string, ref *syntax.VarRef) error {
+	if ref == nil || ref.Index == nil || ref.Index.AllElements() {
+		return nil
+	}
+	raw := ref.Index.RawText()
+	if raw == "" {
+		raw = subscriptLit(ref.Index)
+	}
+	if raw == "" {
+		return nil
+	}
+	word, ok := parseIndirectSubscriptWord(raw)
+	if !ok || indirectSubscriptHasLiteralQuote(word) {
+		return InvalidVariableNameError{Ref: name}
+	}
+	return nil
+}
+
+func indirectSubscriptHasLiteralQuote(word *syntax.Word) bool {
+	if word == nil {
+		return false
+	}
+	for _, part := range word.Parts {
+		lit, ok := part.(*syntax.Lit)
+		if !ok {
+			continue
+		}
+		if strings.ContainsAny(lit.Value, `"'`) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseIndirectSubscriptWord(content string) (*syntax.Word, bool) {
@@ -784,6 +824,44 @@ func decodePromptEscapes(str string) string {
 		}
 	}
 	return sb.String()
+}
+
+func normalizeIndexedSubscriptError(index *syntax.Subscript, err error) error {
+	var diag *ArithmDiagnosticError
+	if !errors.As(err, &diag) {
+		return err
+	}
+	trimmedRaw := strings.TrimSpace(index.RawText())
+	exprText := strings.TrimSpace(diag.ExprText)
+	if exprText == "" {
+		exprText = trimmedRaw
+	}
+	clone := *diag
+	switch {
+	case strings.HasPrefix(trimmedRaw, "{") && strings.HasSuffix(trimmedRaw, "}"),
+		strings.HasPrefix(exprText, "{") && strings.HasSuffix(exprText, "}"):
+		clone.Message = "arithmetic syntax error: operand expected"
+		clone.TokenText = exprText
+		return &clone
+	case strings.HasPrefix(exprText, "<(") || strings.HasPrefix(exprText, ">("):
+		clone.Message = "arithmetic syntax error: operand expected"
+		clone.TokenText = exprText
+		return &clone
+	case clone.Message == "arithmetic syntax error: invalid arithmetic operator" &&
+		strings.ContainsAny(exprText, " \t\r\n") &&
+		clone.TokenText != "":
+		switch clone.TokenText[0] {
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+			'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+			'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+			'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+			'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+			'_', '\'', '"':
+			clone.Message = "arithmetic syntax error in expression"
+			return &clone
+		}
+	}
+	return err
 }
 
 func bashQuoteValue(str string) (string, error) {
@@ -1198,7 +1276,7 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 		case Indexed:
 			i, err := Arithm(cfg, index.Expr)
 			if err != nil {
-				return state, err
+				return state, normalizeIndexedSubscriptError(index, err)
 			}
 			if i < 0 {
 				resolved, ok := state.vr.IndexedResolve(i)
@@ -1275,20 +1353,25 @@ func (cfg *Config) paramArgField(word *syntax.Word, ql quoteLevel) ([]fieldPart,
 					}
 				}
 			}
-			if (ql == quoteDouble || ql == quoteHeredoc) && strings.Contains(s, "\\") {
+			if strings.Contains(s, "\\") {
 				sb := cfg.strBuilder()
 				for i := 0; i < len(s); i++ {
 					b := s[i]
 					if b == '\\' && i+1 < len(s) {
 						switch s[i+1] {
+						case '}':
+							i++
+							b = s[i]
 						case '"':
 							if ql != quoteDouble {
 								break
 							}
 							fallthrough
 						case '\\', '$', '`':
-							i++
-							b = s[i]
+							if ql == quoteDouble || ql == quoteHeredoc {
+								i++
+								b = s[i]
+							}
 						}
 					}
 					sb.WriteByte(b)
@@ -1466,7 +1549,9 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 			if err != nil {
 				return nil, false, err
 			}
-			hasElems := len(targetState.elems) > 0
+			_, targetElems, _ := cfg.quotedArrayFields(target)
+			hasElems := len(targetElems) > 0
+			null := !hasElems
 			argField := func() ([]fieldPart, string, error) {
 				return cfg.paramOpArg(pe.Exp.Word, ql)
 			}
@@ -1480,7 +1565,7 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 					return parts, true, err
 				}
 			case syntax.AlternateUnsetOrNull:
-				if hasElems {
+				if !null {
 					parts, _, err := argField()
 					return parts, true, err
 				}
@@ -1491,13 +1576,13 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 				}
 				return current()
 			case syntax.DefaultUnsetOrNull:
-				if !hasElems {
+				if null {
 					parts, _, err := argField()
 					return parts, true, err
 				}
 				return current()
 			case syntax.AssignUnset, syntax.AssignUnsetOrNull:
-				if hasElems {
+				if (pe.Exp.Op == syntax.AssignUnset && hasElems) || (pe.Exp.Op == syntax.AssignUnsetOrNull && !null) {
 					return current()
 				}
 			}
@@ -1614,7 +1699,9 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 			return nil, false, false, err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
-			hasElems := len(resolved.elems) > 0
+			_, targetElems, _ := cfg.quotedArrayFields(target)
+			hasElems := len(targetElems) > 0
+			null := !hasElems
 			indirectArgFields := func() ([][]fieldPart, error) {
 				if pe.Exp.Word == nil {
 					return nil, nil
@@ -1639,11 +1726,6 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 					return fields, ok, true, err
 				}
 			case syntax.AlternateUnsetOrNull:
-				fields0 := resolved.elems
-				if arrayExpansionIsStar(target) {
-					fields0 = []string{resolved.str}
-				}
-				null := arrayExpansionNull(target, fields0, resolved.elems)
 				if !null {
 					fields, err := indirectArgFields()
 					return fields, true, false, err
@@ -1652,6 +1734,46 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 					fields, ok, err := cfg.arrayParamFields(target, resolved, resolved.elems)
 					return fields, ok, true, err
 				}
+			case syntax.DefaultUnset:
+				if !hasElems {
+					fields, err := indirectArgFields()
+					return fields, true, false, err
+				}
+				fields, ok, err := cfg.arrayParamFields(target, resolved, targetElems)
+				return fields, ok, true, err
+			case syntax.DefaultUnsetOrNull:
+				if null {
+					fields, err := indirectArgFields()
+					return fields, true, false, err
+				}
+				fields, ok, err := cfg.arrayParamFields(target, resolved, targetElems)
+				return fields, ok, true, err
+			case syntax.AssignUnset:
+				if !hasElems {
+					fields, arg, err := cfg.paramOpArgFields(pe.Exp.Word, ql)
+					if err != nil {
+						return nil, false, false, err
+					}
+					if err := cfg.envSetParam(resolved, arg); err != nil {
+						return nil, false, false, err
+					}
+					return fields, true, false, nil
+				}
+				fields, ok, err := cfg.arrayParamFields(target, resolved, targetElems)
+				return fields, ok, true, err
+			case syntax.AssignUnsetOrNull:
+				if null {
+					fields, arg, err := cfg.paramOpArgFields(pe.Exp.Word, ql)
+					if err != nil {
+						return nil, false, false, err
+					}
+					if err := cfg.envSetParam(resolved, arg); err != nil {
+						return nil, false, false, err
+					}
+					return fields, true, false, nil
+				}
+				fields, ok, err := cfg.arrayParamFields(target, resolved, targetElems)
+				return fields, ok, true, err
 			default:
 				targetCopy := *target
 				targetCopy.Exp = pe.Exp
@@ -1919,6 +2041,65 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 		}
 		if err := indirectStarNounsetError(cfg, pe, target, resolved); err != nil {
 			return "", err
+		}
+		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil && (ql == quoteDouble || ql == quoteHeredoc) {
+			targetState, err := cfg.paramExpState(target)
+			if err != nil {
+				return "", err
+			}
+			_, targetElems, _ := cfg.quotedArrayFields(target)
+			hasElems := len(targetElems) > 0
+			null := !hasElems
+			arg := func() (string, error) {
+				_, arg, err := cfg.paramOpArg(pe.Exp.Word, ql)
+				return arg, err
+			}
+			switch pe.Exp.Op {
+			case syntax.DefaultUnset:
+				if !hasElems {
+					return arg()
+				}
+				return targetState.str, nil
+			case syntax.DefaultUnsetOrNull:
+				if null {
+					return arg()
+				}
+				return targetState.str, nil
+			case syntax.AlternateUnset:
+				if hasElems {
+					return arg()
+				}
+				return targetState.str, nil
+			case syntax.AlternateUnsetOrNull:
+				if !null {
+					return arg()
+				}
+				return targetState.str, nil
+			case syntax.AssignUnset:
+				if !hasElems {
+					argVal, err := arg()
+					if err != nil {
+						return "", err
+					}
+					if err := cfg.envSetParam(resolved, argVal); err != nil {
+						return "", err
+					}
+					return argVal, nil
+				}
+				return targetState.str, nil
+			case syntax.AssignUnsetOrNull:
+				if null {
+					argVal, err := arg()
+					if err != nil {
+						return "", err
+					}
+					if err := cfg.envSetParam(resolved, argVal); err != nil {
+						return "", err
+					}
+					return argVal, nil
+				}
+				return targetState.str, nil
+			}
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
 			targetCopy := *target

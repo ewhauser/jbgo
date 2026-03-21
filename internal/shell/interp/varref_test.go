@@ -753,6 +753,158 @@ echo ${!ref}
 	}
 }
 
+func TestIndirectExpansionMalformedArrayRefsStayRuntimeErrors(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+f() {
+  local result
+  result="${!1}"
+  printf 'unreachable\n'
+}
+a=(x y)
+declare -A aa=([k]=r)
+f 'a[0'
+printf 'status=%d\n' "$?"
+f 'aa[k'
+printf 'status=%d\n' "$?"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "status=1\nstatus=1\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "status=1\nstatus=1\n")
+	}
+	if stderr != "a[0: invalid variable name\naa[k: invalid variable name\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "a[0: invalid variable name\naa[k: invalid variable name\n")
+	}
+}
+
+func TestInvalidIndirectExpansionInAssignmentReturnsFromFunction(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+x='a b'
+echo before-top
+v="${!x}"
+echo "after-top status=$?"
+f() {
+  echo before-fn
+  local v
+  v="${!x}"
+  echo "after-fn status=$?"
+}
+f
+echo "after-call status=$?"
+echo before-simple
+echo ${!x}
+echo "after-simple status=$?"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"before-top\n" +
+		"after-top status=1\n" +
+		"before-fn\n" +
+		"after-call status=1\n" +
+		"before-simple\n" +
+		"after-simple status=1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "" +
+		"a b: invalid variable name\n" +
+		"a b: invalid variable name\n" +
+		"a b: invalid variable name\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestIndirectExpansionArraySubscriptCompatibility(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+f() {
+  local val=$(echo "${!1}")
+  if test "$val" = y; then
+    echo "works: $1"
+  fi
+}
+a=(x y)
+f 'a[1]'
+f 'a["1"]'
+f 'a[{1,0}]'
+f 'a[<(echo x)]'
+aa="1 0"
+f 'a[$aa]'
+f 'a[b*]'
+f 'a[1"]'
+b=1
+f 'a[$b]'
+f 'a[${c:-1}]'
+f 'a[$(echo 1)]'
+f 'a[$(( 3 - 2 ))]'
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "works: a[1]\nworks: a[\"1\"]\nworks: a[$b]\nworks: a[${c:-1}]\nworks: a[$(echo 1)]\nworks: a[$(( 3 - 2 ))]\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "" +
+		"{1,0}: arithmetic syntax error: operand expected (error token is \"{1,0}\")\n" +
+		"<(echo x): arithmetic syntax error: operand expected (error token is \"<(echo x)\")\n" +
+		"1 0: arithmetic syntax error in expression (error token is \"0\")\n" +
+		"b*: arithmetic syntax error: operand expected (error token is \"*\")\n" +
+		"a[1\"]: invalid variable name\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestIndirectQuotedArrayDefaultsMatchBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+test_hyphen() {
+  ref='a[@]'
+  echo "ref=a[@]: '${!ref-no-colon}' '${!ref:-with-colon}'"
+  ref='a[*]'
+  echo "ref=a[*]: '${!ref-no-colon}' '${!ref:-with-colon}'"
+}
+
+a=()
+test_hyphen
+a=("")
+test_hyphen
+a=("" "")
+test_hyphen
+IFS=
+test_hyphen
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"ref=a[@]: 'no-colon' 'with-colon'\n" +
+		"ref=a[*]: 'no-colon' 'with-colon'\n" +
+		"ref=a[@]: '' ''\n" +
+		"ref=a[*]: '' ''\n" +
+		"ref=a[@]: ' ' ' '\n" +
+		"ref=a[*]: ' ' ' '\n" +
+		"ref=a[@]: ' ' ' '\n" +
+		"ref=a[*]: '' ''\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestBashVarOpTransformsMatchCompatibilityCases(t *testing.T) {
 	t.Parallel()
 

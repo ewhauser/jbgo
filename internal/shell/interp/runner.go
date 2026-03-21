@@ -343,6 +343,9 @@ func (r *Runner) expandErr(err error) {
 		r.exit.code = 1
 	case errors.As(err, &invalidNameErr):
 		r.exit.code = 1
+		if r.inAssignment > 0 && (r.inFunc || r.inSource) {
+			r.exit.returning = true
+		}
 	case errors.As(err, &failGlobErr):
 		r.exit.code = 1
 		if r.currentStmtLine != 0 {
@@ -3100,6 +3103,23 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 	case syntax.DplIn:
 		r.inRedirectWord++
 		fields, err := expand.RedirectFields(r.ecfg, rd.Word)
+		r.inRedirectWord--
+		r.expandErr(err)
+		if err != nil {
+			return result, err
+		}
+		if len(fields) != 1 {
+			if wordText != "" {
+				r.errf("%s: ambiguous redirect\n", wordText)
+			} else {
+				r.errf("ambiguous redirect\n")
+			}
+			return result, errors.New("ambiguous redirect")
+		}
+		arg = fields[0]
+	case syntax.DplOut:
+		r.inRedirectWord++
+		fields, err := expand.DupFields(r.ecfg, rd.Word)
 		r.inRedirectWord--
 		r.expandErr(err)
 		if err != nil {

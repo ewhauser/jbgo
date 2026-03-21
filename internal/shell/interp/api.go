@@ -224,6 +224,7 @@ type Runner struct {
 	random    uint32
 
 	inRedirectWord int
+	inAssignment   int
 
 	// Most scripts don't use pushd/popd, so make space for the initial visible
 	// cwd without requiring an extra allocation.

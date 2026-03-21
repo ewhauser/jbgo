@@ -244,7 +244,15 @@ func shiftChunkError(err error, offsetBase, lineBase uint) error {
 	if !errors.As(err, &parseErr) || !parseErr.Pos.IsValid() {
 		return err
 	}
-	parseErr.Pos = syntax.NewPos(parseErr.Pos.Offset()+offsetBase, parseErr.Pos.Line()+lineBase-1, parseErr.Pos.Col())
+	shiftPos := func(pos syntax.Pos) syntax.Pos {
+		if !pos.IsValid() {
+			return pos
+		}
+		return syntax.NewPos(pos.Offset()+offsetBase, pos.Line()+lineBase-1, pos.Col())
+	}
+	parseErr.Pos = shiftPos(parseErr.Pos)
+	parseErr.SecondaryPos = shiftPos(parseErr.SecondaryPos)
+	parseErr.SourceLinePos = shiftPos(parseErr.SourceLinePos)
 	return parseErr
 }
 

@@ -359,8 +359,63 @@ func TestParseErrorLegacyBashConditionalDiagnostics(t *testing.T) {
 func TestParseInvalidBracedParamExpansionPreservedForRuntimeError(t *testing.T) {
 	t.Parallel()
 
+	tests := []string{"${%}", "${a&}"}
+	for _, src := range tests {
+		t.Run(src, func(t *testing.T) {
+			parser := NewParser(Variant(LangBash))
+			file, err := parser.Parse(strings.NewReader("echo "+src), "")
+			if err != nil {
+				t.Fatalf("Parse() error = %v, want nil", err)
+			}
+			call, ok := file.Stmts[0].Cmd.(*CallExpr)
+			if !ok {
+				t.Fatalf("command = %T, want *CallExpr", file.Stmts[0].Cmd)
+			}
+			pe, ok := call.Args[1].Parts[0].(*ParamExp)
+			if !ok {
+				t.Fatalf("arg = %T, want *ParamExp", call.Args[1].Parts[0])
+			}
+			if got, want := pe.Invalid, src; got != want {
+				t.Fatalf("Invalid = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestParseMalformedIndexedParamExpansionPreservesClosingBrace(t *testing.T) {
+	t.Parallel()
+
+	tests := []string{"${a[0}", "${aa[k}"}
+	for _, src := range tests {
+		t.Run(src, func(t *testing.T) {
+			parser := NewParser(Variant(LangBash))
+			file, err := parser.Parse(strings.NewReader("echo "+src), "")
+			if err != nil {
+				t.Fatalf("Parse() error = %v, want nil", err)
+			}
+			call, ok := file.Stmts[0].Cmd.(*CallExpr)
+			if !ok {
+				t.Fatalf("command = %T, want *CallExpr", file.Stmts[0].Cmd)
+			}
+			pe, ok := call.Args[1].Parts[0].(*ParamExp)
+			if !ok {
+				t.Fatalf("arg = %T, want *ParamExp", call.Args[1].Parts[0])
+			}
+			if pe.Index == nil || pe.Index.Right.IsValid() {
+				t.Fatalf("Index = %#v, want unterminated index", pe.Index)
+			}
+			if !pe.Rbrace.IsValid() {
+				t.Fatalf("Rbrace invalid for %q", src)
+			}
+		})
+	}
+}
+
+func TestParseParamDefaultAllowsEscapedRightBrace(t *testing.T) {
+	t.Parallel()
+
 	parser := NewParser(Variant(LangBash))
-	file, err := parser.Parse(strings.NewReader("echo ${%}"), "")
+	file, err := parser.Parse(strings.NewReader("echo ${var-\\}}"), "")
 	if err != nil {
 		t.Fatalf("Parse() error = %v, want nil", err)
 	}
@@ -372,8 +427,29 @@ func TestParseInvalidBracedParamExpansionPreservedForRuntimeError(t *testing.T) 
 	if !ok {
 		t.Fatalf("arg = %T, want *ParamExp", call.Args[1].Parts[0])
 	}
-	if got, want := pe.Invalid, "${%}"; got != want {
-		t.Fatalf("Invalid = %q, want %q", got, want)
+	if pe.Exp == nil || pe.Exp.Word == nil {
+		t.Fatalf("Exp = %#v, want default word", pe.Exp)
+	}
+	if got, want := pe.Exp.Word.Lit(), "\\}"; got != want {
+		t.Fatalf("default word = %q, want %q", got, want)
+	}
+}
+
+func TestParseErrorBashErrorForQuotedHeredocDelimiterExpansion(t *testing.T) {
+	t.Parallel()
+
+	src := "fun() {\n  cat << \"$@\"\nhi\n1 2\n}\nfun 1 2\n"
+	parser := NewParser(Variant(LangBash))
+	_, err := parser.Parse(strings.NewReader(src), "")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want parse error")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want ParseError", err)
+	}
+	if got, want := parseErr.BashError(), "line 2: warning: here-document at line 2 delimited by end-of-file (wanted `$@')\nline 1: syntax error: unexpected end of file from `{' command on line 1"; got != want {
+		t.Fatalf("BashError() = %q, want %q", got, want)
 	}
 }
 

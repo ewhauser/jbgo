@@ -647,6 +647,9 @@ type Parser struct {
 	aliasActive     map[string]int
 	aliasSource     *AliasExpansion
 	tokAliasChain   []*AliasExpansion
+
+	pendingHeredocWarningPos    Pos
+	pendingHeredocWarningWanted string
 }
 
 type aliasInputState struct {
@@ -709,6 +712,8 @@ func (p *Parser) reset() {
 	p.aliasInputStack = p.aliasInputStack[:0]
 	p.aliasSource = nil
 	p.tokAliasChain = nil
+	p.pendingHeredocWarningPos = Pos{}
+	p.pendingHeredocWarningWanted = ""
 	if p.aliasActive != nil {
 		clear(p.aliasActive)
 	}
@@ -1113,12 +1118,38 @@ func (p *Parser) doHeredocs() {
 		}
 		if p.err == nil {
 			if stop := p.hdocStops[len(p.hdocStops)-1]; stop != nil {
-				p.posErr(r.Pos(), "unclosed here-document %#q", r.HdocDelim.Value)
+				if p.lang.in(langBashLike) && heredocNeedsEOFWarning(r.HdocDelim) {
+					p.pendingHeredocWarningPos = r.Pos()
+					p.pendingHeredocWarningWanted = r.HdocDelim.Value
+				} else {
+					p.posErr(r.Pos(), "unclosed here-document %#q", r.HdocDelim.Value)
+				}
 			}
 		}
 		p.hdocStops = p.hdocStops[:len(p.hdocStops)-1]
 	}
 	p.quote = old
+}
+
+func heredocNeedsEOFWarning(delim *HeredocDelim) bool {
+	if delim == nil || !delim.Quoted {
+		return false
+	}
+	return heredocPartsNeedEOFWarning(delim.Parts)
+}
+
+func heredocPartsNeedEOFWarning(parts []WordPart) bool {
+	for _, part := range parts {
+		switch part := part.(type) {
+		case *ParamExp, *CmdSubst, *ArithmExp, *ProcSubst:
+			return true
+		case *DblQuoted:
+			if heredocPartsNeedEOFWarning(part.Parts) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func posSubCol(p Pos, n int) Pos {
@@ -1384,6 +1415,20 @@ func (p *Parser) matched(lpos Pos, left, right token) Pos {
 
 func (p *Parser) errPass(err error) {
 	if p.err == nil {
+		if parseErr, ok := err.(ParseError); ok && p.pendingHeredocWarningWanted != "" {
+			if token, ok := bashCompatUnexpectedEOFCommand(parseErr); ok {
+				parseErr.bashHeredocWanted = p.pendingHeredocWarningWanted
+				parseErr.bashUnexpectedEOFCommand = token
+				parseErr.SecondaryPos = parseErr.Pos
+				parseErr.Pos = p.pendingHeredocWarningPos
+				parseErr.SourceLine = ""
+				parseErr.SourceLinePos = Pos{}
+				parseErr.noSourceLine = true
+				err = parseErr
+			}
+		}
+	}
+	if p.err == nil {
 		p.err = err
 		p.bsp = uint(len(p.bs)) + 1
 		p.r = utf8.RuneSelf
@@ -1457,12 +1502,14 @@ type ParseError struct {
 	// SourceLinePos optionally overrides the line number used for SourceLine.
 	SourceLinePos Pos
 
-	bashText          string
-	bashSecondaryText string
-	bashPrefix        string
-	bashPrefixNoLine  bool
-	noSourceLine      bool
-	recoverable       bool
+	bashText                 string
+	bashSecondaryText        string
+	bashHeredocWanted        string
+	bashUnexpectedEOFCommand string
+	bashPrefix               string
+	bashPrefixNoLine         bool
+	noSourceLine             bool
+	recoverable              bool
 }
 
 func (e ParseError) Error() string {
@@ -1473,25 +1520,18 @@ func (e ParseError) Error() string {
 }
 
 func (e ParseError) bashCompat() ParseError {
-	if e.bashText != "" || e.bashSecondaryText != "" || e.SecondaryText != "" || e.noSourceLine {
+	if e.bashText != "" || e.bashSecondaryText != "" || e.bashHeredocWanted != "" || e.SecondaryText != "" || e.noSourceLine {
 		return e
 	}
 	sourceLine := strings.TrimSpace(e.SourceLine)
+	if bashText, ok := bashCompatUnexpectedEOFText(e); ok {
+		e.bashText = bashText
+		e.SourceLine = ""
+		e.SourceLinePos = Pos{}
+		e.noSourceLine = true
+		return e
+	}
 	switch {
-	case e.Incomplete &&
-		(e.Text == "`if` must be followed by a statement list" || e.Text == "`if <cond>` must be followed by `then`") &&
-		strings.HasSuffix(sourceLine, "if"):
-		e.bashText = fmt.Sprintf("syntax error: unexpected end of file from `if' command on line %d", e.Pos.Line())
-		e.SourceLine = ""
-		e.SourceLinePos = Pos{}
-		e.noSourceLine = true
-	case e.Incomplete &&
-		(e.Text == "`while` must be followed by a statement list" || e.Text == "`while <cond>` must be followed by `do`") &&
-		strings.HasSuffix(sourceLine, "while"):
-		e.bashText = fmt.Sprintf("syntax error: unexpected end of file from `while' command on line %d", e.Pos.Line())
-		e.SourceLine = ""
-		e.SourceLinePos = Pos{}
-		e.noSourceLine = true
 	case e.Text == "`for` must be followed by a literal" && strings.HasSuffix(sourceLine, "for"):
 		e.bashText = "syntax error near unexpected token `newline'"
 	case e.Text == "`case` must be followed by a word" && strings.HasSuffix(sourceLine, "case"):
@@ -1541,6 +1581,29 @@ func bashCompatArrayLiteralToken(sourceLine string) bool {
 	return strings.Contains(sourceLine, "=()")
 }
 
+func bashCompatUnexpectedEOFCommand(e ParseError) (string, bool) {
+	switch {
+	case e.Incomplete &&
+		(e.Text == "`if` must be followed by a statement list" || e.Text == "`if <cond>` must be followed by `then`"):
+		return "if", true
+	case e.Incomplete &&
+		(e.Text == "`while` must be followed by a statement list" || e.Text == "`while <cond>` must be followed by `do`"):
+		return "while", true
+	case e.Incomplete &&
+		(e.Text == "`{` statement must end with `}`" || e.Text == "reached EOF without matching `{` with `}`"):
+		return "{", true
+	default:
+		return "", false
+	}
+}
+
+func bashCompatUnexpectedEOFText(e ParseError) (string, bool) {
+	token, ok := bashCompatUnexpectedEOFCommand(e)
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("syntax error: unexpected end of file from `%s' command on line %d", token, e.Pos.Line()), true
+}
 func bashCompatFuncOpenError(text string) bool {
 	switch text {
 	case "`foo(` must be followed by `)`", "`function foo(` must be followed by `)`":
@@ -1597,7 +1660,13 @@ func (e ParseError) BashError() string {
 	}
 	var first string
 	text := e.Text
-	if e.bashText != "" {
+	if e.bashHeredocWanted != "" {
+		text = fmt.Sprintf(
+			"warning: here-document at line %d delimited by end-of-file (wanted `%s')",
+			e.Pos.Line(),
+			e.bashHeredocWanted,
+		)
+	} else if e.bashText != "" {
 		text = e.bashText
 	}
 	if e.bashPrefix != "" && e.bashPrefixNoLine {
@@ -1611,7 +1680,13 @@ func (e ParseError) BashError() string {
 	}
 	lines := []string{first}
 	secondaryText := e.SecondaryText
-	if e.bashSecondaryText != "" {
+	if e.bashHeredocWanted != "" {
+		secondaryText = fmt.Sprintf(
+			"syntax error: unexpected end of file from `%s' command on line %d",
+			e.bashUnexpectedEOFCommand,
+			secondaryPos.Line(),
+		)
+	} else if e.bashSecondaryText != "" {
 		secondaryText = e.bashSecondaryText
 	}
 	if secondaryText != "" {
@@ -3270,12 +3345,28 @@ func (p *Parser) paramExp() *ParamExp {
 		p.pos = p.nextPos()
 		p.rune()
 		pe.Index = p.eitherIndex()
+		if pe.Index != nil && !pe.Index.Right.IsValid() {
+			if p.tok == rightBrace && p.pos.IsValid() {
+				pe.Rbrace = p.pos
+				pe.Invalid = p.sourceRange(pe.Dollar, posAddCol(pe.Rbrace, 1))
+				p.quote = old
+				p.next()
+				return pe
+			}
+			return p.invalidParamExp(pe, old)
+		}
+	}
+	if p.r == '&' {
+		return p.invalidParamExp(pe, old)
 	}
 	tokRune := p.r
 	p.pos = p.nextPos()
 	p.tok = p.paramToken(p.r)
 	if p.tok == rightBrace {
 		pe.Rbrace = p.pos
+		if pe.Index != nil && !pe.Index.Right.IsValid() {
+			pe.Invalid = p.sourceRange(pe.Dollar, posAddCol(pe.Rbrace, 1))
+		}
 		p.quote = old
 		p.next()
 		return pe
@@ -3394,6 +3485,9 @@ func (p *Parser) paramExp() *ParamExp {
 	}
 	p.quote = old
 	pe.Rbrace = p.matched(pe.Dollar, dollBrace, rightBrace)
+	if pe.Index != nil && !pe.Index.Right.IsValid() && pe.Invalid == "" && pe.Rbrace.IsValid() {
+		pe.Invalid = p.sourceRange(pe.Dollar, posAddCol(pe.Rbrace, 1))
+	}
 	return pe
 }
 
@@ -3648,6 +3742,11 @@ func (p *Parser) eitherIndex() *Subscript {
 	if p.tok == rightBrack {
 		sub.Right = p.pos
 		sub.raw = p.sourceBetween(innerStart, p.pos)
+	}
+	if p.lang.in(langBashLike) && old == runeByRune && p.tok == rightBrace {
+		sub.raw = p.sourceBetween(innerStart, p.pos)
+		p.quote = old
+		return sub
 	}
 	p.quote = old
 	p.matchedArithm(lpos, leftBrack, rightBrack)
