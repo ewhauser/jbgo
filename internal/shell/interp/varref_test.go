@@ -1223,3 +1223,72 @@ echo ~root
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+
+func TestDbracketTildeUsesLiveHome(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/home/bob"),
+		Dir:         "/tmp",
+	}, `
+[[ ~ == /home/bob ]]
+echo status=$?
+
+HOME=''
+[[ ~ ]]
+echo status=$?
+[[ -n ~ ]]
+echo unary=$?
+
+[[ ~ == ~ ]]
+echo status=$?
+
+[[ $HOME == ~ ]]
+echo fnmatch=$?
+[[ ~ == $HOME ]]
+echo fnmatch=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "status=0\nstatus=1\nunary=1\nstatus=0\nfnmatch=0\nfnmatch=0\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDbracketRegexDoesNotTildeExpand(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		StartupHome: "/startup",
+		Env:         expand.ListEnviron("HOME=/home/bob"),
+		Dir:         "/tmp",
+	}, `
+HOME=foo
+[[ ~ =~ $HOME ]]
+echo regex=$?
+[[ $HOME =~ ~ ]]
+echo regex=$?
+
+HOME='^a$'
+[[ ~ =~ $HOME ]]
+echo regex=$?
+[[ $HOME =~ ~ ]]
+echo regex=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "regex=1\nregex=1\nregex=1\nregex=1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}

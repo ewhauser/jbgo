@@ -414,20 +414,8 @@ func (r *Runner) literal(word *syntax.Word) string {
 	return str
 }
 
-func condTildeExpandsInDBrackets() bool {
-	return runtime.GOOS != "darwin"
-}
-
 func (r *Runner) condLiteral(word *syntax.Word) string {
-	var (
-		str string
-		err error
-	)
-	if condTildeExpandsInDBrackets() {
-		str, err = expand.Literal(r.ecfg, word)
-	} else {
-		str, err = expand.LiteralNoTilde(r.ecfg, word)
-	}
+	str, err := expand.Literal(r.condExpandConfig(), word)
 	r.expandErr(err)
 	return str
 }
@@ -465,15 +453,7 @@ func (r *Runner) pattern(pat *syntax.Pattern) string {
 }
 
 func (r *Runner) condPattern(pat *syntax.Pattern) string {
-	var (
-		str string
-		err error
-	)
-	if condTildeExpandsInDBrackets() {
-		str, err = expand.Pattern(r.ecfg, pat)
-	} else {
-		str, err = expand.PatternNoTilde(r.ecfg, pat)
-	}
+	str, err := expand.Pattern(r.condExpandConfig(), pat)
 	r.expandErr(err)
 	return str
 }
