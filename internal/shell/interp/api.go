@@ -234,7 +234,10 @@ type Runner struct {
 
 	trapLineOverride uint
 	signalOwner      *Runner
-	signalChildren   *sync.Map
+	// signalChildren is an owner-wide registry of inherited shell runners keyed
+	// by their bash PID so signal dispatch can inspect direct child shells.
+	signalChildren      *sync.Map
+	signalParentBASHPID int
 }
 
 type commandHashEntry struct {
@@ -908,6 +911,7 @@ func (r *Runner) Reset() {
 		syntheticPipelineStmts: r.syntheticPipelineStmts,
 		signalOwner:            r.signalOwner,
 		signalChildren:         r.signalChildren,
+		signalParentBASHPID:    r.signalParentBASHPID,
 	}
 	r.traps.actions = nil
 	r.traps.active = nil
@@ -1149,6 +1153,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		origRandom:              random,
 		signalOwner:             r.signalOwner,
 		signalChildren:          r.signalChildren,
+		signalParentBASHPID:     r.signalParentBASHPID,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
@@ -1194,14 +1199,15 @@ func (r *Runner) InheritSignalFamily(owner *Runner, stablePID, parentBASHPID int
 	}
 	r.signalOwner = owner
 	r.signalChildren = owner.signalChildren
+	r.signalParentBASHPID = parentBASHPID
 	r.pid = stablePID
 	r.ppid = parentBASHPID
 	r.nextVirtualPID = owner.nextVirtualPID
 	r.bashPID = owner.allocateSubshellPID()
-	owner.signalChildren.Store(parentBASHPID, r)
+	owner.signalChildren.Store(r.bashPID, r)
 }
 
-func (r *Runner) signalChildTrapTarget() *Runner {
+func (r *Runner) signalChildTrapTarget(id trapID) *Runner {
 	if r == nil {
 		return nil
 	}
@@ -1210,10 +1216,20 @@ func (r *Runner) signalChildTrapTarget() *Runner {
 		owner = owner.signalOwner
 	}
 	if owner.signalChildren != nil {
-		if child, ok := owner.signalChildren.Load(r.bashPID); ok {
-			if runner, ok := child.(*Runner); ok && runner != nil {
-				return runner
+		var target *Runner
+		owner.signalChildren.Range(func(_, child any) bool {
+			runner, ok := child.(*Runner)
+			if !ok || runner == nil || runner.signalParentBASHPID != r.bashPID {
+				return true
 			}
+			if action := runner.trapAction(id); action.active() {
+				target = runner
+				return false
+			}
+			return true
+		})
+		if target != nil {
+			return target
 		}
 	}
 	return nil

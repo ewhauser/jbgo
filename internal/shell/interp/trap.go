@@ -290,32 +290,32 @@ func (r *Runner) runPendingSignalTraps(ctx context.Context) {
 func (r *Runner) queueSignalTrap(id trapID) {
 	r.traps.pending = append(r.traps.pending, pendingSignalTrap{
 		id:     id,
-		status: r.lastExit.code,
+		status: r.exit.code,
 		line:   r.currentStmtLine,
 	})
 }
 
 func (r *Runner) dispatchSignal(target string, number int) error {
 	if strings.HasPrefix(target, "g") {
-		return r.dispatchOwnedSignal(target, number)
+		return r.dispatchOwnedSignal(r, target, number)
 	}
 	owner := r
 	if owner.signalOwner != nil {
 		owner = owner.signalOwner
 	}
-	return owner.dispatchOwnedSignal(target, number)
+	return owner.dispatchOwnedSignal(r, target, number)
 }
 
 func (r *Runner) DispatchSignal(target string, number int) error {
 	return r.dispatchSignal(target, number)
 }
 
-func (r *Runner) dispatchOwnedSignal(target string, number int) error {
+func (r *Runner) dispatchOwnedSignal(caller *Runner, target string, number int) error {
 	info, ok := trapSignalByNumber[number]
 	if !ok {
 		return fmt.Errorf("invalid signal %d", number)
 	}
-	resolveTarget := func(target *Runner) *Runner {
+	resolveTarget := func(target *Runner, caller *Runner) *Runner {
 		if target == nil {
 			return nil
 		}
@@ -327,7 +327,18 @@ func (r *Runner) dispatchOwnedSignal(target string, number int) error {
 		case 2, 3:
 			return target
 		}
-		if child := target.signalChildTrapTarget(); child != nil {
+		if caller != nil && caller != target {
+			owner := caller
+			if owner.signalOwner != nil {
+				owner = owner.signalOwner
+			}
+			if owner == r {
+				if action := caller.trapAction(id); action.active() {
+					return caller
+				}
+			}
+		}
+		if child := target.signalChildTrapTarget(id); child != nil {
 			if action := child.trapAction(id); action.active() {
 				return child
 			}
@@ -336,7 +347,7 @@ func (r *Runner) dispatchOwnedSignal(target string, number int) error {
 	}
 	switch target {
 	case strconv.Itoa(r.pid), strconv.Itoa(r.bashPID):
-		targetRunner := resolveTarget(r)
+		targetRunner := resolveTarget(r, caller)
 		if action := targetRunner.trapAction(trapID(number)); action.kind == trapActionIgnore {
 			return nil
 		}
@@ -353,7 +364,7 @@ func (r *Runner) dispatchOwnedSignal(target string, number int) error {
 			return fmt.Errorf("%s: arguments must be process or job IDs", target)
 		}
 		bg := r.bgProcs[idx-1]
-		targetRunner := resolveTarget(bg.runner)
+		targetRunner := resolveTarget(bg.runner, nil)
 		if targetRunner == nil {
 			return fmt.Errorf("%s: arguments must be process or job IDs", target)
 		}

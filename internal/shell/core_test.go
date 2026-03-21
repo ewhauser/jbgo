@@ -130,6 +130,36 @@ func TestCoreRunKillTriggersSignalTrap(t *testing.T) {
 	}
 }
 
+func TestCoreRunKillUsesCurrentStatementExitForTrapStatus(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	result, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"trap 'echo status=$?' USR1",
+			"false",
+			"kill -USR1 $$",
+			"echo after=$?",
+			"",
+		}, "\n"),
+		Registry: builtins.DefaultRegistry(),
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "status=0\nafter=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
 func TestCoreRunNestedShellKillTriggersParentSignalTrap(t *testing.T) {
 	t.Parallel()
 
@@ -151,6 +181,32 @@ func TestCoreRunNestedShellKillTriggersParentSignalTrap(t *testing.T) {
 		t.Fatalf("Run() error = %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
 	}
 	if got, want := stdout.String(), "nested\nafter=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
+func TestCoreRunNestedShellKillUsesCallingChildTrap(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	registry := builtins.DefaultRegistry()
+	result, err := Run(context.Background(), &Execution{
+		Script:   "sh -c \"sh -c 'trap \\\"echo first\\\" USR1; sleep 0.05; kill -USR1 \\$\\$' & sh -c 'trap \\\"echo second\\\" USR1; sleep 0.1' & wait\"\n",
+		Registry: registry,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Exec:     newCoreTestExec(registry, nil),
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "first\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {
