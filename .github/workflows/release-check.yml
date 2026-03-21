@@ -26,6 +26,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go mod download
+
       - run: go build -trimpath ./cmd/gbash
       - run: go build -trimpath ./contrib/extras/cmd/gbash-extras
 
@@ -37,6 +39,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
@@ -64,6 +68,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:

@@ -32,6 +32,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go mod download
+
       - name: Install benchstat
         run: |
           go install golang.org/x/perf/cmd/benchstat@${BENCHSTAT_VERSION}
@@ -112,6 +114,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - name: Run full benchmark suite
         env:

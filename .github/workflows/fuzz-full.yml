@@ -34,6 +34,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go mod download
+
       - id: fuzz
         continue-on-error: true
         run: make fuzz-shard
@@ -83,6 +85,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - id: fuzz
         continue-on-error: true

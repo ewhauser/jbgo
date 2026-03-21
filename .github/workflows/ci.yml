@@ -18,6 +18,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go mod download
+
       - run: make build
 
   build-contrib:
@@ -28,6 +30,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - run: make build-contrib
 
@@ -40,6 +44,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go mod download
+
       - run: make build-examples
 
   test:
@@ -51,6 +57,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - run: go mod download
+
       - run: make test
 
   bats:
@@ -61,6 +69,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - uses: cachix/install-nix-action@v30
 
@@ -74,6 +84,8 @@ jobs:
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+
+      - run: go mod download
 
       - uses: cachix/install-nix-action@v30
 
