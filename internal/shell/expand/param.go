@@ -668,6 +668,15 @@ func (cfg *Config) resolveIndirectTargetState(state paramExpState) (paramExpStat
 		return state, target, nil
 	}
 	targetState, err := cfg.paramExpState(target)
+	if err != nil {
+		var unsetErr UnsetParameterError
+		if errors.As(err, &unsetErr) && (subscriptLit(target.Index) == "@" || subscriptLit(target.Index) == "*") {
+			// Indirect ref to undefined array[@] is empty, not an error.
+			targetState.vr = Variable{Kind: Indexed}
+			targetState.indexAllElements = true
+			return targetState, target, nil
+		}
+	}
 	return targetState, target, err
 }
 
@@ -1428,6 +1437,10 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 	if indirectModeFor(pe, indirectState) == indirectResolve {
 		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
 		if err != nil {
+			var unsetErr UnsetParameterError
+			if errors.As(err, &unsetErr) {
+				return nil, false, UnsetParameterError{Node: pe, Message: unsetErr.Message}
+			}
 			return nil, false, err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil && (ql == quoteDouble || ql == quoteHeredoc) {
@@ -1573,12 +1586,39 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp) ([][]fieldPart, bool, boo
 	if indMode == indirectResolve {
 		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
 		if err != nil {
+			var unsetErr UnsetParameterError
+			if errors.As(err, &unsetErr) {
+				return nil, false, false, UnsetParameterError{Node: pe, Message: unsetErr.Message}
+			}
 			return nil, false, false, err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
-			targetCopy := *target
-			targetCopy.Exp = pe.Exp
-			return cfg.paramExpFields(&targetCopy)
+			hasElems := len(resolved.elems) > 0
+			switch pe.Exp.Op {
+			case syntax.AlternateUnset:
+				if hasElems {
+					fields, err := cfg.wordFields(pe.Exp.Word.Parts)
+					return fields, true, false, err
+				}
+				if resolved.indexAllElements {
+					fields, ok, err := cfg.arrayParamFields(target, resolved, resolved.elems)
+					return fields, ok, true, err
+				}
+			case syntax.AlternateUnsetOrNull:
+				null := arrayExpansionNull(target, nil, resolved.elems)
+				if !null {
+					fields, err := cfg.wordFields(pe.Exp.Word.Parts)
+					return fields, true, false, err
+				}
+				if resolved.indexAllElements {
+					fields, ok, err := cfg.arrayParamFields(target, resolved, resolved.elems)
+					return fields, ok, true, err
+				}
+			default:
+				targetCopy := *target
+				targetCopy.Exp = pe.Exp
+				return cfg.paramExpFields(&targetCopy)
+			}
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && !paramExpHasOuterOps(pe) {
 			if fields, ok, elideEmpty, err := cfg.paramExpFields(target); err != nil {
@@ -1833,6 +1873,10 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 	if indMode == indirectResolve {
 		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
 		if err != nil {
+			var unsetErr UnsetParameterError
+			if errors.As(err, &unsetErr) {
+				return "", UnsetParameterError{Node: pe, Message: unsetErr.Message}
+			}
 			return "", err
 		}
 		if target != nil && quotedIndirectArrayTarget(target) && pe.Exp != nil {
