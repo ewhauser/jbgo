@@ -1398,6 +1398,26 @@ func RedirectFields(cfg *Config, word *syntax.Word) ([]string, error) {
 	return fields, nil
 }
 
+// DupFields expands a single shell word for use as a descriptor-dup redirect
+// target like `>&word`. Bash performs shell expansion and field splitting here,
+// but gbash intentionally keeps pathname-like literals as-is for this redirect
+// family, matching the project conformance suite.
+func DupFields(cfg *Config, word *syntax.Word) ([]string, error) {
+	if word == nil {
+		return nil, nil
+	}
+	cfg = prepareConfig(cfg)
+	fields, err := cfg.wordFields(word.Parts)
+	if err != nil {
+		return nil, err
+	}
+	strs := make([]string, len(fields))
+	for i, field := range fields {
+		strs[i] = cfg.fieldJoin(field)
+	}
+	return strs, nil
+}
+
 // FieldsSeq expands a number of words as if they were arguments in a shell
 // command. This includes brace expansion, tilde expansion, parameter expansion,
 // command substitution, arithmetic expansion, quote removal, and globbing.

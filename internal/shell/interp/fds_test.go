@@ -191,17 +191,14 @@ echo status=$?
 	}
 }
 
-func TestDupRedirectGlobIsAmbiguousWithMultipleMatches(t *testing.T) {
+func TestDupRedirectTreatsGlobWordLiterally(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	onePath := filepath.Join(dir, "one")
-	twoPath := filepath.Join(dir, "two")
-	if err := os.WriteFile(onePath, nil, 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", onePath, err)
-	}
-	if err := os.WriteFile(twoPath, nil, 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", twoPath, err)
+	tenPath := filepath.Join(dir, "10")
+	literalPath := filepath.Join(dir, "1*")
+	if err := os.WriteFile(tenPath, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", tenPath, err)
 	}
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -212,18 +209,19 @@ func TestDupRedirectGlobIsAmbiguousWithMultipleMatches(t *testing.T) {
 		ReadDirHandler: func(_ context.Context, name string) ([]os.DirEntry, error) {
 			return os.ReadDir(name)
 		},
-	}, `
-echo hi >& *
-echo status=$?
-`)
+	}, fmt.Sprintf(`
+echo should-not-be-on-stdout >& %s
+printf 'ten=%%s\n' "$(< %q)"
+printf 'literal=%%s\n' "$(< %q)"
+`, literalPath, tenPath, literalPath))
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	if stdout != "status=1\n" {
-		t.Fatalf("stdout = %q, want %q", stdout, "status=1\n")
+	if stdout != "ten=\nliteral=should-not-be-on-stdout\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "ten=\nliteral=should-not-be-on-stdout\n")
 	}
-	if stderr != "*: ambiguous redirect\n" {
-		t.Fatalf("stderr = %q, want %q", stderr, "*: ambiguous redirect\n")
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
 
@@ -248,38 +246,6 @@ echo status=$?
 	}
 	if stderr != "\"$@\": ambiguous redirect\n" {
 		t.Fatalf("stderr = %q, want %q", stderr, "\"$@\": ambiguous redirect\n")
-	}
-}
-
-func TestDupRedirectGlobCanResolveToSingleFile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "file")
-	if err := os.WriteFile(filePath, nil, 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", filePath, err)
-	}
-
-	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Dir: dir,
-		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
-			return os.OpenFile(name, flag, perm)
-		},
-		ReadDirHandler: func(_ context.Context, name string) ([]os.DirEntry, error) {
-			return os.ReadDir(name)
-		},
-	}, `
-echo hi >& f*
-printf 'file=%s\n' "$(< file)"
-`)
-	if err != nil {
-		t.Fatalf("Run error = %v", err)
-	}
-	if stdout != "file=hi\n" {
-		t.Fatalf("stdout = %q, want %q", stdout, "file=hi\n")
-	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
 
