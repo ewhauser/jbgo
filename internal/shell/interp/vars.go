@@ -30,6 +30,14 @@ func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
 		for name, vr := range parent.Each {
 			oenv.Set(name, vr)
 		}
+		if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+			if secondsEnv, _, ok := visibleSecondsBinding(parentWrite); ok {
+				if started, ok := secondsStartTimeForEnv(secondsEnv); ok {
+					oenv.secondsStartTime = started
+					oenv.secondsStartSet = true
+				}
+			}
+		}
 	}
 	return oenv
 }
@@ -47,6 +55,11 @@ type overlayEnviron struct {
 	// We need to know if the current scope is a function's scope, because
 	// functions can modify global variables. When true, [parent] must not be nil.
 	funcScope bool
+
+	// secondsStartTime tracks the SECONDS baseline for this scope when that
+	// binding is visible from here.
+	secondsStartTime time.Time
+	secondsStartSet  bool
 }
 
 // namedVariable records the original name of a variable for platforms
@@ -215,6 +228,60 @@ func visibleBindingWriteEnv(env expand.WriteEnviron, name string) (expand.WriteE
 		return visibleBindingWriteEnv(env.parent, name)
 	default:
 		return nil, expand.Variable{}, false
+	}
+}
+
+func visibleSecondsBinding(env expand.WriteEnviron) (expand.WriteEnviron, expand.Variable, bool) {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		normalized := env.normalize("SECONDS")
+		if vr, ok := env.values[normalized]; ok {
+			if vr.Variable.Declared() {
+				return env, vr.Variable, true
+			}
+			return nil, expand.Variable{}, false
+		}
+		parent, ok := env.parent.(expand.WriteEnviron)
+		if !ok {
+			return nil, expand.Variable{}, false
+		}
+		return visibleSecondsBinding(parent)
+	case *shadowWriteEnviron:
+		if env.shadowSet && env.shadowName == "SECONDS" {
+			if env.shadow.Declared() {
+				return env, env.shadow, true
+			}
+			return nil, expand.Variable{}, false
+		}
+		return visibleSecondsBinding(env.parent)
+	default:
+		return nil, expand.Variable{}, false
+	}
+}
+
+func secondsStartTimeForEnv(env expand.WriteEnviron) (time.Time, bool) {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		return env.secondsStartTime, env.secondsStartSet
+	case *shadowWriteEnviron:
+		return env.secondsStartTime, env.secondsStartSet
+	default:
+		return time.Time{}, false
+	}
+}
+
+func setSecondsStartTimeForEnv(env expand.WriteEnviron, started time.Time) bool {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		env.secondsStartTime = started
+		env.secondsStartSet = true
+		return true
+	case *shadowWriteEnviron:
+		env.secondsStartTime = started
+		env.secondsStartSet = true
+		return true
+	default:
+		return false
 	}
 }
 
@@ -424,9 +491,15 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		n := binary.NativeEndian.Uint32(p[:])
 		vr.Kind, vr.Str = expand.String, strconv.FormatUint(uint64(n), 10)
 	case "SECONDS":
+		started := r.startTime
+		if env, _, ok := visibleSecondsBinding(r.writeEnv); ok {
+			if scopedStart, ok := secondsStartTimeForEnv(env); ok {
+				started = scopedStart
+			}
+		}
 		seconds := 0
-		if !r.startTime.IsZero() {
-			seconds = int(time.Since(r.startTime) / time.Second)
+		if !started.IsZero() {
+			seconds = int(time.Since(started) / time.Second)
 		}
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(seconds)
 	case "HOSTNAME":
@@ -516,6 +589,17 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.errf("%s: %v\n", name, err)
 		r.exit.code = 1
 		return
+	}
+	if name == "SECONDS" && vr.IsSet() {
+		seconds, err := strconv.ParseInt(strings.TrimSpace(vr.String()), 10, 64)
+		if err != nil {
+			seconds = 0
+		}
+		started := time.Now().Add(-time.Duration(seconds) * time.Second)
+		if env, _, ok := visibleSecondsBinding(r.writeEnv); ok && setSecondsStartTimeForEnv(env, started) {
+			return
+		}
+		r.startTime = started
 	}
 }
 
@@ -646,6 +730,9 @@ type shadowWriteEnviron struct {
 	shadow     expand.Variable
 	shadowName string
 	shadowSet  bool
+
+	secondsStartTime time.Time
+	secondsStartSet  bool
 }
 
 func (e *shadowWriteEnviron) Get(name string) expand.Variable {

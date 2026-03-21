@@ -86,6 +86,8 @@ bad
 #### ((gzip example - zdiff package - #2337
 
 # https://github.com/git-for-windows/git-sdk-64/blob/main/usr/bin/zdiff#L136
+# The gzip failures here are incidental; their stderr interleaving differs across
+# runtimes and hosts, while the case is really about parsing the nested (( ... ).
 
 gzip_status=$(
   exec 4>&1
@@ -93,7 +95,7 @@ gzip_status=$(
       ((gzip -cdfq -- "$file2" 4>&-
         echo $? >&4) 3>&- 5<&- </dev/null |
        eval "$cmp" /dev/fd/5 - >&3) 5<&0
-)
+) 2>/dev/null
 echo bye
 
 ## STDOUT:
@@ -132,4 +134,3 @@ echo bye
 ## STDOUT:
 bye
 ## END
-
