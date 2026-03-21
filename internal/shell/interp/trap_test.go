@@ -416,6 +416,93 @@ f
 	}
 }
 
+func TestErrTrapPipelinesFireOncePerPipeline(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+trap 'echo first' ERR
+false | false | false
+
+trap 'echo second' ERR
+{ false; } | false | false
+
+trap 'echo assign' ERR
+a=$(false) | a=$(false) | a=$(false)
+
+trap 'echo dparen' ERR
+(( 0 )) | (( 0 )) | (( 0 ))
+
+trap 'echo dbracket' ERR
+[[ a = b ]] | [[ a = b ]] | [[ a = b ]]
+
+trap 'echo subshell' ERR
+(false) | (false) | (false) | (false)
+
+trap 'echo subshell2' ERR
+(false) | (false) | (false) | (false; false)
+
+trap 'echo group' ERR
+{ false; } | { false; } | { false; }
+
+trap 'echo group2' ERR
+{ false; } | { false; } | { false; false; }
+
+echo ok
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "" +
+		"first\n" +
+		"second\n" +
+		"assign\n" +
+		"dparen\n" +
+		"dbracket\n" +
+		"subshell\n" +
+		"subshell2\n" +
+		"group\n" +
+		"group2\n" +
+		"ok\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrTrapPipelinesObserveFinalPIPESTATUS(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+err() {
+  echo "err [$@] status=$? [${PIPESTATUS[@]}]"
+}
+trap 'err' ERR
+
+echo C | false
+echo D | false | :
+
+set -o pipefail
+echo E | false | :
+
+echo ok
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "" +
+		"err [] status=1 [0 1]\n" +
+		"err [] status=1 [0 1 0]\n" +
+		"ok\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestDebugAndReturnTrapInheritance(t *testing.T) {
 	t.Parallel()
 

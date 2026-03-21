@@ -904,6 +904,7 @@ func gbashExecutionName(specPath, bashPath string) string {
 func shouldApplyOracleOverrides(specPath string) bool {
 	switch specPath {
 	case "oils/dbracket.test.sh",
+		"oils/builtin-trap-err.test.sh",
 		"oils/builtin-getopts.test.sh",
 		"oils/globignore.test.sh",
 		"oils/globstar.test.sh",
