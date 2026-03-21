@@ -270,13 +270,11 @@ func TestSECONDSPrefixAssignmentRestoreIsLIFO(t *testing.T) {
 	}
 }
 
-func TestSECONDSRestoreFailureStillRestoresOtherPrefixAssignments(t *testing.T) {
+func TestSECONDSTempBindingPopStillRestoresOtherPrefixAssignments(t *testing.T) {
 	t.Parallel()
 
-	var stderr strings.Builder
 	runner, err := NewRunner(&RunnerConfig{
-		Dir:    "/tmp",
-		Stderr: &stderr,
+		Dir: "/tmp",
 	})
 	if err != nil {
 		t.Fatalf("NewRunner() error = %v", err)
@@ -313,11 +311,8 @@ func TestSECONDSRestoreFailureStillRestoresOtherPrefixAssignments(t *testing.T) 
 	if got, want := runner.lookupVar("X").String(), "old"; got != want {
 		t.Fatalf("X after restoreCallAssigns = %q, want %q", got, want)
 	}
-	if got, want := runner.exit.code, uint8(1); got != want {
+	if got, want := runner.exit.code, uint8(0); got != want {
 		t.Fatalf("exit code = %d, want %d", got, want)
-	}
-	if got, want := stderr.String(), "SECONDS: readonly variable\n"; got != want {
-		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }
 

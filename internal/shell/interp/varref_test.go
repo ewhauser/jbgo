@@ -298,6 +298,58 @@ f
 	}
 }
 
+func TestUnsetTempBindingRevealsOuterValue(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+x=global
+f() {
+  printf 'before=%s\n' "$x"
+  x=mutated-temp
+  printf 'mutated=%s\n' "$x"
+  unset x
+  printf 'after=%s\n' "$x"
+}
+x=temp-binding f
+printf 'outer=%s\n' "$x"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "before=temp-binding\nmutated=mutated-temp\nafter=global\nouter=global\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestUnsetTempBindingStopsRestoringOriginalAfterLaterWrite(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+x=global
+f() {
+  unset x
+  x=changed
+  printf 'inside=%s\n' "$x"
+}
+x=temp-binding f
+printf 'outer=%s\n' "$x"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "inside=changed\nouter=changed\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestUnsetWrongTypeMatchesBash(t *testing.T) {
 	t.Parallel()
 

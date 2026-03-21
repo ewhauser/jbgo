@@ -174,6 +174,89 @@ func TestLocalInvalidAssignmentLikeIdentifierMatchesBash(t *testing.T) {
 	}
 }
 
+func TestExportReadonlyRejectArrayElementOperands(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+export a[7]=8
+printf 'export=%d\n' "$?"
+readonly b[7]=8
+printf 'readonly=%d\n' "$?"
+printf 'a=%s\n' "${a-unset}"
+printf 'b=%s\n' "${b-unset}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "export=1\nreadonly=1\na=unset\nb=unset\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "export: `a[7]': not a valid identifier\nreadonly: `b[7]': not a valid identifier\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestLocalDynamicWordCreatesSeparateOperand(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+var='b'
+b=global
+f() {
+  local a=loc $var c=loc
+  printf 'vals=<%s>|<%s>|<%s>\n' "$a" "$b" "$c"
+  declare -p a
+  declare -p b
+  declare -p c
+}
+f
+printf 'outer=<%s>\n' "$b"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"vals=<loc>|<>|<loc>\n" +
+		"declare -- a=\"loc\"\n" +
+		"declare -- b\n" +
+		"declare -- c=\"loc\"\n" +
+		"outer=<global>\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestLocalNamerefKeepsAssocSubscriptInAssignmentValue(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+typeset -A bashup_ev_r
+bashup_ev_r[foo]=bar
+
+p() {
+  local s=foo
+  local -n f=bashup_ev_r["$s"]
+  printf "['%s']\n" "$f"
+}
+
+p
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "['bar']\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "['bar']\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestWrappedDeclarationBuiltins(t *testing.T) {
 	t.Parallel()
 

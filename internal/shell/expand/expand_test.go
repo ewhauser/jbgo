@@ -552,6 +552,37 @@ func TestFieldsQuotedAssociativeKeyExpansionStarJoinsOneField(t *testing.T) {
 	}
 }
 
+func TestFieldsDirectKeyExpansionUnsetAndScalar(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"x": {Set: true, Kind: String, Str: ""},
+	}
+	tests := []struct {
+		src  string
+		want []string
+	}{
+		{`[${!u[@]}]`, []string{"[]"}},
+		{`[${!u[*]}]`, []string{"[]"}},
+		{`[${!x[@]}]`, []string{"[0]"}},
+		{`[${!x[*]}]`, []string{"[0]"}},
+		{`"${!u[@]}"`, nil},
+		{`"${!u[*]}"`, []string{""}},
+		{`"${!x[@]}"`, []string{"0"}},
+		{`"${!x[*]}"`, []string{"0"}},
+	}
+	for _, tc := range tests {
+		word := parseCommandWord(t, tc.src)
+		got, err := Fields(&Config{Env: env}, word)
+		if err != nil {
+			t.Fatalf("Fields(%q) error = %v", tc.src, err)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("Fields(%q) = %#v, want %#v", tc.src, got, tc.want)
+		}
+	}
+}
+
 func TestAssociativeSubscriptStringifiesNonWordExpr(t *testing.T) {
 	t.Parallel()
 

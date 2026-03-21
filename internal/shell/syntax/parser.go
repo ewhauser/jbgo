@@ -4050,7 +4050,7 @@ func (p *Parser) bracketStartsWithSpace() bool {
 	}
 }
 
-func (p *Parser) finishAssign(as *Assign) *Assign {
+func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 	if p.spaced || p.stopToken() {
 		return as
 	}
@@ -4133,10 +4133,12 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 		as.Array.Last, p.accComs = p.accComs, nil
 		p.postNested(old)
 		as.Array.Rparen = p.matched(as.Array.Lparen, leftParen, rightParen)
-	} else if w := p.getWord(); w != nil {
-		if as.Value == nil {
+	} else if as.Value == nil {
+		if w := p.getWord(); w != nil {
 			as.Value = w
-		} else {
+		}
+	} else if appendScalarWord {
+		if w := p.getWord(); w != nil {
 			as.Value.Parts = append(as.Value.Parts, w.Parts...)
 			p.finishWord(as.Value)
 		}
@@ -4145,6 +4147,10 @@ func (p *Parser) finishAssign(as *Assign) *Assign {
 }
 
 func (p *Parser) getAssignAfterRef(ref *VarRef) *Assign {
+	return p.getAssignAfterRefMode(ref, true)
+}
+
+func (p *Parser) getAssignAfterRefMode(ref *VarRef, appendScalarWord bool) *Assign {
 	as := &Assign{Ref: ref}
 	if p.tok == assgnParen {
 		// assgnParen consumed both '=' and '(', so rewrite as leftParen for
@@ -4172,7 +4178,7 @@ func (p *Parser) getAssignAfterRef(ref *VarRef) *Assign {
 			p.next()
 		}
 	}
-	return p.finishAssign(as)
+	return p.finishAssign(as, appendScalarWord)
 }
 
 func (p *Parser) tryAssignAfterRef(ref *VarRef) (*Assign, bool) {
@@ -4195,7 +4201,7 @@ func (p *Parser) tryAssignAfterRef(ref *VarRef) (*Assign, bool) {
 			p.next()
 		}
 	}
-	return p.finishAssign(as), true
+	return p.finishAssign(as, true), true
 }
 
 func (p *Parser) tryAssignCandidate(declMode bool) (*Assign, bool) {
@@ -4274,6 +4280,10 @@ func (p *Parser) tryAssignCandidate(declMode bool) (*Assign, bool) {
 }
 
 func (p *Parser) getAssign() *Assign {
+	return p.getAssignMode(true)
+}
+
+func (p *Parser) getAssignMode(appendScalarWord bool) *Assign {
 	as := &Assign{}
 	if eqIndex := p.validEqlOffs(); eqIndex > 0 { // foo=bar
 		nameEnd := eqIndex
@@ -4291,7 +4301,7 @@ func (p *Parser) getAssign() *Assign {
 			as.Value = p.wordOne(left)
 		}
 		p.next()
-		return p.finishAssign(as)
+		return p.finishAssign(as, appendScalarWord)
 	}
 	ref := p.varRef()
 	if ref == nil {
@@ -4301,7 +4311,7 @@ func (p *Parser) getAssign() *Assign {
 		p.followErr(ref.Pos(), "a[b]", assgn)
 		return nil
 	}
-	return p.getAssignAfterRef(ref)
+	return p.getAssignAfterRefMode(ref, appendScalarWord)
 }
 
 func looksLikeDeclFlagWord(tok token, val string) bool {
@@ -4360,7 +4370,7 @@ func (p *Parser) declOperand(allowInvalidAssign bool) DeclOperand {
 			}
 			return nil
 		}
-		if as := p.getAssign(); as != nil {
+		if as := p.getAssignMode(false); as != nil {
 			return &DeclAssign{Assign: as}
 		}
 		return nil
@@ -4390,7 +4400,7 @@ func (p *Parser) declOperand(allowInvalidAssign bool) DeclOperand {
 		if p.spaced || p.stopToken() {
 			return &DeclName{Ref: ref}
 		}
-		if as := p.getAssignAfterRef(ref); as != nil {
+		if as := p.getAssignAfterRefMode(ref, false); as != nil {
 			return &DeclAssign{Assign: as}
 		}
 		return nil

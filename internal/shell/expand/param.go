@@ -665,13 +665,28 @@ func indirectModeFor(pe *syntax.ParamExp, state paramExpState) indirectMode {
 		case state.orig.Kind == NameRef && pe.Index == nil:
 			return indirectNameRef
 		case pe.Index != nil && pe.Index.AllElements():
-			switch state.vr.Kind {
-			case Indexed, Associative:
-				return indirectKeys
-			}
+			return indirectKeys
 		}
 	}
 	return indirectResolve
+}
+
+func directKeyExpansionValues(vr Variable) ([]string, bool) {
+	switch vr.Kind {
+	case Indexed:
+		keys := make([]string, 0, vr.IndexedCount())
+		for _, key := range vr.IndexedIndices() {
+			keys = append(keys, strconv.Itoa(key))
+		}
+		return keys, true
+	case Associative:
+		return sortedMapKeys(vr.Map), true
+	default:
+		if vr.IsSet() {
+			return []string{"0"}, true
+		}
+		return nil, true
+	}
 }
 
 func simpleIndirectTarget(pe *syntax.ParamExp) bool {
@@ -1904,32 +1919,11 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 
 		switch subscriptLit(pe.Index) {
 		case "@":
-			switch state.vr.Kind {
-			case Indexed:
-				keys := make([]string, 0, state.vr.IndexedCount())
-				for _, key := range state.vr.IndexedIndices() {
-					keys = append(keys, strconv.Itoa(key))
-				}
+			if keys, ok := directKeyExpansionValues(state.vr); ok {
 				return cfg.splitElemsAsFields(keys), true, false, nil
-			case Associative:
-				return cfg.splitElemsAsFields(sortedMapKeys(state.vr.Map)), true, false, nil
 			}
 		case "*":
-			switch state.vr.Kind {
-			case Indexed:
-				keys := make([]string, 0, state.vr.IndexedCount())
-				for _, key := range state.vr.IndexedIndices() {
-					keys = append(keys, strconv.Itoa(key))
-				}
-				if cfg.ifs == "" {
-					if len(keys) == 0 {
-						return [][]fieldPart{}, true, false, nil
-					}
-					return [][]fieldPart{{{val: strings.Join(keys, " ")}}}, true, false, nil
-				}
-				return cfg.splitElemsAsFields(keys), true, false, nil
-			case Associative:
-				keys := sortedMapKeys(state.vr.Map)
+			if keys, ok := directKeyExpansionValues(state.vr); ok {
 				if cfg.ifs == "" {
 					if len(keys) == 0 {
 						return [][]fieldPart{}, true, false, nil
@@ -2224,13 +2218,8 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 			strs = cfg.namesByPrefix(pe.Param.Value)
 		case indMode == indirectNameRef:
 			strs = append(strs, orig.Str)
-		case vr.Kind == Indexed:
-			for _, index := range vr.IndexedIndices() {
-				strs = append(strs, strconv.Itoa(index))
-			}
-		case vr.Kind == Associative:
-			strs = sortedMapKeys(vr.Map)
-			assocKeys = true
+		case indMode == indirectKeys:
+			strs, assocKeys = directKeyExpansionValues(vr)
 		}
 		if !assocKeys {
 			slices.Sort(strs)

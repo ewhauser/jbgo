@@ -1926,7 +1926,6 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 	if err := invalidParamExpansion(pe); err != nil {
 		return nil, false, err
 	}
-	name := pe.Param.Value
 	if pe.Excl {
 		state, err := cfg.paramExpState(indirectHolderParamExp(pe))
 		if err != nil {
@@ -2008,18 +2007,7 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 				return nil, false, nil
 			}
 		case indirectKeys:
-			switch vr := cfg.Env.Get(name); vr.Kind {
-			case Indexed:
-				keys := make([]string, 0, vr.IndexedCount())
-				for _, key := range vr.IndexedIndices() {
-					keys = append(keys, strconv.Itoa(key))
-				}
-				if subscriptLit(pe.Index) == "*" {
-					return []string{cfg.ifsJoin(keys)}, true, nil
-				}
-				return keys, true, nil
-			case Associative:
-				keys := sortedMapKeys(vr.Map)
+			if keys, ok := directKeyExpansionValues(state.vr); ok {
 				if subscriptLit(pe.Index) == "*" {
 					return []string{cfg.ifsJoin(keys)}, true, nil
 				}

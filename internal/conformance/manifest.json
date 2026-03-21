@@ -14,35 +14,15 @@
           "mode": "xfail",
           "reason": "gbash stops invalid array literals earlier than bash's parser"
         },
-        "oils/assign-deferred.test.sh::export a[7]=8": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign-deferred.test.sh::readonly a[7]=8": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-read.test.sh::read bash bug": {
           "mode": "xfail",
           "reason": "gbash intentionally keeps the space-preserving result instead of reproducing bash's historical control-character bug"
-        },
-        "oils/assign.test.sh::Test above without 'local' (which is not POSIX)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/assign.test.sh::local a=loc $var c=loc": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/ble-features.test.sh::[bash_unset] function call with tempenv vs tempenv-eval": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for localvar (mutated from tempenv)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-features.test.sh::[bash_unset] local-unset / dynamic-unset for tempenv": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -58,15 +38,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested tempenvs": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/ble-unset.test.sh::[bash_unset] local-unset / dynamic-unset for localvar on nested-context": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/ble-unset.test.sh::[bash_unset] local-unset for nested tempenvs": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
