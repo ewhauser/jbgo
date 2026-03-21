@@ -220,13 +220,15 @@ func openGzipInput(ctx context.Context, inv *Invocation, name string, opts *gzip
 	}
 
 	candidates := gzipInputCandidates(name, opts)
+	lastCandidate := name
 	for i, candidate := range candidates {
+		lastCandidate = candidate
 		info, abs, err = statPath(ctx, inv, candidate)
 		if err != nil {
 			if i+1 < len(candidates) && gzipIsNotExist(err) {
 				continue
 			}
-			return nil, "", nil, nil, err
+			return nil, "", nil, nil, gzipInputError(inv, opts.quiet, candidate, err)
 		}
 		if info.IsDir() {
 			return nil, "", nil, nil, gzipExitf(inv, opts.quiet, "gzip: %s: Is a directory", abs)
@@ -236,11 +238,11 @@ func openGzipInput(ctx context.Context, inv *Invocation, name string, opts *gzip
 			if i+1 < len(candidates) && gzipIsNotExist(err) {
 				continue
 			}
-			return nil, "", nil, nil, err
+			return nil, "", nil, nil, gzipInputError(inv, opts.quiet, candidate, err)
 		}
 		return file, abs, info, func() { _ = file.Close() }, nil
 	}
-	return nil, "", nil, nil, stdfs.ErrNotExist
+	return nil, "", nil, nil, gzipInputError(inv, opts.quiet, lastCandidate, stdfs.ErrNotExist)
 }
 
 func gzipInputCandidates(name string, opts *gzipOptions) []string {
@@ -258,6 +260,13 @@ func gzipInputCandidates(name string, opts *gzipOptions) []string {
 
 func gzipIsNotExist(err error) bool {
 	return errors.Is(err, stdfs.ErrNotExist) || os.IsNotExist(err)
+}
+
+func gzipInputError(inv *Invocation, quiet bool, name string, err error) error {
+	if gzipIsNotExist(err) {
+		return gzipExitf(inv, quiet, "gzip: %s: No such file or directory", name)
+	}
+	return gzipExitf(inv, quiet, "gzip: %s: %v", name, err)
 }
 
 func gzipTestStream(inv *Invocation, verbose bool, displayName string, reader io.Reader) error {

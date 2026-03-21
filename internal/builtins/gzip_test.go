@@ -33,9 +33,6 @@ func TestGzipDecompressEmptyOperandFallsBackToSuffixLookup(t *testing.T) {
 	if got, want := result.ExitCode, 1; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
-	if runtime.GOOS == "darwin" {
-		return
-	}
 	if got := result.Stderr; !strings.Contains(got, ".gz") {
 		t.Fatalf("Stderr = %q, want .gz lookup diagnostic", got)
 	}
