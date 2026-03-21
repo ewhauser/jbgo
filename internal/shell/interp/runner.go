@@ -253,6 +253,7 @@ func (r *Runner) updateExpandOpts() {
 	r.ecfg.FailGlob = r.opts[optFailGlob]
 	r.ecfg.GlobSkipDots = r.opts[optGlobSkipDots]
 	r.ecfg.NoUnset = r.opts[optNoUnset]
+	r.ecfg.NoBraceExpand = !r.opts[optBraceExpand]
 	r.ecfg.ExtGlob = r.opts[optExtGlob]
 }
 

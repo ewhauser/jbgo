@@ -169,6 +169,11 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 	if passthrough {
 		// Output was already written via the passthrough writers,
 		// so skip writeExecutionOutputs to avoid duplicated output.
+		// Note: stderr normalization above (bash: prefix, etc.) runs on
+		// the captured result but cannot retroactively fix what was
+		// already streamed. This means error prefixes are lost when
+		// stderr is merged with stdout; the proper fix is for the child
+		// session to emit the prefix itself.
 		return exitForExecutionResult(result)
 	}
 	if err := writeExecutionOutputs(inv, result); err != nil {

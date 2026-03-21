@@ -93,6 +93,10 @@ type Config struct {
 	// as errors.
 	NoUnset bool
 
+	// NoBraceExpand corresponds to set +B; when true, brace expansion
+	// (e.g. {a,b,c}, {1..5}) is suppressed.
+	NoBraceExpand bool
+
 	// ExtGlob corresponds to the shell option which allows using extended
 	// pattern matching features when performing pathname expansion (globbing).
 	ExtGlob bool
@@ -1407,7 +1411,7 @@ func fieldsSeq(cfg *Config, allowAssignLike bool, words ...*syntax.Word) iter.Se
 	return func(yield func(string, error) bool) {
 		for _, word := range words {
 			afterBraces := []*syntax.Word{word}
-			hadBraces := slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+			hadBraces := !cfg.NoBraceExpand && slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
 				_, ok := part.(*syntax.BraceExp)
 				return ok
 			})
