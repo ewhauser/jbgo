@@ -432,6 +432,139 @@ func callShouldRunDebugTrap(cm *syntax.CallExpr) bool {
 	return cm.Args[0].Lit() != loopIterHelperCommand
 }
 
+func commandUsesTopLevelDebugTrap(cm syntax.Command) bool {
+	switch cm := cm.(type) {
+	case *syntax.CallExpr:
+		return callShouldRunDebugTrap(cm)
+	case *syntax.ArithmCmd, *syntax.CaseClause, *syntax.TestClause, *syntax.DeclClause:
+		return true
+	default:
+		return false
+	}
+}
+
+func isPipelineBinaryCmd(cm *syntax.BinaryCmd) bool {
+	return cm != nil && (cm.Op == syntax.Pipe || cm.Op == syntax.PipeAll)
+}
+
+func (r *Runner) unwrapSyntheticPipelineStmt(st *syntax.Stmt) *syntax.Stmt {
+	if st == nil {
+		return nil
+	}
+	if inner, ok := r.syntheticPipelineStmts[st]; ok && inner != nil {
+		return inner
+	}
+	return st
+}
+
+func (r *Runner) collectPipelineDebugStmts(st *syntax.Stmt, nodes *[]*syntax.BinaryCmd, segments *[]*syntax.Stmt) {
+	st = r.unwrapSyntheticPipelineStmt(st)
+	if st == nil {
+		return
+	}
+	if cm, ok := st.Cmd.(*syntax.BinaryCmd); ok && isPipelineBinaryCmd(cm) {
+		r.collectPipelineDebugInfo(cm, nodes, segments)
+		return
+	}
+	*segments = append(*segments, st)
+}
+
+func (r *Runner) collectPipelineDebugInfo(cm *syntax.BinaryCmd, nodes *[]*syntax.BinaryCmd, segments *[]*syntax.Stmt) {
+	if !isPipelineBinaryCmd(cm) {
+		return
+	}
+	*nodes = append(*nodes, cm)
+	r.collectPipelineDebugStmts(cm.X, nodes, segments)
+	r.collectPipelineDebugStmts(cm.Y, nodes, segments)
+}
+
+func (r *Runner) pipelineDebugInfo(cm *syntax.BinaryCmd) ([]*syntax.BinaryCmd, []*syntax.Stmt) {
+	var nodes []*syntax.BinaryCmd
+	var segments []*syntax.Stmt
+	r.collectPipelineDebugInfo(cm, &nodes, &segments)
+	return nodes, segments
+}
+
+func debugLineForStmt(st *syntax.Stmt) uint {
+	if st == nil {
+		return 0
+	}
+	if line := debugLineForCommand(st.Cmd); line != 0 {
+		return line
+	}
+	return st.Pos().Line()
+}
+
+func (r *Runner) pipelineDebugTrapSuppressed(cm *syntax.BinaryCmd) bool {
+	return r != nil && r.pipelineDebugSkips != nil && r.pipelineDebugSkips[cm] > 0
+}
+
+func (r *Runner) commandDebugTrapSuppressed(cm syntax.Command) bool {
+	return r != nil && cm != nil && r.pipelineSegmentDebugSkips != nil && r.pipelineSegmentDebugSkips[cm] > 0
+}
+
+func (r *Runner) runCommandDebugTrap(ctx context.Context, cm syntax.Command) bool {
+	if !commandUsesTopLevelDebugTrap(cm) || r.commandDebugTrapSuppressed(cm) {
+		return false
+	}
+	return r.runDebugTrap(ctx, debugLineForCommand(cm))
+}
+
+func (r *Runner) runPipelineDebugTrap(ctx context.Context, cm *syntax.BinaryCmd) bool {
+	if r.pipelineDebugTrapSuppressed(cm) {
+		return false
+	}
+	_, segments := r.pipelineDebugInfo(cm)
+	for _, st := range segments {
+		if st == nil || !commandUsesTopLevelDebugTrap(st.Cmd) {
+			continue
+		}
+		if r.runDebugTrap(ctx, debugLineForStmt(st)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runner) pushPipelineDebugState(cm *syntax.BinaryCmd) func() {
+	nodes, segments := r.pipelineDebugInfo(cm)
+	if len(nodes) == 0 && len(segments) == 0 {
+		return func() {}
+	}
+	if r.pipelineDebugSkips == nil {
+		r.pipelineDebugSkips = make(map[*syntax.BinaryCmd]int, len(nodes))
+	}
+	if r.pipelineSegmentDebugSkips == nil {
+		r.pipelineSegmentDebugSkips = make(map[syntax.Command]int, len(segments))
+	}
+	for _, node := range nodes {
+		r.pipelineDebugSkips[node]++
+	}
+	for _, st := range segments {
+		if st == nil || !commandUsesTopLevelDebugTrap(st.Cmd) {
+			continue
+		}
+		r.pipelineSegmentDebugSkips[st.Cmd]++
+	}
+	return func() {
+		for _, node := range nodes {
+			r.pipelineDebugSkips[node]--
+			if r.pipelineDebugSkips[node] == 0 {
+				delete(r.pipelineDebugSkips, node)
+			}
+		}
+		for _, st := range segments {
+			if st == nil || !commandUsesTopLevelDebugTrap(st.Cmd) {
+				continue
+			}
+			r.pipelineSegmentDebugSkips[st.Cmd]--
+			if r.pipelineSegmentDebugSkips[st.Cmd] == 0 {
+				delete(r.pipelineSegmentDebugSkips, st.Cmd)
+			}
+		}
+	}
+}
+
 func (r *Runner) condLiteral(word *syntax.Word) string {
 	var (
 		str string
@@ -914,7 +1047,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.exit = r2.exit
 		r.exit.errExitIgnored = false
 	case *syntax.CallExpr:
-		if callShouldRunDebugTrap(cm) && r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+		if callShouldRunDebugTrap(cm) && r.runCommandDebugTrap(ctx, cm) {
 			return
 		}
 		args := cm.Args
@@ -1040,6 +1173,15 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.stmt(ctx, cm.Y)
 			}
 		case syntax.Pipe, syntax.PipeAll:
+			suppressPipelineDebug := r.pipelineDebugTrapSuppressed(cm)
+			if !suppressPipelineDebug && r.runPipelineDebugTrap(ctx, cm) {
+				return
+			}
+			restorePipelineDebug := func() {}
+			if !suppressPipelineDebug {
+				restorePipelineDebug = r.pushPipelineDebugState(cm)
+			}
+			defer restorePipelineDebug()
 			pr, pw := r.newPipe()
 			r2 := r.subshell(true)
 			r2.setStdoutWriter(pw)
@@ -1233,7 +1375,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		}
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
-		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+		if r.runCommandDebugTrap(ctx, cm) {
 			return
 		}
 		if tracingEnabled {
@@ -1282,7 +1424,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.exit.oneIf(val == 0)
 		}
 	case *syntax.CaseClause:
-		if r.runDebugTrap(ctx, cm.Pos().Line()) {
+		if r.runCommandDebugTrap(ctx, cm) {
 			return
 		}
 		trace.string("case ")
@@ -1319,7 +1461,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		}
 	case *syntax.TestClause:
-		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+		if r.runCommandDebugTrap(ctx, cm) {
 			return
 		}
 		cond := r.evalCond(ctx, cm.X, trace)
@@ -1334,7 +1476,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.exit.code = 1
 		}
 	case *syntax.DeclClause:
-		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+		if r.runCommandDebugTrap(ctx, cm) {
 			return
 		}
 		local, global := false, false

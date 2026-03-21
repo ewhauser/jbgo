@@ -253,18 +253,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::One 'echo' in first pipeline part - why does bash behave differently from case above?": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG and pipeline (lastpipe difference)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG not run in forked interpreter for first pipeline part": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::trap RETURN": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

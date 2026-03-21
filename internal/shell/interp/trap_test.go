@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"runtime"
@@ -13,6 +14,32 @@ import (
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
+
+func runPipelineTrapScript(t *testing.T, src string) (string, string, error) {
+	t.Helper()
+
+	return runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		ExecHandler: func(ctx context.Context, args []string) error {
+			hc := mustHandlerCtx(ctx)
+			switch {
+			case len(args) == 1 && args[0] == "cat":
+				_, err := io.Copy(hc.Stdout, hc.Stdin)
+				return err
+			case len(args) == 2 && args[0] == "wc" && args[1] == "-l":
+				data, err := io.ReadAll(hc.Stdin)
+				if err != nil {
+					return err
+				}
+				_, err = fmt.Fprintf(hc.Stdout, "%8d\n", bytes.Count(data, []byte{'\n'}))
+				return err
+			default:
+				fmt.Fprintf(hc.Stderr, "%q: executable file not found in $PATH\n", args[0])
+				return ExitStatus(127)
+			}
+		},
+	}, src)
+}
 
 func TestRunReaderWithMetadataRunsExitTrapOnLaterParseError(t *testing.T) {
 	t.Parallel()
@@ -605,5 +632,112 @@ f
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestDebugTrapPipelinesRunInParent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name: "grouped left segment",
+			script: "debuglog() { echo \"dbg:$1\"; }\n" +
+				"trap 'debuglog $LINENO' DEBUG\n" +
+				"{ echo pipe1;\n" +
+				"  echo pipe2; } | cat\n" +
+				"echo ok\n",
+			want: "dbg:4\npipe1\npipe2\ndbg:5\nok\n",
+		},
+		{
+			name: "simple two stage pipeline",
+			script: "debuglog() { echo \"dbg:$1\"; }\n" +
+				"trap 'debuglog $LINENO' DEBUG\n" +
+				"echo pipeline | cat\n" +
+				"echo ok\n",
+			want: "dbg:3\ndbg:3\npipeline\ndbg:4\nok\n",
+		},
+		{
+			name: "grouped segment before wc",
+			script: "debuglog() { echo \"dbg:$1\"; }\n" +
+				"trap 'debuglog $LINENO' DEBUG\n" +
+				"{ echo x; echo y; } | wc -l\n",
+			want: "dbg:3\n       2\n",
+		},
+		{
+			name: "three stage pipeline",
+			script: "debuglog() { echo \"dbg:$1\"; }\n" +
+				"trap 'debuglog $LINENO' DEBUG\n" +
+				"printf \"x\\n\" | cat | cat\n",
+			want: "dbg:3\ndbg:3\ndbg:3\nx\n",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			stdout, stderr, err := runPipelineTrapScript(t, tt.script)
+			if err != nil {
+				t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+			}
+			if stdout != tt.want {
+				t.Fatalf("stdout = %q, want %q", stdout, tt.want)
+			}
+			if stderr != "" {
+				t.Fatalf("stderr = %q, want empty", stderr)
+			}
+		})
+	}
+}
+
+func TestDebugTrapFunctracePipelines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name: "simple stages stay parent scoped",
+			script: "debuglog() { echo \"dbg:$1\"; }\n" +
+				"set -o functrace\n" +
+				"trap 'debuglog $LINENO' DEBUG\n" +
+				"printf \"x\\n\" | cat | cat\n",
+			want: "dbg:4\ndbg:4\ndbg:4\nx\n",
+		},
+		{
+			name: "grouped left segment keeps child debug",
+			script: "debuglog() { echo \"dbg:$1\"; }\n" +
+				"set -o functrace\n" +
+				"trap 'debuglog $LINENO' DEBUG\n" +
+				"{ echo pipe1;\n" +
+				"  echo pipe2; } | cat\n" +
+				"echo ok\n",
+			want: "dbg:5\ndbg:4\npipe1\ndbg:5\npipe2\ndbg:6\nok\n",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			stdout, stderr, err := runPipelineTrapScript(t, tt.script)
+			if err != nil {
+				t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+			}
+			if stdout != tt.want {
+				t.Fatalf("stdout = %q, want %q", stdout, tt.want)
+			}
+			if stderr != "" {
+				t.Fatalf("stderr = %q, want empty", stderr)
+			}
+		})
 	}
 }
