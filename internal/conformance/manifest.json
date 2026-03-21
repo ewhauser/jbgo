@@ -1374,17 +1374,12 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/sh-options-bash.test.sh::SHELLOPTS is readonly": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/sh-options-bash.test.sh::SHELLOPTS is updated when options are changed": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/sh-options-bash.test.sh::SHELLOPTS reflects flags like sh -x": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/sh-options-bash.test.sh::export SHELLOPTS does cross-process tracing": {
           "mode": "xfail",
@@ -1394,27 +1389,9 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/smoke.test.sh::Here doc with redirect": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/smoke.test.sh::failed command": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/smoke.test.sh::pipeline": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/smoke.test.sh::pipeline with builtin": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
         },
         "oils/temp-binding.test.sh::Temp bindings with unset": {
           "mode": "xfail",
