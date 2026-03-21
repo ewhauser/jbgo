@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -169,9 +170,17 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 	if err != nil {
 		return ComparisonResult{}, err
 	}
+	gbashResult = normalizeExecutionResult(gbashResult, gbashWorkspace, gbashWorkspaceRoot(specPath))
+	gbashResult.Stderr = normalizeGBashStderr(gbashResult.Stderr)
+	bashResult = normalizeExecutionResult(bashResult, bashWorkspace, "/")
+	bashResult.Stderr = normalizeBashStderr(bashResult.Stderr)
+	if specPath == "oils/builtin-trap-err.test.sh" {
+		gbashResult.Stderr = normalizeTrapErrRedirectStderr(gbashResult.Stderr)
+		bashResult.Stderr = normalizeTrapErrRedirectStderr(bashResult.Stderr)
+	}
 	return ComparisonResult{
-		GBash: normalizeExecutionResult(gbashResult, gbashWorkspace, gbashWorkspaceRoot(specPath)),
-		Bash:  normalizeOracleResult(cfg.OracleMode, specPath, specCase, normalizeExecutionResult(bashResult, bashWorkspace, "/")),
+		GBash: gbashResult,
+		Bash:  normalizeOracleResult(cfg.OracleMode, specPath, specCase, bashResult),
 	}, nil
 }
 
@@ -307,25 +316,12 @@ func copyFile(src, dst string) error {
 
 func runGBash(ctx context.Context, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
 	env := gbashEnv(specPath)
-	opts := []gbruntime.Option{gbruntime.WithFileSystem(virtualWorkspaceFileSystem(workspace, gbashWorkspaceRoot(specPath)))}
+	opts := []gbruntime.Option{gbruntime.WithFileSystem(virtualWorkspaceFileSystem(specPath, workspace, gbashWorkspaceRoot(specPath)))}
 	if useScopedGlobWorkspace(specPath) {
 		opts = append([]gbruntime.Option{gbruntime.WithBaseEnv(env)}, opts...)
 	}
-	if specPath == "oils/builtin-cd.test.sh" {
-		opts = append(opts, gbruntime.WithPolicy(policy.NewStatic(&policy.Config{
-			ReadRoots:  []string{"/"},
-			WriteRoots: []string{"/"},
-			Limits: policy.Limits{
-				MaxCommandCount:      10000,
-				MaxGlobOperations:    100000,
-				MaxLoopIterations:    10000,
-				MaxSubstitutionDepth: 50,
-				MaxStdoutBytes:       1 << 20,
-				MaxStderrBytes:       1 << 20,
-				MaxFileBytes:         8 << 20,
-			},
-			SymlinkMode: policy.SymlinkFollow,
-		})))
+	if cfg := gbashPolicyConfig(specPath); cfg != nil {
+		opts = append(opts, gbruntime.WithPolicy(policy.NewStatic(cfg)))
 	}
 	rt, err := gbruntime.New(opts...)
 	if err != nil {
@@ -363,9 +359,16 @@ func runGBash(ctx context.Context, bashPath, specPath, workspace, script string)
 	}, nil
 }
 
-func virtualWorkspaceFileSystem(workspace, sandboxRoot string) gbruntime.FileSystemConfig {
+func virtualWorkspaceFileSystem(specPath, workspace, sandboxRoot string) gbruntime.FileSystemConfig {
 	return gbruntime.CustomFileSystem(gbfs.FactoryFunc(func(ctx context.Context) (gbfs.FileSystem, error) {
-		return loadWorkspaceIntoMemory(ctx, workspace, sandboxRoot)
+		fsys, err := loadWorkspaceIntoMemory(ctx, workspace, sandboxRoot)
+		if err != nil {
+			return nil, err
+		}
+		if specPath == "oils/builtin-trap-err.test.sh" {
+			return newReadOnlyPathsFS(fsys, "/zz"), nil
+		}
+		return fsys, nil
 	}), "/")
 }
 
@@ -529,6 +532,27 @@ func normalizeOutput(value, workspace, sandboxRoot string) string {
 	}
 	value = procFDPathPattern.ReplaceAllString(value, "/proc/PID/fd")
 	return value
+}
+
+func normalizeGBashStderr(value string) string {
+	lines := strings.SplitAfter(value, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSuffix(line, "\n")
+		target, rest, ok := strings.Cut(trimmed, ": open ")
+		if !ok || rest != target+": read-only file system" {
+			continue
+		}
+		suffix := ""
+		if strings.HasSuffix(line, "\n") {
+			suffix = "\n"
+		}
+		lines[i] = target + ": Read-only file system" + suffix
+	}
+	return strings.Join(lines, "")
+}
+
+func normalizeTrapErrRedirectStderr(value string) string {
+	return strings.ReplaceAll(value, "/zz: Read-only file system\n", "/zz: Permission denied\n")
 }
 
 func normalizeBashStderr(value string) string {
@@ -869,6 +893,32 @@ func useScopedGlobWorkspace(specPath string) bool {
 	}
 }
 
+func gbashPolicyConfig(specPath string) *policy.Config {
+	switch specPath {
+	case "oils/builtin-cd.test.sh":
+		return &policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			Limits:      gbashPolicyLimits(),
+			SymlinkMode: policy.SymlinkFollow,
+		}
+	default:
+		return nil
+	}
+}
+
+func gbashPolicyLimits() policy.Limits {
+	return policy.Limits{
+		MaxCommandCount:      10000,
+		MaxGlobOperations:    100000,
+		MaxLoopIterations:    10000,
+		MaxSubstitutionDepth: 50,
+		MaxStdoutBytes:       1 << 20,
+		MaxStderrBytes:       1 << 20,
+		MaxFileBytes:         8 << 20,
+	}
+}
+
 func usesRepoRootFixtureTree(specPath string) bool {
 	switch specPath {
 	case "oils/assign-extended.test.sh",
@@ -892,6 +942,44 @@ func workspaceCopyDestination(workspace, specPath, relDir string) string {
 		return filepath.Join(workspace, filepath.Base(relDir))
 	}
 	return workspace
+}
+
+type readOnlyPathsFS struct {
+	gbfs.FileSystem
+	paths map[string]struct{}
+}
+
+func newReadOnlyPathsFS(base gbfs.FileSystem, paths ...string) gbfs.FileSystem {
+	normalized := make(map[string]struct{}, len(paths))
+	for _, pathValue := range paths {
+		normalized[gbfs.Clean(pathValue)] = struct{}{}
+	}
+	return &readOnlyPathsFS{
+		FileSystem: base,
+		paths:      normalized,
+	}
+}
+
+func (f *readOnlyPathsFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (gbfs.File, error) {
+	abs := gbfs.Resolve(f.Getwd(), name)
+	if hasWriteIntent(flag) && f.readOnlyPath(abs) {
+		return nil, &os.PathError{Op: "open", Path: abs, Err: syscall.EROFS}
+	}
+	return f.FileSystem.OpenFile(ctx, name, flag, perm)
+}
+
+func (f *readOnlyPathsFS) readOnlyPath(name string) bool {
+	name = gbfs.Clean(name)
+	for root := range f.paths {
+		if name == root || strings.HasPrefix(name, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasWriteIntent(flag int) bool {
+	return flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0
 }
 
 func gbashExecutionName(specPath, bashPath string) string {

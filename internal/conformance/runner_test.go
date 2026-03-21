@@ -2,11 +2,15 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
+
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 func TestDetermineCaseOutcome(t *testing.T) {
@@ -43,6 +47,33 @@ func TestGbashEnvMatchesDefaultPathOrder(t *testing.T) {
 	}
 }
 
+func TestReadOnlyPathsFSRejectsWriteIntents(t *testing.T) {
+	t.Parallel()
+
+	fsys := newReadOnlyPathsFS(gbfs.NewMemory(), "/zz")
+	if err := fsys.MkdirAll(context.Background(), "/tmp", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/tmp) error = %v", err)
+	}
+	_, err := fsys.OpenFile(context.Background(), "/tmp/out", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile(/tmp/out) error = %v", err)
+	}
+	_, err = fsys.OpenFile(context.Background(), "/zz", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err == nil {
+		t.Fatal("OpenFile(/zz) error = nil, want read-only failure")
+	}
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("OpenFile(/zz) error = %T, want *os.PathError", err)
+	}
+	if got, want := pathErr.Path, "/zz"; got != want {
+		t.Fatalf("OpenFile(/zz) path = %q, want %q", got, want)
+	}
+	if !errors.Is(err, syscall.EROFS) {
+		t.Fatalf("OpenFile(/zz) error = %v, want EROFS", err)
+	}
+}
+
 func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	t.Parallel()
 
@@ -65,6 +96,15 @@ func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	}
 	if got, want := normalizeOutput("/proc/12345/fd\n", workspace, "/"), "/proc/PID/fd\n"; got != want {
 		t.Fatalf("normalizeOutput(/proc fd) = %q, want %q", got, want)
+	}
+	if got, want := normalizeGBashStderr("/zz: open /zz: read-only file system\n"), "/zz: Read-only file system\n"; got != want {
+		t.Fatalf("normalizeGBashStderr() = %q, want %q", got, want)
+	}
+	if got, want := normalizeTrapErrRedirectStderr("/zz: Read-only file system\n"), "/zz: Permission denied\n"; got != want {
+		t.Fatalf("normalizeTrapErrRedirectStderr(read-only) = %q, want %q", got, want)
+	}
+	if got, want := normalizeTrapErrRedirectStderr("/zz: Permission denied\n"), "/zz: Permission denied\n"; got != want {
+		t.Fatalf("normalizeTrapErrRedirectStderr(permission denied) = %q, want %q", got, want)
 	}
 	if got, want := normalizeBashStderr("/tmp/x/bash: line 2: parse error\n"), "parse error\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)

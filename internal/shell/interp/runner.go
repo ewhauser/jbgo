@@ -641,12 +641,15 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	}
 	r.exit = exitStatus{}
 	r.currentStmtLine = line
+	r.stmtDepth++
 	r.pipeStatusSet = false
 	defer func() {
+		r.stmtDepth--
 		r.currentStmtLine = 0
 	}()
 	if st.Background || st.Disown {
 		r2 := r.subshell(true)
+		r2.suppressTopLevelErrTrap = true
 		st2 := *st
 		st2.Background = false
 		st2.Disown = false
@@ -667,6 +670,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 		r.stmtSync(ctx, st)
 	}
 	r.runPendingSignalTraps(ctx)
+	r.lastStmtLine = line
 	r.lastExit = r.exit
 }
 
@@ -739,6 +743,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	}
 	r.pushFDSnapshot(oldFDs)
 	procSubstStart := len(r.bgProcs)
+	ranCmd := false
 	closers := make([]io.Closer, 0, len(st.Redirs))
 	keepClosedFDs := make(map[int]struct{}, len(st.Redirs))
 	releasedNamedFDs := make([]string, 0, len(st.Redirs))
@@ -757,6 +762,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		releasedNamedFDs = append(releasedNamedFDs, result.releasedNamedFDs...)
 	}
 	if r.exit.ok() && st.Cmd != nil {
+		ranCmd = true
 		if st.Negated {
 			oldNoErrExit := r.noErrExit
 			r.noErrExit = true
@@ -795,9 +801,8 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		if !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored && r.opts[optErrExit] {
 			r.exit.exiting = true
 		}
-	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt || b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
-	} else if !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored {
-		r.maybeRunErrTrap(ctx, st.Pos().Line())
+	} else if r.shouldRunStmtErrTrap(st, ranCmd) {
+		r.maybeRunErrTrap(ctx, r.stmtErrTrapLine(st, ranCmd))
 	}
 	if !keepRedirs {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
@@ -812,6 +817,37 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		r.closeUnusedSnapshotFDs(oldFDs)
 		r.syncStandardFDs()
 	}
+}
+
+func (r *Runner) shouldRunStmtErrTrap(st *syntax.Stmt, ranCmd bool) bool {
+	if r.exit.ok() || r.noErrExit || r.exit.errExitIgnored || st == nil {
+		return false
+	}
+	if r.suppressTopLevelErrTrap && r.stmtDepth == 1 {
+		return false
+	}
+	if b, ok := st.Cmd.(*syntax.BinaryCmd); ok {
+		switch b.Op {
+		case syntax.AndStmt, syntax.OrStmt, syntax.Pipe, syntax.PipeAll:
+			return false
+		}
+	}
+	if !ranCmd {
+		return true
+	}
+	switch st.Cmd.(type) {
+	case *syntax.Block, *syntax.ForClause, *syntax.CaseClause:
+		return r.skipStmtLine == st.Pos().Line()
+	default:
+		return true
+	}
+}
+
+func (r *Runner) stmtErrTrapLine(st *syntax.Stmt, ranCmd bool) uint {
+	if !ranCmd && len(st.Redirs) > 0 && r.lastStmtLine != 0 {
+		return r.lastStmtLine
+	}
+	return st.Pos().Line()
 }
 
 func usesPreRedirectExpandFDs(cmd syntax.Command) bool {

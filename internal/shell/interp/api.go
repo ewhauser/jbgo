@@ -178,13 +178,18 @@ type Runner struct {
 	lastExit exitStatus
 
 	lastExpandExit  exitStatus // used to surface exit statuses while expanding fields
+	lastStmtLine    uint
 	currentStmtLine uint
+	stmtDepth       int
 	skipStmtLine    uint
 	pipeStatuses    []string
 	pipeStatusSet   bool
 	// pipelineErrTrapDepth defers ERR handling to an enclosing pipeline until
 	// the final pipeline status and PIPESTATUS array have been established.
 	pipelineErrTrapDepth int
+	// suppressTopLevelErrTrap skips the synthetic top-level ERR trap that bash
+	// does not run for asynchronous statements like "false & wait".
+	suppressTopLevelErrTrap bool
 
 	// bgProcs holds all background shells spawned by this runner.
 	// Their PIDs are 1-indexed, from 1 to len(bgProcs), with a "g" prefix

@@ -333,26 +333,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-err.test.sh::set -o errtrace - trap ERR runs in shell functions": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::set -o errtrace - trap ERR runs in shell functions (LINENO)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::set -o errtrace: trap ERR with &": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR with for,  case, { }": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR with redirect": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",

@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -403,7 +406,7 @@ set -o errtrace
 trap 'echo traced:$LINENO' ERR
 f
 `)
-	const want = "root:4\ntraced:3\ntraced:3\ntraced:7\n"
+	const want = "root:4\ntraced:3\ntraced:7\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
@@ -413,6 +416,77 @@ f
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrTrapErrtraceAsyncListSkipsTopLevelWrapper(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "set -o errtrace\n"+
+		"trap 'echo line=$LINENO' ERR\n"+
+		"false & wait\n"+
+		"{ false; echo async; } & wait\n")
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "line=4\nasync\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrTrapCompoundWrappersOnlyTrapInnerFailures(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "trap 'echo line=$LINENO' ERR\n"+
+		"for y in 1 2; do\n"+
+		"  false\n"+
+		"done\n"+
+		"case x in\n"+
+		"  x) false ;;\n"+
+		"  *) false ;;\n"+
+		"esac\n"+
+		"{ false; false; false; }\n"+
+		"echo ok\n")
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const want = "line=3\nline=3\nline=6\nline=9\nline=9\nline=9\nok\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrTrapRedirectFailureUsesPreviousStmtLine(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: "/tmp",
+		OpenHandler: func(_ context.Context, name string, _ int, _ os.FileMode) (io.ReadWriteCloser, error) {
+			return nil, &os.PathError{Op: "open", Path: name, Err: syscall.EROFS}
+		},
+	}, "trap 'echo line=$LINENO' ERR\n"+
+		"false\n"+
+		"{ false\n"+
+		"  true\n"+
+		"} > /zz\n"+
+		"echo ok\n")
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const wantStdout = "line=2\nline=2\nok\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "open /zz: read-only file system\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
 
