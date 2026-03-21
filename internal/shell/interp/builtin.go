@@ -569,43 +569,62 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		if len(args) < 2 {
 			return failf(2, "getopts: usage: getopts optstring name [arg ...]\n")
 		}
+		state := r.currentGetoptsState()
 		optind, _ := strconv.Atoi(r.envGet("OPTIND"))
-		if optind-1 != r.optState.argidx {
-			if optind < 1 {
-				optind = 1
-			}
-			r.optState = getopts{argidx: optind - 1}
+		if optind < 1 {
+			optind = 1
+		}
+		if optind-1 != state.argidx {
+			*state = getopts{argidx: optind - 1}
 		}
 		optstr := args[0]
 		name := args[1]
-		if !syntax.ValidName(name) {
-			return failf(2, "getopts: invalid identifier: %q\n", name)
-		}
 		args = args[2:]
 		if len(args) == 0 {
 			args = r.Params
 		}
 		diagnostics := !strings.HasPrefix(optstr, ":")
 
-		opt, optarg, done := r.optState.next(optstr, args)
-
-		r.setVarString(name, string(opt))
-		r.delVar("OPTARG")
-		switch {
-		case opt == '?' && diagnostics && !done:
-			r.errf("getopts: illegal option -- %q\n", optarg)
-		case opt == ':' && diagnostics:
-			r.errf("getopts: option requires an argument -- %q\n", optarg)
-		default:
-			if optarg != "" {
-				r.setVarString("OPTARG", optarg)
+		result := state.next(optstr, args)
+		opt := result.opt
+		switch result.kind {
+		case getoptsResultDone, getoptsResultUnknown:
+			opt = '?'
+		case getoptsResultMissingArg:
+			if diagnostics {
+				opt = '?'
+			} else {
+				opt = ':'
 			}
 		}
-		if optind-1 != r.optState.argidx {
-			r.setVarString("OPTIND", strconv.FormatInt(int64(r.optState.argidx+1), 10))
+
+		r.delVar("OPTARG")
+		if result.kind == getoptsResultOption {
+			if result.optarg != "" {
+				r.setVarString("OPTARG", result.optarg)
+			}
+		} else if !diagnostics && !result.done() && result.optarg != "" {
+			r.setVarString("OPTARG", result.optarg)
+		}
+		if optind-1 != state.argidx {
+			r.setOPTIND(strconv.FormatInt(int64(state.argidx+1), 10))
+		}
+		if !syntax.ValidName(name) {
+			return failf(2, "getopts: `%s': not a valid identifier\n", name)
+		}
+		r.setVarString(name, string(opt))
+		switch result.kind {
+		case getoptsResultUnknown:
+			if diagnostics {
+				r.errf("illegal option -- %s\n", result.optarg)
+			}
+		case getoptsResultMissingArg:
+			if diagnostics {
+				r.errf("option requires an argument -- %s\n", result.optarg)
+			}
 		}
 
-		exit.oneIf(done)
+		exit.oneIf(result.done())
 
 	case "shopt":
 		mode := ""
@@ -2566,46 +2585,91 @@ func (p *flagParser) value() string {
 
 func (p *flagParser) args() []string { return p.remaining }
 
+type getoptsResultKind uint8
+
+const (
+	getoptsResultDone getoptsResultKind = iota
+	getoptsResultOption
+	getoptsResultUnknown
+	getoptsResultMissingArg
+)
+
+type getoptsResult struct {
+	kind   getoptsResultKind
+	opt    rune
+	optarg string
+}
+
+func (r getoptsResult) done() bool { return r.kind == getoptsResultDone }
+
 type getopts struct {
 	argidx  int
 	runeidx int
 }
 
-func (g *getopts) next(optstr string, args []string) (opt rune, optarg string, done bool) {
+func (g *getopts) next(optstr string, args []string) getoptsResult {
 	if len(args) == 0 || g.argidx >= len(args) {
-		return '?', "", true
+		g.argidx = len(args)
+		g.runeidx = 0
+		return getoptsResult{kind: getoptsResultDone, opt: '?'}
 	}
 	arg := []rune(args[g.argidx])
-	if len(arg) < 2 || arg[0] != '-' || arg[1] == '-' {
-		return '?', "", true
+	if len(arg) < 2 || arg[0] != '-' {
+		return getoptsResult{kind: getoptsResultDone, opt: '?'}
+	}
+	if arg[1] == '-' {
+		if len(arg) == 2 {
+			g.argidx++
+			g.runeidx = 0
+		}
+		return getoptsResult{kind: getoptsResultDone, opt: '?'}
 	}
 
 	opts := arg[1:]
-	opt = opts[g.runeidx]
-	if g.runeidx+1 < len(opts) {
-		g.runeidx++
-	} else {
+	if g.runeidx >= len(opts) {
 		g.argidx++
 		g.runeidx = 0
+		return getoptsResult{kind: getoptsResultDone, opt: '?'}
 	}
-
+	opt := opts[g.runeidx]
 	i := strings.IndexRune(optstr, opt)
 	if i < 0 {
-		// invalid option
-		return '?', string(opt), false
-	}
-
-	if i+1 < len(optstr) && optstr[i+1] == ':' {
-		if g.argidx >= len(args) {
-			// missing argument
-			return ':', string(opt), false
+		if g.runeidx+1 < len(opts) {
+			g.runeidx++
+		} else {
+			g.argidx++
+			g.runeidx = 0
 		}
-		optarg = args[g.argidx]
+		return getoptsResult{kind: getoptsResultUnknown, opt: '?', optarg: string(opt)}
+	}
+	if i+1 >= len(optstr) || optstr[i+1] != ':' {
+		if g.runeidx+1 < len(opts) {
+			g.runeidx++
+		} else {
+			g.argidx++
+			g.runeidx = 0
+		}
+		return getoptsResult{kind: getoptsResultOption, opt: opt}
+	}
+	if g.runeidx+1 < len(opts) {
+		optarg := string(opts[g.runeidx+1:])
 		g.argidx++
 		g.runeidx = 0
+		return getoptsResult{kind: getoptsResultOption, opt: opt, optarg: optarg}
 	}
+	g.argidx++
+	g.runeidx = 0
+	if g.argidx >= len(args) {
+		return getoptsResult{kind: getoptsResultMissingArg, opt: ':', optarg: string(opt)}
+	}
+	optarg := args[g.argidx]
+	g.argidx++
+	return getoptsResult{kind: getoptsResultOption, opt: opt, optarg: optarg}
+}
 
-	return opt, optarg, false
+func (g *getopts) reset() {
+	g.argidx = 0
+	g.runeidx = 0
 }
 
 // optStatusText returns a shell option's status text display

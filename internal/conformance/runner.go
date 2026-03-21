@@ -723,6 +723,10 @@ func isNestedShellDiagnostic(line string) bool {
 		return true
 	case strings.Contains(line, "division by 0"):
 		return true
+	case strings.Contains(line, "illegal option -- "):
+		return true
+	case strings.Contains(line, "option requires an argument -- "):
+		return true
 	case strings.HasSuffix(line, ": command not found"):
 		return true
 	default:
@@ -847,6 +851,7 @@ func useScopedGlobWorkspace(specPath string) bool {
 func shouldApplyOracleOverrides(specPath string) bool {
 	switch specPath {
 	case "oils/dbracket.test.sh",
+		"oils/builtin-getopts.test.sh",
 		"oils/globignore.test.sh",
 		"oils/globstar.test.sh",
 		"oils/redirect-multi.test.sh":

@@ -30,7 +30,19 @@ func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
 		for name, vr := range parent.Each {
 			oenv.Set(name, vr)
 		}
-		if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+	}
+	if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+		if optEnv, optVar, ok := visibleBindingWriteEnv(parentWrite, "OPTIND"); ok {
+			if state := getoptsStateForEnv(optEnv); state != nil {
+				oenv.optState = *state
+			}
+			if !background {
+				if err := oenv.Set("OPTIND", optVar); err != nil {
+					panic(fmt.Sprintf("copy OPTIND into overlay: %v", err))
+				}
+			}
+		}
+		if background {
 			if secondsEnv, _, ok := visibleSecondsBinding(parentWrite); ok {
 				if started, ok := secondsStartTimeForEnv(secondsEnv); ok {
 					oenv.secondsStartTime = started
@@ -55,6 +67,10 @@ type overlayEnviron struct {
 	// We need to know if the current scope is a function's scope, because
 	// functions can modify global variables. When true, [parent] must not be nil.
 	funcScope bool
+
+	// optState tracks clustered getopts progress for the OPTIND binding visible
+	// in this scope.
+	optState getopts
 
 	// secondsStartTime tracks the SECONDS baseline for this scope when that
 	// binding is visible from here.
@@ -229,6 +245,26 @@ func visibleBindingWriteEnv(env expand.WriteEnviron, name string) (expand.WriteE
 	default:
 		return nil, expand.Variable{}, false
 	}
+}
+
+func getoptsStateForEnv(env expand.WriteEnviron) *getopts {
+	switch env := env.(type) {
+	case *overlayEnviron:
+		return &env.optState
+	case *shadowWriteEnviron:
+		return &env.optState
+	default:
+		return nil
+	}
+}
+
+func (r *Runner) currentGetoptsState() *getopts {
+	if env, _, ok := visibleBindingWriteEnv(r.writeEnv, "OPTIND"); ok {
+		if state := getoptsStateForEnv(env); state != nil {
+			return state
+		}
+	}
+	return &r.optState
 }
 
 func visibleSecondsBinding(env expand.WriteEnviron) (expand.WriteEnviron, expand.Variable, bool) {
@@ -566,6 +602,17 @@ func (r *Runner) setVarString(name, value string) {
 	r.setVar(name, expand.Variable{Set: true, Kind: expand.String, Str: value})
 }
 
+func (r *Runner) setOPTIND(value string) {
+	vr := expand.Variable{Set: true, Kind: expand.String, Str: value}
+	if prev := r.lookupVar("OPTIND"); prev.Exported || r.opts[optAllExport] {
+		vr.Exported = true
+	}
+	if err := r.writeEnv.Set("OPTIND", vr); err != nil {
+		r.errf("OPTIND: %v\n", err)
+		r.exit.code = 1
+	}
+}
+
 func (r *Runner) setExportedVarString(name, value string) {
 	r.setVar(name, expand.Variable{Set: true, Exported: true, Kind: expand.String, Str: value})
 }
@@ -589,6 +636,9 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.errf("%s: %v\n", name, err)
 		r.exit.code = 1
 		return
+	}
+	if name == "OPTIND" {
+		r.currentGetoptsState().reset()
 	}
 	if name == "SECONDS" && vr.IsSet() {
 		seconds, err := strconv.ParseInt(strings.TrimSpace(vr.String()), 10, 64)
@@ -734,6 +784,8 @@ type shadowWriteEnviron struct {
 	shadow     expand.Variable
 	shadowName string
 	shadowSet  bool
+
+	optState getopts
 
 	secondsStartTime time.Time
 	secondsStartSet  bool

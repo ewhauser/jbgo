@@ -75,6 +75,12 @@ func TestNormalizeOutputAndBashStderr(t *testing.T) {
 	if got, want := normalizeBashStderr("bash: a + 42x: value too great for base (error token is \"42x\")\n"), "a + 42x: value too great for base (error token is \"42x\")\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
 	}
+	if got, want := normalizeBashStderr("bash: illegal option -- Z\n"), "illegal option -- Z\n"; got != want {
+		t.Fatalf("normalizeBashStderr(illegal option) = %q, want %q", got, want)
+	}
+	if got, want := normalizeBashStderr("bash: option requires an argument -- a\n"), "option requires an argument -- a\n"; got != want {
+		t.Fatalf("normalizeBashStderr(missing argument) = %q, want %q", got, want)
+	}
 	if got, want := normalizeBashStderr("0x1X: value too great for base (error token is \"0x1X\")\n"), "0x1X: value too great for base (error token is \"0x1X\")\n"; got != want {
 		t.Fatalf("normalizeBashStderr() = %q, want %q", got, want)
 	}
@@ -164,6 +170,11 @@ func TestNormalizeOracleResultScopesOverridesToTargetedSpecs(t *testing.T) {
 	got = normalizeOracleResult(OracleBash, "oils/redirect-multi.test.sh", specCase, ExecutionResult{Stdout: actualStdout})
 	if got.Stdout != wantStdout {
 		t.Fatalf("stdout for targeted spec = %q, want %q", got.Stdout, wantStdout)
+	}
+
+	got = normalizeOracleResult(OracleBash, "oils/builtin-getopts.test.sh", specCase, ExecutionResult{Stdout: actualStdout})
+	if got.Stdout != wantStdout {
+		t.Fatalf("stdout for builtin-getopts targeted spec = %q, want %q", got.Stdout, wantStdout)
 	}
 }
 

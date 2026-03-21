@@ -298,50 +298,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-getopts.test.sh::More Smooshing 2": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::OPTIND after multiple getopts with different spec": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::OPTIND after multiple getopts with same spec": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::flag and arg: -c10": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts handles '--' #2579": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts leaves all args after '--' as operands #2579": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts missing required argument": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts normal mode - missing required argument (compare with silent)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts sees unknown arg": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts with invalid flag": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-getopts.test.sh::getopts with invalid variable name": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
