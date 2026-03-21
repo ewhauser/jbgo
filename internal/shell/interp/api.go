@@ -1030,6 +1030,16 @@ func (r *Runner) Reset() {
 		}
 	}
 
+	// Similarly, when a parent shell exports BASHOPTS, apply the
+	// inherited shopt options so the child mirrors the parent's state.
+	if bashOpts := r.writeEnv.Get("BASHOPTS"); bashOpts.IsSet() && bashOpts.Exported {
+		for _, optName := range strings.Split(bashOpts.String(), ":") {
+			if opt, _ := r.bashOptByName(optName); opt != nil {
+				*opt = true
+			}
+		}
+	}
+
 	r.dirStack = append(r.dirStack, r.logicalDir)
 	r.syncStandardFDs()
 
