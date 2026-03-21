@@ -386,6 +386,7 @@ func runSedProgram(program []sedCommand, lines []string, quiet, trailingNewline 
 	output := make([]string, 0, len(lines))
 	active := make([]bool, len(program))
 	totalLines := len(lines)
+	lastEmittedIndex := -1
 
 	for index, original := range lines {
 		current := original
@@ -416,18 +417,15 @@ func runSedProgram(program []sedCommand, lines []string, quiet, trailingNewline 
 			}
 		}
 
-		output = append(output, printed...)
+		if len(printed) > 0 {
+			output = append(output, printed...)
+			lastEmittedIndex = index
+		}
 		if !quiet && !deleted {
 			output = append(output, current)
+			lastEmittedIndex = index
 		}
 		if quit {
-			// When quitting before the last line, the processed lines
-			// were newline-terminated in the input, so output should
-			// end with a newline regardless of whether the file itself
-			// ended with one.
-			if index+1 < totalLines {
-				trailingNewline = true
-			}
 			break
 		}
 	}
@@ -436,7 +434,14 @@ func runSedProgram(program []sedCommand, lines []string, quiet, trailingNewline 
 		return nil
 	}
 	joined := strings.Join(output, "\n")
-	if trailingNewline {
+	// The trailing newline depends on the last emitted line's position:
+	// if it came from before the final input line, it was newline-terminated
+	// in the input, so output gets a trailing newline. Only when the last
+	// emitted line IS the last input line do we use the input file's own
+	// trailing-newline status.
+	if lastEmittedIndex >= 0 && lastEmittedIndex+1 < totalLines {
+		joined += "\n"
+	} else if trailingNewline {
 		joined += "\n"
 	}
 	return []byte(joined)

@@ -906,6 +906,11 @@ func isHex(b byte) bool {
 // invalid Unicode (surrogates, values above U+10FFFF). This matches bash
 // behavior for $”, printf, and echo -e with out-of-range escapes.
 func writeRawUTF8(sb *strings.Builder, v uint32) {
+	// Values above 0x7FFFFFFF exceed the 31-bit ceiling of 6-byte extended
+	// UTF-8. Bash produces no output for these, so we silently drop them.
+	if v > 0x7fffffff {
+		return
+	}
 	switch {
 	case v <= 0x7f: // 1-byte: ASCII (U+0000..U+007F)
 		sb.WriteByte(byte(v))
