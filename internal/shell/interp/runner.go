@@ -790,7 +790,8 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		} else {
 			r.exit.clear()
 		}
-	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt) {
+	} else if r.pipelineErrTrapDepth > 0 {
+	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt || b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
 	} else if !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored {
 		r.maybeRunErrTrap(ctx, st.Pos().Line())
 	}
@@ -977,15 +978,21 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.setStdinReader(pr)
 			var wg sync.WaitGroup
 			wg.Go(func() {
+				r2.pipelineErrTrapDepth++
+				defer func() {
+					r2.pipelineErrTrapDepth--
+					pw.Close()
+				}()
 				r2.stmt(ctx, cm.X)
 				r2.exit.exiting = false // subshells don't exit the parent shell
-				pw.Close()
 			})
+			r.pipelineErrTrapDepth++
 			if stmt, ok := r.lastpipeStmt(cm.Y); ok {
 				r.stmt(ctx, stmt)
 			} else {
 				r.stmt(ctx, cm.Y)
 			}
+			r.pipelineErrTrapDepth--
 			pr.Close()
 			wg.Wait()
 			leftStatuses := r2.pipeStatusValues()
@@ -1004,6 +1011,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			if r2.exit.fatalExit {
 				r.exit.fatal(r2.exit.err) // surface fatal errors immediately
+			}
+			if r.pipelineErrTrapDepth == 0 && !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored {
+				r.maybeRunErrTrap(ctx, cm.Pos().Line())
 			}
 		}
 	case *syntax.IfClause:

@@ -169,6 +169,11 @@ func TestNormalizeOracleResultScopesOverridesToTargetedSpecs(t *testing.T) {
 		t.Fatalf("stdout for targeted spec = %q, want %q", got.Stdout, wantStdout)
 	}
 
+	got = normalizeOracleResult(OracleBash, "oils/builtin-trap-err.test.sh", specCase, ExecutionResult{Stdout: actualStdout})
+	if got.Stdout != wantStdout {
+		t.Fatalf("stdout for builtin-trap-err targeted spec = %q, want %q", got.Stdout, wantStdout)
+	}
+
 	got = normalizeOracleResult(OracleBash, "oils/builtin-getopts.test.sh", specCase, ExecutionResult{Stdout: actualStdout})
 	if got.Stdout != wantStdout {
 		t.Fatalf("stdout for builtin-getopts targeted spec = %q, want %q", got.Stdout, wantStdout)

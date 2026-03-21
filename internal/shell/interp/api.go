@@ -182,6 +182,9 @@ type Runner struct {
 	skipStmtLine    uint
 	pipeStatuses    []string
 	pipeStatusSet   bool
+	// pipelineErrTrapDepth defers ERR handling to an enclosing pipeline until
+	// the final pipeline status and PIPESTATUS array have been established.
+	pipelineErrTrapDepth int
 
 	// bgProcs holds all background shells spawned by this runner.
 	// Their PIDs are 1-indexed, from 1 to len(bgProcs), with a "g" prefix
@@ -1143,6 +1146,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		exit:                    r.exit,
 		lastExit:                r.lastExit,
 		pipeStatuses:            append([]string(nil), r.pipeStatuses...),
+		pipelineErrTrapDepth:    r.pipelineErrTrapDepth,
 		suppressXTrace:          r.suppressXTrace,
 		currentChunkSource:      r.currentChunkSource,
 		currentChunkSourceBase:  r.currentChunkSourceBase,
