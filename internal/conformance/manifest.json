@@ -1648,42 +1648,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/vars-special.test.sh::$_ and ${_}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ is not reset with (( and [[": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ is not undefined on first use": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ with && and ||": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ with assignments, arrays, etc.": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ with loop": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ with pipeline and subshell": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ with simple command and evaluation": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/vars-special.test.sh::$_ with word splitting": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/vars-special.test.sh::Some vars are set, even without startup file, or env: PATH, PWD": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

@@ -872,6 +872,63 @@ printf 'test=%d\n' "$?"
 	}
 }
 
+func TestSpecialUnderscoreTracksExecutedSimpleCommands(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+name=world
+echo "hi $name"
+echo "after-echo [$_]"
+s=bar
+echo "after-assign [$_]"
+declare s=bar
+echo "after-declare [$_]"
+declare a=(1 2)
+echo "after-declare-array [$_]"
+(( x = 1 + 2 ))
+echo "after-arith [$_]"
+[[ x -eq 3 ]]
+echo "after-test [$_]"
+echo hi && echo "after-and [$_]"
+echo hi || echo "unreachable"
+echo "after-or [$_]"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "hi world\nafter-echo [hi world]\nafter-assign []\nafter-declare [s=bar]\nafter-declare-array [a]\nafter-arith [after-declare-array [a]]\nafter-test [after-arith [after-declare-array [a]]]\nhi\nafter-and [hi]\nhi\nafter-or [hi]\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestSpecialUnderscoreUsesExpandedLastField(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+x='with spaces'
+set -- $x
+echo "split [$_]"
+echo one
+for i in 1 2; do
+  echo "loop [$_]"
+done
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "split [spaces]\none\nloop [one]\nloop [loop [one]]\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestNumericDbracketStopsAfterLeftOperandError(t *testing.T) {
 	t.Parallel()
 

@@ -790,6 +790,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if r.exit.ok() {
 				r.exit = r.lastExpandExit
 			}
+			if !r.exit.fatalExit && !r.exit.exiting && r.exit.err == nil {
+				r.setSpecialUnderscore("")
+			}
 			break
 		}
 
@@ -798,6 +801,8 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.restoreCallAssigns(restores)
 			break
 		}
+
+		r.setSpecialUnderscoreFromFields(fields)
 
 		trace.call(fields[0], fields[1:]...)
 		trace.newLineFlush()
@@ -1045,6 +1050,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		var modes []string
 		valType := ""
 		declQuery := "" // "-f", "-F", or "-p" for query mode
+		underscore := cm.Variant.Value
 		allowPlusFlags := false
 		builtinTraceFields := []string{cm.Variant.Value}
 		var leadingTraceLines []string
@@ -1290,6 +1296,18 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return false
 			}
 			onlyFlagOperands = false
+			if isAssign {
+				switch {
+				case as != nil && as.Array != nil:
+					underscore = name
+				case raw != "":
+					underscore = raw
+				default:
+					underscore = name
+				}
+			} else {
+				underscore = name
+			}
 			if tracingEnabled && !isAssign {
 				builtinTraceFields = append(builtinTraceFields, name)
 			}
@@ -1600,6 +1618,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			switch operand := operand.(type) {
 			case *syntax.DeclFlag:
 				name := r.literal(operand.Word)
+				underscore = name
 				if allowPlusFlags || !strings.HasPrefix(name, "+") {
 					fp := flagParser{remaining: []string{name}}
 					for fp.more() {
@@ -1640,6 +1659,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			case *syntax.DeclName:
 				return processNamedOperand(operand.Ref, nil, false, declOperandString(operand))
 			case *syntax.DeclAssign:
+				if operand.Assign.Array != nil && operand.Assign.Ref != nil {
+					underscore = operand.Assign.Ref.Name.Value
+				} else {
+					underscore = declOperandString(operand)
+				}
 				return processNamedOperand(operand.Assign.Ref, operand.Assign, true, declOperandString(operand))
 			case *syntax.DeclDynamicWord:
 				var fields []string
@@ -1763,6 +1787,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 			}
 		}
+		r.setSpecialUnderscore(underscore)
 		if tracingEnabled {
 			for _, line := range leadingTraceLines {
 				trace.string(line)

@@ -18,6 +18,8 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
+const loopIterHelperCommand = "__jb_loop_iter"
+
 func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
 	oenv := &overlayEnviron{}
 	if !background {
@@ -460,6 +462,17 @@ func (r *Runner) setVarString(name, value string) {
 
 func (r *Runner) setExportedVarString(name, value string) {
 	r.setVar(name, expand.Variable{Set: true, Exported: true, Kind: expand.String, Str: value})
+}
+
+func (r *Runner) setSpecialUnderscore(value string) {
+	r.setVarString("_", value)
+}
+
+func (r *Runner) setSpecialUnderscoreFromFields(fields []string) {
+	if len(fields) == 0 || fields[0] == loopIterHelperCommand {
+		return
+	}
+	r.setSpecialUnderscore(fields[len(fields)-1])
 }
 
 func (r *Runner) setVar(name string, vr expand.Variable) {
