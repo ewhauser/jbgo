@@ -144,13 +144,13 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 	resolvedCfg := resolvedSuiteConfig(cfg)
 	cfg = &resolvedCfg
 
-	bashWorkspace, err := prepareWorkspace(cfg, specPath)
+	bashWorkspace, err := prepareWorkspace(cfg, specPath, bashPath)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
 	defer removeAll(bashWorkspace)
 
-	gbashWorkspace, err := prepareWorkspace(cfg, specPath)
+	gbashWorkspace, err := prepareWorkspace(cfg, specPath, bashPath)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
@@ -173,7 +173,7 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 }
 
 //nolint:forbidigo // The conformance harness builds isolated host temp workspaces per case.
-func prepareWorkspace(cfg *SuiteConfig, specPath string) (string, error) {
+func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, error) {
 	workspace, err := os.MkdirTemp("", "gbash-conformance-*")
 	if err != nil {
 		return "", err
@@ -214,7 +214,18 @@ func prepareWorkspace(cfg *SuiteConfig, specPath string) (string, error) {
 		removeAll(workspace)
 		return "", err
 	}
+	if err := installPinnedBash(workspace, bashPath); err != nil {
+		removeAll(workspace)
+		return "", err
+	}
 	return workspace, nil
+}
+
+func installPinnedBash(workspace, bashPath string) error {
+	if strings.TrimSpace(bashPath) == "" {
+		return nil
+	}
+	return copyFile(bashPath, filepath.Join(workspace, "bin", "bash"))
 }
 
 //nolint:forbidigo // The conformance harness copies vendored helper trees into a host temp workspace.

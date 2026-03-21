@@ -1592,47 +1592,6 @@
           "mode": "xfail",
           "reason": "conformance: echo now matches bash; printf still differs for surrogate Unicode escape handling"
         },
-        "oils/var-op-bash.test.sh::${!A@a} and ${!A[@]@a}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-bash.test.sh::${!var[@]@X}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/var-op-bash.test.sh::${x@u} U L - upper / lower case (bash 5.1 feature)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-bash.test.sh::-o nounset with var ops": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-bash.test.sh::argv array and @P @Q @a": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/var-op-bash.test.sh::assoc array and @P @Q @a": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/var-op-bash.test.sh::undef and @P @Q @a": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/var-op-bash.test.sh::undef vs. empty string in var ops": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/var-op-test.test.sh::$* (\"\" \"\") and - and + (IFS=)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

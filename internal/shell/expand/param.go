@@ -797,6 +797,19 @@ func transformCasePattern(arg string, op syntax.ParExpOperator) (func(string) st
 	}, nil
 }
 
+func otherParamCaseTransform(arg string) (syntax.ParExpOperator, bool) {
+	switch arg {
+	case "u":
+		return syntax.UpperFirst, true
+	case "U":
+		return syntax.UpperAll, true
+	case "L":
+		return syntax.LowerAll, true
+	default:
+		return 0, false
+	}
+}
+
 func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState, elems []string) ([]string, error) {
 	elems = slices.Clone(elems)
 	if pe.Repl != nil {
@@ -870,7 +883,7 @@ func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState,
 			return nil, err
 		}
 		switch arg {
-		case "Q":
+		case "Q", "K", "k":
 			for i, elem := range elems {
 				quoted, err := bashQuoteValue(elem)
 				if err != nil {
@@ -884,12 +897,24 @@ func (cfg *Config) transformArrayElems(pe *syntax.ParamExp, state paramExpState,
 			}
 		case "a":
 			flags := state.orig.Flags()
+			if state.name == "@" || state.name == "*" {
+				flags = ""
+			}
 			for i := range elems {
 				elems[i] = flags
 			}
 		case "P":
 			for i, elem := range elems {
 				elems[i] = decodePromptEscapes(elem)
+			}
+		case "u", "U", "L":
+			caseOp, _ := otherParamCaseTransform(arg)
+			transform, err := transformCasePattern("", caseOp)
+			if err != nil {
+				return nil, err
+			}
+			for i, elem := range elems {
+				elems[i] = transform(elem)
 			}
 		default:
 			return elems, nil
@@ -1900,7 +1925,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 				str = cfg.joinArrayElemsForString(pe, elems)
 			case syntax.OtherParamOps:
 				switch arg {
-				case "Q":
+				case "Q", "K", "k":
 					if !vr.IsSet() {
 						break
 					}
@@ -1929,10 +1954,24 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 					}
 					str = string(rns)
 				case "a":
+					if name == "@" || name == "*" {
+						str = ""
+						break
+					}
+					if pe.Excl && indMode == indirectResolve &&
+						pe.Index == nil && indirectState.str == "" &&
+						(indirectState.orig.Kind == Indexed || indirectState.orig.Kind == Associative) {
+						str = ""
+						break
+					}
 					str = orig.Flags()
 				case "A":
+					if !vr.IsSet() {
+						str = ""
+						break
+					}
 					flags := orig.Flags()
-					quoted, err := syntax.Quote(str, syntax.LangBash)
+					quoted, err := bashQuoteValue(str)
 					if err != nil {
 						return "", err
 					}
@@ -1943,6 +1982,16 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 					}
 				case "P":
 					str = decodePromptEscapes(str)
+				case "u", "U", "L":
+					caseOp, _ := otherParamCaseTransform(arg)
+					transform, err := transformCasePattern("", caseOp)
+					if err != nil {
+						return "", err
+					}
+					for i, elem := range elems {
+						elems[i] = transform(elem)
+					}
+					str = cfg.joinArrayElemsForString(pe, elems)
 				default:
 					panic(fmt.Sprintf("unexpected @%s param expansion", arg))
 				}
