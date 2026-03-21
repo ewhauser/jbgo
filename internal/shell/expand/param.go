@@ -624,6 +624,7 @@ type paramExpState struct {
 	elems            []string
 	indexAllElements bool
 	callVarInd       bool
+	scalarizedArray  bool
 	swallowedError   bool
 }
 
@@ -1260,6 +1261,7 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 				state.str = ""
 			}
 			state.callVarInd = false
+			state.scalarizedArray = true
 		case Associative:
 			if val, ok := state.vr.Map["0"]; ok {
 				state.vr = Variable{Set: true, Kind: String, Str: val}
@@ -1269,6 +1271,7 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 				state.str = ""
 			}
 			state.callVarInd = false
+			state.scalarizedArray = true
 		}
 	}
 	if index != nil && !state.indexAllElements {
@@ -2186,7 +2189,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 	case pe.IsSet:
 		return "", fmt.Errorf("unsupported")
 	case pe.Slice != nil:
-		if callVarInd {
+		if callVarInd || state.scalarizedArray {
 			str = cfg.bashStringSlice(str, pe.Slice.Offset != nil, sliceOffset, pe.Slice.Length != nil, sliceLen)
 		} // else, elems are already sliced
 	case pe.Repl != nil:

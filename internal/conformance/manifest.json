@@ -321,14 +321,6 @@
             "darwin"
           ]
         },
-        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in case": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in conditional word": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/for-expr.test.sh::Arith lexer mode": {
           "mode": "xfail",
           "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case"
@@ -340,14 +332,6 @@
         "oils/func-parsing.test.sh::Function name with command sub": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/introspect.test.sh::${FUNCNAME} with prefix/suffix operators": {
-          "mode": "xfail",
-          "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics"
-        },
-        "oils/introspect.test.sh::operators on FUNCNAME": {
-          "mode": "xfail",
-          "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics"
         },
         "oils/loop.test.sh::break in condition of loop": {
           "mode": "xfail",
@@ -425,10 +409,6 @@
         "oils/smoke.test.sh::failed command": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/xtrace.test.sh::xtrace with unprintable chars": {
-          "mode": "xfail",
-          "reason": "conformance: xtrace escape style for unprintable bytes still differs from bash"
         },
         "oils/glob.test.sh::Glob unicode char": {
           "mode": "xfail",

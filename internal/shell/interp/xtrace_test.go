@@ -98,6 +98,26 @@ echo status=$?
 	}
 }
 
+func TestXTraceControlBytesUseOctalEscapes(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+s=$'a\x03b\004c\x00d'
+set -x
+echo "$s"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "a\x03b\x04c\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "+ echo $'a\\003b\\004c'\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
 func TestXTracePS4CommandSubstDoesNotTraceRecursively(t *testing.T) {
 	t.Parallel()
 

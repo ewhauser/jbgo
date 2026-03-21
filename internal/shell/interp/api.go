@@ -182,6 +182,7 @@ type Runner struct {
 	currentStmtLine uint
 	stmtDepth       int
 	skipStmtLine    uint
+	commandAborted  bool
 	pipeStatuses    []string
 	pipeStatusSet   bool
 	// pipelineErrTrapDepth defers ERR handling to an enclosing pipeline until

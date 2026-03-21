@@ -657,8 +657,9 @@ func TestCoreRunPreservesArithmeticDiagnosticsInsideFunctions(t *testing.T) {
 		Stdout: io.Discard,
 		Stderr: &stderr,
 	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
+	var status interp.ExitStatus
+	if !errors.As(err, &status) || status != 1 {
+		t.Fatalf("Run() error = %v, want exit status 1", err)
 	}
 	if got, want := stderr.String(), "1 / 0 : division by 0 (error token is \"0 \")\n"; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
