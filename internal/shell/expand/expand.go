@@ -753,15 +753,34 @@ func (cfg *Config) extGlobLiteralString(eg *syntax.ExtGlob) (string, error) {
 	return sb.String(), nil
 }
 
-func regexpWord(cfg *Config, word *syntax.Word, ql quoteLevel) (string, error) {
+func regexpWord(cfg *Config, word *syntax.Word, expandTilde bool) (string, error) {
 	if word == nil {
 		return "", nil
 	}
 	cfg = prepareConfig(cfg)
-	field, err := cfg.wordField(word.Parts, ql)
+	parts := word.Parts
+	var field []fieldPart
+	if expandTilde && len(parts) > 0 {
+		if lit, ok := parts[0].(*syntax.Lit); ok {
+			prefix, rest, expanded := cfg.expandUser(lit.Value, len(parts) > 1)
+			if expanded {
+				if prefix != "" || rest == "" {
+					field = append(field, fieldPart{
+						quote: quoteSingle,
+						val:   prefix,
+					})
+				}
+				litCopy := *lit
+				litCopy.Value = rest
+				parts = append([]syntax.WordPart{&litCopy}, parts[1:]...)
+			}
+		}
+	}
+	rest, err := cfg.wordField(parts, quoteNoTilde)
 	if err != nil {
 		return "", err
 	}
+	field = append(field, rest...)
 	sb := cfg.strBuilder()
 	for _, part := range field {
 		if part.quote > quoteNone {
@@ -777,13 +796,13 @@ func regexpWord(cfg *Config, word *syntax.Word, ql quoteLevel) (string, error) {
 // expression, preserving regex semantics in unquoted parts while treating
 // quoted parts as literals.
 func Regexp(cfg *Config, word *syntax.Word) (string, error) {
-	return regexpWord(cfg, word, quoteNone)
+	return regexpWord(cfg, word, true)
 }
 
 // RegexpNoTilde expands a single shell word like [Regexp], but leaves a
 // leading bare `~` untouched.
 func RegexpNoTilde(cfg *Config, word *syntax.Word) (string, error) {
-	return regexpWord(cfg, word, quoteNoTilde)
+	return regexpWord(cfg, word, false)
 }
 
 // Format expands a format string with a number of arguments, following the
