@@ -249,10 +249,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::Compare trap DEBUG vs. trap ERR": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::trap RETURN": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
