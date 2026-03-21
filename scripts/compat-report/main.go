@@ -84,9 +84,10 @@ type utilityResult struct {
 }
 
 type testResult struct {
-	Name       string   `json:"name"`
-	Status     string   `json:"status"`
-	ReportedAs []string `json:"reported_as,omitempty"`
+	Name                  string   `json:"name"`
+	Status                string   `json:"status"`
+	ReportedAs            []string `json:"reported_as,omitempty"`
+	ExpectedFailureReason string   `json:"expected_failure_reason,omitempty"`
 }
 
 type suiteSummary struct {
@@ -106,13 +107,14 @@ type suiteSummary struct {
 }
 
 type suiteTest struct {
-	Path         string            `json:"path"`
-	Category     string            `json:"category"`
-	Status       string            `json:"status"`
-	Filtered     bool              `json:"filtered,omitempty"`
-	FilterReason string            `json:"filter_reason,omitempty"`
-	ReportedAs   []string          `json:"reported_as,omitempty"`
-	Attributions []testAttribution `json:"attributions,omitempty"`
+	Path                  string            `json:"path"`
+	Category              string            `json:"category"`
+	Status                string            `json:"status"`
+	Filtered              bool              `json:"filtered,omitempty"`
+	FilterReason          string            `json:"filter_reason,omitempty"`
+	ReportedAs            []string          `json:"reported_as,omitempty"`
+	ExpectedFailureReason string            `json:"expected_failure_reason,omitempty"`
+	Attributions          []testAttribution `json:"attributions,omitempty"`
 }
 
 type testAttribution struct {

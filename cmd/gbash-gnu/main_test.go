@@ -121,12 +121,13 @@ func TestBuildBatchedUtilityResultsSharesLogAndSynthesizesExitCodes(t *testing.T
 		},
 	}
 
-	got, overall := buildBatchedUtilityResults(runs, []string{"tests/misc/basename.pl", "tests/misc/dirname.pl"}, 0, makeCheckResult{
-		ExitCode: 1,
-		Output: []byte(`
+	combinedResults, combinedExtras := parseReportedTestResults([]byte(`
 PASS: tests/misc/basename.pl
 FAIL: tests/misc/dirname.pl
-`),
+`), []string{"tests/misc/basename.pl", "tests/misc/dirname.pl"})
+	got, overall := buildBatchedUtilityResults(runs, 0, combinedResults, combinedExtras, makeCheckResult{
+		ExitCode: 1,
+		Output:   []byte(""),
 	}, "compat.log", "/tmp/compat.log")
 
 	if len(got) != 2 {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,6 +36,9 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 		return err
 	}
 	fmt.Printf("results: %s\n", summary.ResultsDir)
+	if unexpected := unexpectedPassesForExpectedFailures(summary.Suite.Tests); len(unexpected) != 0 {
+		return errors.New(formatUnexpectedPasses(unexpected))
+	}
 	if hadFailure {
 		return fmt.Errorf("GNU compatibility run failed")
 	}
@@ -111,8 +115,9 @@ func summarizeRun(mf *manifest, workDir, resultsDirRaw, logPathRaw string, exitC
 		ExitCode: exitCode,
 		Output:   logData,
 	}
-	utilityResults, overall := buildBatchedUtilityResults(plan.runs, plan.selectedTests, len(plan.filteredEntries), makeResult, logFile, logPath)
 	combinedResults, combinedExtras := parseReportedTestResults(logData, plan.selectedTests)
+	combinedResults = applyExpectedFailures(combinedResults, mf)
+	utilityResults, overall := buildBatchedUtilityResults(plan.runs, len(plan.filteredEntries), combinedResults, combinedExtras, makeResult, logFile, logPath)
 
 	summary := runSummary{
 		GNUVersion:     mf.GNUVersion,
@@ -142,8 +147,7 @@ func combinedTestsForRuns(runs []utilityRun) []string {
 	return combined
 }
 
-func buildBatchedUtilityResults(runs []utilityRun, allTests []string, filteredSkipTotal int, makeCheckResult makeCheckResult, logFile, logPath string) ([]utilityResult, testSummary) {
-	combinedResults, combinedExtras := parseReportedTestResults(makeCheckResult.Output, allTests)
+func buildBatchedUtilityResults(runs []utilityRun, filteredSkipTotal int, combinedResults, combinedExtras []testResult, makeCheckResult makeCheckResult, logFile, logPath string) ([]utilityResult, testSummary) {
 	resultByName := make(map[string]testResult, len(combinedResults))
 	for _, result := range combinedResults {
 		resultByName[result.Name] = result
@@ -184,6 +188,31 @@ func buildBatchedUtilityResults(runs []utilityRun, allTests []string, filteredSk
 		results = append(results, result)
 	}
 	return results, overall
+}
+
+func unexpectedPassesForExpectedFailures(tests []suiteTest) []suiteTest {
+	out := make([]suiteTest, 0)
+	for i := range tests {
+		test := &tests[i]
+		if test.Status != "xpass" || strings.TrimSpace(test.ExpectedFailureReason) == "" {
+			continue
+		}
+		out = append(out, *test)
+	}
+	return out
+}
+
+func formatUnexpectedPasses(tests []suiteTest) string {
+	if len(tests) == 1 {
+		return fmt.Sprintf("unexpected pass for expected failure %s: %s", tests[0].Path, tests[0].ExpectedFailureReason)
+	}
+
+	parts := make([]string, 0, len(tests))
+	for i := range tests {
+		test := &tests[i]
+		parts = append(parts, fmt.Sprintf("%s (%s)", test.Path, test.ExpectedFailureReason))
+	}
+	return "unexpected passes for expected failures: " + strings.Join(parts, "; ")
 }
 
 func extraResultsForUtility(utility attributedUtility, extras []testResult) []testResult {

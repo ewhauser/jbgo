@@ -198,3 +198,55 @@ func TestLoadSummaryRejectsUnknownFields(t *testing.T) {
 		t.Fatalf("loadSummary() error = nil, want unknown-field failure")
 	}
 }
+
+func TestWriteReportIncludesExpectedFailureReason(t *testing.T) {
+	t.Parallel()
+
+	outputDir := t.TempDir()
+	summary := runSummary{
+		GNUVersion:  "9.10",
+		GeneratedAt: "2026-03-11T18:30:00Z",
+		Suite: suiteSummary{
+			SelectedTotal:   1,
+			XFail:           1,
+			RunnableTotal:   1,
+			PassPctSelected: 0,
+			PassPctRunnable: 0,
+			Tests: []suiteTest{
+				{
+					Path:                  "tests/misc/dirname.pl",
+					Category:              "misc",
+					Status:                "xfail",
+					ExpectedFailureReason: "dirname still diverges from GNU trailing-slash handling",
+				},
+			},
+		},
+		Categories: []categoryResult{
+			{
+				Name:    "misc",
+				Summary: coverageBucket{SelectedTotal: 1, XFail: 1, RunnableTotal: 1},
+				Tests: []suiteTest{
+					{
+						Path:                  "tests/misc/dirname.pl",
+						Category:              "misc",
+						Status:                "xfail",
+						ExpectedFailureReason: "dirname still diverges from GNU trailing-slash handling",
+					},
+				},
+			},
+		},
+	}
+
+	if err := writeReport(outputDir, &summary); err != nil {
+		t.Fatalf("writeReport() error = %v", err)
+	}
+
+	indexData, err := os.ReadFile(filepath.Join(outputDir, "index.html"))
+	if err != nil {
+		t.Fatalf("ReadFile(index.html) error = %v", err)
+	}
+	index := string(indexData)
+	if !strings.Contains(index, "expected failure: dirname still diverges from GNU trailing-slash handling") {
+		t.Fatalf("index.html missing expected failure reason: %q", index)
+	}
+}
