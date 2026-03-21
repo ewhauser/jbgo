@@ -123,12 +123,9 @@ zz > /
 echo alias status=$?
 echo status=$?
 `)
-	if err != nil {
-		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
-	}
-	const wantStdout = "alias status=1\nstatus=0\n"
-	if stdout != wantStdout {
-		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	requireInterpExitStatus(t, err, 1)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
 	}
 	const wantStderr = "open /: redirect target is a directory\n"
 	if stderr != wantStderr {
@@ -145,12 +142,9 @@ set -o errexit
 echo dbracket status=$?
 echo status=$?
 `)
-	if err != nil {
-		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
-	}
-	const wantStdout = "dbracket status=1\nstatus=0\n"
-	if stdout != wantStdout {
-		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	requireInterpExitStatus(t, err, 1)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
 	}
 	const wantStderr = "open /: redirect target is a directory\n"
 	if stderr != wantStderr {
@@ -167,12 +161,9 @@ set -o errexit
 echo dparen status=$?
 echo status=$?
 `)
-	if err != nil {
-		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
-	}
-	const wantStdout = "dparen status=1\nstatus=0\n"
-	if stdout != wantStdout {
-		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	requireInterpExitStatus(t, err, 1)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
 	}
 	const wantStderr = "open /: redirect target is a directory\n"
 	if stderr != wantStderr {
@@ -213,5 +204,103 @@ echo bad
 	const wantStderr = "open /: redirect target is a directory\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestErrExitSubshellBoundaryStillExits(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -o errexit
+( false && true )
+echo bad
+`)
+	requireInterpExitStatus(t, err, 1)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrExitCommandSubBoundaryStillExits(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -o errexit
+shopt -s inherit_errexit || true
+x=$( false && true )
+echo bad
+`)
+	requireInterpExitStatus(t, err, 1)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrTrapConditionalListsOnlyTrapOnOuterFailure(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+trap 'echo line=$LINENO' ERR
+
+false || false || false
+echo ok
+
+false && false
+echo ok
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const wantStdout = "line=4\nok\nok\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestErrTrapSkipsIgnoredErrExitContexts(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+trap 'echo line=$LINENO' ERR
+
+if false; then
+  echo if
+fi
+
+while false; do
+  echo while
+done
+
+until false; do
+  echo until
+  break
+done
+
+false || false || false
+
+false && false && false
+
+false; false; false
+
+echo ok
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const wantStdout = "until\nline=17\nline=21\nline=21\nline=21\nok\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }

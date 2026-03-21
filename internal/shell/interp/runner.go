@@ -88,6 +88,7 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 			r2.stmts(ctx, cs.Stmts)
 			r2.exit.exiting = false // subshells don't exit the parent shell
 			r.lastExpandExit = r2.exit
+			r.lastExpandExit.errExitIgnored = false
 			if r2.exit.fatalExit {
 				return r2.exit.err // surface fatal errors immediately
 			}
@@ -674,9 +675,6 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		result, err := r.redir(ctx, rd)
 		if err != nil {
 			r.exit.code = 1
-			if redirectFailureIgnoresErrExit(st.Cmd, err) {
-				r.exit.errExitIgnored = true
-			}
 			break
 		}
 		if result.closer != nil {
@@ -722,6 +720,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		} else {
 			r.exit.clear()
 		}
+	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt) {
 	} else if !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored {
 		r.maybeRunErrTrap(ctx, st.Pos().Line())
 	}
@@ -747,39 +746,6 @@ func usesPreRedirectExpandFDs(cmd syntax.Command) bool {
 	default:
 		return false
 	}
-}
-
-func redirectFailureIgnoresErrExit(cmd syntax.Command, err error) bool {
-	if cmd == nil || !isRedirectOpenError(err) {
-		return false
-	}
-	switch cmd.(type) {
-	case *syntax.TestClause, *syntax.ArithmCmd:
-		return true
-	default:
-		return commandHasAliasExpansion(cmd)
-	}
-}
-
-func isRedirectOpenError(err error) bool {
-	var pathErr *os.PathError
-	return errors.As(err, &pathErr) && pathErr.Op == "open"
-}
-
-func commandHasAliasExpansion(cmd syntax.Command) bool {
-	found := false
-	syntax.Walk(cmd, func(node syntax.Node) bool {
-		if found || node == nil {
-			return !found
-		}
-		word, ok := node.(*syntax.Word)
-		if !ok {
-			return true
-		}
-		found = len(word.AliasExpansions) > 0
-		return !found
-	})
-	return found
 }
 
 type redirResult struct {
@@ -822,6 +788,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r2.stmts(ctx, cm.Stmts)
 		r2.exit.exiting = false // subshells don't exit the parent shell
 		r.exit = r2.exit
+		r.exit.errExitIgnored = false
 	case *syntax.CallExpr:
 		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
 			return
@@ -896,6 +863,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			// we need to surface that last exit code.
 			if r.exit.ok() {
 				r.exit = r.lastExpandExit
+				r.exit.errExitIgnored = false
 			}
 			if !r.exit.fatalExit && !r.exit.exiting && r.exit.err == nil {
 				r.setSpecialUnderscore("")
@@ -915,6 +883,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		trace.newLineFlush()
 
 		r.call(ctx, cm.Args[0].Pos(), fields)
+		r.exit.errExitIgnored = false
 		r.restoreCallAssigns(restores)
 	case *syntax.BinaryCmd:
 		switch cm.Op {
@@ -961,6 +930,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.setPipeStatusValues(combined)
 			if r.opts[optPipeFail] && !r2.exit.ok() && r.exit.ok() {
 				r.exit = r2.exit
+				r.exit.errExitIgnored = false
 			}
 			if r2.exit.fatalExit {
 				r.exit.fatal(r2.exit.err) // surface fatal errors immediately

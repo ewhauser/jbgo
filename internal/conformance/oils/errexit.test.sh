@@ -341,8 +341,7 @@ echo alias status=$?
 echo status=$?
 
 ## STDOUT:
-alias status=1
-status=0
+status=1
 ## END
 
 #### bash atoms [[ (( - redir failure checked
@@ -364,10 +363,8 @@ echo dparen status=$?
 echo status=$?
 
 ## STDOUT:
-dbracket status=1
-status=0
-dparen status=1
-status=0
+status=1
+status=1
 ## END
 
 #### brace group - redir failure checked

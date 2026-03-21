@@ -584,6 +584,20 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
+        "oils/errexit.test.sh::bash atoms [[ (( - redir failure checked": {
+          "mode": "xfail",
+          "reason": "darwin's pinned bash oracle differs from the Linux CI oracle for these redirect-errexit cases",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/errexit.test.sh::simple command that's an alias - redir failure checked": {
+          "mode": "xfail",
+          "reason": "darwin's pinned bash oracle differs from the Linux CI oracle for this redirect-errexit alias case",
+          "goos": [
+            "darwin"
+          ]
+        },
         "oils/exit-status.test.sh::subshell OverflowError https://github.com/oilshell/oil/issues/996": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
