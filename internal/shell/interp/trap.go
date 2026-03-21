@@ -373,13 +373,15 @@ func (r *Runner) maybeRunReturnTrap(ctx context.Context, line uint, status uint8
 }
 
 func (r *Runner) maybeRunErrTrap(ctx context.Context, line uint) {
-	if !r.errTrapAllowed() || r.noErrExit || r.exit.ok() {
+	if r.noErrExit || r.exit.ok() {
 		return
 	}
-	result := r.runTrap(ctx, trapIDErr, line, r.exit.code)
-	if result.handler.exiting || result.handler.fatalExit {
-		r.exit = result.handler
-		return
+	if r.errTrapAllowed() {
+		result := r.runTrap(ctx, trapIDErr, line, r.exit.code)
+		if result.handler.exiting || result.handler.fatalExit {
+			r.exit = result.handler
+			return
+		}
 	}
 	if r.opts[optErrExit] {
 		r.exit.exiting = true
