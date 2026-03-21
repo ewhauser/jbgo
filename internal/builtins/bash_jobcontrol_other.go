@@ -2,6 +2,8 @@
 
 package builtins
 
-func bashInteractiveJobControlWarning(_ string, _ *Invocation) string {
+import "context"
+
+func bashInteractiveJobControlWarning(_ context.Context, _ string, _ *Invocation) string {
 	return ""
 }

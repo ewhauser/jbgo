@@ -31,6 +31,10 @@ var bashShellPrefixPattern = regexp.MustCompile(`^(?:[^:\n]+/)?[A-Za-z0-9_-]*sh:
 var bashAnsiCQuotedCommandNotFoundPattern = regexp.MustCompile(`\$'((?:[^'\\]|\\.)*)': command not found`)
 var bashQuotedNoSuchFilePattern = regexp.MustCompile(`(?m)^([-.[:alnum:]_]+): '([^']+)': No such file or directory$`)
 var bashCannotOpenNoSuchFilePattern = regexp.MustCompile(`(?m)^([-.[:alnum:]_]+): cannot (?:open|remove) '([^']+)'(?: for reading)?: No such file or directory$`)
+
+// The interactive bash oracle can run in a different host process group than
+// the in-process gbash interpreter under CI, so normalize just the numeric PGID.
+var bashTerminalProcessGroupPattern = regexp.MustCompile(`cannot set terminal process group \(\d+\)`)
 var procFDPathPattern = regexp.MustCompile(`/proc/\d+/fd`)
 var procFDLsMissingPattern = regexp.MustCompile(`(?m)^ls: /proc/PID/fd(?:[^\n]*)?: No such file or directory\n?`)
 var (
@@ -540,6 +544,7 @@ func normalizeBashStderr(value string) string {
 	value = normalizeMultiLineNestedShellPrefixes(value)
 	value = normalizeCommandStringOperandPrefix(value)
 	value = normalizeArithOperandContinuation(value)
+	value = bashTerminalProcessGroupPattern.ReplaceAllString(value, "cannot set terminal process group (PGID)")
 	value = procFDLsMissingPattern.ReplaceAllString(value, "")
 	value = strings.ReplaceAll(value, "shopt: usage: shopt [-pqsu] [-o long-option] optname [optname...]\n", "shopt: usage: shopt [-pqsu] [-o] [optname ...]\n")
 	value = bashCannotOpenNoSuchFilePattern.ReplaceAllString(value, "$1: $2: No such file or directory")

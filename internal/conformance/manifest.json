@@ -437,10 +437,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::Combine DEBUG trap and USR1 trap": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::Combine ERR trap and USR1 trap": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -453,23 +449,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::but trap DEBUG respects errexit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap -l": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap -p": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::trap -p in child is BUGGY in bash": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG and command sub / subshell": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -481,10 +461,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG case": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::trap DEBUG for each": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -493,31 +469,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG function call": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG if while": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG ignores $?": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::trap DEBUG not run in forked interpreter for first pipeline part": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG with 'exit'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG with 'return'": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG with non-compound commands": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -529,10 +481,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-err.test.sh::error in trap ERR (recursive)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-err.test.sh::set -o errtrace - trap ERR runs in shell functions": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -541,19 +489,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-err.test.sh::set -o errtrace: trap ERR runs in subprograms": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-err.test.sh::set -o errtrace: trap ERR with &": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR and errexit disabled context": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -565,31 +501,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-err.test.sh::trap ERR and set -o errexit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR and || conditional": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR does not run in errexit situations": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR doesn't run in subprograms - subshell, command sub, async": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR not active in shell functions in (bash behavior)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-err.test.sh::trap ERR pipelines without simple commands": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-err.test.sh::trap ERR with \"atoms\": assignment (( [[": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -601,27 +513,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-err.test.sh::trap can use original $LINENO": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::Register the same handler for multiple signals": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap.test.sh::Remove multiple handlers with trap -": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-trap.test.sh::Remove trap with an unsigned integer": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::SIGINT and INT are aliases": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::eval in the exit trap (regression for issue #293)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -637,43 +533,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::trap '' EXIT - printing state": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap '' sets handler to empty string (SIG_IGN)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap '' with multiple signals": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap 'echo hi' KILL (regression test, caught by smoosh suite)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap -p is like trap: it prints the handlers and full signal names": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap.test.sh::trap 0 2 resets EXIT AND SIGINT": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap 0 is equivalent to trap EXIT": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap 1 is equivalent to SIGHUP; HUP is equivalent to SIGHUP": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap EXIT calling exit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap EXIT clears the EXIT trap": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -694,21 +554,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-trap.test.sh::trap foo gives non-zero error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap with command.NoOp - check internal invariant": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/builtin-trap.test.sh::trap without args prints traps": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::traps are cleared in subshell (started with &)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -879,20 +724,9 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/errexit.test.sh::set -e in function #2": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/errexit.test.sh::set errexit while it's ignored in a subshell (moot with strict_errexit)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/errexit.test.sh::simple command / assign - redir failure DOES respect errexit": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
         },
         "oils/errexit.test.sh::simple command that's an alias - redir failure checked": {
           "mode": "xfail",

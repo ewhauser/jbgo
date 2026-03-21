@@ -183,6 +183,7 @@ func sameTraceVar(a, b expand.Variable) bool {
 		a.ReadOnly == b.ReadOnly &&
 		a.Integer == b.Integer &&
 		a.Lower == b.Lower &&
+		a.Trace == b.Trace &&
 		a.Upper == b.Upper &&
 		a.Kind == b.Kind &&
 		a.Str == b.Str &&

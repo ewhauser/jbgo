@@ -75,6 +75,8 @@ The parser, expansion, pattern, and interpreter packages live in-tree as `intern
 
 The shell core also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the in-tree interpreter rather than synthesized in a shell prelude.
 
+The shell core also owns trap and signal semantics. `trap`, pseudo-signals such as `EXIT`, `ERR`, `DEBUG`, and `RETURN`, real-signal registration and printing, subshell trap inheritance rules, and shell-visible signal routing for `kill $$`, `kill $BASHPID`, and background-job targets are implemented in the in-tree interpreter rather than delegated to host process behavior. Catchable host signals such as Ctrl-C are bridged into the active foreground shell family through runtime-owned signal handlers, while non-catchable signals and job control remain outside the product contract.
+
 The shell core compiles user input as a sequence of complete parsed chunks before execution. In non-interactive `Run`, the core incrementally reparses the growing script buffer so parse-time state such as aliases and `shopt` flags can affect later commands in the same execution. Each complete chunk then goes through the same validation, budget checks, pipeline rewriting, and loop instrumentation before the runner sees that chunk's AST.
 
 The shell core may also apply small AST normalizations when the in-tree parser or interpreter behavior diverges from the Bash semantics we intend to preserve. One example is wrapping the right-hand side of pipelines in synthetic subshells so default parent-shell state matches Bash's `lastpipe=off` behavior while still allowing the interpreter to unwrap those specific synthetic wrappers when `shopt -s lastpipe` is enabled.
@@ -238,6 +240,8 @@ The shell initializes shell-owned startup state rather than inheriting host defa
 The runtime treats the runner's virtual directory plus shell-visible `PWD` as the authoritative working-directory state. Shell variable assignments, shell-owned startup state, `BASH_HISTORY`, and `GBASH_UMASK` are synchronized by direct runner mutation APIs rather than by prepending trusted shell code, so syntax errors, traces, and `BASH_LINENO` always use real user line numbers.
 
 Sandbox-facing machine metadata is also runtime-owned: `HOSTNAME`, `hostname`, `OSTYPE`, `BASHPID`, and `PPID` must resolve from sandbox metadata and runner state rather than from host uname or host process inspection.
+
+Signal identity is part of that runtime-owned metadata. Stable `$$` values, per-shell `BASHPID`, shell-family `PPID`, virtual background job IDs, and internal signal delivery for shell-managed `kill` targets must be derived from runner state rather than host PIDs.
 
 ## 7. Proposed Package Layout
 

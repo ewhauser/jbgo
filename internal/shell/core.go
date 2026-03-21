@@ -147,6 +147,11 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	if err != nil {
 		return nil, err
 	}
+	if family, ok := shellstate.SignalFamilyFromContext(ctx); ok {
+		if owner, ok := family.Owner.(*interp.Runner); ok {
+			runner.InheritSignalFamily(owner, family.StablePID, family.ParentBASHPID)
+		}
+	}
 	runErr = runner.RunReaderWithMetadata(
 		ctx,
 		strings.NewReader(exec.Script),
@@ -646,7 +651,12 @@ func (m *core) execHandler(exec *Execution, budget *executionBudget) interp.Exec
 			FromBootstrap: fromBootstrap,
 			PrepareInvoke: func(callCtx context.Context) context.Context {
 				callCtx = shellstate.WithShellVarAssignments(callCtx, shellVars)
-				return shellstate.WithShellVarLookup(callCtx, shellVarLookup)
+				callCtx = shellstate.WithShellVarLookup(callCtx, shellVarLookup)
+				callCtx = shellstate.WithSignalDispatcher(callCtx, hc.DispatchSignal)
+				if pgrp, ok := hc.ProcessGroup(); ok {
+					callCtx = shellstate.WithProcessGroup(callCtx, pgrp)
+				}
+				return shellstate.WithSignalFamily(callCtx, hc.SignalFamily())
 			},
 			SyncEnv: func(callCtx context.Context, before, after map[string]string) error {
 				if syncErr := syncShellVarAssignments(hc, shellVars); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
@@ -957,6 +967,20 @@ func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.
 
 func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, commandName string) (_ *resolvedCommand, ok bool, err error) {
 	fullPath := gbfs.Resolve(dir, name)
+	resolvedName := path.Base(fullPath)
+	if exec == nil || exec.FS == nil {
+		if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
+			if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {
+				return &resolvedCommand{
+					command: cmd,
+					name:    resolvedName,
+					path:    fullPath,
+					source:  source,
+				}, true, nil
+			}
+		}
+		return nil, false, nil
+	}
 	if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, fullPath); err != nil {
 		recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), fullPath, commandName, source)
 		return nil, false, err
@@ -965,14 +989,6 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 	if err != nil || info.IsDir() {
 		return nil, false, nil //nolint:nilerr // stat error means the file doesn't exist as a command
 	}
-
-	// When the file lives inside the built-in command directory (default
-	// /bin) and its basename matches a registered command, resolve to the
-	// registry implementation directly. This prevents infinite recursion
-	// when a stub script (e.g. #!/bin/sh\nsort) in the built-in dir calls
-	// the same command name in its body. Files outside the built-in dir
-	// are resolved normally so user scripts can override built-in names.
-	resolvedName := path.Base(fullPath)
 	if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
 		if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {
 			return &resolvedCommand{

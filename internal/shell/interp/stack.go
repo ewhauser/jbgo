@@ -17,12 +17,15 @@ const (
 )
 
 type execFrame struct {
-	kind       frameKind
-	label      string
-	execFile   string
-	bashSource string
-	callLine   int
-	internal   bool
+	kind        frameKind
+	label       string
+	execFile    string
+	bashSource  string
+	callLine    int
+	internal    bool
+	allowErr    bool
+	allowDebug  bool
+	allowReturn bool
 }
 
 func (r *Runner) pushFrame(frame execFrame) func() {
@@ -77,67 +80,64 @@ func (r *Runner) currentDefinitionSource() string {
 	return ""
 }
 
-func (r *Runner) funcSource(name string) string {
-	if r == nil || r.funcSources == nil {
-		return ""
+func (r *Runner) funcInfo(name string) (funcInfo, bool) {
+	if r == nil || r.funcs == nil {
+		return funcInfo{}, false
 	}
-	return r.funcSources[name]
+	info, ok := r.funcs[name]
+	return info, ok
 }
 
-func (r *Runner) setFuncSource(name, source string) {
-	if r.funcSources == nil {
-		r.funcSources = make(map[string]string, 4)
+func (r *Runner) funcBody(name string) *syntax.Stmt {
+	info, ok := r.funcInfo(name)
+	if !ok {
+		return nil
 	}
-	r.funcSources[name] = source
+	return info.body
+}
+
+func (r *Runner) funcSource(name string) string {
+	info, ok := r.funcInfo(name)
+	if !ok {
+		return ""
+	}
+	return info.definitionSource
 }
 
 func (r *Runner) funcBodySource(name string) (funcSourceSpan, bool) {
-	if r == nil || r.funcBodySrc == nil {
+	info, ok := r.funcInfo(name)
+	if !ok || !info.hasBodySource {
 		return funcSourceSpan{}, false
 	}
-	src, ok := r.funcBodySrc[name]
-	return src, ok
-}
-
-func (r *Runner) setFuncBodySource(name, source string, base uint) {
-	if r.funcBodySrc == nil {
-		r.funcBodySrc = make(map[string]funcSourceSpan, 4)
-	}
-	r.funcBodySrc[name] = funcSourceSpan{text: source, base: base}
+	return info.bodySource, true
 }
 
 func (r *Runner) funcInternal(name string) bool {
-	if r == nil || r.funcInternals == nil {
+	info, ok := r.funcInfo(name)
+	if !ok {
 		return false
 	}
-	return r.funcInternals[name]
+	return info.internal
 }
 
-func (r *Runner) setFuncInternal(name string, internal bool) {
-	if !internal {
-		if r.funcInternals != nil {
-			delete(r.funcInternals, name)
-		}
-		return
+func (r *Runner) funcTrace(name string) bool {
+	info, ok := r.funcInfo(name)
+	if !ok {
+		return false
 	}
-	if r.funcInternals == nil {
-		r.funcInternals = make(map[string]bool, 4)
+	return info.trace
+}
+
+func (r *Runner) setFuncInfo(name string, info funcInfo) {
+	if r.funcs == nil {
+		r.funcs = make(map[string]funcInfo, 4)
 	}
-	r.funcInternals[name] = true
+	r.funcs[name] = info
 }
 
 func (r *Runner) delFunc(name string) {
 	if r.funcs != nil {
 		delete(r.funcs, name)
-	}
-	if r.funcSources != nil {
-		delete(r.funcSources, name)
-	}
-	if r.funcInternals != nil {
-		delete(r.funcInternals, name)
-	}
-	if r.funcBodySrc != nil {
-		delete(r.funcBodySrc, name)
 	}
 }
 
@@ -205,4 +205,39 @@ func (r *Runner) callerFrame(depth int) (int, execFrame, bool) {
 		return 0, execFrame{}, false
 	}
 	return stack[depth].callLine, stack[depth+1], true
+}
+
+func (r *Runner) currentTrapFrame() (execFrame, bool) {
+	for i := len(r.frames) - 1; i >= 0; i-- {
+		frame := r.frames[i]
+		if frame.kind != frameKindFunction && frame.kind != frameKindSource {
+			continue
+		}
+		return frame, true
+	}
+	return execFrame{allowErr: true, allowDebug: true, allowReturn: true}, false
+}
+
+func (r *Runner) errTrapAllowed() bool {
+	frame, ok := r.currentTrapFrame()
+	if !ok {
+		return true
+	}
+	return frame.allowErr
+}
+
+func (r *Runner) debugTrapAllowed() bool {
+	frame, ok := r.currentTrapFrame()
+	if !ok {
+		return true
+	}
+	return frame.allowDebug
+}
+
+func (r *Runner) returnTrapAllowed() bool {
+	frame, ok := r.currentTrapFrame()
+	if !ok {
+		return true
+	}
+	return frame.allowReturn
 }

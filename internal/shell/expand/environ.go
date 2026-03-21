@@ -96,6 +96,7 @@ type Variable struct {
 	ReadOnly bool
 	Integer  bool // -i: evaluate as arithmetic on assignment
 	Lower    bool // -l: convert to lowercase on assignment
+	Trace    bool // -t: trace attribute on variables/functions
 	Upper    bool // -u: convert to uppercase on assignment
 
 	// Kind defines which of the value fields below should be used.
@@ -117,7 +118,7 @@ func (v Variable) IsSet() bool {
 // Declared variables may not be set; `export foo` is exported but not set to a value,
 // and `declare -a foo` is an indexed array but not set to a value.
 func (v Variable) Declared() bool {
-	return v.Set || v.Local || v.Exported || v.ReadOnly || v.Integer || v.Lower || v.Upper || v.Kind != Unknown
+	return v.Set || v.Local || v.Exported || v.ReadOnly || v.Integer || v.Lower || v.Trace || v.Upper || v.Kind != Unknown
 }
 
 // Flags returns the variable's attribute flags in the order used by bash's
@@ -141,6 +142,9 @@ func (v Variable) Flags() string {
 	}
 	if v.ReadOnly {
 		flags = append(flags, 'r')
+	}
+	if v.Trace {
+		flags = append(flags, 't')
 	}
 	if v.Upper {
 		flags = append(flags, 'u')

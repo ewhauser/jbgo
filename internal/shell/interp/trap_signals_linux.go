@@ -1,0 +1,35 @@
+//go:build linux
+
+package interp
+
+var platformTrapSignals = []trapSignalInfo{
+	{number: 1, name: "SIGHUP", aliases: []string{"HUP"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 2, name: "SIGINT", aliases: []string{"INT"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 3, name: "SIGQUIT", aliases: []string{"QUIT"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 4, name: "SIGILL", aliases: []string{"ILL"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 5, name: "SIGTRAP", aliases: []string{"TRAP"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 6, name: "SIGABRT", aliases: []string{"ABRT", "IOT"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 8, name: "SIGFPE", aliases: []string{"FPE"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 9, name: "SIGKILL", aliases: []string{"KILL"}, catchable: false, defaultDisposition: trapDefaultTerminate},
+	{number: 10, name: "SIGUSR1", aliases: []string{"USR1"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 11, name: "SIGSEGV", aliases: []string{"SEGV"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 12, name: "SIGUSR2", aliases: []string{"USR2"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 13, name: "SIGPIPE", aliases: []string{"PIPE"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 14, name: "SIGALRM", aliases: []string{"ALRM"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 15, name: "SIGTERM", aliases: []string{"TERM"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 17, name: "SIGCHLD", aliases: []string{"CHLD", "CLD"}, catchable: true, defaultDisposition: trapDefaultIgnore},
+	{number: 18, name: "SIGCONT", aliases: []string{"CONT"}, catchable: true, defaultDisposition: trapDefaultIgnore},
+	{number: 19, name: "SIGSTOP", aliases: []string{"STOP"}, catchable: false, defaultDisposition: trapDefaultStop},
+	{number: 20, name: "SIGTSTP", aliases: []string{"TSTP"}, catchable: true, defaultDisposition: trapDefaultStop},
+	{number: 21, name: "SIGTTIN", aliases: []string{"TTIN"}, catchable: true, defaultDisposition: trapDefaultStop},
+	{number: 22, name: "SIGTTOU", aliases: []string{"TTOU"}, catchable: true, defaultDisposition: trapDefaultStop},
+	{number: 23, name: "SIGURG", aliases: []string{"URG"}, catchable: true, defaultDisposition: trapDefaultIgnore},
+	{number: 24, name: "SIGXCPU", aliases: []string{"XCPU"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 25, name: "SIGXFSZ", aliases: []string{"XFSZ"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 26, name: "SIGVTALRM", aliases: []string{"VTALRM"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 27, name: "SIGPROF", aliases: []string{"PROF"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 28, name: "SIGWINCH", aliases: []string{"WINCH"}, catchable: true, defaultDisposition: trapDefaultIgnore},
+	{number: 29, name: "SIGIO", aliases: []string{"IO", "POLL"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 30, name: "SIGPWR", aliases: []string{"PWR"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+	{number: 31, name: "SIGSYS", aliases: []string{"SYS"}, catchable: true, defaultDisposition: trapDefaultTerminate},
+}

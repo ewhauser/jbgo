@@ -49,6 +49,9 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 		Env:         expandEnv{r},
 		StartupHome: r.startupHome,
 		CurrentLine: func() uint {
+			if r.trapLineOverride != 0 {
+				return r.trapLineOverride
+			}
 			if r.currentStmtLine != 0 {
 				return r.currentStmtLine
 			}
@@ -172,6 +175,7 @@ func (r *Runner) runProcSubst(ctx context.Context, ps *syntax.ProcSubst, path st
 	// process substitution as long as it is $!; the logic here would mean we wait for all of them.
 	bg := bgProc{
 		done:          make(chan struct{}),
+		runner:        r2,
 		exit:          new(exitStatus),
 		procSubst:     true,
 		waitAtStmtEnd: r.inRedirectWord > 0 && ps.Op == syntax.CmdOut,
@@ -505,8 +509,7 @@ func (r *Runner) errf(format string, a ...any) {
 }
 
 func (r *Runner) stop(ctx context.Context) bool {
-	// Some traps trigger on exit, so we do want those to run.
-	if !r.handlingTrap && (r.exit.returning || r.exit.exiting) {
+	if r.exit.returning || r.exit.exiting {
 		return true
 	}
 	if err := ctx.Err(); err != nil {
@@ -544,8 +547,9 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 		st2.Background = false
 		st2.Disown = false
 		bg := bgProc{
-			done: make(chan struct{}),
-			exit: new(exitStatus),
+			done:   make(chan struct{}),
+			exit:   new(exitStatus),
+			runner: r2,
 		}
 		r.bgProcs = append(r.bgProcs, bg)
 		go func() {
@@ -558,6 +562,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	} else {
 		r.stmtSync(ctx, st)
 	}
+	r.runPendingSignalTraps(ctx)
 	r.lastExit = r.exit
 }
 
@@ -613,7 +618,12 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	oldFDs := cloneFDTable(r.fds)
 	oldTraceOutput := r.traceOutput
 	oldExpandBaseFDs := r.expandBaseFDs
+	oldNoErrExit := r.noErrExit
+	if st.Negated {
+		r.noErrExit = true
+	}
 	defer func() {
+		r.noErrExit = oldNoErrExit
 		r.traceOutput = oldTraceOutput
 		r.expandBaseFDs = oldExpandBaseFDs
 	}()
@@ -668,16 +678,8 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			r.exit.clear()
 		}
 	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt) {
-	} else if !r.exit.ok() && !r.noErrExit {
-		r.trapCallback(ctx, r.callbackErr, "error")
-		// If the "errexit" option is set and a command failed, exit the shell. Exceptions:
-		//
-		//   conditions (if <cond>, while <cond>, etc)
-		//   part of && or || lists; excluded via "else" above
-		//   preceded by !; excluded via "else" above
-		if r.opts[optErrExit] {
-			r.exit.exiting = true
-		}
+	} else {
+		r.maybeRunErrTrap(ctx, st.Pos().Line())
 	}
 	if !keepRedirs {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
@@ -744,6 +746,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r2.exit.exiting = false // subshells don't exit the parent shell
 		r.exit = r2.exit
 	case *syntax.CallExpr:
+		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+			return
+		}
 		args := cm.Args
 		r.lastExpandExit = exitStatus{}
 		fields, decl := r.resolveCallExprArgs(args)
@@ -770,6 +775,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				// Preserve and apply variable attributes from the previous declaration.
 				vr.Integer = prev.Integer
 				vr.Lower = prev.Lower
+				vr.Trace = prev.Trace
 				vr.Upper = prev.Upper
 				if prev.Integer && as.Append && vr.Kind == expand.String {
 					// For -i with +=, do arithmetic addition instead of string concat.
@@ -963,6 +969,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 
 			for _, field := range items {
+				if r.runDebugTrap(ctx, cm.Pos().Line()) {
+					return
+				}
 				r.setVarString(name, field)
 				trace.stringf("for %s in", y.Name.Value)
 				if inToken {
@@ -987,6 +996,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 			}
 			for {
+				if r.runDebugTrap(ctx, cm.Pos().Line()) {
+					return
+				}
 				if y.Cond != nil && r.arithmCmd(y.Cond) == 0 {
 					break
 				}
@@ -997,6 +1009,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					break
 				}
 				if y.Post != nil {
+					if r.runDebugTrap(ctx, cm.Pos().Line()) {
+						return
+					}
 					r.arithmCmd(y.Post)
 					if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 						break
@@ -1007,6 +1022,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.FuncDecl:
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
+		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+			return
+		}
 		if tracingEnabled {
 			if src := r.sourceForNode(cm); src != "" {
 				if strings.HasPrefix(src, "((") && strings.HasSuffix(src, "))") {
@@ -1053,6 +1071,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.exit.oneIf(val == 0)
 		}
 	case *syntax.CaseClause:
+		if r.runDebugTrap(ctx, cm.Pos().Line()) {
+			return
+		}
 		trace.string("case ")
 		trace.expr(cm.Word)
 		trace.string(" in")
@@ -1087,6 +1108,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		}
 	case *syntax.TestClause:
+		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+			return
+		}
 		cond := r.evalCond(ctx, cm.X, trace)
 		if tracingEnabled {
 			trace.string("[[ ")
@@ -1099,6 +1123,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.exit.code = 1
 		}
 	case *syntax.DeclClause:
+		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+			return
+		}
 		local, global := false, false
 		var modes []string
 		valType := ""
@@ -1275,6 +1302,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					if !vr.Lower {
 						return false
 					}
+				case "-t":
+					if !vr.Trace {
+						return false
+					}
 				case "-u":
 					if !vr.Upper {
 						return false
@@ -1367,10 +1398,27 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if raw == "" {
 				raw = name
 			}
+			if declQuery == "-f" && functionTraceOnlyModes(modes) {
+				info, ok := r.funcInfo(name)
+				if !ok || info.body == nil {
+					r.exit.code = 1
+					return true
+				}
+				for _, mode := range modes {
+					switch mode {
+					case "-t":
+						info.trace = true
+					case "+t":
+						info.trace = false
+					}
+				}
+				r.setFuncInfo(name, info)
+				return true
+			}
 			if declQuery == "-f" {
 				// declare -f name: print function definition.
 				// Bash silently returns exit 1 for missing functions.
-				if body := r.funcs[name]; body != nil {
+				if body := r.funcBody(name); body != nil {
 					printFunction(name, body)
 				} else {
 					r.exit.code = 1
@@ -1378,7 +1426,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return true
 			}
 			if declQuery == "-F" {
-				if body := r.funcs[name]; body != nil {
+				if body := r.funcBody(name); body != nil {
 					if r.opts[optExtDebug] {
 						source := r.funcSource(name)
 						if source == "" {
@@ -1413,6 +1461,19 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					return true
 				}
 				printDeclaredVar(name, vr)
+				return true
+			}
+			if body := r.funcBody(name); body != nil && as == nil && valType == "" && functionTraceOnlyModes(modes) {
+				info, _ := r.funcInfo(name)
+				for _, mode := range modes {
+					switch mode {
+					case "-t":
+						info.trace = true
+					case "+t":
+						info.trace = false
+					}
+				}
+				r.setFuncInfo(name, info)
 				return true
 			}
 			targetEnv := r.writeEnv
@@ -1564,6 +1625,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						updates.hasLower = true
 						updates.lower = false
 						vr.Lower = false
+					case "-t":
+						updates.hasTrace = true
+						updates.trace = true
+						vr.Trace = true
+					case "+t":
+						updates.hasTrace = true
+						updates.trace = false
+						vr.Trace = false
 					case "-u":
 						updates.hasUpper = true
 						updates.upper = true
@@ -1604,6 +1673,16 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						updates.hasReadOnly = true
 						updates.readOnly = false
 						vr.ReadOnly = false
+					}
+				}
+				if info, ok := r.funcInfo(name); ok && info.body != nil {
+					switch {
+					case vr.Trace:
+						info.trace = true
+						r.setFuncInfo(name, info)
+					case updates.hasTrace && !updates.trace:
+						info.trace = false
+						r.setFuncInfo(name, info)
 					}
 				}
 				r.applyVarAttrs(&vr)
@@ -1676,9 +1755,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					fp := flagParser{remaining: []string{name}}
 					for fp.more() {
 						switch flag := fp.flag(); flag {
-						case "-x", "-r", "-i", "-l", "-u":
+						case "-x", "-r", "-i", "-l", "-t", "-u":
 							modes = append(modes, flag)
-						case "+x", "+r", "+i", "+l", "+u":
+						case "+x", "+r", "+i", "+l", "+t", "+u":
 							modes = append(modes, flag)
 						case "-a", "-A":
 							valType = flag
@@ -1816,7 +1895,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 				sort.Strings(names)
 				for _, name := range names {
-					printFunction(name, r.funcs[name])
+					printFunction(name, r.funcBody(name))
 				}
 			case "-F":
 				names := make([]string, 0, len(r.funcs))
@@ -1921,6 +2000,18 @@ func declUsage(name string) string {
 	}
 }
 
+func functionTraceOnlyModes(modes []string) bool {
+	if len(modes) == 0 {
+		return false
+	}
+	for _, mode := range modes {
+		if mode != "-t" && mode != "+t" {
+			return false
+		}
+	}
+	return true
+}
+
 func declaredVarMatches(vr expand.Variable, valType string, modes []string) bool {
 	if !vr.Declared() {
 		return false
@@ -1947,6 +2038,10 @@ func declaredVarMatches(vr expand.Variable, valType string, modes []string) bool
 			}
 		case "-l":
 			if !vr.Lower {
+				return false
+			}
+		case "-t":
+			if !vr.Trace {
 				return false
 			}
 		case "-r":
@@ -2022,29 +2117,6 @@ func (r *Runner) hideReadonlyArrayDeclKind(name string, vr expand.Variable) bool
 	}
 	kind, ok := r.hiddenReadonlyArrayDecl[name]
 	return ok && kind == vr.Kind
-}
-
-func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
-	if callback == "" {
-		return // nothing to do
-	}
-	if r.handlingTrap {
-		return // don't recurse, as that could lead to cycles
-	}
-	r.handlingTrap = true
-
-	oldExit := r.exit
-	defer func() {
-		r.exit = oldExit // traps on EXIT or ERR should not modify the result
-		r.handlingTrap = false
-	}()
-
-	if err := r.runShellReader(ctx, strings.NewReader(callback), name+" trap", nil); err != nil {
-		var status ExitStatus
-		if !errors.As(err, &status) {
-			r.errf(name+"trap: %v\n", err)
-		}
-	}
 }
 
 func (r *Runner) aliasResolver(name string) (syntax.AliasSpec, bool) {
@@ -3004,25 +3076,31 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		}
 	}
 	name := args[0]
-	if body := r.funcs[name]; body != nil {
-		source := r.funcSource(name)
-		isInternal := r.funcInternal(name)
+	if info, ok := r.funcInfo(name); ok && info.body != nil {
+		source := info.definitionSource
+		isInternal := info.internal
 		bashSource := source
 		if isInternal {
 			bashSource = ""
 		}
+		allowDebug := r.opts[optFuncTrace] || r.opts[optExtDebug] || info.trace
+		allowReturn := r.opts[optFuncTrace] || info.trace
+		allowErr := r.opts[optErrTrace]
 		// stack them to support nested func calls
 		oldParams := r.Params
 		r.Params = args[1:]
 		oldInFunc := r.inFunc
 		r.inFunc = true
 		restoreFrame := r.pushFrame(execFrame{
-			kind:       frameKindFunction,
-			label:      name,
-			execFile:   source,
-			bashSource: bashSource,
-			callLine:   r.functionCallLine(pos),
-			internal:   isInternal,
+			kind:        frameKindFunction,
+			label:       name,
+			execFile:    source,
+			bashSource:  bashSource,
+			callLine:    r.functionCallLine(pos),
+			internal:    isInternal,
+			allowErr:    allowErr,
+			allowDebug:  allowDebug,
+			allowReturn: allowReturn,
 		})
 
 		// Functions run in a nested scope.
@@ -3036,12 +3114,15 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 			r.currentChunkSourceBase = bodySource.base
 		}
 
-		r.stmt(ctx, body)
+		r.stmt(ctx, info.body)
 
 		r.currentChunkSource = prevChunkSource
 		r.currentChunkSourceBase = prevChunkSourceBase
 		r.writeEnv = origEnv
 		restoreFrame()
+		if allowReturn && !r.exit.fatalExit {
+			r.maybeRunReturnTrap(ctx, pos.Line(), r.exit.code)
+		}
 
 		r.Params = oldParams
 		r.inFunc = oldInFunc

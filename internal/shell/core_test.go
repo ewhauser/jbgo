@@ -101,6 +101,120 @@ func TestCoreRunAliasTrailingBlankDoesNotReachRedirectionTargets(t *testing.T) {
 	}
 }
 
+func TestCoreRunKillTriggersSignalTrap(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	result, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"trap 'echo usr1' USR1",
+			"kill -USR1 $$",
+			"echo after=$?",
+			"",
+		}, "\n"),
+		Registry: builtins.DefaultRegistry(),
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "usr1\nafter=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
+func TestCoreRunNestedShellKillTriggersParentSignalTrap(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	registry := builtins.DefaultRegistry()
+	result, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"trap 'echo nested' USR1",
+			`sh -c "kill -USR1 $$"`,
+			"echo after=$?",
+			"",
+		}, "\n"),
+		Registry: registry,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Exec:     newCoreTestExec(registry, nil),
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "nested\nafter=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
+func newCoreTestExec(registry commands.CommandRegistry, fsys gbfs.FileSystem) func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
+	var execFn func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
+	execFn = func(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
+		if req == nil {
+			req = &commands.ExecutionRequest{}
+		}
+
+		var stdout, stderr strings.Builder
+		execReq := &Execution{
+			Name:            req.Name,
+			Interpreter:     req.Interpreter,
+			PassthroughArgs: append([]string(nil), req.PassthroughArgs...),
+			ScriptPath:      req.ScriptPath,
+			Script:          req.Script,
+			Command:         append([]string(nil), req.Command...),
+			Args:            append([]string(nil), req.Args...),
+			StartupOptions:  append([]string(nil), req.StartupOptions...),
+			Interactive:     req.Interactive,
+			Env:             req.Env,
+			Dir:             req.WorkDir,
+			Stdin:           req.Stdin,
+			Stdout:          &stdout,
+			Stderr:          &stderr,
+			FS:              fsys,
+			Registry:        registry,
+			Exec:            execFn,
+		}
+
+		var (
+			runResult *RunResult
+			err       error
+		)
+		if len(req.Command) > 0 {
+			runResult, err = RunCommand(ctx, execReq)
+		} else {
+			runResult, err = Run(ctx, execReq)
+		}
+		result := &commands.ExecutionResult{
+			ExitCode: ExitCode(err),
+			Stdout:   stdout.String(),
+			Stderr:   stderr.String(),
+		}
+		if runResult != nil {
+			result.FinalEnv = runResult.FinalEnv
+			result.ShellExited = runResult.ShellExited
+		}
+		if err != nil && !IsExitStatus(err) {
+			return result, err
+		}
+		return result, nil
+	}
+	return execFn
+}
+
 func TestEnvMapExportsOnlyExportedShellVars(t *testing.T) {
 	t.Parallel()
 

@@ -66,11 +66,7 @@ type Runner struct {
 
 	// Separate maps - note that bash allows a name to be both a var and a
 	// func simultaneously.
-	funcs map[string]*syntax.Stmt
-
-	funcSources   map[string]string
-	funcInternals map[string]bool
-	funcBodySrc   map[string]funcSourceSpan
+	funcs map[string]funcInfo
 
 	alias map[string]alias
 
@@ -154,11 +150,10 @@ type Runner struct {
 	// >0 to break or continue out of N enclosing loops
 	breakEnclosing, contnEnclosing int
 
-	inLoop       bool
-	inFunc       bool
-	inSource     bool
-	evalDepth    int
-	handlingTrap bool // whether we're currently in a trap callback
+	inLoop    bool
+	inFunc    bool
+	inSource  bool
+	evalDepth int
 
 	// track if a sourced script set positional parameters
 	sourceSetParams bool
@@ -231,14 +226,31 @@ type Runner struct {
 	// printfEnv keeps process-level environment state used by printf %T.
 	printfEnv map[string]string
 
-	// Fake signal callbacks
-	callbackErr  string
-	callbackExit string
+	traps trapState
+
+	trapLineOverride uint
+	signalOwner      *Runner
 }
 
 type funcSourceSpan struct {
 	text string
 	base uint
+}
+
+type funcInfo struct {
+	body             *syntax.Stmt
+	definitionSource string
+	bodySource       funcSourceSpan
+	hasBodySource    bool
+	internal         bool
+	trace            bool
+}
+
+type trapState struct {
+	actions             map[trapID]trapAction
+	active              map[trapID]int
+	pending             []trapID
+	currentSignalNumber int
 }
 
 type virtualPIDState struct {
@@ -336,6 +348,7 @@ type bgProc struct {
 	// after which point the result fields below are set.
 	done chan struct{}
 
+	runner        *Runner
 	exit          *exitStatus
 	procSubst     bool
 	waitAtStmtEnd bool
@@ -562,7 +575,9 @@ type bashOpt struct {
 var posixOptsTable = [...]posixOpt{
 	// sorted alphabetically by name
 	{'a', "allexport"},
+	{'E', "errtrace"},
 	{'e', "errexit"},
+	{'T', "functrace"},
 	{'C', "noclobber"},
 	{'n', "noexec"},
 	{'f', "noglob"},
@@ -711,7 +726,9 @@ var bashOptsTable = [...]bashOpt{
 const (
 	// These correspond to indexes in [shellOptsTable]
 	optAllExport = iota
+	optErrTrace
 	optErrExit
+	optFuncTrace
 	optNoClobber
 	optNoExec
 	optNoGlob
@@ -802,33 +819,30 @@ func (r *Runner) Reset() {
 		startTime:  r.origStart,
 		random:     r.origRandom,
 
-		funcSources:   r.funcSources,
-		funcInternals: r.funcInternals,
-		funcs:         r.funcs,
-		printfEnv:     make(map[string]string),
+		funcs:     r.funcs,
+		printfEnv: make(map[string]string),
 
 		dirStack:               r.dirStack[:0],
 		topLevelScriptPath:     r.topLevelScriptPath,
 		interactive:            r.interactive,
 		syntheticPipelineStmts: r.syntheticPipelineStmts,
+		signalOwner:            r.signalOwner,
+	}
+	r.traps.actions = nil
+	r.traps.active = nil
+	r.traps.pending = nil
+	r.traps.currentSignalNumber = 0
+	r.trapLineOverride = 0
+	if r.signalOwner == nil {
+		r.signalOwner = r
 	}
 	r.nextVirtualPID = newVirtualPIDState(max(r.pid, r.bashPID) + 1)
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
 	r.bgProcs = r.bgProcs[:0]
 
-	if r.funcSources == nil {
-		r.funcSources = make(map[string]string)
-	} else {
-		clear(r.funcSources)
-	}
-	if r.funcInternals == nil {
-		r.funcInternals = make(map[string]bool)
-	} else {
-		clear(r.funcInternals)
-	}
 	if r.funcs == nil {
-		r.funcs = make(map[string]*syntax.Stmt, 4)
+		r.funcs = make(map[string]funcInfo, 4)
 	} else {
 		clear(r.funcs)
 	}
@@ -960,7 +974,7 @@ func (r *Runner) run(ctx context.Context, node syntax.Node, runExitTrap, manageM
 		return fmt.Errorf("node can only be File, Stmt, or Command: %T", node)
 	}
 	if runExitTrap {
-		r.trapCallback(ctx, r.callbackExit, "exit")
+		r.runTrap(ctx, trapIDExit, r.currentStmtLine, r.exit.code)
 	}
 	return r.currentRunError()
 }
@@ -1034,17 +1048,17 @@ func (r *Runner) subshell(background bool) *Runner {
 		startTime:               r.startTime,
 		random:                  random,
 		origRandom:              random,
+		signalOwner:             r.signalOwner,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
 	r2.writeEnv = newOverlayEnviron(r.writeEnv, background)
 	// Funcs are copied, since they might be modified.
 	r2.funcs = maps.Clone(r.funcs)
-	r2.funcSources = maps.Clone(r.funcSources)
-	r2.funcInternals = maps.Clone(r.funcInternals)
 	r2.alias = maps.Clone(r.alias)
 	r2.frames = append(r2.frames, r.frames...)
 	r2.syntheticPipelineStmts = r.syntheticPipelineStmts
+	r2.cloneTrapStateFrom(r)
 
 	r2.dirStack = append(r2.dirBootstrap[:0], r.dirStack...)
 	r2.fillExpandConfig(r.ectx)
@@ -1060,6 +1074,26 @@ func (r *Runner) allocateSubshellPID() int {
 		r.nextVirtualPID = newVirtualPIDState(max(r.pid, r.bashPID) + 1)
 	}
 	return r.nextVirtualPID.allocate()
+}
+
+func (r *Runner) InheritSignalFamily(owner *Runner, stablePID, parentBASHPID int) {
+	if r == nil || owner == nil {
+		return
+	}
+	if owner.signalOwner != nil {
+		owner = owner.signalOwner
+	}
+	if stablePID <= 0 {
+		stablePID = owner.pid
+	}
+	if parentBASHPID <= 0 {
+		parentBASHPID = owner.bashPID
+	}
+	r.signalOwner = owner
+	r.pid = stablePID
+	r.ppid = parentBASHPID
+	r.nextVirtualPID = owner.nextVirtualPID
+	r.bashPID = owner.allocateSubshellPID()
 }
 
 func randomSeed(pid int, started time.Time) uint32 {

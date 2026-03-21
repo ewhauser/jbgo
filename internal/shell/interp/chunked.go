@@ -73,7 +73,7 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 	finish := func(err error) error {
 		popFrame()
 		if runExitTrap {
-			r.trapCallback(ctx, r.callbackExit, "exit")
+			r.runTrap(ctx, trapIDExit, r.currentStmtLine, r.exit.code)
 		}
 		if err != nil {
 			return err

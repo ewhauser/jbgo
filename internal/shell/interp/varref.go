@@ -302,6 +302,8 @@ type attrUpdate struct {
 	integer     bool
 	hasLower    bool
 	lower       bool
+	hasTrace    bool
+	trace       bool
 	hasUpper    bool
 	upper       bool
 }
@@ -328,6 +330,10 @@ func (u attrUpdate) mergeOntoTarget(vr *expand.Variable, target expand.Variable)
 	vr.Lower = target.Lower
 	if u.hasLower {
 		vr.Lower = u.lower
+	}
+	vr.Trace = target.Trace
+	if u.hasTrace {
+		vr.Trace = u.trace
 	}
 	vr.Upper = target.Upper
 	if u.hasUpper {
@@ -373,6 +379,7 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 			vr.ReadOnly = next.ReadOnly
 			vr.Integer = next.Integer
 			vr.Lower = next.Lower
+			vr.Trace = next.Trace
 			vr.Upper = next.Upper
 			r.setVar(origName, vr)
 			return nil

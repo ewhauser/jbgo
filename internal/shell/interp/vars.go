@@ -768,15 +768,18 @@ func expandTrimArithSpace(s string) string {
 }
 
 func (r *Runner) setFunc(name string, body *syntax.Stmt) {
-	if r.funcs == nil {
-		r.funcs = make(map[string]*syntax.Stmt, 4)
-	}
-	r.funcs[name] = body
-	r.setFuncSource(name, r.currentDefinitionSource())
+	info, _ := r.funcInfo(name)
+	info.body = body
+	info.definitionSource = r.currentDefinitionSource()
 	if source := r.sourceForNode(body); source != "" {
-		r.setFuncBodySource(name, source, body.Pos().Offset())
+		info.bodySource = funcSourceSpan{text: source, base: body.Pos().Offset()}
+		info.hasBodySource = true
+	} else {
+		info.bodySource = funcSourceSpan{}
+		info.hasBodySource = false
 	}
-	r.setFuncInternal(name, r.currentInternal())
+	info.internal = r.currentInternal()
+	r.setFuncInfo(name, info)
 }
 
 type shadowWriteEnviron struct {

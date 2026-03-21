@@ -260,9 +260,9 @@ linters:
         - pattern: '^tls\.(Dial|DialWithDialer|Listen)$'
           pkg: '^crypto/tls$'
           msg: Use inv.Fetch instead of direct host TLS clients or listeners.
-        - pattern: '^syscall\.(Kill|Open|Openat|Readlink|Symlink|Link|Rename|Unlink|Unlinkat|Mkdir|Mkdirat|Exec|ForkExec|StartProcess|Mount|PivotRoot|Chdir|Chroot|Fchdir|Connect|Socket|Socketpair|Bind|Listen|Accept|Accept4|Dup|Dup2|Dup3|Syscall|Syscall6|RawSyscall|RawSyscall6)$'
+        - pattern: '^syscall\.(Kill|Getpid|Getppid|Getpgrp|Getpgid|Setpgid|Setsid|Tgkill|Open|Openat|Readlink|Symlink|Link|Rename|Unlink|Unlinkat|Mkdir|Mkdirat|Exec|ForkExec|StartProcess|Mount|PivotRoot|Chdir|Chroot|Fchdir|Connect|Socket|Socketpair|Bind|Listen|Accept|Accept4|Dup|Dup2|Dup3|Syscall|Syscall6|RawSyscall|RawSyscall6)$'
           msg: Do not access host syscalls directly from commands.
-        - pattern: '^unix\.(Uname|Umask|Open|Openat|Readlink|Readlinkat|Symlink|Symlinkat|Link|Linkat|Rename|Renameat|Unlink|Unlinkat|Mkdir|Mkdirat|Exec|ForkExec|Mount|PivotRoot|Chdir|Chroot|Fchdir|Connect|Socket|Socketpair|Bind|Listen|Accept|Accept4|Dup|Dup2|Dup3|Ioctl.*|Kill|Setns)$'
+        - pattern: '^unix\.(Uname|Umask|Open|Openat|Readlink|Readlinkat|Symlink|Symlinkat|Link|Linkat|Rename|Renameat|Unlink|Unlinkat|Mkdir|Mkdirat|Exec|ForkExec|Mount|PivotRoot|Chdir|Chroot|Fchdir|Connect|Socket|Socketpair|Bind|Listen|Accept|Accept4|Dup|Dup2|Dup3|Ioctl.*|Kill|Setns|Getpid|Getppid|Getpgrp|Getpgid|Setpgid|Setsid|Tgkill|PidfdSendSignal)$'
           pkg: '^golang\.org/x/sys/unix$'
           msg: Do not read or mutate host process or kernel state directly from commands.
         - pattern: '^commands\.CommandFS\.raw$'
@@ -271,6 +271,9 @@ linters:
         - pattern: '^io\.ReadAll$'
           pkg: '^io$'
           msg: Use commands.ReadAll, commands.ReadAllStdin, or inv.FS.ReadFile so MaxFileBytes is enforced.
+        - pattern: '^signal\.(Notify|NotifyContext|Stop|Reset|Ignore)$'
+          pkg: '^os/signal$'
+          msg: Do not register host signal handlers; use the virtual trap subsystem.
         - pattern: '^os\.(FindProcess|Geteuid|Getegid|Getuid|Getgid|Getpid|Getppid)$'
           msg: Use invocation-provided identity or process state instead of host process state.
         - pattern: '^os\.(Stdout|Stderr|Stdin)$'

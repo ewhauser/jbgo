@@ -62,7 +62,7 @@ func (b *runnerCompletionBackend) ExpandWordlist(wordlist string) ([]string, err
 }
 
 func (b *runnerCompletionBackend) FunctionExists(name string) bool {
-	return b.runner != nil && b.runner.funcs[name] != nil
+	return b.runner != nil && b.runner.funcBody(name) != nil
 }
 
 func (b *runnerCompletionBackend) FunctionNames(prefix string) []string {
@@ -269,7 +269,7 @@ func (b *runnerCompletionBackend) MatchFilterPattern(filter, candidate string) (
 }
 
 func (b *runnerCompletionBackend) RunFunction(name string, req completionutil.HookRequest) completionutil.HookResult {
-	if b.runner == nil || b.runner.funcs[name] == nil {
+	if b.runner == nil || b.runner.funcBody(name) == nil {
 		return completionutil.HookResult{Status: 1}
 	}
 	restoreVars := b.pushCompletionEnv(req)

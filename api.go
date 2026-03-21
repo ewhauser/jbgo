@@ -387,7 +387,7 @@ func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
 	if r == nil || r.inner == nil {
 		return nil, fmt.Errorf("gbash: runtime is nil")
 	}
-	session, err := r.inner.NewSession(ctx)
+	session, err := r.inner.NewSession(withHostProcessGroup(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +402,7 @@ func (r *Runtime) Run(ctx context.Context, req *ExecutionRequest) (*ExecutionRes
 	if r == nil || r.inner == nil {
 		return nil, fmt.Errorf("gbash: runtime is nil")
 	}
-	result, err := r.inner.Run(ctx, req.runtimeRequest())
+	result, err := r.inner.Run(withHostProcessGroup(ctx), req.runtimeRequest())
 	return executionResultFromRuntime(result), err
 }
 
@@ -415,7 +415,7 @@ func (s *Session) Exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	if s == nil || s.inner == nil {
 		return nil, fmt.Errorf("gbash: session is nil")
 	}
-	result, err := s.inner.Exec(ctx, req.runtimeRequest())
+	result, err := s.inner.Exec(withHostProcessGroup(ctx), req.runtimeRequest())
 	return executionResultFromRuntime(result), err
 }
 
@@ -424,7 +424,7 @@ func (s *Session) Interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	if s == nil || s.inner == nil {
 		return nil, fmt.Errorf("gbash: session is nil")
 	}
-	result, err := s.inner.Interact(ctx, req.runtimeRequest())
+	result, err := s.inner.Interact(withHostProcessGroup(ctx), req.runtimeRequest())
 	return interactiveResultFromRuntime(result), err
 }
 

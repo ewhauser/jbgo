@@ -216,8 +216,12 @@ func normalizeBashStartupOption(value string) (string, error) {
 	switch strings.TrimSpace(value) {
 	case "allexport":
 		return "allexport", nil
+	case "errtrace":
+		return "errtrace", nil
 	case "errexit":
 		return "errexit", nil
+	case "functrace":
+		return "functrace", nil
 	case "noglob":
 		return "noglob", nil
 	case "noexec":

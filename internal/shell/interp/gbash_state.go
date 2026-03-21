@@ -7,6 +7,7 @@ import (
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/internal/shellstate"
 )
 
 func (r *Runner) setStdIO(in io.Reader, out, err io.Writer) error {
@@ -172,4 +173,33 @@ func (hc *HandlerContext) UnsetShellVar(name string) error {
 		return nil
 	}
 	return hc.runner.UnsetShellVar(name)
+}
+
+func (hc HandlerContext) DispatchSignal(target string, number int) error {
+	if hc.runner == nil {
+		return nil
+	}
+	return hc.runner.DispatchSignal(target, number)
+}
+
+func (hc HandlerContext) SignalFamily() shellstate.SignalFamily {
+	if hc.runner == nil {
+		return shellstate.SignalFamily{}
+	}
+	owner := hc.runner
+	if owner.signalOwner != nil {
+		owner = owner.signalOwner
+	}
+	return shellstate.SignalFamily{
+		Owner:         owner,
+		StablePID:     owner.pid,
+		ParentBASHPID: hc.runner.bashPID,
+	}
+}
+
+func (hc HandlerContext) ProcessGroup() (int, bool) {
+	if hc.runner == nil {
+		return 0, false
+	}
+	return shellstate.ProcessGroupFromContext(hc.runner.ectx)
 }

@@ -149,7 +149,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 					continue
 				}
 			}
-			if _, ok := r.funcs[arg]; ok && funcs {
+			if body := r.funcBody(arg); body != nil && funcs {
 				r.delFunc(arg)
 			}
 		}
@@ -772,52 +772,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 
 	case "trap":
-		fp := flagParser{remaining: args}
-		callback := "-"
-		for fp.more() {
-			switch flag := fp.flag(); flag {
-			case "-l", "-p":
-				return failf(2, "trap: %q: NOT IMPLEMENTED flag\n", flag)
-			case "-":
-				// default signal
-			default:
-				r.errf("trap: %q: invalid option\n", flag)
-				r.errf("trap: usage: trap [-lp] [[arg] signal_spec ...]\n")
-				exit.code = 2
-				return exit
-			}
-		}
-		args := fp.args()
-		switch len(args) {
-		case 0:
-			// Print non-default signals
-			if r.callbackExit != "" {
-				r.outf("trap -- %q EXIT\n", r.callbackExit)
-			}
-			if r.callbackErr != "" {
-				r.outf("trap -- %q ERR\n", r.callbackErr)
-			}
-		case 1:
-			// assume it's a signal, the default will be restored
-		default:
-			callback = args[0]
-			args = args[1:]
-		}
-		// For now, treat both empty and - the same since ERR and EXIT have no
-		// default callback.
-		if callback == "-" {
-			callback = ""
-		}
-		for _, arg := range args {
-			switch arg {
-			case "ERR":
-				r.callbackErr = callback
-			case "EXIT":
-				r.callbackExit = callback
-			default:
-				return failf(2, "trap: %s: invalid signal specification\n", arg)
-			}
-		}
+		return r.trapBuiltin(ctx, args)
 
 	case "readarray", "mapfile":
 		opts, args, parseErr := parseMapfileBuiltinArgs(name, args)
@@ -1777,15 +1732,21 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, args []strin
 		bashSource = ""
 	}
 	frame := &execFrame{
-		kind:       frameKindSource,
-		label:      "source",
-		execFile:   sourceName,
-		bashSource: bashSource,
-		callLine:   r.sourceCallLine(pos),
-		internal:   internal,
+		kind:        frameKindSource,
+		label:       "source",
+		execFile:    sourceName,
+		bashSource:  bashSource,
+		callLine:    r.sourceCallLine(pos),
+		internal:    internal,
+		allowErr:    r.opts[optErrTrace],
+		allowDebug:  r.opts[optFuncTrace],
+		allowReturn: r.opts[optFuncTrace],
 	}
 	r.inSource = true
 	runErr := r.runShellReader(ctx, f, sourceName, frame)
+	if r.opts[optFuncTrace] && !r.exit.fatalExit {
+		r.maybeRunReturnTrap(ctx, pos.Line(), r.exit.code)
+	}
 
 	if sourceArgs && !r.sourceSetParams {
 		r.Params = oldParams
@@ -2347,7 +2308,7 @@ func (r *Runner) typeMatches(ctx context.Context, name string, mode shellTypeMod
 		}
 	}
 	if !mode.suppressFuncs {
-		if body := r.funcs[name]; body != nil && !r.funcInternal(name) {
+		if body := r.funcBody(name); body != nil && !r.funcInternal(name) {
 			if !appendMatch(shellTypeMatch{kind: shellTypeFunction, body: body}) {
 				if mode.output == shellTypeOutputPath {
 					return nil, true

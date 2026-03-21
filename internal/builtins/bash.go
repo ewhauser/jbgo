@@ -71,7 +71,7 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return RenderSimpleVersion(inv.Stdout, c.name)
 	}
 	if parsed.Interactive && inv.Stderr != nil {
-		if warning := bashInteractiveJobControlWarning(c.name, inv); warning != "" {
+		if warning := bashInteractiveJobControlWarning(ctx, c.name, inv); warning != "" {
 			_, _ = io.WriteString(inv.Stderr, warning)
 		}
 		_, _ = fmt.Fprintf(inv.Stderr, "%s: no job control in this shell\n", c.name)
