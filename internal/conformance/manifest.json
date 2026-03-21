@@ -2,6 +2,10 @@
   "suites": {
     "bash": {
       "entries": {
+        "oils/paren-ambiguity.test.sh::((gzip example - zdiff package - #2337": {
+          "mode": "skip",
+          "reason": "bash forks two real gzip processes whose stderr writes interleave non-deterministically; gbash built-in gzip is deterministic so stderr comparison is inherently flaky"
+        },
         "oils/alias.test.sh::alias with word of multiple lines": {
           "mode": "xfail",
           "reason": "conformance: gbash ls error message format differs from GNU coreutils ls"
