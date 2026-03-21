@@ -875,7 +875,7 @@ func (r *Runner) Reset() {
 	r.setExportedVarString("PWD", pwd)
 	r.setVarString("_", "")
 	r.setVarString("IFS", " \t\n")
-	r.setVarString("OPTIND", "1")
+	r.setOPTIND("1")
 	r.setVarString("PS4", "+ ")
 	if r.interactive && !r.writeEnv.Get("HISTFILE").IsSet() {
 		home := strings.TrimSpace(r.writeEnv.Get("HOME").String())

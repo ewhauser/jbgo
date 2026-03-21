@@ -70,8 +70,12 @@ echo h=$FLAG_h c=$FLAG_c optind=$OPTIND argv=$@
 set -- -c foo -h
 getopts 'hc:' opt-
 echo status=$? opt=$opt OPTARG=$OPTARG OPTIND=$OPTIND
-## stdout: status=2 opt= OPTARG=foo OPTIND=3
-## OK bash stdout: status=1 opt= OPTARG=foo OPTIND=3
+## STDOUT:
+status=2 opt= OPTARG=foo OPTIND=3
+## END
+## OK bash STDOUT:
+status=1 opt= OPTARG=foo OPTIND=3
+## END
 
 #### getopts with invalid flag
 set -- -h -x

@@ -566,6 +566,13 @@ func (r *Runner) setVarString(name, value string) {
 	r.setVar(name, expand.Variable{Set: true, Kind: expand.String, Str: value})
 }
 
+func (r *Runner) setOPTIND(value string) {
+	if err := r.writeEnv.Set("OPTIND", expand.Variable{Set: true, Kind: expand.String, Str: value}); err != nil {
+		r.errf("OPTIND: %v\n", err)
+		r.exit.code = 1
+	}
+}
+
 func (r *Runner) setExportedVarString(name, value string) {
 	r.setVar(name, expand.Variable{Set: true, Exported: true, Kind: expand.String, Str: value})
 }
@@ -589,6 +596,9 @@ func (r *Runner) setVar(name string, vr expand.Variable) {
 		r.errf("%s: %v\n", name, err)
 		r.exit.code = 1
 		return
+	}
+	if name == "OPTIND" {
+		r.optState.reset()
 	}
 	if name == "SECONDS" && vr.IsSet() {
 		seconds, err := strconv.ParseInt(strings.TrimSpace(vr.String()), 10, 64)
