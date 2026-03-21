@@ -19,12 +19,12 @@ import (
 
 // LookupHandlerContext returns the [HandlerContext] value stored in ctx,
 // which is used when calling handler functions.
-func LookupHandlerContext(ctx context.Context) (HandlerContext, bool) {
-	hc, ok := ctx.Value(handlerCtxKey{}).(HandlerContext)
+func LookupHandlerContext(ctx context.Context) (*HandlerContext, bool) {
+	hc, ok := ctx.Value(handlerCtxKey{}).(*HandlerContext)
 	return hc, ok
 }
 
-func mustHandlerCtx(ctx context.Context) HandlerContext {
+func mustHandlerCtx(ctx context.Context) *HandlerContext {
 	hc, ok := LookupHandlerContext(ctx)
 	if !ok {
 		panic("interp: missing HandlerContext in context")

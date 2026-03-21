@@ -28,7 +28,7 @@ func TestLookupHandlerContextInExecHandler(t *testing.T) {
 
 	var (
 		seen bool
-		hc   HandlerContext
+		hc   *HandlerContext
 	)
 	runner, err := NewRunner(&RunnerConfig{
 		Dir:   "/sandbox",
@@ -77,7 +77,7 @@ func TestLookupHandlerContextInProcSubstHandler(t *testing.T) {
 
 	var (
 		seen bool
-		hc   HandlerContext
+		hc   *HandlerContext
 	)
 	runner, err := NewRunner(&RunnerConfig{
 		Dir:    "/sandbox",
