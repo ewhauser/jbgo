@@ -481,7 +481,7 @@ func (r *Runner) handlerCtx(ctx context.Context, kind handlerKind, pos syntax.Po
 	if r.stdin != nil { // do not leave hc.Stdin as a typed nil
 		hc.Stdin = r.stdin
 	}
-	return context.WithValue(ctx, handlerCtxKey{}, hc)
+	return context.WithValue(ctx, handlerCtxKey{}, &hc)
 }
 
 func (r *Runner) out(s string) {

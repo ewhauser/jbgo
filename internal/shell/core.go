@@ -649,13 +649,13 @@ func (m *core) execHandler(exec *Execution, budget *executionBudget) interp.Exec
 				return shellstate.WithShellVarLookup(callCtx, shellVarLookup)
 			},
 			SyncEnv: func(callCtx context.Context, before, after map[string]string) error {
-				if syncErr := syncShellVarAssignments(&hc, shellVars); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
+				if syncErr := syncShellVarAssignments(hc, shellVars); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
 					return syncErr
 				}
-				if syncErr := syncCommandHistory(&hc, before, after); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
+				if syncErr := syncCommandHistory(hc, before, after); syncErr != nil { //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
 					return syncErr
 				}
-				return syncUmaskEnv(&hc, before, after) //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
+				return syncUmaskEnv(hc, before, after) //nolint:contextcheck // runner state mutation is intentionally in-process and context-free
 			},
 		})
 		return err
@@ -1306,7 +1306,7 @@ func handlerState(ctx context.Context, exec *Execution) resolvedHandlerState {
 	}
 }
 
-func optionalHandlerCtx(ctx context.Context) (_ interp.HandlerContext, ok bool) {
+func optionalHandlerCtx(ctx context.Context) (_ *interp.HandlerContext, ok bool) {
 	return interp.LookupHandlerContext(ctx)
 }
 

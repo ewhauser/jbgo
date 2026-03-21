@@ -607,9 +607,9 @@ func (m *procSubstManager) pathAllowed(ctx context.Context, action policy.FileAc
 	return m.policy.AllowPath(ctx, action, target) == nil
 }
 
-func procSubstHandlerContext(ctx context.Context) (hc interp.HandlerContext, ok bool) {
+func procSubstHandlerContext(ctx context.Context) (hc *interp.HandlerContext, ok bool) {
 	if ctx == nil {
-		return interp.HandlerContext{}, false
+		return nil, false
 	}
 	return interp.LookupHandlerContext(ctx)
 }
