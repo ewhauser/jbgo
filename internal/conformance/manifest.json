@@ -552,45 +552,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/dbracket.test.sh::(( array1 == array2 )) doesn't work": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::Argument that looks like a real operator": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ '(' foo ]] is syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ -z '>' a ]] is syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ -z ]] is syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ ]] is syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ a 3< b ]] doesn't work (bug regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ regex syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "linux"
-          ]
-        },
-        "oils/dbracket.test.sh::[[ with op variable (compare with test-builtin.test.sh)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/dbracket.test.sh::more tilde expansion": {
           "mode": "xfail",
           "reason": "conformance: darwin bash keeps startup-home tilde semantics inside [[ ]]",

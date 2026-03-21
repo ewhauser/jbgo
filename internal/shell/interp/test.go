@@ -112,13 +112,19 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 			if classic {
 				break
 			}
-			left, ok := r.testExpandWord(x.X.(*syntax.Word), expand.Document)
+			expandLeft := expand.Literal
+			expandRight := expand.Regexp
+			if !condTildeExpandsInDBrackets() {
+				expandLeft = expand.LiteralNoTilde
+				expandRight = expand.RegexpNoTilde
+			}
+			left, ok := r.testExpandWord(x.X.(*syntax.Word), expandLeft)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return ""
 			}
 			rightWord := x.Y.(*syntax.Word)
-			right, ok := r.testExpandWord(rightWord, expand.Regexp)
+			right, ok := r.testExpandWord(rightWord, expandRight)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return ""
@@ -255,13 +261,19 @@ func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *trac
 	case *syntax.CondBinary:
 		switch x.Op {
 		case syntax.TsReMatch:
-			left, ok := r.testExpandWord(x.X.(*syntax.CondWord).Word, expand.Document)
+			expandLeft := expand.Literal
+			expandRight := expand.Regexp
+			if !condTildeExpandsInDBrackets() {
+				expandLeft = expand.LiteralNoTilde
+				expandRight = expand.RegexpNoTilde
+			}
+			left, ok := r.testExpandWord(x.X.(*syntax.CondWord).Word, expandLeft)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return condEval{}
 			}
 			rightWord := x.Y.(*syntax.CondRegex).Word
-			right, ok := r.testExpandWord(rightWord, expand.Regexp)
+			right, ok := r.testExpandWord(rightWord, expandRight)
 			if !ok {
 				r.clearBASH_REMATCH()
 				return condEval{}

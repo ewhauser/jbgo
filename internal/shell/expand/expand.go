@@ -2056,11 +2056,11 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indices []int
 }
 
 func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest string, expanded bool) {
-	return cfg.expandUserWithHome(field, moreFields, cfg.StartupHome)
+	return cfg.expandUserWithHome(field, moreFields, "")
 }
 
 func (cfg *Config) expandAssignmentUser(field string, moreFields bool) (prefix, rest string, expanded bool) {
-	return cfg.expandUserWithHome(field, moreFields, cfg.StartupHome)
+	return cfg.expandUserWithHome(field, moreFields, "")
 }
 
 func (cfg *Config) expandUserWithHome(field string, moreFields bool, startupHome string) (prefix, rest string, expanded bool) {

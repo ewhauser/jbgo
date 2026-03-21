@@ -1048,7 +1048,7 @@ echo "$a" "${b-unset}" "${c-unset}"
 	}
 }
 
-func TestArrayAssignmentTildeUsesStartupHome(t *testing.T) {
+func TestArrayAssignmentTildeUsesLiveHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1067,7 +1067,7 @@ typeset -p a b
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "declare -a a=([0]=\"0\" [1]=\"\" [2]=\"2\")\ndeclare -a b=([0]=\"3\" [1]=\"4\" [2]=\"/startup/src\")\n"
+	const wantStdout = "declare -a a=([0]=\"0\" [1]=\"\" [2]=\"2\")\ndeclare -a b=([0]=\"3\" [1]=\"4\" [2]=\"/home/spec-test/src\")\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1076,7 +1076,7 @@ typeset -p a b
 	}
 }
 
-func TestScalarAssignmentTildeUsesStartupHome(t *testing.T) {
+func TestScalarAssignmentTildeUsesLiveHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1092,7 +1092,7 @@ echo "$foo"
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "/startup\n~\n"
+	const wantStdout = "/home/spec-test\n~\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1101,7 +1101,7 @@ echo "$foo"
 	}
 }
 
-func TestReadonlyAssignmentTildeUsesStartupHome(t *testing.T) {
+func TestReadonlyAssignmentTildeUsesLiveHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1115,7 +1115,7 @@ echo "$const"
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "/startup/src\n"
+	const wantStdout = "/home/bob/src\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1124,7 +1124,7 @@ echo "$const"
 	}
 }
 
-func TestAssignmentKeywordTildeUsesStartupHome(t *testing.T) {
+func TestAssignmentKeywordTildeUsesLiveHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1141,7 +1141,7 @@ f
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "foo:/startup\n"
+	const wantStdout = "foo:/home/bar\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1150,7 +1150,7 @@ f
 	}
 }
 
-func TestTempAssignmentTildeUsesStartupHome(t *testing.T) {
+func TestTempAssignmentTildeUsesLiveHome(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1166,7 +1166,7 @@ xx=~ show
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "/startup\n"
+	const wantStdout = "/home/bar\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1252,7 +1252,10 @@ echo fnmatch=$?
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "status=0\nstatus=1\nunary=1\nstatus=0\nfnmatch=0\nfnmatch=0\n"
+	wantStdout := "status=0\nstatus=1\nunary=1\nstatus=0\nfnmatch=0\nfnmatch=0\n"
+	if runtime.GOOS == "darwin" {
+		wantStdout = "status=1\nstatus=0\nunary=0\nstatus=0\nfnmatch=1\nfnmatch=1\n"
+	}
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -1261,7 +1264,7 @@ echo fnmatch=$?
 	}
 }
 
-func TestDbracketRegexDoesNotTildeExpand(t *testing.T) {
+func TestDbracketRegexTildeMatchesHostBash(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1284,7 +1287,10 @@ echo regex=$?
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "regex=1\nregex=1\nregex=1\nregex=1\n"
+	wantStdout := "regex=0\nregex=0\nregex=1\nregex=0\n"
+	if runtime.GOOS == "darwin" {
+		wantStdout = "regex=1\nregex=1\nregex=1\nregex=1\n"
+	}
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
