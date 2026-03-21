@@ -72,10 +72,19 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 	}
 	finish := func(err error) error {
 		popFrame()
+		var exitResult trapRunResult
 		if runExitTrap {
-			r.runTrap(ctx, trapIDExit, r.currentStmtLine, r.exit.code)
+			exitResult = r.runTrap(ctx, trapIDExit, r.currentStmtLine, r.exit.code)
 		}
 		if err != nil {
+			if exitResult.handler.exiting || exitResult.handler.fatalExit {
+				var parseErr syntax.ParseError
+				if errors.As(err, &parseErr) {
+					io.WriteString(r.stderr, parseErr.BashError())
+					io.WriteString(r.stderr, "\n")
+					return r.currentRunError()
+				}
+			}
 			return err
 		}
 		return r.currentRunError()

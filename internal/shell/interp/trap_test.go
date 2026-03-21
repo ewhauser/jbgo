@@ -40,6 +40,34 @@ echo work
 	}
 }
 
+func TestRunReaderWithMetadataExitTrapExitOverridesParseErrorStatus(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:    t.TempDir(),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+
+	err = runner.RunReaderWithMetadata(context.Background(), strings.NewReader(`
+trap 'echo FAILED; exit 0' EXIT
+for
+`), "trap-parse-exit.sh", "", nil)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout.String(), "FAILED\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); !strings.Contains(got, "syntax error near unexpected token `newline'\n") || !strings.Contains(got, "`for'\n") {
+		t.Fatalf("stderr = %q, want parse error output", got)
+	}
+}
+
 func TestExitTrapExitStatusDoesNotWriteStderr(t *testing.T) {
 	t.Parallel()
 

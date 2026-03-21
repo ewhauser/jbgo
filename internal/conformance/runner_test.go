@@ -337,6 +337,21 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 		t.Fatalf("Stat(assign-extended bin/bash) error = %v, want not exist", err)
 	}
 
+	trapWorkspace, err := prepareWorkspace(cfg, "oils/builtin-trap.test.sh", bashPath)
+	if err != nil {
+		t.Fatalf("prepareWorkspace(builtin-trap) error = %v", err)
+	}
+	defer removeAll(trapWorkspace)
+	if _, err := os.Stat(filepath.Join(trapWorkspace, "spec", "testdata", "echo.sz")); err != nil {
+		t.Fatalf("Stat(builtin-trap spec/testdata/echo.sz) error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(trapWorkspace, "testdata", "echo.sz")); !os.IsNotExist(err) {
+		t.Fatalf("Stat(builtin-trap testdata/echo.sz) error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(trapWorkspace, "bin", "bash")); !os.IsNotExist(err) {
+		t.Fatalf("Stat(builtin-trap bin/bash) error = %v, want not exist", err)
+	}
+
 	defaultWorkspace, err := prepareWorkspace(cfg, "oils/serialize.test.sh", bashPath)
 	if err != nil {
 		t.Fatalf("prepareWorkspace(default) error = %v", err)

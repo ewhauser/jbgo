@@ -437,19 +437,11 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::exit codes for traps are isolated": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap.test.sh::print trap handler with multiple lines": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-trap.test.sh::trap 0 2 resets EXIT AND SIGINT": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap.test.sh::trap EXIT with PARSE error and explicit exit": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

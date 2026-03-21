@@ -871,7 +871,8 @@ func useScopedGlobWorkspace(specPath string) bool {
 
 func usesRepoRootFixtureTree(specPath string) bool {
 	switch specPath {
-	case "oils/assign-extended.test.sh":
+	case "oils/assign-extended.test.sh",
+		"oils/builtin-trap.test.sh":
 		return true
 	default:
 		return false

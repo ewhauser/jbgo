@@ -161,6 +161,38 @@ func TestCoreRunNestedShellKillTriggersParentSignalTrap(t *testing.T) {
 	}
 }
 
+func TestCoreRunNestedShellKillPreservesTrapStatus(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	registry := builtins.DefaultRegistry()
+	result, err := Run(context.Background(), &Execution{
+		Script: strings.Join([]string{
+			"trap 'echo nested status=$?; ( exit 42 )' USR1",
+			"echo before=$?",
+			`sh -c "kill -USR1 $$"`,
+			"echo after=$?",
+			"",
+		}, "\n"),
+		Registry: registry,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Exec:     newCoreTestExec(registry, nil),
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "before=0\nnested status=0\nafter=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
 func newCoreTestExec(registry commands.CommandRegistry, fsys gbfs.FileSystem) func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
 	var execFn func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
 	execFn = func(ctx context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {

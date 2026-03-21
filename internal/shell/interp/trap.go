@@ -280,26 +280,25 @@ func (r *Runner) runPendingSignalTraps(ctx context.Context) {
 	if len(r.traps.pending) == 0 {
 		return
 	}
-	pending := append([]trapID(nil), r.traps.pending...)
+	pending := append([]pendingSignalTrap(nil), r.traps.pending...)
 	r.traps.pending = r.traps.pending[:0]
-	for _, id := range pending {
-		_ = r.runTrap(ctx, id, r.currentStmtLine, 128+signalExitCode(id))
+	for _, trap := range pending {
+		_ = r.runTrap(ctx, trap.id, trap.line, trap.status)
 	}
-}
-
-func signalExitCode(id trapID) uint8 {
-	info, ok := trapSignalInfoByID(id)
-	if !ok {
-		return 0
-	}
-	return uint8(info.number)
 }
 
 func (r *Runner) queueSignalTrap(id trapID) {
-	r.traps.pending = append(r.traps.pending, id)
+	r.traps.pending = append(r.traps.pending, pendingSignalTrap{
+		id:     id,
+		status: r.lastExit.code,
+		line:   r.currentStmtLine,
+	})
 }
 
 func (r *Runner) dispatchSignal(target string, number int) error {
+	if strings.HasPrefix(target, "g") {
+		return r.dispatchOwnedSignal(target, number)
+	}
 	owner := r
 	if owner.signalOwner != nil {
 		owner = owner.signalOwner
@@ -316,13 +315,33 @@ func (r *Runner) dispatchOwnedSignal(target string, number int) error {
 	if !ok {
 		return fmt.Errorf("invalid signal %d", number)
 	}
-	switch target {
-	case strconv.Itoa(r.pid), strconv.Itoa(r.bashPID):
-		if action := r.trapAction(trapID(number)); action.kind == trapActionIgnore {
+	resolveTarget := func(target *Runner) *Runner {
+		if target == nil {
 			return nil
 		}
-		if info.catchable && r.trapAction(trapID(number)).kind == trapActionCommand {
-			r.queueSignalTrap(trapID(number))
+		id := trapID(number)
+		if action := target.trapAction(id); action.active() {
+			return target
+		}
+		switch number {
+		case 2, 3:
+			return target
+		}
+		if child := target.signalChildTrapTarget(); child != nil {
+			if action := child.trapAction(id); action.active() {
+				return child
+			}
+		}
+		return target
+	}
+	switch target {
+	case strconv.Itoa(r.pid), strconv.Itoa(r.bashPID):
+		targetRunner := resolveTarget(r)
+		if action := targetRunner.trapAction(trapID(number)); action.kind == trapActionIgnore {
+			return nil
+		}
+		if info.catchable && targetRunner.trapAction(trapID(number)).kind == trapActionCommand {
+			targetRunner.queueSignalTrap(trapID(number))
 		}
 		return nil
 	default:
@@ -334,14 +353,15 @@ func (r *Runner) dispatchOwnedSignal(target string, number int) error {
 			return fmt.Errorf("%s: arguments must be process or job IDs", target)
 		}
 		bg := r.bgProcs[idx-1]
-		if bg.runner == nil {
+		targetRunner := resolveTarget(bg.runner)
+		if targetRunner == nil {
 			return fmt.Errorf("%s: arguments must be process or job IDs", target)
 		}
-		if action := bg.runner.trapAction(trapID(number)); action.kind == trapActionIgnore {
+		if action := targetRunner.trapAction(trapID(number)); action.kind == trapActionIgnore {
 			return nil
 		}
-		if info.catchable && bg.runner.trapAction(trapID(number)).kind == trapActionCommand {
-			bg.runner.queueSignalTrap(trapID(number))
+		if info.catchable && targetRunner.trapAction(trapID(number)).kind == trapActionCommand {
+			targetRunner.queueSignalTrap(trapID(number))
 		}
 		return nil
 	}
