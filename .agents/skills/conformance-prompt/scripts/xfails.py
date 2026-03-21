@@ -6,10 +6,16 @@ Usage:
     python xfails.py <file>                   # list xfails for a specific test file
     python xfails.py --total                  # just print total count
     python xfails.py --exclude <file> [...]   # summary excluding listed files
+    python xfails.py --all-platforms          # include platform-specific (goos) xfails
+
+By default, entries with a "goos" field are excluded since they represent
+platform-specific issues that can't be fixed cross-platform. Use --all-platforms
+to include them.
 
 Examples:
     python xfails.py builtin-trap             # matches builtin-trap*.test.sh
     python xfails.py --exclude builtin-trap builtin-trap-bash builtin-trap-err
+    python xfails.py --all-platforms          # include darwin-only etc. xfails
 """
 
 import json
@@ -19,7 +25,7 @@ from pathlib import Path
 MANIFEST = Path(__file__).resolve().parents[4] / "internal" / "conformance" / "manifest.json"
 
 
-def load_xfails():
+def load_xfails(all_platforms=False):
     with open(MANIFEST) as f:
         data = json.load(f)
     entries = data.get("suites", {}).get("bash", {}).get("entries", {})
@@ -27,11 +33,13 @@ def load_xfails():
     for key, val in entries.items():
         if val.get("mode") != "xfail":
             continue
+        goos = val.get("goos", [])
+        if goos and not all_platforms:
+            continue
         parts = key.split("::", 1)
         file_part = parts[0]
         file_name = file_part.removeprefix("oils/")
         test_name = parts[1] if len(parts) > 1 else ""
-        goos = val.get("goos", [])
         reason = val.get("reason", "")
         xfails.setdefault(file_name, []).append({
             "key": key,
@@ -72,7 +80,10 @@ def print_file_xfails(xfails, pattern):
 
 def main():
     args = sys.argv[1:]
-    xfails = load_xfails()
+    all_platforms = "--all-platforms" in args
+    if all_platforms:
+        args = [a for a in args if a != "--all-platforms"]
+    xfails = load_xfails(all_platforms=all_platforms)
 
     if not args:
         print_summary(xfails)
