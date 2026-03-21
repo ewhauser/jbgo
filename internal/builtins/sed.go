@@ -113,28 +113,45 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 		return nil
 	}
 
-	for _, file := range files {
-		data, abs, err := readAllFile(ctx, inv, file)
-		if err != nil {
-			_, _ = fmt.Fprintf(inv.Stderr, "sed: %s: %s\n", file, readAllErrorText(err))
-			exitCode = 1
-			continue
+	if opts.inPlace {
+		for _, file := range files {
+			data, abs, err := readAllFile(ctx, inv, file)
+			if err != nil {
+				_, _ = fmt.Fprintf(inv.Stderr, "sed: %s: %s\n", file, readAllErrorText(err))
+				exitCode = 1
+				continue
+			}
+			trailingNL := len(data) > 0 && data[len(data)-1] == '\n'
+			output := runSedProgram(program, textLines(data), opts.quiet, trailingNL)
+
+			info, _, err := statPath(ctx, inv, abs)
+			if err != nil {
+				return err
+			}
+			if err := writeFileContents(ctx, inv, abs, output, info.Mode().Perm()); err != nil {
+				return err
+			}
 		}
-		trailingNL := len(data) > 0 && data[len(data)-1] == '\n'
-		output := runSedProgram(program, textLines(data), opts.quiet, trailingNL)
-		if !opts.inPlace {
+	} else {
+		// Non-in-place: concatenate all files into a single stream,
+		// matching GNU sed behavior where line numbers, $ address,
+		// and trailing-newline state span across files.
+		var combined []byte
+		for _, file := range files {
+			data, _, err := readAllFile(ctx, inv, file)
+			if err != nil {
+				_, _ = fmt.Fprintf(inv.Stderr, "sed: %s: %s\n", file, readAllErrorText(err))
+				exitCode = 1
+				continue
+			}
+			combined = append(combined, data...)
+		}
+		if len(combined) > 0 {
+			trailingNL := combined[len(combined)-1] == '\n'
+			output := runSedProgram(program, textLines(combined), opts.quiet, trailingNL)
 			if _, err := inv.Stdout.Write(output); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
-			continue
-		}
-
-		info, _, err := statPath(ctx, inv, abs)
-		if err != nil {
-			return err
-		}
-		if err := writeFileContents(ctx, inv, abs, output, info.Mode().Perm()); err != nil {
-			return err
 		}
 	}
 
