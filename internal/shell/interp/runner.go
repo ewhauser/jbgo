@@ -868,8 +868,13 @@ func (r *Runner) sourceForNode(node syntax.Node) string {
 	if node == nil || r.currentChunkSource == "" {
 		return ""
 	}
-	startOffset := node.Pos().Offset()
-	endOffset := node.End().Offset()
+	return r.sourceForOffsets(node.Pos().Offset(), node.End().Offset())
+}
+
+func (r *Runner) sourceForOffsets(startOffset, endOffset uint) string {
+	if r.currentChunkSource == "" {
+		return ""
+	}
 	if endOffset < startOffset || startOffset < r.currentChunkSourceBase {
 		return ""
 	}
@@ -879,6 +884,43 @@ func (r *Runner) sourceForNode(node syntax.Node) string {
 		return ""
 	}
 	return r.currentChunkSource[start:end]
+}
+
+func (r *Runner) mergeDeclOperands(variant string, operands []syntax.DeclOperand) []syntax.DeclOperand {
+	if len(operands) < 2 || r.currentChunkSource == "" {
+		return operands
+	}
+	rebuilt := make([]syntax.DeclOperand, 0, len(operands))
+	for i := 0; i < len(operands); i++ {
+		merged := operands[i]
+		mergedSrc := r.sourceForNode(merged)
+		if mergedSrc == "" {
+			rebuilt = append(rebuilt, merged)
+			continue
+		}
+		for j := i + 1; j < len(operands); j++ {
+			if gap := r.sourceForOffsets(operands[j-1].End().Offset(), operands[j].Pos().Offset()); gap != "" {
+				break
+			}
+			nextSrc := r.sourceForNode(operands[j])
+			if nextSrc == "" {
+				break
+			}
+			candidateSrc := mergedSrc + nextSrc
+			reparsed, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).DeclOperand(strings.NewReader(candidateSrc))
+			if err != nil || reparsed == nil {
+				reparsed, err = parseDeclOperandField(variant, candidateSrc)
+				if err != nil || reparsed == nil {
+					break
+				}
+			}
+			merged = reparsed
+			mergedSrc = candidateSrc
+			i = j
+		}
+		rebuilt = append(rebuilt, merged)
+	}
+	return rebuilt
 }
 
 func (r *Runner) verboseStmtSource(st *syntax.Stmt) string {
@@ -2165,29 +2207,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return true
 			})
 		}
-		operands := cm.Operands
-		if len(operands) > 1 {
-			rebuilt := make([]syntax.DeclOperand, 0, len(operands))
-			for i := 0; i < len(operands); i++ {
-				operand := operands[i]
-				src := strings.TrimSpace(r.sourceForNode(operand))
-				if src == "$" && i+1 < len(operands) {
-					nextSrc := strings.TrimSpace(r.sourceForNode(operands[i+1]))
-					if nextSrc != "" {
-						reparsed, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).DeclOperand(strings.NewReader(src + nextSrc))
-						if err == nil && reparsed != nil {
-							if _, ok := reparsed.(*syntax.DeclDynamicWord); ok {
-								rebuilt = append(rebuilt, reparsed)
-								i++
-								continue
-							}
-						}
-					}
-				}
-				rebuilt = append(rebuilt, operand)
-			}
-			operands = rebuilt
-		}
+		operands := r.mergeDeclOperands(cm.Variant.Value, cm.Operands)
 		var processOperand func(syntax.DeclOperand) bool
 		processOperand = func(operand syntax.DeclOperand) bool {
 			switch operand := operand.(type) {

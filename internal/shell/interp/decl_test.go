@@ -231,6 +231,32 @@ printf 'outer=<%s>\n' "$b"
 	}
 }
 
+func TestLocalNamerefKeepsAssocSubscriptInAssignmentValue(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+typeset -A bashup_ev_r
+bashup_ev_r[foo]=bar
+
+p() {
+  local s=foo
+  local -n f=bashup_ev_r["$s"]
+  printf "['%s']\n" "$f"
+}
+
+p
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "['bar']\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "['bar']\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestWrappedDeclarationBuiltins(t *testing.T) {
 	t.Parallel()
 
