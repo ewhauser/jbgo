@@ -113,6 +113,10 @@ type Runner struct {
 	stderr io.Writer
 	fds    map[int]*shellFD
 
+	// namedFDReleased tracks named redirect variables whose descriptor was
+	// explicitly closed with a persistent redirect such as `exec {fd}>&-`.
+	namedFDReleased map[string]bool
+
 	// traceOutput keeps xtrace on the shell's stderr even when a statement
 	// temporarily redirects fd 2.
 	traceOutput io.Writer
@@ -948,6 +952,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		stdout:                  r.stdout,
 		stderr:                  r.stderr,
 		fds:                     cloneFDTable(r.fds),
+		namedFDReleased:         maps.Clone(r.namedFDReleased),
 		traceOutput:             r.traceOutput,
 		expandBaseFDs:           cloneFDTable(r.expandBaseFDs),
 		filename:                r.filename,

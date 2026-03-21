@@ -192,6 +192,40 @@ func TestMemoryFSFIFOWriterWaitsForReader(t *testing.T) {
 	}
 }
 
+func TestMemoryFSFIFOWriteFailsAfterReaderDisconnect(t *testing.T) {
+	t.Parallel()
+
+	mem := NewMemory()
+	if err := mem.MkdirAll(context.Background(), "/tmp", 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := mem.Mkfifo(context.Background(), "/tmp/p", 0o600); err != nil {
+		t.Fatalf("Mkfifo() error = %v", err)
+	}
+
+	reader, err := mem.OpenFile(context.Background(), "/tmp/p", os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(reader) error = %v", err)
+	}
+	writer, err := mem.OpenFile(context.Background(), "/tmp/p", os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(writer) error = %v", err)
+	}
+
+	if err := reader.Close(); err != nil {
+		t.Fatalf("reader.Close() error = %v", err)
+	}
+	defer func() {
+		if err := writer.Close(); err != nil {
+			t.Errorf("writer.Close() error = %v", err)
+		}
+	}()
+
+	if _, err := io.WriteString(writer, "hello"); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("WriteString() error = %v, want ErrClosedPipe", err)
+	}
+}
+
 func TestOverlayFSReadsFromLowerAndWritesToUpper(t *testing.T) {
 	t.Parallel()
 	lower := seededMemory(t, map[string]string{

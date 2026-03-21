@@ -27,6 +27,8 @@ type memoryFIFO struct {
 	buf     []byte
 	readers int
 	writers int
+
+	readerEpoch uint64
 }
 
 func newMemoryFIFO() *memoryFIFO {
@@ -53,6 +55,9 @@ type memoryFIFOFile struct {
 	readable bool
 	writable bool
 	closed   atomic.Bool
+
+	readerEpoch uint64
+	sawReader   bool
 }
 
 func newMemoryFIFOFile(fs *MemoryFS, path string, fifo *memoryFIFO, flag int) *memoryFIFOFile {
@@ -65,9 +70,14 @@ func newMemoryFIFOFile(fs *MemoryFS, path string, fifo *memoryFIFO, flag int) *m
 	}
 	fifo.mu.Lock()
 	if file.readable {
+		if fifo.readers == 0 {
+			fifo.readerEpoch++
+		}
 		fifo.readers++
 	}
 	if file.writable {
+		file.readerEpoch = fifo.readerEpoch
+		file.sawReader = fifo.readers > 0
 		fifo.writers++
 	}
 	fifo.cond.Broadcast()
@@ -117,8 +127,13 @@ func (f *memoryFIFOFile) Write(p []byte) (int, error) {
 	defer f.fifo.mu.Unlock()
 
 	for f.fifo.readers == 0 {
+		if f.sawReader || f.fifo.readerEpoch != f.readerEpoch {
+			return 0, &os.PathError{Op: "write", Path: f.path, Err: io.ErrClosedPipe}
+		}
 		f.fifo.cond.Wait()
 	}
+	f.sawReader = true
+	f.readerEpoch = f.fifo.readerEpoch
 	f.fifo.buf = append(f.fifo.buf, p...)
 	f.fifo.cond.Broadcast()
 	return len(p), nil

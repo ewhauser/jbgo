@@ -600,6 +600,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	procSubstStart := len(r.bgProcs)
 	closers := make([]io.Closer, 0, len(st.Redirs))
 	keepClosedFDs := make(map[int]struct{}, len(st.Redirs))
+	releasedNamedFDs := make([]string, 0, len(st.Redirs))
 	for _, rd := range st.Redirs {
 		result, err := r.redir(ctx, rd)
 		if err != nil {
@@ -612,12 +613,18 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 		for _, fd := range result.keepClosed {
 			keepClosedFDs[fd] = struct{}{}
 		}
+		releasedNamedFDs = append(releasedNamedFDs, result.releasedNamedFDs...)
 	}
 	if r.exit.ok() && st.Cmd != nil {
 		r.cmd(ctx, st.Cmd)
 	}
 	keepRedirs := r.keepRedirs
 	r.keepRedirs = false
+	if keepRedirs {
+		for _, name := range releasedNamedFDs {
+			r.markNamedFDReleased(name)
+		}
+	}
 	if !keepRedirs {
 		for i := len(closers) - 1; i >= 0; i-- {
 			_ = closers[i].Close()
@@ -667,8 +674,9 @@ func usesPreRedirectExpandFDs(cmd syntax.Command) bool {
 }
 
 type redirResult struct {
-	closer     io.Closer
-	keepClosed []int
+	closer           io.Closer
+	keepClosed       []int
+	releasedNamedFDs []string
 }
 
 type redirectDupSpec struct {
@@ -2468,6 +2476,11 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 			} else {
 				r.setFD(targetFD, nil)
 			}
+			if rd.N != nil {
+				if name, ok := redirectNamedFD(rd.N.Value); ok {
+					result.releasedNamedFDs = append(result.releasedNamedFDs, name)
+				}
+			}
 		default:
 			dup, err := parseRedirectDupSpec(arg)
 			if err != nil {
@@ -2512,6 +2525,11 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 		switch arg {
 		case "-":
 			r.setFD(targetFD, nil)
+			if rd.N != nil {
+				if name, ok := redirectNamedFD(rd.N.Value); ok {
+					result.releasedNamedFDs = append(result.releasedNamedFDs, name)
+				}
+			}
 		default:
 			dup, err := parseRedirectDupSpec(arg)
 			if err != nil {
@@ -2752,6 +2770,23 @@ func redirectNamedFD(value string) (string, bool) {
 	return value[1 : len(value)-1], true
 }
 
+func (r *Runner) markNamedFDReleased(name string) {
+	if name == "" {
+		return
+	}
+	if r.namedFDReleased == nil {
+		r.namedFDReleased = make(map[string]bool)
+	}
+	r.namedFDReleased[name] = true
+}
+
+func (r *Runner) clearNamedFDReleased(name string) {
+	if name == "" || r.namedFDReleased == nil {
+		return
+	}
+	delete(r.namedFDReleased, name)
+}
+
 func (r *Runner) redirectTargetFD(rd *syntax.Redirect, arg string) (fd int, allocated bool, err error) {
 	if rd.N == nil {
 		return redirectDefaultFD(rd.Op), false, nil
@@ -2764,9 +2799,13 @@ func (r *Runner) redirectTargetFD(rd *syntax.Redirect, arg string) (fd int, allo
 		start := shellNamedFDStart
 		if prev, err := r.lookupNamedFD(name); err == nil && prev >= shellNamedFDStart {
 			start = prev + 1
+			if r.namedFDReleased != nil && r.namedFDReleased[name] {
+				start = prev
+			}
 		}
 		fd = r.allocateFDFrom(start)
 		r.setVarString(name, strconv.Itoa(fd))
+		r.clearNamedFDReleased(name)
 		return fd, true, nil
 	}
 	fd, err = parseRedirectFDNumber(rd.N.Value)

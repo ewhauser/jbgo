@@ -366,3 +366,34 @@ printf '%%s\n' "$(< %q)"
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+
+func TestNamedRedirectFDReusesClosedDescriptor(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.txt")
+	second := filepath.Join(dir, "second.txt")
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir: dir,
+		OpenHandler: func(_ context.Context, name string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+			return os.OpenFile(name, flag, perm)
+		},
+	}, fmt.Sprintf(`
+exec {fd}> %q
+printf 'first=%%s\n' "$fd"
+exec {fd}>&-
+exec {fd}> %q
+printf 'second=%%s\n' "$fd"
+exec {fd}>&-
+`, first, second))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stdout != "first=10\nsecond=10\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "first=10\nsecond=10\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
