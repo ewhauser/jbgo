@@ -242,6 +242,30 @@ echo bad
 	}
 }
 
+func TestErrExitPipelineProcessesAbortLocally(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -o errexit
+{ echo one; false; echo two; } | while IFS= read -r line; do
+  echo "$line"
+done
+{ echo three; echo four; } | while read -r line; do
+  echo "[$line]"
+  false
+done
+echo four
+`)
+	requireInterpExitStatus(t, err, 1)
+	const wantStdout = "one\n[three]\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestErrTrapConditionalListsOnlyTrapOnOuterFailure(t *testing.T) {
 	t.Parallel()
 

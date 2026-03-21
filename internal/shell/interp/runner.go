@@ -791,6 +791,9 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			r.exit.clear()
 		}
 	} else if r.pipelineErrTrapDepth > 0 {
+		if !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored && r.opts[optErrExit] {
+			r.exit.exiting = true
+		}
 	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt || b.Op == syntax.Pipe || b.Op == syntax.PipeAll) {
 	} else if !r.exit.ok() && !r.noErrExit && !r.exit.errExitIgnored {
 		r.maybeRunErrTrap(ctx, st.Pos().Line())
