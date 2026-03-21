@@ -51,6 +51,25 @@ func runInterpScriptConfig(t *testing.T, cfg *RunnerConfig, src string) (string,
 	return stdout.String(), stderr.String(), err
 }
 
+func runInterpCommandString(t *testing.T, src string) (string, string, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:                "/tmp",
+		CommandString:      true,
+		CommandStringValue: src,
+		Stdout:             &stdout,
+		Stderr:             &stderr,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+
+	err = runner.RunReaderWithMetadata(context.Background(), strings.NewReader(src), "dummy0", "", nil)
+	return stdout.String(), stderr.String(), err
+}
+
 func TestForLoopInvalidIdentifierMatchesBash(t *testing.T) {
 	t.Parallel()
 
@@ -1251,7 +1270,7 @@ func TestCommandStringArithmeticErrorsUseShellNamePrefix(t *testing.T) {
 		t.Fatalf("NewRunner error = %v", err)
 	}
 
-	err = runner.runShellReader(context.Background(), strings.NewReader("echo $(( $1 + 1 ))\n"), "dummy0", nil)
+	err = runner.RunReaderWithMetadata(context.Background(), strings.NewReader("echo $(( $1 + 1 ))\n"), "dummy0", "", nil)
 	if err == nil {
 		t.Fatal("Run error = nil, want arithmetic failure")
 	}
@@ -1262,6 +1281,90 @@ func TestCommandStringArithmeticErrorsUseShellNamePrefix(t *testing.T) {
 	if got := stderr.String(); got != wantStderr {
 		t.Fatalf("stderr = %q, want %q", got, wantStderr)
 	}
+}
+
+func TestCommandStringDivisionByZeroFatality(t *testing.T) {
+	t.Parallel()
+
+	t.Run("command arg aborts shell", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpCommandString(t, "echo foo$(( 42 / 0 ))\necho inside=$?\n")
+		if err != nil {
+			t.Fatalf("Run error = %v", err)
+		}
+		if got, want := stdout, "inside=1\n"; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		const wantStderr = "42 / 0 : division by 0 (error token is \" \")\n"
+		if stderr != wantStderr {
+			t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+		}
+	})
+
+	t.Run("if condition aborts before else", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpCommandString(t, "if test foo$(( 42 / 0 )) = foo; then\n  echo true\nelse\n  echo false\nfi\necho inside=$?\n")
+		if err != nil {
+			t.Fatalf("Run error = %v", err)
+		}
+		if got, want := stdout, "inside=1\n"; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		const wantStderr = "42 / 0 : division by 0 (error token is \" \")\n"
+		if stderr != wantStderr {
+			t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+		}
+	})
+
+	t.Run("case word aborts before body", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpCommandString(t, "case $(( 42 / 0 )) in\n  (*) echo hi ;;\nesac\necho inside=$?\n")
+		if err != nil {
+			t.Fatalf("Run error = %v", err)
+		}
+		if got, want := stdout, "inside=1\n"; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		const wantStderr = "42 / 0 : division by 0 (error token is \" \")\n"
+		if stderr != wantStderr {
+			t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+		}
+	})
+
+	t.Run("case pattern aborts before body", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpCommandString(t, "case foo in\n  ($(( 42 / 0 ))) echo hi ;;\nesac\necho inside=$?\n")
+		if err != nil {
+			t.Fatalf("Run error = %v", err)
+		}
+		if got, want := stdout, "inside=1\n"; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		const wantStderr = "42 / 0 : division by 0 (error token is \" \")\n"
+		if stderr != wantStderr {
+			t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+		}
+	})
+
+	t.Run("redirect word stays non-fatal", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpCommandString(t, "echo hi > file$(( 42 / 0 )) in\necho inside=$?\n")
+		if err != nil {
+			t.Fatalf("Run error = %v", err)
+		}
+		if got, want := stdout, "inside=1\n"; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		const wantStderr = "42 / 0 : division by 0 (error token is \" \")\n"
+		if stderr != wantStderr {
+			t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+		}
+	})
 }
 
 func TestIndexedAssignNestedSideEffects(t *testing.T) {

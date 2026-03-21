@@ -286,6 +286,62 @@ func TestParamPatternBracketEdgeCases(t *testing.T) {
 	}
 }
 
+func TestScalarizedArraySlicesUseStringSemantics(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  testEnv
+		src  string
+		want string
+	}{
+		{
+			name: "IndexedPrefix",
+			env: testEnv{
+				"a": {Set: true, Kind: Indexed, List: []string{"check"}},
+			},
+			src:  `${a::1}`,
+			want: "c",
+		},
+		{
+			name: "IndexedSuffix",
+			env: testEnv{
+				"a": {Set: true, Kind: Indexed, List: []string{"check"}},
+			},
+			src:  `${a:1}`,
+			want: "heck",
+		},
+		{
+			name: "AssociativePrefix",
+			env: testEnv{
+				"a": {Set: true, Kind: Associative, Map: map[string]string{"0": "check"}},
+			},
+			src:  `${a::1}`,
+			want: "c",
+		},
+		{
+			name: "AssociativeSuffix",
+			env: testEnv{
+				"a": {Set: true, Kind: Associative, Map: map[string]string{"0": "check"}},
+			},
+			src:  `${a:1}`,
+			want: "heck",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := literalExpand(t, tt.env, tt.src)
+			if err != nil {
+				t.Fatalf("Literal(%q) error = %v", tt.src, err)
+			}
+			if got != tt.want {
+				t.Fatalf("Literal(%q) = %q, want %q", tt.src, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestInvalidParamExpansionsFailAtExpansionTime(t *testing.T) {
 	t.Parallel()
 

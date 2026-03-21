@@ -321,14 +321,6 @@
             "darwin"
           ]
         },
-        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in case": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in conditional word": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/for-expr.test.sh::Arith lexer mode": {
           "mode": "xfail",
           "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case"
@@ -340,14 +332,6 @@
         "oils/func-parsing.test.sh::Function name with command sub": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/introspect.test.sh::${FUNCNAME} with prefix/suffix operators": {
-          "mode": "xfail",
-          "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics"
-        },
-        "oils/introspect.test.sh::operators on FUNCNAME": {
-          "mode": "xfail",
-          "reason": "gbash still applies substring operators to FUNCNAME differently from bash's scalarized stack semantics"
         },
         "oils/loop.test.sh::break in condition of loop": {
           "mode": "xfail",
@@ -426,9 +410,33 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/xtrace.test.sh::xtrace with unprintable chars": {
+        "oils/var-op-test.test.sh::op-test for ${!array} with array=\"a[@]\" or array=\"a[*]\"": {
           "mode": "xfail",
-          "reason": "conformance: xtrace escape style for unprintable bytes still differs from bash"
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-ref.test.sh::Indirect expansion TO fancy expansion features bash disallows": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-ref.test.sh::var ref TO array with arbitrary subscripts": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-sub-quote.test.sh::Right Brace as argument (similar to #702)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-sub.test.sh::Bad var sub": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-sub.test.sh::Descriptor redirect to bad \"$@\"": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/var-sub.test.sh::Here doc with bad \"$@\" delimiter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/glob.test.sh::Glob unicode char": {
           "mode": "xfail",

@@ -283,8 +283,11 @@ func (r *Runner) expandErr(err error) {
 			r.currentChunkSourceBase+uint(len(r.currentChunkSource)),
 		)
 	}
-	errMsg := err.Error()
 	fatalExpansionErr := r.commandString && !r.interactive
+	errMsg := err.Error()
+	if r.commandString && !r.interactive && errors.As(err, &divErr) {
+		errMsg = strings.Replace(errMsg, `error token is "0 "`, `error token is " "`, 1)
+	}
 	var (
 		unboundVarErr  expand.UnboundVariableError
 		unsetErr       expand.UnsetParameterError
@@ -351,6 +354,9 @@ func (r *Runner) expandErr(err error) {
 		if r.currentStmtLine != 0 {
 			r.skipStmtLine = r.currentStmtLine
 		}
+	case errors.As(err, &divErr):
+		r.exit.code = 1
+		r.commandAborted = true
 	case errors.As(err, &arithSyntaxErr):
 		r.exit.code = 1
 		r.exit.exiting = fatalExpansionErr
@@ -370,6 +376,10 @@ func (r *Runner) expandErr(err error) {
 	default:
 		return // other cases do not exit
 	}
+}
+
+func (r *Runner) stmtAborted() bool {
+	return r.exit.exiting || r.exit.fatalExit || r.commandAborted
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {
@@ -821,6 +831,9 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 		return
 	}
 	line := st.Pos().Line()
+	if r.stmtDepth == 0 {
+		r.commandAborted = false
+	}
 	if r.skipStmtLine != 0 {
 		switch {
 		case line == r.skipStmtLine:
@@ -1286,6 +1299,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.noErrExit = true
 		r.stmts(ctx, cm.Cond)
 		r.noErrExit = oldNoErrExit
+		if r.stmtAborted() {
+			return
+		}
 
 		if r.exit.ok() {
 			r.stmts(ctx, cm.Then)
@@ -1301,6 +1317,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.noErrExit = true
 			r.stmts(ctx, cm.Cond)
 			r.noErrExit = oldNoErrExit
+			if r.stmtAborted() {
+				return
+			}
 
 			stop := r.exit.ok() == cm.Until
 			r.exit.clear()
@@ -1322,6 +1341,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			inToken := y.InPos.IsValid()
 			if inToken {
 				items = r.fields(y.Items...) // for i in ...; do ...
+				if r.stmtAborted() {
+					break
+				}
 			}
 
 			if cm.Select {
@@ -1487,12 +1509,18 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		trace.string(" in")
 		trace.newLineFlush()
 		str := r.literal(cm.Word)
+		if r.stmtAborted() {
+			return
+		}
 		fallthroughNext := false
 		for _, ci := range cm.Items {
 			matched := fallthroughNext
 			if !matched {
 				for _, word := range ci.Patterns {
 					pat := r.pattern(word)
+					if r.stmtAborted() {
+						return
+					}
 					if match(pat, str) {
 						matched = true
 						break
@@ -3086,8 +3114,8 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 		syntax.RdrAll, syntax.RdrAllClob, syntax.AppAll, syntax.AppAllClob:
 		r.inRedirectWord++
 		fields, err := expand.RedirectFields(r.ecfg, rd.Word)
-		r.inRedirectWord--
 		r.expandErr(err)
+		r.inRedirectWord--
 		if err != nil {
 			return result, err
 		}
@@ -3103,8 +3131,8 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (redirResult, e
 	case syntax.DplIn:
 		r.inRedirectWord++
 		fields, err := expand.RedirectFields(r.ecfg, rd.Word)
-		r.inRedirectWord--
 		r.expandErr(err)
+		r.inRedirectWord--
 		if err != nil {
 			return result, err
 		}

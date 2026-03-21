@@ -303,7 +303,7 @@ func (t *tracer) traceArg(arg string) string {
 	if arg == "'" {
 		return `\'`
 	}
-	if t.cLocale && needsTraceANSIQuote(arg) {
+	if needsTraceControlQuote(arg) || (t.cLocale && needsTraceANSIQuote(arg)) {
 		return traceANSIQuote(arg)
 	}
 	quoted, err := syntax.Quote(arg, syntax.LangBash)
@@ -335,6 +335,15 @@ func traceCallArg(arg string, traceArg func(string) string) string {
 func needsTraceANSIQuote(arg string) bool {
 	for i := 0; i < len(arg); i++ {
 		if arg[i] < 0x20 || arg[i] >= 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func needsTraceControlQuote(arg string) bool {
+	for i := 0; i < len(arg); i++ {
+		if arg[i] < 0x20 || arg[i] == 0x7f {
 			return true
 		}
 	}
