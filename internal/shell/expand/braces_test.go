@@ -268,6 +268,57 @@ func TestFieldsMixedCaseCharRangeError(t *testing.T) {
 	}
 }
 
+func TestBracesMixedCaseCharRangeWithoutSuffixExpands(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		src    string
+		prefix string
+		from   rune
+		to     rune
+		step   int
+	}{
+		{
+			src:  `{z..A}`,
+			from: 'z',
+			to:   'A',
+			step: 1,
+		},
+		{
+			src:    `-{z..A}`,
+			prefix: "-",
+			from:   'z',
+			to:     'A',
+			step:   1,
+		},
+		{
+			src:  `{z..A..2}`,
+			from: 'z',
+			to:   'A',
+			step: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.src, func(t *testing.T) {
+			word := parseCommandWord(t, tc.src)
+			got, err := Braces(word)
+			if err != nil {
+				t.Fatalf("Braces(%q) error = %v", tc.src, err)
+			}
+
+			var want []string
+			for r := tc.from; r >= tc.to; r -= rune(tc.step) {
+				want = append(want, tc.prefix+string(r))
+			}
+			wantStr := printWords(litWords(want...)...)
+			if gotStr := printWords(got...); gotStr != wantStr {
+				t.Fatalf("Braces(%q) = %q, want %q", tc.src, gotStr, wantStr)
+			}
+		})
+	}
+}
+
 func TestBracesInvalidSequenceStepLiteralizes(t *testing.T) {
 	t.Parallel()
 

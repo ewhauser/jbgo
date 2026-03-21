@@ -45,7 +45,6 @@ func Braces(word *syntax.Word) ([]*syntax.Word, error) {
 					if suffix != "" {
 						return nil, mixedCaseBraceRangeError(suffix)
 					}
-					return nil, fmt.Errorf("bad substitution")
 				}
 			} else if hasLeadingZero(fromLit) || hasLeadingZero(toLit) {
 				fixedWidth = true
