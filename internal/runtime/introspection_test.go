@@ -71,7 +71,13 @@ func TestExecInlineCommandStringSetsBashExecutionString(t *testing.T) {
 	t.Parallel()
 
 	session := newSession(t, &Config{})
-	script := "declare -p BASH_EXECUTION_STRING"
+	script := strings.Join([]string{
+		"declare -p BASH_EXECUTION_STRING",
+		"BASH_EXECUTION_STRING=override",
+		"echo status=$?",
+		"declare -p BASH_EXECUTION_STRING",
+		"",
+	}, "\n")
 	result, err := session.Exec(context.Background(), &ExecutionRequest{
 		Name:   "inline.sh",
 		Script: script,
@@ -80,7 +86,12 @@ func TestExecInlineCommandStringSetsBashExecutionString(t *testing.T) {
 		t.Fatalf("Exec() error = %v", err)
 	}
 
-	if got, want := result.Stdout, "declare -- BASH_EXECUTION_STRING=\"declare -p BASH_EXECUTION_STRING\"\n"; got != want {
+	if got, want := result.Stdout, strings.Join([]string{
+		"declare -- BASH_EXECUTION_STRING=$'declare -p BASH_EXECUTION_STRING\\nBASH_EXECUTION_STRING=override\\necho status=$?\\ndeclare -p BASH_EXECUTION_STRING\\n'",
+		"status=0",
+		"declare -- BASH_EXECUTION_STRING=\"override\"",
+		"",
+	}, "\n"); got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

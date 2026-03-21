@@ -1208,9 +1208,6 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if r.hideReadonlyArrayDeclKind(name, declVR) {
 				declVR.Kind = expand.Unknown
 			}
-			if name == "BASH_EXECUTION_STRING" && (declName == "declare" || declName == "typeset") {
-				declVR.ReadOnly = false
-			}
 			flags := declVR.Flags()
 			if flags == "" {
 				flags = "--"

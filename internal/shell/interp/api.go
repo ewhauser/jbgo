@@ -887,10 +887,9 @@ func (r *Runner) Reset() {
 	})
 	if r.commandStringValue != "" {
 		r.setVar("BASH_EXECUTION_STRING", expand.Variable{
-			Set:      true,
-			Kind:     expand.String,
-			ReadOnly: true,
-			Str:      r.commandStringValue,
+			Set:  true,
+			Kind: expand.String,
+			Str:  r.commandStringValue,
 		})
 	}
 	pwd := r.Dir
