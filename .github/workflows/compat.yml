@@ -122,7 +122,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ] \
+          if [ -f "$PAGES_ROOT/docs/compatibility/coreutils/index.html" ] \
             && [ -f "$PAGES_ROOT/compat/latest/summary.json" ] \
             && [ -f "$PAGES_ROOT/compat/latest/badge.svg" ] \
             && [ ! -e "$PAGES_ROOT/compat/latest/index.html" ]; then
@@ -181,7 +181,7 @@ jobs:
           if [ "$RELEASED_BUNDLE_USABLE" = "true" ]; then
             echo "site_source=released tag $WEBSITE_TAG" >> "$GITHUB_OUTPUT"
           elif [ "${FALLBACK_BUILD_OUTCOME:-}" = "success" ] \
-            && [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ]; then
+            && [ -f "$PAGES_ROOT/docs/compatibility/coreutils/index.html" ]; then
             echo "site_source=current checkout fallback" >> "$GITHUB_OUTPUT"
           else
             echo "site_source=unavailable" >> "$GITHUB_OUTPUT"
@@ -190,7 +190,7 @@ jobs:
           if [ -f "$RESULTS_DIR/summary.json" ] \
             && [ -f "$RESULTS_DIR/badge.svg" ] \
             && [ "$REF_NAME" = "$DEFAULT_BRANCH" ] \
-            && [ -f "$PAGES_ROOT/docs/performance/compatibility/index.html" ] \
+            && [ -f "$PAGES_ROOT/docs/compatibility/coreutils/index.html" ] \
             && [ -f "$PAGES_ROOT/compat/latest/summary.json" ] \
             && [ -f "$PAGES_ROOT/compat/latest/badge.svg" ] \
             && [ ! -e "$PAGES_ROOT/compat/latest/index.html" ]; then
@@ -203,7 +203,7 @@ jobs:
       - name: Summarize compat run
         if: always()
         env:
-          PAGE_URL: https://ewhauser.github.io/gbash/docs/performance/compatibility/
+          PAGE_URL: https://ewhauser.github.io/gbash/docs/compatibility/coreutils/
           RAW_SUMMARY_URL: https://ewhauser.github.io/gbash/compat/latest/summary.json
           COMPAT_EXIT_CODE: ${{ steps.run-compat.outputs.exit_code }}
           PUBLISHABLE: ${{ steps.publish-state.outputs.publishable }}

@@ -40,7 +40,6 @@ const pages: Record<string, () => Promise<{ default: React.ComponentType; metada
 
 const canonicalSlugs: Record<string, string> = {
   "observability/tracing-and-logging": "api/tracing-and-logging",
-  "performance/compatibility": "compatibility/coreutils",
 };
 
 interface Props {
