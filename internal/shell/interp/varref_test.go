@@ -678,6 +678,117 @@ echo ${!ref}
 	}
 }
 
+func TestBashVarOpTransformsMatchCompatibilityCases(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+x='abc DEF'
+echo "${x@u}"
+echo "${x@U}"
+echo "${x@L}"
+
+empty=''
+x=x
+echo ${x@K} ${empty@K} ${undef@K} ${x@K}
+echo ${x@k} ${empty@k} ${undef@k} ${x@k}
+echo ${x@A} ${empty@A} ${undef@A} ${x@A}
+declare -r x
+echo ${x@a} ${empty@a} ${undef@a} ${x@a}
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const wantStdout = "Abc DEF\nABC DEF\nabc def\n'x' '' 'x'\n'x' '' 'x'\nx='x' empty='' x='x'\nr r\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestIndirectAttributeTransformMatchesBashEmptyAssocTarget(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+declare -A A=(["x"]=y)
+echo x=${!A[@]@a}
+echo invalid=${!A@a}
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stdout != "x=\ninvalid=\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "x=\ninvalid=\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestNounsetVarOpsReturnStatusOne(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+(echo ${undef}); echo "stat: $?"
+(echo ${undef@Q}); echo "stat: $?"
+(echo ${undef@P}); echo "stat: $?"
+(echo ${undef@a}); echo "stat: $?"
+x=$(echo ${undef@Q}); echo "stat: $?"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	const wantStdout = "stat: 1\nstat: 1\nstat: 1\nstat: 1\nstat: 1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	const wantStderr = "undef: unbound variable\nundef: unbound variable\nundef: unbound variable\nundef: unbound variable\nundef: unbound variable\n"
+	if stderr != wantStderr {
+		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestTopLevelNounsetStillExits127(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+echo ${undef}
+echo after
+`)
+	if status, ok := err.(ExitStatus); !ok || status != 127 {
+		t.Fatalf("Run error = %v, want exit status 127", err)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "undef: unbound variable\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "undef: unbound variable\n")
+	}
+}
+
+func TestPositionalAttributeTransformReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir:    "/tmp",
+		Params: []string{"a", "b", "c"},
+	}, `
+echo ${@@a}
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stdout != "\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestRunCallAssignsRestoresResolvedNameRefTargets(t *testing.T) {
 	t.Parallel()
 

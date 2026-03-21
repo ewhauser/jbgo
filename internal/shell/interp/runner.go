@@ -275,6 +275,9 @@ func (r *Runner) expandErr(err error) {
 		r.exit.code = 1
 	case errors.As(err, &unboundVarErr):
 		r.exit.code = 127
+		if r.inSubshell {
+			r.exit.code = 1
+		}
 		if r.opts[optErrExit] {
 			r.exit.code = 1
 		}
@@ -287,6 +290,9 @@ func (r *Runner) expandErr(err error) {
 		}
 	case errors.As(err, &unsetErr):
 		r.exit.code = 127
+		if r.inSubshell && unsetErr.Message == "unbound variable" {
+			r.exit.code = 1
+		}
 		if r.opts[optErrExit] {
 			r.exit.code = 1
 		}
