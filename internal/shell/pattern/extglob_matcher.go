@@ -15,19 +15,12 @@ import (
 // It falls back to the recursive matcher for patterns or inputs containing
 // invalid UTF-8 bytes, since Go's regexp engine operates on UTF-8 code points.
 func Match(pat, name string, mode Mode) (bool, error) {
-	if mode&ExtendedOperators != 0 && mode&EntireString == 0 {
-		panic("ExtendedOperators is only supported with EntireString")
-	}
-
-	if utf8.ValidString(pat) && utf8.ValidString(name) {
-		expr, err := Regexp(pat, mode)
-		if err == nil {
-			return regexp.MustCompile(expr).MatchString(name), nil
-		}
-		var negErr *NegExtGlobError
-		if !errors.As(err, &negErr) {
+	if utf8.ValidString(pat) && utf8.ValidString(name) || mode&Filenames != 0 {
+		matcher, err := ExtendedPatternMatcher(pat, mode)
+		if err != nil {
 			return false, err
 		}
+		return matcher(name), nil
 	}
 	root, err := parseExtPattern(pat, mode)
 	if err != nil {
@@ -51,12 +44,36 @@ func Match(pat, name string, mode Mode) (bool, error) {
 // It falls back to a recursive matcher when [Regexp] reports a negated extglob
 // !(...) group, since Go's regexp package cannot express that directly.
 func ExtendedPatternMatcher(pat string, mode Mode) (func(string) bool, error) {
-	if _, err := Match(pat, pat, mode); err != nil {
+	if mode&ExtendedOperators != 0 && mode&EntireString == 0 {
+		panic("ExtendedOperators is only supported with EntireString")
+	}
+
+	expr, err := Regexp(pat, mode)
+	if err == nil {
+		rx := regexp.MustCompile(expr)
+		return rx.MatchString, nil
+	}
+	var negErr *NegExtGlobError
+	if !errors.As(err, &negErr) {
+		return nil, err
+	}
+	root, err := parseExtPattern(pat, mode)
+	if err != nil {
 		return nil, err
 	}
 	return func(name string) bool {
-		ok, err := Match(pat, name, mode)
-		return err == nil && ok
+		m := extMatcher{
+			mode:       mode,
+			memo:       make(map[extMemoKey][]int),
+			repeatMemo: make(map[extMemoKey][]int),
+			stack:      make(map[extMemoKey]struct{}),
+		}
+		for _, end := range m.ends(root, 0, name, 0) {
+			if end == len(name) {
+				return true
+			}
+		}
+		return false
 	}, nil
 }
 
