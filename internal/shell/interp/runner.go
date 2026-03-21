@@ -419,6 +419,13 @@ func condTildeExpandsInDBrackets() bool {
 	return runtime.GOOS != "darwin"
 }
 
+func callShouldRunDebugTrap(cm *syntax.CallExpr) bool {
+	if cm == nil || len(cm.Args) == 0 {
+		return true
+	}
+	return cm.Args[0].Lit() != loopIterHelperCommand
+}
+
 func (r *Runner) condLiteral(word *syntax.Word) string {
 	var (
 		str string
@@ -901,7 +908,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r.exit = r2.exit
 		r.exit.errExitIgnored = false
 	case *syntax.CallExpr:
-		if r.runDebugTrap(ctx, debugLineForCommand(cm)) {
+		if callShouldRunDebugTrap(cm) && r.runDebugTrap(ctx, debugLineForCommand(cm)) {
 			return
 		}
 		args := cm.Args
@@ -1177,6 +1184,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		case *syntax.CStyleLoop:
 			if y.Init != nil {
+				if r.runDebugTrap(ctx, cm.Pos().Line()) {
+					return
+				}
 				r.arithmCmd(y.Init)
 				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 					break

@@ -116,6 +116,108 @@ func TestMaxLoopIterationsAllowsLoopsWithinLimit(t *testing.T) {
 	}
 }
 
+func TestDebugTrapSkipsLoopBudgetHelper(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name: "for-each",
+			script: `debuglog() {
+  echo "  [$@]"
+}
+trap 'debuglog $LINENO' DEBUG
+
+for x in 1 2; do
+  echo x=$x
+done
+
+echo ok
+`,
+			want: "" +
+				"  [6]\n" +
+				"  [7]\n" +
+				"x=1\n" +
+				"  [6]\n" +
+				"  [7]\n" +
+				"x=2\n" +
+				"  [10]\n" +
+				"ok\n",
+		},
+		{
+			name: "for-expr",
+			script: `debuglog() {
+  echo "  [$@]"
+}
+trap 'debuglog $LINENO' DEBUG
+
+for (( i =3 ; i < 5; ++i )); do
+  echo i=$i
+done
+
+echo ok
+`,
+			want: "" +
+				"  [6]\n" +
+				"  [6]\n" +
+				"  [7]\n" +
+				"i=3\n" +
+				"  [6]\n" +
+				"  [6]\n" +
+				"  [7]\n" +
+				"i=4\n" +
+				"  [6]\n" +
+				"  [6]\n" +
+				"  [10]\n" +
+				"ok\n",
+		},
+		{
+			name: "while-control-flow",
+			script: `debuglog() {
+  echo "  [$@]"
+}
+trap 'debuglog $LINENO' DEBUG
+
+while true; do
+  echo hello
+  break
+done
+`,
+			want: "" +
+				"  [6]\n" +
+				"  [7]\n" +
+				"hello\n" +
+				"  [8]\n",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rt := newRuntimeWithLimits(t, policy.Limits{MaxLoopIterations: 100})
+
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0 (stderr=%q)", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.want {
+				t.Fatalf("Stdout = %q, want %q", got, tc.want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
+	}
+}
+
 func TestMaxLoopIterationsDoNotLeakAcrossTopLevelChunks(t *testing.T) {
 	t.Parallel()
 	rt := newRuntimeWithLimits(t, policy.Limits{MaxLoopIterations: 3})

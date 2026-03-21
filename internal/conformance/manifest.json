@@ -257,19 +257,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG and control flow": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap-bash.test.sh::trap DEBUG and pipeline (lastpipe difference)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG for each": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/builtin-trap-bash.test.sh::trap DEBUG for expr": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
