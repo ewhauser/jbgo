@@ -5,6 +5,7 @@ package interp
 import (
 	"fmt"
 	"syscall"
+	"time"
 )
 
 func shellTimesUsage() (selfUser, selfSystem, childUser, childSystem string, err error) {
@@ -21,7 +22,7 @@ func shellTimesUsage() (selfUser, selfSystem, childUser, childSystem string, err
 }
 
 func formatTimesTimeval(tv syscall.Timeval) string {
-	totalMillis := tv.Sec*1000 + int64(tv.Usec)/1000
+	totalMillis := int64((time.Duration(tv.Sec)*time.Second + time.Duration(tv.Usec)*time.Microsecond) / time.Millisecond)
 	minutes := totalMillis / 60000
 	secondsMillis := totalMillis % 60000
 	return fmt.Sprintf("%dm%d.%03ds", minutes, secondsMillis/1000, secondsMillis%1000)
