@@ -954,17 +954,38 @@ printf 'status=%d x=%s\n' "$?" "${x-unset}"
 	}
 }
 
-func TestIndexedAssignQuotedSubscriptUsesArithmeticValue(t *testing.T) {
+func TestIndexedAssignQuotedSubscriptIsFatal(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
 a['2']=3
-printf 'status=%d value=%s len=%d\n' "$?" "${a[2]}" "${#a[@]}"
+printf 'unreachable\n'
+`)
+	if err == nil {
+		t.Fatal("Run error = nil, want fatal assignment failure")
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr == "" {
+		t.Fatal("stderr = empty, want arithmetic diagnostic")
+	}
+}
+
+func TestLetStripsQuotedWords(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+let x=1
+let y=x+2
+let z=y*3
+let z2='y*3'
+echo $x $y $z $z2
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	if got, want := stdout, "status=0 value=3 len=1\n"; got != want {
+	if got, want := stdout, "1 3 9 9\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr != "" {
@@ -972,20 +993,19 @@ printf 'status=%d value=%s len=%d\n' "$?" "${a[2]}" "${#a[@]}"
 	}
 }
 
-func TestArithmeticCommandStripsQuotedWords(t *testing.T) {
+func TestLetAcceptsSpacedGrouping(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
-(( x=1 ))
-(( y=x+2 ))
-(( z=y*3 ))
-(( z2='y*3' ))
-echo $x $y $z $z2
+let x=( 1 )
+let y=( x + 2 )
+let z=( y * 3 )
+echo $x $y $z
 `)
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	if got, want := stdout, "1 3 9 9\n"; got != want {
+	if got, want := stdout, "1 3 9\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr != "" {

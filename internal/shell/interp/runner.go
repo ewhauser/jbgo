@@ -354,20 +354,26 @@ func (r *Runner) expandErr(err error) {
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {
-	return r.arithmEval(expr, false, "", 0, 0)
+	return r.arithmEval(expr, false, false, "", 0, 0)
+}
+
+func (r *Runner) arithmLet(expr syntax.ArithmExpr) int {
+	return r.arithmEval(expr, false, true, "", 0, 0)
 }
 
 func (r *Runner) arithmCmd(expr syntax.ArithmExpr) int {
-	return r.arithmEval(expr, true, "", 0, 0)
+	return r.arithmEval(expr, true, false, "", 0, 0)
 }
 
-func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool, source string, sourceStart, sourceEnd uint) int {
+func (r *Runner) arithmEval(expr syntax.ArithmExpr, command, let bool, source string, sourceStart, sourceEnd uint) int {
 	var (
 		n   int
 		err error
 	)
 	if source != "" {
 		n, err = expand.ArithmWithSource(r.ecfg, expr, source, sourceStart, sourceEnd)
+	} else if let {
+		n, err = expand.ArithmLet(r.ecfg, expr)
 	} else {
 		n, err = expand.Arithm(r.ecfg, expr)
 	}
@@ -384,7 +390,7 @@ func (r *Runner) arithmEval(expr syntax.ArithmExpr, command bool, source string,
 }
 
 func (r *Runner) arithmCmdExpr(cm *syntax.ArithmCmd) int {
-	return r.arithmEval(cm.X, true, cm.Source, cm.Left.Offset()+2, cm.Right.Offset())
+	return r.arithmEval(cm.X, true, false, cm.Source, cm.Left.Offset()+2, cm.Right.Offset())
 }
 
 type arithmCommandError struct {
@@ -1177,7 +1183,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.LetClause:
 		var val int
 		for _, expr := range cm.Exprs {
-			val = r.arithm(expr)
+			val = r.arithmLet(expr)
 
 			if !tracingEnabled {
 				continue
