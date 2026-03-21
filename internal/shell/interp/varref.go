@@ -161,7 +161,12 @@ func parseStrictIndexedSubscript(raw string) (syntax.ArithmExpr, error) {
 
 func (r *Runner) strictIndexedSubscript(index *syntax.Subscript) (int, error) {
 	expr := index.Expr
-	if raw := index.RawText(); raw != "" {
+	if raw := index.RawText(); raw != "" &&
+		!strings.Contains(raw, "$(") && !strings.Contains(raw, "`") {
+		// Re-parse the raw text for stricter validation, but skip
+		// re-parsing when command substitutions are present because
+		// the original Expr already has alias-expanded content that
+		// would be lost by re-parsing without an alias resolver.
 		parsed, err := parseStrictIndexedSubscript(raw)
 		if err != nil {
 			return 0, strictIndexedSubscriptError{err: err}

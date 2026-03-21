@@ -890,7 +890,7 @@ func (p *Parser) resumeAliasInput() bool {
 	p.readEOF = state.readEOF
 	p.aliasChain = state.aliasChain
 	p.aliasSource = state.aliasSource
-	p.aliasBlankNext = state.aliasBlankNext || blankNext
+	p.aliasBlankNext = blankNext
 	return true
 }
 
@@ -1096,7 +1096,11 @@ func (p *Parser) doHeredocs() {
 			break
 		}
 		if r.HdocDelim != nil && r.HdocDelim.BodyExpands && raw != nil {
-			bodyParser := NewParser(Variant(p.lang), KeepComments(p.keepComments))
+			bodyOpts := []ParserOption{Variant(p.lang), KeepComments(p.keepComments)}
+			if p.aliasResolver != nil {
+				bodyOpts = append(bodyOpts, ExpandAliases(p.aliasResolver))
+			}
+			bodyParser := NewParser(bodyOpts...)
 			r.Hdoc, p.err = bodyParser.document(strings.NewReader(raw.Lit()), bodyStart)
 			if p.err == nil && r.Hdoc != nil {
 				setWordEnd(r.Hdoc, raw.End())
@@ -1663,12 +1667,20 @@ func (p *Parser) posErr(pos Pos, format string, args ...any) {
 	// 		args[i] = quotedToken(arg)
 	// 	}
 	// }
-	p.errPass(ParseError{
+	pe := ParseError{
 		Filename:   p.f.Name,
 		Pos:        pos,
 		Text:       fmt.Sprintf(format, args...),
 		Incomplete: p.tok == _EOF && p.Incomplete(),
-	})
+	}
+	// When a syntax error occurs during alias expansion, use the
+	// expanded alias text as the source line so the error message
+	// shows the problematic expansion rather than the original alias
+	// invocation.
+	if p.aliasSource != nil {
+		pe.SourceLine = p.aliasSource.Value
+	}
+	p.errPass(pe)
 }
 
 func (p *Parser) posErrSecondary(pos Pos, secondary, format string, args ...any) {
@@ -6240,6 +6252,14 @@ loop:
 				if p.err != nil {
 					p.normalizeArrayLikeEOFError()
 					break loop
+				}
+			}
+			// When the command word follows environment bindings
+			// (e.g. FOO=2 p_ FOO), expand aliases for the command word.
+			if len(ce.Args) == 0 && len(ce.Assigns) > 0 {
+				p.expandCommandAliases(true)
+				if p.tok != _LitWord {
+					continue
 				}
 			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
