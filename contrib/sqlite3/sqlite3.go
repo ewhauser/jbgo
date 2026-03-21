@@ -313,7 +313,7 @@ func resolveSQLiteDatabasePath(ctx context.Context, inv *commands.Invocation, da
 	if err != nil {
 		return "", false, err
 	}
-	if exists && info.IsDir() {
+	if exists && info.IsDir() { //nolint:nilaway // exists guards info non-nil
 		return "", false, exitf(inv, "sqlite3: %s: Is a directory", database)
 	}
 	return abs, exists, nil

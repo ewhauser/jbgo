@@ -706,7 +706,7 @@ func (m *workspaceManager) renderGraph() string {
 	lines = append(lines, mainWorkspaceName)
 	for _, snapshotName := range snapshotNames {
 		snapshot := m.snapshots[snapshotName]
-		lines = append(lines, "`-- snapshot: "+snapshot.name+" (from "+snapshot.fromWorkspace+")")
+		lines = append(lines, "`-- snapshot: "+snapshot.name+" (from "+snapshot.fromWorkspace+")") //nolint:nilaway // key guaranteed to exist: snapshotNames is built from m.snapshots keys
 
 		branchNames := make([]string, 0, len(m.workspaces))
 		for name, workspace := range m.workspaces {
@@ -776,7 +776,7 @@ func renderTree(ctx context.Context, fsys gbfs.FileSystem, root string) (string,
 }
 
 func buildTree(ctx context.Context, fsys gbfs.FileSystem, name string) (*treeNode, error) {
-	info, err := fsys.Lstat(ctx, name)
+	info, err := fsys.Lstat(ctx, name) //nolint:nilaway // callers ensure fsys is non-nil before passing it here
 	if err != nil {
 		return nil, err
 	}
@@ -915,7 +915,7 @@ func captureState(ctx context.Context, fsys gbfs.FileSystem, name string) (map[s
 }
 
 func walkState(ctx context.Context, fsys gbfs.FileSystem, name string, out map[string]fileState) error {
-	info, err := fsys.Lstat(ctx, name)
+	info, err := fsys.Lstat(ctx, name) //nolint:nilaway // callers ensure fsys is non-nil before passing it here
 	if err != nil {
 		return err
 	}
@@ -999,7 +999,7 @@ func countMutations(events []trace.Event) int {
 }
 
 func writeSandboxFile(ctx context.Context, fsys gbfs.FileSystem, name, content string, perm stdfs.FileMode) error {
-	if err := fsys.MkdirAll(ctx, path.Dir(name), 0o755); err != nil {
+	if err := fsys.MkdirAll(ctx, path.Dir(name), 0o755); err != nil { //nolint:nilaway // callers ensure fsys is non-nil before passing it here
 		return err
 	}
 	file, err := fsys.OpenFile(ctx, name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
@@ -1012,7 +1012,7 @@ func writeSandboxFile(ctx context.Context, fsys gbfs.FileSystem, name, content s
 }
 
 func readSandboxFile(ctx context.Context, fsys gbfs.FileSystem, name string) (string, error) {
-	file, err := fsys.Open(ctx, name)
+	file, err := fsys.Open(ctx, name) //nolint:nilaway // callers ensure fsys is non-nil before passing it here
 	if err != nil {
 		return "", err
 	}

@@ -138,7 +138,7 @@ func (c *YQ) Run(ctx context.Context, inv *commands.Invocation) error {
 		if err != nil {
 			return &commands.ExitError{Code: 1, Err: err}
 		}
-		if err := writeFileContents(ctx, inv, namedInputs[0].Abs, output.Bytes(), info.Mode().Perm()); err != nil {
+		if err := writeFileContents(ctx, inv, namedInputs[0].Abs, output.Bytes(), info.Mode().Perm()); err != nil { //nolint:nilaway // inPlace requires inputs; namedInputs is non-empty
 			return err
 		}
 	}
@@ -366,7 +366,7 @@ func yqLooksLikeInput(inv *commands.Invocation, token string) bool {
 	}
 
 	info, err := inv.FS.Stat(context.Background(), inv.FS.Resolve(token)) //nolint:contextcheck // heuristic stat check during arg parsing
-	return err == nil && !info.IsDir()
+	return err == nil && !info.IsDir()                                    //nolint:nilaway // info is non-nil when err is nil
 }
 
 func loadYQExpression(ctx context.Context, inv *commands.Invocation, opts *yqOptions, expression string) (string, error) {
@@ -778,7 +778,7 @@ func ensureParentDirExists(ctx context.Context, inv *commands.Invocation, target
 			Err:  fmt.Errorf("%s: No such file or directory", parent),
 		}
 	}
-	if !info.IsDir() {
+	if !info.IsDir() { //nolint:nilaway // exists guards info non-nil
 		return &commands.ExitError{
 			Code: 1,
 			Err:  fmt.Errorf("%s: Not a directory", parent),

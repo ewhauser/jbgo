@@ -314,7 +314,7 @@ func (s *sqliteFS) ReadDir(ctx context.Context, name string) ([]stdfs.DirEntry, 
 		return nil, &os.PathError{Op: "readdir", Path: abs, Err: stdfs.ErrInvalid}
 	}
 
-	children, err := s.listChildrenLocked(node.id)
+	children, err := s.listChildrenLocked(node.id) //nolint:nilaway // node is non-nil: resolvePathLocked returns err when node is nil, and err is checked above
 	if err != nil {
 		return nil, err
 	}

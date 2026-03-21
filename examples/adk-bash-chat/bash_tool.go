@@ -167,10 +167,10 @@ func seedLab(ctx context.Context, session *gbash.Session, fixtureDir string) err
 	}
 
 	fsys := session.FileSystem()
-	if err := fsys.MkdirAll(ctx, labDir, 0o755); err != nil {
+	if err := fsys.MkdirAll(ctx, labDir, 0o755); err != nil { //nolint:nilaway // session is non-nil (checked above) so FileSystem() returns a valid fs
 		return fmt.Errorf("create lab dir: %w", err)
 	}
-	if err := fsys.MkdirAll(ctx, workDir, 0o755); err != nil {
+	if err := fsys.MkdirAll(ctx, workDir, 0o755); err != nil { //nolint:nilaway // same fsys guarded by session non-nil check above
 		return fmt.Errorf("create work dir: %w", err)
 	}
 
@@ -201,7 +201,7 @@ func seedLab(ctx context.Context, session *gbash.Session, fixtureDir string) err
 }
 
 func writeVirtualFile(ctx context.Context, fsys gbfs.FileSystem, name string, data []byte) error {
-	if err := fsys.MkdirAll(ctx, path.Dir(name), 0o755); err != nil {
+	if err := fsys.MkdirAll(ctx, path.Dir(name), 0o755); err != nil { //nolint:nilaway // callers ensure fsys is non-nil before passing it here
 		return err
 	}
 	file, err := fsys.OpenFile(ctx, name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
