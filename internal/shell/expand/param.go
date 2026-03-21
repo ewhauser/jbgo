@@ -1892,6 +1892,23 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 	} else if pe.Excl {
 		state = indirectState
 	}
+	if ql == quoteNone && pe.Exp != nil && pe.Exp.Op == syntax.OtherParamOps && !state.indexAllElements {
+		arg, err := Literal(cfg, pe.Exp.Word)
+		if err != nil {
+			return nil, false, false, err
+		}
+		switch arg {
+		case "Q", "K", "k":
+			if !state.vr.IsSet() {
+				return [][]fieldPart{}, true, false, nil
+			}
+			quoted, err := bashQuoteValue(state.str)
+			if err != nil {
+				return nil, false, false, err
+			}
+			return [][]fieldPart{{{quote: quoteDouble, val: quoted}}}, true, false, nil
+		}
+	}
 	if state.swallowedError && !state.indexAllElements {
 		return [][]fieldPart{}, true, false, nil
 	}
