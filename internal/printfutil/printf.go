@@ -239,7 +239,7 @@ func readDigits(s string, start int) (int, int, bool) {
 }
 
 func isSupportedVerb(ch byte) bool {
-	return strings.ContainsRune("bqcsdiouxXefFgGEtT", rune(ch))
+	return strings.ContainsRune("bqcsdiouxXefFgGET", rune(ch))
 }
 
 func (f *formatter) run(tokens []formatToken) bool {
