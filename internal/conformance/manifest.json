@@ -883,10 +883,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/builtin-trap.test.sh::trap EXIT with PARSE error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-trap.test.sh::trap EXIT with PARSE error and explicit exit": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -1030,10 +1026,6 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/dbracket.test.sh::Argument that looks like a real operator": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/dbracket.test.sh::[[ && ]] is syntax error": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
