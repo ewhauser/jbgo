@@ -4,6 +4,7 @@
 package expand
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -1176,6 +1177,65 @@ func TestFieldsQuotedIndirectAllElementsTargets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFieldsIndirectUnsetArrayNounset(t *testing.T) {
+	t.Parallel()
+
+	// Indirect ref to undefined array[@] is treated as empty (no error) even
+	// under nounset, matching bash behavior.
+	t.Run("AtSubscriptSilentUnderNounset", func(t *testing.T) {
+		word := parseCommandWord(t, "\"${!name}\"")
+		got, err := Fields(&Config{
+			NoUnset: true,
+			Env: testEnv{
+				"name": {Set: true, Kind: String, Str: "arr[@]"},
+			},
+		}, word)
+		if err != nil {
+			t.Fatalf("did not want error for unset arr[@] under nounset, got %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("wanted [], got %q", got)
+		}
+	})
+
+	// Indirect ref to undefined array[*] must still error under nounset,
+	// matching bash: "!name: unbound variable".
+	t.Run("StarSubscriptErrorUnderNounset", func(t *testing.T) {
+		word := parseCommandWord(t, "\"${!name}\"")
+		_, err := Fields(&Config{
+			NoUnset: true,
+			Env: testEnv{
+				"name": {Set: true, Kind: String, Str: "arr[*]"},
+			},
+		}, word)
+		if err == nil {
+			t.Fatal("expected unbound variable error for unset arr[*] under nounset, got nil")
+		}
+		var unsetErr UnsetParameterError
+		if !errors.As(err, &unsetErr) {
+			t.Fatalf("expected UnsetParameterError, got %T: %v", err, err)
+		}
+	})
+
+	// Outer default operators must still fire for [*] under nounset; the
+	// operator handles the unset case and no error should be produced.
+	t.Run("StarSubscriptDefaultOpSilentUnderNounset", func(t *testing.T) {
+		word := parseCommandWord(t, "${!name:-fallback}")
+		got, err := Fields(&Config{
+			NoUnset: true,
+			Env: testEnv{
+				"name": {Set: true, Kind: String, Str: "arr[*]"},
+			},
+		}, word)
+		if err != nil {
+			t.Fatalf("did not want error for ${!name:-fallback} with unset arr[*], got %v", err)
+		}
+		if !reflect.DeepEqual(got, []string{"fallback"}) {
+			t.Fatalf("wanted [\"fallback\"], got %q", got)
+		}
+	})
 }
 
 func TestFieldsUnquotedIndirectAllElementsTargets(t *testing.T) {
