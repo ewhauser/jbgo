@@ -560,6 +560,9 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		if stack := r.funcNameStack(); len(stack) > 0 {
 			vr.Kind, vr.List = expand.Indexed, stack
 		}
+	case "BASH_VERSION":
+		vr.Kind, vr.Str = expand.String, "5.2.0(1)-gbash"
+		vr.ReadOnly = true
 	}
 	if vr.Kind != expand.Unknown {
 		vr.Set = true
