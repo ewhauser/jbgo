@@ -186,9 +186,20 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 func (o *overlayEnviron) Each() expand.VarSeq {
 	return func(yield func(string, expand.Variable) bool) {
 		if o.parent != nil {
-			for name, vr := range o.parent.Each() {
-				if !yield(name, vr) {
-					return
+			if len(o.values) == 0 {
+				for name, vr := range o.parent.Each() {
+					if !yield(name, vr) {
+						return
+					}
+				}
+			} else {
+				for name, vr := range o.parent.Each() {
+					if _, shadowed := o.values[o.normalize(name)]; shadowed {
+						continue
+					}
+					if !yield(name, vr) {
+						return
+					}
 				}
 			}
 		}
@@ -198,39 +209,6 @@ func (o *overlayEnviron) Each() expand.VarSeq {
 			}
 		}
 	}
-}
-
-func execEnv(env expand.Environ) []string {
-	list := make([]string, 0, 64)
-	for name, vr := range env.Each() {
-		if !vr.IsSet() {
-			// If a variable is set globally but unset in the
-			// runner, we need to ensure it's not part of the final
-			// list. Seems like zeroing the element is enough.
-			// This is a linear search, but this scenario should be
-			// rare, and the number of variables shouldn't be large.
-			for i, kv := range list {
-				if strings.HasPrefix(kv, name+"=") {
-					list[i] = ""
-				}
-			}
-			continue
-		}
-		if !vr.Exported || (vr.Kind != expand.String && vr.Kind != expand.NameRef) {
-			for i, kv := range list {
-				if strings.HasPrefix(kv, name+"=") {
-					list[i] = ""
-				}
-			}
-			continue
-		}
-		value := vr.String()
-		if vr.Kind == expand.NameRef {
-			value = vr.Str
-		}
-		list = append(list, name+"="+value)
-	}
-	return list
 }
 
 func currentScopeVar(env expand.WriteEnviron, name string) (expand.Variable, bool) {
@@ -604,28 +582,29 @@ func (r *Runner) printSetVar(name string, vr expand.Variable) {
 }
 
 func (r *Runner) printSetVars() {
-	seen := make(map[string]expand.Variable)
+	var vars []namedVariable
+	hasBashLineNo := false
 	for name, vr := range r.writeEnv.Each() {
-		seen[name] = vr
-	}
-	for _, name := range []string{"BASH_LINENO"} {
-		if _, ok := seen[name]; ok {
-			continue
+		if name == "BASH_LINENO" {
+			hasBashLineNo = true
 		}
-		if vr, ok := r.setBuiltinSpecialVar(name); ok {
-			seen[name] = vr
-		}
-	}
-	names := make([]string, 0, len(seen))
-	for name, vr := range seen {
 		if !r.printSetVarVisible(name, vr) {
 			continue
 		}
-		names = append(names, name)
+		vars = append(vars, namedVariable{Name: name, Variable: vr})
 	}
-	slices.Sort(names)
-	for _, name := range names {
-		r.printSetVar(name, seen[name])
+	if !hasBashLineNo {
+		if vr, ok := r.setBuiltinSpecialVar("BASH_LINENO"); ok {
+			if r.printSetVarVisible("BASH_LINENO", vr) {
+				vars = append(vars, namedVariable{Name: "BASH_LINENO", Variable: vr})
+			}
+		}
+	}
+	slices.SortFunc(vars, func(a, b namedVariable) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	for _, vr := range vars {
+		r.printSetVar(vr.Name, vr.Variable)
 	}
 }
 
@@ -1032,6 +1011,9 @@ func (e *shadowWriteEnviron) Each() expand.VarSeq {
 		seenShadow := false
 		for name, vr := range e.parent.Each() {
 			if e.shadowSet && name == e.shadowName {
+				if seenShadow {
+					continue
+				}
 				seenShadow = true
 				if !yield(name, e.shadow) {
 					return
@@ -1043,7 +1025,9 @@ func (e *shadowWriteEnviron) Each() expand.VarSeq {
 			}
 		}
 		if e.shadowSet && !seenShadow {
-			yield(e.shadowName, e.shadow)
+			if !yield(e.shadowName, e.shadow) {
+				return
+			}
 		}
 	}
 }

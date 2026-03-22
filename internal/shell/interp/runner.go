@@ -2694,12 +2694,7 @@ func declaredVarMatches(vr expand.Variable, valType string, modes []string) bool
 
 func (r *Runner) printDeclaredVars(valType string, modes []string) {
 	names := make([]string, 0, 16)
-	seen := make(map[string]struct{})
 	for name := range r.writeEnv.Each() {
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
 		if declaredVarMatches(r.lookupVar(name), valType, modes) {
 			names = append(names, name)
 		}

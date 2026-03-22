@@ -87,7 +87,6 @@ func (b *runnerCompletionBackend) VariableNames(prefix string, exportedOnly bool
 		return nil
 	}
 	names := make([]string, 0, 32)
-	seen := make(map[string]struct{})
 	for name, vr := range b.runner.writeEnv.Each() {
 		if !vr.Declared() {
 			continue
@@ -98,10 +97,6 @@ func (b *runnerCompletionBackend) VariableNames(prefix string, exportedOnly bool
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
 		names = append(names, name)
 	}
 	slices.Sort(names)
