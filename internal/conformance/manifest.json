@@ -277,17 +277,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/loop.test.sh::break in condition of loop": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/loop.test.sh::top-level break/continue/return (without strict_control_flow)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/loop.test.sh::while in pipe": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",

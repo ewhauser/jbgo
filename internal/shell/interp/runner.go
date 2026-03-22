@@ -1356,11 +1356,27 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.WhileClause:
 		for !r.stop(ctx) {
 			oldNoErrExit := r.noErrExit
+			oldInLoop := r.inLoop
 			r.noErrExit = true
+			r.inLoop = true
 			r.stmts(ctx, cm.Cond)
+			r.inLoop = oldInLoop
 			r.noErrExit = oldNoErrExit
 			if r.stmtAborted() {
 				return
+			}
+			if r.contnEnclosing > 0 {
+				r.contnEnclosing--
+				if r.contnEnclosing > 0 {
+					break
+				}
+				r.exit.clear()
+				continue
+			}
+			if r.breakEnclosing > 0 {
+				r.breakEnclosing--
+				r.exit.clear()
+				break
 			}
 
 			stop := r.exit.ok() == cm.Until

@@ -538,7 +538,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		return exit
 	case "return":
 		if !r.inFunc && !r.inSource {
-			return failf(2, "return: can only `return' from a function or sourced script\n")
+			return failf(1, "return: can only `return' from a function or sourced script\n")
 		}
 		switch len(args) {
 		case 0:
