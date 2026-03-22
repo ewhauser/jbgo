@@ -196,18 +196,25 @@ func (r *Runner) callerFrame(depth int) (int, execFrame, bool) {
 	if depth < 0 {
 		return 0, execFrame{}, false
 	}
-	stack := make([]execFrame, 0, len(r.frames))
+	// Walk the frame stack once, counting only non-internal frames.
+	// We need frames at positions depth and depth+1.
+	var atDepth, atDepthPlus1 execFrame
+	seen := 0
 	for i := len(r.frames) - 1; i >= 0; i-- {
 		frame := r.frames[i]
 		if frame.internal {
 			continue
 		}
-		stack = append(stack, frame)
+		if seen == depth {
+			atDepth = frame
+		}
+		if seen == depth+1 {
+			atDepthPlus1 = frame
+			return atDepth.callLine, atDepthPlus1, true
+		}
+		seen++
 	}
-	if depth+1 >= len(stack) {
-		return 0, execFrame{}, false
-	}
-	return stack[depth].callLine, stack[depth+1], true
+	return 0, execFrame{}, false
 }
 
 func (r *Runner) currentTrapFrame() (execFrame, bool) {
