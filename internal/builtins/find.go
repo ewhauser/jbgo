@@ -105,8 +105,8 @@ func (c *Find) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	}
 
 	state := &findTraversalState{}
+	requirements := analyzeFindRequirements(expr, actions)
 	hasExplicitPrint := findHasPrintAction(actions)
-	hasPrintfAction := findHasPrintfAction(actions)
 
 	exitCode := 0
 	for _, root := range paths {
@@ -114,14 +114,19 @@ func (c *Find) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		if strings.HasPrefix(root, "/") {
 			rootAbs = root
 		}
-		if _, _, exists, err := statMaybe(ctx, inv, rootAbs); err != nil {
+		rootInfo, rootResolved, exists, err := statMaybe(ctx, inv, rootAbs)
+		if err != nil {
 			return err
-		} else if !exists {
+		}
+		if !exists {
 			_, _ = fmt.Fprintf(inv.Stderr, "find: %s: No such file or directory\n", root)
 			exitCode = 1
 			continue
 		}
-		if err := c.walk(ctx, inv, root, rootAbs, rootAbs, nil, 0, opts, expr, state, hasExplicitPrint, hasPrintfAction); err != nil {
+		if rootInfo == nil {
+			return fmt.Errorf("find: missing file info for %s", root)
+		}
+		if err := c.walk(ctx, inv, root, rootResolved, rootResolved, nil, rootInfo, 0, opts, expr, requirements, state, hasExplicitPrint); err != nil {
 			return err
 		}
 	}
@@ -150,83 +155,185 @@ func (c *Find) walk(
 	ctx context.Context,
 	inv *Invocation,
 	rootArg, rootAbs, currentAbs string,
+	currentEntry stdfs.DirEntry,
 	currentInfo stdfs.FileInfo,
 	depth int,
 	opts findCommandOptions,
 	expr findExpr,
+	requirements findRequirements,
 	state *findTraversalState,
-	hasExplicitPrint, hasPrintfAction bool,
+	hasExplicitPrint bool,
 ) error {
 	info := currentInfo
-	var err error
-	if info == nil {
-		info, _, err = statPath(ctx, inv, currentAbs)
+	displayPath := walkDisplayPath(rootArg, rootAbs, currentAbs)
+	entryName := ""
+	entryTypeKnown := false
+	entryIsDir := false
+	entryIsSymlink := false
+	if currentEntry != nil {
+		entryName = currentEntry.Name()
+		entryTypeKnown = !findDirEntryTypeUnknown(currentEntry.Type())
+		entryIsDir = currentEntry.IsDir()
+		entryIsSymlink = currentEntry.Type()&stdfs.ModeSymlink != 0
+	}
+	name := findNodeName(rootArg, rootAbs, currentAbs, entryName, info)
+
+	followedIsDir := false
+	followedIsDirKnown := false
+	if info != nil {
+		followedIsDir = info.IsDir()
+		followedIsDirKnown = true
+	} else if currentEntry != nil && entryTypeKnown && !entryIsSymlink {
+		followedIsDir = entryIsDir
+		followedIsDirKnown = true
+	}
+
+	ensureInfo := func() (stdfs.FileInfo, error) {
+		if info != nil {
+			return info, nil
+		}
+		entryInfo, err := loadFindInfo(ctx, inv, currentEntry, currentAbs, entryTypeKnown, entryIsSymlink)
 		if err != nil {
+			return nil, err
+		}
+		info = entryInfo
+		followedIsDir = info.IsDir()
+		followedIsDirKnown = true
+		return info, nil
+	}
+
+	canDescend := !opts.hasMaxDepth || depth < opts.maxDepth
+	if !followedIsDirKnown {
+		if _, err := ensureInfo(); err != nil {
+			return err
+		}
+	}
+	if requirements.exprNeedsSize || requirements.exprNeedsMTime || requirements.exprNeedsMode {
+		if _, err := ensureInfo(); err != nil {
 			return err
 		}
 	}
 
-	displayPath := walkDisplayPath(rootArg, rootAbs, currentAbs)
-	name := findNodeName(rootArg, rootAbs, currentAbs, info)
-
-	needsEntries := info.IsDir() && (findExprNeedsEmptyCheck(expr) || (!opts.hasMaxDepth || depth < opts.maxDepth))
 	var entries []stdfs.DirEntry
 	entriesLoaded := false
-	if needsEntries {
-		entries, err = readDir(ctx, inv, currentAbs)
+	isEmpty := false
+	if requirements.needsEmpty {
+		if followedIsDir {
+			if !entriesLoaded {
+				dirEntries, err := readDir(ctx, inv, currentAbs)
+				if err != nil {
+					return err
+				}
+				entries = dirEntries
+				entriesLoaded = true
+			}
+			isEmpty = len(entries) == 0
+		} else {
+			fileInfo, err := ensureInfo()
+			if err != nil {
+				return err
+			}
+			isEmpty = fileInfo.Size() == 0
+		}
+	}
+
+	if canDescend && followedIsDir && !entriesLoaded {
+		dirEntries, err := readDir(ctx, inv, currentAbs)
 		if err != nil {
 			return err
 		}
-		entriesLoaded = true
-	}
-
-	isEmpty := false
-	if info.IsDir() {
-		if entriesLoaded {
-			isEmpty = len(entries) == 0
-		}
-	} else {
-		isEmpty = info.Size() == 0
+		entries = dirEntries
 	}
 
 	matchCtx := &findEvalContext{
 		displayPath: displayPath,
 		name:        name,
-		isDir:       info.IsDir(),
-		isEmpty:     isEmpty,
-		mtime:       info.ModTime(),
-		size:        info.Size(),
-		mode:        info.Mode(),
+	}
+	if requirements.needsType {
+		matchCtx.isDir = followedIsDir
+	}
+	if requirements.needsEmpty {
+		matchCtx.isEmpty = isEmpty
+	}
+	if requirements.exprNeedsMTime {
+		fileInfo, err := ensureInfo()
+		if err != nil {
+			return err
+		}
+		matchCtx.mtime = fileInfo.ModTime()
+	}
+	if requirements.exprNeedsSize {
+		fileInfo, err := ensureInfo()
+		if err != nil {
+			return err
+		}
+		matchCtx.size = fileInfo.Size()
+	}
+	if requirements.exprNeedsMode {
+		fileInfo, err := ensureInfo()
+		if err != nil {
+			return err
+		}
+		matchCtx.mode = fileInfo.Mode()
 	}
 
 	shouldCollect, eval := shouldCollectFindNode(expr, matchCtx, depth, opts, hasExplicitPrint)
-	if !opts.depthFirst && shouldCollect {
-		recordFindNode(state, displayPath, name, info, depth, rootArg, hasPrintfAction)
-	}
-
-	if info.IsDir() && (!opts.hasMaxDepth || depth < opts.maxDepth) && !eval.pruned {
-		if !entriesLoaded {
-			entries, err = readDir(ctx, inv, currentAbs)
-			if err != nil {
+	recordNode := func() error {
+		if requirements.hasPrintfAction && requirements.needsPrintfMetadata {
+			if _, err := ensureInfo(); err != nil {
 				return err
 			}
 		}
+		recordFindNode(state, displayPath, name, info, depth, rootArg, requirements)
+		return nil
+	}
+	if !opts.depthFirst && shouldCollect {
+		if err := recordNode(); err != nil {
+			return err
+		}
+	}
+
+	if followedIsDir && canDescend && !eval.pruned {
 		for _, entry := range entries {
 			childAbs := joinChildPath(currentAbs, entry.Name())
-			var childInfo stdfs.FileInfo
-			if entry.Type()&stdfs.ModeSymlink == 0 {
-				childInfo, _ = entry.Info()
-			}
-			if err := c.walk(ctx, inv, rootArg, rootAbs, childAbs, childInfo, depth+1, opts, expr, state, hasExplicitPrint, hasPrintfAction); err != nil {
+			if err := c.walk(ctx, inv, rootArg, rootAbs, childAbs, entry, nil, depth+1, opts, expr, requirements, state, hasExplicitPrint); err != nil {
 				return err
 			}
 		}
 	}
 
 	if opts.depthFirst && shouldCollect {
-		recordFindNode(state, displayPath, name, info, depth, rootArg, hasPrintfAction)
+		if err := recordNode(); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func findDirEntryTypeUnknown(mode stdfs.FileMode) bool {
+	return mode == ^stdfs.FileMode(0)
+}
+
+func loadFindInfo(
+	ctx context.Context,
+	inv *Invocation,
+	currentEntry stdfs.DirEntry,
+	currentAbs string,
+	entryTypeKnown, entryIsSymlink bool,
+) (stdfs.FileInfo, error) {
+	if currentEntry != nil && entryTypeKnown && !entryIsSymlink {
+		if entryInfo, err := currentEntry.Info(); err == nil {
+			return entryInfo, nil
+		}
+	}
+	entryInfo, _, err := statPath(ctx, inv, currentAbs)
+	if err != nil {
+		return nil, err
+	}
+	if entryInfo == nil {
+		return nil, fmt.Errorf("find: missing file info for %s", currentAbs)
+	}
+	return entryInfo, nil
 }
 
 func shouldCollectFindNode(expr findExpr, matchCtx *findEvalContext, depth int, opts findCommandOptions, hasExplicitPrint bool) (bool, findEvalResult) {
@@ -243,21 +350,25 @@ func shouldCollectFindNode(expr findExpr, matchCtx *findEvalContext, depth int, 
 	return result.matches, result
 }
 
-func recordFindNode(state *findTraversalState, displayPath, name string, info stdfs.FileInfo, depth int, rootArg string, includePrintf bool) {
+func recordFindNode(state *findTraversalState, displayPath, name string, info stdfs.FileInfo, depth int, rootArg string, requirements findRequirements) {
 	state.results = append(state.results, displayPath)
-	if !includePrintf {
+	if !requirements.hasPrintfAction {
 		return
 	}
 	state.printData = append(state.printData, findPrintData{
 		path:          displayPath,
 		name:          name,
-		size:          info.Size(),
-		mtime:         info.ModTime(),
-		mode:          info.Mode(),
-		isDirectory:   info.IsDir(),
 		depth:         depth,
 		startingPoint: rootArg,
 	})
+	if !requirements.needsPrintfMetadata || info == nil {
+		return
+	}
+	item := &state.printData[len(state.printData)-1]
+	item.size = info.Size()
+	item.mtime = info.ModTime()
+	item.mode = info.Mode()
+	item.isDirectory = info.IsDir()
 }
 
 func (c *Find) runActions(ctx context.Context, inv *Invocation, actions []findAction, state *findTraversalState) (int, error) {
@@ -378,9 +489,6 @@ func writeFindSeparated(inv *Invocation, values []string, sep string, trailing b
 
 func walkDisplayPath(rootArg, rootAbs, currentAbs string) string {
 	if currentAbs == rootAbs {
-		if strings.HasPrefix(rootArg, "/") {
-			return rootAbs
-		}
 		if rootArg == "" {
 			return "."
 		}
@@ -390,7 +498,13 @@ func walkDisplayPath(rootArg, rootAbs, currentAbs string) string {
 	rel := strings.TrimPrefix(currentAbs, rootAbs)
 	rel = strings.TrimPrefix(rel, "/")
 	if strings.HasPrefix(rootArg, "/") {
-		return currentAbs
+		if rootArg == "/" {
+			return "/" + rel
+		}
+		if strings.HasSuffix(rootArg, "/") {
+			return rootArg + rel
+		}
+		return rootArg + "/" + rel
 	}
 	if rootArg == "." {
 		return "./" + rel
@@ -398,9 +512,16 @@ func walkDisplayPath(rootArg, rootAbs, currentAbs string) string {
 	return path.Join(rootArg, rel)
 }
 
-func findNodeName(rootArg, rootAbs, currentAbs string, info stdfs.FileInfo) string {
+func findNodeName(rootArg, rootAbs, currentAbs, entryName string, info stdfs.FileInfo) string {
 	if currentAbs != rootAbs {
-		return info.Name()
+		switch {
+		case entryName != "":
+			return entryName
+		case info != nil:
+			return info.Name()
+		default:
+			return path.Base(currentAbs)
+		}
 	}
 	switch rootArg {
 	case "", ".":
@@ -421,13 +542,50 @@ func findHasPrintAction(actions []findAction) bool {
 	return false
 }
 
-func findHasPrintfAction(actions []findAction) bool {
-	for _, action := range actions {
-		if _, ok := action.(*findPrintfAction); ok {
-			return true
+func analyzeFindPrintfRequirements(format string) findRequirements {
+	var reqs findRequirements
+	walkFindPrintfDirectives(format, func(verb byte) {
+		switch verb {
+		case 's':
+			reqs.needsSize = true
+			reqs.needsPrintfMetadata = true
+			reqs.printfNeedsSize = true
+		case 'm', 'M':
+			reqs.needsMode = true
+			reqs.needsPrintfMetadata = true
+			reqs.printfNeedsMode = true
+		case 't':
+			reqs.needsMTime = true
+			reqs.needsPrintfMetadata = true
+			reqs.printfNeedsMTime = true
 		}
+	})
+	return reqs
+}
+
+func walkFindPrintfDirectives(format string, visit func(byte)) {
+	processed, _, _ := printfutil.DecodeEscapes(format)
+	for i := 0; i < len(processed); {
+		if processed[i] != '%' || i+1 >= len(processed) {
+			i++
+			continue
+		}
+		if processed[i+1] == '%' {
+			i += 2
+			continue
+		}
+
+		_, _, consumed := parseFindWidthPrecision(processed, i+1)
+		i += 1 + consumed
+		if i >= len(processed) {
+			return
+		}
+		switch processed[i] {
+		case 'f', 'h', 'p', 'P', 's', 'd', 'm', 'M', 't':
+			visit(processed[i])
+		}
+		i++
 	}
-	return false
 }
 
 func formatFindPrintf(format string, item *findPrintData) string {
@@ -498,11 +656,17 @@ func formatFindPrintf(format string, item *findPrintData) string {
 }
 
 func trimFindStartingPoint(pathValue, startingPoint string) string {
+	normalizedStartingPoint := startingPoint
+	if normalizedStartingPoint != "/" {
+		normalizedStartingPoint = strings.TrimRight(normalizedStartingPoint, "/")
+	}
 	switch {
 	case pathValue == startingPoint:
 		return ""
-	case strings.HasPrefix(pathValue, startingPoint+"/"):
-		return strings.TrimPrefix(pathValue, startingPoint+"/")
+	case normalizedStartingPoint != "" && pathValue == normalizedStartingPoint:
+		return ""
+	case normalizedStartingPoint != "" && strings.HasPrefix(pathValue, normalizedStartingPoint+"/"):
+		return strings.TrimPrefix(pathValue, normalizedStartingPoint+"/")
 	case startingPoint == "." && strings.HasPrefix(pathValue, "./"):
 		return strings.TrimPrefix(pathValue, "./")
 	default:

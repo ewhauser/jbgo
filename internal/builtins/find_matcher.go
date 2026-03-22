@@ -122,21 +122,79 @@ func evaluateFindExpr(expr findExpr, ctx *findEvalContext) findEvalResult {
 	}
 }
 
-func findExprNeedsEmptyCheck(expr findExpr) bool {
+func analyzeFindRequirements(expr findExpr, actions []findAction) findRequirements {
+	reqs := analyzeFindExprRequirements(expr)
+	mergeFindRequirements(&reqs, analyzeFindActionRequirements(actions))
+	return reqs
+}
+
+func analyzeFindExprRequirements(expr findExpr) findRequirements {
 	switch e := expr.(type) {
 	case nil:
-		return false
+		return findRequirements{}
+	case *findTypeExpr:
+		return findRequirements{needsType: true}
 	case *findEmptyExpr:
-		return true
+		return findRequirements{needsEmpty: true}
+	case *findMTimeExpr, *findNewerExpr:
+		return findRequirements{
+			needsMTime:     true,
+			exprNeedsMTime: true,
+		}
+	case *findSizeExpr:
+		return findRequirements{
+			needsSize:     true,
+			exprNeedsSize: true,
+		}
+	case *findPermExpr:
+		return findRequirements{
+			needsMode:     true,
+			exprNeedsMode: true,
+		}
 	case *findNotExpr:
-		return findExprNeedsEmptyCheck(e.expr)
+		return analyzeFindExprRequirements(e.expr)
 	case *findAndExpr:
-		return findExprNeedsEmptyCheck(e.left) || findExprNeedsEmptyCheck(e.right)
+		reqs := analyzeFindExprRequirements(e.left)
+		mergeFindRequirements(&reqs, analyzeFindExprRequirements(e.right))
+		return reqs
 	case *findOrExpr:
-		return findExprNeedsEmptyCheck(e.left) || findExprNeedsEmptyCheck(e.right)
+		reqs := analyzeFindExprRequirements(e.left)
+		mergeFindRequirements(&reqs, analyzeFindExprRequirements(e.right))
+		return reqs
 	default:
-		return false
+		return findRequirements{}
 	}
+}
+
+func analyzeFindActionRequirements(actions []findAction) findRequirements {
+	var reqs findRequirements
+	for _, action := range actions {
+		a, ok := action.(*findPrintfAction)
+		if ok {
+			reqs.hasPrintfAction = true
+			mergeFindRequirements(&reqs, analyzeFindPrintfRequirements(a.format))
+		}
+	}
+	return reqs
+}
+
+func mergeFindRequirements(dst *findRequirements, src findRequirements) {
+	if dst == nil {
+		return
+	}
+	dst.needsType = dst.needsType || src.needsType
+	dst.needsEmpty = dst.needsEmpty || src.needsEmpty
+	dst.needsSize = dst.needsSize || src.needsSize
+	dst.needsMTime = dst.needsMTime || src.needsMTime
+	dst.needsMode = dst.needsMode || src.needsMode
+	dst.needsPrintfMetadata = dst.needsPrintfMetadata || src.needsPrintfMetadata
+	dst.hasPrintfAction = dst.hasPrintfAction || src.hasPrintfAction
+	dst.exprNeedsSize = dst.exprNeedsSize || src.exprNeedsSize
+	dst.exprNeedsMTime = dst.exprNeedsMTime || src.exprNeedsMTime
+	dst.exprNeedsMode = dst.exprNeedsMode || src.exprNeedsMode
+	dst.printfNeedsSize = dst.printfNeedsSize || src.printfNeedsSize
+	dst.printfNeedsMTime = dst.printfNeedsMTime || src.printfNeedsMTime
+	dst.printfNeedsMode = dst.printfNeedsMode || src.printfNeedsMode
 }
 
 func findGlobMatch(value, pattern string, ignoreCase bool) bool {
