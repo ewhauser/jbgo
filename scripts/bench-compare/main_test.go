@@ -298,6 +298,15 @@ func TestBenchmarkScenarios(t *testing.T) {
 	if !strings.Contains(scenarios[3].Command, `globbed=(./pkg0[0-3]/section0[0-2]/file0[0-3][0-9].txt)`) {
 		t.Fatalf("expansion_stress command = %q, want glob coverage", scenarios[3].Command)
 	}
+	if !strings.Contains(scenarios[3].Command, `) > "$scratch/out.txt"`) {
+		t.Fatalf("expansion_stress command = %q, want subshell stdout redirection coverage", scenarios[3].Command)
+	}
+	if !strings.Contains(scenarios[3].Command, `2> "$scratch/err.txt"`) {
+		t.Fatalf("expansion_stress command = %q, want stderr redirection coverage", scenarios[3].Command)
+	}
+	if !strings.Contains(scenarios[3].Command, `exec 3< "$scratch/out.txt"`) {
+		t.Fatalf("expansion_stress command = %q, want explicit fd redirection coverage", scenarios[3].Command)
+	}
 }
 
 func TestRenderTextReportAndJSON(t *testing.T) {
