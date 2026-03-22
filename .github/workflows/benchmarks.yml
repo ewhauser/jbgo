@@ -66,6 +66,10 @@ jobs:
 
           git worktree add "$BASE_DIR" "$BASE_SHA"
 
+          # Align the base worktree go.work with the installed Go version so
+          # that a version-floor change on this PR doesn't break the base build.
+          cp go.work "$BASE_DIR/go.work"
+
           BASE_RUNTIME_PKG=$(resolve_runtime_pkg "$BASE_DIR")
           HEAD_RUNTIME_PKG=$(resolve_runtime_pkg ".")
 
