@@ -2759,10 +2759,10 @@ func (r *Runner) typeFileMatches(ctx context.Context, name string, all, requireE
 		pathList = []string{""}
 	}
 	chars := `/`
-	if runtime.GOOS == "windows" {
+	if r.hostOS() == "windows" {
 		chars = `:\/`
 	}
-	exts := pathExts(r.writeEnv)
+	exts := pathExts(r.writeEnv, r.platform)
 	if strings.ContainsAny(name, chars) {
 		if path, err := r.typeExecutablePath(ctx, name, exts, true); err == nil {
 			return []shellTypeMatch{{kind: shellTypeFile, path: path}}
@@ -2795,6 +2795,11 @@ func (r *Runner) typeExecutablePath(ctx context.Context, name string, exts []str
 			return path, nil
 		}
 	}
+	if len(exts) > 0 {
+		if path, err := r.typeStatExecutable(ctx, name, requireExec); err == nil {
+			return path, nil
+		}
+	}
 	for _, ext := range exts {
 		if path, err := r.typeStatExecutable(ctx, name+ext, requireExec); err == nil {
 			return path, nil
@@ -2812,7 +2817,7 @@ func (r *Runner) typeStatExecutable(ctx context.Context, name string, requireExe
 	if mode.IsDir() {
 		return "", fmt.Errorf("is a directory")
 	}
-	if requireExec && runtime.GOOS != "windows" && mode&0o111 == 0 {
+	if requireExec && r.requireExecutableBit() && mode&0o111 == 0 {
 		return "", fmt.Errorf("permission denied")
 	}
 	return name, nil

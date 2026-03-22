@@ -91,6 +91,7 @@ func run(ctx context.Context, cfg Config, args []string, stdin io.Reader, stdout
 		return 2, nil
 	}
 
+	//nolint:contextcheck // gbash.New does not accept context; runtime use remains scoped to this ctx-bound CLI invocation.
 	rt, err := newRuntime(cfg, &runtimeOpts)
 	if err != nil {
 		if runtimeOpts.json {

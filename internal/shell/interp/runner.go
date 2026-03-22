@@ -39,9 +39,14 @@ const (
 	readBuiltinTimeoutExitCode = 128 + 14
 )
 
-// newPipe creates a pipe using the default virtual pipe implementation.
+// newPipe creates a pipe using the configured host pipe implementation.
 func (r *Runner) newPipe() (StdinReader, io.WriteCloser) {
-	return NewVirtualPipe()
+	reader, writer, err := newPipe(r.pipeFactory)
+	if err != nil {
+		pr, pw := NewVirtualPipe()
+		return pr, pw
+	}
+	return reader, writer
 }
 
 func (r *Runner) currentVisibleLine(line uint) uint {
@@ -165,7 +170,7 @@ func (r *Runner) customProcSubst(ctx context.Context, ps *syntax.ProcSubst) (str
 			if endpoint.Reader == nil {
 				return nil, fmt.Errorf("process substitution reader is nil")
 			}
-			stdin, release, err := procSubstStdin(endpoint.Reader)
+			stdin, release, err := procSubstStdin(endpoint.Reader, r.pipeFactory)
 			if err != nil {
 				cleanup()
 				return nil, err
@@ -214,7 +219,7 @@ func (r *Runner) runProcSubst(ctx context.Context, ps *syntax.ProcSubst, path st
 	return path, nil
 }
 
-func procSubstStdin(reader io.ReadCloser) (StdinReader, func(), error) {
+func procSubstStdin(reader io.ReadCloser, pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) (StdinReader, func(), error) {
 	if reader == nil {
 		return nil, nil, fmt.Errorf("process substitution reader is nil")
 	}
@@ -223,7 +228,7 @@ func procSubstStdin(reader io.ReadCloser) (StdinReader, func(), error) {
 			_ = reader.Close()
 		}, nil
 	}
-	sr := stdinReader(reader)
+	sr := stdinReader(reader, pipeFactory)
 	return sr, func() {
 		if closer, ok := sr.(io.Closer); ok {
 			_ = closer.Close()
@@ -773,7 +778,10 @@ func defaultNamedUserHome(user string) (string, bool) {
 var todoPos syntax.Pos // for handlerCtx callers where we don't yet have a position
 
 func (r *Runner) handlerCtx(ctx context.Context, kind handlerKind, pos syntax.Pos) context.Context {
-	overlay := &overlayEnviron{parent: r.writeEnv}
+	overlay := &overlayEnviron{
+		parent:          r.writeEnv,
+		caseInsensitive: r.platform.EnvCaseInsensitive,
+	}
 	if kind == handlerKindExec {
 		// When SHELLOPTS is exported, update the env overlay with the
 		// current dynamic value so child processes inherit the active
@@ -1962,7 +1970,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}()
 			return fn()
 		}
-		declEvalEnv := newOverlayEnviron(r.writeEnv, true)
+		declEvalEnv := newOverlayEnviron(r.writeEnv, true, r.platform.EnvCaseInsensitive)
 		declLookupVar := func(env expand.WriteEnviron, name string) expand.Variable {
 			if !local || global {
 				return env.Get(name)
@@ -2825,6 +2833,7 @@ const (
 
 func (r *Runner) runCallAssignOverlay(assigns []*syntax.Assign, forceExport, consumeLocals, crossesFuncScope bool) (*overlayEnviron, bool) {
 	overlay := &overlayEnviron{
+		caseInsensitive:           r.platform.EnvCaseInsensitive,
 		parent:                    r.writeEnv,
 		tempScopeConsumesLocals:   consumeLocals,
 		tempScopeCrossesFuncScope: crossesFuncScope,
@@ -3863,7 +3872,11 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		// Functions run in a nested scope.
 		// Note that [Runner.exec] below does something similar.
 		origEnv := r.writeEnv
-		r.writeEnv = &overlayEnviron{parent: r.writeEnv, funcScope: true}
+		r.writeEnv = &overlayEnviron{
+			parent:          r.writeEnv,
+			caseInsensitive: r.platform.EnvCaseInsensitive,
+			funcScope:       true,
+		}
 		prevChunkSource := r.currentChunkSource
 		prevChunkSourceBase := r.currentChunkSourceBase
 		if bodySource, ok := r.funcBodySource(name); ok {

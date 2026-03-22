@@ -1,12 +1,16 @@
-//go:build !windows && !js
-
 package builtins
 
-import "runtime"
+import (
+	"runtime"
+	"strings"
+)
+
+const hostOSEnvKey = "GBASH_HOST_OS"
 
 func bashHelpPlatform(inv *Invocation) string {
 	arch := archMachine(inv)
-	switch runtime.GOOS {
+	goos := helpHostOS(inv)
+	switch goos {
 	case "darwin":
 		release := unameEnvValue(nil, unameReleaseEnvKey)
 		if inv != nil {
@@ -21,7 +25,18 @@ func bashHelpPlatform(inv *Invocation) string {
 		return arch + "-unknown-openbsd"
 	case "netbsd":
 		return arch + "-unknown-netbsd"
+	case "js":
+		return arch + "-unknown-js"
 	default:
-		return arch + "-unknown-" + runtime.GOOS
+		return arch + "-unknown-" + goos
 	}
+}
+
+func helpHostOS(inv *Invocation) string {
+	if inv != nil && inv.Env != nil {
+		if goos := strings.TrimSpace(inv.Env[hostOSEnvKey]); goos != "" {
+			return goos
+		}
+	}
+	return runtime.GOOS
 }

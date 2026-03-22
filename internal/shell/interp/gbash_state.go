@@ -11,7 +11,7 @@ import (
 )
 
 func (r *Runner) setStdIO(in io.Reader, out, err io.Writer) error {
-	r.setStdinReader(stdinReader(in))
+	r.setStdinReader(stdinReader(in, r.pipeFactory))
 	r.setStdoutWriter(out)
 	r.setStderrWriter(err)
 	return nil

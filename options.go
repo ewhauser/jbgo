@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/commands"
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 )
@@ -29,6 +30,9 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.BaseEnv != nil {
 			target.BaseEnv = copyStringMap(cfg.BaseEnv)
+		}
+		if cfg.Host != nil {
+			target.Host = cfg.Host
 		}
 		if cfg.Network != nil {
 			networkCopy := *cfg.Network
@@ -106,6 +110,14 @@ func WithPolicy(p policy.Policy) Option {
 func WithBaseEnv(env map[string]string) Option {
 	return func(target *Config) error {
 		target.BaseEnv = copyStringMap(env)
+		return nil
+	}
+}
+
+// WithHost replaces the host adapter used by the runtime.
+func WithHost(adapter host.Adapter) Option {
+	return func(target *Config) error {
+		target.Host = adapter
 		return nil
 	}
 }

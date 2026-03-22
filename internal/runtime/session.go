@@ -12,7 +12,9 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/shell"
+	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/trace"
 )
 
@@ -47,9 +49,15 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	}
 	ctx, cancel := executionContext(ctx, req.Timeout)
 	defer cancel()
+	processMeta, err := s.cfg.Host.ExecutionMeta(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = withHostExecutionMeta(ctx, processMeta)
 
 	workDir := resolveWorkDir(s.cfg.FileSystem.WorkingDir, req.WorkDir)
 	execEnv := executionEnv(s.cfg.BaseEnv, req)
+	projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
 	visiblePWD, hasVisiblePWD := execEnv["PWD"]
 	execEnv["PWD"] = workDir
 	if !s.bootAt.IsZero() {
@@ -112,6 +120,9 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Dir:             workDir,
 		VisiblePWD:      visiblePWD,
 		HasVisiblePWD:   hasVisiblePWD,
+		HostPlatform:    hostPlatform(s.cfg.Host),
+		HostProcessMeta: processMeta,
+		NewPipe:         s.cfg.Host.NewPipe,
 		Stdin:           stdinOrEmpty(req.Stdin),
 		Stdout:          stdoutWriter,
 		Stderr:          stderrWriter,
@@ -173,6 +184,11 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	if req == nil {
 		req = &InteractiveRequest{}
 	}
+	processMeta, err := s.cfg.Host.ExecutionMeta(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = withHostExecutionMeta(ctx, processMeta)
 
 	workDir := resolveWorkDir(s.cfg.FileSystem.WorkingDir, req.WorkDir)
 	execReq := &ExecutionRequest{
@@ -181,6 +197,7 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 		ReplaceEnv: req.ReplaceEnv,
 	}
 	execEnv := executionEnv(s.cfg.BaseEnv, execReq)
+	projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
 	visiblePWD, hasVisiblePWD := execEnv["PWD"]
 	execEnv["PWD"] = workDir
 	if _, ok := execEnv["TTY"]; !ok {
@@ -212,24 +229,27 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 		}
 	}
 	result, err := shell.Interact(ctx, &shell.Execution{
-		Name:           defaultName(req.Name),
-		Args:           req.Args,
-		StartupOptions: req.StartupOptions,
-		Interactive:    true,
-		Env:            execEnv,
-		Dir:            workDir,
-		VisiblePWD:     visiblePWD,
-		HasVisiblePWD:  hasVisiblePWD,
-		Stdin:          stdinOrEmpty(req.Stdin),
-		Stdout:         writerOrDiscard(req.Stdout),
-		Stderr:         writerOrDiscard(req.Stderr),
-		FS:             s.fs,
-		Network:        s.cfg.NetworkClient,
-		Registry:       s.cfg.Registry,
-		Policy:         s.cfg.Policy,
-		Trace:          recorder,
-		Exec:           s.subexecCallback,
-		Interact:       s.interactCallback,
+		Name:            defaultName(req.Name),
+		Args:            req.Args,
+		StartupOptions:  req.StartupOptions,
+		Interactive:     true,
+		Env:             execEnv,
+		Dir:             workDir,
+		VisiblePWD:      visiblePWD,
+		HasVisiblePWD:   hasVisiblePWD,
+		HostPlatform:    hostPlatform(s.cfg.Host),
+		HostProcessMeta: processMeta,
+		NewPipe:         s.cfg.Host.NewPipe,
+		Stdin:           stdinOrEmpty(req.Stdin),
+		Stdout:          writerOrDiscard(req.Stdout),
+		Stderr:          writerOrDiscard(req.Stderr),
+		FS:              s.fs,
+		Network:         s.cfg.NetworkClient,
+		Registry:        s.cfg.Registry,
+		Policy:          s.cfg.Policy,
+		Trace:           recorder,
+		Exec:            s.subexecCallback,
+		Interact:        s.interactCallback,
 	})
 	if err != nil {
 		return normalizeInteractiveResult(result), err
@@ -273,6 +293,13 @@ func executionContext(ctx context.Context, timeout time.Duration) (context.Conte
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, timeout)
+}
+
+func withHostExecutionMeta(ctx context.Context, meta host.ExecutionMeta) context.Context {
+	if meta.ProcessGroup > 0 {
+		ctx = shellstate.WithProcessGroup(ctx, meta.ProcessGroup)
+	}
+	return ctx
 }
 
 func validateExecutionRequest(req *ExecutionRequest) error {

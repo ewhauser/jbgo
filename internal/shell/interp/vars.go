@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"maps"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,8 +20,8 @@ import (
 
 const loopIterHelperCommand = "__jb_loop_iter"
 
-func newOverlayEnviron(parent expand.Environ, snapshot bool) *overlayEnviron {
-	oenv := &overlayEnviron{}
+func newOverlayEnviron(parent expand.Environ, snapshot, caseInsensitive bool) *overlayEnviron {
+	oenv := &overlayEnviron{caseInsensitive: caseInsensitive}
 	if !snapshot {
 		oenv.parent = parent
 	} else if parentWrite, ok := parent.(expand.WriteEnviron); ok {
@@ -101,6 +100,8 @@ type overlayEnviron struct {
 	// or function calls.
 	parent expand.Environ
 
+	caseInsensitive bool
+
 	// values maps normalized variable names, per [overlayEnviron.normalize].
 	values map[string]namedVariable
 	// valuesShared tracks whether values is shared with another environ and
@@ -157,11 +158,11 @@ type namedVariable struct {
 }
 
 func (o *overlayEnviron) normalize(name string) string {
-	return normalizeEnvName(name)
+	return normalizeEnvName(name, o.caseInsensitive)
 }
 
-func normalizeEnvName(name string) string {
-	if runtime.GOOS == "windows" {
+func normalizeEnvName(name string, caseInsensitive bool) string {
+	if caseInsensitive {
 		return strings.ToUpper(name)
 	}
 	return name
@@ -927,23 +928,39 @@ func (r *Runner) defaultHostname() string {
 	return "gbash"
 }
 
-func (r *Runner) defaultOSType() string {
-	switch runtime.GOOS {
-	case "linux":
-		return "linux-gnu"
-	case "darwin":
-		return "darwin"
-	case "windows":
-		return "msys"
-	case "freebsd":
-		return "freebsd"
-	case "openbsd":
-		return "openbsd"
-	case "netbsd":
-		return "netbsd"
-	default:
-		return runtime.GOOS
+func (r *Runner) hostOS() string {
+	if strings.TrimSpace(r.platform.OS) != "" {
+		return strings.TrimSpace(r.platform.OS)
 	}
+	if r.writeEnv != nil {
+		if vr := r.writeEnv.Get("GBASH_HOST_OS"); vr.IsSet() {
+			if value := strings.TrimSpace(vr.String()); value != "" {
+				return value
+			}
+		}
+	}
+	return "linux"
+}
+
+func (r *Runner) requireExecutableBit() bool {
+	if strings.TrimSpace(r.platform.OS) != "" || r.platform.RequireExecutableBit {
+		return r.platform.RequireExecutableBit
+	}
+	return r.hostOS() != "windows"
+}
+
+func (r *Runner) defaultOSType() string {
+	if value := strings.TrimSpace(r.platform.OSType); value != "" {
+		return value
+	}
+	if r.writeEnv != nil {
+		if vr := r.writeEnv.Get("GBASH_OSTYPE"); vr.IsSet() {
+			if value := strings.TrimSpace(vr.String()); value != "" {
+				return value
+			}
+		}
+	}
+	return defaultOSTypeForOS(r.hostOS())
 }
 
 func (r *Runner) shellOptsValue() string {

@@ -10,7 +10,6 @@ import (
 	"maps"
 	"os"
 	"path"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
@@ -45,6 +45,9 @@ type Execution struct {
 	Dir               string
 	VisiblePWD        string
 	HasVisiblePWD     bool
+	HostPlatform      host.Platform
+	HostProcessMeta   host.ExecutionMeta
+	NewPipe           func() (io.ReadCloser, io.WriteCloser, error)
 	BuiltinCommandDir string
 	CompletionState   *shellstate.CompletionState
 	Stdin             io.Reader
@@ -200,7 +203,7 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 	finalEnv, err := m.executeCommand(ctx, exec, &commandExecuteRequest{
 		Argv:       exec.Command,
 		VirtualWD:  gbfs.Clean(exec.Dir),
-		Env:        expand.ListEnviron(envPairs(finalEnv)...),
+		Env:        executionEnviron(exec, finalEnv),
 		CurrentEnv: finalEnv,
 		Stdin:      exec.Stdin,
 		Stdout:     exec.Stdout,
@@ -211,7 +214,7 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 
 func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.RunnerConfig {
 	cfg := &interp.RunnerConfig{
-		Env:              expand.ListEnviron(envPairs(m.runnerEnv(exec))...),
+		Env:              executionEnviron(exec, m.runnerEnv(exec)),
 		CallHandler:      m.callHandler(exec, budget),
 		ExecHandler:      m.execHandler(exec, budget),
 		OpenHandler:      m.openHandler(exec),
@@ -230,12 +233,21 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	cfg.Stderr = exec.Stderr
 	cfg.Params = runnerParamArgs(exec.StartupOptions, exec.Args)
 	cfg.Interactive = exec.Interactive
+	cfg.Platform = exec.HostPlatform
+	cfg.PID = exec.HostProcessMeta.PID
+	cfg.PPID = exec.HostProcessMeta.PPID
+	cfg.NewPipe = exec.NewPipe
 	cfg.LegacyBashCompat = exec.Interpreter == "bash" || exec.Interpreter == "sh"
 	cfg.CommandString = executionUsesCommandString(exec)
 	if exec.ScriptPath == "" && exec.Script != "" {
 		cfg.CommandStringValue = exec.Script
 	}
 	return cfg
+}
+
+func executionEnviron(exec *Execution, env map[string]string) expand.Environ {
+	caseInsensitive := exec != nil && exec.HostPlatform.EnvCaseInsensitive
+	return expand.ListEnvironWithCase(caseInsensitive, envPairs(env)...)
 }
 
 func (m *core) runnerEnv(exec *Execution) map[string]string {
@@ -963,7 +975,7 @@ func lookupCommand(ctx context.Context, exec *Execution, dir string, env expand.
 		}
 	}
 
-	for _, candidate := range pathCandidates(env, name) {
+	for _, candidate := range pathCandidates(exec, env, name) {
 		resolved, ok, err := lookupCommandPath(ctx, exec, dir, candidate.display, "path-search", name)
 		if err != nil {
 			return nil, false, err
@@ -1117,23 +1129,72 @@ type pathCandidate struct {
 	display string
 }
 
-func pathCandidates(env expand.Environ, name string) []pathCandidate {
+func pathCandidates(exec *Execution, env expand.Environ, name string) []pathCandidate {
 	pathValue := strings.TrimSpace(env.Get("PATH").String())
 	if pathValue == "" {
 		return nil
 	}
+	exts := commandPathExtensions(exec, env)
 
-	candidates := make([]pathCandidate, 0, strings.Count(pathValue, ":")+1)
+	candidates := make([]pathCandidate, 0, (strings.Count(pathValue, ":")+1)*max(1, len(exts)+1))
 	for entry := range strings.SplitSeq(pathValue, ":") {
 		entry = strings.TrimSpace(entry)
+		base := "./" + name
 		switch entry {
 		case "", ".":
-			candidates = append(candidates, pathCandidate{display: "./" + name})
 		default:
-			candidates = append(candidates, pathCandidate{display: path.Join(entry, name)})
+			base = path.Join(entry, name)
+		}
+		for _, candidate := range commandPathVariants(base, exts) {
+			candidates = append(candidates, pathCandidate{display: candidate})
 		}
 	}
 	return candidates
+}
+
+func commandPathExtensions(exec *Execution, env expand.Environ) []string {
+	if exec == nil || len(exec.HostPlatform.PathExtensions) == 0 {
+		return nil
+	}
+	if env == nil {
+		return append([]string(nil), exec.HostPlatform.PathExtensions...)
+	}
+	pathext := strings.TrimSpace(env.Get("PATHEXT").String())
+	if pathext == "" {
+		return append([]string(nil), exec.HostPlatform.PathExtensions...)
+	}
+	exts := make([]string, 0, strings.Count(pathext, ";")+1)
+	for ext := range strings.SplitSeq(strings.ToLower(pathext), ";") {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+		if ext[0] != '.' {
+			ext = "." + ext
+		}
+		exts = append(exts, ext)
+	}
+	return exts
+}
+
+func commandPathVariants(name string, exts []string) []string {
+	if len(exts) == 0 || commandPathHasExt(name) {
+		return []string{name}
+	}
+	variants := make([]string, 0, len(exts)+1)
+	variants = append(variants, name)
+	for _, ext := range exts {
+		variants = append(variants, name+ext)
+	}
+	return variants
+}
+
+func commandPathHasExt(file string) bool {
+	index := strings.LastIndex(file, ".")
+	if index < 0 {
+		return false
+	}
+	return strings.LastIndexAny(file, `:\/`) < index
 }
 
 type shebangResolution struct {
@@ -1177,7 +1238,7 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invok
 }
 
 func resolveCommandFile(ctx context.Context, exec *Execution, fullPath string, mode stdfs.FileMode, invokedPath string) (_ *resolvedCommand, ok bool, err error) {
-	if !isExecutableCommandFile(mode) {
+	if !isExecutableCommandFile(exec, mode) {
 		return nil, false, nil
 	}
 	if resolved, ok, err := resolveVirtualCommandStub(ctx, exec, fullPath); ok || err != nil {
@@ -1254,8 +1315,8 @@ func readVirtualCommandStub(ctx context.Context, r io.Reader) (string, bool, err
 	return name, true, nil
 }
 
-func isExecutableCommandFile(mode stdfs.FileMode) bool {
-	if runtime.GOOS == "windows" {
+func isExecutableCommandFile(exec *Execution, mode stdfs.FileMode) bool {
+	if exec != nil && !exec.HostPlatform.RequireExecutableBit {
 		return true
 	}
 	return mode&0o111 != 0
@@ -1421,7 +1482,7 @@ func handlerState(ctx context.Context, exec *Execution) resolvedHandlerState {
 		}
 	}
 	return resolvedHandlerState{
-		Env:    expand.ListEnviron(envPairs(exec.Env)...),
+		Env:    executionEnviron(exec, exec.Env),
 		Dir:    exec.Dir,
 		Stderr: exec.Stderr,
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/builtins"
 	internalruntime "github.com/ewhauser/gbash/internal/runtime"
 	"github.com/ewhauser/gbash/network"
@@ -87,6 +88,11 @@ type Config struct {
 	// BaseEnv provides the base environment visible to each execution before any
 	// per-request environment overrides are applied.
 	BaseEnv map[string]string
+
+	// Host controls the host-derived platform behavior, process metadata, and
+	// base environment defaults visible to the runtime. When nil, gbash uses its
+	// internal virtual host adapter.
+	Host host.Adapter
 
 	// Network configures the built-in HTTP client used by the curl command. When
 	// nil and NetworkClient is also nil, curl is not registered in the sandbox.
@@ -248,6 +254,7 @@ func (cfg *Config) runtimeConfig() *internalruntime.Config {
 		Registry:      cfg.Registry,
 		Policy:        cfg.Policy,
 		BaseEnv:       copyStringMap(cfg.BaseEnv),
+		Host:          cfg.Host,
 		Network:       cfg.networkConfig(),
 		NetworkClient: cfg.NetworkClient,
 		Tracing:       cfg.Tracing,

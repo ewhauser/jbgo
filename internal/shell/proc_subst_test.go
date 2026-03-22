@@ -15,7 +15,7 @@ import (
 )
 
 func newTestProcSubstManager(pol policy.Policy) *procSubstManager {
-	return newProcSubstManager(pol, "/home/agent/project", "/home/agent")
+	return newProcSubstManager(pol, "/home/agent/project", "/home/agent", nil)
 }
 
 func TestProcSubstFSReadPathIsNamedPipeAndOneShot(t *testing.T) {

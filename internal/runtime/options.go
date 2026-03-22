@@ -27,6 +27,9 @@ func WithConfig(cfg *Config) Option {
 		if cfg.BaseEnv != nil {
 			target.BaseEnv = cfg.BaseEnv
 		}
+		if cfg.Host != nil {
+			target.Host = cfg.Host
+		}
 		if cfg.Network != nil {
 			target.Network = cfg.Network
 		}

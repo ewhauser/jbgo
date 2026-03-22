@@ -21,30 +21,6 @@ const (
 	defaultGID     = "1000"
 )
 
-func defaultBaseEnv() map[string]string {
-	return map[string]string{
-		"HOME":                         defaultHomeDir,
-		"PATH":                         defaultPath,
-		"USER":                         defaultUser,
-		"LOGNAME":                      defaultUser,
-		"GROUP":                        defaultUser,
-		"GROUPS":                       defaultGID,
-		"UID":                          defaultUID,
-		"EUID":                         defaultUID,
-		"GID":                          defaultGID,
-		"EGID":                         defaultGID,
-		"SHELL":                        "/bin/sh",
-		"GBASH_ARCH":                   defaultArchMachine(),
-		"GBASH_UNAME_SYSNAME":          defaultUnameKernelName(),
-		"GBASH_UNAME_NODENAME":         defaultUnameNodename,
-		"GBASH_UNAME_RELEASE":          defaultUnameRelease,
-		"GBASH_UNAME_VERSION":          defaultUnameVersion,
-		"GBASH_UNAME_MACHINE":          defaultArchMachine(),
-		"GBASH_UNAME_OPERATING_SYSTEM": defaultUnameOperatingSystem(),
-		"GBASH_UMASK":                  "0022",
-	}
-}
-
 func initializeSandboxLayout(ctx context.Context, fsys gbfs.FileSystem, env map[string]string, workDir string, commands []string) error {
 	for _, dir := range layoutDirectories(env, workDir) {
 		if err := fsys.MkdirAll(ctx, dir, 0o755); err != nil {

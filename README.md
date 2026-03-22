@@ -19,6 +19,7 @@ Shell parsing and execution are owned in-tree under `internal/shell`, with a pro
   - [CLI](#cli)
 - [Configuration](#configuration)
   - [Filesystem](#filesystem)
+  - [Host Platform](#host-platform)
   - [Network Access](#network-access)
 - [Security Model](#security-model)
 - [Supported Commands](#supported-commands)
@@ -45,6 +46,7 @@ Shell parsing and execution are owned in-tree under `internal/shell`, with a pro
 ## Public Packages
 
 - `github.com/ewhauser/gbash`: the core Go runtime and embedding API
+- `github.com/ewhauser/gbash/host`: the public host adapter boundary for platform and process behavior
 - `github.com/ewhauser/gbash/server`: shared JSON-RPC server mode for hosting persistent gbash sessions
 - `github.com/ewhauser/gbash/contrib/...`: optional Go command modules
 - `@ewhauser/gbash-wasm/browser`: the explicit browser entrypoint for the `js/wasm` package. It is versioned in-repo today; npm publishing remains disabled in the release workflow for now.
@@ -310,6 +312,32 @@ gb, err := gbash.New(
 ```
 
 This mode maps the host directory to sandbox `/`, so it is best suited to compatibility harnesses and other opt-in developer workflows.
+
+### Host Platform
+
+By default, gbash uses an internal virtual host adapter. That preserves the existing sandbox behavior: virtual pipes, virtual process metadata, and build-dependent platform defaults.
+
+Embedders can opt into the underlying process and OS view with `WithHost(host.NewSystem())`:
+
+```go
+import (
+	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/host"
+)
+
+gb, err := gbash.New(
+	gbash.WithHost(host.NewSystem()),
+)
+```
+
+The host adapter controls:
+
+- base environment defaults before `Config.BaseEnv` and per-request `Env`
+- shell-visible platform identity such as `OSTYPE`, `uname`, `hostname`, and `arch`
+- env-name case sensitivity and executable lookup behavior such as `PATHEXT`
+- initial PID, PPID, process-group metadata, and the pipe primitive used by pipelines and process substitution
+
+Precedence remains `host defaults -> Config.BaseEnv -> request Env`. `ReplaceEnv` still bypasses host defaults and `Config.BaseEnv`, after which the shell initializes its own startup-owned variables such as `PATH`, `PWD`, and `SHELL`.
 
 
 ### Network Access

@@ -37,6 +37,7 @@ type procSubstManager struct {
 	policy      policy.Policy
 	defaultDir  string
 	defaultHome string
+	pipeFactory func() (io.ReadCloser, io.WriteCloser, error)
 	entries     map[string]*procSubstEntry
 }
 
@@ -75,12 +76,13 @@ type procSubstFileInfo struct {
 	modTime time.Time
 }
 
-func newProcSubstManager(pol policy.Policy, defaultDir, defaultHome string) *procSubstManager {
+func newProcSubstManager(pol policy.Policy, defaultDir, defaultHome string, pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) *procSubstManager {
 	return &procSubstManager{
 		nonce:       newProcSubstNonce(),
 		policy:      pol,
 		defaultDir:  gbfs.Clean(defaultDir),
 		defaultHome: gbfs.Clean(defaultHome),
+		pipeFactory: pipeFactory,
 		entries:     make(map[string]*procSubstEntry),
 	}
 }
@@ -96,7 +98,7 @@ func withProcSubstScope(exec *Execution) func() {
 	if exec == nil {
 		return func() {}
 	}
-	manager := newProcSubstManager(exec.Policy, procSubstDefaultDir(exec), procSubstDefaultHome(exec))
+	manager := newProcSubstManager(exec.Policy, procSubstDefaultDir(exec), procSubstDefaultHome(exec), exec.NewPipe)
 	inner := exec.FS
 	exec.procSubst = manager
 	exec.FS = newProcSubstFS(inner, manager)
@@ -117,10 +119,10 @@ func (m *procSubstManager) endpoint(ctx context.Context, ps *syntax.ProcSubst) (
 		return nil, err
 	}
 
-	// Create a buffered in-memory virtual pipe instead of an OS pipe.
-	// The buffer allows writes to proceed without blocking (up to buffer size),
-	// matching OS pipe semantics while avoiding host kernel resources.
-	pipeReader, pipeWriter := interp.NewVirtualPipe()
+	pipeReader, pipeWriter, err := m.newPipe()
+	if err != nil {
+		return nil, err
+	}
 
 	entry := &procSubstEntry{
 		path:       procSubstPath,
@@ -164,6 +166,21 @@ func (m *procSubstManager) endpoint(ctx context.Context, ps *syntax.ProcSubst) (
 		endpoint.Reader = pipeReader
 	}
 	return endpoint, nil
+}
+
+func (m *procSubstManager) newPipe() (io.ReadCloser, io.WriteCloser, error) {
+	if m == nil || m.pipeFactory == nil {
+		reader, writer := interp.NewVirtualPipe()
+		return reader, writer, nil
+	}
+	reader, writer, err := m.pipeFactory()
+	if err != nil {
+		return nil, nil, err
+	}
+	if reader == nil || writer == nil {
+		return nil, nil, fmt.Errorf("process substitution pipe factory returned nil endpoint")
+	}
+	return reader, writer, nil
 }
 
 func (m *procSubstManager) nextPath(ctx context.Context, op syntax.ProcOperator) (string, error) {

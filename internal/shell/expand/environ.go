@@ -223,6 +223,13 @@ func ListEnviron(pairs ...string) Environ {
 	return listEnviron_(runtime.GOOS == "windows", pairs...)
 }
 
+// ListEnvironWithCase returns an [Environ] with the supplied variables, in the
+// form "key=value", using the supplied case-sensitivity behavior for variable
+// names. All variables will be exported.
+func ListEnvironWithCase(caseInsensitive bool, pairs ...string) Environ {
+	return listEnviron_(caseInsensitive, pairs...)
+}
+
 // listEnviron_ implements [ListEnviron], but letting the tests specify
 // whether to uppercase all names or not.
 func listEnviron_(caseInsensitive bool, pairs ...string) Environ {

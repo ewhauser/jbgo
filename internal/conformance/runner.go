@@ -325,6 +325,7 @@ func runGBash(ctx context.Context, bashPath, specPath, workspace, script string)
 	if cfg := gbashPolicyConfig(specPath); cfg != nil {
 		opts = append(opts, gbruntime.WithPolicy(policy.NewStatic(cfg)))
 	}
+	//nolint:contextcheck // gbruntime.New does not accept context; the created runtime is only used inside this ctx-scoped run.
 	rt, err := gbruntime.New(opts...)
 	if err != nil {
 		return ExecutionResult{}, err

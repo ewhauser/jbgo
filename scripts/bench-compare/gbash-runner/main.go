@@ -72,6 +72,7 @@ func run(ctx context.Context, opts options, stdin io.Reader, stdout, stderr io.W
 		runtimeOpts = append(runtimeOpts, gbash.WithWorkingDir(opts.cwd))
 	}
 
+	//nolint:contextcheck // gbash.New does not accept context; the runtime is immediately used for this ctx-bound benchmark run.
 	rt, err := gbash.New(runtimeOpts...)
 	if err != nil {
 		return 1, fmt.Errorf("init runtime: %w", err)

@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-21
+Last updated: 2026-03-22
 
 ## 1. Purpose
 
@@ -92,6 +92,7 @@ Shell builtins that remain implemented inside the in-tree interpreter should pre
 The runtime owns:
 
 - filesystem abstraction
+- host platform identity, process metadata, and pipe semantics
 - command registry
 - policy enforcement
 - output limiting
@@ -121,6 +122,7 @@ Execution flow:
 1. Parse the script with `syntax.Parser`, incrementally when shell state like aliases must affect later complete commands in the same execution.
 2. Construct an execution context from the current session with:
    - session-owned virtual filesystem
+   - configured host adapter for platform identity, process metadata, and pipes
    - command registry
    - policy
    - optional trace recorder and logging callbacks
@@ -243,11 +245,14 @@ The runtime treats the runner's virtual directory plus shell-visible `PWD` as th
 
 Sandbox-facing machine metadata is also runtime-owned: `HOSTNAME`, `hostname`, `OSTYPE`, `BASHPID`, and `PPID` must resolve from sandbox metadata and runner state rather than from host uname or host process inspection.
 
+That metadata now has a supported public adapter boundary. `gbash.Config.Host` and `gbash.WithHost(host.Adapter)` select the logical host implementation, while the public `host` package owns typed platform identity, per-execution PID/PPID/process-group seeds, and the pipe primitive used for pipelines and process substitution. The default adapter remains internal and virtual so zero-config sandbox behavior stays unchanged.
+
 Signal identity is part of that runtime-owned metadata. Stable `$$` values, per-shell `BASHPID`, shell-family `PPID`, virtual background job IDs, and internal signal delivery for shell-managed `kill` targets must be derived from runner state rather than host PIDs.
 
 ## 7. Proposed Package Layout
 
 ```text
+host/                  public host adapter boundary for platform/process behavior
 cli/                   reusable CLI frontend shared by shipped binaries
 cmd/gbash/             CLI entrypoint for local execution
 server/                public JSON-RPC server surface shared by wrapper binaries
@@ -266,6 +271,7 @@ tests/                integration fixtures and compatibility-style harnesses
 
 Package responsibilities:
 
+- `host/`: public adapter contract for host-derived defaults, logical platform semantics, per-execution process metadata, and pipe provisioning
 - `cli/`: reusable CLI frontend that parses shell flags, renders help/version output, handles interactive mode, and provisions runtimes for thin wrapper binaries
 - `server/`: public shared server implementation that owns JSON-RPC framing and session registries for both shipped CLIs and external hosts, plus Unix-socket listener helpers
 - `internal/runtime/`: internal runtime/session creation, run configuration, result collection, output capture
@@ -308,6 +314,7 @@ type Config struct {
     Registry      commands.CommandRegistry
     Policy        Policy
     BaseEnv       map[string]string
+    Host          host.Adapter
     Network       *network.Config
     NetworkClient network.Client
     Tracing       TraceConfig

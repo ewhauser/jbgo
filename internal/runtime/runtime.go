@@ -10,6 +10,7 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
@@ -20,6 +21,7 @@ type Config struct {
 	Registry      commands.CommandRegistry
 	Policy        policy.Policy
 	BaseEnv       map[string]string
+	Host          host.Adapter
 	Network       *network.Config
 	NetworkClient network.Client
 	Tracing       TraceConfig
@@ -79,7 +81,14 @@ func New(opts ...Option) (*Runtime, error) {
 			SymlinkMode: policy.SymlinkDeny,
 		})
 	}
-	resolved.BaseEnv = mergeEnv(defaultBaseEnv(), resolved.BaseEnv)
+	if resolved.Host == nil {
+		resolved.Host = newVirtualHost()
+	}
+	hostEnv, err := runtimeBaseEnv(context.Background(), resolved.Host)
+	if err != nil {
+		return nil, err
+	}
+	resolved.BaseEnv = mergeEnv(hostEnv, resolved.BaseEnv)
 
 	factory := sessionFactory(plainSessionFactory{base: resolved.FileSystem.Factory})
 	if defaultSessionFS {

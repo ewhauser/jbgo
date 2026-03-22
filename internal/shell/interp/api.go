@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -60,6 +61,10 @@ type Runner struct {
 	// tempDir is either $TMPDIR from [Runner.Env] or a deterministic virtual
 	// default.
 	tempDir string
+
+	platform host.Platform
+
+	pipeFactory func() (io.ReadCloser, io.WriteCloser, error)
 
 	// Params are the current shell parameters, e.g. from running a shell
 	// file or calling a function. Accessible via the $@/$* family of vars.
@@ -494,6 +499,11 @@ const (
 type RunnerConfig struct {
 	Env expand.Environ
 
+	Platform host.Platform
+
+	PID  int
+	PPID int
+
 	// StartupHome carries the shell's trusted startup home for callers that
 	// need startup-sensitive tilde semantics.
 	StartupHome string
@@ -519,6 +529,7 @@ type RunnerConfig struct {
 	StatHandler      StatHandlerFunc
 	RealpathHandler  RealpathHandlerFunc
 	ProcSubstHandler ProcSubstHandlerFunc
+	NewPipe          func() (io.ReadCloser, io.WriteCloser, error)
 }
 
 func newRunnerBase() *Runner {
@@ -534,7 +545,7 @@ func newRunnerBase() *Runner {
 
 func (r *Runner) applyConstructorDefaults() error {
 	if r.Env == nil {
-		r.Env = expand.ListEnviron()
+		r.Env = expand.ListEnvironWithCase(r.platform.EnvCaseInsensitive)
 	}
 	if r.startupHome == "" {
 		if home := r.Env.Get("HOME").String(); path.IsAbs(home) {
@@ -617,6 +628,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	}
 	r := newRunnerBase()
 	r.Env = cfg.Env
+	r.platform = normalizePlatform(cfg.Platform)
 	r.startupHome = cfg.StartupHome
 	r.Dir = cfg.Dir
 	r.callHandler = cfg.CallHandler
@@ -626,6 +638,9 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.statHandler = cfg.StatHandler
 	r.realpathHandler = cfg.RealpathHandler
 	r.procSubstHandler = cfg.ProcSubstHandler
+	r.pipeFactory = cfg.NewPipe
+	r.pid = cfg.PID
+	r.ppid = cfg.PPID
 	r.legacyBashCompat = cfg.LegacyBashCompat
 	r.commandString = cfg.CommandString
 	r.commandStringValue = cfg.CommandStringValue
@@ -639,19 +654,84 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	return r, r.applyConstructorDefaults()
 }
 
-func stdinReader(r io.Reader) StdinReader {
+func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) StdinReader {
 	switch r := r.(type) {
 	case StdinReader:
 		return r
 	case nil:
 		return nil
 	default:
-		pr, pw := NewVirtualPipe()
+		pr, pw, err := newPipe(pipeFactory)
+		if err != nil {
+			pr, pw = NewVirtualPipe()
+		}
 		go func() {
 			io.Copy(pw, r)
 			pw.Close()
 		}()
 		return pr
+	}
+}
+
+func newPipe(pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) (StdinReader, io.WriteCloser, error) {
+	if pipeFactory == nil {
+		pr, pw := NewVirtualPipe()
+		return pr, pw, nil
+	}
+	reader, writer, err := pipeFactory()
+	if err != nil {
+		return nil, nil, err
+	}
+	if reader == nil || writer == nil {
+		return nil, nil, fmt.Errorf("pipe factory returned nil endpoint")
+	}
+	if stdin, ok := reader.(StdinReader); ok {
+		return stdin, writer, nil
+	}
+	return nopDeadlineReader{ReadCloser: reader}, writer, nil
+}
+
+type nopDeadlineReader struct {
+	io.ReadCloser
+}
+
+func (nopDeadlineReader) SetReadDeadline(time.Time) error { return nil }
+
+func normalizePlatform(platform host.Platform) host.Platform {
+	if platform.OS == "" {
+		platform.OS = "linux"
+	}
+	if platform.OSType == "" {
+		platform.OSType = defaultOSTypeForOS(platform.OS)
+	}
+	if platform.OS == "windows" {
+		platform.EnvCaseInsensitive = true
+		if len(platform.PathExtensions) == 0 {
+			platform.PathExtensions = []string{".com", ".exe", ".bat", ".cmd"}
+		}
+		platform.RequireExecutableBit = false
+	} else if !platform.RequireExecutableBit {
+		platform.RequireExecutableBit = true
+	}
+	return platform
+}
+
+func defaultOSTypeForOS(goos string) string {
+	switch goos {
+	case "linux":
+		return "linux-gnu"
+	case "darwin":
+		return "darwin"
+	case "windows":
+		return "msys"
+	case "freebsd":
+		return "freebsd"
+	case "openbsd":
+		return "openbsd"
+	case "netbsd":
+		return "netbsd"
+	default:
+		return goos
 	}
 }
 
@@ -999,7 +1079,10 @@ func (r *Runner) Reset() {
 	r.dirStack = r.dirBootstrap[:0]
 	r.dirStackShared = false
 	// TODO(v4): Use the supplied Env directly if it implements enough methods.
-	r.writeEnv = &overlayEnviron{parent: r.Env}
+	r.writeEnv = &overlayEnviron{
+		parent:          r.Env,
+		caseInsensitive: r.platform.EnvCaseInsensitive,
+	}
 	if !r.writeEnv.Get("TMPDIR").IsSet() {
 		r.setVarString("TMPDIR", r.tempDir)
 	}
@@ -1008,6 +1091,12 @@ func (r *Runner) Reset() {
 	}
 	if !r.writeEnv.Get("SHELL").IsSet() {
 		r.setVarString("SHELL", defaultVirtualShell)
+	}
+	if !r.writeEnv.Get("HOSTNAME").Declared() {
+		r.setVarString("HOSTNAME", r.defaultHostname())
+	}
+	if !r.writeEnv.Get("OSTYPE").Declared() {
+		r.setVarString("OSTYPE", r.defaultOSType())
 	}
 	r.setVar("UID", expand.Variable{
 		Set:      true,
@@ -1170,9 +1259,12 @@ func (r *Runner) subshell(_ bool) *Runner {
 	// sensitive ones like [errgroup.Group], while sharing large shell state via
 	// copy-on-write.
 	r2 := &Runner{
+		Env:                       r.Env,
 		Dir:                       r.Dir,
 		logicalDir:                r.logicalDir,
 		tempDir:                   r.tempDir,
+		platform:                  r.platform,
+		pipeFactory:               r.pipeFactory,
 		Params:                    r.Params,
 		callHandler:               r.callHandler,
 		execHandler:               r.execHandler,
@@ -1220,6 +1312,7 @@ func (r *Runner) subshell(_ bool) *Runner {
 		printfEnv:                 r.printfEnv,
 		hiddenReadonlyArrayDecl:   r.hiddenReadonlyArrayDecl,
 		commandHash:               r.commandHash,
+		startupHome:               r.startupHome,
 		origStart:                 r.origStart,
 		startTime:                 r.startTime,
 		random:                    random,
@@ -1230,6 +1323,7 @@ func (r *Runner) subshell(_ bool) *Runner {
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
+<<<<<<< HEAD
 	if shareMapForSubshell(r.fds, &r.fdsShared) {
 		r2.fdsShared = true
 	}
@@ -1242,7 +1336,7 @@ func (r *Runner) subshell(_ bool) *Runner {
 	if shareMapForSubshell(r.commandHash, &r.commandHashShared) {
 		r2.commandHashShared = true
 	}
-	r2.writeEnv = newOverlayEnviron(r.writeEnv, true)
+	r2.writeEnv = newOverlayEnviron(r.writeEnv, true, r.platform.EnvCaseInsensitive)
 	r2.funcs = r.funcs
 	if shareMapForSubshell(r.funcs, &r.funcsShared) {
 		r2.funcsShared = true
