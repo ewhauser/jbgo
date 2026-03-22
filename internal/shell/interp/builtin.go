@@ -75,8 +75,6 @@ func (r *Runner) posixSpecialBuiltinActive(name string) bool {
 	return r.posixMode() && IsPOSIXSpecialBuiltin(name)
 }
 
-// TODO: atoi is duplicated in the expand package.
-
 // atoi is like [strconv.ParseInt](s, 10, 64), but it ignores errors and trims whitespace.
 func atoi(s string) int64 {
 	s = strings.TrimSpace(s)

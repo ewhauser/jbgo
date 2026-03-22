@@ -158,15 +158,28 @@ parts:
 	return wps
 }
 
-func (s *simplifier) removeParensArithm(x ArithmExpr) ArithmExpr {
+// removeParens strips redundant parentheses from an expression node.
+// unwrap should return the inner expression and true if the node is a
+// parenthesized wrapper, or zero and false otherwise.
+func removeParens[T Node](s *simplifier, x T, unwrap func(T) (T, bool)) T {
 	for {
-		par, _ := x.(*ParenArithm)
-		if par == nil {
+		inner, ok := unwrap(x)
+		if !ok {
 			return x
 		}
 		s.modified = true
-		x = par.X
+		x = inner
 	}
+}
+
+func (s *simplifier) removeParensArithm(x ArithmExpr) ArithmExpr {
+	return removeParens(s, x, func(x ArithmExpr) (ArithmExpr, bool) {
+		par, ok := x.(*ParenArithm)
+		if !ok {
+			return x, false
+		}
+		return par.X, true
+	})
 }
 
 func (s *simplifier) inlineSimpleParams(x ArithmExpr) ArithmExpr {
@@ -226,14 +239,13 @@ func (s *simplifier) unquoteCond(x CondExpr) CondExpr {
 }
 
 func (s *simplifier) removeParensCond(x CondExpr) CondExpr {
-	for {
-		par, _ := x.(*CondParen)
-		if par == nil {
-			return x
+	return removeParens(s, x, func(x CondExpr) (CondExpr, bool) {
+		par, ok := x.(*CondParen)
+		if !ok {
+			return x, false
 		}
-		s.modified = true
-		x = par.X
-	}
+		return par.X, true
+	})
 }
 
 func (s *simplifier) removeNegateCond(x CondExpr) CondExpr {
@@ -289,14 +301,13 @@ func (s *simplifier) unquoteParams(x TestExpr) TestExpr {
 }
 
 func (s *simplifier) removeParensTest(x TestExpr) TestExpr {
-	for {
-		par, _ := x.(*ParenTest)
-		if par == nil {
-			return x
+	return removeParens(s, x, func(x TestExpr) (TestExpr, bool) {
+		par, ok := x.(*ParenTest)
+		if !ok {
+			return x, false
 		}
-		s.modified = true
-		x = par.X
-	}
+		return par.X, true
+	})
 }
 
 func (s *simplifier) removeNegateTest(x TestExpr) TestExpr {
