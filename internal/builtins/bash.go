@@ -114,6 +114,9 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 			}
 			return exitf(inv, 1, "%s: %s: %s", c.name, parsed.ScriptPath, readAllErrorText(err))
 		}
+		if err := ValidateShellScriptFileData(parsed.ScriptPath, scriptData); err != nil {
+			return exitf(inv, 126, "%s", err)
+		}
 		return c.executeInlineScript(ctx, inv, parsed, string(scriptData), inv.Stdin)
 	default:
 		return c.executeStdinScript(ctx, inv, parsed)

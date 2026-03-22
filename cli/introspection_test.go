@@ -77,6 +77,32 @@ func TestRunJSONFileScriptSetsScriptPathIntrospection(t *testing.T) {
 	}
 }
 
+func TestRunFileScriptRejectsNULBytes(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "nul-script.sh")
+	if err := os.WriteFile(scriptPath, []byte("echo one \x00 echo two"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
+	}
+
+	exitCode, stdout, stderr, err := runCLI(t, []string{scriptPath}, "")
+	if err == nil {
+		t.Fatal("run() error = nil, want file execution failure")
+	}
+	if exitCode != 126 {
+		t.Fatalf("exitCode = %d, want 126", exitCode)
+	}
+	if got, want := stdout, ""; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := err.Error(), scriptPath+": "+scriptPath+": cannot execute binary file"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	if got, want := stderr, ""; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestRunCommandStringLeavesBashSourceUnset(t *testing.T) {
 	t.Parallel()
 

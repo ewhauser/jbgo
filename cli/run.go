@@ -287,6 +287,9 @@ func loadBashInvocationScript(parsed *builtins.BashInvocation, stdin io.Reader) 
 			missingPath = parsed.ScriptPath
 			break
 		}
+		if validateErr := builtins.ValidateShellScriptFileData(parsed.ScriptPath, data); validateErr != nil {
+			return "", nil, 126, validateErr
+		}
 		script = string(data)
 	default:
 		var data []byte

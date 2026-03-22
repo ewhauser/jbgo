@@ -82,10 +82,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh::file with NUL byte": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/bugs.test.sh::other builtins fail on writing to full disk": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

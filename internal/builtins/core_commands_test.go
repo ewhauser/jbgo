@@ -1974,6 +1974,27 @@ func TestBashRunsScriptFileAndPassesArgs(t *testing.T) {
 	}
 }
 
+func TestBashRejectsScriptFileWithNULByte(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'echo one \\0 echo two' > /tmp/script.sh\nbash /tmp/script.sh\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, ""; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "/tmp/script.sh: /tmp/script.sh: cannot execute binary file\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestBashMissingScriptFileReturns127(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
