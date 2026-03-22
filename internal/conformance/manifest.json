@@ -265,10 +265,6 @@
             "darwin"
           ]
         },
-        "oils/for-expr.test.sh::Arith lexer mode": {
-          "mode": "xfail",
-          "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case"
-        },
         "oils/func-parsing.test.sh::Function name with $": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"

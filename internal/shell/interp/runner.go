@@ -1454,7 +1454,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				if r.runDebugTrap(ctx, cm.Pos().Line()) {
 					return
 				}
-				r.arithmCmd(y.Init)
+				r.arithmEval(y.Init, true, false, r.sourceForNode(y.Init), y.Init.Pos().Offset(), y.Init.End().Offset())
 				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 					break
 				}
@@ -1463,7 +1463,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				if r.runDebugTrap(ctx, cm.Pos().Line()) {
 					return
 				}
-				if y.Cond != nil && r.arithmCmd(y.Cond) == 0 {
+				if y.Cond != nil && r.arithmEval(y.Cond, true, false, r.sourceForNode(y.Cond), y.Cond.Pos().Offset(), y.Cond.End().Offset()) == 0 {
 					break
 				}
 				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
@@ -1476,7 +1476,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					if r.runDebugTrap(ctx, cm.Pos().Line()) {
 						return
 					}
-					r.arithmCmd(y.Post)
+					r.arithmEval(y.Post, true, false, r.sourceForNode(y.Post), y.Post.Pos().Offset(), y.Post.End().Offset())
 					if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 						break
 					}
