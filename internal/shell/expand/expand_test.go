@@ -20,10 +20,12 @@ type testEnv map[string]Variable
 
 func (e testEnv) Get(name string) Variable { return e[name] }
 
-func (e testEnv) Each(fn func(name string, vr Variable) bool) {
-	for name, vr := range e {
-		if !fn(name, vr) {
-			return
+func (e testEnv) Each() VarSeq {
+	return func(yield func(string, Variable) bool) {
+		for name, vr := range e {
+			if !yield(name, vr) {
+				return
+			}
 		}
 	}
 }
@@ -92,10 +94,12 @@ type layeredTestEnv struct {
 
 func (e layeredTestEnv) Get(name string) Variable { return e.values[name] }
 
-func (e layeredTestEnv) Each(fn func(name string, vr Variable) bool) {
-	for _, entry := range e.entries {
-		if !fn(entry.name, entry.vr) {
-			return
+func (e layeredTestEnv) Each() VarSeq {
+	return func(yield func(string, Variable) bool) {
+		for _, entry := range e.entries {
+			if !yield(entry.name, entry.vr) {
+				return
+			}
 		}
 	}
 }

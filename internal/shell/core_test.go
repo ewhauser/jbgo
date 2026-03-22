@@ -32,10 +32,12 @@ func (e testEnvMapEnv) Get(name string) expand.Variable {
 	return expand.Variable{}
 }
 
-func (e testEnvMapEnv) Each(fn func(name string, vr expand.Variable) bool) {
-	for _, entry := range e {
-		if !fn(entry.name, entry.vr) {
-			return
+func (e testEnvMapEnv) Each() expand.VarSeq {
+	return func(yield func(string, expand.Variable) bool) {
+		for _, entry := range e {
+			if !yield(entry.name, entry.vr) {
+				return
+			}
 		}
 	}
 }

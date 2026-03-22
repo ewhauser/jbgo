@@ -88,23 +88,22 @@ func (b *runnerCompletionBackend) VariableNames(prefix string, exportedOnly bool
 	}
 	names := make([]string, 0, 32)
 	seen := make(map[string]struct{})
-	b.runner.writeEnv.Each(func(name string, vr expand.Variable) bool {
+	for name, vr := range b.runner.writeEnv.Each() {
 		if !vr.Declared() {
-			return true
+			continue
 		}
 		if exportedOnly && !vr.Exported && name != "PWD" {
-			return true
+			continue
 		}
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
-			return true
+			continue
 		}
 		if _, ok := seen[name]; ok {
-			return true
+			continue
 		}
 		seen[name] = struct{}{}
 		names = append(names, name)
-		return true
-	})
+	}
 	slices.Sort(names)
 	return names
 }

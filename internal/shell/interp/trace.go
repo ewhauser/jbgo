@@ -199,10 +199,9 @@ func traceVarsSnapshot(env expand.Environ) map[string]expand.Variable {
 	if env == nil {
 		return vars
 	}
-	env.Each(func(name string, vr expand.Variable) bool {
+	for name, vr := range env.Each() {
 		vars[name] = cloneTraceVar(vr)
-		return true
-	})
+	}
 	return vars
 }
 

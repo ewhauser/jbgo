@@ -5,10 +5,14 @@ package expand
 
 import (
 	"cmp"
+	"iter"
 	"runtime"
 	"slices"
 	"strings"
 )
+
+// VarSeq is an iterator over name/variable pairs in an [Environ].
+type VarSeq = iter.Seq2[string, Variable]
 
 // Environ is the base interface for a shell's environment, allowing it to fetch
 // variables by name and to iterate over all the currently set variables.
@@ -17,11 +21,7 @@ type Environ interface {
 	// set, use Variable.IsSet.
 	Get(name string) Variable
 
-	// TODO(v4): make Each below a func that returns an iterator.
-
-	// Each iterates over all the currently set variables, calling the
-	// supplied function on each variable. Iteration is stopped if the
-	// function returns false.
+	// Each returns an iterator over all the currently set variables.
 	//
 	// The names used in the calls aren't required to be unique or sorted.
 	// If a variable name appears twice, the latest occurrence takes
@@ -29,7 +29,7 @@ type Environ interface {
 	//
 	// Each is required to forward exported variables when executing
 	// programs.
-	Each(func(name string, vr Variable) bool)
+	Each() VarSeq
 }
 
 // TODO(v4): [WriteEnviron.Set] below is overloaded to the point that correctly
@@ -209,7 +209,9 @@ func (f funcEnviron) Get(name string) Variable {
 	return Variable{Set: true, Exported: true, Kind: String, Str: value}
 }
 
-func (f funcEnviron) Each(func(name string, vr Variable) bool) {}
+func (f funcEnviron) Each() VarSeq {
+	return func(yield func(string, Variable) bool) {}
+}
 
 // ListEnviron returns an [Environ] with the supplied variables, in the form
 // "key=value". All variables will be exported. The last value in pairs is used
@@ -300,15 +302,17 @@ func (l listEnviron) Get(name string) Variable {
 	return Variable{}
 }
 
-func (l listEnviron) Each(fn func(name string, vr Variable) bool) {
-	for _, pair := range l.pairs {
-		name, value, ok := strings.Cut(pair, "=")
-		if !ok {
-			// should never happen; see listEnvironWithUpper
-			panic("expand.listEnviron: did not expect malformed name-value pair: " + pair)
-		}
-		if !fn(name, Variable{Set: true, Exported: true, Kind: String, Str: value}) {
-			return
+func (l listEnviron) Each() VarSeq {
+	return func(yield func(string, Variable) bool) {
+		for _, pair := range l.pairs {
+			name, value, ok := strings.Cut(pair, "=")
+			if !ok {
+				// should never happen; see listEnvironWithUpper
+				panic("expand.listEnviron: did not expect malformed name-value pair: " + pair)
+			}
+			if !yield(name, Variable{Set: true, Exported: true, Kind: String, Str: value}) {
+				return
+			}
 		}
 	}
 }

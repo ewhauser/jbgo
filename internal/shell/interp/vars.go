@@ -28,7 +28,7 @@ func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
 	} else {
 		// We could do better here if the parent is also an overlayEnviron;
 		// measure with profiles or benchmarks before we choose to do so.
-		for name, vr := range parent.Each {
+		for name, vr := range parent.Each() {
 			oenv.Set(name, vr)
 		}
 	}
@@ -183,20 +183,26 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 	return nil
 }
 
-func (o *overlayEnviron) Each(f func(name string, vr expand.Variable) bool) {
-	if o.parent != nil {
-		o.parent.Each(f)
-	}
-	for _, vr := range o.values {
-		if !f(vr.Name, vr.Variable) {
-			return
+func (o *overlayEnviron) Each() expand.VarSeq {
+	return func(yield func(string, expand.Variable) bool) {
+		if o.parent != nil {
+			for name, vr := range o.parent.Each() {
+				if !yield(name, vr) {
+					return
+				}
+			}
+		}
+		for _, vr := range o.values {
+			if !yield(vr.Name, vr.Variable) {
+				return
+			}
 		}
 	}
 }
 
 func execEnv(env expand.Environ) []string {
 	list := make([]string, 0, 64)
-	for name, vr := range env.Each {
+	for name, vr := range env.Each() {
 		if !vr.IsSet() {
 			// If a variable is set globally but unset in the
 			// runner, we need to ensure it's not part of the final
@@ -278,19 +284,25 @@ func currentTempScopeBinding(env expand.WriteEnviron, name string) (expand.Write
 	}
 }
 
-func currentScopeVars(env expand.WriteEnviron, f func(name string, vr expand.Variable) bool) {
-	switch env := env.(type) {
-	case *overlayEnviron:
-		for _, vr := range env.values {
-			if !f(vr.Name, vr.Variable) {
+func currentScopeVars(env expand.WriteEnviron) expand.VarSeq {
+	return func(yield func(string, expand.Variable) bool) {
+		switch env := env.(type) {
+		case *overlayEnviron:
+			for _, vr := range env.values {
+				if !yield(vr.Name, vr.Variable) {
+					return
+				}
+			}
+		case *shadowWriteEnviron:
+			if env.shadowSet && !yield(env.shadowName, env.shadow) {
 				return
 			}
+			for name, vr := range currentScopeVars(env.parent) {
+				if !yield(name, vr) {
+					return
+				}
+			}
 		}
-	case *shadowWriteEnviron:
-		if env.shadowSet && !f(env.shadowName, env.shadow) {
-			return
-		}
-		currentScopeVars(env.parent, f)
 	}
 }
 
@@ -593,10 +605,9 @@ func (r *Runner) printSetVar(name string, vr expand.Variable) {
 
 func (r *Runner) printSetVars() {
 	seen := make(map[string]expand.Variable)
-	r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+	for name, vr := range r.writeEnv.Each() {
 		seen[name] = vr
-		return true
-	})
+	}
 	for _, name := range []string{"BASH_LINENO"} {
 		if _, ok := seen[name]; ok {
 			continue
@@ -1016,26 +1027,24 @@ func (e *shadowWriteEnviron) Set(name string, vr expand.Variable) error {
 	return e.parent.Set(name, vr)
 }
 
-func (e *shadowWriteEnviron) Each(fn func(name string, vr expand.Variable) bool) {
-	seenShadow := false
-	stopped := false
-	e.parent.Each(func(name string, vr expand.Variable) bool {
-		if e.shadowSet && name == e.shadowName {
-			seenShadow = true
-			if !fn(name, e.shadow) {
-				stopped = true
-				return false
+func (e *shadowWriteEnviron) Each() expand.VarSeq {
+	return func(yield func(string, expand.Variable) bool) {
+		seenShadow := false
+		for name, vr := range e.parent.Each() {
+			if e.shadowSet && name == e.shadowName {
+				seenShadow = true
+				if !yield(name, e.shadow) {
+					return
+				}
+				continue
 			}
-			return true
+			if !yield(name, vr) {
+				return
+			}
 		}
-		if !fn(name, vr) {
-			stopped = true
-			return false
+		if e.shadowSet && !seenShadow {
+			yield(e.shadowName, e.shadow)
 		}
-		return true
-	})
-	if e.shadowSet && !seenShadow && !stopped {
-		fn(e.shadowName, e.shadow)
 	}
 }
 

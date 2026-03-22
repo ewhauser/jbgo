@@ -2652,7 +2652,7 @@ func (cfg *Config) varInd(name string, vr Variable, idx *syntax.Subscript) (stri
 func (cfg *Config) namesByPrefix(prefix string) []string {
 	var names []string
 	seen := make(map[string]struct{})
-	for name := range cfg.Env.Each {
+	for name := range cfg.Env.Each() {
 		if strings.HasPrefix(name, prefix) {
 			if _, ok := seen[name]; ok {
 				continue

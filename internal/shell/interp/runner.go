@@ -697,8 +697,8 @@ func (e expandEnv) SetVarRef(ref *syntax.VarRef, vr expand.Variable, appendValue
 	return e.r.setVarByRef(e.r.lookupVar(ref.Name.Value), ref, vr, appendValue, attrUpdate{})
 }
 
-func (e expandEnv) Each(fn func(name string, vr expand.Variable) bool) {
-	e.r.writeEnv.Each(fn)
+func (e expandEnv) Each() expand.VarSeq {
+	return e.r.writeEnv.Each()
 }
 
 // tildeExpandEnv keeps named-user tilde expansion inside sandbox-owned data.
@@ -726,8 +726,8 @@ func (e tildeExpandEnv) Get(name string) expand.Variable {
 	return expand.Variable{}
 }
 
-func (e tildeExpandEnv) Each(fn func(name string, vr expand.Variable) bool) {
-	e.r.writeEnv.Each(fn)
+func (e tildeExpandEnv) Each() expand.VarSeq {
+	return e.r.writeEnv.Each()
 }
 
 func (e tildeExpandEnv) passwdHome(user string) (string, bool) {
@@ -1849,16 +1849,14 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		listedVars := func(currentOnly bool) map[string]expand.Variable {
 			seen := make(map[string]expand.Variable)
 			if currentOnly {
-				currentScopeVars(localScopeEnv(r.writeEnv), func(name string, vr expand.Variable) bool {
+				for name, vr := range currentScopeVars(localScopeEnv(r.writeEnv)) {
 					seen[name] = vr
-					return true
-				})
+				}
 				return seen
 			}
-			r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+			for name, vr := range r.writeEnv.Each() {
 				seen[name] = vr
-				return true
-			})
+			}
 			return seen
 		}
 		matchesVarFilter := func(name string, vr expand.Variable) bool {
@@ -2697,16 +2695,15 @@ func declaredVarMatches(vr expand.Variable, valType string, modes []string) bool
 func (r *Runner) printDeclaredVars(valType string, modes []string) {
 	names := make([]string, 0, 16)
 	seen := make(map[string]struct{})
-	r.writeEnv.Each(func(name string, _ expand.Variable) bool {
+	for name := range r.writeEnv.Each() {
 		if _, ok := seen[name]; ok {
-			return true
+			continue
 		}
 		seen[name] = struct{}{}
 		if declaredVarMatches(r.lookupVar(name), valType, modes) {
 			names = append(names, name)
 		}
-		return true
-	})
+	}
 	sort.Strings(names)
 	for _, name := range names {
 		r.printDeclaredVar(name, r.lookupVar(name))

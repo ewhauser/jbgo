@@ -139,14 +139,13 @@ func (r *Runner) ShellEnv() map[string]string {
 		return nil
 	}
 	out := make(map[string]string)
-	r.writeEnv.Each(func(name string, vr expand.Variable) bool {
+	for name, vr := range r.writeEnv.Each() {
 		if !vr.IsSet() {
 			delete(out, name)
-			return true
+			continue
 		}
 		out[name] = vr.String()
-		return true
-	})
+	}
 	if len(out) == 0 {
 		return nil
 	}
