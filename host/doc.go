@@ -19,6 +19,10 @@
 // randomness remain outside this package and are still configured elsewhere in
 // gbash.
 //
+// The package exposes a typed [OS] value plus built-in constants such as
+// [OSLinux], [OSDarwin], and [OSWindows] so adapters can describe logical
+// platform identity without scattering raw GOOS strings throughout caller code.
+//
 // The only public concrete adapter in v1 is [NewSystem], which reflects the
 // current process and OS. The default virtual adapter remains internal and is
 // not part of the public API.

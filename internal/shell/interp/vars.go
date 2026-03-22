@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -929,8 +930,8 @@ func (r *Runner) defaultHostname() string {
 }
 
 func (r *Runner) hostOS() string {
-	if strings.TrimSpace(r.platform.OS) != "" {
-		return strings.TrimSpace(r.platform.OS)
+	if value := strings.TrimSpace(r.platform.OS.String()); value != "" {
+		return value
 	}
 	if r.writeEnv != nil {
 		if vr := r.writeEnv.Get("GBASH_HOST_OS"); vr.IsSet() {
@@ -939,14 +940,14 @@ func (r *Runner) hostOS() string {
 			}
 		}
 	}
-	return "linux"
+	return host.OSLinux.String()
 }
 
 func (r *Runner) requireExecutableBit() bool {
-	if strings.TrimSpace(r.platform.OS) != "" || r.platform.RequireExecutableBit {
+	if r.platform.OS != "" || r.platform.RequireExecutableBit {
 		return r.platform.RequireExecutableBit
 	}
-	return r.hostOS() != "windows"
+	return host.OS(r.hostOS()).PlatformDefaults().RequireExecutableBit
 }
 
 func (r *Runner) defaultOSType() string {
@@ -960,7 +961,7 @@ func (r *Runner) defaultOSType() string {
 			}
 		}
 	}
-	return defaultOSTypeForOS(r.hostOS())
+	return host.OS(r.hostOS()).PlatformDefaults().OSType
 }
 
 func (r *Runner) shellOptsValue() string {

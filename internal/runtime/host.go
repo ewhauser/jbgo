@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"io"
-	"runtime"
 	"strings"
 
 	"github.com/ewhauser/gbash/host"
@@ -48,7 +47,7 @@ func projectPlatformEnv(env map[string]string, raw host.Platform) {
 	}
 	platform := normalizeHostPlatform(raw)
 	setProjectedEnv(env, "GBASH_ARCH", platform.Arch)
-	setProjectedEnv(env, hostOSEnvKey, platform.OS)
+	setProjectedEnv(env, hostOSEnvKey, platform.OS.String())
 	setProjectedEnv(env, hostOSTypeEnvKey, platform.OSType)
 	setProjectedEnv(env, "OSTYPE", platform.OSType)
 	setProjectedEnv(env, "GBASH_UNAME_SYSNAME", platform.Uname.SysName)
@@ -70,22 +69,26 @@ func setProjectedEnv(env map[string]string, key, value string) {
 func normalizeHostPlatform(raw host.Platform) host.Platform {
 	platform := raw
 	if platform.OS == "" {
-		platform.OS = runtime.GOOS
+		platform.OS = host.CurrentOS()
 	}
+	defaults := platform.OS.PlatformDefaults()
 	if platform.Arch == "" {
 		platform.Arch = defaultArchMachine()
 	}
 	if platform.OSType == "" {
-		platform.OSType = defaultOSTypeForOS(platform.OS)
+		platform.OSType = defaults.OSType
 	}
-	if len(platform.PathExtensions) == 0 && platform.OS == "windows" {
-		platform.PathExtensions = []string{".com", ".exe", ".bat", ".cmd"}
+	if defaults.EnvCaseInsensitive {
+		platform.EnvCaseInsensitive = true
 	}
-	if !platform.RequireExecutableBit && platform.OS != "windows" {
+	if len(platform.PathExtensions) == 0 {
+		platform.PathExtensions = append([]string(nil), defaults.PathExtensions...)
+	}
+	if defaults.RequireExecutableBit {
 		platform.RequireExecutableBit = true
 	}
 	if platform.Uname.SysName == "" {
-		platform.Uname.SysName = defaultKernelNameForOS(platform.OS)
+		platform.Uname.SysName = defaults.KernelName
 	}
 	if platform.Uname.NodeName == "" {
 		platform.Uname.NodeName = defaultUnameNodename
@@ -100,82 +103,9 @@ func normalizeHostPlatform(raw host.Platform) host.Platform {
 		platform.Uname.Machine = platform.Arch
 	}
 	if platform.Uname.OperatingSystem == "" {
-		platform.Uname.OperatingSystem = defaultOperatingSystemForOS(platform.OS)
+		platform.Uname.OperatingSystem = defaults.OperatingSystem
 	}
 	return platform
-}
-
-func defaultKernelNameForOS(goos string) string {
-	switch goos {
-	case "android", "linux":
-		return "Linux"
-	case "darwin", "ios":
-		return "Darwin"
-	case "windows":
-		return "Windows_NT"
-	case "plan9":
-		return "Plan 9"
-	default:
-		return defaultOperatingSystemForOS(goos)
-	}
-}
-
-func defaultOperatingSystemForOS(goos string) string {
-	switch goos {
-	case "aix":
-		return "AIX"
-	case "android":
-		return "Android"
-	case "darwin":
-		return "Darwin"
-	case "dragonfly":
-		return "DragonFly"
-	case "freebsd":
-		return "FreeBSD"
-	case "fuchsia":
-		return "Fuchsia"
-	case "illumos":
-		return "illumos"
-	case "ios":
-		return "Darwin"
-	case "js":
-		return "JavaScript"
-	case "linux":
-		return "GNU/Linux"
-	case "netbsd":
-		return "NetBSD"
-	case "openbsd":
-		return "OpenBSD"
-	case "plan9":
-		return "Plan 9"
-	case "redox":
-		return "Redox"
-	case "solaris":
-		return "SunOS"
-	case "windows":
-		return "MS/Windows"
-	default:
-		return goos
-	}
-}
-
-func defaultOSTypeForOS(goos string) string {
-	switch goos {
-	case "linux":
-		return "linux-gnu"
-	case "darwin":
-		return "darwin"
-	case "windows":
-		return "msys"
-	case "freebsd":
-		return "freebsd"
-	case "openbsd":
-		return "openbsd"
-	case "netbsd":
-		return "netbsd"
-	default:
-		return goos
-	}
 }
 
 type virtualHost struct {
@@ -185,29 +115,16 @@ type virtualHost struct {
 func newVirtualHost() host.Adapter {
 	return &virtualHost{
 		platform: normalizeHostPlatform(host.Platform{
-			OS:                   runtime.GOOS,
-			Arch:                 defaultArchMachine(),
-			OSType:               defaultOSTypeForOS(runtime.GOOS),
-			EnvCaseInsensitive:   runtime.GOOS == "windows",
-			PathExtensions:       defaultPathExtensionsForOS(runtime.GOOS),
-			RequireExecutableBit: runtime.GOOS != "windows",
+			OS:   host.CurrentOS(),
+			Arch: defaultArchMachine(),
 			Uname: host.Uname{
-				SysName:         defaultKernelNameForOS(runtime.GOOS),
-				NodeName:        defaultUnameNodename,
-				Release:         defaultUnameRelease,
-				Version:         defaultUnameVersion,
-				Machine:         defaultArchMachine(),
-				OperatingSystem: defaultOperatingSystemForOS(runtime.GOOS),
+				NodeName: defaultUnameNodename,
+				Release:  defaultUnameRelease,
+				Version:  defaultUnameVersion,
+				Machine:  defaultArchMachine(),
 			},
 		}),
 	}
-}
-
-func defaultPathExtensionsForOS(goos string) []string {
-	if goos != "windows" {
-		return nil
-	}
-	return []string{".com", ".exe", ".bat", ".cmd"}
 }
 
 func (v *virtualHost) Defaults(context.Context) (host.Defaults, error) {

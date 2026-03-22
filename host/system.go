@@ -55,20 +55,22 @@ func (s *systemAdapter) NewPipe() (io.ReadCloser, io.WriteCloser, error) {
 
 func systemPlatform() Platform {
 	machine := systemArchMachine()
+	osName := CurrentOS()
+	defaults := osName.PlatformDefaults()
 	return Platform{
-		OS:                   runtime.GOOS,
+		OS:                   osName,
 		Arch:                 machine,
-		OSType:               systemOSType(runtime.GOOS),
-		EnvCaseInsensitive:   runtime.GOOS == "windows",
-		PathExtensions:       defaultPathExtensions(runtime.GOOS),
-		RequireExecutableBit: runtime.GOOS != "windows",
+		OSType:               defaults.OSType,
+		EnvCaseInsensitive:   defaults.EnvCaseInsensitive,
+		PathExtensions:       append([]string(nil), defaults.PathExtensions...),
+		RequireExecutableBit: defaults.RequireExecutableBit,
 		Uname: Uname{
-			SysName:         systemKernelName(runtime.GOOS),
+			SysName:         defaults.KernelName,
 			NodeName:        systemNodeName(),
 			Release:         systemUnameRelease(),
 			Version:         systemUnameVersion(),
 			Machine:         machine,
-			OperatingSystem: systemOperatingSystem(runtime.GOOS),
+			OperatingSystem: defaults.OperatingSystem,
 		},
 	}
 }
@@ -160,86 +162,6 @@ func copyIfPresent(dst map[string]string, key string) {
 	}
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		dst[key] = value
-	}
-}
-
-func defaultPathExtensions(goos string) []string {
-	if goos != "windows" {
-		return nil
-	}
-	return []string{".com", ".exe", ".bat", ".cmd"}
-}
-
-func systemKernelName(goos string) string {
-	switch goos {
-	case "android", "linux":
-		return "Linux"
-	case "darwin", "ios":
-		return "Darwin"
-	case "windows":
-		return "Windows_NT"
-	case "plan9":
-		return "Plan 9"
-	default:
-		return systemOperatingSystem(goos)
-	}
-}
-
-func systemOperatingSystem(goos string) string {
-	switch goos {
-	case "aix":
-		return "AIX"
-	case "android":
-		return "Android"
-	case "darwin":
-		return "Darwin"
-	case "dragonfly":
-		return "DragonFly"
-	case "freebsd":
-		return "FreeBSD"
-	case "fuchsia":
-		return "Fuchsia"
-	case "illumos":
-		return "illumos"
-	case "ios":
-		return "Darwin"
-	case "js":
-		return "JavaScript"
-	case "linux":
-		return "GNU/Linux"
-	case "netbsd":
-		return "NetBSD"
-	case "openbsd":
-		return "OpenBSD"
-	case "plan9":
-		return "Plan 9"
-	case "redox":
-		return "Redox"
-	case "solaris":
-		return "SunOS"
-	case "windows":
-		return "MS/Windows"
-	default:
-		return goos
-	}
-}
-
-func systemOSType(goos string) string {
-	switch goos {
-	case "linux":
-		return "linux-gnu"
-	case "darwin":
-		return "darwin"
-	case "windows":
-		return "msys"
-	case "freebsd":
-		return "freebsd"
-	case "openbsd":
-		return "openbsd"
-	case "netbsd":
-		return "netbsd"
-	default:
-		return goos
 	}
 }
 

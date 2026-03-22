@@ -699,40 +699,22 @@ func (nopDeadlineReader) SetReadDeadline(time.Time) error { return nil }
 
 func normalizePlatform(platform host.Platform) host.Platform {
 	if platform.OS == "" {
-		platform.OS = "linux"
+		platform.OS = host.OSLinux
 	}
+	defaults := platform.OS.PlatformDefaults()
 	if platform.OSType == "" {
-		platform.OSType = defaultOSTypeForOS(platform.OS)
+		platform.OSType = defaults.OSType
 	}
-	if platform.OS == "windows" {
+	if defaults.EnvCaseInsensitive {
 		platform.EnvCaseInsensitive = true
-		if len(platform.PathExtensions) == 0 {
-			platform.PathExtensions = []string{".com", ".exe", ".bat", ".cmd"}
-		}
-		platform.RequireExecutableBit = false
-	} else if !platform.RequireExecutableBit {
+	}
+	if len(platform.PathExtensions) == 0 {
+		platform.PathExtensions = append([]string(nil), defaults.PathExtensions...)
+	}
+	if defaults.RequireExecutableBit {
 		platform.RequireExecutableBit = true
 	}
 	return platform
-}
-
-func defaultOSTypeForOS(goos string) string {
-	switch goos {
-	case "linux":
-		return "linux-gnu"
-	case "darwin":
-		return "darwin"
-	case "windows":
-		return "msys"
-	case "freebsd":
-		return "freebsd"
-	case "openbsd":
-		return "openbsd"
-	case "netbsd":
-		return "netbsd"
-	default:
-		return goos
-	}
 }
 
 func (r *Runner) posixOptByName(name string) *bool {

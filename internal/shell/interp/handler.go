@@ -199,13 +199,13 @@ func winHasExt(file string) bool {
 }
 
 func pathExts(env expand.Environ, platform host.Platform) []string {
-	hostOS := strings.TrimSpace(platform.OS)
-	if hostOS == "" && env != nil {
-		hostOS = strings.TrimSpace(env.Get("GBASH_HOST_OS").String())
+	hostOS := platform.OS
+	if value := strings.TrimSpace(hostOS.String()); value == "" && env != nil {
+		hostOS = host.OS(strings.TrimSpace(env.Get("GBASH_HOST_OS").String()))
 	}
 	defaultExts := append([]string(nil), platform.PathExtensions...)
-	if len(defaultExts) == 0 && hostOS == "windows" {
-		defaultExts = []string{".com", ".exe", ".bat", ".cmd"}
+	if len(defaultExts) == 0 {
+		defaultExts = hostOS.PlatformDefaults().PathExtensions
 	}
 	pathext := env.Get("PATHEXT").String()
 	if pathext == "" {

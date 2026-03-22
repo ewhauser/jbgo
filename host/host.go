@@ -88,9 +88,11 @@ type ExecutionMeta struct {
 // defaults, but explicit values are recommended for custom adapters so the
 // contract remains clear and stable.
 type Platform struct {
-	// OS is the logical operating-system name, typically in runtime.GOOS style
-	// such as "linux", "darwin", or "windows".
-	OS string
+	// OS is the logical operating-system identity exposed by the shell.
+	//
+	// Use the typed [OS] constants such as [OSLinux], [OSDarwin], or
+	// [OSWindows] when constructing platforms directly.
+	OS OS
 
 	// Arch is the shell-visible machine or architecture identifier, such as
 	// "x86_64" or "aarch64".
