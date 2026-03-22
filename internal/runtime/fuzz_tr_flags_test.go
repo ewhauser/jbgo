@@ -21,10 +21,14 @@ func FuzzTRFlagsCommand(f *testing.F) {
 
 		script := []byte(
 			"cat " + shellQuote(inputPath) + " | tr --squeeze-repeats abc >/tmp/tr-squeeze.txt || true\n" +
-				"cat " + shellQuote(inputPath) + " | tr --delete '[:digit:]' >/tmp/tr-delete.txt || true\n",
+				"cat " + shellQuote(inputPath) + " | tr --delete '[:digit:]' >/tmp/tr-delete.txt || true\n" +
+				"cat " + shellQuote(inputPath) + " | tr '[b*2]' x >/tmp/tr-repeat.txt || true\n" +
+				"cat " + shellQuote(inputPath) + " | tr X '\\400' >/tmp/tr-octal.txt 2>/tmp/tr-octal.err || true\n" +
+				"cat " + shellQuote(inputPath) + " | tr '[:lower:]' '[:upper:]' >/tmp/tr-upper.txt || true\n" +
+				"cat " + shellQuote(inputPath) + " | tr '[:bogus:]' x >/tmp/tr-invalid-class.txt 2>/tmp/tr-invalid-class.err || true\n",
 		)
 
 		result, err := runFuzzSessionScript(t, session, script)
-		assertSuccessfulFuzzExecution(t, script, result, err)
+		assertSecureFuzzOutcome(t, script, result, err)
 	})
 }
