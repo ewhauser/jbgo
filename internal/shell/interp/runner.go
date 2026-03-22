@@ -1528,6 +1528,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 			break
 		}
+		if !validFunctionName(cm.Name.Value) {
+			r.errf("`%s': not a valid identifier\n", cm.Name.Value)
+			r.exit.code = 1
+			break
+		}
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
 		if r.runCommandDebugTrap(ctx, cm) {
@@ -3159,6 +3164,13 @@ func declStringifiedArrayAssign(as *syntax.Assign) *syntax.DeclAssign {
 			Value: rendered[i+1:],
 		}}},
 	}}
+}
+
+func validFunctionName(name string) bool {
+	return strings.TrimSpace(name) != "" &&
+		!strings.Contains(name, "$") &&
+		!strings.Contains(name, "<(") &&
+		!strings.Contains(name, ">(")
 }
 
 func (r *Runner) patternMatch(pat, name string) bool {

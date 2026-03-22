@@ -1865,6 +1865,19 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
 	})
 }
 
+func (p *Parser) currentUnexpectedTokenQuote() string {
+	switch p.tok {
+	case _Lit, _LitWord:
+		return bashQuoteString(p.val)
+	case sglQuote, dollSglQuote, dblQuote, dollDblQuote, bckQuote, dollar, dollBrace,
+		dollDblParen, dollParen, dollBrack, cmdIn, assgnParen, cmdOut:
+		if _, raw := p.getWordRaw(); raw != "" {
+			return bashQuoteString(raw)
+		}
+	}
+	return p.tok.bashQuote()
+}
+
 func (p *Parser) stmts(yield func(*Stmt, error) bool, stops ...reservedWord) {
 	gotEnd := true
 loop:
@@ -2454,19 +2467,6 @@ func (p *Parser) finishWord(w *Word) *Word {
 	return w
 }
 
-func (p *Parser) currentUnexpectedTokenQuote() string {
-	switch p.tok {
-	case _Lit, _LitWord:
-		return bashQuoteString(p.val)
-	case sglQuote, dollSglQuote, dblQuote, dollDblQuote, bckQuote, dollar, dollBrace,
-		dollDblParen, dollParen, dollBrack, cmdIn, assgnParen, cmdOut:
-		if _, raw := p.getWordRaw(); raw != "" {
-			return bashQuoteString(raw)
-		}
-	}
-	return p.tok.bashQuote()
-}
-
 func (p *Parser) braceWordPartsAllowed() bool {
 	if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
 		return false
@@ -2479,6 +2479,33 @@ func (p *Parser) braceWordPartsAllowed() bool {
 	default:
 		return true
 	}
+}
+
+func functionNameNeedsRuntimeValidation(w *Word) bool {
+	if w == nil {
+		return false
+	}
+	for _, part := range w.Parts {
+		switch part.(type) {
+		case *ParamExp, *CmdSubst, *ArithmExp, *ProcSubst:
+			return true
+		}
+	}
+	return false
+}
+
+func functionNameSource(w *Word) string {
+	if w == nil {
+		return ""
+	}
+	if lit := w.Lit(); lit != "" {
+		return lit
+	}
+	var sb strings.Builder
+	if err := NewPrinter().Print(&sb, w); err != nil {
+		return ""
+	}
+	return sb.String()
 }
 
 func (p *Parser) ensureNoNested(pos Pos) {
@@ -4711,8 +4738,44 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		if s.Cmd != nil {
 			break
 		}
-		if p.hasValidIdent() {
+		if p.hasValidIdent() && p.r != '$' {
 			p.callExpr(s, nil, true)
+			break
+		}
+		if p.r == '$' || p.r == '(' {
+			// The name may contain expansions; use getWordRaw to capture
+			// the full source text for runtime function-name validation.
+			aliases := append([]*AliasExpansion(nil), p.tokAliasChain...)
+			w, _ := p.getWordRaw()
+			if w == nil {
+				break
+			}
+			if len(w.AliasExpansions) == 0 && len(aliases) > 0 {
+				w.AliasExpansions = aliases
+			}
+			if name := w.Lit(); name != "" && p.tok == leftParen && (!p.lang.in(LangZsh) || p.r == ')') {
+				lit := p.rawLit(w.Pos(), w.End(), name)
+				p.next()
+				p.follow(lit.ValuePos, "foo(", rightParen)
+				if p.lang.in(LangPOSIX) && !ValidName(lit.Value) {
+					p.posErr(lit.Pos(), "invalid func name")
+				}
+				p.funcDecl(s, lit.ValuePos, false, true, lit)
+				break
+			}
+			if p.tok == leftParen && p.lang.in(langBashLike) && functionNameNeedsRuntimeValidation(w) {
+				if p.r == ')' {
+					name := p.rawLit(w.Pos(), w.End(), functionNameSource(w))
+					p.next()
+					p.follow(w.Pos(), "foo(", rightParen)
+					p.funcDecl(s, w.Pos(), false, true, name)
+					break
+				}
+				p.next()
+				p.posErr(p.pos, "syntax error near unexpected token %s", p.currentUnexpectedTokenQuote())
+				break
+			}
+			p.callExpr(s, w, false)
 			break
 		}
 		aliases := append([]*AliasExpansion(nil), p.tokAliasChain...)
@@ -4747,7 +4810,22 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			p.callExpr(s, nil, true)
 			break
 		}
-		w := p.wordAnyNumber()
+		w, _ := p.getWordRaw()
+		if w == nil {
+			break
+		}
+		if p.tok == leftParen && p.lang.in(langBashLike) && functionNameNeedsRuntimeValidation(w) {
+			if p.r == ')' {
+				name := p.rawLit(w.Pos(), w.End(), functionNameSource(w))
+				p.next()
+				p.follow(w.Pos(), "foo(", rightParen)
+				p.funcDecl(s, w.Pos(), false, true, name)
+				break
+			}
+			p.next()
+			p.posErr(p.pos, "syntax error near unexpected token %s", p.currentUnexpectedTokenQuote())
+			break
+		}
 		if p.got(leftParen) {
 			p.posErr(w.Pos(), "invalid func name")
 		}

@@ -1432,7 +1432,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		`foo$bar(){ :; }`,
-		langErr("1:1: invalid func name"),
+		langErr("1:1: invalid func name", LangPOSIX|LangMirBSDKorn|LangZsh),
 	),
 	errCase(
 		"{",

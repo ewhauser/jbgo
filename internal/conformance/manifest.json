@@ -45,14 +45,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh::First word like foo$x() and foo$[1+2] (regression)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::Function names": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/bugs.test.sh::assign readonly -- multiple lines -- set -o posix": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -226,14 +218,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/func-parsing.test.sh::Function name with $": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/func-parsing.test.sh::Function name with command sub": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/loop.test.sh::top-level break/continue/return (without strict_control_flow)": {
           "mode": "xfail",
