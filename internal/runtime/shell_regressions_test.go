@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRedirectRegressionSupportsOverwriteAppendAndInputRedirection(t *testing.T) {
@@ -44,6 +46,54 @@ func TestPipelineRegressionChainsShellAndRegistryCommands(t *testing.T) {
 	}
 	if got, want := result.Stdout, "beta\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPipelineRegressionCatStreamsCharacterDevicesThroughHead(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	result, err := session.Exec(ctx, &ExecutionRequest{
+		Script: "cat /dev/zero | cat | head -c 5 | tr '\\0' 0; echo\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "00000\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestPipelineRegressionCatReportsSIGPIPEForVirtualUrandom(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	result, err := session.Exec(ctx, &ExecutionRequest{
+		Script: "cat /dev/urandom | sleep 0.01\necho ${PIPESTATUS[@]}\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "141 0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
 	}
 }
 

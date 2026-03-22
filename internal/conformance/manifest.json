@@ -40,7 +40,10 @@
         },
         "oils/bugs.test.sh::#2640 Hanging when reading from character devices": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: Darwin bash oracle lacks GNU coreutils timeout for this character-device regression",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/bugs.test.sh::'echo' and printf fail on writing to full disk": {
           "mode": "xfail",
@@ -206,7 +209,10 @@
         },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: Darwin bash oracle lacks /usr/bin/cat inside this harness",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/empty-bodies.test.sh::Empty do/done": {
           "mode": "xfail",
@@ -276,10 +282,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/pipeline.test.sh::SIGPIPE causes pipeline to die (regression for issue #295)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
           "mode": "xfail",
