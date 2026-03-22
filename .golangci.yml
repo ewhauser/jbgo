@@ -27,6 +27,7 @@ linters:
     - unconvert
     - unparam
     - nilaway
+    - regexponce
 
   settings:
     custom:
@@ -35,6 +36,9 @@ linters:
         description: Static analysis tool to detect potential nil panics in Go code.
         settings:
           include-pkgs: github.com/ewhauser/gbash
+      regexponce:
+        type: module
+        description: Linter that checks regexp.Compile and friends are called only once at initialization.
 
     revive:
       rules:
@@ -320,6 +324,9 @@ linters:
       - path: _test\.go$
         linters:
           - nilaway
+      - path: _test\.go$
+        linters:
+          - regexponce
       - path: commands/invocation_capabilities\.go$
         text: "use of `fs\\.raw` forbidden because \"Do not bypass CommandFS policy checks; use inv\\.FS methods instead\\.\""
         linters:

@@ -6,7 +6,20 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
+
+var (
+	findSizeOnce sync.Once
+	findSizeRe   *regexp.Regexp
+)
+
+func getFindSizeRe() *regexp.Regexp {
+	findSizeOnce.Do(func() {
+		findSizeRe = regexp.MustCompile(`^(\d+)([ckMGb])?$`)
+	})
+	return findSizeRe
+}
 
 type findTokenKind int
 
@@ -256,7 +269,7 @@ func parseFindSizeExpr(value string) (*findSizeExpr, error) {
 		sizeValue = value[1:]
 	}
 
-	match := regexp.MustCompile(`^(\d+)([ckMGb])?$`).FindStringSubmatch(sizeValue)
+	match := getFindSizeRe().FindStringSubmatch(sizeValue)
 	if match == nil {
 		return nil, fmt.Errorf("invalid size")
 	}

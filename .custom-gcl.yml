@@ -3,3 +3,6 @@ plugins:
   - module: "go.uber.org/nilaway"
     import: "go.uber.org/nilaway/cmd/gclplugin"
     version: v0.0.0-20260318203545-ad240b12fb4c
+  - module: "github.com/ewhauser/gbash/tools/regexponce-gclplugin"
+    import: "github.com/ewhauser/gbash/tools/regexponce-gclplugin"
+    path: tools/regexponce-gclplugin
