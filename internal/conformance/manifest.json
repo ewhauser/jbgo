@@ -26,10 +26,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-idioms.test.sh::recursive arith: recursion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested localvars": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
