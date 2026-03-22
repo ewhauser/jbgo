@@ -310,7 +310,7 @@
         },
         "oils/smoke.test.sh::failed command": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash ls error message format differs from bash"
         },
         "oils/glob.test.sh::Glob unicode char": {
           "mode": "xfail",
