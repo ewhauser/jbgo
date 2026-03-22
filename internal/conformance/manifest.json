@@ -14,18 +14,6 @@
           "mode": "skip",
           "reason": "intentional: gbash keeps the space-preserving result instead of reproducing bash's historical control-character bug"
         },
-        "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested localvars": {
-          "mode": "xfail",
-          "reason": "conformance: gbash temp scope unset ordering differs from bash for deeply nested local/tempenv stacks"
-        },
-        "oils/ble-unset.test.sh::[bash_unset] local-unset / dynamic-unset for localvar on nested-context": {
-          "mode": "xfail",
-          "reason": "conformance: gbash temp scope unset ordering differs from bash for deeply nested local/tempenv stacks"
-        },
-        "oils/ble-unset.test.sh::[bash_unset] nested context by tempenv-eval": {
-          "mode": "xfail",
-          "reason": "conformance: gbash temp scope local inheritance differs from bash for eval temp bindings"
-        },
         "oils/bugs.test.sh::#2640 Hanging when reading from character devices": {
           "mode": "xfail",
           "reason": "conformance: Darwin bash oracle lacks GNU coreutils timeout for this character-device regression",

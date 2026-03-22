@@ -77,6 +77,13 @@ type overlayEnviron struct {
 	// should be consumed when a local of the same name is declared.
 	tempScopeConsumesLocals bool
 
+	// tempScopeCrossesFuncScope allows current-frame temp binding lookup to
+	// traverse a function-scope boundary to this temp scope. Function-call temp
+	// scopes set this so locals in the function can consume the prefix binding;
+	// eval/source temp scopes keep it false so later nested function calls do
+	// not consume the caller's eval/source temp binding.
+	tempScopeCrossesFuncScope bool
+
 	// tempUnset tracks variable names whose temp bindings were explicitly
 	// unset. Subsequent writes to these variables should pass through to
 	// the parent rather than being recaptured in the temp scope.
@@ -489,6 +496,9 @@ func currentFrameTempBindingWithState(env expand.WriteEnviron, name string, seen
 			}
 			parent, ok := env.parent.(expand.WriteEnviron)
 			if !ok {
+				return nil, expand.Variable{}, false
+			}
+			if overlay, ok := parent.(*overlayEnviron); ok && overlay.tempScope && !overlay.tempScopeCrossesFuncScope {
 				return nil, expand.Variable{}, false
 			}
 			return currentFrameTempBindingWithState(parent, name, true)
