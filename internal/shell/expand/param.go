@@ -921,32 +921,54 @@ func bashQuoteNeedsANSI(str string) bool {
 func bashANSIQuote(str string) string {
 	var sb strings.Builder
 	sb.WriteString("$'")
-	for i := 0; i < len(str); i++ {
-		switch c := str[i]; c {
-		case '\a':
-			sb.WriteString(`\a`)
-		case '\b':
-			sb.WriteString(`\b`)
-		case '\f':
-			sb.WriteString(`\f`)
-		case '\n':
-			sb.WriteString(`\n`)
-		case '\r':
-			sb.WriteString(`\r`)
-		case '\t':
-			sb.WriteString(`\t`)
-		case '\v':
-			sb.WriteString(`\v`)
-		case '\\', '\'':
-			sb.WriteByte('\\')
-			sb.WriteByte(c)
-		default:
-			if c >= 0x20 && c < 0x7f {
-				sb.WriteByte(c)
-				continue
-			}
-			fmt.Fprintf(&sb, "\\%03o", c)
+	for i := 0; i < len(str); {
+		r, size := utf8.DecodeRuneInString(str[i:])
+		if r == utf8.RuneError && size == 1 {
+			// Invalid UTF-8 byte: emit as octal escape.
+			fmt.Fprintf(&sb, "\\%03o", str[i])
+			i++
+			continue
 		}
+		// Single-byte characters handled individually.
+		if size == 1 {
+			switch c := str[i]; c {
+			case '\a':
+				sb.WriteString(`\a`)
+			case '\b':
+				sb.WriteString(`\b`)
+			case '\f':
+				sb.WriteString(`\f`)
+			case '\n':
+				sb.WriteString(`\n`)
+			case '\r':
+				sb.WriteString(`\r`)
+			case '\t':
+				sb.WriteString(`\t`)
+			case '\v':
+				sb.WriteString(`\v`)
+			case '\\', '\'':
+				sb.WriteByte('\\')
+				sb.WriteByte(c)
+			default:
+				if c >= 0x20 && c < 0x7f {
+					sb.WriteByte(c)
+				} else {
+					fmt.Fprintf(&sb, "\\%03o", c)
+				}
+			}
+			i++
+			continue
+		}
+		// Valid multibyte UTF-8 rune: if printable, emit literally;
+		// otherwise octal-escape each byte.
+		if unicode.IsPrint(r) {
+			sb.WriteString(str[i : i+size])
+		} else {
+			for j := i; j < i+size; j++ {
+				fmt.Fprintf(&sb, "\\%03o", str[j])
+			}
+		}
+		i += size
 	}
 	sb.WriteByte('\'')
 	return sb.String()
