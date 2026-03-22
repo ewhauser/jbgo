@@ -411,9 +411,6 @@ func (h *HostFS) resolveMountedLeaf(abs string) (string, error) {
 		}
 		lexical := h.lexicalPath(rel)
 		parent := filepath.Dir(lexical)
-		if filepath.Clean(parent) == h.root {
-			return filepath.Join(h.canonicalRoot, filepath.Base(lexical)), nil
-		}
 		canonicalParent, err := filepath.EvalSymlinks(parent)
 		if err != nil {
 			return "", err

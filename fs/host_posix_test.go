@@ -300,6 +300,48 @@ func TestHostFSReadDirOnSymlinkedDirectoriesPreservesContainment(t *testing.T) {
 	}
 }
 
+func TestHostFSReadDirRejectsDirectChildAfterRootPathMutation(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	outsideRoot := t.TempDir()
+
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll(root) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(outsideRoot, "leak"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(leak) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideRoot, "leak", "hidden.txt"), []byte("hidden\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(hidden) error = %v", err)
+	}
+
+	fsys, err := NewHost(HostOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewHost() error = %v", err)
+	}
+
+	movedRoot := filepath.Join(parent, "project-moved")
+	if err := os.Rename(root, movedRoot); err != nil {
+		t.Fatalf("Rename(root) error = %v", err)
+	}
+	if err := os.Symlink(outsideRoot, root); err != nil {
+		t.Fatalf("Symlink(root) error = %v", err)
+	}
+
+	_, err = fsys.ReadDir(context.Background(), defaultHostVirtualRoot+"/leak")
+	if err == nil {
+		t.Fatal("ReadDir(leak) error = nil, want permission")
+	}
+	if !errors.Is(err, stdfs.ErrPermission) {
+		t.Fatalf("ReadDir(leak) error = %v, want permission", err)
+	}
+	if strings.Contains(err.Error(), outsideRoot) {
+		t.Fatalf("ReadDir(leak) error leaked outside root: %v", err)
+	}
+}
+
 func assertDirEntries(t *testing.T, fsys *HostFS, dir string, want ...string) {
 	t.Helper()
 
