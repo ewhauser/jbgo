@@ -185,3 +185,40 @@ echo after
 		}
 	})
 }
+
+func TestReadonlyAssignmentAbortsShellExecution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("non-posix-simple-list", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpScript(t, `
+readonly x=1; x=2; echo hi
+`)
+		requireInterpExitStatus(t, err, 1)
+		if got, want := stdout, ""; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		if got, want := stderr, "x: readonly variable\n"; got != want {
+			t.Fatalf("stderr = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("posix-multiline", func(t *testing.T) {
+		t.Parallel()
+
+		stdout, stderr, err := runInterpScript(t, `
+set -o posix
+readonly x=1
+x=2
+echo hi
+`)
+		requireInterpExitStatus(t, err, 127)
+		if got, want := stdout, ""; got != want {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+		if got, want := stderr, "x: readonly variable\n"; got != want {
+			t.Fatalf("stderr = %q, want %q", got, want)
+		}
+	})
+}
