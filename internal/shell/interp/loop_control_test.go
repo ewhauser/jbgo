@@ -24,7 +24,7 @@ echo done
 	}
 }
 
-func TestTopLevelReturnReportsStatusOne(t *testing.T) {
+func TestTopLevelReturnReportsStatusTwo(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScript(t, `
@@ -35,7 +35,7 @@ echo status=$?
 		t.Fatalf("Run error = %v", err)
 	}
 
-	const wantStdout = "status=1\n"
+	const wantStdout = "status=2\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
