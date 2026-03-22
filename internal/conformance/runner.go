@@ -657,6 +657,7 @@ func reorderBadFDTriplet(first, second, third string) (missing, badFD string, ok
 	lines := []string{first, second, third}
 	badFDIndex := -1
 	missingCounts := make(map[string]int, 2)
+	missingLines := make(map[string]string, 2)
 	for i, line := range lines {
 		switch {
 		case strings.HasSuffix(line, ": Bad file descriptor"):
@@ -665,7 +666,11 @@ func reorderBadFDTriplet(first, second, third string) (missing, badFD string, ok
 			}
 			badFDIndex = i
 		case strings.Contains(line, ": No such file or directory"):
-			missingCounts[line]++
+			key := canonicalBadFDMissingLine(line)
+			missingCounts[key]++
+			if best := missingLines[key]; len(line) > len(best) {
+				missingLines[key] = line
+			}
 		default:
 			return "", "", false
 		}
@@ -673,12 +678,20 @@ func reorderBadFDTriplet(first, second, third string) (missing, badFD string, ok
 	if badFDIndex == -1 || len(missingCounts) != 1 {
 		return "", "", false
 	}
-	for line, count := range missingCounts {
+	for key, count := range missingCounts {
 		if count == 2 {
-			return line, lines[badFDIndex], true
+			return missingLines[key], lines[badFDIndex], true
 		}
 	}
 	return "", "", false
+}
+
+func canonicalBadFDMissingLine(line string) string {
+	_, rest, ok := strings.Cut(line, ": ")
+	if ok && strings.Contains(rest, ": No such file or directory") {
+		return rest
+	}
+	return line
 }
 
 func normalizeNestedShellPrefixes(value string) string {

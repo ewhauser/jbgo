@@ -974,6 +974,86 @@ func TestGlobRespectsLocaleCollation(t *testing.T) {
 	}
 }
 
+func TestGlobReusesReadDirForLiteralPrefix(t *testing.T) {
+	t.Parallel()
+
+	spy := newTrackedGlobReadDirSpy(map[string]globReadDirNode{
+		"/foo": dirNode(fileEntry("alpha"), fileEntry("beta")),
+	})
+	got, err := (&Config{ReadDir: spy.ReadDir}).glob("/", "foo/*")
+	if err != nil {
+		t.Fatalf("glob() error = %v", err)
+	}
+	want := []string{"foo/alpha", "foo/beta"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("glob() = %#v, want %#v", got, want)
+	}
+	if calls := spy.callsFor("/foo"); calls != 1 {
+		t.Fatalf("ReadDir(/foo) calls = %d, want 1", calls)
+	}
+}
+
+func TestGlobReusesReadDirForSymlinkChild(t *testing.T) {
+	t.Parallel()
+
+	spy := newTrackedGlobReadDirSpy(map[string]globReadDirNode{
+		"/links":     dirNode(symlinkEntry("app")),
+		"/links/app": dirNode(dirEntry("cmd")),
+	})
+	got, err := (&Config{ReadDir: spy.ReadDir}).glob("/", "links/*/*")
+	if err != nil {
+		t.Fatalf("glob() error = %v", err)
+	}
+	want := []string{"links/app/cmd"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("glob() = %#v, want %#v", got, want)
+	}
+	if calls := spy.callsFor("/links/app"); calls != 1 {
+		t.Fatalf("ReadDir(/links/app) calls = %d, want 1", calls)
+	}
+}
+
+func TestGlobStarPreservesByteOrder(t *testing.T) {
+	t.Parallel()
+
+	spy := newTrackedGlobReadDirSpy(map[string]globReadDirNode{
+		"/tree":   dirNode(dirEntry("a"), fileEntry("a.txt"), fileEntry("a0.txt")),
+		"/tree/a": dirNode(fileEntry("b.txt")),
+	})
+	got, err := (&Config{
+		ReadDir:  spy.ReadDir,
+		GlobStar: true,
+	}).glob("/", "tree/**/*.txt")
+	if err != nil {
+		t.Fatalf("glob() error = %v", err)
+	}
+	want := []string{"tree/a.txt", "tree/a/b.txt", "tree/a0.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("glob() = %#v, want %#v", got, want)
+	}
+}
+
+func TestGlobStarIgnoresUnreadableSubdirs(t *testing.T) {
+	t.Parallel()
+
+	spy := newTrackedGlobReadDirSpy(map[string]globReadDirNode{
+		"/tree":         dirNode(dirEntry("blocked"), dirEntry("good")),
+		"/tree/blocked": {err: fs.ErrPermission},
+		"/tree/good":    dirNode(fileEntry("keep.txt")),
+	})
+	got, err := (&Config{
+		ReadDir:  spy.ReadDir,
+		GlobStar: true,
+	}).glob("/", "tree/**")
+	if err != nil {
+		t.Fatalf("glob() error = %v", err)
+	}
+	want := []string{"tree/", "tree/blocked", "tree/good", "tree/good/keep.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("glob() = %#v, want %#v", got, want)
+	}
+}
+
 func TestFieldsGlobEscapedBracketPattern(t *testing.T) {
 	t.Parallel()
 

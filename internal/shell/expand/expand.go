@@ -5,6 +5,7 @@ package expand
 
 import (
 	"cmp"
+	"container/heap"
 	"errors"
 	"fmt"
 	"io"
@@ -103,6 +104,9 @@ type Config struct {
 
 	globIgnore         []string
 	globIgnoreMatchers []func(string) bool
+	globCollatorLocale string
+	globCollatorValue  *collate.Collator
+	globCollatorCached bool
 
 	bufferAlloc strings.Builder
 	fieldAlloc  [4]fieldPart
@@ -2344,126 +2348,90 @@ func EstimateGlobOperations(pat string) int64 {
 	return ops
 }
 
+type globPartKind uint8
+
+const (
+	globPartSpecial globPartKind = iota
+	globPartLiteral
+	globPartMeta
+	globPartGlobStar
+)
+
+type globPart struct {
+	text    string
+	kind    globPartKind
+	matcher func(string) bool
+}
+
+type globDirMatch struct {
+	name       string
+	path       string
+	canDescend bool
+}
+
+type globReadDirResult struct {
+	entries []fs.DirEntry
+	err     error
+}
+
+type globState struct {
+	cfg             *Config
+	base            string
+	parts           []globPart
+	hasGlobStar     bool
+	globStarMatcher func(string) bool
+	readDirCache    map[string]globReadDirResult
+}
+
+type globMergeItem struct {
+	matches []string
+	index   int
+}
+
+type globMergeHeap []*globMergeItem
+
+func (h globMergeHeap) Len() int { return len(h) }
+
+func (h globMergeHeap) Less(i, j int) bool {
+	return cmp.Compare(h[i].matches[h[i].index], h[j].matches[h[j].index]) < 0
+}
+
+func (h globMergeHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+
+func (h *globMergeHeap) Push(x any) {
+	*h = append(*h, x.(*globMergeItem))
+}
+
+func (h *globMergeHeap) Pop() any {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[:n-1]
+	return item
+}
+
 func (cfg *Config) glob(base, pat string) ([]string, error) {
 	parts := pathSplit(pat)
-	matches := []string{""}
+	start := ""
 	if path.IsAbs(pat) {
-		matches[0] = "/"
+		start = "/"
 		parts = parts[1:]
 	}
 	// TODO: as an optimization, we could do chunks of the path all at once,
 	// like doing a single stat for "/foo/bar" in "/foo/bar/*".
-
-	// TODO: Another optimization would be to reduce the number of ReadDir calls.
-	// For example, /foo/* can end up doing one duplicate call:
-	//
-	//    ReadDir("/foo") to ensure that "/foo/" exists and only matches a directory
-	//    ReadDir("/foo") glob "*"
-
-	metaMode := pattern.Mode(0)
-	if cfg.ExtGlob {
-		metaMode |= pattern.ExtendedOperators
+	state, err := cfg.newGlobState(base, parts)
+	if err != nil {
+		return nil, err
 	}
-	for i, part := range parts {
-		// Keep around for debugging.
-		// log.Printf("matches %q part %d %q", matches, i, part)
-
-		wantDir := i < len(parts)-1
-		switch {
-		case part == "", part == ".", part == "..":
-			for i, dir := range matches {
-				matches[i] = pathJoin2(dir, part)
-			}
-			continue
-		case !pattern.HasMeta(part, metaMode):
-			var newMatches []string
-			for _, dir := range matches {
-				match := dir
-				if !path.IsAbs(match) {
-					match = path.Join(base, match)
-				}
-				match = pathJoin2(match, part)
-				// We can't use [Config.ReadDir] on the parent and match the directory
-				// entry by name, because short paths on Windows break that.
-				// Our only option is to [Config.ReadDir] on the directory entry itself,
-				// which can be wasteful if we only want to see if it exists,
-				// but at least it's correct in all scenarios.
-				if _, err := cfg.ReadDir(match); err != nil {
-					if isWindowsErrPathNotFound(err) {
-						// Unfortunately, [os.File.Readdir] on a regular file on
-						// Windows returns an error that satisfies [fs.ErrNotExist].
-						// Luckily, it returns a special "path not found" rather
-						// than the normal "file not found" for missing files,
-						// so we can use that knowledge to work around the bug.
-						// See https://github.com/golang/go/issues/46734.
-						// TODO: remove when the Go issue above is resolved.
-					} else if errors.Is(err, fs.ErrNotExist) {
-						continue // simply doesn't exist
-					}
-					if wantDir {
-						continue // exists but not a directory
-					}
-				}
-				newMatches = append(newMatches, pathJoin2(dir, part))
-			}
-			matches = newMatches
-			continue
-		case part == "**" && cfg.GlobStar:
-			// Find all recursive matches for "**".
-			// Note that we need the results to be in depth-first order,
-			// and to avoid recursion, we use a slice as a stack.
-			// Since we pop from the back, we populate the stack backwards.
-			stack := make([]string, 0, len(matches))
-			for _, match := range slices.Backward(matches) {
-				// "a/**" should match "a/ a/b a/b/cfg ...";
-				// note how the zero-match case there has a trailing separator.
-				stack = append(stack, pathJoin2(match, ""))
-			}
-			matches = matches[:0]
-			var newMatches []string // to reuse its capacity
-			for len(stack) > 0 {
-				dir := stack[len(stack)-1]
-				stack = stack[:len(stack)-1]
-				matches = append(matches, dir)
-
-				// If dir is not a directory, we keep the stack as-is and continue.
-				newMatches = newMatches[:0]
-				rx := rxGlobStar.MatchString
-				if cfg.globLeadingDot() {
-					rx = rxGlobStarDotGlob.MatchString
-				}
-				newMatches, _ = cfg.globDir(base, dir, rx, wantDir, newMatches)
-				for _, match := range slices.Backward(newMatches) {
-					stack = append(stack, match)
-				}
-			}
-			continue
-		}
-		mode := pattern.Filenames | pattern.EntireString | pattern.NoGlobStar
-		if cfg.NoCaseGlob {
-			mode |= pattern.NoGlobCase
-		}
-		if cfg.globLeadingDot() {
-			mode |= pattern.GlobLeadingDot
-		}
-		if cfg.ExtGlob {
-			mode |= pattern.ExtendedOperators
-		}
-		matcher, err := pattern.ExtendedPatternMatcher(part, mode)
-		if err != nil {
-			return nil, err
-		}
-		var newMatches []string
-		for _, dir := range matches {
-			newMatches, err = cfg.globDir(base, dir, matcher, wantDir, newMatches)
-			if err != nil {
-				return nil, err
-			}
-		}
-		matches = newMatches
+	var matches []string
+	if state.hasGlobStar {
+		matches, err = state.walk(start, 0, nil)
+	} else {
+		matches, err = state.walkIterative(start)
 	}
-	// Note that the results need to be sorted.
-	// TODO: above we do a BFS; if we did a DFS, the matches would already be sorted.
+	if err != nil {
+		return nil, err
+	}
 	cfg.sortGlobMatches(matches)
 	matches = slices.Compact(matches)
 	// Remove any empty matches left behind from "**".
@@ -2479,7 +2447,6 @@ func (cfg *Config) sortGlobMatches(matches []string) {
 	}
 	collator := cfg.globCollator()
 	if collator == nil {
-		slices.Sort(matches)
 		return
 	}
 	sort.SliceStable(matches, func(i, j int) bool {
@@ -2488,7 +2455,16 @@ func (cfg *Config) sortGlobMatches(matches []string) {
 }
 
 func (cfg *Config) globCollator() *collate.Collator {
+	if cfg == nil {
+		return nil
+	}
 	locale := cfg.globCollationLocale()
+	if cfg.globCollatorCached && cfg.globCollatorLocale == locale {
+		return cfg.globCollatorValue
+	}
+	cfg.globCollatorLocale = locale
+	cfg.globCollatorValue = nil
+	cfg.globCollatorCached = true
 	if locale == "" || usesByteCollation(locale) {
 		return nil
 	}
@@ -2496,7 +2472,8 @@ func (cfg *Config) globCollator() *collate.Collator {
 	if err != nil {
 		return nil
 	}
-	return collate.New(tag)
+	cfg.globCollatorValue = collate.New(tag)
+	return cfg.globCollatorValue
 }
 
 func (cfg *Config) globCollationLocale() string {
@@ -2531,43 +2508,315 @@ func normalizeLocaleTag(locale string) string {
 	return strings.ReplaceAll(locale, "_", "-")
 }
 
-func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir bool, matches []string) ([]string, error) {
-	fullDir := dir
-	if !path.IsAbs(dir) {
-		fullDir = path.Join(base, dir)
+func (cfg *Config) newGlobState(base string, parts []string) (*globState, error) {
+	compiled, err := cfg.compileGlobParts(parts)
+	if err != nil {
+		return nil, err
 	}
-	infos, err := cfg.ReadDir(fullDir)
+	globStarMatcher := rxGlobStar.MatchString
+	if cfg.globLeadingDot() {
+		globStarMatcher = rxGlobStarDotGlob.MatchString
+	}
+	hasGlobStar := slices.ContainsFunc(compiled, func(part globPart) bool {
+		return part.kind == globPartGlobStar
+	})
+	return &globState{
+		cfg:             cfg,
+		base:            base,
+		parts:           compiled,
+		hasGlobStar:     hasGlobStar,
+		globStarMatcher: globStarMatcher,
+		readDirCache:    make(map[string]globReadDirResult, len(parts)+1),
+	}, nil
+}
+
+func (cfg *Config) compileGlobParts(parts []string) ([]globPart, error) {
+	metaMode := pattern.Mode(0)
+	if cfg.ExtGlob {
+		metaMode |= pattern.ExtendedOperators
+	}
+	matchMode := pattern.Filenames | pattern.EntireString | pattern.NoGlobStar
+	if cfg.NoCaseGlob {
+		matchMode |= pattern.NoGlobCase
+	}
+	if cfg.globLeadingDot() {
+		matchMode |= pattern.GlobLeadingDot
+	}
+	if cfg.ExtGlob {
+		matchMode |= pattern.ExtendedOperators
+	}
+	compiled := make([]globPart, 0, len(parts))
+	for _, part := range parts {
+		switch {
+		case part == "", part == ".", part == "..":
+			compiled = append(compiled, globPart{text: part, kind: globPartSpecial})
+		case part == "**" && cfg.GlobStar:
+			compiled = append(compiled, globPart{text: part, kind: globPartGlobStar})
+		case !pattern.HasMeta(part, metaMode):
+			compiled = append(compiled, globPart{text: part, kind: globPartLiteral})
+		default:
+			matcher, err := pattern.ExtendedPatternMatcher(part, matchMode)
+			if err != nil {
+				return nil, err
+			}
+			compiled = append(compiled, globPart{text: part, kind: globPartMeta, matcher: matcher})
+		}
+	}
+	return compiled, nil
+}
+
+func (state *globState) walk(dir string, partIndex int, matches []string) ([]string, error) {
+	if partIndex == len(state.parts) {
+		return append(matches, dir), nil
+	}
+	part := state.parts[partIndex]
+	wantDir := partIndex < len(state.parts)-1
+	switch part.kind {
+	case globPartSpecial:
+		return state.walk(pathJoin2(dir, part.text), partIndex+1, matches)
+	case globPartLiteral:
+		if !state.literalPathMatches(dir, part.text, wantDir) {
+			return matches, nil
+		}
+		return state.walk(pathJoin2(dir, part.text), partIndex+1, matches)
+	case globPartMeta:
+		dirMatches, err := state.globDir(dir, part.matcher, wantDir, false, nil)
+		if err != nil {
+			return matches, err
+		}
+		for _, match := range dirMatches {
+			matches, err = state.walk(match.path, partIndex+1, matches)
+			if err != nil {
+				return matches, err
+			}
+		}
+		return matches, nil
+	case globPartGlobStar:
+		if !wantDir {
+			return state.walkGlobStarFinal(dir, true, matches)
+		}
+		zeroMatches, err := state.walk(pathJoin2(dir, ""), partIndex+1, nil)
+		if err != nil {
+			return matches, err
+		}
+		var childMatches []string
+		if childDirs, err := state.globDir(dir, state.globStarMatcher, true, false, nil); err == nil {
+			for _, child := range childDirs {
+				if child.name == "." || child.name == ".." {
+					continue
+				}
+				childMatches, err = state.walk(child.path, partIndex, childMatches)
+				if err != nil {
+					return matches, err
+				}
+			}
+		}
+		return mergeGlobMatches(matches, zeroMatches, childMatches), nil
+	default:
+		return matches, nil
+	}
+}
+
+func (state *globState) walkIterative(start string) ([]string, error) {
+	matches := []string{start}
+	var (
+		newMatches []string
+		dirMatches []globDirMatch
+	)
+	for partIndex, part := range state.parts {
+		wantDir := partIndex < len(state.parts)-1
+		switch part.kind {
+		case globPartSpecial:
+			for i, dir := range matches {
+				matches[i] = pathJoin2(dir, part.text)
+			}
+			continue
+		case globPartLiteral:
+			newMatches = newMatches[:0]
+			for _, dir := range matches {
+				if state.literalPathMatches(dir, part.text, wantDir) {
+					newMatches = append(newMatches, pathJoin2(dir, part.text))
+				}
+			}
+			matches, newMatches = newMatches, matches[:0]
+		case globPartMeta:
+			newMatches = newMatches[:0]
+			for _, dir := range matches {
+				dirMatches = dirMatches[:0]
+				matched, err := state.globDir(dir, part.matcher, wantDir, false, dirMatches)
+				if err != nil {
+					return nil, err
+				}
+				for _, match := range matched {
+					newMatches = append(newMatches, match.path)
+				}
+			}
+			matches, newMatches = newMatches, matches[:0]
+		default:
+			return state.walk(start, 0, nil)
+		}
+	}
+	return matches, nil
+}
+
+func (state *globState) walkGlobStarFinal(dir string, includeZeroMatch bool, matches []string) ([]string, error) {
+	if includeZeroMatch {
+		matches = append(matches, pathJoin2(dir, ""))
+	} else {
+		matches = append(matches, dir)
+	}
+	if dirMatches, err := state.globDir(dir, state.globStarMatcher, false, true, nil); err == nil {
+		streams := make([][]string, 0, len(dirMatches))
+		for _, match := range dirMatches {
+			if match.canDescend && match.name != "." && match.name != ".." {
+				stream, err := state.walkGlobStarFinal(match.path, false, nil)
+				if err != nil {
+					return matches, err
+				}
+				streams = append(streams, stream)
+				continue
+			}
+			streams = append(streams, []string{match.path})
+		}
+		return mergeManyGlobMatches(matches, streams), nil
+	}
+	return matches, nil
+}
+
+func (state *globState) literalPathMatches(dir, part string, wantDir bool) bool {
+	fullPath := state.fullPath(pathJoin2(dir, part))
+	// We can't use [Config.ReadDir] on the parent and match the directory
+	// entry by name, because short paths on Windows break that.
+	// Our only option is to [Config.ReadDir] on the directory entry itself,
+	// which can be wasteful if we only want to see if it exists,
+	// but at least it's correct in all scenarios.
+	_, err := state.readDir(fullPath)
+	if err == nil {
+		return true
+	}
+	if isWindowsErrPathNotFound(err) {
+		return !wantDir
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	return !wantDir
+}
+
+func (state *globState) globDir(dir string, matcher func(string) bool, wantDir bool, needDescend bool, matches []globDirMatch) ([]globDirMatch, error) {
+	infos, err := state.readDir(state.fullPath(dir))
 	if err != nil {
 		// We still want to return matches, for the sake of reusing slices.
 		return matches, err
 	}
-	for _, info := range infos {
-		name := info.Name()
-		if !wantDir {
-			// No filtering.
-		} else if mode := info.Type(); mode&os.ModeSymlink != 0 {
-			// We need to know if the symlink points to a directory.
-			// This requires an extra syscall, as [Config.ReadDir] on the parent directory
-			// does not follow symlinks for each of the directory entries.
-			// ReadDir is somewhat wasteful here, as we only want its error result,
-			// but we could try to reuse its result as per the TODO in [Config.glob].
-			if _, err := cfg.ReadDir(path.Join(fullDir, info.Name())); err != nil {
-				continue
-			}
-		} else if !mode.IsDir() {
-			// Not a symlink nor a directory.
-			continue
-		}
-		if matcher(name) {
-			matches = append(matches, pathJoin2(dir, name))
-		}
-	}
-	if cfg.includeDotDotCandidates() {
+	if state.cfg.includeDotDotCandidates() {
 		for _, name := range []string{".", ".."} {
 			if matcher(name) {
-				matches = append(matches, pathJoin2(dir, name))
+				matches = append(matches, globDirMatch{name: name, path: pathJoin2(dir, name), canDescend: true})
 			}
 		}
+	}
+	for _, info := range infos {
+		name := info.Name()
+		if !matcher(name) {
+			continue
+		}
+		match := globDirMatch{name: name, path: pathJoin2(dir, name)}
+		mode := info.Type()
+		switch {
+		case mode&os.ModeSymlink != 0:
+			// ReadDir on the child path both answers the wantDir check and seeds
+			// the per-glob cache for a later descent into the same symlink target.
+			if _, err := state.readDir(state.fullPath(match.path)); err != nil {
+				if wantDir {
+					continue
+				}
+			} else {
+				match.canDescend = true
+			}
+		case mode.IsDir():
+			match.canDescend = true
+		case wantDir:
+			continue
+		}
+		if needDescend && wantDir {
+			match.canDescend = true
+		}
+		matches = append(matches, match)
+	}
+	return matches, nil
+}
+
+func (state *globState) fullPath(name string) string {
+	if path.IsAbs(name) {
+		return name
+	}
+	return path.Join(state.base, name)
+}
+
+func (state *globState) readDir(name string) ([]fs.DirEntry, error) {
+	if cached, ok := state.readDirCache[name]; ok {
+		return cached.entries, cached.err
+	}
+	entries, err := state.cfg.ReadDir(name)
+	state.readDirCache[name] = globReadDirResult{entries: entries, err: err}
+	return entries, err
+}
+
+func mergeGlobMatches(dst, left, right []string) []string {
+	i, j := 0, 0
+	for i < len(left) && j < len(right) {
+		if cmp.Compare(left[i], right[j]) <= 0 {
+			dst = append(dst, left[i])
+			i++
+			continue
+		}
+		dst = append(dst, right[j])
+		j++
+	}
+	for ; i < len(left); i++ {
+		dst = append(dst, left[i])
+	}
+	for ; j < len(right); j++ {
+		dst = append(dst, right[j])
+	}
+	return dst
+}
+
+func mergeManyGlobMatches(dst []string, streams [][]string) []string {
+	queue := make(globMergeHeap, 0, len(streams))
+	for _, matches := range streams {
+		if len(matches) == 0 {
+			continue
+		}
+		queue = append(queue, &globMergeItem{matches: matches})
+	}
+	if len(queue) == 0 {
+		return dst
+	}
+	heap.Init(&queue)
+	for len(queue) > 0 {
+		item := heap.Pop(&queue).(*globMergeItem)
+		dst = append(dst, item.matches[item.index])
+		item.index++
+		if item.index < len(item.matches) {
+			heap.Push(&queue, item)
+		}
+	}
+	return dst
+}
+
+func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir bool, matches []string) ([]string, error) {
+	state, err := cfg.newGlobState(base, nil)
+	if err != nil {
+		return matches, err
+	}
+	dirMatches, err := state.globDir(dir, matcher, wantDir, false, nil)
+	if err != nil {
+		return matches, err
+	}
+	for _, match := range dirMatches {
+		matches = append(matches, match.path)
 	}
 	return matches, nil
 }
