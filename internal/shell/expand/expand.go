@@ -107,6 +107,10 @@ type Config struct {
 	globCollatorLocale string
 	globCollatorValue  *collate.Collator
 	globCollatorCached bool
+	globPartsCacheKey  globPartsCacheKey
+	globPartsCache     []globPart
+	globPartsHaveStar  bool
+	globPartsCached    bool
 
 	bufferAlloc strings.Builder
 	fieldAlloc  [4]fieldPart
@@ -2448,6 +2452,14 @@ type globReadDirResult struct {
 	err     error
 }
 
+type globPartsCacheKey struct {
+	pattern    string
+	extGlob    bool
+	noCaseGlob bool
+	leadingDot bool
+	globStar   bool
+}
+
 type globState struct {
 	cfg             *Config
 	base            string
@@ -2462,7 +2474,7 @@ type globMergeItem struct {
 	index   int
 }
 
-type globMergeHeap []*globMergeItem
+type globMergeHeap []globMergeItem
 
 func (h globMergeHeap) Len() int { return len(h) }
 
@@ -2473,7 +2485,7 @@ func (h globMergeHeap) Less(i, j int) bool {
 func (h globMergeHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
 func (h *globMergeHeap) Push(x any) {
-	*h = append(*h, x.(*globMergeItem))
+	*h = append(*h, x.(globMergeItem))
 }
 
 func (h *globMergeHeap) Pop() any {
@@ -2493,7 +2505,7 @@ func (cfg *Config) glob(base, pat string) ([]string, error) {
 	}
 	// TODO: as an optimization, we could do chunks of the path all at once,
 	// like doing a single stat for "/foo/bar" in "/foo/bar/*".
-	state, err := cfg.newGlobState(base, parts)
+	state, err := cfg.newGlobState(base, pat, parts)
 	if err != nil {
 		return nil, err
 	}
@@ -2582,8 +2594,8 @@ func normalizeLocaleTag(locale string) string {
 	return strings.ReplaceAll(locale, "_", "-")
 }
 
-func (cfg *Config) newGlobState(base string, parts []string) (*globState, error) {
-	compiled, err := cfg.compileGlobParts(parts)
+func (cfg *Config) newGlobState(base, pat string, parts []string) (*globState, error) {
+	compiled, hasGlobStar, err := cfg.compileGlobPartsCached(pat, parts)
 	if err != nil {
 		return nil, err
 	}
@@ -2591,9 +2603,6 @@ func (cfg *Config) newGlobState(base string, parts []string) (*globState, error)
 	if cfg.globLeadingDot() {
 		globStarMatcher = rxGlobStarDotGlob.MatchString
 	}
-	hasGlobStar := slices.ContainsFunc(compiled, func(part globPart) bool {
-		return part.kind == globPartGlobStar
-	})
 	return &globState{
 		cfg:             cfg,
 		base:            base,
@@ -2604,7 +2613,29 @@ func (cfg *Config) newGlobState(base string, parts []string) (*globState, error)
 	}, nil
 }
 
-func (cfg *Config) compileGlobParts(parts []string) ([]globPart, error) {
+func (cfg *Config) compileGlobPartsCached(pat string, parts []string) ([]globPart, bool, error) {
+	key := globPartsCacheKey{
+		pattern:    pat,
+		extGlob:    cfg.ExtGlob,
+		noCaseGlob: cfg.NoCaseGlob,
+		leadingDot: cfg.globLeadingDot(),
+		globStar:   cfg.GlobStar,
+	}
+	if cfg.globPartsCached && cfg.globPartsCacheKey == key {
+		return cfg.globPartsCache, cfg.globPartsHaveStar, nil
+	}
+	compiled, hasGlobStar, err := cfg.compileGlobParts(parts)
+	if err != nil {
+		return nil, false, err
+	}
+	cfg.globPartsCacheKey = key
+	cfg.globPartsCache = compiled
+	cfg.globPartsHaveStar = hasGlobStar
+	cfg.globPartsCached = true
+	return compiled, hasGlobStar, nil
+}
+
+func (cfg *Config) compileGlobParts(parts []string) ([]globPart, bool, error) {
 	metaMode := pattern.Mode(0)
 	if cfg.ExtGlob {
 		metaMode |= pattern.ExtendedOperators
@@ -2620,23 +2651,25 @@ func (cfg *Config) compileGlobParts(parts []string) ([]globPart, error) {
 		matchMode |= pattern.ExtendedOperators
 	}
 	compiled := make([]globPart, 0, len(parts))
+	hasGlobStar := false
 	for _, part := range parts {
 		switch {
 		case part == "", part == ".", part == "..":
 			compiled = append(compiled, globPart{text: part, kind: globPartSpecial})
 		case part == "**" && cfg.GlobStar:
 			compiled = append(compiled, globPart{text: part, kind: globPartGlobStar})
+			hasGlobStar = true
 		case !pattern.HasMeta(part, metaMode):
 			compiled = append(compiled, globPart{text: part, kind: globPartLiteral})
 		default:
 			matcher, err := pattern.ExtendedPatternMatcher(part, matchMode)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			compiled = append(compiled, globPart{text: part, kind: globPartMeta, matcher: matcher})
 		}
 	}
-	return compiled, nil
+	return compiled, hasGlobStar, nil
 }
 
 func (state *globState) walk(dir string, partIndex int, matches []string) ([]string, error) {
@@ -2649,10 +2682,11 @@ func (state *globState) walk(dir string, partIndex int, matches []string) ([]str
 	case globPartSpecial:
 		return state.walk(pathJoin2(dir, part.text), partIndex+1, matches)
 	case globPartLiteral:
-		if !state.literalPathMatches(dir, part.text, wantDir) {
+		joined := pathJoin2(dir, part.text)
+		if !state.literalPathMatches(state.fullPath(joined), wantDir) {
 			return matches, nil
 		}
-		return state.walk(pathJoin2(dir, part.text), partIndex+1, matches)
+		return state.walk(joined, partIndex+1, matches)
 	case globPartMeta:
 		dirMatches, err := state.globDir(dir, part.matcher, wantDir, false, nil)
 		if err != nil {
@@ -2708,8 +2742,9 @@ func (state *globState) walkIterative(start string) ([]string, error) {
 		case globPartLiteral:
 			newMatches = newMatches[:0]
 			for _, dir := range matches {
-				if state.literalPathMatches(dir, part.text, wantDir) {
-					newMatches = append(newMatches, pathJoin2(dir, part.text))
+				joined := pathJoin2(dir, part.text)
+				if state.literalPathMatches(state.fullPath(joined), wantDir) {
+					newMatches = append(newMatches, joined)
 				}
 			}
 			matches, newMatches = newMatches, matches[:0]
@@ -2757,8 +2792,7 @@ func (state *globState) walkGlobStarFinal(dir string, includeZeroMatch bool, mat
 	return matches, nil
 }
 
-func (state *globState) literalPathMatches(dir, part string, wantDir bool) bool {
-	fullPath := state.fullPath(pathJoin2(dir, part))
+func (state *globState) literalPathMatches(fullPath string, wantDir bool) bool {
 	// We can't use [Config.ReadDir] on the parent and match the directory
 	// entry by name, because short paths on Windows break that.
 	// Our only option is to [Config.ReadDir] on the directory entry itself,
@@ -2778,10 +2812,34 @@ func (state *globState) literalPathMatches(dir, part string, wantDir bool) bool 
 }
 
 func (state *globState) globDir(dir string, matcher func(string) bool, wantDir bool, needDescend bool, matches []globDirMatch) ([]globDirMatch, error) {
-	infos, err := state.readDir(state.fullPath(dir))
+	fullDir := state.fullPath(dir)
+	infos, err := state.readDir(fullDir)
 	if err != nil {
 		// We still want to return matches, for the sake of reusing slices.
 		return matches, err
+	}
+	needed := 0
+	if state.cfg.includeDotDotCandidates() {
+		for _, name := range []string{".", ".."} {
+			if matcher(name) {
+				needed++
+			}
+		}
+	}
+	if wantDir {
+		for _, info := range infos {
+			mode := info.Type()
+			if mode&os.ModeSymlink != 0 || mode.IsDir() {
+				needed++
+			}
+		}
+	} else {
+		needed += len(infos)
+	}
+	if cap(matches) < needed {
+		matches = make([]globDirMatch, 0, needed)
+	} else {
+		matches = matches[:0]
 	}
 	if state.cfg.includeDotDotCandidates() {
 		for _, name := range []string{".", ".."} {
@@ -2795,13 +2853,17 @@ func (state *globState) globDir(dir string, matcher func(string) bool, wantDir b
 		if !matcher(name) {
 			continue
 		}
-		match := globDirMatch{name: name, path: pathJoin2(dir, name)}
 		mode := info.Type()
+		if wantDir && mode&os.ModeSymlink == 0 && !mode.IsDir() {
+			continue
+		}
+		match := globDirMatch{name: name}
 		switch {
 		case mode&os.ModeSymlink != 0:
 			// ReadDir on the child path both answers the wantDir check and seeds
 			// the per-glob cache for a later descent into the same symlink target.
-			if _, err := state.readDir(state.fullPath(match.path)); err != nil {
+			fullPath := pathJoin2(fullDir, name)
+			if _, err := state.readDir(fullPath); err != nil {
 				if wantDir {
 					continue
 				}
@@ -2816,6 +2878,7 @@ func (state *globState) globDir(dir string, matcher func(string) bool, wantDir b
 		if needDescend && wantDir {
 			match.canDescend = true
 		}
+		match.path = pathJoin2(dir, name)
 		matches = append(matches, match)
 	}
 	return matches, nil
@@ -2838,39 +2901,61 @@ func (state *globState) readDir(name string) ([]fs.DirEntry, error) {
 }
 
 func mergeGlobMatches(dst, left, right []string) []string {
+	base := len(dst)
+	total := len(left) + len(right)
+	need := base + total
+	if cap(dst) < need {
+		grown := make([]string, need)
+		copy(grown, dst)
+		dst = grown
+	} else {
+		dst = dst[:need]
+	}
+	out := base
 	i, j := 0, 0
 	for i < len(left) && j < len(right) {
 		if cmp.Compare(left[i], right[j]) <= 0 {
-			dst = append(dst, left[i])
+			dst[out] = left[i]
+			out++
 			i++
 			continue
 		}
-		dst = append(dst, right[j])
+		dst[out] = right[j]
+		out++
 		j++
 	}
 	for ; i < len(left); i++ {
-		dst = append(dst, left[i])
+		dst[out] = left[i]
+		out++
 	}
 	for ; j < len(right); j++ {
-		dst = append(dst, right[j])
+		dst[out] = right[j]
+		out++
 	}
 	return dst
 }
 
 func mergeManyGlobMatches(dst []string, streams [][]string) []string {
+	total := 0
 	queue := make(globMergeHeap, 0, len(streams))
 	for _, matches := range streams {
 		if len(matches) == 0 {
 			continue
 		}
-		queue = append(queue, &globMergeItem{matches: matches})
+		total += len(matches)
+		queue = append(queue, globMergeItem{matches: matches})
 	}
 	if len(queue) == 0 {
 		return dst
 	}
+	if cap(dst)-len(dst) < total {
+		grown := make([]string, len(dst), len(dst)+total)
+		copy(grown, dst)
+		dst = grown
+	}
 	heap.Init(&queue)
 	for len(queue) > 0 {
-		item := heap.Pop(&queue).(*globMergeItem)
+		item := heap.Pop(&queue).(globMergeItem)
 		dst = append(dst, item.matches[item.index])
 		item.index++
 		if item.index < len(item.matches) {
@@ -2881,7 +2966,7 @@ func mergeManyGlobMatches(dst []string, streams [][]string) []string {
 }
 
 func (cfg *Config) globDir(base, dir string, matcher func(string) bool, wantDir bool, matches []string) ([]string, error) {
-	state, err := cfg.newGlobState(base, nil)
+	state, err := cfg.newGlobState(base, "", nil)
 	if err != nil {
 		return matches, err
 	}
