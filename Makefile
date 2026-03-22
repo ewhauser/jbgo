@@ -313,10 +313,10 @@ release:
 	$(GH) workflow run $(RELEASE_WORKFLOW) --ref $(RELEASE_REF)
 
 release-check:
-	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) check
+	GOTOOLCHAIN=go1.26.1 go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) check
 
 release-snapshot:
-	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) release --snapshot --clean
+	GOTOOLCHAIN=go1.26.1 go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) release --snapshot --clean
 
 fix-modules:
 	./scripts/fix_modules.sh $(MODULE_VERSION)
