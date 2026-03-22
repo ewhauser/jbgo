@@ -2,6 +2,25 @@ package interp
 
 import "testing"
 
+func TestCompletionBuiltinsDispatchFromThinSwitch(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, ""+
+		"complete -W\n"+
+		"printf 'complete=%d\\n' \"$?\"\n"+
+		"compopt -o invalid cmd\n"+
+		"printf 'compopt=%d\\n' \"$?\"\n")
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "complete=2\ncompopt=2\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, "complete: -W: option requires an argument\ncompopt: invalid: invalid option name\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestWaitBuiltinWithoutArgsReturnsZero(t *testing.T) {
 	t.Parallel()
 

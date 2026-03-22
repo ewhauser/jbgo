@@ -165,9 +165,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		return r.echoBuiltin(args)
 	case "printf":
 		return r.printfBuiltin(args)
-	case "complete":
-	case "compopt":
-	case "compgen":
+	case "complete", "compopt", "compgen":
 		return r.completionBuiltin(ctx, name, args)
 	case "break", "continue":
 		return r.loopControlBuiltin(name, args)
@@ -225,7 +223,6 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	default:
 		return r.builtinFailf(2, "%s: unimplemented builtin\n", name)
 	}
-	return exit
 }
 
 func (r *Runner) simpleBuiltin(name string, args []string) (exit exitStatus) {
@@ -1564,7 +1561,9 @@ func (r *Runner) readLine(ctx context.Context, raw bool) ([]byte, error) {
 				esc = !esc
 			case !raw && b == '\n' && esc:
 				// line continuation
-				line = line[len(line)-1:]
+				if len(line) > 0 {
+					line = line[:len(line)-1]
+				}
 				esc = false
 			case b == '\n':
 				return line, nil

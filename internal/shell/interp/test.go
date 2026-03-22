@@ -96,6 +96,9 @@ func numericTest(op syntax.BinTestOperator, x, y int64) bool {
 
 // non-empty string is true, empty string is false
 func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic bool, cmdName string) string {
+	if expr == nil {
+		return ""
+	}
 	switch x := expr.(type) {
 	case *syntax.Word:
 		if classic {
@@ -105,6 +108,9 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 		}
 		return r.condLiteral(x)
 	case *syntax.ParenTest:
+		if x.X == nil {
+			return ""
+		}
 		return r.bashTest(ctx, x.X, classic, cmdName)
 	case *syntax.BinaryTest:
 		switch x.Op {
@@ -681,7 +687,7 @@ func (r *Runner) statMode(ctx context.Context, name string, mode os.FileMode) bo
 		return false
 	}
 	info, err := r.stat(ctx, name)
-	return err == nil && info.Mode()&mode != 0
+	return err == nil && info != nil && info.Mode()&mode != 0
 }
 
 // These are copied from x/sys/unix as we can't import it here.
@@ -704,14 +710,14 @@ func (r *Runner) unTest(ctx context.Context, op syntax.UnTestOperator, x, cmdNam
 			return false
 		}
 		info, err := r.stat(ctx, x)
-		return err == nil && info.Mode().IsRegular()
+		return err == nil && info != nil && info.Mode().IsRegular()
 	case syntax.TsDirect:
 		return r.statMode(ctx, x, os.ModeDir)
 	case syntax.TsCharSp:
 		return r.statMode(ctx, x, os.ModeCharDevice)
 	case syntax.TsBlckSp:
 		info, err := r.stat(ctx, x)
-		return err == nil && info.Mode()&os.ModeDevice != 0 &&
+		return err == nil && info != nil && info.Mode()&os.ModeDevice != 0 &&
 			info.Mode()&os.ModeCharDevice == 0
 	case syntax.TsNmPipe:
 		return r.statMode(ctx, x, os.ModeNamedPipe)
@@ -719,7 +725,7 @@ func (r *Runner) unTest(ctx context.Context, op syntax.UnTestOperator, x, cmdNam
 		return r.statMode(ctx, x, os.ModeSocket)
 	case syntax.TsSmbLink:
 		info, err := r.lstat(ctx, x)
-		return err == nil && info.Mode()&os.ModeSymlink != 0
+		return err == nil && info != nil && info.Mode()&os.ModeSymlink != 0
 	case syntax.TsSticky:
 		return r.statMode(ctx, x, os.ModeSticky)
 	case syntax.TsUIDSet:
@@ -749,7 +755,7 @@ func (r *Runner) unTest(ctx context.Context, op syntax.UnTestOperator, x, cmdNam
 			return false
 		}
 		info, err := r.stat(ctx, x)
-		return err == nil && info.Size() > 0
+		return err == nil && info != nil && info.Size() > 0
 	case syntax.TsFdTerm:
 		if cmdName == "" {
 			fd := atoi(x)

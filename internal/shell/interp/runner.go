@@ -2783,8 +2783,10 @@ type restoreVar struct {
 }
 
 func (r *Runner) restoreCallAssigns(restores []restoreVar) {
-	for i := len(restores) - 1; i >= 0; i-- {
-		restore := restores[i]
+	for len(restores) > 0 {
+		last := len(restores) - 1
+		restore := restores[last]
+		restores = restores[:last]
 		if restore.restoreSeconds {
 			if err := r.writeEnv.Set(restore.name, restore.vr); err != nil {
 				// If the variable became readonly during command execution
