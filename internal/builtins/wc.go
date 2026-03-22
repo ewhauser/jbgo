@@ -61,6 +61,13 @@ type wcCountResult struct {
 	err         error
 }
 
+type wcLimitedReader struct {
+	reader    io.Reader
+	remaining int64
+	maxBytes  int64
+	overflow  bool
+}
+
 func NewWC() *WC {
 	return &WC{}
 }
@@ -293,6 +300,7 @@ func wcRunFiles0FromPathStream(ctx context.Context, inv *Invocation, opts wcOpti
 
 func wcRunFiles0FromStream(ctx context.Context, inv *Invocation, opts wcOptions, source string, reader io.Reader) error {
 	reader = commandutil.ReaderWithContext(ctx, reader)
+	reader = wcLimitReaderForInvocation(inv, reader)
 	buf := bufio.NewReader(reader)
 
 	var (
@@ -334,6 +342,44 @@ func wcRunFiles0FromStream(ctx context.Context, inv *Invocation, opts wcOptions,
 		return &ExitError{Code: exitCode}
 	}
 	return nil
+}
+
+func wcLimitReaderForInvocation(inv *Invocation, reader io.Reader) io.Reader {
+	if inv == nil {
+		return reader
+	}
+	maxFileBytes := inv.Limits.MaxFileBytes
+	if maxFileBytes <= 0 || maxFileBytes == math.MaxInt64 {
+		return reader
+	}
+	return &wcLimitedReader{
+		reader:    reader,
+		remaining: maxFileBytes,
+		maxBytes:  maxFileBytes,
+	}
+}
+
+func (r *wcLimitedReader) Read(p []byte) (int, error) {
+	if r.overflow {
+		return 0, wcMaxFileBytesError(r.maxBytes)
+	}
+	if int64(len(p)) > r.remaining+1 {
+		p = p[:r.remaining+1]
+	}
+
+	n, err := r.reader.Read(p)
+	if int64(n) <= r.remaining {
+		r.remaining -= int64(n)
+		return n, err
+	}
+
+	allowed := max(int(r.remaining), 0)
+	r.remaining = 0
+	r.overflow = true
+	if allowed == 0 {
+		return 0, wcMaxFileBytesError(r.maxBytes)
+	}
+	return allowed, wcMaxFileBytesError(r.maxBytes)
 }
 
 func wcReadFiles0Record(reader *bufio.Reader) ([]byte, bool, error) {
@@ -527,7 +573,7 @@ func wcReadAllReaderPartialWithLimit(reader io.Reader, maxFileBytes int64) ([]by
 			if enforceLimit && totalRead > maxFileBytes {
 				return nil, &ExitError{
 					Code: 1,
-					Err:  fmt.Errorf("input exceeds maximum file size of %d bytes", maxFileBytes),
+					Err:  wcMaxFileBytesDiagnostic(maxFileBytes),
 				}, true
 			}
 			_, _ = data.Write(chunk[:n])
@@ -540,6 +586,17 @@ func wcReadAllReaderPartialWithLimit(reader io.Reader, maxFileBytes int64) ([]by
 		}
 		return data.Bytes(), wcWrapReadError(err), false
 	}
+}
+
+func wcMaxFileBytesError(maxFileBytes int64) error {
+	return &ExitError{
+		Code: 1,
+		Err:  wcMaxFileBytesDiagnostic(maxFileBytes),
+	}
+}
+
+func wcMaxFileBytesDiagnostic(maxFileBytes int64) error {
+	return fmt.Errorf("input exceeds maximum file size of %d bytes", maxFileBytes)
 }
 
 func wcWrapReadError(err error) error {

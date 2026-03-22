@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestGrepWorksInPipelineFromStdin(t *testing.T) {
@@ -564,6 +566,35 @@ func TestWCFiles0FromReportsSourceReadErrorsAndMixedEntries(t *testing.T) {
 		if !strings.Contains(result.Stderr, want) {
 			t.Fatalf("Stderr = %q, want substring %q", result.Stderr, want)
 		}
+	}
+}
+
+func TestWCFiles0FromStreamingHonorsMaxFileBytes(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:  []string{"/"},
+			WriteRoots: []string{"/"},
+			Limits: policy.Limits{
+				MaxFileBytes: 12,
+			},
+		}),
+	})
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"printf 'a\\n' > /tmp/a.txt",
+		"printf 'b\\n' > /tmp/b.txt",
+		"printf '/tmp/a.txt\\0/tmp/b.txt\\0' | wc --files0-from=-",
+		"",
+	}, "\n"))
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "1 1 2 /tmp/a.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "wc: -: read error: input exceeds maximum file size of 12 bytes\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
 
