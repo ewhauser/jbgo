@@ -111,3 +111,14 @@ func Resolve(dir, name string) string {
 	}
 	return Clean(path.Join(dir, name))
 }
+
+// joinClean concatenates a clean absolute directory path with a single path
+// component. Both inputs must be pre-validated: dir is a clean absolute path
+// (as returned by Clean or Resolve) and name is a single entry with no
+// slashes. This avoids the path.Join + path.Clean overhead that Resolve pays.
+func joinClean(dir, name string) string {
+	if dir == "/" {
+		return "/" + name
+	}
+	return dir + "/" + name
+}

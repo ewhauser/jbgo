@@ -433,7 +433,7 @@ func (m *MemoryFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, er
 
 	entries := make([]stdfs.DirEntry, 0, len(names))
 	for _, child := range names {
-		childPath := Resolve(abs, child)
+		childPath := joinClean(abs, child)
 		childNode := m.nodes[childPath] //nolint:nilaway // children are registered via mkdirAllLocked/OpenFile, so node always exists
 		entries = append(entries, memoryDirEntry{
 			fs:   m,
@@ -663,7 +663,7 @@ func (m *MemoryFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
 	parts := strings.Split(strings.TrimPrefix(name, "/"), "/")
 	current := "/"
 	for _, part := range parts {
-		next := Resolve(current, part)
+		next := joinClean(current, part)
 		node, ok := m.nodes[next]
 		if ok {
 			if node.mode&stdfs.ModeSymlink != 0 {
@@ -720,7 +720,7 @@ func (m *MemoryFS) resolveCreatePathLocked(abs string, depth int) (string, error
 	current := "/"
 	parts := strings.Split(strings.TrimPrefix(abs, "/"), "/")
 	for i, part := range parts {
-		next := Resolve(current, part)
+		next := joinClean(current, part)
 		node, ok := m.nodes[next]
 		isLast := i == len(parts)-1
 		if !ok {
@@ -760,7 +760,7 @@ func (m *MemoryFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 	current := "/"
 	parts := strings.Split(strings.TrimPrefix(abs, "/"), "/")
 	for i, part := range parts {
-		next := Resolve(current, part)
+		next := joinClean(current, part)
 		node, ok := m.nodes[next]
 		isLast := i == len(parts)-1
 		if !ok {
