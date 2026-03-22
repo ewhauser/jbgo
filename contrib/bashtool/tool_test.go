@@ -222,6 +222,19 @@ func TestExecutePassesRuntimeOptions(t *testing.T) {
 	}
 }
 
+func TestExecuteUsesConfiguredHomeDirAsWorkingDir(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{HomeDir: "/tmp"})
+	resp := tool.Execute(context.Background(), Request{Commands: "pwd\n"})
+	if resp.ExitCode != 0 {
+		t.Fatalf("Execute() exit = %d, want 0; stderr=%q", resp.ExitCode, resp.Stderr)
+	}
+	if got := strings.TrimSpace(resp.Stdout); got != "/tmp" {
+		t.Fatalf("Execute() stdout = %q, want /tmp", got)
+	}
+}
+
 func TestExecuteUsesVirtualPipes(t *testing.T) {
 	t.Parallel()
 
@@ -234,5 +247,29 @@ func TestExecuteUsesVirtualPipes(t *testing.T) {
 	}
 	if got := resp.Stdout; got != "y\n" {
 		t.Fatalf("Execute() stdout = %q, want y\\n", got)
+	}
+}
+
+func TestResponseFromErrorUsesExternalContextTimeout(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	contextTimeout := deadlineTimeout(ctx)
+
+	time.Sleep(140 * time.Millisecond)
+
+	resp := responseFromError(ctx, context.DeadlineExceeded, 0, contextTimeout)
+	if resp.Error != "timeout" {
+		t.Fatalf("responseFromError() error = %q, want timeout", resp.Error)
+	}
+	if resp.ExitCode != 124 {
+		t.Fatalf("responseFromError() exit = %d, want 124", resp.ExitCode)
+	}
+	if strings.Contains(resp.Stderr, "after 0.0s") {
+		t.Fatalf("responseFromError() stderr = %q, want caller deadline reflected", resp.Stderr)
+	}
+	if !strings.Contains(resp.Stderr, "execution timed out after") {
+		t.Fatalf("responseFromError() stderr = %q, want timeout message", resp.Stderr)
 	}
 }

@@ -327,7 +327,11 @@ func (t *Tool) Execute(ctx context.Context, req Request) Response {
 		return Response{Stdout: "", Stderr: "", ExitCode: 0}
 	}
 
-	opts := append([]gbash.Option{}, t.cfg.runtimeOpts...)
+	requestTimeout := req.Timeout()
+	contextTimeout := deadlineTimeout(ctx)
+
+	opts := []gbash.Option{gbash.WithWorkingDir(t.cfg.homeDir)}
+	opts = append(opts, t.cfg.runtimeOpts...)
 	opts = append(opts,
 		gbash.WithRegistry(t.registry),
 		gbash.WithHost(newVirtualHost(&t.cfg)),
@@ -343,10 +347,10 @@ func (t *Tool) Execute(ctx context.Context, req Request) Response {
 
 	result, err := rt.Run(ctx, &gbash.ExecutionRequest{
 		Script:  commandsText,
-		Timeout: req.Timeout(),
+		Timeout: requestTimeout,
 	})
 	if err != nil {
-		return responseFromError(err, req.Timeout())
+		return responseFromError(ctx, err, requestTimeout, contextTimeout)
 	}
 	if result == nil {
 		return Response{Stdout: "", Stderr: "", ExitCode: 0}
@@ -586,10 +590,13 @@ func parseUint64(raw any) (uint64, error) {
 	}
 }
 
-func responseFromError(err error, timeout time.Duration) Response {
+func responseFromError(ctx context.Context, err error, requestTimeout, contextTimeout time.Duration) Response {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return timeoutResponse(timeout)
+		if ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return timeoutResponse(contextTimeout)
+		}
+		return timeoutResponse(requestTimeout)
 	case errors.Is(err, context.Canceled):
 		return Response{
 			Stderr:   err.Error(),
@@ -603,6 +610,21 @@ func responseFromError(err error, timeout time.Duration) Response {
 			Error:    "execution_error",
 		}
 	}
+}
+
+func deadlineTimeout(ctx context.Context) time.Duration {
+	if ctx == nil {
+		return 0
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return 0
+	}
+	timeout := time.Until(deadline)
+	if timeout < 0 {
+		return 0
+	}
+	return timeout
 }
 
 func timeoutResponse(timeout time.Duration) Response {
