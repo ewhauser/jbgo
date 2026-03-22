@@ -6,10 +6,12 @@ import (
 	"io"
 	stdfs "io/fs"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -17,6 +19,7 @@ import (
 
 const (
 	virtualDeviceDir            = "/dev"
+	virtualFullDevice           = "/dev/full"
 	virtualNullDevice           = "/dev/null"
 	virtualUrandomDevice        = "/dev/urandom"
 	virtualZeroDevice           = "/dev/zero"
@@ -56,6 +59,11 @@ func (f *virtualDeviceFS) Open(ctx context.Context, name string) (gbfs.File, err
 func (f *virtualDeviceFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (gbfs.File, error) {
 	abs := f.resolve(name)
 	switch {
+	case abs == virtualFullDevice:
+		if flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
+			return nil, &os.PathError{Op: "open", Path: abs, Err: stdfs.ErrExist}
+		}
+		return newVirtualDeviceFile(abs, flag), nil
 	case abs == virtualNullDevice:
 		if flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
 			return nil, &os.PathError{Op: "open", Path: abs, Err: stdfs.ErrExist}
@@ -88,6 +96,8 @@ func (f *virtualDeviceFS) Stat(ctx context.Context, name string) (stdfs.FileInfo
 	switch {
 	case abs == virtualDeviceDir:
 		return virtualDirInfo("dev"), nil
+	case abs == virtualFullDevice:
+		return virtualFullInfo(), nil
 	case abs == virtualNullDevice:
 		return virtualNullInfo(), nil
 	case abs == virtualUrandomDevice:
@@ -106,6 +116,8 @@ func (f *virtualDeviceFS) Lstat(ctx context.Context, name string) (stdfs.FileInf
 	switch {
 	case abs == virtualDeviceDir:
 		return virtualDirInfo("dev"), nil
+	case abs == virtualFullDevice:
+		return virtualFullInfo(), nil
 	case abs == virtualNullDevice:
 		return virtualNullInfo(), nil
 	case abs == virtualUrandomDevice:
@@ -305,11 +317,12 @@ func isVirtualDeviceChild(abs string) bool {
 }
 
 func isReservedVirtualDevice(abs string) bool {
-	return abs == virtualNullDevice || abs == virtualUrandomDevice || abs == virtualZeroDevice
+	return abs == virtualFullDevice || abs == virtualNullDevice || abs == virtualUrandomDevice || abs == virtualZeroDevice
 }
 
 func isReservedVirtualDeviceChild(abs string) bool {
-	return strings.HasPrefix(abs, virtualNullDevice+"/") ||
+	return strings.HasPrefix(abs, virtualFullDevice+"/") ||
+		strings.HasPrefix(abs, virtualNullDevice+"/") ||
 		strings.HasPrefix(abs, virtualUrandomDevice+"/") ||
 		strings.HasPrefix(abs, virtualZeroDevice+"/")
 }
@@ -345,11 +358,12 @@ func (f *virtualDeviceFS) readVirtualDeviceDir(ctx context.Context) ([]stdfs.Dir
 	}
 	byName := make(map[string]stdfs.DirEntry, len(baseEntries)+1)
 	for _, entry := range baseEntries {
-		if entry == nil || entry.Name() == "null" {
+		if entry == nil || entry.Name() == "full" || entry.Name() == "null" {
 			continue
 		}
 		byName[entry.Name()] = entry
 	}
+	byName["full"] = stdfs.FileInfoToDirEntry(virtualFullInfo())
 	byName["null"] = stdfs.FileInfoToDirEntry(virtualNullInfo())
 	byName["urandom"] = stdfs.FileInfoToDirEntry(virtualUrandomInfo())
 	byName["zero"] = stdfs.FileInfoToDirEntry(virtualZeroInfo())
@@ -393,6 +407,16 @@ func virtualDirInfo(name string) stdfs.FileInfo {
 func virtualNullInfo() stdfs.FileInfo {
 	return virtualFileInfo{
 		name:    "null",
+		mode:    stdfs.ModeDevice | stdfs.ModeCharDevice | 0o666,
+		modTime: virtualDeviceModTime,
+		uid:     gbfs.DefaultOwnerUID,
+		gid:     gbfs.DefaultOwnerGID,
+	}
+}
+
+func virtualFullInfo() stdfs.FileInfo {
+	return virtualFileInfo{
+		name:    "full",
 		mode:    stdfs.ModeDevice | stdfs.ModeCharDevice | 0o666,
 		modTime: virtualDeviceModTime,
 		uid:     gbfs.DefaultOwnerUID,
@@ -461,6 +485,9 @@ func (f *virtualDeviceFile) Read(p []byte) (int, error) {
 		return 0, &os.PathError{Op: "read", Path: f.path, Err: stdfs.ErrPermission}
 	}
 	switch f.path {
+	case virtualFullDevice:
+		clear(p)
+		return len(p), nil
 	case virtualNullDevice:
 		return 0, io.EOF
 	case virtualUrandomDevice:
@@ -481,6 +508,9 @@ func (f *virtualDeviceFile) Write(p []byte) (int, error) {
 	if !canWriteVirtualDevice(f.flag) {
 		return 0, &os.PathError{Op: "write", Path: f.path, Err: stdfs.ErrPermission}
 	}
+	if f.path == virtualFullDevice {
+		return 0, &os.PathError{Op: "write", Path: f.path, Err: virtualFullWriteErrno()}
+	}
 	return len(p), nil
 }
 
@@ -494,6 +524,8 @@ func (f *virtualDeviceFile) Stat() (stdfs.FileInfo, error) {
 		return nil, stdfs.ErrClosed
 	}
 	switch f.path {
+	case virtualFullDevice:
+		return virtualFullInfo(), nil
 	case virtualNullDevice:
 		return virtualNullInfo(), nil
 	case virtualUrandomDevice:
@@ -511,6 +543,13 @@ func canReadVirtualDevice(flag int) bool {
 
 func canWriteVirtualDevice(flag int) bool {
 	return flag&(os.O_WRONLY|os.O_RDWR) != 0
+}
+
+func virtualFullWriteErrno() error {
+	if runtime.GOOS == "darwin" {
+		return syscall.EPERM
+	}
+	return syscall.ENOSPC
 }
 
 func (f *virtualDeviceFile) fillUrandom(p []byte) {

@@ -68,6 +68,9 @@ func (c *Printf) Run(ctx context.Context, inv *Invocation) error {
 			}
 			return nil
 		}
+		if diag, ok := shellWriteErrorDiagnostic(err); ok {
+			return exitf(inv, 1, "%s", diag)
+		}
 		return &ExitError{Code: 1, Err: err}
 	}
 	if result.ExitCode != 0 {

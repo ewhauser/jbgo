@@ -21,11 +21,11 @@
             "darwin"
           ]
         },
-        "oils/bugs.test.sh::'echo' and printf fail on writing to full disk": {
+        "oils/bugs.test.sh::assign readonly -- multiple lines -- set -o posix": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh::other builtins fail on writing to full disk": {
+        "oils/bugs.test.sh::assign readonly -- one line": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },

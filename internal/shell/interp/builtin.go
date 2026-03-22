@@ -273,6 +273,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 					}
 					return exit
 				}
+				if diag, ok := shellWriteErrorDiagnostic(err); ok {
+					return failf(1, "%s\n", diag)
+				}
 				return failf(1, "%v\n", err)
 			}
 			if result.ExitCode != 0 {
@@ -531,6 +534,8 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		exit = r.exit
 	case "command":
 		return r.commandBuiltin(ctx, pos, args)
+	case "ulimit":
+		return r.ulimitBuiltin(args)
 	case "dirs":
 		exit.code = r.dirsBuiltin(args)
 		return exit
@@ -1759,6 +1764,95 @@ func (r *Runner) typeBuiltin(ctx context.Context, args []string) (exit exitStatu
 		exit.code = 1
 	}
 	return exit
+}
+
+type ulimitBuiltinMode uint8
+
+const (
+	ulimitBuiltinSoft ulimitBuiltinMode = iota
+	ulimitBuiltinHard
+)
+
+type ulimitResourceSpec struct {
+	label    string
+	option   rune
+	unit     string
+	scale    uint64
+	resource int
+}
+
+func (r *Runner) ulimitBuiltin(args []string) (exit exitStatus) {
+	all := false
+	mode := ulimitBuiltinSoft
+	for _, arg := range args {
+		if arg == "--" {
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			r.errf("ulimit: usage: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n")
+			exit.code = 2
+			return exit
+		}
+		for _, flag := range arg[1:] {
+			switch flag {
+			case 'a':
+				all = true
+			case 'S':
+				mode = ulimitBuiltinSoft
+			case 'H':
+				mode = ulimitBuiltinHard
+			default:
+				r.errf("ulimit: usage: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n")
+				exit.code = 2
+				return exit
+			}
+		}
+	}
+	if !all {
+		r.errf("ulimit: usage: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n")
+		exit.code = 2
+		return exit
+	}
+	for _, spec := range ulimitBuiltinSpecs() {
+		var limit syscall.Rlimit
+		if err := syscall.Getrlimit(spec.resource, &limit); err != nil {
+			continue
+		}
+		value := limit.Cur
+		if mode == ulimitBuiltinHard {
+			value = limit.Max
+		}
+		if _, err := fmt.Fprintf(r.stdout, "%-25s (%s, -%c) %s\n", spec.label, spec.unit, spec.option, formatUlimitValue(value, spec.scale)); err != nil {
+			if diag, ok := shellWriteErrorDiagnostic(err); ok {
+				r.errf("%s\n", diag)
+			}
+			exit.code = 1
+			exit.err = ExitStatus(1)
+			return exit
+		}
+	}
+	return exit
+}
+
+func ulimitBuiltinSpecs() []ulimitResourceSpec {
+	return []ulimitResourceSpec{
+		{label: "core file size", option: 'c', unit: "blocks", scale: 512, resource: syscall.RLIMIT_CORE},
+		{label: "data seg size", option: 'd', unit: "kbytes", scale: 1024, resource: syscall.RLIMIT_DATA},
+		{label: "file size", option: 'f', unit: "blocks", scale: 512, resource: syscall.RLIMIT_FSIZE},
+		{label: "open files", option: 'n', unit: "", scale: 1, resource: syscall.RLIMIT_NOFILE},
+		{label: "stack size", option: 's', unit: "kbytes", scale: 1024, resource: syscall.RLIMIT_STACK},
+		{label: "cpu time", option: 't', unit: "seconds", scale: 1, resource: syscall.RLIMIT_CPU},
+	}
+}
+
+func formatUlimitValue(value, scale uint64) string {
+	if value == syscall.RLIM_INFINITY {
+		return "unlimited"
+	}
+	if scale <= 1 {
+		return strconv.FormatUint(value, 10)
+	}
+	return strconv.FormatUint(value/scale, 10)
 }
 
 func sourceBuiltinUsageLine(name string) string {
