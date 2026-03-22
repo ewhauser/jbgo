@@ -507,13 +507,21 @@ func (t *Tool) languageWarning() string {
 	selectedNames := t.registry.Names()
 	hasPerl := slices.Contains(selectedNames, "perl")
 	hasPython := slices.Contains(selectedNames, "python") || slices.Contains(selectedNames, "python3")
+	hasRuby := slices.Contains(selectedNames, "ruby")
+	hasNode := slices.Contains(selectedNames, "node") || slices.Contains(selectedNames, "nodejs")
 
-	missing := make([]string, 0, 2)
+	missing := make([]string, 0, 4)
 	if !hasPerl {
 		missing = append(missing, "perl")
 	}
 	if !hasPython {
 		missing = append(missing, "python/python3")
+	}
+	if !hasRuby {
+		missing = append(missing, "ruby")
+	}
+	if !hasNode {
+		missing = append(missing, "node/nodejs")
 	}
 	if len(missing) == 0 {
 		return ""

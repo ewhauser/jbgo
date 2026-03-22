@@ -52,7 +52,7 @@ func TestSystemPromptTracksUpstreamWordingWithGbashIdentity(t *testing.T) {
 	if !strings.Contains(got, "Use bash syntax; do not assume /bin/sh portability") {
 		t.Fatalf("SystemPrompt() = %q, want upstream syntax warning", got)
 	}
-	if !strings.Contains(got, "perl, python/python3 not available.") {
+	if !strings.Contains(got, "perl, python/python3, ruby, node/nodejs not available.") {
 		t.Fatalf("SystemPrompt() = %q, want language warning", got)
 	}
 }
@@ -63,6 +63,8 @@ func TestLanguageWarningSuppression(t *testing.T) {
 	registry := commands.NewRegistry(
 		commands.DefineCommand("perl", nil),
 		commands.DefineCommand("python", nil),
+		commands.DefineCommand("ruby", nil),
+		commands.DefineCommand("node", nil),
 	)
 	tool := New(Config{
 		Profile:  CommandProfileCustom,
@@ -71,6 +73,23 @@ func TestLanguageWarningSuppression(t *testing.T) {
 
 	if got := tool.languageWarning(); got != "" {
 		t.Fatalf("languageWarning() = %q, want empty", got)
+	}
+}
+
+func TestLanguageWarningPartialSuppression(t *testing.T) {
+	t.Parallel()
+
+	registry := commands.NewRegistry(
+		commands.DefineCommand("python3", nil),
+		commands.DefineCommand("nodejs", nil),
+	)
+	tool := New(Config{
+		Profile:  CommandProfileCustom,
+		Registry: registry,
+	})
+
+	if got, want := tool.languageWarning(), "perl, ruby not available."; got != want {
+		t.Fatalf("languageWarning() = %q, want %q", got, want)
 	}
 }
 
