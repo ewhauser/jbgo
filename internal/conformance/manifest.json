@@ -21,14 +21,6 @@
             "darwin"
           ]
         },
-        "oils/bugs.test.sh::assign readonly -- multiple lines -- set -o posix": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::assign readonly -- one line": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "skip",
           "reason": "platform-specific: test requires strace (Linux-only) and syscall behavior varies by platform"
