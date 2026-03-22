@@ -6,14 +6,6 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
-func cloneSubscript(index *syntax.Subscript) *syntax.Subscript {
-	return syntax.CloneSubscript(index)
-}
-
-func cloneVarRef(ref *syntax.VarRef) *syntax.VarRef {
-	return syntax.CloneVarRef(ref)
-}
-
 func defaultAssociativeSubscript(key string) *syntax.Subscript {
 	return &syntax.Subscript{
 		Kind: syntax.SubscriptExpr,
@@ -28,7 +20,7 @@ func resolveSubscriptAuto(kind ValueKind, index *syntax.Subscript) *syntax.Subsc
 	if index == nil || index.AllElements() || index.Mode != syntax.SubscriptAuto {
 		return index
 	}
-	dup := cloneSubscript(index)
+	dup := syntax.CloneSubscript(index)
 	switch kind {
 	case Associative:
 		dup.Mode = syntax.SubscriptAssociative
@@ -85,11 +77,11 @@ func (v Variable) ResolveRef(env Environ, ref *syntax.VarRef) (*syntax.VarRef, V
 
 // ResolveRefState follows nameref variables and reports how resolution ended.
 func (v Variable) ResolveRefState(env Environ, ref *syntax.VarRef) (RefResolution, error) {
-	resolved := cloneVarRef(ref)
+	resolved := syntax.CloneVarRef(ref)
 	if resolved != nil && emptySubscript(resolved.Index) {
 		return RefResolution{}, BadArraySubscriptError{Name: printNode(resolved)}
 	}
-	original := cloneVarRef(resolved)
+	original := syntax.CloneVarRef(resolved)
 	seen := make(map[string]struct{})
 	for range maxNameRefDepth {
 		if v.Kind != NameRef {
@@ -136,7 +128,7 @@ func (v Variable) ResolveRefState(env Environ, ref *syntax.VarRef) (RefResolutio
 			}
 			target = &syntax.VarRef{
 				Name:    target.Name,
-				Index:   cloneSubscript(resolved.Index),
+				Index:   syntax.CloneSubscript(resolved.Index),
 				Context: resolved.Context,
 			}
 		} else if resolved != nil {
@@ -166,7 +158,7 @@ func (cfg *Config) envSetRef(ref *syntax.VarRef, value string) error {
 		return nil
 	}
 	if resolvedRef, vr, err := cfg.resolveVarRef(ref); err == nil && resolvedRef != nil && resolvedRef.Index == nil && vr.Kind == Associative {
-		ref = cloneVarRef(resolvedRef)
+		ref = syntax.CloneVarRef(resolvedRef)
 		ref.Index = defaultAssociativeSubscript("0")
 	}
 	if wenv, ok := cfg.Env.(VarRefWriter); ok {
