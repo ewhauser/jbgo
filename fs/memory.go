@@ -660,9 +660,18 @@ func (m *MemoryFS) mkdirAllLocked(name string, perm stdfs.FileMode) error {
 		return nil
 	}
 
-	parts := strings.Split(strings.TrimPrefix(name, "/"), "/")
 	current := "/"
-	for _, part := range parts {
+	remaining := name[1:] // strip leading "/"
+	for remaining != "" {
+		var part string
+		i := strings.IndexByte(remaining, '/')
+		if i < 0 {
+			part = remaining
+			remaining = ""
+		} else {
+			part = remaining[:i]
+			remaining = remaining[i+1:]
+		}
 		next := joinClean(current, part)
 		node, ok := m.nodes[next]
 		if ok {
@@ -718,18 +727,30 @@ func (m *MemoryFS) resolveCreatePathLocked(abs string, depth int) (string, error
 	}
 
 	current := "/"
-	parts := strings.Split(strings.TrimPrefix(abs, "/"), "/")
-	for i, part := range parts {
+	remaining := abs[1:] // strip leading "/"
+	for remaining != "" {
+		var part string
+		i := strings.IndexByte(remaining, '/')
+		if i < 0 {
+			part = remaining
+			remaining = ""
+		} else {
+			part = remaining[:i]
+			remaining = remaining[i+1:]
+		}
 		next := joinClean(current, part)
 		node, ok := m.nodes[next]
-		isLast := i == len(parts)-1
+		isLast := remaining == ""
 		if !ok {
-			return Resolve(current, path.Join(parts[i:]...)), nil
+			if isLast {
+				return next, nil
+			}
+			return Resolve(next, remaining), nil
 		}
 		if node.mode&stdfs.ModeSymlink != 0 {
 			target := Resolve(parentDir(next), node.target)
 			if !isLast {
-				target = Resolve(target, path.Join(parts[i+1:]...))
+				target = Resolve(target, remaining)
 			}
 			return m.resolveCreatePathLocked(target, depth+1)
 		}
@@ -758,11 +779,20 @@ func (m *MemoryFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 	}
 
 	current := "/"
-	parts := strings.Split(strings.TrimPrefix(abs, "/"), "/")
-	for i, part := range parts {
+	remaining := abs[1:] // strip leading "/"
+	for remaining != "" {
+		var part string
+		i := strings.IndexByte(remaining, '/')
+		if i < 0 {
+			part = remaining
+			remaining = ""
+		} else {
+			part = remaining[:i]
+			remaining = remaining[i+1:]
+		}
 		next := joinClean(current, part)
 		node, ok := m.nodes[next]
-		isLast := i == len(parts)-1
+		isLast := remaining == ""
 		if !ok {
 			if isLast && allowMissingFinal {
 				return next, nil, nil
@@ -772,7 +802,7 @@ func (m *MemoryFS) resolveAbsLocked(abs string, followFinal, allowMissingFinal b
 		if node.mode&stdfs.ModeSymlink != 0 && (!isLast || followFinal) {
 			target := Resolve(parentDir(next), node.target)
 			if !isLast {
-				target = Resolve(target, path.Join(parts[i+1:]...))
+				target = Resolve(target, remaining)
 			}
 			return m.resolveAbsLocked(target, true, allowMissingFinal, depth+1)
 		}
