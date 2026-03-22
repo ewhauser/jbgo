@@ -35,6 +35,30 @@ done
 	}
 }
 
+func TestCaseClauseNoCaseMatchOption(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+shopt -s nocasematch
+
+case FOO in
+  foo) echo match ;;
+  *) echo miss ;;
+esac
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+
+	const wantStdout = "match\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestCaseClauseMatchesInvalidUTF8Bytes(t *testing.T) {
 	t.Parallel()
 

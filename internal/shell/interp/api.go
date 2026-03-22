@@ -738,6 +738,11 @@ var bashOptsTable = [...]bashOpt{
 		supported:    true,
 	},
 	{
+		name:         "nocasematch",
+		defaultState: false,
+		supported:    true,
+	},
+	{
 		name:         "nullglob",
 		defaultState: false,
 		supported:    true,
@@ -804,7 +809,6 @@ var bashOptsTable = [...]bashOpt{
 	{name: "login_shell"},
 	{name: "mailwarn"},
 	{name: "no_empty_cmd_completion"},
-	{name: "nocasematch"},
 	{
 		name:         "progcomp",
 		defaultState: true,
@@ -853,6 +857,7 @@ const (
 	optGlobStar
 	optLastPipe
 	optNoCaseGlob
+	optNoCaseMatch
 	optNullGlob
 )
 

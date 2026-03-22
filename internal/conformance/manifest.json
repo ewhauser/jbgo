@@ -295,18 +295,6 @@
             "linux"
           ]
         },
-        "oils/nocasematch-match.test.sh::[[ equality matching": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nocasematch-match.test.sh::[[ regex matching": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nocasematch-match.test.sh::case matching": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/parse-errors.test.sh::Long Token - 65535 bytes": {
           "mode": "xfail",
           "reason": "conformance: Darwin wc still differs from GNU bash harness behavior for this case",

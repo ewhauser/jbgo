@@ -1563,7 +1563,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					if r.stmtAborted() {
 						return
 					}
-					if match(pat, str) {
+					if r.patternMatch(pat, str) {
 						matched = true
 						break
 					}
@@ -3093,8 +3093,12 @@ func declStringifiedArrayAssign(as *syntax.Assign) *syntax.DeclAssign {
 	}}
 }
 
-func match(pat, name string) bool {
-	ok, err := pattern.Match(pat, name, pattern.EntireString|pattern.ExtendedOperators)
+func (r *Runner) patternMatch(pat, name string) bool {
+	mode := pattern.EntireString | pattern.ExtendedOperators
+	if r.opts[optNoCaseMatch] {
+		mode |= pattern.NoGlobCase
+	}
+	ok, err := pattern.Match(pat, name, mode)
 	_ = err // TODO: report these errors
 	return ok
 }
