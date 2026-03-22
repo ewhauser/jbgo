@@ -267,8 +267,9 @@ type Runner struct {
 	// apply to the current shell, and not just the command.
 	keepRedirs bool
 
-	// printfEnv keeps process-level environment state used by printf %T.
-	printfEnv map[string]string
+	// printfEnv keeps process-level environment state used by printf %T and is
+	// shared across subshells in the same shell family.
+	printfEnv *printfEnvCache
 
 	traps trapState
 
@@ -956,7 +957,7 @@ func (r *Runner) Reset() {
 		random:     r.origRandom,
 
 		funcs:     funcs,
-		printfEnv: make(map[string]string),
+		printfEnv: newPrintfEnvCache(),
 
 		topLevelScriptPath:     r.topLevelScriptPath,
 		interactive:            r.interactive,
@@ -1216,6 +1217,7 @@ func (r *Runner) subshell(_ bool) *Runner {
 		suppressXTrace:            r.suppressXTrace,
 		currentChunkSource:        r.currentChunkSource,
 		currentChunkSourceBase:    r.currentChunkSourceBase,
+		printfEnv:                 r.printfEnv,
 		hiddenReadonlyArrayDecl:   r.hiddenReadonlyArrayDecl,
 		commandHash:               r.commandHash,
 		origStart:                 r.origStart,

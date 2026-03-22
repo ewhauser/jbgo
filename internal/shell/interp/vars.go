@@ -66,6 +66,7 @@ func forkWriteEnviron(parent expand.WriteEnviron) expand.WriteEnviron {
 		clone := *parent
 		clone.parent = forkEnviron(parent.parent)
 		clone.valuesShared = shareMapForSubshell(parent.values, &parent.valuesShared)
+		clone.tempUnsetShared = shareMapForSubshell(parent.tempUnset, &parent.tempUnsetShared)
 		return &clone
 	case *shadowWriteEnviron:
 		clone := *parent
@@ -129,6 +130,9 @@ type overlayEnviron struct {
 	// unset. Subsequent writes to these variables should pass through to
 	// the parent rather than being recaptured in the temp scope.
 	tempUnset map[string]bool
+	// tempUnsetShared tracks whether tempUnset is shared with another environ
+	// and must be cloned before mutation.
+	tempUnsetShared bool
 
 	// optState tracks clustered getopts progress for the OPTIND binding visible
 	// in this scope.
@@ -433,8 +437,10 @@ func deleteCurrentScopeVar(env expand.WriteEnviron, name string) bool {
 		if _, ok := env.values[normalized]; !ok {
 			return false
 		}
+		env.values = cloneMapOnWrite(env.values, &env.valuesShared)
 		delete(env.values, normalized)
 		if env.tempScope {
+			env.tempUnset = cloneMapOnWrite(env.tempUnset, &env.tempUnsetShared)
 			if env.tempUnset == nil {
 				env.tempUnset = make(map[string]bool)
 			}

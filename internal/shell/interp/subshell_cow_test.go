@@ -3,6 +3,8 @@ package interp
 import (
 	"io"
 	"testing"
+
+	"github.com/ewhauser/gbash/internal/shell/expand"
 )
 
 func TestSubshellEnvSnapshotIsolation(t *testing.T) {
@@ -209,6 +211,58 @@ func TestSubshellFrameAndDirStackIsolation(t *testing.T) {
 	}
 	if got, want := len(child.dirStack), 2; got != want {
 		t.Fatalf("child dir stack length = %d, want %d", got, want)
+	}
+}
+
+func TestSubshellTempScopeUnsetIsolation(t *testing.T) {
+	t.Parallel()
+
+	runner := newTestSubshellCOWRunner(t)
+	tempScope := &overlayEnviron{
+		parent:    runner.writeEnv,
+		tempScope: true,
+		values: map[string]namedVariable{
+			"TEMP": {
+				Name: "TEMP",
+				Variable: expand.Variable{
+					Set:  true,
+					Kind: expand.String,
+					Str:  "parent",
+				},
+			},
+		},
+		tempUnset: map[string]bool{"OLD": true},
+	}
+	runner.writeEnv = tempScope
+
+	child := runner.subshell(true)
+	childTemp, ok := child.writeEnv.(*overlayEnviron)
+	if !ok {
+		t.Fatalf("child writeEnv type = %T, want *overlayEnviron", child.writeEnv)
+	}
+	childTemp, ok = childTemp.parent.(*overlayEnviron)
+	if !ok {
+		t.Fatalf("child temp scope type = %T, want *overlayEnviron", child.writeEnv)
+	}
+
+	if !deleteCurrentScopeVar(childTemp, "TEMP") {
+		t.Fatalf("deleteCurrentScopeVar() = false, want true")
+	}
+
+	if _, ok := tempScope.values["TEMP"]; !ok {
+		t.Fatalf("parent temp scope lost TEMP binding")
+	}
+	if tempScope.tempUnset["TEMP"] {
+		t.Fatalf("parent tempUnset unexpectedly contains TEMP")
+	}
+	if !tempScope.tempUnset["OLD"] {
+		t.Fatalf("parent tempUnset lost OLD marker")
+	}
+	if _, ok := childTemp.values["TEMP"]; ok {
+		t.Fatalf("child temp scope still contains TEMP")
+	}
+	if !childTemp.tempUnset["TEMP"] {
+		t.Fatalf("child tempUnset missing TEMP marker")
 	}
 }
 
