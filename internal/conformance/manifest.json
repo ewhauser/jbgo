@@ -288,10 +288,6 @@
             "darwin"
           ]
         },
-        "oils/serialize.test.sh::${var@Q}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/smoke.test.sh::failed command": {
           "mode": "xfail",
           "reason": "conformance: gbash ls error message format differs from bash"
