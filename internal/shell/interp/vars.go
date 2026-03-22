@@ -77,6 +77,11 @@ type overlayEnviron struct {
 	// should be consumed when a local of the same name is declared.
 	tempScopeConsumesLocals bool
 
+	// tempUnset tracks variable names whose temp bindings were explicitly
+	// unset. Subsequent writes to these variables should pass through to
+	// the parent rather than being recaptured in the temp scope.
+	tempUnset map[string]bool
+
 	// optState tracks clustered getopts progress for the OPTIND binding visible
 	// in this scope.
 	optState getopts
@@ -130,6 +135,12 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 	if o.funcScope && !vr.Local && !inOverlay {
 		// Functions use dynamic scope: writes to non-local names should walk
 		// outward until they reach the defining scope, including caller locals.
+		return o.parent.(expand.WriteEnviron).Set(name, vr)
+	}
+	if o.tempScope && !inOverlay && o.tempUnset[normalized] {
+		// A temp binding was explicitly unset; pass writes through to the
+		// parent so they land in the correct outer scope rather than being
+		// recaptured by the temp overlay.
 		return o.parent.(expand.WriteEnviron).Set(name, vr)
 	}
 
@@ -377,6 +388,12 @@ func deleteCurrentScopeVar(env expand.WriteEnviron, name string) bool {
 			return false
 		}
 		delete(env.values, normalized)
+		if env.tempScope {
+			if env.tempUnset == nil {
+				env.tempUnset = make(map[string]bool)
+			}
+			env.tempUnset[normalized] = true
+		}
 		return true
 	case *shadowWriteEnviron:
 		if env.shadowSet && name == env.shadowName {

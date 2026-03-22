@@ -2725,8 +2725,9 @@ func (r *Runner) restoreCallAssigns(restores []restoreVar) {
 		restore := restores[i]
 		if restore.restoreSeconds {
 			if err := r.writeEnv.Set(restore.name, restore.vr); err != nil {
-				r.errf("%s: %v\n", restore.name, err)
-				r.exit.code = 1
+				// If the variable became readonly during command execution
+				// (e.g. SECONDS), silently skip the restore rather than
+				// treating it as a fatal error.
 				continue
 			}
 			if restore.secondsEnv != nil && setSecondsStartTimeForEnv(restore.secondsEnv, restore.secondsStartTime) {
