@@ -1365,10 +1365,30 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		for !r.stop(ctx) {
 			oldNoErrExit := r.noErrExit
 			r.noErrExit = true
-			r.stmts(ctx, cm.Cond)
+			r.loopDepth++
+			for _, condStmt := range cm.Cond {
+				r.stmt(ctx, condStmt)
+				if r.breakEnclosing > 0 || r.contnEnclosing > 0 {
+					break
+				}
+			}
+			r.loopDepth--
 			r.noErrExit = oldNoErrExit
 			if r.stmtAborted() {
 				return
+			}
+			if r.contnEnclosing > 0 {
+				r.contnEnclosing--
+				if r.contnEnclosing > 0 {
+					break
+				}
+				r.exit.clear()
+				continue
+			}
+			if r.breakEnclosing > 0 {
+				r.breakEnclosing--
+				r.exit.clear()
+				break
 			}
 
 			stop := r.exit.ok() == cm.Until
@@ -3637,9 +3657,8 @@ func (r *Runner) redirectTargetFD(rd *syntax.Redirect, arg string) (fd int, allo
 }
 
 func (r *Runner) loopStmtsBroken(ctx context.Context, stmts []*syntax.Stmt) bool {
-	oldInLoop := r.inLoop
-	r.inLoop = true
-	defer func() { r.inLoop = oldInLoop }()
+	r.loopDepth++
+	defer func() { r.loopDepth-- }()
 	for _, stmt := range stmts {
 		r.stmt(ctx, stmt)
 		if r.contnEnclosing > 0 {

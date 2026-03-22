@@ -153,7 +153,7 @@ type Runner struct {
 	// >0 to break or continue out of N enclosing loops
 	breakEnclosing, contnEnclosing int
 
-	inLoop    bool
+	loopDepth int
 	inFunc    bool
 	inSource  bool
 	evalDepth int
