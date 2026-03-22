@@ -3,9 +3,14 @@ package builtins_test
 import (
 	"bytes"
 	"context"
+	stdfs "io/fs"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestFindSupportsCaseInsensitivePathAndRegexFlagsIsolated(t *testing.T) {
@@ -231,4 +236,181 @@ func TestFindFromRootKeepsRelativePathsNormalized(t *testing.T) {
 	if got, want := strings.TrimSpace(result.Stdout), "./pkg/testdata/fuzz/FuzzFoo/corpus1"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
+}
+
+func TestFindTypeQueriesAvoidDirEntryInfoForKnownEntries(t *testing.T) {
+	t.Parallel()
+
+	var tracked *infoCountingFS
+	session := newSession(t, &Config{
+		FileSystem: CustomFileSystem(gbfs.FactoryFunc(func(context.Context) (gbfs.FileSystem, error) {
+			tracked = &infoCountingFS{FileSystem: gbfs.NewMemory()}
+			return tracked, nil
+		}), defaultHomeDir),
+	})
+
+	writeSessionFile(t, session, "/bench/a.txt", []byte("a"))
+	writeSessionFile(t, session, "/bench/sub/b.txt", []byte("b"))
+
+	tracked.infoCalls.Store(0)
+	result := mustExecSession(t, session, "find /bench -type f\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "/bench/a.txt\n/bench/sub/b.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := tracked.infoCalls.Load(); got != 0 {
+		t.Fatalf("DirEntry.Info() calls = %d, want 0", got)
+	}
+}
+
+func TestFindMetadataFreePrintfAvoidsDirEntryInfo(t *testing.T) {
+	t.Parallel()
+
+	var tracked *infoCountingFS
+	session := newSession(t, &Config{
+		FileSystem: CustomFileSystem(gbfs.FactoryFunc(func(context.Context) (gbfs.FileSystem, error) {
+			tracked = &infoCountingFS{FileSystem: gbfs.NewMemory()}
+			return tracked, nil
+		}), defaultHomeDir),
+	})
+
+	writeSessionFile(t, session, "/printf/a.txt", []byte("a"))
+	writeSessionFile(t, session, "/printf/sub/b.txt", []byte("b"))
+
+	tracked.infoCalls.Store(0)
+	result := mustExecSession(t, session, "find /printf -mindepth 1 -maxdepth 1 -printf '%f|%h|%p|%P|%d\\n'\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a.txt|/printf|/printf/a.txt|a.txt|1\nsub|/printf|/printf/sub|sub|1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := tracked.infoCalls.Load(); got != 0 {
+		t.Fatalf("DirEntry.Info() calls = %d, want 0", got)
+	}
+}
+
+func TestFindSymlinkBehavior(t *testing.T) {
+	t.Parallel()
+
+	t.Run("follow mode uses target type and descends", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{
+			FileSystem: CustomFileSystem(gbfs.FactoryFunc(func(context.Context) (gbfs.FileSystem, error) {
+				return gbfs.NewMemory(), nil
+			}), defaultHomeDir),
+			Policy: policy.NewStatic(&policy.Config{
+				ReadRoots:   []string{"/links", "/usr/bin", "/bin"},
+				WriteRoots:  []string{"/links"},
+				SymlinkMode: policy.SymlinkFollow,
+			}),
+		})
+
+		writeSessionFile(t, session, "/links/target.txt", []byte("target"))
+		writeSessionFile(t, session, "/links/dir/inner.txt", []byte("inner"))
+		if err := session.FileSystem().Symlink(context.Background(), "target.txt", "/links/file-link"); err != nil {
+			t.Fatalf("Symlink(file-link) error = %v", err)
+		}
+		if err := session.FileSystem().Symlink(context.Background(), "dir", "/links/dir-link"); err != nil {
+			t.Fatalf("Symlink(dir-link) error = %v", err)
+		}
+
+		result := mustExecSession(t, session,
+			"find /links/file-link -type f\n"+
+				"find /links/dir-link -type d\n"+
+				"find /links/dir-link -type f\n",
+		)
+		if result.ExitCode != 0 {
+			t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if got, want := result.Stdout, "/links/file-link\n/links/dir-link\n/links/dir-link/inner.txt\n"; got != want {
+			t.Fatalf("Stdout = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("default policy still denies symlink traversal", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{
+			FileSystem: CustomFileSystem(gbfs.FactoryFunc(func(context.Context) (gbfs.FileSystem, error) {
+				return gbfs.NewMemory(), nil
+			}), defaultHomeDir),
+		})
+
+		writeSessionFile(t, session, "/links/target.txt", []byte("target"))
+		if err := session.FileSystem().Symlink(context.Background(), "target.txt", "/links/file-link"); err != nil {
+			t.Fatalf("Symlink(file-link) error = %v", err)
+		}
+
+		result := mustExecSession(t, session, "find /links/file-link -type f\n")
+		if result.ExitCode != 126 {
+			t.Fatalf("ExitCode = %d, want 126; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "symlink traversal denied") {
+			t.Fatalf("Stderr = %q, want symlink denial", result.Stderr)
+		}
+	})
+
+	t.Run("dangling symlink still reports missing root", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{
+			FileSystem: CustomFileSystem(gbfs.FactoryFunc(func(context.Context) (gbfs.FileSystem, error) {
+				return gbfs.NewMemory(), nil
+			}), defaultHomeDir),
+			Policy: policy.NewStatic(&policy.Config{
+				ReadRoots:   []string{"/links", "/usr/bin", "/bin"},
+				WriteRoots:  []string{"/links"},
+				SymlinkMode: policy.SymlinkFollow,
+			}),
+		})
+
+		if err := session.FileSystem().MkdirAll(context.Background(), "/links", 0o755); err != nil {
+			t.Fatalf("MkdirAll(/links) error = %v", err)
+		}
+		if err := session.FileSystem().Symlink(context.Background(), "missing.txt", "/links/dangle"); err != nil {
+			t.Fatalf("Symlink(dangle) error = %v", err)
+		}
+
+		result := mustExecSession(t, session, "find /links/dangle -type f\n")
+		if result.ExitCode != 1 {
+			t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if got, want := result.Stderr, "find: /links/dangle: No such file or directory\n"; got != want {
+			t.Fatalf("Stderr = %q, want %q", got, want)
+		}
+		if result.Stdout != "" {
+			t.Fatalf("Stdout = %q, want empty", result.Stdout)
+		}
+	})
+}
+
+type infoCountingFS struct {
+	gbfs.FileSystem
+	infoCalls atomic.Int32
+}
+
+func (fs *infoCountingFS) ReadDir(ctx context.Context, name string) ([]stdfs.DirEntry, error) {
+	entries, err := fs.FileSystem.ReadDir(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	wrapped := make([]stdfs.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		wrapped = append(wrapped, infoCountingDirEntry{DirEntry: entry, infoCalls: &fs.infoCalls})
+	}
+	return wrapped, nil
+}
+
+type infoCountingDirEntry struct {
+	stdfs.DirEntry
+	infoCalls *atomic.Int32
+}
+
+func (e infoCountingDirEntry) Info() (stdfs.FileInfo, error) {
+	e.infoCalls.Add(1)
+	return e.DirEntry.Info()
 }

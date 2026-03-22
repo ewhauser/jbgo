@@ -112,6 +112,23 @@ type findCommandOptions struct {
 	depthFirst  bool
 }
 
+type findRequirements struct {
+	needsType           bool
+	needsEmpty          bool
+	needsSize           bool
+	needsMTime          bool
+	needsMode           bool
+	needsPrintfMetadata bool
+	hasPrintfAction     bool
+
+	exprNeedsSize    bool
+	exprNeedsMTime   bool
+	exprNeedsMode    bool
+	printfNeedsSize  bool
+	printfNeedsMTime bool
+	printfNeedsMode  bool
+}
+
 type findEvalContext struct {
 	displayPath string
 	name        string
