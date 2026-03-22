@@ -1007,8 +1007,18 @@ type BinaryArithm struct {
 	X, Y  ArithmExpr
 }
 
-func (b *BinaryArithm) Pos() Pos { return b.X.Pos() }
-func (b *BinaryArithm) End() Pos { return b.Y.End() }
+func (b *BinaryArithm) Pos() Pos {
+	if b.X != nil {
+		return b.X.Pos()
+	}
+	return b.OpPos
+}
+func (b *BinaryArithm) End() Pos {
+	if b.Y != nil {
+		return b.Y.End()
+	}
+	return posAddCol(b.OpPos, 1)
+}
 
 // UnaryArithm represents an unary arithmetic expression. The unary operator
 // may come before or after the sub-expression.

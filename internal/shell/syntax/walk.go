@@ -136,8 +136,12 @@ func Walk(node Node, f func(Node) bool) {
 	case *ArithmCmd:
 		Walk(node.X, f)
 	case *BinaryArithm:
-		Walk(node.X, f)
-		Walk(node.Y, f)
+		if node.X != nil {
+			Walk(node.X, f)
+		}
+		if node.Y != nil {
+			Walk(node.Y, f)
+		}
 	case *CondBinary:
 		Walk(node.X, f)
 		Walk(node.Y, f)
