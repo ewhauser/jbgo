@@ -24,6 +24,24 @@ var _ StdinReader = (*virtualPipeReader)(nil)
 // This matches typical Linux pipe buffer size for consistent behavior.
 const defaultPipeBufferSize = 65536
 
+const minVirtualPipeAllocSize = 4 * 1024
+
+var virtualPipeBufferBuckets = []int{
+	4 * 1024,
+	8 * 1024,
+	16 * 1024,
+	32 * 1024,
+	64 * 1024,
+}
+
+var virtualPipeBufferPools = map[int]*sync.Pool{
+	4 * 1024:  newVirtualPipeBufferPool(4 * 1024),
+	8 * 1024:  newVirtualPipeBufferPool(8 * 1024),
+	16 * 1024: newVirtualPipeBufferPool(16 * 1024),
+	32 * 1024: newVirtualPipeBufferPool(32 * 1024),
+	64 * 1024: newVirtualPipeBufferPool(64 * 1024),
+}
+
 // errDeadlineExceeded is returned when a read deadline is exceeded.
 // This matches the behavior of os.File.SetReadDeadline.
 var errDeadlineExceeded = os.ErrDeadlineExceeded
@@ -35,7 +53,10 @@ type virtualPipe struct {
 	mu           sync.Mutex
 	cond         *sync.Cond
 	buf          []byte
+	readPos      int
+	writePos     int
 	bufSize      int
+	bufPooled    bool
 	closed       bool
 	wrClosed     bool
 	err          error
@@ -70,16 +91,155 @@ func NewVirtualPipe() (StdinReader, io.WriteCloser) {
 	return newVirtualPipeSize(defaultPipeBufferSize)
 }
 
+func newVirtualPipeBufferPool(size int) *sync.Pool {
+	return &sync.Pool{
+		New: func() any {
+			return make([]byte, size)
+		},
+	}
+}
+
 func newVirtualPipeSize(size int) (StdinReader, io.WriteCloser) {
 	if size <= 0 {
 		size = defaultPipeBufferSize
 	}
 	p := &virtualPipe{
-		buf:     make([]byte, 0, size),
 		bufSize: size,
 	}
 	p.cond = sync.NewCond(&p.mu)
 	return &virtualPipeReader{pipe: p}, &virtualPipeWriter{pipe: p}
+}
+
+func (p *virtualPipe) unreadLen() int {
+	return p.writePos - p.readPos
+}
+
+func (p *virtualPipe) pooledCapacityFor(needed int) int {
+	switch p.bufSize {
+	case 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024:
+		for _, size := range virtualPipeBufferBuckets {
+			if size >= needed && size <= p.bufSize {
+				return size
+			}
+		}
+	}
+	return 0
+}
+
+func (p *virtualPipe) nextBufferCapacity(needed int) int {
+	if needed <= 0 {
+		return 0
+	}
+	if pooled := p.pooledCapacityFor(needed); pooled != 0 {
+		return pooled
+	}
+
+	size := len(p.buf)
+	if size == 0 {
+		size = min(p.bufSize, max(minVirtualPipeAllocSize, needed))
+	}
+	for size < needed && size < p.bufSize {
+		next := size * 2
+		if next <= size || next > p.bufSize {
+			size = p.bufSize
+			break
+		}
+		size = next
+	}
+	if size < needed {
+		size = needed
+	}
+	if size > p.bufSize {
+		size = p.bufSize
+	}
+	return size
+}
+
+func borrowVirtualPipeBuffer(size int) ([]byte, bool) {
+	if pool := virtualPipeBufferPools[size]; pool != nil {
+		if buf, ok := pool.Get().([]byte); ok && cap(buf) >= size {
+			return buf[:size], true
+		}
+		return make([]byte, size), true
+	}
+	return make([]byte, size), false
+}
+
+func releaseVirtualPipeBuffer(buf []byte, pooled bool) {
+	if !pooled || buf == nil {
+		return
+	}
+	if pool := virtualPipeBufferPools[cap(buf)]; pool != nil {
+		pool.Put(buf[:cap(buf)])
+	}
+}
+
+func (p *virtualPipe) releaseBufferLocked() {
+	releaseVirtualPipeBuffer(p.buf, p.bufPooled)
+	p.buf = nil
+	p.readPos = 0
+	p.writePos = 0
+	p.bufPooled = false
+}
+
+func (p *virtualPipe) compactBufferLocked() {
+	unread := p.unreadLen()
+	if unread == 0 {
+		p.readPos = 0
+		p.writePos = 0
+		return
+	}
+	if p.readPos == 0 {
+		return
+	}
+	copy(p.buf[:unread], p.buf[p.readPos:p.writePos])
+	p.readPos = 0
+	p.writePos = unread
+}
+
+func (p *virtualPipe) growBufferLocked(newSize int) {
+	unread := p.unreadLen()
+	buf, pooled := borrowVirtualPipeBuffer(newSize)
+	if unread > 0 && p.buf != nil {
+		copy(buf, p.buf[p.readPos:p.writePos])
+	}
+	p.releaseBufferLocked()
+	p.buf = buf
+	p.bufPooled = pooled
+	p.readPos = 0
+	p.writePos = unread
+}
+
+func (p *virtualPipe) ensureWriteCapacityLocked(toWrite int) {
+	if toWrite <= 0 {
+		return
+	}
+	if p.buf == nil {
+		p.growBufferLocked(p.nextBufferCapacity(toWrite))
+		return
+	}
+	if len(p.buf)-p.writePos >= toWrite {
+		return
+	}
+	if p.readPos > 0 {
+		p.compactBufferLocked()
+		if len(p.buf)-p.writePos >= toWrite {
+			return
+		}
+	}
+	p.growBufferLocked(p.nextBufferCapacity(p.unreadLen() + toWrite))
+}
+
+func (p *virtualPipe) resetOrReleaseEmptyBufferLocked() {
+	if p.unreadLen() > 0 {
+		return
+	}
+	if p.closed || p.wrClosed {
+		p.releaseBufferLocked()
+		return
+	}
+	p.readPos = 0
+	p.writePos = 0
 }
 
 // Read reads data from the pipe. It blocks until data is available,
@@ -92,7 +252,7 @@ func (r *virtualPipeReader) Read(p []byte) (int, error) {
 	r.pipe.mu.Lock()
 	defer r.pipe.mu.Unlock()
 
-	for len(r.pipe.buf) == 0 {
+	for r.pipe.unreadLen() == 0 {
 		if r.pipe.closed {
 			return 0, r.pipe.err
 		}
@@ -112,8 +272,9 @@ func (r *virtualPipeReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 
-	n := copy(p, r.pipe.buf)
-	r.pipe.buf = r.pipe.buf[n:]
+	n := copy(p, r.pipe.buf[r.pipe.readPos:r.pipe.writePos])
+	r.pipe.readPos += n
+	r.pipe.resetOrReleaseEmptyBufferLocked()
 	r.pipe.cond.Broadcast()
 	return n, nil
 }
@@ -159,6 +320,7 @@ func (r *virtualPipeReader) CloseWithError(err error) error {
 		err = io.ErrClosedPipe
 	}
 	r.pipe.err = err
+	r.pipe.releaseBufferLocked()
 	r.pipe.cond.Broadcast()
 	return nil
 }
@@ -186,7 +348,7 @@ func (w *virtualPipeWriter) Write(p []byte) (int, error) {
 		}
 
 		// Wait for space in the buffer
-		for len(w.pipe.buf) >= w.pipe.bufSize {
+		for w.pipe.unreadLen() >= w.pipe.bufSize {
 			if w.pipe.closed {
 				return written, w.pipe.err
 			}
@@ -201,9 +363,11 @@ func (w *virtualPipeWriter) Write(p []byte) (int, error) {
 		}
 
 		// Write as much as we can
-		space := w.pipe.bufSize - len(w.pipe.buf)
+		space := w.pipe.bufSize - w.pipe.unreadLen()
 		toWrite := min(len(p)-written, space)
-		w.pipe.buf = append(w.pipe.buf, p[written:written+toWrite]...)
+		w.pipe.ensureWriteCapacityLocked(toWrite)
+		copy(w.pipe.buf[w.pipe.writePos:w.pipe.writePos+toWrite], p[written:written+toWrite])
+		w.pipe.writePos += toWrite
 		written += toWrite
 		w.pipe.cond.Broadcast()
 	}
@@ -231,6 +395,9 @@ func (w *virtualPipeWriter) CloseWithError(err error) error {
 	if err != nil {
 		w.pipe.closed = true
 		w.pipe.err = err
+		w.pipe.releaseBufferLocked()
+	} else if w.pipe.unreadLen() == 0 {
+		w.pipe.releaseBufferLocked()
 	}
 	w.pipe.cond.Broadcast()
 	return nil
