@@ -75,6 +75,42 @@ if [ -f "$literal_path" ]; then
 else
   printf 'literal=missing\n'
 fi
+
+scratch='./.bench-redir'
+mkdir -p "$scratch"
+(
+  printf '%s\n' 'subshell-a'
+  printf '%s\n' "${patched[0]}"
+) > "$scratch/out.txt"
+(
+  printf '%s\n' 'subshell-b'
+) >> "$scratch/out.txt"
+(
+  printf '%s\n' 'stderr-a' >&2
+  printf '%s\n' 'stderr-b' >&2
+) 2> "$scratch/err.txt"
+
+{
+  IFS= read -r redir_first
+  IFS= read -r redir_second
+  IFS= read -r redir_third
+} < "$scratch/out.txt"
+printf 'redir=%s|%s|%s\n' "$redir_first" "$redir_second" "$redir_third"
+
+exec 3< "$scratch/out.txt"
+IFS= read -r fd_first <&3
+exec 3<&-
+printf 'fd=%s\n' "$fd_first"
+
+err_join=''
+while IFS= read -r line; do
+  if [ -n "$err_join" ]; then
+    err_join="$err_join,$line"
+  else
+    err_join=$line
+  fi
+done < "$scratch/err.txt"
+printf 'stderr=%s\n' "$err_join"
 `
 
 const expansionStressExpectedStdout = "" +
@@ -86,7 +122,10 @@ const expansionStressExpectedStdout = "" +
 	"default=3|alpha|gamma\n" +
 	"slice=3|one|two|three\n" +
 	"strip=root/archive/program.tar.gz|/root/archive/program\n" +
-	"literal=./literal*dir/[meta]?/report.txt\n"
+	"literal=./literal*dir/[meta]?/report.txt\n" +
+	"redir=subshell-a|pkg-root00/section00/file000.data|subshell-b\n" +
+	"fd=subshell-a\n" +
+	"stderr=stderr-a,stderr-b\n"
 
 type options struct {
 	Runs         int
