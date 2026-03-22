@@ -253,11 +253,15 @@ func walkComments(list []Comment, f func(Node) bool) {
 // and does not support skipping subtrees.
 func All(node Node) iter.Seq[Node] {
 	return func(yield func(Node) bool) {
+		var stopped bool
 		Walk(node, func(n Node) bool {
-			if n == nil {
-				return true
+			if stopped || n == nil {
+				return !stopped
 			}
-			return yield(n)
+			if !yield(n) {
+				stopped = true
+			}
+			return !stopped
 		})
 	}
 }
