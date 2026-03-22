@@ -1878,12 +1878,12 @@ func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 		{
 			name: "TildeExpandsAfterBraceSplit",
 			src:  `{foo~,~}/bar`,
-			want: []string{"foo~/bar", "/startup/bar"},
+			want: []string{"foo~/bar", "/home/bob/bar"},
 		},
 		{
 			name: "NamedUserTildeExpandsAfterBraceSplit",
 			src:  `~{/src,root}`,
-			want: []string{"/startup/src", "/root"},
+			want: []string{"/home/bob/src", "/root"},
 		},
 		{
 			name: "QuotedBraceElementsStillQuoteAfterReparse",
@@ -1946,7 +1946,7 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 			want: "/live/src",
 		},
 		{
-			name: "StartupHomePreferred",
+			name: "StartupHomeIgnored",
 			src:  `~/src`,
 			cfg: &Config{
 				StartupHome: "/startup",
@@ -1954,7 +1954,7 @@ func TestLiteralCurrentUserHomeUsesSandboxEnv(t *testing.T) {
 					"HOME": {Set: true, Kind: String, Str: "/live"},
 				},
 			},
-			want: "/startup/src",
+			want: "/live/src",
 		},
 		{
 			name: "RootHomeAvoidsDoubleSlash",

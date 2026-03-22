@@ -2258,17 +2258,17 @@ func (cfg *Config) expandUserWithHome(field string, moreFields bool, startupHome
 		name = name[:i]
 	}
 	if name == "" {
-		// Current user; try via "HOME", otherwise fall back to the
-		// system's appropriate home dir env var. Don't use os/user, as
-		// that's overkill. We can't use [os.UserHomeDir], because we want
-		// to use cfg.Env, and we always want to check "HOME" first.
-
-		if startupHome != "" {
-			prefix, rest := joinTildeHome(startupHome, rest)
-			return prefix, rest, true
-		}
+		// Current user; try via "HOME" first (bash-compatible), then
+		// fall back to StartupHome, then the system's appropriate home
+		// dir env var. Don't use os/user, as that's overkill. We can't
+		// use [os.UserHomeDir], because we want to use cfg.Env, and we
+		// always want to check "HOME" first.
 		if vr := cfg.TildeEnv.Get("HOME"); vr.IsSet() {
 			prefix, rest := joinTildeHome(vr.String(), rest)
+			return prefix, rest, true
+		}
+		if startupHome != "" {
+			prefix, rest := joinTildeHome(startupHome, rest)
 			return prefix, rest, true
 		}
 

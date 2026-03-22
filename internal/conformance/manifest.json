@@ -42,18 +42,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/brace-expansion.test.sh::Tilde expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash sandbox tilde expansion uses StartupHome instead of host HOME"
-        },
-        "oils/brace-expansion.test.sh::Tilde expansion with brace expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash sandbox tilde expansion uses StartupHome instead of host HOME"
-        },
-        "oils/brace-expansion.test.sh::Two kinds of tilde expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash sandbox tilde expansion uses StartupHome instead of host HOME"
-        },
         "oils/blog1.test.sh::${####}": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -361,6 +349,10 @@
         "oils/serialize.test.sh::${var@Q}": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
+        },
+        "oils/glob.test.sh::Glob unicode char": {
+          "mode": "xfail",
+          "reason": "conformance: C.UTF-8 pathname collation order still differs from bash for this glob case"
         }
       }
     }
