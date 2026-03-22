@@ -1,0 +1,172 @@
+package bashtool
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/commands"
+)
+
+func TestDefaultToolDefinitionAndSchemas(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{})
+	def := tool.ToolDefinition()
+
+	if def.Name != "bash" {
+		t.Fatalf("ToolDefinition().Name = %q, want bash", def.Name)
+	}
+	if got := def.Description; !strings.Contains(got, "isolated virtual filesystem") {
+		t.Fatalf("ToolDefinition().Description = %q", got)
+	}
+	if got := def.InputSchema["type"]; got != "object" {
+		t.Fatalf("InputSchema.type = %#v, want object", got)
+	}
+	props, _ := def.InputSchema["properties"].(map[string]any)
+	if _, ok := props["commands"]; !ok {
+		t.Fatalf("InputSchema.properties missing commands: %#v", props)
+	}
+	if _, ok := props["script"]; !ok {
+		t.Fatalf("InputSchema.properties missing script: %#v", props)
+	}
+	if got := tool.OutputSchema()["type"]; got != "object" {
+		t.Fatalf("OutputSchema.type = %#v, want object", got)
+	}
+}
+
+func TestSystemPromptTracksUpstreamWordingWithGbashIdentity(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{})
+	got := tool.SystemPrompt()
+
+	if !strings.Contains(got, "Returns JSON with stdout, stderr, exit_code.") {
+		t.Fatalf("SystemPrompt() = %q, want JSON contract", got)
+	}
+	if !strings.Contains(got, "Home /home/agent.") {
+		t.Fatalf("SystemPrompt() = %q, want gbash home", got)
+	}
+	if !strings.Contains(got, "Use bash syntax; do not assume /bin/sh portability") {
+		t.Fatalf("SystemPrompt() = %q, want upstream syntax warning", got)
+	}
+	if !strings.Contains(got, "perl, python/python3 not available.") {
+		t.Fatalf("SystemPrompt() = %q, want language warning", got)
+	}
+}
+
+func TestLanguageWarningSuppression(t *testing.T) {
+	t.Parallel()
+
+	registry := commands.NewRegistry(
+		commands.DefineCommand("perl", nil),
+		commands.DefineCommand("python", nil),
+	)
+	tool := New(Config{
+		Profile:  CommandProfileCustom,
+		Registry: registry,
+	})
+
+	if got := tool.languageWarning(); got != "" {
+		t.Fatalf("languageWarning() = %q, want empty", got)
+	}
+}
+
+func TestHelpIncludesExtrasNotes(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{Profile: CommandProfileExtras})
+	help := tool.Help()
+
+	if !strings.Contains(help, "## Parameters") {
+		t.Fatalf("Help() missing parameters section: %q", help)
+	}
+	if !strings.Contains(help, "## Result") {
+		t.Fatalf("Help() missing result section: %q", help)
+	}
+	if !strings.Contains(help, "Stable contrib commands available: awk, html-to-markdown, jq, sqlite3, yq.") {
+		t.Fatalf("Help() missing extras note: %q", help)
+	}
+	if !strings.Contains(help, "`awk`, `html-to-markdown`, `jq`, `sqlite3`, `yq`") {
+		t.Fatalf("Help() missing custom commands list: %q", help)
+	}
+}
+
+func TestParseRequestSupportsScriptAliasAndTimeout(t *testing.T) {
+	t.Parallel()
+
+	req, err := ParseRequest(map[string]any{
+		"script":     "echo hi",
+		"timeout_ms": json.Number("2500"),
+	})
+	if err != nil {
+		t.Fatalf("ParseRequest() error = %v", err)
+	}
+	if got := req.ResolvedCommands(); got != "echo hi" {
+		t.Fatalf("ResolvedCommands() = %q, want echo hi", got)
+	}
+	if got := req.Timeout().Milliseconds(); got != 2500 {
+		t.Fatalf("Timeout() = %dms, want 2500ms", got)
+	}
+}
+
+func TestFormatToolResultMatchesEvaluatorShape(t *testing.T) {
+	t.Parallel()
+
+	got := FormatToolResult(Response{
+		Stdout:   "out",
+		Stderr:   "err",
+		ExitCode: 1,
+	})
+	want := "out\nSTDERR: err\nExit code: 1"
+	if got != want {
+		t.Fatalf("FormatToolResult() = %q, want %q", got, want)
+	}
+}
+
+func TestExecuteUsesDefaultRegistry(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{})
+	resp := tool.Execute(context.Background(), Request{Commands: "echo hello\n"})
+	if resp.ExitCode != 0 {
+		t.Fatalf("Execute() exit = %d, want 0; stderr=%q", resp.ExitCode, resp.Stderr)
+	}
+	if got := resp.Stdout; got != "hello\n" {
+		t.Fatalf("Execute() stdout = %q, want hello\\n", got)
+	}
+}
+
+func TestExecuteUsesExtrasRegistry(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{Profile: CommandProfileExtras})
+	resp := tool.Execute(context.Background(), Request{
+		Commands: `printf '{"name":"alice"}' | jq -r '.name'`,
+	})
+	if resp.ExitCode != 0 {
+		t.Fatalf("Execute() exit = %d, want 0; stderr=%q", resp.ExitCode, resp.Stderr)
+	}
+	if got := strings.TrimSpace(resp.Stdout); got != "alice" {
+		t.Fatalf("Execute() stdout = %q, want alice", got)
+	}
+}
+
+func TestExecutePassesRuntimeOptions(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{
+		RuntimeOptions: []gbash.Option{
+			gbash.WithWorkingDir("/tmp"),
+		},
+	})
+	resp := tool.Execute(context.Background(), Request{Commands: "pwd\n"})
+	if resp.ExitCode != 0 {
+		t.Fatalf("Execute() exit = %d, want 0; stderr=%q", resp.ExitCode, resp.Stderr)
+	}
+	if got := strings.TrimSpace(resp.Stdout); got != "/tmp" {
+		t.Fatalf("Execute() stdout = %q, want /tmp", got)
+	}
+}

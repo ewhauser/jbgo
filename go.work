@@ -3,6 +3,7 @@ go 1.26.0
 use (
 	.
 	./contrib/awk
+	./contrib/bashtool
 	./contrib/extras
 	./contrib/htmltomarkdown
 	./contrib/jq

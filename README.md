@@ -48,7 +48,7 @@ Shell parsing and execution are owned in-tree under `internal/shell`, with a pro
 - `github.com/ewhauser/gbash`: the core Go runtime and embedding API
 - `github.com/ewhauser/gbash/host`: the public host adapter boundary for platform and process behavior
 - `github.com/ewhauser/gbash/server`: shared JSON-RPC server mode for hosting persistent gbash sessions
-- `github.com/ewhauser/gbash/contrib/...`: optional Go command modules
+- `github.com/ewhauser/gbash/contrib/...`: optional Go command and tool modules
 - `@ewhauser/gbash-wasm/browser`: the explicit browser entrypoint for the `js/wasm` package. It is versioned in-repo today; npm publishing remains disabled in the release workflow for now.
 - `@ewhauser/gbash-wasm/node`: the explicit Node entrypoint for the same `js/wasm` package.
 
@@ -433,13 +433,14 @@ Shell language support also includes indexed arrays and associative arrays.
 
 Many commands are ported from [uutils/coreutils](https://github.com/uutils/coreutils) and have full GNU flag parity. See the current [compatibility report](https://ewhauser.github.io/gbash/docs/performance/compatibility/).
 
-### Contrib Commands
+### Contrib Modules
 
-Optional commands live in [`contrib/`](./contrib/) as separate Go modules so the core library stays dependency-light. They are not registered by default.
+Optional contrib packages live in [`contrib/`](./contrib/) as separate Go modules so the core library stays dependency-light. Command modules are not registered by default, and helper/tool modules do not change the default runtime surface.
 
-| Command | Module | Backed by |
+| Module | Import Path | Backed by |
 |---|---|---|
 | [`awk`](./contrib/awk/) | `github.com/ewhauser/gbash/contrib/awk` | [`benhoyt/goawk`](https://github.com/benhoyt/goawk) |
+| [`bashtool`](./contrib/bashtool/) | `github.com/ewhauser/gbash/contrib/bashtool` | `gbash` runtime execution plus the upstream [`bashkit`](https://github.com/everruns/bashkit) Bash tool contract |
 | [`html-to-markdown`](./contrib/htmltomarkdown/) | `github.com/ewhauser/gbash/contrib/htmltomarkdown` | [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) |
 | [`jq`](./contrib/jq/) | `github.com/ewhauser/gbash/contrib/jq` | [`itchyny/gojq`](https://github.com/itchyny/gojq) |
 | [`sqlite3`](./contrib/sqlite3/) | `github.com/ewhauser/gbash/contrib/sqlite3` | [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) |
@@ -454,6 +455,16 @@ gb, err := gbash.New(gbash.WithRegistry(extras.FullRegistry()))
 ```
 
 The same stable set is bundled in the `gbash-extras` CLI at `github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras`.
+
+Use `github.com/ewhauser/gbash/contrib/bashtool` when you want a reusable LLM-facing bash tool contract with upstream-style prompt, schema, help, and response formatting on top of gbash execution:
+
+```go
+import "github.com/ewhauser/gbash/contrib/bashtool"
+
+tool := bashtool.New(bashtool.Config{
+	Profile: bashtool.CommandProfileExtras,
+})
+```
 
 See the [`custom-zstd`](./examples/custom-zstd/) example for how to register custom commands.
 
