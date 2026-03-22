@@ -1033,7 +1033,11 @@ func (p *Parser) newLit(r rune) {
 		p.litBs = p.litBuf[:1]
 		p.litBs[0] = byte(r)
 	case r > escNewl:
-		w := utf8.RuneLen(r)
+		w := p.w
+		if w <= 0 || uint(w) > p.bsp {
+			p.litBs = p.litBuf[:0]
+			return
+		}
 		p.litBs = append(p.litBuf[:0], p.bs[p.bsp-uint(w):p.bsp]...)
 	default:
 		// don't let r == utf8.RuneSelf go to the second case as [utf8.RuneLen]

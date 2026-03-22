@@ -659,6 +659,11 @@ type Parser struct {
 	aliasSource     *AliasExpansion
 	tokAliasChain   []*AliasExpansion
 
+	// Probe parsers used while resolving $(( ambiguity skip nested $(( probes
+	// so malformed arithmetic words cannot recurse without consuming input.
+	parenAmbiguityDisabled   bool
+	parenAmbiguityProbeDepth int
+
 	pendingHeredocWarningPos    Pos
 	pendingHeredocWarningWanted string
 }
@@ -678,6 +683,28 @@ type aliasInputState struct {
 	aliasChain     []*AliasExpansion
 	aliasBlankNext bool
 	aliasSource    *AliasExpansion
+}
+
+type parserCursorSnapshot struct {
+	tok  token
+	pos  Pos
+	offs int64
+	bsp  uint
+	r    rune
+}
+
+func (p *Parser) cursorSnapshot() parserCursorSnapshot {
+	return parserCursorSnapshot{
+		tok:  p.tok,
+		pos:  p.pos,
+		offs: p.offs,
+		bsp:  p.bsp,
+		r:    p.r,
+	}
+}
+
+func (s parserCursorSnapshot) progressed(p *Parser) bool {
+	return s.tok != p.tok || s.pos != p.pos || s.offs != p.offs || s.bsp != p.bsp || s.r != p.r
 }
 
 // Incomplete reports whether the parser needs more input bytes
@@ -726,6 +753,7 @@ func (p *Parser) reset() {
 	p.tokAliasChain = nil
 	p.pendingHeredocWarningPos = Pos{}
 	p.pendingHeredocWarningWanted = ""
+	p.parenAmbiguityProbeDepth = 0
 	if p.aliasActive != nil {
 		clear(p.aliasActive)
 	}
@@ -1118,6 +1146,10 @@ func (p *Parser) doHeredocs() {
 				bodyOpts = append(bodyOpts, ExpandAliases(p.aliasResolver))
 			}
 			bodyParser := NewParser(bodyOpts...)
+			if p.parenAmbiguityDisabled {
+				bodyParser.parenAmbiguityDisabled = true
+				bodyParser.parenAmbiguityProbeDepth = p.parenAmbiguityProbeDepth
+			}
 			r.Hdoc, p.err = bodyParser.document(strings.NewReader(raw.Lit()), bodyStart)
 			if p.err == nil && r.Hdoc != nil {
 				setWordEnd(r.Hdoc, raw.End())
@@ -1918,6 +1950,7 @@ loop:
 		if p.tok == _EOF {
 			break
 		}
+		start := p.cursorSnapshot()
 		p.openNodes++
 		s := p.getStmt(true, false, false)
 		p.openNodes--
@@ -1927,6 +1960,10 @@ loop:
 		}
 		gotEnd = s.Semicolon.IsValid()
 		if !yield(s, p.err) {
+			break
+		}
+		if !start.progressed(p) {
+			p.posRecoverableErr(start.pos, "internal parser error: no progress parsing statement")
 			break
 		}
 	}
@@ -2268,6 +2305,7 @@ func (p *Parser) parenAmbiguityClone() *Parser {
 	clone.aliasInputStack = append([]aliasInputState(nil), p.aliasInputStack...)
 	clone.aliasActive = copyAliasActive(p.aliasActive)
 	clone.tokAliasChain = nil
+	clone.parenAmbiguityDisabled = true
 	return &clone
 }
 
@@ -2448,6 +2486,7 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 		defer func() { p.quote = noState }()
 	}
 	for {
+		start := p.cursorSnapshot()
 		p.openNodes++
 		n := p.wordPart()
 		p.openNodes--
@@ -2458,6 +2497,10 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 			return wps
 		}
 		wps = append(wps, n)
+		if !start.progressed(p) {
+			p.posRecoverableErr(start.pos, "internal parser error: no progress parsing word part")
+			return wps
+		}
 		if p.spaced {
 			return wps
 		}
@@ -2552,6 +2595,9 @@ func (p *Parser) arithmWordPart(salvageTail bool) *ArithmExp {
 }
 
 func (p *Parser) parenAmbiguityWordPart() WordPart {
+	p.parenAmbiguityProbeDepth++
+	defer func() { p.parenAmbiguityProbeDepth-- }()
+
 	afterToken, err := p.currentSourceTail()
 	start := p.pos
 	fullSrc := append([]byte(dollDblParen.String()), afterToken...)
@@ -2655,6 +2701,9 @@ func (p *Parser) wordPart() WordPart {
 	case dollDblParen, dollBrack:
 		p.ensureNoNested(p.pos)
 		if p.tok == dollDblParen {
+			if p.parenAmbiguityDisabled {
+				return p.arithmWordPart(true)
+			}
 			return p.parenAmbiguityWordPart()
 		}
 		return p.arithmWordPart(true)
@@ -3777,7 +3826,12 @@ func (p *Parser) eitherIndex() *Subscript {
 		if p.err != nil && p.lang.in(langBashLike) {
 			scan := arithSaved
 			for scan.tok != rightBrack && scan.tok != _EOF && scan.tok != _Newl {
+				start := scan.cursorSnapshot()
 				scan.nextArith(false)
+				if !start.progressed(&scan) {
+					scan.posRecoverableErr(start.pos, "internal parser error: no progress scanning subscript")
+					break
+				}
 			}
 			if scan.tok == rightBrack {
 				next := scan
@@ -3794,7 +3848,12 @@ func (p *Parser) eitherIndex() *Subscript {
 	}
 	if p.lang.in(langBashLike) && p.tok == hash {
 		for p.tok != rightBrack && p.tok != _EOF && p.tok != _Newl {
+			start := p.cursorSnapshot()
 			p.next()
+			if !start.progressed(p) {
+				p.posRecoverableErr(start.pos, "internal parser error: no progress scanning subscript")
+				break
+			}
 		}
 		if p.tok == rightBrack {
 			if sub.Expr == nil {
@@ -4928,6 +4987,9 @@ func (p *Parser) arithmExpCmdWithTail(s *Stmt, salvageTail bool) {
 }
 
 func (p *Parser) parenAmbiguityStmt(s *Stmt) {
+	p.parenAmbiguityProbeDepth++
+	defer func() { p.parenAmbiguityProbeDepth-- }()
+
 	afterToken, err := p.currentSourceTail()
 	start := p.pos
 	fullSrc := append([]byte(dblLeftParen.String()), afterToken...)
@@ -5016,6 +5078,10 @@ func (p *Parser) parenAmbiguityStmt(s *Stmt) {
 }
 
 func (p *Parser) arithmExpCmd(s *Stmt) {
+	if p.parenAmbiguityDisabled && p.parenAmbiguityProbeDepth > 1 {
+		p.arithmExpCmdWithTail(s, true)
+		return
+	}
 	p.parenAmbiguityStmt(s)
 }
 
@@ -6381,17 +6447,30 @@ func (p *Parser) letClause(s *Stmt) {
 	old := p.preNested(arithmExprLet)
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
+		start := p.cursorSnapshot()
 		if p.spaced && p.tok == hash {
 			for p.tok != _Newl && p.tok != _EOF {
+				commentStart := p.cursorSnapshot()
 				p.next()
+				if !commentStart.progressed(p) {
+					p.posRecoverableErr(commentStart.pos, "internal parser error: no progress parsing let clause")
+					break
+				}
 			}
 			break
 		}
 		x := p.arithmExpr(true)
 		if x == nil {
+			if !start.progressed(p) {
+				p.posRecoverableErr(start.pos, "internal parser error: no progress parsing let clause")
+			}
 			break
 		}
 		lc.Exprs = append(lc.Exprs, x)
+		if !start.progressed(p) {
+			p.posRecoverableErr(start.pos, "internal parser error: no progress parsing let clause")
+			break
+		}
 	}
 	if len(lc.Exprs) == 0 {
 		p.followErrExp(lc.Let, "let")

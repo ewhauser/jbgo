@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte("007@0$1  u")
+byte('U')
+bool(false)
+byte('\x1a')

@@ -292,6 +292,10 @@ func (p *Parser) arithmWordSuffixEnd(compact bool) Pos {
 
 func (p *Parser) arithmSuffixWord(start, end Pos, src string) *Word {
 	doc := NewParser(Variant(p.lang), KeepComments(p.keepComments))
+	if p.parenAmbiguityDisabled {
+		doc.parenAmbiguityDisabled = true
+		doc.parenAmbiguityProbeDepth = p.parenAmbiguityProbeDepth
+	}
 	if len(p.stopAt) > 0 {
 		doc.stopAt = append([]byte(nil), p.stopAt...)
 	}
@@ -491,7 +495,12 @@ func (p *Parser) arithmTailToEnd() (Pos, bool) {
 		if p.tok == _EOF {
 			return Pos{}, false
 		}
+		start := p.cursorSnapshot()
 		p.nextArith(false)
+		if !start.progressed(p) {
+			p.posRecoverableErr(start.pos, "internal parser error: no progress scanning arithmetic tail")
+			return Pos{}, false
+		}
 	}
 	return p.pos, true
 }
@@ -501,7 +510,12 @@ func (p *Parser) arithmTailToPos(end Pos) (Pos, bool) {
 		if p.tok == _EOF {
 			return Pos{}, false
 		}
+		start := p.cursorSnapshot()
 		p.nextArith(false)
+		if !start.progressed(p) {
+			p.posRecoverableErr(start.pos, "internal parser error: no progress scanning arithmetic tail")
+			return Pos{}, false
+		}
 	}
 	if p.pos != end {
 		return Pos{}, false
@@ -510,47 +524,55 @@ func (p *Parser) arithmTailToPos(end Pos) (Pos, bool) {
 }
 
 func (p *Parser) arithmEndExpr(expr *ArithmExpr, ltok token, lpos Pos, old saveState, salvageTail bool, tailEnd Pos) Pos {
+	pos := p.pos
 	if !p.peekArithmEnd() {
 		if p.recoverError() {
-			return recoveredPos
-		}
-		if salvageTail && expr != nil && *expr != nil {
-			tailStart := p.pos
-			if exprEnd := arithmExprEnd(*expr); exprEnd.IsValid() && !exprEnd.After(tailStart) {
-				tailStart = exprEnd
-			}
-			if tailEnd.IsValid() {
-				if end, ok := p.arithmTailToPos(tailEnd); ok {
+			pos = recoveredPos
+		} else {
+			if salvageTail && expr != nil && *expr != nil {
+				tailStart := p.pos
+				if exprEnd := arithmExprEnd(*expr); exprEnd.IsValid() && !exprEnd.After(tailStart) {
+					tailStart = exprEnd
+				}
+				if tailEnd.IsValid() {
+					if end, ok := p.arithmTailToPos(tailEnd); ok {
+						*expr = p.appendArithmSuffix(*expr, tailStart, end, p.sourceRange(tailStart, end))
+					} else {
+						p.arithmMatchingErr(lpos, ltok, dblRightParen)
+					}
+				} else if end, ok := p.arithmTailToEnd(); ok {
 					*expr = p.appendArithmSuffix(*expr, tailStart, end, p.sourceRange(tailStart, end))
 				} else {
 					p.arithmMatchingErr(lpos, ltok, dblRightParen)
 				}
-			} else if end, ok := p.arithmTailToEnd(); ok {
-				*expr = p.appendArithmSuffix(*expr, tailStart, end, p.sourceRange(tailStart, end))
 			} else {
 				p.arithmMatchingErr(lpos, ltok, dblRightParen)
 			}
+		}
+	}
+	p.rune()
+	p.postNested(old)
+	if pos != recoveredPos {
+		pos = p.pos
+	}
+	p.next()
+	return pos
+}
+
+func (p *Parser) arithmEnd(ltok token, lpos Pos, old saveState) Pos {
+	pos := p.pos
+	if !p.peekArithmEnd() {
+		if p.recoverError() {
+			pos = recoveredPos
 		} else {
 			p.arithmMatchingErr(lpos, ltok, dblRightParen)
 		}
 	}
 	p.rune()
 	p.postNested(old)
-	pos := p.pos
-	p.next()
-	return pos
-}
-
-func (p *Parser) arithmEnd(ltok token, lpos Pos, old saveState) Pos {
-	if !p.peekArithmEnd() {
-		if p.recoverError() {
-			return recoveredPos
-		}
-		p.arithmMatchingErr(lpos, ltok, dblRightParen)
+	if pos != recoveredPos {
+		pos = p.pos
 	}
-	p.rune()
-	p.postNested(old)
-	pos := p.pos
 	p.next()
 	return pos
 }

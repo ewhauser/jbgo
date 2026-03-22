@@ -76,6 +76,52 @@ func TestKnownParserAttackCorpus(t *testing.T) {
 	}
 }
 
+func TestParserNoProgressRegressions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adversarial-arithm-word", func(t *testing.T) {
+		runParserAttackHelper(t, []byte("$((h0oe c`"), LangPOSIX, false, 0)
+	})
+
+	t.Run("adversarial-arithm-subscript-recovery", func(t *testing.T) {
+		runParserAttackHelper(t, []byte("$((0[!  "), parserFuzzVariant(0x01), true, parserFuzzRecover(0))
+	})
+
+	t.Run("adversarial-backtick-let-comment", func(t *testing.T) {
+		runParserAttackHelper(t, []byte("`let #`"), LangBash, true, 3)
+	})
+
+	t.Run("mutation-derived-arithm-word", func(t *testing.T) {
+		raw := []byte("0\xb2$%")
+		cursor := newParserFuzzCursor(raw)
+		attacks := loadKnownParserAttacks(t)
+		attack := attacks[cursor.Intn(len(attacks))]
+		script := []byte(mutateParserAttackScript(attack.Script, cursor))
+
+		runParserAttackHelper(t, script, LangBash, true, 1)
+	})
+
+	t.Run("mutation-derived-brace-arithm-stmt", func(t *testing.T) {
+		raw := []byte("0&7\"0 0 ")
+		cursor := newParserFuzzCursor(raw)
+		attacks := loadKnownParserAttacks(t)
+		attack := attacks[cursor.Intn(len(attacks))]
+		script := []byte(mutateParserAttackScript(attack.Script, cursor))
+
+		runParserAttackHelper(t, script, parserFuzzVariant(0x16), false, parserFuzzRecover(0))
+	})
+
+	t.Run("mutation-derived-incomplete-arith-assignment", func(t *testing.T) {
+		raw := []byte("907%1$'\x80\x00\x00\x00 ")
+		cursor := newParserFuzzCursor(raw)
+		attacks := loadKnownParserAttacks(t)
+		attack := attacks[cursor.Intn(len(attacks))]
+		script := []byte(mutateParserAttackScript(attack.Script, cursor))
+
+		runParserAttackHelper(t, script, parserFuzzVariant(0x82), true, parserFuzzRecover('z'))
+	})
+}
+
 func TestParserAttackHelperProcess(t *testing.T) {
 	if os.Getenv("GBASH_PARSER_ATTACK_HELPER") == "" {
 		t.Skip("helper process only")

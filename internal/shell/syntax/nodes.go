@@ -1008,12 +1008,19 @@ type BinaryArithm struct {
 }
 
 func (b *BinaryArithm) Pos() Pos {
+	if b == nil {
+		return Pos{}
+	}
 	if b.X != nil {
 		return b.X.Pos()
 	}
 	return b.OpPos
 }
+
 func (b *BinaryArithm) End() Pos {
+	if b == nil {
+		return Pos{}
+	}
 	if b.Y != nil {
 		return b.Y.End()
 	}
@@ -1033,17 +1040,29 @@ type UnaryArithm struct {
 }
 
 func (u *UnaryArithm) Pos() Pos {
+	if u == nil {
+		return Pos{}
+	}
 	if u.Post {
-		return u.X.Pos()
+		if u.X != nil {
+			return u.X.Pos()
+		}
+		return u.OpPos
 	}
 	return u.OpPos
 }
 
 func (u *UnaryArithm) End() Pos {
+	if u == nil {
+		return Pos{}
+	}
 	if u.Post {
 		return posAddCol(u.OpPos, 2)
 	}
-	return u.X.End()
+	if u.X != nil {
+		return u.X.End()
+	}
+	return posAddCol(u.OpPos, 1)
 }
 
 // ParenArithm represents an arithmetic expression within parentheses.
@@ -1053,8 +1072,25 @@ type ParenArithm struct {
 	X ArithmExpr
 }
 
-func (p *ParenArithm) Pos() Pos { return p.Lparen }
-func (p *ParenArithm) End() Pos { return posAddCol(p.Rparen, 1) }
+func (p *ParenArithm) Pos() Pos {
+	if p == nil {
+		return Pos{}
+	}
+	return p.Lparen
+}
+
+func (p *ParenArithm) End() Pos {
+	if p == nil {
+		return Pos{}
+	}
+	if p.Rparen.IsValid() {
+		return posAddCol(p.Rparen, 1)
+	}
+	if p.X != nil {
+		return p.X.End()
+	}
+	return posAddCol(p.Lparen, 1)
+}
 
 // FlagsArithm represents zsh subscript flags attached to an arithmetic expression,
 // such as ${array[(flags)expr]}.
@@ -1065,10 +1101,28 @@ type FlagsArithm struct {
 	X     ArithmExpr
 }
 
-func (z *FlagsArithm) Pos() Pos { return posAddCol(z.Flags.Pos(), -1) }
+func (z *FlagsArithm) Pos() Pos {
+	if z == nil {
+		return Pos{}
+	}
+	if z.Flags != nil {
+		return posAddCol(z.Flags.Pos(), -1)
+	}
+	if z.X != nil {
+		return z.X.Pos()
+	}
+	return Pos{}
+}
+
 func (z *FlagsArithm) End() Pos {
+	if z == nil {
+		return Pos{}
+	}
 	if z.X != nil {
 		return z.X.End()
+	}
+	if z.Flags == nil {
+		return Pos{}
 	}
 	return posAddCol(z.Flags.End(), 1) // closing paren
 }

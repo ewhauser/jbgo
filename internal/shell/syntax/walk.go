@@ -81,7 +81,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkList(node.Do, f)
 		walkComments(node.DoLast, f)
 	case *ForClause:
-		Walk(node.Loop, f)
+		walkNilable(node.Loop, f)
 		walkList(node.Do, f)
 		walkComments(node.DoLast, f)
 	case *WordIter:
@@ -92,12 +92,12 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Cond, f)
 		walkNilable(node.Post, f)
 	case *BinaryCmd:
-		Walk(node.X, f)
-		Walk(node.Y, f)
+		walkNilable(node.X, f)
+		walkNilable(node.Y, f)
 	case *FuncDecl:
 		walkNilable(node.Name, f)
 		walkList(node.Names, f)
-		Walk(node.Body, f)
+		walkNilable(node.Body, f)
 	case *Word:
 		walkList(node.Parts, f)
 	case *Lit:
@@ -132,21 +132,17 @@ func Walk(node Node, f func(Node) bool) {
 			walkNilable(node.Exp.Pattern, f)
 		}
 	case *ArithmExp:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *ArithmCmd:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *BinaryArithm:
-		if node.X != nil {
-			Walk(node.X, f)
-		}
-		if node.Y != nil {
-			Walk(node.Y, f)
-		}
+		walkNilable(node.X, f)
+		walkNilable(node.Y, f)
 	case *CondBinary:
-		Walk(node.X, f)
-		Walk(node.Y, f)
+		walkNilable(node.X, f)
+		walkNilable(node.Y, f)
 	case *CondUnary:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *CondParen:
 		Walk(node.X, f)
 	case *CondWord:
@@ -158,21 +154,21 @@ func Walk(node Node, f func(Node) bool) {
 	case *CondRegex:
 		walkNilable(node.Word, f)
 	case *BinaryTest:
-		Walk(node.X, f)
-		Walk(node.Y, f)
+		walkNilable(node.X, f)
+		walkNilable(node.Y, f)
 	case *UnaryArithm:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *UnaryTest:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *ParenArithm:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *FlagsArithm:
 		Walk(node.Flags, f)
 		if node.X != nil {
 			Walk(node.X, f)
 		}
 	case *ParenTest:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *CaseClause:
 		Walk(node.Word, f)
 		walkList(node.Items, f)
@@ -189,7 +185,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkList(node.Stmts, f)
 		walkComments(node.Last, f)
 	case *TestClause:
-		Walk(node.X, f)
+		walkNilable(node.X, f)
 	case *DeclClause:
 		walkList(node.Operands, f)
 	case *ArrayExpr:
@@ -214,12 +210,12 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Stmt, f)
 	case *CoprocClause:
 		walkNilable(node.Name, f)
-		Walk(node.Stmt, f)
+		walkNilable(node.Stmt, f)
 	case *LetClause:
 		walkList(node.Exprs, f)
 	case *TestDecl:
-		Walk(node.Description, f)
-		Walk(node.Body, f)
+		walkNilable(node.Description, f)
+		walkNilable(node.Body, f)
 	default:
 		panic(fmt.Sprintf("syntax.Walk: unexpected node type %T", node))
 	}
