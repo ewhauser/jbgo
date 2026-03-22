@@ -184,7 +184,7 @@ func (h *HostFS) Lstat(_ context.Context, name string) (stdfs.FileInfo, error) {
 func (h *HostFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, error) {
 	abs := h.resolve(name)
 
-	switch kind, rel := h.classify(abs); kind {
+	switch kind, _ := h.classify(abs); kind {
 	case hostPathAncestor:
 		child, ok := h.syntheticChild(abs)
 		if !ok {
@@ -197,23 +197,13 @@ func (h *HostFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, erro
 		})
 		return []stdfs.DirEntry{entry}, nil
 	case hostPathMounted:
-		canonical, err := h.resolveMountedCanonical(abs)
+		target, err := h.resolveMountedReadDirTarget(abs)
 		if err != nil {
 			return nil, h.pathError("readdir", abs, err)
 		}
-		info, err := os.Stat(canonical)
+		entries, err := os.ReadDir(target)
 		if err != nil {
 			return nil, h.pathError("readdir", abs, err)
-		}
-		if !info.IsDir() {
-			return nil, h.pathError("readdir", abs, stdfs.ErrInvalid)
-		}
-		entries, err := os.ReadDir(canonical)
-		if err != nil {
-			return nil, h.pathError("readdir", abs, err)
-		}
-		if rel == "/" {
-			return entries, nil
 		}
 		return entries, nil
 	default:
@@ -421,6 +411,9 @@ func (h *HostFS) resolveMountedLeaf(abs string) (string, error) {
 		}
 		lexical := h.lexicalPath(rel)
 		parent := filepath.Dir(lexical)
+		if filepath.Clean(parent) == h.root {
+			return filepath.Join(h.canonicalRoot, filepath.Base(lexical)), nil
+		}
 		canonicalParent, err := filepath.EvalSymlinks(parent)
 		if err != nil {
 			return "", err
@@ -430,6 +423,31 @@ func (h *HostFS) resolveMountedLeaf(abs string) (string, error) {
 			return "", stdfs.ErrPermission
 		}
 		return filepath.Join(canonicalParent, filepath.Base(lexical)), nil
+	default:
+		return "", stdfs.ErrNotExist
+	}
+}
+
+func (h *HostFS) resolveMountedReadDirTarget(abs string) (string, error) {
+	switch kind, rel := h.classify(abs); kind {
+	case hostPathMounted:
+		if rel == "/" {
+			return h.canonicalRoot, nil
+		}
+
+		leaf, err := h.resolveMountedLeaf(abs)
+		if err != nil {
+			return "", err
+		}
+		info, err := os.Lstat(leaf)
+		switch {
+		case err == nil && info.Mode()&stdfs.ModeSymlink == 0:
+			return leaf, nil
+		case err == nil:
+			return h.resolveMountedCanonical(abs)
+		default:
+			return "", err
+		}
 	default:
 		return "", stdfs.ErrNotExist
 	}

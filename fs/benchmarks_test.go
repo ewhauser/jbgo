@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -87,6 +90,52 @@ func BenchmarkFileSystemReadDirWide(b *testing.B) {
 				}
 				if got, want := len(entries), 4096; got != want {
 					b.Fatalf("ReadDir(%q) count = %d, want %d", dir, got, want)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkHostBackedReadDirTraversal(b *testing.B) {
+	root, totalFiles := hostTraversalFixture(b)
+	ctx := context.Background()
+
+	benchmarks := []struct {
+		name string
+		new  func(testing.TB) gbfs.FileSystem
+	}{
+		{
+			name: "host",
+			new: func(tb testing.TB) gbfs.FileSystem {
+				tb.Helper()
+				fsys, err := gbfs.NewHost(gbfs.HostOptions{Root: root})
+				if err != nil {
+					tb.Skipf("host-backed filesystem unavailable: %v", err)
+				}
+				return fsys
+			},
+		},
+		{
+			name: "overlay_host",
+			new: func(tb testing.TB) gbfs.FileSystem {
+				tb.Helper()
+				fsys, err := gbfs.NewHost(gbfs.HostOptions{Root: root})
+				if err != nil {
+					tb.Skipf("host-backed filesystem unavailable: %v", err)
+				}
+				return gbfs.NewOverlay(fsys)
+			},
+		},
+	}
+
+	for _, benchmark := range benchmarks {
+		b.Run(benchmark.name, func(b *testing.B) {
+			fsys := benchmark.new(b)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if got := walkBenchmarkTree(ctx, b, fsys, gbfs.DefaultHostVirtualRoot); got != totalFiles {
+					b.Fatalf("walk file count = %d, want %d", got, totalFiles)
 				}
 			}
 		})
@@ -322,6 +371,52 @@ func cloneFixture() gbfs.InitialFiles {
 		}
 	}
 	return files
+}
+
+func hostTraversalFixture(tb testing.TB) (root string, totalFiles int) {
+	tb.Helper()
+
+	root = tb.TempDir()
+	for pkg := range 12 {
+		for file := range 25 {
+			dir := filepath.Join(root, fmt.Sprintf("pkg%02d", pkg), fmt.Sprintf("section%02d", file%5))
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				tb.Fatalf("MkdirAll(%q) error = %v", dir, err)
+			}
+			target := filepath.Join(dir, fmt.Sprintf("file%03d.txt", file))
+			content := fmt.Sprintf("package=%02d\nsection=%02d\nfile=%03d\n", pkg, file%5, file)
+			if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
+				tb.Fatalf("WriteFile(%q) error = %v", target, err)
+			}
+			totalFiles++
+		}
+	}
+	return root, totalFiles
+}
+
+func walkBenchmarkTree(ctx context.Context, tb testing.TB, fsys gbfs.FileSystem, root string) int {
+	tb.Helper()
+
+	seenFiles := 0
+	stack := []string{root}
+	for len(stack) > 0 {
+		dir := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		entries, err := fsys.ReadDir(ctx, dir)
+		if err != nil {
+			tb.Fatalf("ReadDir(%q) error = %v", dir, err)
+		}
+		for _, entry := range entries {
+			child := path.Join(dir, entry.Name())
+			if entry.IsDir() {
+				stack = append(stack, child)
+				continue
+			}
+			seenFiles++
+		}
+	}
+	return seenFiles
 }
 
 func readAllBenchmarkFile(tb testing.TB, fsys gbfs.FileSystem, name string) {

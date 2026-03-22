@@ -253,6 +253,53 @@ func TestHostFSSymlinkResolutionAndReadlinkSanitization(t *testing.T) {
 	}
 }
 
+func TestHostFSReadDirOnSymlinkedDirectoriesPreservesContainment(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outsideRoot := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(docs) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(outsideRoot, "secret"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(secret) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "guide.txt"), []byte("guide\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(guide) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideRoot, "secret", "hidden.txt"), []byte("hidden\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(hidden) error = %v", err)
+	}
+	if err := os.Symlink("docs", filepath.Join(root, "rel-docs")); err != nil {
+		t.Fatalf("Symlink(rel-docs) error = %v", err)
+	}
+	if err := os.Symlink(filepath.Join(root, "docs"), filepath.Join(root, "abs-in-docs")); err != nil {
+		t.Fatalf("Symlink(abs-in-docs) error = %v", err)
+	}
+	if err := os.Symlink(filepath.Join(outsideRoot, "secret"), filepath.Join(root, "abs-out-docs")); err != nil {
+		t.Fatalf("Symlink(abs-out-docs) error = %v", err)
+	}
+
+	fsys, err := NewHost(HostOptions{Root: root})
+	if err != nil {
+		t.Fatalf("NewHost() error = %v", err)
+	}
+
+	assertDirEntries(t, fsys, defaultHostVirtualRoot+"/rel-docs", "guide.txt")
+	assertDirEntries(t, fsys, defaultHostVirtualRoot+"/abs-in-docs", "guide.txt")
+
+	_, err = fsys.ReadDir(context.Background(), defaultHostVirtualRoot+"/abs-out-docs")
+	if err == nil {
+		t.Fatal("ReadDir(abs-out-docs) error = nil, want permission")
+	}
+	if !errors.Is(err, stdfs.ErrPermission) {
+		t.Fatalf("ReadDir(abs-out-docs) error = %v, want permission", err)
+	}
+	if strings.Contains(err.Error(), outsideRoot) {
+		t.Fatalf("ReadDir(abs-out-docs) error leaked outside root: %v", err)
+	}
+}
+
 func assertDirEntries(t *testing.T, fsys *HostFS, dir string, want ...string) {
 	t.Helper()
 
