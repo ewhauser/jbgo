@@ -1260,11 +1260,15 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 
 		assignOverlayMode := callAssignOverlayDiscard
 		assignOverlayConsumesLocals := false
+		assignOverlayCrossesFuncScope := false
 		if r.posixSpecialBuiltinActive(fields[0]) {
 			assignOverlayMode = callAssignOverlayCommit
-		} else if fields[0] != "eval" && fields[0] != "source" && fields[0] != "." {
+		} else if fields[0] == "eval" || fields[0] == "source" || fields[0] == "." {
+			assignOverlayConsumesLocals = true
+		} else {
 			if info, ok := r.funcInfo(fields[0]); ok && info.body != nil {
 				assignOverlayConsumesLocals = true
+				assignOverlayCrossesFuncScope = true
 			} else {
 				assignOverlayMode = callAssignOverlayNone
 			}
@@ -1277,7 +1281,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		)
 		if len(cm.Assigns) > 0 && assignOverlayMode != callAssignOverlayNone {
 			var ok bool
-			assignOverlay, ok = r.runCallAssignOverlay(cm.Assigns, true, assignOverlayConsumesLocals)
+			assignOverlay, ok = r.runCallAssignOverlay(cm.Assigns, true, assignOverlayConsumesLocals, assignOverlayCrossesFuncScope)
 			if !ok || r.exit.fatalExit || r.exit.exiting {
 				break
 			}
@@ -2033,9 +2037,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.setFuncInfo(name, info)
 				return true
 			}
+			frameTempOwner, _, hasFrameTemp := currentFrameTempBinding(r.writeEnv, name)
 			targetEnv := r.writeEnv
 			if local {
 				targetEnv = localScopeEnv(r.writeEnv)
+				if hasFrameTemp && frameTempOwner == r.writeEnv && tempScopeConsumesLocals(frameTempOwner) {
+					targetEnv = frameTempOwner
+				}
 			}
 			if global && r.inFunc {
 				targetEnv = globalWriteEnv(r.writeEnv)
@@ -2045,7 +2053,6 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 			}
 			return runWithWriteEnv(targetEnv, func() bool {
-				frameTempOwner, _, hasFrameTemp := currentFrameTempBinding(r.writeEnv, name)
 				vr := declLookupVar(targetEnv, name)
 				declaredBefore := vr.Declared()
 				if msg := arrayConversionError(name, vr); msg != "" {
@@ -2768,10 +2775,11 @@ const (
 	callAssignOverlayCommit
 )
 
-func (r *Runner) runCallAssignOverlay(assigns []*syntax.Assign, forceExport, consumeLocals bool) (*overlayEnviron, bool) {
+func (r *Runner) runCallAssignOverlay(assigns []*syntax.Assign, forceExport, consumeLocals, crossesFuncScope bool) (*overlayEnviron, bool) {
 	overlay := &overlayEnviron{
-		parent:                  r.writeEnv,
-		tempScopeConsumesLocals: consumeLocals,
+		parent:                    r.writeEnv,
+		tempScopeConsumesLocals:   consumeLocals,
+		tempScopeCrossesFuncScope: crossesFuncScope,
 	}
 	origEnv := r.writeEnv
 	r.writeEnv = overlay

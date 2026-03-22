@@ -164,3 +164,116 @@ func TestSourceSyntaxErrorReturnsStatusTwo(t *testing.T) {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
+
+func TestEvalPrefixAssignmentsConsumeNestedLocals(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+unlocal() { unset -v "$1"; }
+
+f1() {
+  local v=local1
+  echo "nested:${v-(unset)}"
+  v=tempenv2 eval '
+    echo "temp:${v-(unset)}"
+    local v=local2
+    echo "shadow:${v-(unset)}"
+  '
+  echo "after:${v-(unset)}"
+}
+
+f2() {
+  local v=local1
+  v=tempenv2 eval '
+    local v=local2
+    (unset v; echo "unset:${v-(unset)}")
+    (unlocal v; echo "unlocal:${v-(unset)}")
+  '
+}
+
+f3() {
+  local v=local1
+  v=tempenv2 eval '
+    local v=local2
+    v=tempenv3 eval "
+      local v=local3
+      echo \"deep:\${v-(unset)}\"
+      unlocal v
+      echo \"deep1:\${v-(unset)}\"
+      unlocal v
+      echo \"deep2:\${v-(unset)}\"
+      unlocal v
+      echo \"deep3:\${v-(unset)}\"
+      unlocal v
+      echo \"deep4:\${v-(unset)}\"
+    "
+  '
+}
+
+v=global
+v=tempenv1 f1
+v=global
+v=tempenv1 f2
+v=global
+v=tempenv1 f3
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"nested:local1\n" +
+		"temp:tempenv2\n" +
+		"shadow:local2\n" +
+		"after:local1\n" +
+		"unset:(unset)\n" +
+		"unlocal:local1\n" +
+		"deep:local3\n" +
+		"deep1:local2\n" +
+		"deep2:local1\n" +
+		"deep3:global\n" +
+		"deep4:(unset)\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestSourcePrefixAssignmentsConsumeNestedLocals(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "consume-locals.sh")
+	script := "echo \"temp:${v-(unset)}\"\nlocal v=local2\necho \"shadow:${v-(unset)}\"\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
+	}
+
+	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir:         dir,
+		OpenHandler: sourceTestOpenHandler,
+	}, fmt.Sprintf(`
+f() {
+  local v=local1
+  v=tempenv2 source %q
+  echo "after:${v-(unset)}"
+}
+
+v=global
+v=tempenv1 f
+`, scriptPath))
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "" +
+		"temp:tempenv2\n" +
+		"shadow:local2\n" +
+		"after:local1\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
