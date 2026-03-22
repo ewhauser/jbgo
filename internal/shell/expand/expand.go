@@ -2903,8 +2903,11 @@ func (state *globState) readDir(name string) ([]fs.DirEntry, error) {
 func mergeGlobMatches(dst, left, right []string) []string {
 	base := len(dst)
 	total := len(left) + len(right)
+	if total == 0 {
+		return dst
+	}
 	need := base + total
-	if cap(dst) < need {
+	if dst == nil || cap(dst) < need {
 		grown := make([]string, need)
 		copy(grown, dst)
 		dst = grown
