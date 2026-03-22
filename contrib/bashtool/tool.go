@@ -657,13 +657,15 @@ func (h *virtualHost) Platform() host.Platform {
 	osName := host.CurrentOS()
 	defaults := osName.PlatformDefaults()
 	machine := normalizeMachine(runtime.GOARCH)
+	envCaseInsensitive := defaults.EnvCaseInsensitive
+	requireExecutableBit := defaults.RequireExecutableBit
 	return host.Platform{
 		OS:                   osName,
 		Arch:                 machine,
 		OSType:               defaults.OSType,
-		EnvCaseInsensitive:   boolPtr(defaults.EnvCaseInsensitive),
+		EnvCaseInsensitive:   &envCaseInsensitive,
 		PathExtensions:       append([]string(nil), defaults.PathExtensions...),
-		RequireExecutableBit: boolPtr(defaults.RequireExecutableBit),
+		RequireExecutableBit: &requireExecutableBit,
 		Uname: host.Uname{
 			SysName:         defaults.KernelName,
 			NodeName:        h.cfg.hostname,
@@ -697,10 +699,6 @@ func normalizeMachine(goarch string) string {
 	default:
 		return goarch
 	}
-}
-
-func boolPtr(value bool) *bool {
-	return &value
 }
 
 func mustParsePromptTemplate(name string) *template.Template {
