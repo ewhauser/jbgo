@@ -743,15 +743,15 @@ func arithNormalizeDiagnosticSource(expr syntax.ArithmExpr, source string) strin
 		text  string
 	}
 	var replacements []replacement
-	syntax.Walk(expr, func(node syntax.Node) bool {
+	for node := range syntax.All(expr) {
 		sq, ok := node.(*syntax.SglQuoted)
 		if !ok || !sq.Dollar {
-			return true
+			continue
 		}
 		start := int(sq.Pos().Offset() - base)
 		end := int(sq.End().Offset() - base)
 		if start < 0 || end < start || end > len(source) {
-			return true
+			continue
 		}
 		decoded := (*Config)(nil).decodeANSICString(sq.Value)
 		replacements = append(replacements, replacement{
@@ -759,8 +759,7 @@ func arithNormalizeDiagnosticSource(expr syntax.ArithmExpr, source string) strin
 			end:   end,
 			text:  arithSingleQuotedLiteral(decoded),
 		})
-		return true
-	})
+	}
 	if len(replacements) == 0 {
 		return source
 	}
