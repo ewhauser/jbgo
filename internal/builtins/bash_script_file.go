@@ -8,7 +8,8 @@ import (
 )
 
 func ValidateShellScriptFileData(path string, data []byte) error {
-	if bytes.IndexByte(data, 0) < 0 {
+	firstLine, _, _ := bytes.Cut(data, []byte{'\n'})
+	if bytes.IndexByte(firstLine, 0) < 0 {
 		return nil
 	}
 	path = strings.TrimSpace(path)
