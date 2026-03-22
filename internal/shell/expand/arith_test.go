@@ -245,6 +245,34 @@ func TestArithmLetUsesShellDequotedSource(t *testing.T) {
 	}
 }
 
+func TestArithmRecursiveExpressionMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"loop": {Set: true, Kind: String, Str: "i<=100&&(s+=i,i++,loop)"},
+		"s":    {Set: true, Kind: String, Str: "0"},
+		"i":    {Set: true, Kind: String, Str: "0"},
+	}
+	cfg := &Config{Env: env}
+
+	got, err := Arithm(cfg, parseArithmExpr(t, "a=loop,s"))
+	if err != nil {
+		t.Fatalf("Arithm(a=loop,s) error = %v", err)
+	}
+	if got != 5050 {
+		t.Fatalf("Arithm(a=loop,s) = %d, want %d", got, 5050)
+	}
+	if got := env["i"].Str; got != "101" {
+		t.Fatalf("i = %q, want %q", got, "101")
+	}
+	if got := env["s"].Str; got != "5050" {
+		t.Fatalf("s = %q, want %q", got, "5050")
+	}
+	if got := env["a"].Str; got != "0" {
+		t.Fatalf("a = %q, want %q", got, "0")
+	}
+}
+
 func TestArithmArrayElementLValues(t *testing.T) {
 	t.Parallel()
 
