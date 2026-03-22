@@ -36,7 +36,7 @@ func ulimitBuiltinSpecs() []ulimitResourceSpec {
 }
 
 func formatUlimitValue(value, scale uint64) string {
-	if value == syscall.RLIM_INFINITY {
+	if value == ^uint64(0) {
 		return "unlimited"
 	}
 	if scale <= 1 {
