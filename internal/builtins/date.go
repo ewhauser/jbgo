@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 )
@@ -479,10 +480,8 @@ func dateRequireValue(inv *Invocation, args []string, index int, longName, value
 
 func resolveDateLongOption(inv *Invocation, name string) (string, error) {
 	for _, option := range dateLongOptions {
-		for _, alias := range option.aliases {
-			if alias == name {
-				return option.name, nil
-			}
+		if slices.Contains(option.aliases, name) {
+			return option.name, nil
 		}
 	}
 
