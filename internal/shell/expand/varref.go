@@ -2,15 +2,9 @@ package expand
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
-
-func parseVarRef(src string) (*syntax.VarRef, error) {
-	p := syntax.NewParser()
-	return p.VarRef(strings.NewReader(src))
-}
 
 func cloneSubscript(index *syntax.Subscript) *syntax.Subscript {
 	return syntax.CloneSubscript(index)
@@ -112,7 +106,7 @@ func (v Variable) ResolveRefState(env Environ, ref *syntax.VarRef) (RefResolutio
 			return RefResolution{Ref: original, Var: Variable{Set: true, Kind: String}, Target: raw, Status: RefTargetCircular}, nil
 		}
 		seen[raw] = struct{}{}
-		target, err := parseVarRef(raw)
+		target, err := syntax.ParseVarRef(raw)
 		if err != nil {
 			if raw == "@" || raw == "*" {
 				return RefResolution{Ref: original, Var: Variable{Kind: String}, Target: raw, Status: RefTargetInvalid}, nil

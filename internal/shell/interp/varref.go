@@ -11,16 +11,11 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
-func parseVarRef(src string) (*syntax.VarRef, error) {
-	p := syntax.NewParser()
-	return p.VarRef(strings.NewReader(src))
-}
-
 func validateNameRefTarget(src string) error {
 	if src == "" {
 		return nil
 	}
-	ref, err := parseVarRef(src)
+	ref, err := syntax.ParseVarRef(src)
 	if err != nil || ref == nil || !syntax.ValidName(ref.Name.Value) {
 		return fmt.Errorf("`%s': invalid variable name for name reference", src)
 	}
@@ -190,7 +185,7 @@ func (r *Runner) strictVarRef(src string) (*syntax.VarRef, error) {
 }
 
 func (r *Runner) strictVarRefWithContext(src string, context syntax.VarRefContext) (*syntax.VarRef, error) {
-	ref, err := parseVarRef(src)
+	ref, err := syntax.ParseVarRef(src)
 	if ref != nil {
 		ref.Context = context
 	}

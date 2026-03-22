@@ -532,6 +532,13 @@ func (p *Parser) Arithmetic(r io.Reader) (ArithmExpr, error) {
 	return expr, p.err
 }
 
+// ParseVarRef is a convenience function that parses a shell variable reference
+// from a string, such as "foo", "a[1]", or `assoc["k"]`.
+func ParseVarRef(src string) (*VarRef, error) {
+	p := NewParser()
+	return p.VarRef(strings.NewReader(src))
+}
+
 // VarRef parses a single shell variable reference, such as "foo", "a[1]", or
 // `assoc["k"]`.
 func (p *Parser) VarRef(r io.Reader) (*VarRef, error) {

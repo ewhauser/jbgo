@@ -1220,7 +1220,7 @@ func arithmVarRef(expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
 	if containsShellExpansion(word) {
 		return nil, false
 	}
-	ref, err := parseVarRef(arithExprSource(word))
+	ref, err := syntax.ParseVarRef(arithExprSource(word))
 	if err != nil || ref == nil {
 		return nil, false
 	}
@@ -1485,7 +1485,7 @@ func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr) (*syntax.VarRef, i
 				return nil, 0, err
 			}
 		}
-		ref, err = parseVarRef(text)
+		ref, err = syntax.ParseVarRef(text)
 		if err != nil {
 			tail := arithInvalidRefTail(text)
 			if tail == "" {

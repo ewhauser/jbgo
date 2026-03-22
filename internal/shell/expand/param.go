@@ -381,7 +381,7 @@ func indirectPositionalParam(name string) bool {
 }
 
 func looseIndirectVarRef(name string) (*syntax.VarRef, error) {
-	if ref, err := parseVarRef(name); err == nil {
+	if ref, err := syntax.ParseVarRef(name); err == nil {
 		if err := validateIndirectVarRef(name, ref); err != nil {
 			return nil, err
 		}
