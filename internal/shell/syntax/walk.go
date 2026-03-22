@@ -6,6 +6,7 @@ package syntax
 import (
 	"fmt"
 	"io"
+	"iter"
 	"reflect"
 )
 
@@ -244,6 +245,20 @@ func walkComments(list []Comment, f func(Node) bool) {
 	// Note that []Comment does not satisfy the generic constraint []Node.
 	for i := range list {
 		Walk(&list[i], f)
+	}
+}
+
+// All returns an iterator over all nodes in the syntax tree rooted at node,
+// in depth-first pre-order. Unlike [Walk], it does not yield nil sentinels
+// and does not support skipping subtrees.
+func All(node Node) iter.Seq[Node] {
+	return func(yield func(Node) bool) {
+		Walk(node, func(n Node) bool {
+			if n == nil {
+				return true
+			}
+			return yield(n)
+		})
 	}
 }
 

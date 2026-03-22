@@ -14,28 +14,27 @@ func rewritePipelineSubshells(program *syntax.File) map[*syntax.Stmt]*syntax.Stm
 	}
 	synthetic := make(map[*syntax.Stmt]*syntax.Stmt)
 
-	syntax.Walk(program, func(node syntax.Node) bool {
+	for node := range syntax.All(program) {
 		cmd, ok := node.(*syntax.BinaryCmd)
 		if !ok {
-			return true
+			continue
 		}
 		if cmd.Op != syntax.Pipe && cmd.Op != syntax.PipeAll {
-			return true
+			continue
 		}
 		if cmd.Y == nil || cmd.Y.Cmd == nil {
-			return true
+			continue
 		}
 		if inner, ok := syntheticWrappedStmt(cmd.Y); ok {
 			synthetic[cmd.Y] = inner
-			return true
+			continue
 		}
 		if _, ok := cmd.Y.Cmd.(*syntax.Subshell); ok {
-			return true
+			continue
 		}
 
 		cmd.Y = wrapStmtInSubshell(cmd.Y, synthetic)
-		return true
-	})
+	}
 	return synthetic
 }
 

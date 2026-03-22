@@ -83,13 +83,11 @@ func estimateProgramGlobOps(program *syntax.File) int64 {
 		return 0
 	}
 	var globOps int64
-	syntax.Walk(program, func(node syntax.Node) bool {
-		word, ok := node.(*syntax.Word)
-		if ok {
+	for node := range syntax.All(program) {
+		if word, ok := node.(*syntax.Word); ok {
 			globOps += estimateWordGlobOps(word)
 		}
-		return true
-	})
+	}
 	return globOps
 }
 
@@ -98,29 +96,20 @@ func validateSupportedRedirections(program *syntax.File) error {
 		return nil
 	}
 
-	var walkErr error
-	syntax.Walk(program, func(node syntax.Node) bool {
-		if walkErr != nil || node == nil {
-			return walkErr == nil
-		}
-
+	for node := range syntax.All(program) {
 		redir, ok := node.(*syntax.Redirect)
 		if !ok {
-			return true
+			continue
 		}
 		if redir.N != nil && !isSupportedRedirectFD(redir.N.Value) {
-			walkErr = &shellValidationError{message: "invalid redirection"}
-			return false
+			return &shellValidationError{message: "invalid redirection"}
 		}
-
 		switch redir.Op {
 		case syntax.AppClob, syntax.RdrAllClob, syntax.AppAllClob:
-			walkErr = &shellValidationError{message: "invalid redirection"}
-			return false
+			return &shellValidationError{message: "invalid redirection"}
 		}
-		return true
-	})
-	return walkErr
+	}
+	return nil
 }
 
 func validateSupportedFunctionDeclarations(program *syntax.File) error {
@@ -128,23 +117,16 @@ func validateSupportedFunctionDeclarations(program *syntax.File) error {
 		return nil
 	}
 
-	var walkErr error
-	syntax.Walk(program, func(node syntax.Node) bool {
-		if walkErr != nil || node == nil {
-			return walkErr == nil
-		}
-
+	for node := range syntax.All(program) {
 		fn, ok := node.(*syntax.FuncDecl)
 		if !ok {
-			return true
+			continue
 		}
 		if fn.Body == nil || !hasSupportedFunctionName(fn) {
-			walkErr = &shellValidationError{message: "invalid function declaration"}
-			return false
+			return &shellValidationError{message: "invalid function declaration"}
 		}
-		return true
-	})
-	return walkErr
+	}
+	return nil
 }
 
 func hasSupportedFunctionName(fn *syntax.FuncDecl) bool {

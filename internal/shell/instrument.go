@@ -16,44 +16,33 @@ func instrumentLoopBudgets(program *syntax.File, pol policy.Policy, loopNamespac
 		return nil
 	}
 
-	var (
-		nextLoopID int
-		walkErr    error
-	)
-
-	syntax.Walk(program, func(node syntax.Node) bool {
-		if walkErr != nil {
-			return false
-		}
-
+	var nextLoopID int
+	for node := range syntax.All(program) {
 		switch node := node.(type) {
 		case *syntax.WhileClause:
 			if hasLoopGuard(node.Do) {
-				return true
+				continue
 			}
 			guard, err := newLoopGuardStmt(loopKind(node), loopGuardID(loopNamespace, nextLoopID))
 			if err != nil {
-				walkErr = err
-				return false
+				return err
 			}
 			nextLoopID++
 			node.Do = append([]*syntax.Stmt{guard}, node.Do...)
 		case *syntax.ForClause:
 			if hasLoopGuard(node.Do) {
-				return true
+				continue
 			}
 			guard, err := newLoopGuardStmt("for", loopGuardID(loopNamespace, nextLoopID))
 			if err != nil {
-				walkErr = err
-				return false
+				return err
 			}
 			nextLoopID++
 			node.Do = append([]*syntax.Stmt{guard}, node.Do...)
 		}
-		return true
-	})
+	}
 
-	return walkErr
+	return nil
 }
 
 func loopGuardID(namespace string, id int) string {
