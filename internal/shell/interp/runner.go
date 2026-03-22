@@ -285,6 +285,9 @@ func (r *Runner) expandErr(err error) {
 	}
 	fatalExpansionErr := r.commandString && !r.interactive
 	errMsg := err.Error()
+	fatalProcSubstArithErr := strings.Contains(errMsg, "arithmetic syntax error") &&
+		(strings.Contains(errMsg, `error token is "<(`) ||
+			strings.Contains(errMsg, `error token is ">(`))
 	if r.commandString && !r.interactive && runtime.GOOS == "darwin" && errors.As(err, &divErr) {
 		errMsg = strings.Replace(errMsg, `error token is "0 "`, `error token is " "`, 1)
 	}
@@ -359,10 +362,10 @@ func (r *Runner) expandErr(err error) {
 		r.commandAborted = true
 	case errors.As(err, &arithSyntaxErr):
 		r.exit.code = 1
-		r.exit.exiting = fatalExpansionErr
+		r.exit.exiting = fatalExpansionErr || fatalProcSubstArithErr
 	case errors.As(err, &arithDiagErr):
 		r.exit.code = 1
-		r.exit.exiting = fatalExpansionErr
+		r.exit.exiting = fatalExpansionErr || fatalProcSubstArithErr
 	case errMsg == "bad substitution" ||
 		strings.HasPrefix(errMsg, "bad substitution:") ||
 		strings.Contains(errMsg, ": bad substitution"):
@@ -374,6 +377,11 @@ func (r *Runner) expandErr(err error) {
 	case errMsg == "invalid indirect expansion":
 		r.exit.code = 1
 	default:
+		if fatalProcSubstArithErr {
+			r.exit.code = 1
+			r.exit.exiting = true
+			return
+		}
 		return // other cases do not exit
 	}
 }

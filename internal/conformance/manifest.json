@@ -321,11 +321,7 @@
             "darwin"
           ]
         },
-        "oils/pipeline.test.sh::SIGPIPE causes pipeline to die (regression for issue #295)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
+"oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
