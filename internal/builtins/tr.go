@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -101,7 +102,7 @@ func (c *TR) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 	}
 
 	translating := !opts.delete && len(sets) > 1
-	set1, set2, err := solveTRSets(sets[0], trSecondSet(sets), opts.complement, opts.truncate && translating, translating)
+	set1, set2, err := solveTRSets(inv.Stderr, sets[0], trSecondSet(sets), opts.complement, opts.truncate && translating, translating)
 	if err != nil {
 		return exitf(inv, 1, "tr: %s", err.Error())
 	}
@@ -147,21 +148,25 @@ func parseTRMatches(inv *Invocation, matches *ParsedCommand) (trOptions, []strin
 	}
 	sets := matches.Args("set")
 	if len(sets) == 0 {
-		return trOptions{}, nil, exitf(inv, 1, "tr: missing operand")
+		return trOptions{}, nil, trUsageError(inv, "tr: missing operand")
 	}
 	if !opts.delete && !opts.squeeze && len(sets) == 1 {
-		return trOptions{}, nil, exitf(inv, 1, "tr: missing operand after %q", sets[0])
+		return trOptions{}, nil, trUsageError(inv, "tr: missing operand after %s\nTwo strings must be given when translating.", quoteGNUOperand(sets[0]))
 	}
 	if opts.delete && opts.squeeze && len(sets) == 1 {
-		return trOptions{}, nil, exitf(inv, 1, "tr: missing operand after %q", sets[0])
+		return trOptions{}, nil, trUsageError(inv, "tr: missing operand after %s\nTwo strings must be given when both deleting and squeezing repeats.", quoteGNUOperand(sets[0]))
 	}
 	if len(sets) > 1 && opts.delete && !opts.squeeze {
-		return trOptions{}, nil, exitf(inv, 1, "tr: extra operand %q", sets[1])
+		return trOptions{}, nil, trUsageError(inv, "tr: extra operand %s\nOnly one string may be given when deleting without squeezing repeats.", quoteGNUOperand(sets[1]))
 	}
 	if len(sets) > 2 {
-		return trOptions{}, nil, exitf(inv, 1, "tr: extra operand %q", sets[2])
+		return trOptions{}, nil, trUsageError(inv, "tr: extra operand %s", quoteGNUOperand(sets[2]))
 	}
 	return opts, sets, nil
+}
+
+func trUsageError(inv *Invocation, format string, args ...any) error {
+	return exitf(inv, 1, format+"\nTry 'tr --help' for more information.", args...)
 }
 
 func trSecondSet(sets []string) string {
@@ -187,18 +192,18 @@ func warnTrailingBackslash(inv *Invocation, value string) error {
 	return nil
 }
 
-func solveTRSets(set1Text, set2Text string, complement, truncateSet1, translating bool) (set1Solved, set2Solved []byte, err error) {
-	set1Seqs, err := parseTRSequences([]byte(set1Text))
+func solveTRSets(warn io.Writer, set1Text, set2Text string, complement, truncateSet1, translating bool) (set1Solved, set2Solved []byte, err error) {
+	set1Seqs, err := parseTRSequences([]byte(set1Text), warn)
 	if err != nil {
 		return nil, nil, err
 	}
 	for _, seq := range set1Seqs {
-		if seq.kind == trSequenceStar || seq.kind == trSequenceRepeat {
-			return nil, nil, fmt.Errorf("misaligned [:upper:] and/or [:lower:] construct")
+		if seq.kind == trSequenceStar {
+			return nil, nil, fmt.Errorf("the [c*] repeat construct may not appear in string1")
 		}
 	}
 
-	set2Seqs, err := parseTRSequences([]byte(set2Text))
+	set2Seqs, err := parseTRSequences([]byte(set2Text), warn)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -312,10 +317,10 @@ func trHasClass(seqs []trSequence) bool {
 	return false
 }
 
-func parseTRSequences(input []byte) ([]trSequence, error) {
+func parseTRSequences(input []byte, warn io.Writer) ([]trSequence, error) {
 	seqs := make([]trSequence, 0)
 	for i := 0; i < len(input); {
-		if seq, next, ok, err := parseTRCharRange(input, i); ok || err != nil {
+		if seq, next, ok, err := parseTRCharRange(input, i, warn); ok || err != nil {
 			if err != nil {
 				return nil, err
 			}
@@ -352,7 +357,7 @@ func parseTRSequences(input []byte) ([]trSequence, error) {
 			i = next
 			continue
 		}
-		b, next, err := parseTRByteWithWarning(input, i)
+		b, next, err := parseTRByteWithWarning(input, i, warn)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +367,7 @@ func parseTRSequences(input []byte) ([]trSequence, error) {
 	return seqs, nil
 }
 
-func parseTRCharRange(input []byte, i int) (seq trSequence, next int, ok bool, err error) {
+func parseTRCharRange(input []byte, i int, warn io.Writer) (seq trSequence, next int, ok bool, err error) {
 	left, next, err := parseTRByte(input, i)
 	if err != nil {
 		return trSequence{}, 0, false, err
@@ -370,9 +375,12 @@ func parseTRCharRange(input []byte, i int) (seq trSequence, next int, ok bool, e
 	if next >= len(input) || input[next] != '-' {
 		return trSequence{}, 0, false, nil
 	}
-	right, end, err := parseTRByte(input, next+1)
+	right, end, err := parseTRByteWithWarning(input, next+1, warn)
 	if err != nil {
-		return trSequence{}, 0, false, nil //nolint:nilerr // parse failure means this parser doesn't match
+		if errors.Is(err, io.EOF) {
+			return trSequence{}, 0, false, nil
+		}
+		return trSequence{}, 0, false, err
 	}
 	if left > right {
 		return trSequence{}, 0, true, fmt.Errorf("range-endpoints of '%c-%c' are in reverse collating sequence order", left, right)
@@ -458,7 +466,7 @@ func parseTRClass(input []byte, i int) (seq trSequence, next int, ok bool, err e
 		if name == "" {
 			return trSequence{}, 0, true, fmt.Errorf("missing character class name '[::]'")
 		}
-		return trSequence{}, 0, false, nil
+		return trSequence{}, 0, true, fmt.Errorf("invalid character class %s", quoteGNUOperand(name))
 	}
 	return trSequence{kind: trSequenceClass, class: class}, end + 2, true, nil
 }
@@ -623,37 +631,20 @@ func parseTRByte(input []byte, i int) (value byte, next int, err error) {
 	if input[i] != '\\' {
 		return input[i], i + 1, nil
 	}
-	return parseTRBackslashByte(input, i)
+	return parseTRBackslashByte(input, i, nil, false)
 }
 
-func parseTRByteWithWarning(input []byte, i int) (value byte, next int, err error) {
+func parseTRByteWithWarning(input []byte, i int, warn io.Writer) (value byte, next int, err error) {
 	if i >= len(input) {
 		return 0, i, io.EOF
 	}
 	if input[i] != '\\' {
 		return input[i], i + 1, nil
 	}
-	if i+1 < len(input) && isOctalDigit(input[i+1]) {
-		end := i + 1
-		for end < len(input) && end < i+4 && isOctalDigit(input[end]) {
-			end++
-		}
-		if end-i == 4 {
-			if value, err := strconv.ParseUint(string(input[i+1:end]), 8, 8); err == nil {
-				return byte(value), end, nil
-			}
-			if end-1 > i+1 {
-				value, err := strconv.ParseUint(string(input[i+1:end-1]), 8, 8)
-				if err == nil {
-					return byte(value), end - 1, nil
-				}
-			}
-		}
-	}
-	return parseTRBackslashByte(input, i)
+	return parseTRBackslashByte(input, i, warn, true)
 }
 
-func parseTRBackslashByte(input []byte, i int) (value byte, next int, err error) {
+func parseTRBackslashByte(input []byte, i int, warn io.Writer, emitAmbiguousWarning bool) (value byte, next int, err error) {
 	if i+1 >= len(input) {
 		return '\\', i + 1, nil
 	}
@@ -679,12 +670,31 @@ func parseTRBackslashByte(input []byte, i int) (value byte, next int, err error)
 			end++
 		}
 		value, err := strconv.ParseUint(string(input[i+1:end]), 8, 8)
-		if err != nil {
-			return 0, i, err
+		if err == nil {
+			return byte(value), end, nil
 		}
-		return byte(value), end, nil
+		if end-i == 4 {
+			fallback, fallbackErr := strconv.ParseUint(string(input[i+1:end-1]), 8, 8)
+			if fallbackErr == nil {
+				if emitAmbiguousWarning {
+					if err := warnTRAmbiguousOctal(warn, input[i+1:end], byte(fallback), input[end-1]); err != nil {
+						return 0, i, err
+					}
+				}
+				return byte(fallback), end - 1, nil
+			}
+		}
+		return 0, i, err
 	}
 	return input[i+1], i + 2, nil
+}
+
+func warnTRAmbiguousOctal(w io.Writer, digits []byte, resolved, trailing byte) error {
+	if w == nil {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "tr: warning: the ambiguous octal escape \\%s is being interpreted as the 2-byte sequence \\%03o, %c\n", string(digits), resolved, trailing)
+	return err
 }
 
 func trProcessDelete(data, set []byte) []byte {
