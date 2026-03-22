@@ -1317,3 +1317,38 @@ func writeShellTestFile(t testing.TB, fsys gbfs.FileSystem, name, contents strin
 		t.Fatalf("Close(%s) error = %v", name, err)
 	}
 }
+
+func TestCoreRunRecoversArrayInvalidTokenLikeBash(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		ScriptPath: "/tmp/array-invalid.sh",
+		Script: strings.Join([]string{
+			"a=(",
+			"1",
+			"&",
+			"'2 3'",
+			")",
+			"",
+		}, "\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	var status interp.ExitStatus
+	if !errors.As(err, &status) || status != 2 {
+		t.Fatalf("Run() error = %v, want exit status 2", err)
+	}
+	if got, want := stdout.String(), ""; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "" +
+		"/tmp/array-invalid.sh: line 3: syntax error near unexpected token `&'\n" +
+		"/tmp/array-invalid.sh: line 3: `&'\n" +
+		"2 3: command not found\n" +
+		"/tmp/array-invalid.sh: line 5: syntax error near unexpected token `)'\n" +
+		"/tmp/array-invalid.sh: line 5: `)'\n"
+	if got := stderr.String(); got != wantStderr {
+		t.Fatalf("stderr = %q, want %q", got, wantStderr)
+	}
+}

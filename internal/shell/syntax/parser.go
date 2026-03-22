@@ -4117,6 +4117,9 @@ func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 					return nil
 				case _Newl, rightParen, leftBrack:
 					// TODO: support [index]=[
+				case and:
+					p.posRecoverableErr(p.pos, "syntax error near unexpected token %s", p.tok.bashQuote())
+					return nil
 				default:
 					p.curErr("array element values must be words")
 					return nil

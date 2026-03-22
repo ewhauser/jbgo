@@ -141,6 +141,28 @@ func TestRecoverableNestedArrayLiteralParseError(t *testing.T) {
 	})
 }
 
+func TestRecoverableArrayInvalidTokenContinuesParsing(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "a=(\n1\n&\n'2 3'\n)\n")
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Run error = %T, want syntax.ParseError", err)
+	}
+	if got, want := stdout, ""; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "" +
+		"varref-test.sh: line 3: syntax error near unexpected token `&'\n" +
+		"varref-test.sh: line 3: `&'\n" +
+		"\"2 3\": executable file not found in $PATH\n" +
+		"varref-test.sh: line 5: syntax error near unexpected token `)'\n" +
+		"varref-test.sh: line 5: `)'\n"
+	if got := stderr + parseErr.BashError() + "\n"; got != wantStderr {
+		t.Fatalf("stderr = %q, want %q", got, wantStderr)
+	}
+}
+
 func TestPrintfVarRef(t *testing.T) {
 	t.Parallel()
 

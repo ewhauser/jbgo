@@ -10,10 +10,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database"
         },
-        "oils/array.test.sh::array with invalid token": {
-          "mode": "xfail",
-          "reason": "gbash stops invalid array literals earlier than bash's parser"
-        },
         "oils/builtin-read.test.sh::read bash bug": {
           "mode": "xfail",
           "reason": "gbash intentionally keeps the space-preserving result instead of reproducing bash's historical control-character bug"
