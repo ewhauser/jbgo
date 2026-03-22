@@ -189,17 +189,13 @@
             "darwin"
           ]
         },
-        "oils/command-sub.test.sh::Double Quotes in Command Sub in Double Quotes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/command-sub.test.sh::Escaped quote in [[ ]]": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash backquote-in-dquote escaping does not yet handle nested [[ ]] correctly"
         },
         "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash backquote-in-dquote error recovery differs from bash"
         },
         "oils/command_.test.sh::Command block": {
           "mode": "xfail",

@@ -105,8 +105,14 @@ retry:
 			}
 			// TODO: why is this necessary to ensure correct position info?
 			p.readEOF = false
-			if p.openBquotes > 0 && bquotes < p.openBquotes &&
-				p.bsp < uint(len(p.bs)) && bquoteEscaped(p.bs[p.bsp]) {
+			if p.openBquotes > 0 && bquotes < p.openBquotes && p.bsp < uint(len(p.bs)) {
+				escaped := bquoteEscaped(p.bs[p.bsp])
+				if !escaped && p.bs[p.bsp] == '"' && bquotes < p.openBquoteDquotes {
+					escaped = true
+				}
+				if !escaped {
+					break
+				}
 				// We turn backquote command substitutions into $(),
 				// so we remove the extra backslashes needed by the backquotes.
 				bquotes++
