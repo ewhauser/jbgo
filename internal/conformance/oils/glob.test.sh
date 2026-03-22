@@ -83,6 +83,14 @@ g=(_tmp/*.A _tmp/*.B)
 echo "${g[@]}"
 ## stdout: _tmp/a.A _tmp/aa.A _tmp/b.B
 
+#### char class glob inside array assignment
+mkdir -p _tmp/pkg00/section00 _tmp/pkg03/section02
+touch _tmp/pkg00/section00/file000.txt
+touch _tmp/pkg03/section02/file039.txt
+g=(_tmp/pkg0[0-3]/section0[0-2]/file0[0-3][0-9].txt)
+argv.sh "${g[@]}"
+## stdout: ['_tmp/pkg00/section00/file000.txt', '_tmp/pkg03/section02/file039.txt']
+
 #### glob with escaped - in char class
 touch _tmp/foo.-
 touch _tmp/c.C
