@@ -48,14 +48,15 @@ const (
 
 // Config controls the public bash-tool contract and one-shot execution helper.
 type Config struct {
-	Name           string
-	Username       string
-	HomeDir        string
-	Hostname       string
-	Profile        CommandProfile
-	CommandNotes   []string
-	Registry       commands.CommandRegistry
-	RuntimeOptions []gbash.Option
+	Name               string
+	Username           string
+	HomeDir            string
+	Hostname           string
+	Profile            CommandProfile
+	CommandNotes       []string
+	SystemPromptAppend string
+	Registry           commands.CommandRegistry
+	RuntimeOptions     []gbash.Option
 }
 
 // Request is the tool-call input contract.
@@ -107,13 +108,14 @@ type promptData struct {
 }
 
 type normalizedConfig struct {
-	name         string
-	username     string
-	homeDir      string
-	hostname     string
-	profile      CommandProfile
-	commandNotes []string
-	runtimeOpts  []gbash.Option
+	name               string
+	username           string
+	homeDir            string
+	hostname           string
+	profile            CommandProfile
+	commandNotes       []string
+	systemPromptAppend string
+	runtimeOpts        []gbash.Option
 }
 
 // Tool owns bash-tool metadata, prompt generation, and one-shot execution.
@@ -290,12 +292,16 @@ func (t *Tool) Help() string {
 
 // SystemPrompt returns the upstream-style bash tool system prompt.
 func (t *Tool) SystemPrompt() string {
-	return renderPromptTemplate(systemPromptTemplate, promptData{
+	prompt := renderPromptTemplate(systemPromptTemplate, promptData{
 		ToolName:        t.Name(),
 		HomeDir:         t.cfg.homeDir,
 		CommandNotes:    t.commandNotes,
 		LanguageWarning: t.languageWarning(),
 	})
+	if appendText := strings.TrimSpace(t.cfg.systemPromptAppend); appendText != "" {
+		prompt += " " + appendText
+	}
+	return prompt
 }
 
 // ToolDefinition returns the provider-neutral function definition.
@@ -429,13 +435,14 @@ func normalizeConfig(cfg Config) normalizedConfig {
 		profile = CommandProfileDefault
 	}
 	return normalizedConfig{
-		name:         name,
-		username:     username,
-		homeDir:      homeDir,
-		hostname:     hostname,
-		profile:      profile,
-		commandNotes: append([]string(nil), cfg.CommandNotes...),
-		runtimeOpts:  append([]gbash.Option{}, cfg.RuntimeOptions...),
+		name:               name,
+		username:           username,
+		homeDir:            homeDir,
+		hostname:           hostname,
+		profile:            profile,
+		commandNotes:       append([]string(nil), cfg.CommandNotes...),
+		systemPromptAppend: strings.TrimSpace(cfg.SystemPromptAppend),
+		runtimeOpts:        append([]gbash.Option{}, cfg.RuntimeOptions...),
 	}
 }
 

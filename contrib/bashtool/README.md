@@ -16,6 +16,7 @@ It is a public helper module, not a sandbox command bundle:
 - request parsing for `commands` plus the `script` alias
 - evaluator-style `FormatToolResult()` rendering
 - one-shot `Execute()` backed by a fresh `gbash` runtime
+- optional config-level prompt appends via `Config.SystemPromptAppend`
 
 Defaults stay gbash-native:
 
@@ -40,7 +41,8 @@ import (
 
 func main() {
 	tool := bashtool.New(bashtool.Config{
-		Profile: bashtool.CommandProfileExtras,
+		Profile:            bashtool.CommandProfileExtras,
+		SystemPromptAppend: "Always prefer jq for JSON reshaping when available.",
 	})
 
 	resp := tool.Execute(context.Background(), bashtool.Request{

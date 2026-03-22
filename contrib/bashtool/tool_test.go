@@ -57,6 +57,22 @@ func TestSystemPromptTracksUpstreamWordingWithGbashIdentity(t *testing.T) {
 	}
 }
 
+func TestSystemPromptSupportsAppend(t *testing.T) {
+	t.Parallel()
+
+	tool := New(Config{
+		SystemPromptAppend: "Always prefer jq for JSON reshaping when available.",
+	})
+
+	got := tool.SystemPrompt()
+	if !strings.HasSuffix(got, "Always prefer jq for JSON reshaping when available.") {
+		t.Fatalf("SystemPrompt() = %q, want appended guidance suffix", got)
+	}
+	if !strings.Contains(got, "Returns JSON with stdout, stderr, exit_code.") {
+		t.Fatalf("SystemPrompt() = %q, want base prompt preserved", got)
+	}
+}
+
 func TestLanguageWarningSuppression(t *testing.T) {
 	t.Parallel()
 
