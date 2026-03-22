@@ -60,6 +60,14 @@ type catStatHandle interface {
 	Stat() (stdfs.FileInfo, error)
 }
 
+type catUnderlyingReader interface {
+	UnderlyingReader() io.Reader
+}
+
+type catUnderlyingWriter interface {
+	UnderlyingWriter() io.Writer
+}
+
 func NewCat() *Cat {
 	return &Cat{}
 }
@@ -187,10 +195,11 @@ func catOptionsFromParsed(matches *ParsedCommand) catOptions {
 }
 
 func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) (bool, error) {
-	output, ok := inv.Stdout.(catRedirectHandle)
+	outputWriter := catResolveWriter(inv.Stdout)
+	output, ok := outputWriter.(catRedirectHandle)
 	if ok && output.RedirectPath() != "" {
 		if name == "-" {
-			input, ok := inv.Stdin.(catRedirectHandle)
+			input, ok := catResolveReader(inv.Stdin).(catRedirectHandle)
 			if !ok || input.RedirectPath() == "" || input.RedirectPath() != output.RedirectPath() {
 				return false, nil
 			}
@@ -204,12 +213,12 @@ func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) 
 		return catIsUnsafeOverwrite(0, output), nil
 	}
 
-	outputHost, ok := inv.Stdout.(catHostHandle)
+	outputHost, ok := outputWriter.(catHostHandle)
 	if !ok {
 		return false, nil
 	}
 	if name == "-" {
-		inputHost, ok := inv.Stdin.(catHostHandle)
+		inputHost, ok := catResolveReader(inv.Stdin).(catHostHandle)
 		if !ok {
 			return false, nil
 		}
@@ -236,6 +245,36 @@ func catWouldUnsafeOverwrite(ctx context.Context, inv *Invocation, name string) 
 		}
 	}
 	return catUnsafeByOffsets(0, outputInfo.Size(), catHostAppendMode(outputHost), catHostOffset(outputHost)), nil
+}
+
+func catResolveReader(reader io.Reader) io.Reader {
+	for reader != nil {
+		underlying, ok := reader.(catUnderlyingReader)
+		if !ok {
+			return reader
+		}
+		next := underlying.UnderlyingReader()
+		if next == nil || next == reader {
+			return reader
+		}
+		reader = next
+	}
+	return nil
+}
+
+func catResolveWriter(writer io.Writer) io.Writer {
+	for writer != nil {
+		underlying, ok := writer.(catUnderlyingWriter)
+		if !ok {
+			return writer
+		}
+		next := underlying.UnderlyingWriter()
+		if next == nil || next == writer {
+			return writer
+		}
+		writer = next
+	}
+	return nil
 }
 
 func catIsUnsafeOverwrite(inputOffset int64, output catRedirectHandle) bool {

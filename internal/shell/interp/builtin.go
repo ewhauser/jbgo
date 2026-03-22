@@ -90,6 +90,60 @@ func (e errBuiltinExitStatus) Error() string {
 	return fmt.Sprintf("builtin exit status %d", e.code)
 }
 
+func shellBuiltinWriteErrorDiagnostic(name string, err error) (string, bool) {
+	if runtime.GOOS == "darwin" {
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) && pathErr != nil && pathErr.Path != "" && pathErr.Err != nil {
+			text := capitalizeErrorText(pathErr.Err.Error())
+			if text == "" {
+				return "", false
+			}
+			return pathErr.Path + ": " + text, true
+		}
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && pathErr != nil && pathErr.Err != nil {
+		err = pathErr.Err
+	}
+	if err == nil || name == "" {
+		return "", false
+	}
+	return fmt.Sprintf("%s: write error: %s", name, capitalizeErrorText(err.Error())), true
+}
+
+func capitalizeErrorText(text string) string {
+	if text == "" {
+		return ""
+	}
+	return strings.ToUpper(text[:1]) + text[1:]
+}
+
+func (r *Runner) failShellBuiltinWrite(name string, err error) exitStatus {
+	if diag, ok := shellBuiltinWriteErrorDiagnostic(name, err); ok {
+		r.errf("%s\n", diag)
+	} else {
+		r.errf("%v\n", err)
+	}
+	return exitStatus{code: 1, err: ExitStatus(1)}
+}
+
+func (r *Runner) shellBuiltinWriteExit(name string, err error) exitStatus {
+	if printfBrokenPipe(err) {
+		return exitStatus{}
+	}
+	return r.failShellBuiltinWrite(name, err)
+}
+
+func (r *Runner) writeBuiltinString(_ string, s string) error {
+	_, err := io.WriteString(r.stdout, s)
+	return err
+}
+
+func (r *Runner) writeBuiltinf(_ string, format string, args ...any) error {
+	_, err := fmt.Fprintf(r.stdout, format, args...)
+	return err
+}
+
 func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args []string) (exit exitStatus) {
 	failf := func(code uint8, format string, args ...any) exitStatus {
 		r.errf(format, args...)
@@ -219,15 +273,21 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 		for i, arg := range args {
 			if i > 0 {
-				r.out(" ")
+				if err := r.writeBuiltinString("echo", " "); err != nil {
+					return r.shellBuiltinWriteExit("echo", err)
+				}
 			}
 			if doExpand {
 				arg, _, _ = expand.Format(r.ecfg, arg, nil)
 			}
-			r.out(arg)
+			if err := r.writeBuiltinString("echo", arg); err != nil {
+				return r.shellBuiltinWriteExit("echo", err)
+			}
 		}
 		if newline {
-			r.out("\n")
+			if err := r.writeBuiltinString("echo", "\n"); err != nil {
+				return r.shellBuiltinWriteExit("echo", err)
+			}
 		}
 	case "printf":
 		if len(args) == 0 {
@@ -273,7 +333,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 					}
 					return exit
 				}
-				return failf(1, "%v\n", err)
+				return r.failShellBuiltinWrite("printf", err)
 			}
 			if result.ExitCode != 0 {
 				exit.code = result.ExitCode
@@ -531,6 +591,8 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		exit = r.exit
 	case "command":
 		return r.commandBuiltin(ctx, pos, args)
+	case "ulimit":
+		return r.ulimitBuiltin(args)
 	case "dirs":
 		exit.code = r.dirsBuiltin(args)
 		return exit
@@ -1748,7 +1810,9 @@ func (r *Runner) typeBuiltin(ctx context.Context, args []string) (exit exitStatu
 			continue
 		}
 		for _, match := range matches {
-			r.printTypeMatch(arg, match, mode)
+			if err := r.printTypeMatch(arg, match, mode); err != nil {
+				return r.shellBuiltinWriteExit("type", err)
+			}
 		}
 		if len(matches) == 0 && mode.output == shellTypeOutputKind {
 			r.errf("type: %s: not found\n", arg)
@@ -1757,6 +1821,61 @@ func (r *Runner) typeBuiltin(ctx context.Context, args []string) (exit exitStatu
 	}
 	if anyNotFound {
 		exit.code = 1
+	}
+	return exit
+}
+
+type ulimitBuiltinMode uint8
+
+const (
+	ulimitBuiltinSoft ulimitBuiltinMode = iota
+	ulimitBuiltinHard
+)
+
+type ulimitResourceSpec struct {
+	label    string
+	option   rune
+	unit     string
+	scale    uint64
+	resource int
+}
+
+func (r *Runner) ulimitBuiltin(args []string) (exit exitStatus) {
+	all := false
+	mode := ulimitBuiltinSoft
+	for _, arg := range args {
+		if arg == "--" {
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			r.errf("ulimit: usage: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n")
+			exit.code = 2
+			return exit
+		}
+		for _, flag := range arg[1:] {
+			switch flag {
+			case 'a':
+				all = true
+			case 'S':
+				mode = ulimitBuiltinSoft
+			case 'H':
+				mode = ulimitBuiltinHard
+			default:
+				r.errf("ulimit: usage: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n")
+				exit.code = 2
+				return exit
+			}
+		}
+	}
+	if !all {
+		r.errf("ulimit: usage: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n")
+		exit.code = 2
+		return exit
+	}
+	for _, line := range ulimitBuiltinLines(mode) {
+		if _, err := fmt.Fprintln(r.stdout, line); err != nil {
+			return r.shellBuiltinWriteExit("ulimit", err)
+		}
 	}
 	return exit
 }
@@ -1919,14 +2038,20 @@ func (r *Runner) commandBuiltin(ctx context.Context, pos syntax.Pos, args []stri
 			}
 			for _, match := range matches {
 				if showVerbose {
-					r.printTypeMatch(arg, match, shellTypeMode{})
+					if err := r.printTypeMatch(arg, match, shellTypeMode{}); err != nil {
+						return r.shellBuiltinWriteExit("command", err)
+					}
 					continue
 				}
 				switch match.kind {
 				case shellTypeFile:
-					r.outf("%s\n", match.path)
+					if err := r.writeBuiltinf("command", "%s\n", match.path); err != nil {
+						return r.shellBuiltinWriteExit("command", err)
+					}
 				default:
-					r.outf("%s\n", arg)
+					if err := r.writeBuiltinf("command", "%s\n", arg); err != nil {
+						return r.shellBuiltinWriteExit("command", err)
+					}
 				}
 			}
 		}
@@ -2593,49 +2718,58 @@ func (r *Runner) typeStatExecutable(ctx context.Context, name string, requireExe
 	return name, nil
 }
 
-func (r *Runner) printTypeMatch(name string, match shellTypeMatch, mode shellTypeMode) {
+func (r *Runner) printTypeMatch(name string, match shellTypeMatch, mode shellTypeMode) error {
 	if mode.output == shellTypeOutputKind {
 		switch match.kind {
 		case shellTypeAlias:
-			r.out("alias\n")
+			return r.writeBuiltinString("type", "alias\n")
 		case shellTypeKeyword:
-			r.out("keyword\n")
+			return r.writeBuiltinString("type", "keyword\n")
 		case shellTypeFunction:
-			r.out("function\n")
+			return r.writeBuiltinString("type", "function\n")
 		case shellTypeSpecialBuiltin:
-			r.out("builtin\n")
+			return r.writeBuiltinString("type", "builtin\n")
 		case shellTypeBuiltin:
-			r.out("builtin\n")
+			return r.writeBuiltinString("type", "builtin\n")
 		case shellTypeFile:
-			r.out("file\n")
+			return r.writeBuiltinString("type", "file\n")
 		}
-		return
+		return nil
 	}
 	if mode.output == shellTypeOutputPath || mode.output == shellTypeOutputForcePath {
 		if match.kind == shellTypeFile {
-			r.outf("%s\n", match.path)
+			return r.writeBuiltinf("type", "%s\n", match.path)
 		}
-		return
+		return nil
 	}
 
 	switch match.kind {
 	case shellTypeAlias:
-		r.outf("%s is aliased to `%s'\n", name, match.als.value)
+		return r.writeBuiltinf("type", "%s is aliased to `%s'\n", name, match.als.value)
 	case shellTypeKeyword:
-		r.outf("%s is a shell keyword\n", name)
+		return r.writeBuiltinf("type", "%s is a shell keyword\n", name)
 	case shellTypeFunction:
-		r.outf("%s is a function\n", name)
-		r.outf("%s () \n", name)
-		r.out("{ \n")
-		r.out(bashFunctionBody(match.body))
-		r.out("}\n")
+		if err := r.writeBuiltinf("type", "%s is a function\n", name); err != nil {
+			return err
+		}
+		if err := r.writeBuiltinf("type", "%s () \n", name); err != nil {
+			return err
+		}
+		if err := r.writeBuiltinString("type", "{ \n"); err != nil {
+			return err
+		}
+		if err := r.writeBuiltinString("type", bashFunctionBody(match.body)); err != nil {
+			return err
+		}
+		return r.writeBuiltinString("type", "}\n")
 	case shellTypeSpecialBuiltin:
-		r.outf("%s is a shell builtin\n", name)
+		return r.writeBuiltinf("type", "%s is a shell builtin\n", name)
 	case shellTypeBuiltin:
-		r.outf("%s is a shell builtin\n", name)
+		return r.writeBuiltinf("type", "%s is a shell builtin\n", name)
 	case shellTypeFile:
-		r.outf("%s is %s\n", name, match.path)
+		return r.writeBuiltinf("type", "%s is %s\n", name, match.path)
 	}
+	return nil
 }
 
 func bashFunctionBody(body *syntax.Stmt) string {

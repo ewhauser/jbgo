@@ -80,7 +80,7 @@ func TestVirtualDeviceDirectoryMergesSandboxEntries(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "null\ntty1\nurandom\nzero\n"; got != want {
+	if got, want := result.Stdout, "full\nnull\ntty1\nurandom\nzero\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -108,8 +108,61 @@ func TestVirtualDeviceChildrenCanBeCreatedOnHostReadWriteFS(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "null\ntty1\nurandom\nzero\ntty1\n"; got != want {
+	if got, want := result.Stdout, "full\nnull\ntty1\nurandom\nzero\ntty1\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestFullDeviceReadAndWriteSemantics(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+
+	file, err := session.FileSystem().OpenFile(context.Background(), "/dev/full", os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("OpenFile(/dev/full) error = %v", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("Close(/dev/full) error = %v", err)
+		}
+	}()
+
+	buf := make([]byte, 4)
+	if _, err := io.ReadFull(file, buf); err != nil {
+		t.Fatalf("ReadFull(/dev/full) error = %v", err)
+	}
+	if !bytes.Equal(buf, make([]byte, len(buf))) {
+		t.Fatalf("Read(/dev/full) = %v, want all zeros", buf)
+	}
+	if _, err := file.Write([]byte("x")); err == nil {
+		t.Fatal("Write(/dev/full) unexpectedly succeeded")
+	}
+}
+
+func TestBuiltinWritesToFullDeviceFail(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime(t, &Config{})
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "" +
+			"echo hi >/dev/full\n" +
+			"echo echo=$?\n" +
+			"printf '%s\\n' hi >/dev/full\n" +
+			"echo printf=$?\n" +
+			"type echo >/dev/full\n" +
+			"echo type=$?\n" +
+			"ulimit -a >/dev/full\n" +
+			"echo ulimit=$?\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "echo=1\nprintf=1\ntype=1\nulimit=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
 	}
 }
 

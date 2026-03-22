@@ -828,6 +828,48 @@ func (r *Runner) errf(format string, a ...any) {
 	fmt.Fprintf(r.stderr, format, a...)
 }
 
+func (r *Runner) clearStandardFDErrors() {
+	if fd := r.getFD(1); fd != nil {
+		fd.clearWriteError()
+	}
+	if fd := r.getFD(2); fd != nil {
+		fd.clearWriteError()
+	}
+}
+
+func (r *Runner) applyStandardFDErrors() {
+	if !r.exit.ok() {
+		return
+	}
+	for _, fdNum := range []int{1, 2} {
+		fd := r.getFD(fdNum)
+		if fd == nil {
+			continue
+		}
+		if err := fd.writeError(); err != nil {
+			if diag, ok := shellWriteErrorDiagnostic(err); ok {
+				r.errf("%s\n", diag)
+			}
+			r.exit.code = 1
+			r.exit.err = ExitStatus(1)
+			r.exit.errExitIgnored = false
+			return
+		}
+	}
+}
+
+func shellWriteErrorDiagnostic(err error) (string, bool) {
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || pathErr == nil || pathErr.Path == "" || pathErr.Err == nil {
+		return "", false
+	}
+	text := pathErr.Err.Error()
+	if text == "" {
+		return "", false
+	}
+	return pathErr.Path + ": " + strings.ToUpper(text[:1]) + text[1:], true
+}
+
 func (r *Runner) stop(ctx context.Context) bool {
 	if r.exit.returning || r.exit.exiting {
 		return true
@@ -3665,7 +3707,7 @@ func (f *shellStdDeviceFile) Write(p []byte) (int, error) {
 	if f == nil || f.fd == nil || f.fd.writer == nil {
 		return 0, &os.PathError{Op: "write", Path: f.path, Err: syscall.EBADF}
 	}
-	return f.fd.writer.Write(p)
+	return f.fd.Write(p)
 }
 
 func (f *shellStdDeviceFile) Close() error { return nil }

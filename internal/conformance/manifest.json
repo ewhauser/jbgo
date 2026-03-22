@@ -21,14 +21,6 @@
             "darwin"
           ]
         },
-        "oils/bugs.test.sh::'echo' and printf fail on writing to full disk": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::other builtins fail on writing to full disk": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "skip",
           "reason": "platform-specific: test requires strace (Linux-only) and syscall behavior varies by platform"

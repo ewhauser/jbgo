@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,8 @@ type shellFD struct {
 	buffered   bool
 	bufferByte byte
 	closed     bool
+	writeErr   error
+	writeErrMu sync.Mutex
 }
 
 func newShellInputFD(reader io.Reader) *shellFD {
@@ -88,6 +91,21 @@ func (fd *shellFD) Read(p []byte) (int, error) {
 	return fd.reader.Read(p)
 }
 
+func (fd *shellFD) Write(p []byte) (int, error) {
+	if fd == nil || fd.writer == nil {
+		return 0, io.ErrClosedPipe
+	}
+	n, err := fd.writer.Write(p)
+	if err != nil {
+		fd.writeErrMu.Lock()
+		if fd.writeErr == nil {
+			fd.writeErr = err
+		}
+		fd.writeErrMu.Unlock()
+	}
+	return n, err
+}
+
 func (fd *shellFD) ReadByte() (byte, error) {
 	var buf [1]byte
 	n, err := fd.Read(buf[:])
@@ -125,6 +143,13 @@ func (fd *shellFD) UnderlyingReader() io.Reader {
 		return nil
 	}
 	return fd.reader
+}
+
+func (fd *shellFD) UnderlyingWriter() io.Writer {
+	if fd == nil {
+		return nil
+	}
+	return fd.writer
 }
 
 func (fd *shellFD) SetReadDeadline(t time.Time) error {
@@ -181,13 +206,13 @@ func (r *Runner) syncStandardFDs() {
 	}
 
 	if fd := r.fds[1]; fd != nil && fd.writer != nil {
-		r.stdout = fd.writer
+		r.stdout = fd
 	} else {
 		r.stdout = io.Discard
 	}
 
 	if fd := r.fds[2]; fd != nil && fd.writer != nil {
-		r.stderr = fd.writer
+		r.stderr = fd
 	} else {
 		r.stderr = io.Discard
 	}
@@ -252,6 +277,24 @@ func (r *Runner) lookupNamedFD(name string) (int, error) {
 		return 0, errors.New("bad file descriptor")
 	}
 	return fd, nil
+}
+
+func (fd *shellFD) clearWriteError() {
+	if fd == nil {
+		return
+	}
+	fd.writeErrMu.Lock()
+	fd.writeErr = nil
+	fd.writeErrMu.Unlock()
+}
+
+func (fd *shellFD) writeError() error {
+	if fd == nil {
+		return nil
+	}
+	fd.writeErrMu.Lock()
+	defer fd.writeErrMu.Unlock()
+	return fd.writeErr
 }
 
 func (r *Runner) setFD(fdNum int, fd *shellFD) {

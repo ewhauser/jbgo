@@ -147,7 +147,7 @@ func (c *Bash) executeInlineScript(ctx context.Context, inv *Invocation, parsed 
 	// When stdout and stderr point to the same writer (e.g. 2>&1),
 	// pass them through so the child session writes directly and
 	// output interleaving between trace and command output is preserved.
-	passthrough := inv.Stdout != nil && inv.Stdout == inv.Stderr
+	passthrough := inv.Stdout != nil && resolveUnderlyingWriter(inv.Stdout) == resolveUnderlyingWriter(inv.Stderr)
 	if passthrough {
 		req.Stdout = inv.Stdout
 		req.Stderr = inv.Stderr
