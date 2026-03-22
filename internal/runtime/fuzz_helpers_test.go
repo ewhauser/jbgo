@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/policy"
@@ -289,7 +290,16 @@ func sanitizeFuzzToken(raw string) string {
 		return "value"
 	}
 	if len(raw) > 32 {
-		raw = raw[:32]
+		// Truncate at a rune boundary to avoid splitting multi-byte UTF-8.
+		i := 0
+		for i < len(raw) {
+			_, size := utf8.DecodeRuneInString(raw[i:])
+			if i+size > 32 {
+				break
+			}
+			i += size
+		}
+		raw = raw[:i]
 	}
 	return raw
 }
