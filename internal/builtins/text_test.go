@@ -3,9 +3,12 @@ package builtins_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestGrepWorksInPipelineFromStdin(t *testing.T) {
@@ -297,7 +300,7 @@ func TestWCCountsWordsFromStdin(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	if got, want := result.Stdout, wcExpectedField(3)+"\n"; got != want {
+	if got, want := result.Stdout, "3\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -311,7 +314,7 @@ func TestWCCountsBinaryBytes(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
 	}
-	if got, want := result.Stdout, wcExpectedField(5)+" /tmp/binary.bin\n"; got != want {
+	if got, want := result.Stdout, "5 /tmp/binary.bin\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -347,7 +350,7 @@ func TestWCSupportsMaxLineLengthAndTotalModes(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := wcExpectedField(3) + " /tmp/a.txt\n9\n" + wcExpectedField(3) + " /tmp/b.txt\n" + wcExpectedField(3) + " total\n"
+	want := "3 /tmp/a.txt\n9\n3 /tmp/b.txt\n3 total\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
@@ -424,7 +427,7 @@ func TestWCMatchesGNUPaddingForMultipleFiles(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	const want = " 1  1  2 2b\n 1  2  8 2w\n2 3 10\n2 2b\n8 2w\n10 total\n"
+	const want = " 1  1  2 2b\n 1  2  8 2w\n2 3 10\n 2 2b\n 8 2w\n10 total\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
@@ -452,7 +455,7 @@ func TestWCNonbreakingSpaceWordSeparators(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, wcExpectedField(2)+"\n"; got != want {
+	if got, want := result.Stdout, "2\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -468,10 +471,10 @@ func TestWCUTF8NonbreakingSeparators(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := wcExpectedField(2) + " /tmp/nbsp.txt\n" +
-		wcExpectedField(3) + " /tmp/nbsp.txt\n" +
-		wcExpectedField(2) + " /tmp/wj.txt\n" +
-		wcExpectedField(3) + " /tmp/wj.txt\n"
+	want := "2 /tmp/nbsp.txt\n" +
+		"3 /tmp/nbsp.txt\n" +
+		"2 /tmp/wj.txt\n" +
+		"3 /tmp/wj.txt\n"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
@@ -488,10 +491,225 @@ func TestWCBytesOnlyUsesRegularFileSizeWithoutReadingWholeFile(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, wcExpectedField(size)+" /tmp/big.bin\n"; got != want {
+	if got, want := result.Stdout, "8388609 /tmp/big.bin\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestWCUsesDisplayWidthAndGNUCountOrder(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/wide.txt", []byte("A界🙂\n"))
+
+	result := mustExecSession(t, session, "wc -L /tmp/wide.txt\nwc -mL /tmp/wide.txt\nwc -cm /tmp/wide.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "5 /tmp/wide.txt\n4 5 /tmp/wide.txt\n4 9 /tmp/wide.txt\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCAcceptsTotalValueAbbreviations(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf 'x\\n' > /tmp/x\nwc /tmp/x --tot=au\nwc /tmp/x --total=al\nwc /tmp/x /tmp/x --t=o\nwc /tmp/x /tmp/x --total=n\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "1 1 2 /tmp/x\n1 1 2 /tmp/x\n1 1 2 total\n2 2 4\n1 1 2 /tmp/x\n1 1 2 /tmp/x\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestWCPrintsZeroCountsForDirectoriesBeforeErrors(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "mkdir -p /tmp/d\nwc /tmp/d || true\n")
+	wantStdout := wcExpectedField(0) + " " + wcExpectedField(0) + " " + wcExpectedField(0) + " /tmp/d\n"
+	if got := result.Stdout; got != wantStdout {
+		t.Fatalf("Stdout = %q, want %q", got, wantStdout)
+	}
+	if got, want := result.Stderr, "wc: /tmp/d: Is a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestWCFiles0FromReportsSourceReadErrorsAndMixedEntries(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"printf 'a\\n' > /tmp/a.txt",
+		"mkdir -p '/tmp/dir with spaces'",
+		"wc --files0-from='/tmp/dir with spaces' || true",
+		"cd /tmp",
+		"wc --files0-from=. || true",
+		"printf '/tmp/a.txt\\0\\0/tmp/missing file\\0' > /tmp/names",
+		"wc --files0-from=/tmp/names || true",
+		"",
+	}, "\n"))
+	if got, want := result.Stdout, "1 1 2 /tmp/a.txt\n1 1 2 total\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	for _, want := range []string{
+		"wc: '/tmp/dir with spaces': read error: Is a directory\n",
+		"wc: .: read error: Is a directory\n",
+		"wc: /tmp/names:2: invalid zero-length file name\n",
+		"wc: '/tmp/missing file': No such file or directory\n",
+	} {
+		if !strings.Contains(result.Stderr, want) {
+			t.Fatalf("Stderr = %q, want substring %q", result.Stderr, want)
+		}
+	}
+}
+
+func TestWCFiles0FromStreamingHonorsMaxFileBytes(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:  []string{"/"},
+			WriteRoots: []string{"/"},
+			Limits: policy.Limits{
+				MaxFileBytes: 12,
+			},
+		}),
+	})
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"printf 'a\\n' > /tmp/a.txt",
+		"printf 'b\\n' > /tmp/b.txt",
+		"printf '/tmp/a.txt\\0/tmp/b.txt\\0' | wc --files0-from=-",
+		"",
+	}, "\n"))
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "1 1 2 /tmp/a.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "wc: -: read error: input exceeds maximum file size of 12 bytes\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestWCFiles0FromMaterializedReportsMaxFileBytes(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:  []string{"/"},
+			WriteRoots: []string{"/"},
+			Limits: policy.Limits{
+				MaxFileBytes: 5,
+			},
+		}),
+	})
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"printf 'a\\n' > /tmp/a.txt",
+		"printf '/tmp/a.txt\\0' > /tmp/names",
+		"wc --files0-from=/tmp/names",
+		"",
+	}, "\n"))
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
+	}
+	if got, want := result.Stderr, "wc: /tmp/names: read error: input exceeds maximum file size of 5 bytes\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestWCFiles0FromStreamsResultsBeforeEOF(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/a.txt", []byte("a\n"))
+
+	stdinReader, stdinWriter := io.Pipe()
+	stdoutWrites := make(chan string, 4)
+	errCh := make(chan error, 1)
+	resultCh := make(chan *ExecutionResult, 1)
+
+	go func() {
+		result, err := session.Exec(context.Background(), &ExecutionRequest{
+			Script: "wc --files0-from=-\n",
+			Stdin:  stdinReader,
+			Stdout: wcStreamObserver(stdoutWrites),
+		})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- result
+	}()
+
+	if _, err := stdinWriter.Write([]byte("/tmp/a.txt\x00")); err != nil {
+		t.Fatalf("stdinWriter.Write() error = %v", err)
+	}
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("Session.Exec() error = %v", err)
+	case got := <-stdoutWrites:
+		if got != "1 1 2 /tmp/a.txt\n" {
+			t.Fatalf("stdout write = %q, want %q", got, "1 1 2 /tmp/a.txt\n")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for streamed wc output")
+	}
+
+	if err := stdinWriter.Close(); err != nil {
+		t.Fatalf("stdinWriter.Close() error = %v", err)
+	}
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("Session.Exec() error = %v", err)
+	case result := <-resultCh:
+		if result.ExitCode != 0 {
+			t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if got, want := result.Stdout, "1 1 2 /tmp/a.txt\n"; got != want {
+			t.Fatalf("Stdout = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for wc completion")
+	}
+}
+
+func TestWCHelpAliasMatchesGNUShortClusterBehavior(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	help := mustExecSession(t, session, "wc -h\n")
+	if help.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", help.ExitCode, help.Stderr)
+	}
+	if !strings.Contains(help.Stdout, "Usage: wc [OPTION]... [FILE]...") {
+		t.Fatalf("Stdout = %q, want wc help text", help.Stdout)
+	}
+
+	invalid := mustExecSession(t, session, "printf 'a\\n' | wc - -help || true\n")
+	if got, want := invalid.Stderr, "wc: invalid option -- 'h'\nTry 'wc --help' for more information.\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+type wcStreamObserver chan string
+
+func (w wcStreamObserver) Write(p []byte) (int, error) {
+	w <- string(p)
+	return len(p), nil
+}
+
 func TestCatSupportsNumberFlag(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

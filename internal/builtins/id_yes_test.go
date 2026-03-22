@@ -113,7 +113,7 @@ func TestYesPreservesWholeRecordsAtGNUBoundaries(t *testing.T) {
 			if result.ExitCode != 0 {
 				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 			}
-			want := fmt.Sprintf("%s\n%s\n", wcExpectedField(1), wcExpectedField(size+1))
+			want := fmt.Sprintf("1\n%d\n", size+1)
 			if result.Stdout != want {
 				t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
 			}
