@@ -29,6 +29,7 @@ type execFrame struct {
 }
 
 func (r *Runner) pushFrame(frame execFrame) func() {
+	r.ensureOwnFrames()
 	r.frames = append(r.frames, frame)
 	return func() {
 		r.frames = r.frames[:len(r.frames)-1]
@@ -132,14 +133,13 @@ func (r *Runner) funcTrace(name string) bool {
 }
 
 func (r *Runner) setFuncInfo(name string, info funcInfo) {
-	if r.funcs == nil {
-		r.funcs = make(map[string]funcInfo, 4)
-	}
+	r.ensureOwnFuncs()
 	r.funcs[name] = info
 }
 
 func (r *Runner) delFunc(name string) {
 	if r.funcs != nil {
+		r.funcs = cloneMapOnWrite(r.funcs, &r.funcsShared)
 		delete(r.funcs, name)
 	}
 }

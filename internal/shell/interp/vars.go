@@ -21,29 +21,27 @@ import (
 
 const loopIterHelperCommand = "__jb_loop_iter"
 
-func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
+func newOverlayEnviron(parent expand.Environ, snapshot bool) *overlayEnviron {
 	oenv := &overlayEnviron{}
-	if !background {
+	if !snapshot {
 		oenv.parent = parent
+	} else if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+		oenv.parent = forkWriteEnviron(parentWrite)
 	} else {
-		// We could do better here if the parent is also an overlayEnviron;
-		// measure with profiles or benchmarks before we choose to do so.
-		for name, vr := range parent.Each() {
-			oenv.Set(name, vr)
-		}
+		oenv.parent = parent
 	}
 	if parentWrite, ok := parent.(expand.WriteEnviron); ok {
 		if optEnv, optVar, ok := visibleBindingWriteEnv(parentWrite, "OPTIND"); ok {
 			if state := getoptsStateForEnv(optEnv); state != nil {
 				oenv.optState = *state
 			}
-			if !background {
+			if !snapshot {
 				if err := oenv.Set("OPTIND", optVar); err != nil {
 					panic(fmt.Sprintf("copy OPTIND into overlay: %v", err))
 				}
 			}
 		}
-		if background {
+		if snapshot {
 			if secondsEnv, _, ok := visibleSecondsBinding(parentWrite); ok {
 				if started, ok := secondsStartTimeForEnv(secondsEnv); ok {
 					oenv.secondsStartTime = started
@@ -55,6 +53,47 @@ func newOverlayEnviron(parent expand.Environ, background bool) *overlayEnviron {
 	return oenv
 }
 
+func forkEnviron(parent expand.Environ) expand.Environ {
+	if parentWrite, ok := parent.(expand.WriteEnviron); ok {
+		return forkWriteEnviron(parentWrite)
+	}
+	return parent
+}
+
+func forkWriteEnviron(parent expand.WriteEnviron) expand.WriteEnviron {
+	switch parent := parent.(type) {
+	case *overlayEnviron:
+		clone := *parent
+		clone.parent = forkEnviron(parent.parent)
+		clone.valuesShared = shareMapForSubshell(parent.values, &parent.valuesShared)
+		clone.tempUnsetShared = shareMapForSubshell(parent.tempUnset, &parent.tempUnsetShared)
+		return &clone
+	case *shadowWriteEnviron:
+		clone := *parent
+		clone.parent = forkWriteEnviron(parent.parent)
+		return &clone
+	default:
+		oenv := &overlayEnviron{}
+		for name, vr := range parent.Each() {
+			if err := oenv.Set(name, vr); err != nil {
+				panic(fmt.Sprintf("copy %s into overlay: %v", name, err))
+			}
+		}
+		if optEnv, _, ok := visibleBindingWriteEnv(parent, "OPTIND"); ok {
+			if state := getoptsStateForEnv(optEnv); state != nil {
+				oenv.optState = *state
+			}
+		}
+		if secondsEnv, _, ok := visibleSecondsBinding(parent); ok {
+			if started, ok := secondsStartTimeForEnv(secondsEnv); ok {
+				oenv.secondsStartTime = started
+				oenv.secondsStartSet = true
+			}
+		}
+		return oenv
+	}
+}
+
 // overlayEnviron is our main implementation of [expand.WriteEnviron].
 type overlayEnviron struct {
 	// parent is non-nil if [values] is an overlay over a parent environment
@@ -64,6 +103,9 @@ type overlayEnviron struct {
 
 	// values maps normalized variable names, per [overlayEnviron.normalize].
 	values map[string]namedVariable
+	// valuesShared tracks whether values is shared with another environ and
+	// must be cloned before mutation.
+	valuesShared bool
 
 	// We need to know if the current scope is a function's scope, because
 	// functions can modify global variables. When true, [parent] must not be nil.
@@ -88,6 +130,9 @@ type overlayEnviron struct {
 	// unset. Subsequent writes to these variables should pass through to
 	// the parent rather than being recaptured in the temp scope.
 	tempUnset map[string]bool
+	// tempUnsetShared tracks whether tempUnset is shared with another environ
+	// and must be cloned before mutation.
+	tempUnsetShared bool
 
 	// optState tracks clustered getopts progress for the OPTIND binding visible
 	// in this scope.
@@ -158,6 +203,7 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 		return o.parent.(expand.WriteEnviron).Set(name, vr)
 	}
 
+	o.values = cloneMapOnWrite(o.values, &o.valuesShared)
 	if o.values == nil {
 		o.values = make(map[string]namedVariable)
 	}
@@ -391,8 +437,10 @@ func deleteCurrentScopeVar(env expand.WriteEnviron, name string) bool {
 		if _, ok := env.values[normalized]; !ok {
 			return false
 		}
+		env.values = cloneMapOnWrite(env.values, &env.valuesShared)
 		delete(env.values, normalized)
 		if env.tempScope {
+			env.tempUnset = cloneMapOnWrite(env.tempUnset, &env.tempUnsetShared)
 			if env.tempUnset == nil {
 				env.tempUnset = make(map[string]bool)
 			}

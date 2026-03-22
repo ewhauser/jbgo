@@ -194,6 +194,12 @@ func (r *Runner) ensureFDTable() {
 		return
 	}
 	r.fds = initialFDTable(r.stdin, r.stdout, r.stderr)
+	r.fdsShared = false
+}
+
+func (r *Runner) ensureMutableFDTable() {
+	r.ensureFDTable()
+	r.fds = cloneMapOnWrite(r.fds, &r.fdsShared)
 }
 
 func (r *Runner) syncStandardFDs() {
@@ -223,6 +229,7 @@ func (r *Runner) setStdinReader(in StdinReader) {
 	if r.fds == nil {
 		return
 	}
+	r.ensureMutableFDTable()
 	r.fds[0] = newShellInputFD(in)
 	r.syncStandardFDs()
 }
@@ -235,6 +242,7 @@ func (r *Runner) setStdoutWriter(out io.Writer) {
 	if r.fds == nil {
 		return
 	}
+	r.ensureMutableFDTable()
 	r.fds[1] = newShellOutputFD(out)
 	r.syncStandardFDs()
 }
@@ -247,6 +255,7 @@ func (r *Runner) setStderrWriter(err io.Writer) {
 	if r.fds == nil {
 		return
 	}
+	r.ensureMutableFDTable()
 	r.fds[2] = newShellOutputFD(err)
 	r.syncStandardFDs()
 }
@@ -298,7 +307,7 @@ func (fd *shellFD) writeError() error {
 }
 
 func (r *Runner) setFD(fdNum int, fd *shellFD) {
-	r.ensureFDTable()
+	r.ensureMutableFDTable()
 	old := r.fds[fdNum]
 	if fd == nil {
 		delete(r.fds, fdNum)

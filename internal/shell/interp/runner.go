@@ -2723,9 +2723,7 @@ func (r *Runner) setHiddenReadonlyArrayDecl(name string, kind expand.ValueKind) 
 		r.clearHiddenReadonlyArrayDecl(name)
 		return
 	}
-	if r.hiddenReadonlyArrayDecl == nil {
-		r.hiddenReadonlyArrayDecl = make(map[string]expand.ValueKind)
-	}
+	r.ensureOwnHiddenReadonlyArrayDecl()
 	r.hiddenReadonlyArrayDecl[name] = kind
 }
 
@@ -2733,6 +2731,7 @@ func (r *Runner) clearHiddenReadonlyArrayDecl(name string) {
 	if r.hiddenReadonlyArrayDecl == nil || name == "" {
 		return
 	}
+	r.hiddenReadonlyArrayDecl = cloneMapOnWrite(r.hiddenReadonlyArrayDecl, &r.hiddenReadonlyArrayDeclShared)
 	delete(r.hiddenReadonlyArrayDecl, name)
 }
 
@@ -3762,9 +3761,7 @@ func (r *Runner) markNamedFDReleased(name string) {
 	if name == "" {
 		return
 	}
-	if r.namedFDReleased == nil {
-		r.namedFDReleased = make(map[string]bool)
-	}
+	r.ensureOwnNamedFDReleased()
 	r.namedFDReleased[name] = true
 }
 
@@ -3772,6 +3769,7 @@ func (r *Runner) clearNamedFDReleased(name string) {
 	if name == "" || r.namedFDReleased == nil {
 		return
 	}
+	r.namedFDReleased = cloneMapOnWrite(r.namedFDReleased, &r.namedFDReleasedShared)
 	delete(r.namedFDReleased, name)
 }
 

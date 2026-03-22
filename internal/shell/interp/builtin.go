@@ -956,9 +956,7 @@ func (r *Runner) aliasBuiltin(args []string) (exit exitStatus) {
 			continue
 		}
 
-		if r.alias == nil {
-			r.alias = make(map[string]alias)
-		}
+		r.ensureOwnAlias()
 		r.alias[name] = alias{value: src}
 	}
 	return exit
@@ -983,7 +981,7 @@ func (r *Runner) unaliasBuiltin(args []string) (exit exitStatus) {
 	}
 unaliasArgs:
 	if removeAll {
-		clear(r.alias)
+		r.clearAlias()
 		return exit
 	}
 	if len(args) == 0 {
@@ -995,6 +993,7 @@ unaliasArgs:
 			exit.code = 1
 			continue
 		}
+		r.alias = cloneMapOnWrite(r.alias, &r.aliasShared)
 		delete(r.alias, name)
 	}
 	return exit
@@ -2284,6 +2283,7 @@ func (r *Runner) dirsBuiltin(args []string) uint8 {
 	}
 
 	if clearStack {
+		r.ensureOwnDirStack()
 		r.dirStack = append(r.dirStack[:0], r.visibleDir())
 		return 0
 	}
@@ -2514,6 +2514,7 @@ func (r *Runner) setCurrentDir(newDir, newLogicalDir, oldLogicalDir string) {
 	r.logicalDir = newLogicalDir
 	r.setExportedVarString("OLDPWD", oldLogicalDir)
 	r.setExportedVarString("PWD", newLogicalDir)
+	r.ensureOwnDirStack()
 	if len(r.dirStack) == 0 {
 		r.dirStack = append(r.dirStack, newLogicalDir)
 	} else {
@@ -3079,20 +3080,14 @@ func printfBrokenPipe(err error) bool {
 func (r *Runner) lookupPrintfEnv(name string) (string, bool) {
 	vr := r.lookupVar(name)
 	if !vr.IsSet() || !vr.Exported || vr.Kind != expand.String {
-		if runtime.GOOS == "linux" && r.printfEnv != nil {
-			value, ok := r.printfEnv[name]
+		if runtime.GOOS == "linux" {
+			value, ok := r.printfEnv.get(name)
 			return value, ok
 		}
 		return "", false
 	}
 	if runtime.GOOS == "linux" {
-		if r.printfEnv == nil {
-			r.printfEnv = make(map[string]string)
-		}
-		if value, ok := r.printfEnv[name]; ok {
-			return value, true
-		}
-		r.printfEnv[name] = vr.String()
+		return r.printfEnv.getOrStore(name, vr.String()), true
 	}
 	return vr.String(), true
 }

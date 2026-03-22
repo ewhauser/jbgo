@@ -68,14 +68,26 @@ type Runner struct {
 	// Separate maps - note that bash allows a name to be both a var and a
 	// func simultaneously.
 	funcs map[string]funcInfo
+	// funcsShared tracks whether funcs is shared with another runner and must
+	// be cloned before mutation.
+	funcsShared bool
 
 	alias map[string]alias
+	// aliasShared tracks whether alias is shared with another runner and must
+	// be cloned before mutation.
+	aliasShared bool
 
 	commandHash map[string]commandHashEntry
+	// commandHashShared tracks whether commandHash is shared with another
+	// runner and must be cloned before mutation.
+	commandHashShared bool
 
 	// readonly -a/-A on a new unset variable preserves array semantics while bash
 	// still omits the array type from `declare -p` output.
 	hiddenReadonlyArrayDecl map[string]expand.ValueKind
+	// hiddenReadonlyArrayDeclShared tracks whether hiddenReadonlyArrayDecl is
+	// shared with another runner and must be cloned before mutation.
+	hiddenReadonlyArrayDeclShared bool
 
 	// callHandler is a function allowing to replace a simple command's
 	// arguments. It may be nil.
@@ -120,10 +132,16 @@ type Runner struct {
 	stdout io.Writer
 	stderr io.Writer
 	fds    map[int]*shellFD
+	// fdsShared tracks whether fds is shared with another runner and must be
+	// cloned before mutation.
+	fdsShared bool
 
 	// namedFDReleased tracks named redirect variables whose descriptor was
 	// explicitly closed with a persistent redirect such as `exec {fd}>&-`.
 	namedFDReleased map[string]bool
+	// namedFDReleasedShared tracks whether namedFDReleased is shared with
+	// another runner and must be cloned before mutation.
+	namedFDReleasedShared bool
 
 	// traceOutput keeps xtrace on the shell's stderr even when a statement
 	// temporarily redirects fd 2.
@@ -148,7 +166,10 @@ type Runner struct {
 
 	topLevelScriptPath string
 	frames             []execFrame
-	internalRun        bool
+	// framesShared tracks whether frames is shared with another runner and must
+	// be cloned before mutation.
+	framesShared bool
+	internalRun  bool
 
 	// >0 to break or continue out of N enclosing loops
 	breakEnclosing, contnEnclosing int
@@ -231,6 +252,9 @@ type Runner struct {
 	// cwd without requiring an extra allocation.
 	dirStack     []string
 	dirBootstrap [1]string
+	// dirStackShared tracks whether dirStack is shared with another runner and
+	// must be cloned before mutation.
+	dirStackShared bool
 
 	optState getopts
 
@@ -243,8 +267,9 @@ type Runner struct {
 	// apply to the current shell, and not just the command.
 	keepRedirs bool
 
-	// printfEnv keeps process-level environment state used by printf %T.
-	printfEnv map[string]string
+	// printfEnv keeps process-level environment state used by printf %T and is
+	// shared across subshells in the same shell family.
+	printfEnv *printfEnvCache
 
 	traps trapState
 
@@ -306,9 +331,7 @@ func (r *Runner) commandHashRemember(name, path string) {
 	if r == nil || name == "" || path == "" {
 		return
 	}
-	if r.commandHash == nil {
-		r.commandHash = make(map[string]commandHashEntry)
-	}
+	r.ensureOwnCommandHash()
 	r.commandHash[name] = commandHashEntry{path: path}
 }
 
@@ -316,6 +339,7 @@ func (r *Runner) commandHashIncrement(name string) {
 	if r == nil || r.commandHash == nil {
 		return
 	}
+	r.commandHash = cloneMapOnWrite(r.commandHash, &r.commandHashShared)
 	entry, ok := r.commandHash[name]
 	if !ok {
 		return
@@ -328,7 +352,7 @@ func (r *Runner) commandHashClear() {
 	if r == nil || r.commandHash == nil {
 		return
 	}
-	clear(r.commandHash)
+	r.clearCommandHash()
 }
 
 func (r *Runner) commandHashEntries() []commandHashEntry {
@@ -884,6 +908,8 @@ func (r *Runner) Reset() {
 			r.execHandler = closedExecHandler()
 		}
 	}
+	funcs := r.funcs
+	funcsShared := r.funcsShared
 	// reset the internal state
 	*r = Runner{
 		Env:              r.Env,
@@ -930,10 +956,9 @@ func (r *Runner) Reset() {
 		startTime:  r.origStart,
 		random:     r.origRandom,
 
-		funcs:     r.funcs,
-		printfEnv: make(map[string]string),
+		funcs:     funcs,
+		printfEnv: newPrintfEnvCache(),
 
-		dirStack:               r.dirStack[:0],
 		topLevelScriptPath:     r.topLevelScriptPath,
 		interactive:            r.interactive,
 		syntheticPipelineStmts: r.syntheticPipelineStmts,
@@ -965,9 +990,14 @@ func (r *Runner) Reset() {
 
 	if r.funcs == nil {
 		r.funcs = make(map[string]funcInfo, 4)
+	} else if funcsShared {
+		r.funcs = make(map[string]funcInfo, 4)
 	} else {
 		clear(r.funcs)
 	}
+	r.funcsShared = false
+	r.dirStack = r.dirBootstrap[:0]
+	r.dirStackShared = false
 	// TODO(v4): Use the supplied Env directly if it implements enough methods.
 	r.writeEnv = &overlayEnviron{parent: r.Env}
 	if !r.writeEnv.Get("TMPDIR").IsSet() {
@@ -1130,14 +1160,15 @@ func (r *Runner) Exited() bool {
 // subshell is like [Runner.subshell], but allows skipping some allocations and copies
 // when creating subshells which will not be used concurrently with the parent shell.
 // TODO(v4): we should expose this, e.g. SubshellForeground and SubshellBackground.
-func (r *Runner) subshell(background bool) *Runner {
+func (r *Runner) subshell(_ bool) *Runner {
 	if !r.didReset {
 		r.Reset()
 	}
 	bashPID := r.allocateSubshellPID()
 	random := randomSeed(bashPID, r.origStart)
-	// Keep in sync with the Runner type. Manually copy fields, to not copy
-	// sensitive ones like [errgroup.Group], and to do deep copies of slices.
+	// Keep in sync with the Runner type. Manually copy fields to avoid copying
+	// sensitive ones like [errgroup.Group], while sharing large shell state via
+	// copy-on-write.
 	r2 := &Runner{
 		Dir:                       r.Dir,
 		logicalDir:                r.logicalDir,
@@ -1161,10 +1192,10 @@ func (r *Runner) subshell(background bool) *Runner {
 		stdin:                     r.stdin,
 		stdout:                    r.stdout,
 		stderr:                    r.stderr,
-		fds:                       cloneFDTable(r.fds),
-		namedFDReleased:           maps.Clone(r.namedFDReleased),
+		fds:                       r.fds,
+		namedFDReleased:           r.namedFDReleased,
 		traceOutput:               r.traceOutput,
-		expandBaseFDs:             cloneFDTable(r.expandBaseFDs),
+		expandBaseFDs:             r.expandBaseFDs,
 		filename:                  r.filename,
 		topLevelScriptPath:        r.topLevelScriptPath,
 		internalRun:               r.internalRun,
@@ -1187,8 +1218,8 @@ func (r *Runner) subshell(background bool) *Runner {
 		currentChunkSource:        r.currentChunkSource,
 		currentChunkSourceBase:    r.currentChunkSourceBase,
 		printfEnv:                 r.printfEnv,
-		hiddenReadonlyArrayDecl:   maps.Clone(r.hiddenReadonlyArrayDecl),
-		commandHash:               maps.Clone(r.commandHash),
+		hiddenReadonlyArrayDecl:   r.hiddenReadonlyArrayDecl,
+		commandHash:               r.commandHash,
 		origStart:                 r.origStart,
 		startTime:                 r.startTime,
 		random:                    random,
@@ -1199,15 +1230,38 @@ func (r *Runner) subshell(background bool) *Runner {
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
-	r2.writeEnv = newOverlayEnviron(r.writeEnv, background)
-	// Funcs are copied, since they might be modified.
-	r2.funcs = maps.Clone(r.funcs)
-	r2.alias = maps.Clone(r.alias)
-	r2.frames = append(r2.frames, r.frames...)
+	if shareMapForSubshell(r.fds, &r.fdsShared) {
+		r2.fdsShared = true
+	}
+	if shareMapForSubshell(r.namedFDReleased, &r.namedFDReleasedShared) {
+		r2.namedFDReleasedShared = true
+	}
+	if shareMapForSubshell(r.hiddenReadonlyArrayDecl, &r.hiddenReadonlyArrayDeclShared) {
+		r2.hiddenReadonlyArrayDeclShared = true
+	}
+	if shareMapForSubshell(r.commandHash, &r.commandHashShared) {
+		r2.commandHashShared = true
+	}
+	r2.writeEnv = newOverlayEnviron(r.writeEnv, true)
+	r2.funcs = r.funcs
+	if shareMapForSubshell(r.funcs, &r.funcsShared) {
+		r2.funcsShared = true
+	}
+	r2.alias = r.alias
+	if shareMapForSubshell(r.alias, &r.aliasShared) {
+		r2.aliasShared = true
+	}
+	r2.frames = r.frames
+	if shareSliceForSubshell(r.frames, &r.framesShared) {
+		r2.framesShared = true
+	}
 	r2.syntheticPipelineStmts = r.syntheticPipelineStmts
 	r2.cloneTrapStateFrom(r)
 
-	r2.dirStack = append(r2.dirBootstrap[:0], r.dirStack...)
+	r2.dirStack = r.dirStack
+	if shareSliceForSubshell(r.dirStack, &r.dirStackShared) {
+		r2.dirStackShared = true
+	}
 	r2.fillExpandConfig(r.ectx)
 	r2.didReset = true
 	return r2
