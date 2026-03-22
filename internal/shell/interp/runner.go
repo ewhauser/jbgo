@@ -2788,10 +2788,26 @@ func (r *Runner) runCallAssignsWithExport(assigns []*syntax.Assign, forceExport,
 				vr.Exported = resolvedPrev.Exported
 			}
 			if temporary {
-				if err := r.writeEnv.(*callAssignWriteEnviron).bind(resolvedRef.Name.Value, resolvedPrev, vr); err != nil {
-					r.errf("%s: %v\n", resolvedRef.Name.Value, err)
-					r.exit.code = 1
-					return restores
+				cenv := r.writeEnv.(*callAssignWriteEnviron)
+				if resolvedRef.Index != nil {
+					base := resolvedPrev
+					base.Exported = vr.Exported
+					if err := cenv.bind(resolvedRef.Name.Value, resolvedPrev, base); err != nil {
+						r.errf("%s: %v\n", resolvedRef.Name.Value, err)
+						r.exit.code = 1
+						return restores
+					}
+					if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
+						r.errf("%v\n", err)
+						r.exit.code = 1
+						return restores
+					}
+				} else {
+					if err := cenv.bind(resolvedRef.Name.Value, resolvedPrev, vr); err != nil {
+						r.errf("%s: %v\n", resolvedRef.Name.Value, err)
+						r.exit.code = 1
+						return restores
+					}
 				}
 				r.afterSetVar(resolvedRef.Name.Value, vr)
 			} else {
@@ -2826,10 +2842,26 @@ func (r *Runner) runCallAssignsWithExport(assigns []*syntax.Assign, forceExport,
 			vr.Exported = resolvedPrev.Exported
 		}
 		if temporary {
-			if err := r.writeEnv.(*callAssignWriteEnviron).bind(resolvedRef.Name.Value, resolvedPrev, vr); err != nil {
-				r.errf("%s: %v\n", resolvedRef.Name.Value, err)
-				r.exit.code = 1
-				return restores
+			cenv := r.writeEnv.(*callAssignWriteEnviron)
+			if resolvedRef.Index != nil {
+				base := resolvedPrev
+				base.Exported = vr.Exported
+				if err := cenv.bind(resolvedRef.Name.Value, resolvedPrev, base); err != nil {
+					r.errf("%s: %v\n", resolvedRef.Name.Value, err)
+					r.exit.code = 1
+					return restores
+				}
+				if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
+					r.errf("%v\n", err)
+					r.exit.code = 1
+					return restores
+				}
+			} else {
+				if err := cenv.bind(resolvedRef.Name.Value, resolvedPrev, vr); err != nil {
+					r.errf("%s: %v\n", resolvedRef.Name.Value, err)
+					r.exit.code = 1
+					return restores
+				}
 			}
 			r.afterSetVar(resolvedRef.Name.Value, vr)
 		} else {

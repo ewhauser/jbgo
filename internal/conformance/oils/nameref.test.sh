@@ -545,3 +545,16 @@ p
 ## STDOUT:
 ['bar']
 ## END
+
+#### temporary call assignment through nameref with subscript
+arr=(a b c d)
+declare -n elem='arr[1]'
+f() { echo "inside: $elem"; }
+elem=temp f
+echo "after: $elem"
+echo "arr: ${arr[@]}"
+## STDOUT:
+inside: temp
+after: b
+arr: a b c d
+## END
