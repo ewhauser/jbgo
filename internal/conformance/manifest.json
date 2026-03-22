@@ -10,10 +10,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database"
         },
-        "oils/array.test.sh::array with invalid token": {
-          "mode": "xfail",
-          "reason": "gbash stops invalid array literals earlier than bash's parser"
-        },
         "oils/builtin-read.test.sh::read bash bug": {
           "mode": "xfail",
           "reason": "gbash intentionally keeps the space-preserving result instead of reproducing bash's historical control-character bug"
@@ -30,10 +26,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/ble-idioms.test.sh::recursive arith: recursion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested localvars": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
@@ -42,25 +34,12 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/blog1.test.sh::${####}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/blog1.test.sh::${###2}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/blog1.test.sh::${###}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/blog1.test.sh::${##2}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/bugs.test.sh::#2640 Hanging when reading from character devices": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: Darwin bash oracle lacks GNU coreutils timeout for this character-device regression",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/bugs.test.sh::'echo' and printf fail on writing to full disk": {
           "mode": "xfail",
@@ -82,15 +61,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh::file with NUL byte": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/bugs.test.sh::other builtins fail on writing to full disk": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/bugs.test.sh::process sub <(echo 42 | tee PWNED) not allowed": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -213,17 +184,13 @@
             "darwin"
           ]
         },
-        "oils/command-sub.test.sh::Double Quotes in Command Sub in Double Quotes": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/command-sub.test.sh::Escaped quote in [[ ]]": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash backquote-in-dquote escaping does not yet handle nested [[ ]] correctly"
         },
         "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash backquote-in-dquote error recovery differs from bash"
         },
         "oils/command_.test.sh::Command block": {
           "mode": "xfail",
@@ -234,15 +201,10 @@
         },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/empty-bodies.test.sh::Empty do/done": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/empty-bodies.test.sh::Empty then/fi": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: Darwin bash oracle lacks /usr/bin/cat inside this harness",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/errexit.test.sh::bash atoms [[ (( - redir failure checked": {
           "mode": "xfail",
@@ -265,19 +227,11 @@
             "darwin"
           ]
         },
-        "oils/for-expr.test.sh::Arith lexer mode": {
-          "mode": "xfail",
-          "reason": "gbash still rejects ANSI-C-quoted arithmetic-for operands that bash accepts, and its single-quoted diagnostics differ in this case"
-        },
         "oils/func-parsing.test.sh::Function name with $": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/func-parsing.test.sh::Function name with command sub": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/loop.test.sh::break in condition of loop": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
@@ -295,18 +249,6 @@
             "linux"
           ]
         },
-        "oils/nocasematch-match.test.sh::[[ equality matching": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nocasematch-match.test.sh::[[ regex matching": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
-        "oils/nocasematch-match.test.sh::case matching": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/parse-errors.test.sh::Long Token - 65535 bytes": {
           "mode": "xfail",
           "reason": "conformance: Darwin wc still differs from GNU bash harness behavior for this case",
@@ -320,10 +262,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/pipeline.test.sh::SIGPIPE causes pipeline to die (regression for issue #295)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
           "mode": "xfail",
@@ -346,13 +284,9 @@
             "darwin"
           ]
         },
-        "oils/serialize.test.sh::${var@Q}": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/smoke.test.sh::failed command": {
           "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
+          "reason": "conformance: gbash ls error message format differs from bash"
         },
         "oils/glob.test.sh::Glob unicode char": {
           "mode": "xfail",

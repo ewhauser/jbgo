@@ -350,7 +350,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		}
 		exit.code = uint8(status)
 	case "break", "continue":
-		if !r.inLoop {
+		if r.loopDepth == 0 {
 			return failf(0, "%s: only meaningful in a `for', `while', or `until' loop\n", name)
 		}
 		enclosing := &r.breakEnclosing
@@ -366,6 +366,10 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				exit = failf(2, "%s: %s: numeric argument required\n", name, args[0])
 				exit.exiting = true
 				return exit
+			}
+			// Clamp to the number of enclosing loops, matching bash.
+			if n > r.loopDepth {
+				n = r.loopDepth
 			}
 			*enclosing = n
 		default:

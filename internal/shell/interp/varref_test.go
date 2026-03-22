@@ -141,6 +141,28 @@ func TestRecoverableNestedArrayLiteralParseError(t *testing.T) {
 	})
 }
 
+func TestRecoverableArrayInvalidTokenContinuesParsing(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, "a=(\n1\n&\n'2 3'\n)\n")
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Run error = %T, want syntax.ParseError", err)
+	}
+	if got, want := stdout, ""; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	const wantStderr = "" +
+		"varref-test.sh: line 3: syntax error near unexpected token `&'\n" +
+		"varref-test.sh: line 3: `&'\n" +
+		"\"2 3\": executable file not found in $PATH\n" +
+		"varref-test.sh: line 5: syntax error near unexpected token `)'\n" +
+		"varref-test.sh: line 5: `)'\n"
+	if got := stderr + parseErr.BashError() + "\n"; got != wantStderr {
+		t.Fatalf("stderr = %q, want %q", got, wantStderr)
+	}
+}
+
 func TestPrintfVarRef(t *testing.T) {
 	t.Parallel()
 
@@ -1287,6 +1309,50 @@ echo $x $y $z $z2
 	}
 }
 
+func TestLetDivByZeroInIfConditionRunsElse(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+if let '42/0'; then
+  echo then
+else
+  echo else
+fi
+echo status=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "else\nstatus=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(stderr, "division by 0") {
+		t.Fatalf("stderr = %q, want diagnostic containing 'division by 0'", stderr)
+	}
+}
+
+func TestArithmCmdDivByZeroInIfConditionRunsElse(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+if (( 42/0 )); then
+  echo then
+else
+  echo else
+fi
+echo status=$?
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "else\nstatus=0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(stderr, "division by 0") {
+		t.Fatalf("stderr = %q, want diagnostic containing 'division by 0'", stderr)
+	}
+}
+
 func TestLetAcceptsSpacedGrouping(t *testing.T) {
 	t.Parallel()
 
@@ -1757,6 +1823,25 @@ echo regex=$?
 	if runtime.GOOS == "darwin" {
 		wantStdout = "regex=1\nregex=1\nregex=1\nregex=1\n"
 	}
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestHashLengthDisambiguationMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -- 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
+printf '%s\n' "${##}" "${###}" "${####}" "${##2}" "${###2}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	const wantStdout = "2\n25\n25\n5\n5\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}

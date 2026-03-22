@@ -7,6 +7,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
@@ -304,7 +306,7 @@ func (t *tracer) traceArg(arg string) string {
 		return `\'`
 	}
 	if needsTraceControlQuote(arg) || (t.cLocale && needsTraceANSIQuote(arg)) {
-		return traceANSIQuote(arg)
+		return traceANSIQuote(arg, t.cLocale)
 	}
 	quoted, err := syntax.Quote(arg, syntax.LangBash)
 	if err != nil {
@@ -350,11 +352,24 @@ func needsTraceControlQuote(arg string) bool {
 	return false
 }
 
-func traceANSIQuote(arg string) string {
+func traceANSIQuote(arg string, cLocale bool) string {
 	var b strings.Builder
 	b.WriteString("$'")
-	for i := 0; i < len(arg); i++ {
-		switch c := arg[i]; c {
+	for i := 0; i < len(arg); {
+		if !cLocale {
+			r, size := utf8.DecodeRuneInString(arg[i:])
+			if size > 1 && unicode.IsPrint(r) {
+				// Printable multi-byte UTF-8: preserve as-is.
+				// Non-printable runes (e.g. U+0085 NEXT LINE) fall
+				// through to per-byte octal escaping like bash.
+				b.WriteString(arg[i : i+size])
+				i += size
+				continue
+			}
+		}
+		c := arg[i]
+		i++
+		switch c {
 		case '\a':
 			b.WriteString(`\a`)
 		case '\b':

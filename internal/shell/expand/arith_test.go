@@ -98,7 +98,7 @@ func TestArithmSingleQuoteRejection(t *testing.T) {
 			wantErr:    true,
 			errExpr:    "$'1'",
 			errTok:     "$'1'",
-			errMessage: "$'1': arithmetic syntax error: operand expected (error token is \"$'1'\")",
+			errMessage: "'1': arithmetic syntax error: operand expected (error token is \"'1'\")",
 		},
 		{
 			name:       "ansi-c quoted with escape",
@@ -106,7 +106,7 @@ func TestArithmSingleQuoteRejection(t *testing.T) {
 			wantErr:    true,
 			errExpr:    "$'\\n'",
 			errTok:     "$'\\n'",
-			errMessage: "$'\\n': arithmetic syntax error: operand expected (error token is \"$'\\\\n'\")",
+			errMessage: "'\\n': arithmetic syntax error: operand expected (error token is \"'\\\\n'\")",
 		},
 		{
 			name:       "assignment with single quoted",
@@ -242,6 +242,34 @@ func TestArithmLetUsesShellDequotedSource(t *testing.T) {
 				t.Fatalf("%s = %q, want %q", tt.wantVarName, got, tt.wantVar)
 			}
 		})
+	}
+}
+
+func TestArithmRecursiveExpressionMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{
+		"loop": {Set: true, Kind: String, Str: "i<=100&&(s+=i,i++,loop)"},
+		"s":    {Set: true, Kind: String, Str: "0"},
+		"i":    {Set: true, Kind: String, Str: "0"},
+	}
+	cfg := &Config{Env: env}
+
+	got, err := Arithm(cfg, parseArithmExpr(t, "a=loop,s"))
+	if err != nil {
+		t.Fatalf("Arithm(a=loop,s) error = %v", err)
+	}
+	if got != 5050 {
+		t.Fatalf("Arithm(a=loop,s) = %d, want %d", got, 5050)
+	}
+	if got := env["i"].Str; got != "101" {
+		t.Fatalf("i = %q, want %q", got, "101")
+	}
+	if got := env["s"].Str; got != "5050" {
+		t.Fatalf("s = %q, want %q", got, "5050")
+	}
+	if got := env["a"].Str; got != "0" {
+		t.Fatalf("a = %q, want %q", got, "0")
 	}
 }
 

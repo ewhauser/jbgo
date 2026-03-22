@@ -285,6 +285,9 @@ func (r *Runner) expandErr(err error) {
 	}
 	fatalExpansionErr := r.commandString && !r.interactive
 	errMsg := err.Error()
+	fatalProcSubstArithErr := strings.Contains(errMsg, "arithmetic syntax error") &&
+		(strings.Contains(errMsg, `error token is "<(`) ||
+			strings.Contains(errMsg, `error token is ">(`))
 	if r.commandString && !r.interactive && runtime.GOOS == "darwin" && errors.As(err, &divErr) {
 		errMsg = strings.Replace(errMsg, `error token is "0 "`, `error token is " "`, 1)
 	}
@@ -359,10 +362,10 @@ func (r *Runner) expandErr(err error) {
 		r.commandAborted = true
 	case errors.As(err, &arithSyntaxErr):
 		r.exit.code = 1
-		r.exit.exiting = fatalExpansionErr
+		r.exit.exiting = fatalExpansionErr || fatalProcSubstArithErr
 	case errors.As(err, &arithDiagErr):
 		r.exit.code = 1
-		r.exit.exiting = fatalExpansionErr
+		r.exit.exiting = fatalExpansionErr || fatalProcSubstArithErr
 	case errMsg == "bad substitution" ||
 		strings.HasPrefix(errMsg, "bad substitution:") ||
 		strings.Contains(errMsg, ": bad substitution"):
@@ -374,6 +377,11 @@ func (r *Runner) expandErr(err error) {
 	case errMsg == "invalid indirect expansion":
 		r.exit.code = 1
 	default:
+		if fatalProcSubstArithErr {
+			r.exit.code = 1
+			r.exit.exiting = true
+			return
+		}
 		return // other cases do not exit
 	}
 }
@@ -412,6 +420,14 @@ func (r *Runner) arithmEval(expr syntax.ArithmExpr, command, let bool, source st
 		err = arithmCommandError{err: err}
 	}
 	r.expandErr(err)
+	var divErr *expand.ArithmDivByZeroError
+	if (command || let) && errors.As(err, &divErr) {
+		// In let/arithmetic-command contexts, division by zero is a
+		// diagnostic that sets exit status 1 but must not abort control
+		// flow.  This keeps if/while conditions working like bash:
+		//   if let '42/0'; then ... else ... fi  → runs else
+		r.commandAborted = false
+	}
 	if command && err != nil && r.exit.code == 0 {
 		r.exit.code = 1
 	}
@@ -1357,10 +1373,30 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		for !r.stop(ctx) {
 			oldNoErrExit := r.noErrExit
 			r.noErrExit = true
-			r.stmts(ctx, cm.Cond)
+			r.loopDepth++
+			for _, condStmt := range cm.Cond {
+				r.stmt(ctx, condStmt)
+				if r.breakEnclosing > 0 || r.contnEnclosing > 0 {
+					break
+				}
+			}
+			r.loopDepth--
 			r.noErrExit = oldNoErrExit
 			if r.stmtAborted() {
 				return
+			}
+			if r.contnEnclosing > 0 {
+				r.contnEnclosing--
+				if r.contnEnclosing > 0 {
+					break
+				}
+				r.exit.clear()
+				continue
+			}
+			if r.breakEnclosing > 0 {
+				r.breakEnclosing--
+				r.exit.clear()
+				break
 			}
 
 			stop := r.exit.ok() == cm.Until
@@ -1454,7 +1490,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				if r.runDebugTrap(ctx, cm.Pos().Line()) {
 					return
 				}
-				r.arithmCmd(y.Init)
+				r.arithmEval(y.Init, true, false, r.sourceForNode(y.Init), y.Init.Pos().Offset(), y.Init.End().Offset())
 				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 					break
 				}
@@ -1463,7 +1499,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				if r.runDebugTrap(ctx, cm.Pos().Line()) {
 					return
 				}
-				if y.Cond != nil && r.arithmCmd(y.Cond) == 0 {
+				if y.Cond != nil && r.arithmEval(y.Cond, true, false, r.sourceForNode(y.Cond), y.Cond.Pos().Offset(), y.Cond.End().Offset()) == 0 {
 					break
 				}
 				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
@@ -1476,7 +1512,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					if r.runDebugTrap(ctx, cm.Pos().Line()) {
 						return
 					}
-					r.arithmCmd(y.Post)
+					r.arithmEval(y.Post, true, false, r.sourceForNode(y.Post), y.Post.Pos().Offset(), y.Post.End().Offset())
 					if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 						break
 					}
@@ -1563,7 +1599,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					if r.stmtAborted() {
 						return
 					}
-					if match(pat, str) {
+					if r.patternMatch(pat, str) {
 						matched = true
 						break
 					}
@@ -2915,14 +2951,14 @@ func bashDeclDoubleQuote(value string) string {
 
 func bashDeclPrintValue(value string) string {
 	if needsTraceANSIQuote(value) {
-		return traceANSIQuote(value)
+		return traceANSIQuote(value, true)
 	}
 	return bashDeclDoubleQuote(value)
 }
 
 func bashDeclPlainValue(value string) string {
 	if needsTraceANSIQuote(value) {
-		return traceANSIQuote(value)
+		return traceANSIQuote(value, true)
 	}
 	quoted, err := syntax.Quote(value, syntax.LangBash)
 	if err != nil {
@@ -3125,8 +3161,12 @@ func declStringifiedArrayAssign(as *syntax.Assign) *syntax.DeclAssign {
 	}}
 }
 
-func match(pat, name string) bool {
-	ok, err := pattern.Match(pat, name, pattern.EntireString|pattern.ExtendedOperators)
+func (r *Runner) patternMatch(pat, name string) bool {
+	mode := pattern.EntireString | pattern.ExtendedOperators
+	if r.opts[optNoCaseMatch] {
+		mode |= pattern.NoGlobCase
+	}
+	ok, err := pattern.Match(pat, name, mode)
 	_ = err // TODO: report these errors
 	return ok
 }
@@ -3657,9 +3697,8 @@ func (r *Runner) redirectTargetFD(rd *syntax.Redirect, arg string) (fd int, allo
 }
 
 func (r *Runner) loopStmtsBroken(ctx context.Context, stmts []*syntax.Stmt) bool {
-	oldInLoop := r.inLoop
-	r.inLoop = true
-	defer func() { r.inLoop = oldInLoop }()
+	r.loopDepth++
+	defer func() { r.loopDepth-- }()
 	for _, stmt := range stmts {
 		r.stmt(ctx, stmt)
 		if r.contnEnclosing > 0 {

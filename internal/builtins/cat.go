@@ -8,6 +8,7 @@ import (
 	stdfs "io/fs"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/ewhauser/gbash/internal/commandutil"
 )
@@ -37,6 +38,13 @@ type catOutputState struct {
 	oneBlankKept          bool
 }
 
+type catInput struct {
+	data   []byte
+	reader io.Reader
+	label  string
+	close  func()
+}
+
 type catRedirectHandle interface {
 	commandutil.RedirectMetadata
 	Stat() (stdfs.FileInfo, error)
@@ -46,6 +54,10 @@ type catHostHandle interface {
 	Stat() (stdfs.FileInfo, error)
 	Seek(offset int64, whence int) (int64, error)
 	Fd() uintptr
+}
+
+type catStatHandle interface {
+	Stat() (stdfs.FileInfo, error)
 }
 
 func NewCat() *Cat {
@@ -119,27 +131,33 @@ func (c *Cat) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 			continue
 		}
 
-		data, label, err := readCatInput(ctx, inv, name)
+		input, err := readCatInput(ctx, inv, name)
 		if err != nil {
 			if code, ok := ExitCode(err); ok && code == 126 {
 				return err
 			}
-			failures = append(failures, catErrorMessage(name, label, err))
+			failures = append(failures, catErrorMessage(name, catInputLabel(input, name), err))
 			continue
 		}
-		if err := writeCatData(inv.Stdout, data, opts, &state); err != nil {
-			return &ExitError{Code: 1, Err: err}
+		if err := writeCatInput(inv.Stdout, input, opts, &state); err != nil {
+			if input.close != nil {
+				input.close()
+			}
+			return catWriteExitError(err)
+		}
+		if input.close != nil {
+			input.close()
 		}
 	}
 
 	if state.pendingCarriageReturn {
 		if opts.showNonprint {
 			if _, err := io.WriteString(inv.Stdout, "^M"); err != nil {
-				return &ExitError{Code: 1, Err: err}
+				return catWriteExitError(err)
 			}
 		} else {
 			if _, err := inv.Stdout.Write([]byte{'\r'}); err != nil {
-				return &ExitError{Code: 1, Err: err}
+				return catWriteExitError(err)
 			}
 		}
 	}
@@ -258,10 +276,9 @@ func catHostOffset(file catHostHandle) int64 {
 	return offset
 }
 
-func readCatInput(ctx context.Context, inv *Invocation, name string) (data []byte, label string, err error) {
+func readCatInput(ctx context.Context, inv *Invocation, name string) (catInput, error) {
 	if name == "-" {
-		data, err := readAllReader(ctx, inv, inv.Stdin)
-		return data, name, err
+		return readCatStdin(ctx, inv)
 	}
 	abs := allowPath(inv, name)
 	file, openErr := inv.FS.Open(ctx, abs)
@@ -269,17 +286,67 @@ func readCatInput(ctx context.Context, inv *Invocation, name string) (data []byt
 		if errors.Is(openErr, stdfs.ErrInvalid) {
 			info, _, statErr := statPath(ctx, inv, name)
 			if statErr == nil && info != nil && info.IsDir() {
-				return nil, abs, errors.New("is a directory")
+				return catInput{label: abs}, errors.New("is a directory")
 			}
 		}
-		return nil, abs, openErr
+		return catInput{label: abs}, openErr
 	}
-	defer func() { _ = file.Close() }()
-	if info, statErr := file.Stat(); statErr == nil && info != nil && info.IsDir() {
-		return nil, abs, errors.New("is a directory")
+	info, statErr := file.Stat()
+	if statErr == nil && info != nil && info.IsDir() {
+		_ = file.Close()
+		return catInput{label: abs}, errors.New("is a directory")
 	}
-	data, err = readAllReader(ctx, inv, file)
-	return data, abs, err
+	shouldStream := statErr != nil || catShouldStreamInfo(info)
+	if shouldStream {
+		return catInput{
+			reader: commandutil.ReaderWithContext(ctx, file),
+			label:  abs,
+			close: func() {
+				_ = file.Close()
+			},
+		}, nil
+	}
+	data, err := readAllReader(ctx, inv, file)
+	_ = file.Close()
+	return catInput{data: data, label: abs}, err
+}
+
+func readCatStdin(ctx context.Context, inv *Invocation) (catInput, error) {
+	reader := io.Reader(strings.NewReader(""))
+	if inv != nil && inv.Stdin != nil {
+		reader = inv.Stdin
+	}
+	if info, ok := catReaderInfo(reader); ok && !catShouldStreamInfo(info) {
+		data, err := readAllReader(ctx, inv, reader)
+		return catInput{data: data, label: "-"}, err
+	}
+	return catInput{
+		reader: commandutil.ReaderWithContext(ctx, reader),
+		label:  "-",
+	}, nil
+}
+
+func catReaderInfo(reader io.Reader) (stdfs.FileInfo, bool) {
+	handle, ok := reader.(catStatHandle)
+	if !ok {
+		return nil, false
+	}
+	info, err := handle.Stat()
+	if err != nil || info == nil {
+		return nil, false
+	}
+	return info, true
+}
+
+func catShouldStreamInfo(info stdfs.FileInfo) bool {
+	return info == nil || !info.Mode().IsRegular()
+}
+
+func catInputLabel(input catInput, fallback string) string {
+	if input.label != "" {
+		return input.label
+	}
+	return fallback
 }
 
 func catErrorMessage(name, label string, err error) string {
@@ -301,6 +368,32 @@ func catErrorMessage(name, label string, err error) string {
 		message = strings.TrimPrefix(message, prefix)
 	}
 	return fmt.Sprintf("%s: %s", name, message)
+}
+
+func writeCatInput(w io.Writer, input catInput, opts catOptions, state *catOutputState) error {
+	if input.reader != nil {
+		return writeCatReader(w, input.reader, opts, state)
+	}
+	return writeCatData(w, input.data, opts, state)
+}
+
+func writeCatReader(w io.Writer, reader io.Reader, opts catOptions, state *catOutputState) error {
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			if writeErr := writeCatData(w, buf[:n], opts, state); writeErr != nil {
+				return writeErr
+			}
+		}
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
 }
 
 func writeCatData(w io.Writer, data []byte, opts catOptions, state *catOutputState) error {
@@ -363,6 +456,24 @@ func writeCatData(w io.Writer, data []byte, opts catOptions, state *catOutputSta
 		state.atLineStart = false
 	}
 	return nil
+}
+
+func catWriteExitError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if catBrokenPipe(err) {
+		return &ExitError{Code: 141}
+	}
+	return &ExitError{Code: 1, Err: err}
+}
+
+func catBrokenPipe(err error) bool {
+	if errors.Is(err, io.ErrClosedPipe) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "broken pipe") || strings.Contains(lower, "closed pipe")
 }
 
 func writeCatNewLine(w io.Writer, opts catOptions, state *catOutputState) error {

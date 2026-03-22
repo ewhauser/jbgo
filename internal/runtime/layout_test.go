@@ -51,7 +51,7 @@ func TestDefaultSandboxLayout(t *testing.T) {
 	if containsLine(lines, "__jb_cd_resolve") {
 		t.Fatalf("Stdout should not expose internal command stubs: %q", result.Stdout)
 	}
-	for _, entry := range []string{"null", "zero"} {
+	for _, entry := range []string{"null", "urandom", "zero"} {
 		if !containsLine(lines, entry) {
 			t.Fatalf("Stdout missing /dev entry %q: %q", entry, result.Stdout)
 		}
@@ -81,6 +81,9 @@ func TestNewSessionHasPreparedDefaultLayout(t *testing.T) {
 	}
 	if _, err := session.FileSystem().Stat(context.Background(), "/dev/zero"); err != nil {
 		t.Fatalf("Stat(/dev/zero) error = %v", err)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/dev/urandom"); err != nil {
+		t.Fatalf("Stat(/dev/urandom) error = %v", err)
 	}
 }
 

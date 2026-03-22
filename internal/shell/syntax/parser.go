@@ -621,6 +621,10 @@ type Parser struct {
 	openNodes int
 	// openBquotes is how many levels of backquotes are open at the moment.
 	openBquotes int
+	// openBquoteDquotes tracks how many open backquote levels were entered
+	// from within double quotes, where backslash-quote needs the extra
+	// backquote escaping semantics that bash applies.
+	openBquoteDquotes int
 
 	// lastBquoteEsc is how many times the last backquote token was escaped
 	lastBquoteEsc int
@@ -698,6 +702,7 @@ func (p *Parser) reset() {
 	p.hdocStops = nil
 	p.parsingDoc = false
 	p.openBquotes = 0
+	p.openBquoteDquotes = 0
 	p.accComs = nil
 	p.accComs, p.curComs = nil, &p.accComs
 	p.litBatch = nil
@@ -1355,6 +1360,10 @@ func (p *Parser) followStmts(left string, lpos Pos, stops ...reservedWord) ([]*S
 		}
 		if p.recoverError() {
 			return []*Stmt{{Position: recoveredPos}}, nil
+		}
+		if p.lang.in(LangBash|LangBats) && p.atRsrv(rsrvFi, rsrvDone) {
+			p.curErr("syntax error near unexpected token %s", p.currentUnexpectedTokenQuote())
+			return nil, nil
 		}
 		p.followErr(lpos, left, noQuote("a statement list"))
 	}
@@ -2445,6 +2454,19 @@ func (p *Parser) finishWord(w *Word) *Word {
 	return w
 }
 
+func (p *Parser) currentUnexpectedTokenQuote() string {
+	switch p.tok {
+	case _Lit, _LitWord:
+		return bashQuoteString(p.val)
+	case sglQuote, dollSglQuote, dblQuote, dollDblQuote, bckQuote, dollar, dollBrace,
+		dollDblParen, dollParen, dollBrack, cmdIn, assgnParen, cmdOut:
+		if _, raw := p.getWordRaw(); raw != "" {
+			return bashQuoteString(raw)
+		}
+	}
+	return p.tok.bashQuote()
+}
+
 func (p *Parser) braceWordPartsAllowed() bool {
 	if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
 		return false
@@ -2668,6 +2690,9 @@ func (p *Parser) wordPart() WordPart {
 		cs := &CmdSubst{Left: p.pos, Backquotes: true}
 		old := p.preNested(subCmdBckquo)
 		p.openBquotes++
+		if old.quote == dblQuotes {
+			p.openBquoteDquotes++
+		}
 
 		// The lexer didn't call p.rune for us, so that it could have
 		// the right p.openBquotes to properly handle backslashes.
@@ -2681,6 +2706,9 @@ func (p *Parser) wordPart() WordPart {
 			p.quoteErr(cs.Pos(), bckQuote)
 		}
 		p.postNested(old)
+		if old.quote == dblQuotes {
+			p.openBquoteDquotes--
+		}
 		p.openBquotes--
 		cs.Right = p.pos
 
@@ -3585,9 +3613,12 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 	}
 	// The parameter name itself, like $foo or $?.
 	switch p.r {
-	case '?', '-':
+	case '?', '-', '#':
 		if pe.Length && p.peek() != '}' {
-			// actually ${#-default}, not ${#-}; fix the ambiguity
+			// actually ${#-default} or ${###}, not ${#-} or ${##};
+			// fix the ambiguity in bash-compatible parses by treating the
+			// leading '#' as the parameter name and the current rune as the
+			// start of the expansion operator.
 			pe.Length = false
 			pos := p.nextPos()
 			pe.Param = p.lit(posAddCol(pos, -1), "#")
@@ -3595,7 +3626,7 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 			break
 		}
 		fallthrough
-	case '@', '*', '#', '!', '$':
+	case '@', '*', '!', '$':
 		r, pos := p.r, p.nextPos()
 		p.rune()
 		pe.Param = p.lit(pos, string(r))
@@ -4114,6 +4145,9 @@ func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 					return nil
 				case _Newl, rightParen, leftBrack:
 					// TODO: support [index]=[
+				case and:
+					p.posRecoverableErr(p.pos, "syntax error near unexpected token %s", p.tok.bashQuote())
+					return nil
 				default:
 					p.curErr("array element values must be words")
 					return nil

@@ -144,7 +144,7 @@ func (r *Runner) bashTest(ctx context.Context, expr syntax.TestExpr, classic boo
 				}
 			} else { // [[
 				pattern := r.condPatternWord(yw)
-				if match(pattern, str) == (x.Op != syntax.TsNoMatch) {
+				if r.patternMatch(pattern, str) == (x.Op != syntax.TsNoMatch) {
 					return "1"
 				}
 			}
@@ -287,7 +287,7 @@ func (r *Runner) evalCond(ctx context.Context, expr syntax.CondExpr, trace *trac
 			str := r.condLiteral(x.X.(*syntax.CondWord).Word)
 			pattern := r.condPattern(x.Y.(*syntax.CondPattern).Pattern)
 			return condEval{
-				value: condBoolString(match(pattern, str) == (x.Op != syntax.TsNoMatch)),
+				value: condBoolString(r.patternMatch(pattern, str) == (x.Op != syntax.TsNoMatch)),
 				trace: condTraceBinary(condTraceArg(trace, str), x.Op, condTracePattern(trace, pattern)),
 			}
 		}
@@ -453,6 +453,9 @@ func (r *Runner) regexMatch(subject, expr string) bool {
 		return r.failInvalidRegex(expr, "Invalid preceding regular expression")
 	}
 	translated := translateBashRegex(expr)
+	if r.opts[optNoCaseMatch] {
+		translated = "(?i)" + translated
+	}
 	re, err := regexp.Compile(translated)
 	if err != nil {
 		return r.failInvalidRegex(expr, bashRegexCompileErrorReason(err))

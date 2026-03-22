@@ -527,6 +527,24 @@ func TestFieldsQuotedSparseArrayParamOpsAreElementWise(t *testing.T) {
 	}
 }
 
+func TestFieldsUnquotedScalarParamQPreservesSingleQuotedField(t *testing.T) {
+	t.Parallel()
+
+	word := parseCommandWord(t, `${zz@Q}`)
+	got, err := Fields(&Config{
+		Env: testEnv{
+			"zz": {Set: true, Kind: String, Str: "one\ntwo \u03bc"},
+		},
+	}, word)
+	if err != nil {
+		t.Fatalf("Fields() error = %v", err)
+	}
+	want := []string{"$'one\\ntwo μ'"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Fields() = %#v, want %#v", got, want)
+	}
+}
+
 func TestFieldsQuotedAssociativeKeyExpansionStarJoinsOneField(t *testing.T) {
 	t.Parallel()
 
@@ -606,6 +624,7 @@ func TestBashQuoteValueMatchesSingleQuoteEdgeCases(t *testing.T) {
 		in   string
 		want string
 	}{
+		{"one\ntwo μ", "$'one\\ntwo μ'"},
 		{"spam", "'spam'"},
 		{"''", "''\\'''\\'''"},
 		{"a'b", "'a'\\''b'"},

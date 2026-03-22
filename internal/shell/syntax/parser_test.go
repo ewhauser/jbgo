@@ -607,6 +607,49 @@ func TestParseErrorRecoverableNestedArrayLiteral(t *testing.T) {
 	}
 }
 
+func TestParseErrorBashCompatEmptyThenAndDoBodies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "empty then body",
+			src:  "if foo; then\nfi\n",
+			want: "stdin: line 2: syntax error near unexpected token `fi'\nstdin: line 2: `fi'",
+		},
+		{
+			name: "empty do body",
+			src:  "while false; do\ndone\n",
+			want: "stdin: line 2: syntax error near unexpected token `done'\nstdin: line 2: `done'",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parser := NewParser(Variant(LangBash))
+			_, err := parser.Parse(strings.NewReader(tc.src), "stdin")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want parse error")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if parseErr.SourceLine == "" {
+				parseErr.SourceLine = sourceLineForTest(tc.src, parseErr.Pos.Line())
+			}
+			if got := parseErr.BashError(); got != tc.want {
+				t.Fatalf("BashError() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseErrorBashCompatRequiresIncompleteForIfAndWhile(t *testing.T) {
 	t.Parallel()
 

@@ -37,6 +37,23 @@ func bashQuoteErrorToken(s string) string {
 	return `"` + replacer.Replace(s) + `"`
 }
 
+func arithSingleQuotedLiteral(s string) string {
+	if !strings.Contains(s, "'") {
+		return "'" + s + "'"
+	}
+	parts := strings.Split(s, "'")
+	var sb strings.Builder
+	for i, part := range parts {
+		if i > 0 {
+			sb.WriteString(`'\''`)
+		}
+		sb.WriteByte('\'')
+		sb.WriteString(part)
+		sb.WriteByte('\'')
+	}
+	return sb.String()
+}
+
 // writeArithExpr writes the source representation of an arithmetic expression to buf.
 func writeArithExpr(buf *bytes.Buffer, expr syntax.ArithmExpr) {
 	switch expr := expr.(type) {
@@ -70,9 +87,8 @@ func writeLiteral(buf *bytes.Buffer, part syntax.WordPart) {
 	case *syntax.Lit:
 		buf.WriteString(p.Value)
 	case *syntax.SglQuoted:
-		if p.Dollar {
-			buf.WriteByte('$')
-		}
+		// Bash normalizes $'...' (ANSI-C quotes) to '...' in arithmetic
+		// diagnostics, so we omit the $ prefix unconditionally.
 		buf.WriteByte('\'')
 		buf.WriteString(p.Value)
 		buf.WriteByte('\'')
@@ -147,10 +163,35 @@ func (e ArithmSyntaxError) Error() string {
 	if fromSource, ok := arithTokenDiagnosticSource(e.Token, e.Source, e.SourceStart, e.SourceEnd, e.Replacements); ok {
 		tokenText = fromSource
 	}
+	// Bash normalizes $'...' (ANSI-C quotes) to '...' in arithmetic
+	// diagnostics. Apply the same normalization to both texts.
+	exprText = normalizeAnsiCQuotes(exprText)
+	tokenText = normalizeAnsiCQuotes(tokenText)
 	if exprText != "" {
 		return fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %s)", exprText, bashQuoteErrorToken(tokenText))
 	}
 	return fmt.Sprintf("arithmetic syntax error: operand expected (error token is %s)", bashQuoteErrorToken(tokenText))
+}
+
+// normalizeAnsiCQuotes replaces $'...' with '...' to match bash's arithmetic
+// diagnostic formatting which strips the $ prefix from ANSI-C quotes.
+func normalizeAnsiCQuotes(s string) string {
+	for {
+		idx := strings.Index(s, "$'")
+		if idx < 0 {
+			return s
+		}
+		// Only strip if preceded by start-of-string or a non-identifier char,
+		// so we don't accidentally mangle e.g. variable names ending in $.
+		if idx > 0 {
+			prev := s[idx-1]
+			if prev == '_' || (prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') || (prev >= '0' && prev <= '9') {
+				break
+			}
+		}
+		s = s[:idx] + s[idx+1:]
+	}
+	return s
 }
 
 // ArithmDiagnosticError preserves bash-style arithmetic diagnostics that are
@@ -432,7 +473,7 @@ func (cfg *Config) arithmStringValue(root, tokenExpr syntax.ArithmExpr, word *sy
 		s = val
 	}
 
-	if depth < maxNameRefDepth {
+	if depth <= maxNameRefDepth {
 		p := syntax.NewParser()
 		if nested, err := p.Arithmetic(strings.NewReader(s)); err == nil {
 			if nested != nil {
@@ -474,7 +515,7 @@ func arithExpandedWordError(err error, root, tokenExpr syntax.ArithmExpr, word *
 }
 
 func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
-	if depth < maxNameRefDepth {
+	if depth <= maxNameRefDepth {
 		if parsed, ok, err := arithmRuntimeParse(cfg, expr); err != nil {
 			return 0, err
 		} else if ok {
@@ -672,6 +713,7 @@ func arithExprDiagnosticSource(expr syntax.ArithmExpr, source string, sourceStar
 		return "", false
 	}
 	if fromSource, ok := arithSourceSpan(expr, source, sourceStart, sourceEnd, true, replacements); ok {
+		fromSource = arithNormalizeDiagnosticSource(expr, fromSource)
 		if prefix := arithLeadingExprDiagnosticPrefix(expr, source, sourceStart); prefix != "" {
 			fromSource = prefix + fromSource
 		}
@@ -685,9 +727,55 @@ func arithTokenDiagnosticSource(expr syntax.ArithmExpr, source string, sourceSta
 		return "", false
 	}
 	if fromSource, ok := arithSourceSpan(expr, source, sourceStart, sourceEnd, true, replacements); ok {
-		return fromSource, true
+		return arithNormalizeDiagnosticSource(expr, fromSource), true
 	}
 	return "", false
+}
+
+func arithNormalizeDiagnosticSource(expr syntax.ArithmExpr, source string) string {
+	if expr == nil || source == "" {
+		return source
+	}
+	base := expr.Pos().Offset()
+	type replacement struct {
+		start int
+		end   int
+		text  string
+	}
+	var replacements []replacement
+	syntax.Walk(expr, func(node syntax.Node) bool {
+		sq, ok := node.(*syntax.SglQuoted)
+		if !ok || !sq.Dollar {
+			return true
+		}
+		start := int(sq.Pos().Offset() - base)
+		end := int(sq.End().Offset() - base)
+		if start < 0 || end < start || end > len(source) {
+			return true
+		}
+		decoded := (*Config)(nil).decodeANSICString(sq.Value)
+		replacements = append(replacements, replacement{
+			start: start,
+			end:   end,
+			text:  arithSingleQuotedLiteral(decoded),
+		})
+		return true
+	})
+	if len(replacements) == 0 {
+		return source
+	}
+	var sb strings.Builder
+	last := 0
+	for _, repl := range replacements {
+		if repl.start < last {
+			continue
+		}
+		sb.WriteString(source[last:repl.start])
+		sb.WriteString(repl.text)
+		last = repl.end
+	}
+	sb.WriteString(source[last:])
+	return sb.String()
 }
 
 func arithExprUsesExpandedValue(expr syntax.ArithmExpr) bool {
