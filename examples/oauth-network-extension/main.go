@@ -61,10 +61,11 @@ func runDemo(ctx context.Context) (*demoReport, error) {
 		return nil, fmt.Errorf("create oauth client: %w", err)
 	}
 
+	//nolint:contextcheck // constructor does not accept context
 	rt, err := gbash.New(
 		gbash.WithNetworkClient(client),
 		gbash.WithTracing(gbash.TraceConfig{Mode: gbash.TraceRaw}),
-	) //nolint:contextcheck // constructor does not accept context
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create runtime: %w", err)
 	}

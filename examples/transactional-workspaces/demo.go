@@ -735,6 +735,7 @@ func (m *workspaceManager) newWorkspace(ctx context.Context, name string, source
 		factory = gbfs.Overlay(gbfs.Snapshot(source))
 	}
 
+	//nolint:contextcheck // constructor does not accept context
 	runtime, err := gbash.New(
 		gbash.WithFileSystem(gbash.CustomFileSystem(factory, m.workDir)),
 		gbash.WithTracing(gbash.TraceConfig{Mode: gbash.TraceRedacted}),

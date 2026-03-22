@@ -32,7 +32,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	gb, err := gbash.New(gbash.WithRegistry(registry))
+	gb, err := gbash.New(gbash.WithRegistry(registry)) //nolint:contextcheck // constructor does not accept context
 	if err != nil {
 		fail(fmt.Errorf("create runtime: %w", err))
 	}

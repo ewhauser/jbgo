@@ -57,6 +57,7 @@ func run(ctx context.Context, telemetryOut, statusOut io.Writer) (err error) {
 		err = errors.Join(err, bridge.Shutdown(shutdownCtx))
 	}()
 
+	//nolint:contextcheck // constructor does not accept context
 	runtime, err := gbash.New(
 		gbash.WithTracing(gbash.TraceConfig{
 			Mode: gbash.TraceRedacted,
@@ -67,7 +68,7 @@ func run(ctx context.Context, telemetryOut, statusOut io.Writer) (err error) {
 		gbash.WithLogger(func(ctx context.Context, event gbash.LogEvent) {
 			bridge.onLogEvent(ctx, &event)
 		}),
-	) //nolint:contextcheck // constructor does not accept context
+	)
 	if err != nil {
 		return fmt.Errorf("create runtime: %w", err)
 	}
