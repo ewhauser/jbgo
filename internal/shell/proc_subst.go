@@ -363,8 +363,8 @@ func (f *procSubstFS) OpenFile(ctx context.Context, name string, flag int, perm 
 }
 
 func (f *procSubstFS) Mkfifo(ctx context.Context, name string, perm stdfs.FileMode) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "mkfifo", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("mkfifo", name); err != nil {
+		return err
 	}
 	fifoFS, ok := f.inner.(gbfs.FIFOFileSystem)
 	if !ok {
@@ -412,63 +412,63 @@ func (f *procSubstFS) Realpath(ctx context.Context, name string) (string, error)
 }
 
 func (f *procSubstFS) Symlink(ctx context.Context, target, linkName string) error {
-	if abs, ok := f.procSubstPath(linkName); ok {
-		return &os.PathError{Op: "symlink", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("symlink", linkName); err != nil {
+		return err
 	}
 	return f.inner.Symlink(ctx, target, linkName)
 }
 
 func (f *procSubstFS) Link(ctx context.Context, oldName, newName string) error {
-	if abs, ok := f.procSubstPath(oldName); ok {
-		return &os.PathError{Op: "link", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("link", oldName); err != nil {
+		return err
 	}
-	if abs, ok := f.procSubstPath(newName); ok {
-		return &os.PathError{Op: "link", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("link", newName); err != nil {
+		return err
 	}
 	return f.inner.Link(ctx, oldName, newName)
 }
 
 func (f *procSubstFS) Chown(ctx context.Context, name string, uid, gid uint32, follow bool) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "chown", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("chown", name); err != nil {
+		return err
 	}
 	return f.inner.Chown(ctx, name, uid, gid, follow)
 }
 
 func (f *procSubstFS) Chmod(ctx context.Context, name string, mode stdfs.FileMode) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "chmod", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("chmod", name); err != nil {
+		return err
 	}
 	return f.inner.Chmod(ctx, name, mode)
 }
 
 func (f *procSubstFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "chtimes", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("chtimes", name); err != nil {
+		return err
 	}
 	return f.inner.Chtimes(ctx, name, atime, mtime)
 }
 
 func (f *procSubstFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "mkdir", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("mkdir", name); err != nil {
+		return err
 	}
 	return f.inner.MkdirAll(ctx, name, perm)
 }
 
 func (f *procSubstFS) Remove(ctx context.Context, name string, recursive bool) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "remove", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("remove", name); err != nil {
+		return err
 	}
 	return f.inner.Remove(ctx, name, recursive)
 }
 
 func (f *procSubstFS) Rename(ctx context.Context, oldName, newName string) error {
-	if abs, ok := f.procSubstPath(oldName); ok {
-		return &os.PathError{Op: "rename", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("rename", oldName); err != nil {
+		return err
 	}
-	if abs, ok := f.procSubstPath(newName); ok {
-		return &os.PathError{Op: "rename", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("rename", newName); err != nil {
+		return err
 	}
 	return f.inner.Rename(ctx, oldName, newName)
 }
@@ -478,8 +478,8 @@ func (f *procSubstFS) Getwd() string {
 }
 
 func (f *procSubstFS) Chdir(name string) error {
-	if abs, ok := f.procSubstPath(name); ok {
-		return &os.PathError{Op: "chdir", Path: abs, Err: stdfs.ErrPermission}
+	if err := f.procSubstDeny("chdir", name); err != nil {
+		return err
 	}
 	return f.inner.Chdir(name)
 }
@@ -491,6 +491,14 @@ func (f *procSubstFS) procSubstPath(name string) (string, bool) {
 	abs := gbfs.Resolve(f.inner.Getwd(), name)
 	ok := f.manager.contains(abs)
 	return abs, ok
+}
+
+// procSubstDeny returns ErrPermission if name refers to a process substitution path.
+func (f *procSubstFS) procSubstDeny(op, name string) error {
+	if abs, ok := f.procSubstPath(name); ok {
+		return &os.PathError{Op: op, Path: abs, Err: stdfs.ErrPermission}
+	}
+	return nil
 }
 
 func (f *procSubstFile) Read(p []byte) (int, error) {
