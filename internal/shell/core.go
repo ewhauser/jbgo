@@ -58,6 +58,8 @@ type Execution struct {
 	Registry          commands.CommandRegistry
 	Policy            policy.Policy
 	Trace             trace.Recorder
+	Now               func() time.Time
+	SetTime           func(time.Time) error
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
 	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
 	procSubst         *procSubstManager
@@ -234,6 +236,7 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	cfg.Params = runnerParamArgs(exec.StartupOptions, exec.Args)
 	cfg.Interactive = exec.Interactive
 	cfg.Platform = exec.HostPlatform
+	cfg.Now = exec.Now
 	cfg.PID = exec.HostProcessMeta.PID
 	cfg.PPID = exec.HostProcessMeta.PPID
 	cfg.NewPipe = exec.NewPipe
@@ -713,6 +716,8 @@ func invokeResolvedCommand(
 		Stdin:      stdin,
 		Stdout:     stdout,
 		Stderr:     stderr,
+		Now:        exec.Now,
+		SetTime:    exec.SetTime,
 		FileSystem: exec.FS,
 		Network:    exec.Network,
 		Policy:     exec.Policy,

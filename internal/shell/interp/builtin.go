@@ -414,6 +414,7 @@ func (r *Runner) printfBuiltin(args []string) (exit exitStatus) {
 	format, args := args[0], args[1:]
 	result := printfutil.Format(format, args, printfutil.Options{
 		LookupEnv: r.lookupPrintfEnv,
+		Now:       r.now,
 		StartTime: r.startTime,
 	})
 	for _, diag := range result.Diagnostics {

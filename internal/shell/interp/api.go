@@ -85,6 +85,7 @@ type Runner struct {
 	platform host.Platform
 
 	pipeFactory func() (io.ReadCloser, io.WriteCloser, error)
+	timeNow     func() time.Time
 
 	// Params are the current shell parameters, e.g. from running a shell
 	// file or calling a function. Accessible via the $@/$* family of vars.
@@ -539,6 +540,7 @@ type RunnerConfig struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Params []string
+	Now    func() time.Time
 
 	Interactive        bool
 	CommandString      bool
@@ -655,6 +657,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.platform = normalizePlatform(cfg.Platform)
 	r.startupHome = cfg.StartupHome
 	r.Dir = cfg.Dir
+	r.timeNow = cfg.Now
 	r.callHandler = cfg.CallHandler
 	r.execHandler = cfg.ExecHandler
 	r.openHandler = cfg.OpenHandler
@@ -676,6 +679,13 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	}
 	r.setInteractive(cfg.Interactive)
 	return r, r.applyConstructorDefaults()
+}
+
+func (r *Runner) now() time.Time {
+	if r != nil && r.timeNow != nil {
+		return r.timeNow()
+	}
+	return time.Now()
 }
 
 func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) StdinReader {
@@ -1009,6 +1019,7 @@ func (r *Runner) Reset() {
 		statHandler:      r.statHandler,
 		realpathHandler:  r.realpathHandler,
 		procSubstHandler: r.procSubstHandler,
+		timeNow:          r.timeNow,
 		uid:              r.uid,
 		euid:             r.euid,
 		gid:              r.gid,
@@ -1320,6 +1331,7 @@ func (r *Runner) subshell(_ bool) *Runner {
 		startupHome:               r.startupHome,
 		origStart:                 r.origStart,
 		startTime:                 r.startTime,
+		timeNow:                   r.timeNow,
 		random:                    random,
 		origRandom:                random,
 		signalOwner:               r.signalOwner,

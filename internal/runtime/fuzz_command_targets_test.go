@@ -248,6 +248,57 @@ func FuzzCompatPredicateCommands(f *testing.F) {
 	})
 }
 
+func FuzzDateCommand(f *testing.F) {
+	rt := newFuzzRuntime(f)
+
+	seeds := []struct {
+		input  string
+		format string
+	}{
+		{"2024-05-06 07:08:09", "%F %T %Z"},
+		{"1 hour ago", "%s"},
+		{"TZ=\"UTC\" 09:00 next Fri", "%F %T %Z"},
+	}
+	for _, seed := range seeds {
+		f.Add(seed.input, seed.format)
+	}
+
+	f.Fuzz(func(t *testing.T, rawInput string, rawFormat string) {
+		session := newFuzzSession(t, rt)
+
+		input := strings.ToValidUTF8(rawInput, "")
+		input = strings.ReplaceAll(input, "\x00", " ")
+		input = strings.TrimSpace(input)
+		if input == "" {
+			input = "2024-05-06 07:08:09"
+		}
+		if len(input) > 64 {
+			input = input[:64]
+		}
+
+		format := sanitizeFuzzToken(rawFormat)
+		if trimmed, ok := strings.CutPrefix(format, "+"); ok {
+			format = trimmed
+		}
+		if format == "" {
+			format = "%F %T %Z"
+		}
+		formatArg := "+" + format
+
+		writeSessionFile(t, session, "/tmp/date-inputs.txt", normalizeFuzzText([]byte(rawInput)))
+
+		script := fmt.Appendf(nil,
+			"TZ=UTC date --set '2024-05-06 07:08:09' >/tmp/date-set.out 2>/tmp/date-set.err || true\nTZ=UTC date -d %s %s >/tmp/date-display.out 2>/tmp/date-display.err || true\nTZ=UTC date -f /tmp/date-inputs.txt %s >/tmp/date-file.out 2>/tmp/date-file.err || true\nTZ=UTC date --resolution +%%s%%N >/tmp/date-resolution.out 2>/tmp/date-resolution.err || true\n",
+			shellQuote(input),
+			shellQuote(formatArg),
+			shellQuote(formatArg),
+		)
+
+		result, err := runFuzzSessionScript(t, session, script)
+		assertSecureFuzzOutcome(t, script, result, err)
+	})
+}
+
 func FuzzTextCommands(f *testing.F) {
 	rt := newFuzzRuntime(f)
 

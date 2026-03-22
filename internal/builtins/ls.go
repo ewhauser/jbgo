@@ -646,7 +646,7 @@ func (c *LS) renderPathEntry(ctx context.Context, inv *Invocation, target, abs s
 		return "", 0, lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, dired := formatLSLongLine(name, info, opts, ranges)
+		line, dired := formatLSLongLine(name, info, opts, ranges, inv.Now())
 		if opts.dired {
 			line = "  " + line
 			for i := range dired {
@@ -696,7 +696,7 @@ func lsRenderEntries(ctx context.Context, inv *Invocation, dirAbs string, entrie
 			return lsRenderResult{}, err
 		}
 		if opts.longFormat {
-			line, dired := formatLSLongLine(name, entry.info, opts, ranges)
+			line, dired := formatLSLongLine(name, entry.info, opts, ranges, inv.Now())
 			if opts.dired {
 				line = "  " + line
 				for i := range dired {
@@ -731,7 +731,7 @@ func lsRenderPathArgs(ctx context.Context, inv *Invocation, args []lsPathArg, op
 			return lsRenderResult{}, err
 		}
 		if opts.longFormat {
-			line, dired := formatLSLongLine(name, arg.info, opts, ranges)
+			line, dired := formatLSLongLine(name, arg.info, opts, ranges, inv.Now())
 			if opts.dired {
 				line = "  " + line
 				for i := range dired {
@@ -2073,7 +2073,7 @@ func lsNumericChunk(value string) (chunk, rest string) {
 	return value[:index], value[index:]
 }
 
-func formatLSLongLine(name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange) (string, []lsByteRange) {
+func formatLSLongLine(name string, info stdfs.FileInfo, opts *lsOptions, nameRanges []lsByteRange, now time.Time) (string, []lsByteRange) {
 	fields := make([]string, 0, 9)
 	userToken, groupToken, authorToken := lsIdentityTokens(info, opts.numericIDs, opts.identityDB)
 	if opts.showInode {
@@ -2092,7 +2092,7 @@ func formatLSLongLine(name string, info stdfs.FileInfo, opts *lsOptions, nameRan
 	if opts.showAuthor {
 		fields = append(fields, authorToken)
 	}
-	fields = append(fields, formatLSSize(info, opts), formatLSDateStyle(info.ModTime(), opts))
+	fields = append(fields, formatLSSize(info, opts), formatLSDateStyle(info.ModTime(), opts, now))
 	prefix := strings.Join(fields, " ")
 	if prefix != "" {
 		prefix += " "
@@ -2228,20 +2228,20 @@ func lsIdentityTokens(info stdfs.FileInfo, numericIDs bool, db *permissionIdenti
 	return userToken, groupToken, authorToken
 }
 
-func formatLSDate(ts time.Time) string {
+func formatLSDate(ts, now time.Time) string {
 	month := ts.Format("Jan")
 	day := fmt.Sprintf("%2d", ts.Day())
-	sixMonthsAgo := time.Now().Add(-180 * 24 * time.Hour)
+	sixMonthsAgo := now.Add(-180 * 24 * time.Hour)
 	if ts.After(sixMonthsAgo) {
 		return fmt.Sprintf("%s %s %02d:%02d", month, day, ts.Hour(), ts.Minute())
 	}
 	return fmt.Sprintf("%s %s  %04d", month, day, ts.Year())
 }
 
-func formatLSDateStyle(ts time.Time, opts *lsOptions) string {
+func formatLSDateStyle(ts time.Time, opts *lsOptions, now time.Time) string {
 	switch opts.timeStyle {
 	case "":
-		return formatLSDate(ts)
+		return formatLSDate(ts, now)
 	case "full-iso":
 		return ts.Format("2006-01-02 15:04:05.000000000 -0700")
 	case "long-iso":
@@ -2249,12 +2249,12 @@ func formatLSDateStyle(ts time.Time, opts *lsOptions) string {
 	case "iso":
 		return ts.Format("01-02 15:04")
 	case "locale":
-		return formatLSDate(ts)
+		return formatLSDate(ts, now)
 	default:
 		if format, ok := strings.CutPrefix(opts.timeStyle, "+"); ok {
 			return ts.Format(format)
 		}
-		return formatLSDate(ts)
+		return formatLSDate(ts, now)
 	}
 }
 

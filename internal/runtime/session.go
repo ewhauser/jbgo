@@ -131,6 +131,8 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Registry:        s.cfg.Registry,
 		Policy:          s.cfg.Policy,
 		Trace:           recorder,
+		Now:             s.now,
+		SetTime:         s.setTime,
 		Exec:            s.subexecCallback,
 		Interact:        s.interactCallback,
 	}
@@ -178,6 +180,32 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		return result, runErr
 	}
 	return result, nil
+}
+
+func (s *Session) now() time.Time {
+	if s == nil {
+		return time.Now().UTC()
+	}
+	s.clockMu.RLock()
+	defer s.clockMu.RUnlock()
+	if s.currentTime.IsZero() {
+		return time.Now().UTC()
+	}
+	if s.clockRealAt.IsZero() {
+		return s.currentTime
+	}
+	return s.currentTime.Add(time.Since(s.clockRealAt))
+}
+
+func (s *Session) setTime(when time.Time) error {
+	if s == nil {
+		return errors.New("session unavailable")
+	}
+	s.clockMu.Lock()
+	s.currentTime = when.UTC()
+	s.clockRealAt = time.Now().UTC()
+	s.clockMu.Unlock()
+	return nil
 }
 
 func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*InteractiveResult, error) {
@@ -248,6 +276,8 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 		Registry:        s.cfg.Registry,
 		Policy:          s.cfg.Policy,
 		Trace:           recorder,
+		Now:             s.now,
+		SetTime:         s.setTime,
 		Exec:            s.subexecCallback,
 		Interact:        s.interactCallback,
 	})

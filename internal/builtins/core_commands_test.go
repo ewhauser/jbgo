@@ -430,25 +430,7 @@ func TestHelpShowsBuiltinSynopsis(t *testing.T) {
 	}
 }
 
-func TestDateFormatsFixedUTCInstant(t *testing.T) {
-	t.Parallel()
-	rt := newRuntime(t, &Config{})
-
-	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "date -u -d 2024-05-06T07:08:09 +%F'T'%T%Z\n",
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
-	}
-	if got, want := result.Stdout, "2024-05-06T07:08:09UTC\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
-	}
-}
-
-func TestDateSupportsLongFlagAliases(t *testing.T) {
+func TestDateGNUFormatsAndSources(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
@@ -458,24 +440,44 @@ func TestDateSupportsLongFlagAliases(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "utc",
-			script: "date --utc --date 2024-05-06T07:08:09 +%Z\n",
-			want:   "UTC\n",
+			name:   "custom format in utc",
+			script: "TZ=UTC date -u -d 2024-05-06T07:08:09 +%F'T'%T%Z\n",
+			want:   "2024-05-06T07:08:09UTC\n",
 		},
 		{
-			name:   "date",
-			script: "date --date 2024-05-06T07:08:09 +%F\n",
+			name:   "date in local timezone",
+			script: "TZ=America/New_York date --date 2024-05-06T07:08:09 +%Z\n",
+			want:   "EDT\n",
+		},
+		{
+			name:   "iso 8601 default",
+			script: "TZ=UTC date --date 2024-05-06T07:08:09 --iso-8601\n",
 			want:   "2024-05-06\n",
 		},
 		{
-			name:   "iso-8601",
-			script: "date --date 2024-05-06T07:08:09 --iso-8601\n",
-			want:   "2024-05-06T07:08:09+0000\n",
+			name:   "iso 8601 seconds attached short value",
+			script: "TZ=UTC date --date 2024-05-06T07:08:09 -Iseconds\n",
+			want:   "2024-05-06T07:08:09+00:00\n",
 		},
 		{
-			name:   "rfc-email",
-			script: "date --date 2024-05-06T07:08:09 --rfc-email\n",
+			name:   "rfc email",
+			script: "TZ=UTC date --date 2024-05-06T07:08:09 --rfc-email\n",
 			want:   "Mon, 06 May 2024 07:08:09 +0000\n",
+		},
+		{
+			name:   "rfc 3339 seconds",
+			script: "TZ=UTC date --date 2024-05-06T07:08:09 --rfc-3339=seconds\n",
+			want:   "2024-05-06 07:08:09+00:00\n",
+		},
+		{
+			name:   "resolution",
+			script: "date --resolution\n",
+			want:   "0.000000001\n",
+		},
+		{
+			name:   "timezone abbreviation parsing",
+			script: "TZ=UTC date -u -d '2024-06-15 10:30 EDT' '+%H:%M %Z'\n",
+			want:   "14:30 UTC\n",
 		},
 	}
 
@@ -493,6 +495,112 @@ func TestDateSupportsLongFlagAliases(t *testing.T) {
 			}
 			if got := result.Stdout; got != tc.want {
 				t.Fatalf("Stdout = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDateParsesFilesAndWritesDebug(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/dates.txt", []byte("2024-05-06\ninvalid\n2024-05-07 09:30\n"))
+
+	result := mustExecSession(t, session, "TZ=UTC date -f /tmp/dates.txt +%F\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2024-05-06\n2024-05-07\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; !strings.Contains(got, `date: invalid date "invalid"`) {
+		t.Fatalf("Stderr = %q, want invalid date diagnostic", got)
+	}
+
+	debug := mustExecSession(t, session, "TZ=UTC date --debug -d 2005-01-01 +%Y\n")
+	if debug.ExitCode != 0 {
+		t.Fatalf("debug ExitCode = %d, want 0; stderr=%q", debug.ExitCode, debug.Stderr)
+	}
+	if got, want := debug.Stdout, "2005\n"; got != want {
+		t.Fatalf("debug Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(debug.Stderr, "date: input string:") || !strings.Contains(debug.Stderr, "date: parsed date part:") {
+		t.Fatalf("debug Stderr = %q, want debug annotations", debug.Stderr)
+	}
+}
+
+func TestDateSessionClockPersistsAcrossExecutions(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	first := mustExecSession(t, session, "TZ=UTC date --set '2024-05-06 07:08:09'\nTZ=UTC printf '%(%F %T)T\\n' -1\n")
+	if first.ExitCode != 0 {
+		t.Fatalf("first ExitCode = %d, want 0; stderr=%q", first.ExitCode, first.Stderr)
+	}
+	if got, want := first.Stdout, "2024-05-06 07:08:09\n"; got != want {
+		t.Fatalf("first Stdout = %q, want %q", got, want)
+	}
+
+	second := mustExecSession(t, session, "TZ=UTC touch /tmp/clock.txt\nTZ=UTC date -r /tmp/clock.txt +%F' '%T\nTZ=UTC date +%F' '%T\n")
+	if second.ExitCode != 0 {
+		t.Fatalf("second ExitCode = %d, want 0; stderr=%q", second.ExitCode, second.Stderr)
+	}
+	if got, want := second.Stdout, "2024-05-06 07:08:09\n2024-05-06 07:08:09\n"; got != want {
+		t.Fatalf("second Stdout = %q, want %q", got, want)
+	}
+
+	legacy := mustExecSession(t, session, "TZ=UTC date 050607082024.11\nTZ=UTC date +%F' '%T\n")
+	if legacy.ExitCode != 0 {
+		t.Fatalf("legacy ExitCode = %d, want 0; stderr=%q", legacy.ExitCode, legacy.Stderr)
+	}
+	if got, want := legacy.Stdout, "2024-05-06 07:08:11\n"; got != want {
+		t.Fatalf("legacy Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestDateSessionClockIsolationAndUsageErrors(t *testing.T) {
+	t.Parallel()
+
+	left := newSession(t, &Config{})
+	right := newSession(t, &Config{})
+
+	leftResult := mustExecSession(t, left, "TZ=UTC date --set '2024-05-06 07:08:09'\nTZ=UTC date +%F' '%T\n")
+	rightResult := mustExecSession(t, right, "TZ=UTC date --set '2025-06-07 08:09:10'\nTZ=UTC date +%F' '%T\n")
+	if got, want := leftResult.Stdout, "2024-05-06 07:08:09\n"; got != want {
+		t.Fatalf("left Stdout = %q, want %q", got, want)
+	}
+	if got, want := rightResult.Stdout, "2025-06-07 08:09:10\n"; got != want {
+		t.Fatalf("right Stdout = %q, want %q", got, want)
+	}
+
+	errorCases := []struct {
+		name       string
+		script     string
+		wantStderr string
+	}{
+		{
+			name:       "mutually exclusive sources",
+			script:     "TZ=UTC date --date now --reference /tmp/file\n",
+			wantStderr: "mutually exclusive",
+		},
+		{
+			name:       "missing plus with explicit source",
+			script:     "TZ=UTC date --date 2024-05-06T07:08:09 bad\n",
+			wantStderr: "lacks a leading '+'",
+		},
+	}
+
+	for _, tc := range errorCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := newRuntime(t, &Config{}).Run(context.Background(), &ExecutionRequest{Script: tc.script})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 1 {
+				t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if !strings.Contains(result.Stderr, tc.wantStderr) {
+				t.Fatalf("Stderr = %q, want substring %q", result.Stderr, tc.wantStderr)
 			}
 		})
 	}

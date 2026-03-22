@@ -336,7 +336,7 @@ func whoWriteUser(ctx context.Context, inv *Invocation, opts whoOptions, record 
 				mesg = '+'
 			}
 			if access, ok := whoIdleTimestamp(info); ok {
-				idle = whoIdleString(access)
+				idle = whoIdleString(inv, access)
 			}
 		}
 	}
@@ -447,8 +447,8 @@ func whoEnvTTY(inv *Invocation) string {
 	return tty
 }
 
-func whoIdleString(lastChange int64) string {
-	now := time.Now().Unix()
+func whoIdleString(inv *Invocation, lastChange int64) string {
+	now := inv.Now().Unix()
 	if lastChange > 0 && lastChange <= now && now-lastChange < 24*3600 {
 		secondsIdle := now - lastChange
 		if secondsIdle < 60 {

@@ -153,7 +153,7 @@ func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs 
 		return "", lsRenderResult{}, err
 	}
 	if opts.longFormat {
-		line, _ := formatLSLongLine(name, info, opts, nil)
+		line, _ := formatLSLongLine(name, info, opts, nil, inv.Now())
 		return line, lsRenderResult{text: line}, nil
 	}
 	if defaultColumns {

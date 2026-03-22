@@ -61,7 +61,7 @@ func (c *Uptime) RunParsed(ctx context.Context, inv *Invocation, matches *Parsed
 	if err != nil {
 		return err
 	}
-	now := time.Now()
+	now := inv.Now().Local()
 	bootAt := uptimeBootTimeFromEnv(inv.Env)
 
 	if opts.path == "" {
@@ -124,8 +124,9 @@ func (c *Uptime) writeFallback(inv *Invocation, stderrLine string) error {
 	if _, err := fmt.Fprintln(inv.Stderr, stderrLine); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
+	now := inv.Now().Local()
 	line := fmt.Sprintf(" %s  %s  %s,  %s",
-		time.Now().Format("15:04:05"),
+		now.Format("15:04:05"),
 		uptimeUnknownUptimeText,
 		uptimeFormatUserCount(0),
 		uptimeDefaultLoadAvg,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
@@ -43,7 +44,9 @@ type Invocation struct {
 	Limits                policy.Limits
 	GetRegisteredCommands func() []string
 
-	trace trace.Recorder
+	trace   trace.Recorder
+	now     func() time.Time
+	setTime func(time.Time) error
 }
 
 type definedCommand struct {
@@ -76,6 +79,28 @@ func (inv *Invocation) TraceRecorder() trace.Recorder {
 		return nil
 	}
 	return inv.trace
+}
+
+// Now returns the wall clock visible to the current command invocation.
+//
+// When the runtime does not provide an explicit clock, this falls back to the
+// process wall clock.
+func (inv *Invocation) Now() time.Time {
+	if inv != nil && inv.now != nil {
+		return inv.now()
+	}
+	return time.Now()
+}
+
+// SetTime updates the wall clock visible to commands in the current runtime
+// session.
+//
+// Runtimes that do not expose a mutable wall clock return an unsupported error.
+func (inv *Invocation) SetTime(when time.Time) error {
+	if inv != nil && inv.setTime != nil {
+		return inv.setTime(when)
+	}
+	return fmt.Errorf("wall clock mutation is unavailable")
 }
 
 // ExitError reports a command exit status.
