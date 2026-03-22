@@ -3145,6 +3145,7 @@ func (r rawPatternParser) parseShellPart(raw string, base Pos) (PatternPart, int
 func parseRawWordPart(raw string, base Pos, lang LangVariant) (WordPart, int, bool) {
 	sub := NewParser(Variant(lang))
 	sub.reset()
+	sub.f = &File{}
 	sub.src = strings.NewReader(raw)
 	sub.offs = int64(base.Offset())
 	sub.line = int64(base.Line())
