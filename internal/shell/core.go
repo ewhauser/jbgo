@@ -408,21 +408,14 @@ func (m *core) openHandler(exec *Execution) interp.OpenHandlerFunc {
 		abs := gbfs.Resolve(state.Dir, name)
 
 		if canRead := flag&(os.O_WRONLY|os.O_RDWR) != os.O_WRONLY; canRead {
-			if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionRead, abs); err != nil {
-				recordPolicyDenied(exec.Trace, err, string(policy.FileActionRead), abs, "", "")
-				return nil, handlerPathError(ctx, state.Stderr, "open", abs, err)
+			if err := checkFileAccess(ctx, exec, state.Stderr, "open", policy.FileActionRead, abs); err != nil {
+				return nil, err
 			}
 		}
 		if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
-			if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionWrite, abs); err != nil {
-				recordPolicyDenied(exec.Trace, err, string(policy.FileActionWrite), abs, "", "")
-				return nil, handlerPathError(ctx, state.Stderr, "open", abs, err)
+			if err := checkFileAccess(ctx, exec, state.Stderr, "open", policy.FileActionWrite, abs); err != nil {
+				return nil, err
 			}
-		}
-
-		recordFile(exec.Trace, string(policy.FileActionRead), abs)
-		if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
-			recordFile(exec.Trace, string(policy.FileActionWrite), abs)
 		}
 
 		file, err := exec.FS.OpenFile(ctx, abs, flag, perm)
@@ -440,11 +433,9 @@ func (m *core) readDirHandler(exec *Execution) interp.ReadDirHandlerFunc {
 	return func(ctx context.Context, name string) ([]stdfs.DirEntry, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
-		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionReadDir, abs); err != nil {
-			recordPolicyDenied(exec.Trace, err, string(policy.FileActionReadDir), abs, "", "")
-			return nil, handlerPathError(ctx, state.Stderr, "readdir", abs, err)
+		if err := checkFileAccess(ctx, exec, state.Stderr, "readdir", policy.FileActionReadDir, abs); err != nil {
+			return nil, err
 		}
-		recordFile(exec.Trace, string(policy.FileActionReadDir), abs)
 		return exec.FS.ReadDir(ctx, abs)
 	}
 }
@@ -457,11 +448,9 @@ func (m *core) statHandler(exec *Execution) interp.StatHandlerFunc {
 		if !followSymlinks {
 			action = policy.FileActionLstat
 		}
-		if err := allowPath(ctx, exec.Policy, exec.FS, action, abs); err != nil {
-			recordPolicyDenied(exec.Trace, err, string(action), abs, "", "")
-			return nil, handlerPathError(ctx, state.Stderr, "stat", abs, err)
+		if err := checkFileAccess(ctx, exec, state.Stderr, "stat", action, abs); err != nil {
+			return nil, err
 		}
-		recordFile(exec.Trace, string(action), abs)
 		if followSymlinks {
 			return exec.FS.Stat(ctx, abs)
 		}
@@ -473,11 +462,9 @@ func (m *core) realpathHandler(exec *Execution) interp.RealpathHandlerFunc {
 	return func(ctx context.Context, name string) (string, error) {
 		state := handlerState(ctx, exec)
 		abs := gbfs.Resolve(state.Dir, name)
-		if err := allowPath(ctx, exec.Policy, exec.FS, policy.FileActionStat, abs); err != nil {
-			recordPolicyDenied(exec.Trace, err, string(policy.FileActionStat), abs, "", "")
-			return "", handlerPathError(ctx, state.Stderr, "realpath", abs, err)
+		if err := checkFileAccess(ctx, exec, state.Stderr, "realpath", policy.FileActionStat, abs); err != nil {
+			return "", err
 		}
-		recordFile(exec.Trace, string(policy.FileActionStat), abs)
 		return exec.FS.Realpath(ctx, abs)
 	}
 }
@@ -824,6 +811,17 @@ func allowBuiltin(ctx context.Context, pol policy.Policy, name string, argv []st
 
 func allowPath(ctx context.Context, pol policy.Policy, fsys gbfs.FileSystem, action policy.FileAction, name string) error {
 	return policy.CheckPath(ctx, pol, fsys, action, name)
+}
+
+// checkFileAccess performs the common handler pattern: check policy, record
+// the denial or access, and return an error suitable for handler callers.
+func checkFileAccess(ctx context.Context, exec *Execution, stderr io.Writer, op string, action policy.FileAction, abs string) error {
+	if err := allowPath(ctx, exec.Policy, exec.FS, action, abs); err != nil {
+		recordPolicyDenied(exec.Trace, err, string(action), abs, "", "")
+		return handlerPathError(ctx, stderr, op, abs, err)
+	}
+	recordFile(exec.Trace, string(action), abs)
+	return nil
 }
 
 func envPairs(env map[string]string) []string {
