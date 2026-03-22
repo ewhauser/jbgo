@@ -90,10 +90,6 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash"
         },
-        "oils/bugs.test.sh::process sub <(echo 42 | tee PWNED) not allowed": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash"
-        },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "xfail",
           "reason": "conformance: parse error wording for this builtin-cd probe still differs from bash"
