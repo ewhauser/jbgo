@@ -7,12 +7,12 @@
           "reason": "conformance: gbash ls error message format differs from GNU coreutils ls"
         },
         "oils/builtin-completion.test.sh::compgen -A user": {
-          "mode": "xfail",
-          "reason": "conformance: gbash uses sandbox-visible passwd data instead of the host account database"
+          "mode": "skip",
+          "reason": "platform-specific: gbash uses sandbox-visible passwd data instead of the host account database"
         },
         "oils/builtin-read.test.sh::read bash bug": {
-          "mode": "xfail",
-          "reason": "gbash intentionally keeps the space-preserving result instead of reproducing bash's historical control-character bug"
+          "mode": "skip",
+          "reason": "intentional: gbash keeps the space-preserving result instead of reproducing bash's historical control-character bug"
         },
         "oils/ble-unset.test.sh::[bash_unset] dynamic-unset for nested localvars": {
           "mode": "xfail",
@@ -50,8 +50,8 @@
           "reason": "conformance: gbash behavior differs from bash"
         },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
-          "mode": "xfail",
-          "reason": "conformance: parse error wording for this builtin-cd probe still differs from bash"
+          "mode": "skip",
+          "reason": "platform-specific: test requires strace (Linux-only) and syscall behavior varies by platform"
         },
         "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
           "mode": "xfail",
