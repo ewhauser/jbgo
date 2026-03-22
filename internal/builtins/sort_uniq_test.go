@@ -181,7 +181,7 @@ func TestSortSupportsDebugAndCompressProgramFlags(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "a\nb\n"; got != want {
+	if got, want := result.Stdout, "a\n_\n_\nb\n_\n_\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	if !strings.Contains(result.Stderr, "text ordering performed using simple byte comparison") {
@@ -189,12 +189,12 @@ func TestSortSupportsDebugAndCompressProgramFlags(t *testing.T) {
 	}
 }
 
-func TestSortAcceptsRandomFlags(t *testing.T) {
+func TestSortCompressProgramIsIgnoredWithoutTemporaryFiles(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf 'seed-data' > /tmp/random\nprintf 'b\\na\\n' > /tmp/in.txt\nsort -R --random-source=/tmp/random /tmp/in.txt\n",
+		Script: "printf 'b\\na\\n' > /tmp/in.txt\nsort --compress-program=does-not-exist /tmp/in.txt\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -202,8 +202,8 @@ func TestSortAcceptsRandomFlags(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got := result.Stdout; got == "" {
-		t.Fatalf("Stdout = %q, want non-empty output", got)
+	if got, want := result.Stdout, "a\nb\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
@@ -240,6 +240,167 @@ func TestSortSupportsVersionFlag(t *testing.T) {
 	}
 	if !strings.Contains(result.Stdout, "sort (gbash)") {
 		t.Fatalf("Stdout = %q, want version banner", result.Stdout)
+	}
+}
+
+func TestSortRandomSortUsesSeedAndGroupsEqualKeys(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '0123456789abcdef' > /tmp/random\n" +
+			"printf '2 z\\n1 a\\n3 z\\n2 a\\n' > /tmp/in.txt\n" +
+			"sort -R -k2,2 --random-source=/tmp/random /tmp/in.txt > /tmp/out1\n" +
+			"sort -R -k2,2 --random-source=/tmp/random /tmp/in.txt > /tmp/out2\n" +
+			"cat /tmp/out1\n" +
+			"printf -- '---\\n'\n" +
+			"cat /tmp/out2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	got := result.Stdout
+	const aThenZ = "1 a\n2 a\n2 z\n3 z\n---\n1 a\n2 a\n2 z\n3 z\n"
+	const zThenA = "2 z\n3 z\n1 a\n2 a\n---\n2 z\n3 z\n1 a\n2 a\n"
+	if got != aThenZ && got != zThenA {
+		t.Fatalf("Stdout = %q, want a stable grouped random ordering", got)
+	}
+}
+
+func TestSortRandomSourceRequiresEnoughBytes(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'seed-data' > /tmp/random\nprintf 'b\\na\\n' > /tmp/in.txt\nsort -R --random-source=/tmp/random /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "end of file") {
+		t.Fatalf("Stderr = %q, want random-source EOF error", result.Stderr)
+	}
+}
+
+func TestSortRandomModeStillChecksOrdering(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'b\\na\\n' | sort -Rc\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "disorder: a") {
+		t.Fatalf("Stderr = %q, want disorder report", result.Stderr)
+	}
+}
+
+func TestSortMergeMaintainsMergeSemantics(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '1\\n4\\n' > /tmp/a\n" +
+			"printf '2\\n4\\n' > /tmp/b\n" +
+			"printf '3\\n5\\n' > /tmp/c\n" +
+			"sort -m /tmp/a /tmp/b /tmp/c\n" +
+			"sort -mu /tmp/a /tmp/b /tmp/c\n" +
+			"printf '3\\n1\\n' > /tmp/r1\n" +
+			"printf '2\\n0\\n' > /tmp/r2\n" +
+			"sort -mr /tmp/r1 /tmp/r2\n" +
+			"printf '1 x\\n2 x\\n' > /tmp/s1\n" +
+			"printf '3 x\\n4 x\\n' > /tmp/s2\n" +
+			"sort -ms -k2,2 /tmp/s1 /tmp/s2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "1\n2\n3\n4\n4\n5\n1\n2\n3\n4\n5\n3\n2\n1\n0\n1 x\n2 x\n3 x\n4 x\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSortDebugAnnotatesSelectedKey(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'zebra,10\\nalpha,2\\n' > /tmp/in.csv\nsort --debug -t, -k2,2n /tmp/in.csv\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "alpha,2\n      _\n_______\nzebra,10\n      __\n________\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "numbers use '.' as a decimal point") {
+		t.Fatalf("Stderr = %q, want numeric debug warning", result.Stderr)
+	}
+}
+
+func TestSortRejectsInvalidBufferSize(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'b\\na\\n' > /tmp/in.txt\nsort -S not-a-size /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, `invalid -S argument "not-a-size"`) {
+		t.Fatalf("Stderr = %q, want invalid buffer-size error", result.Stderr)
+	}
+}
+
+func TestSortRejectsInvalidFieldSeparators(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a\\n' > /tmp/in.txt\nsort -t '' /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "empty tab") {
+		t.Fatalf("Stderr = %q, want empty-tab error", result.Stderr)
+	}
+
+	result, err = rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a::1\\n' > /tmp/in.txt\nsort -t '::' /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "multi-character tab '::'") {
+		t.Fatalf("Stderr = %q, want multi-character separator error", result.Stderr)
 	}
 }
 

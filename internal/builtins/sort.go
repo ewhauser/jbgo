@@ -3,14 +3,18 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"regexp"
 	gosort "sort"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	gbfs "github.com/ewhauser/gbash/fs"
 )
@@ -74,6 +78,17 @@ type sortKey struct {
 type sortGeneralNumber struct {
 	kind  int
 	value float64
+}
+
+type sortInputRun struct {
+	name  string
+	lines []string
+}
+
+type sortFieldInfo struct {
+	text  string
+	start int
+	end   int
 }
 
 const (
@@ -182,21 +197,17 @@ func (c *Sort) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return err
 	}
 
-	lines, checkFile, exitCode, err := collectSortInput(ctx, inv, &opts, files)
+	runs, checkFile, exitCode, err := collectSortInputs(ctx, inv, &opts, files)
 	if err != nil {
 		return err
 	}
-	if opts.compressProgram != "" {
-		if err := sortRunCompressProgram(ctx, inv, opts.compressProgram); err != nil {
-			return err
-		}
-	}
 
 	if opts.debug {
-		_, _ = fmt.Fprintln(inv.Stderr, "sort: text ordering performed using simple byte comparison")
+		sortWriteDebugWarnings(inv.Stderr, &opts)
 	}
 
 	if opts.checkOnly {
+		lines := flattenSortRuns(runs)
 		for i := 1; i < len(lines); i++ {
 			cmp := compareSortLines(lines[i-1], lines[i], &opts)
 			if cmp > 0 || (opts.unique && sortLinesEquivalent(lines[i-1], lines[i], &opts)) {
@@ -212,7 +223,16 @@ func (c *Sort) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return nil
 	}
 
-	if !opts.randomSort {
+	lines := flattenSortRuns(runs)
+	switch {
+	case opts.randomSort:
+		lines, err = randomizeSortLines(ctx, inv, lines, &opts)
+		if err != nil {
+			return err
+		}
+	case opts.merge:
+		lines = mergeSortRuns(runs, &opts)
+	default:
 		gosort.SliceStable(lines, func(i, j int) bool {
 			return compareSortLines(lines[i], lines[j], &opts) < 0
 		})
@@ -223,6 +243,9 @@ func (c *Sort) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	}
 
 	output := encodeSortRecords(lines, opts.zeroTerminated)
+	if opts.debug {
+		output = renderSortDebugOutput(lines, &opts)
+	}
 	if opts.outputFile != "" {
 		targetAbs := gbfs.Resolve(inv.Cwd, opts.outputFile)
 		if err := writeFileContents(ctx, inv, targetAbs, output, 0o644); err != nil {
@@ -552,10 +575,104 @@ func consumeSortKeyNumber(value string) (number int, remainder string, ok bool) 
 }
 
 func validateSortOptions(inv *Invocation, opts *sortOptions) error {
-	if opts.humanNumeric && opts.numeric {
-		return sortOptionf(inv, "sort: options '-hn' are incompatible")
+	if err := validateSortOrderingOptions(inv, sortModeFlagsFromOptions(opts), opts.dictionaryOrder, opts.ignoreNonprinting); err != nil {
+		return err
+	}
+	for _, key := range opts.keys {
+		if err := validateSortOrderingOptions(inv, sortModeFlagsFromKey(key), key.dictionaryOrder, key.ignoreNonprinting); err != nil {
+			return err
+		}
+	}
+	if opts.bufferSize != "" {
+		if err := validateSortBufferSize(inv, opts.bufferSize); err != nil {
+			return err
+		}
+	}
+	if opts.fieldDelimiter != nil {
+		delim := *opts.fieldDelimiter
+		switch runeCount := utf8.RuneCountInString(delim); {
+		case runeCount == 0:
+			return sortOptionf(inv, "sort: empty tab")
+		case runeCount > 1:
+			return sortOptionf(inv, "sort: multi-character tab %s", quoteGNUOperand(delim))
+		}
 	}
 	return nil
+}
+
+type sortModeFlags struct {
+	numeric        bool
+	generalNumeric bool
+	humanNumeric   bool
+	month          bool
+	version        bool
+	random         bool
+}
+
+func sortModeFlagsFromOptions(opts *sortOptions) sortModeFlags {
+	return sortModeFlags{
+		numeric:        opts.numeric,
+		generalNumeric: opts.generalNumeric,
+		humanNumeric:   opts.humanNumeric,
+		month:          opts.monthSort,
+		version:        opts.versionSort,
+		random:         opts.randomSort,
+	}
+}
+
+func sortModeFlagsFromKey(key sortKey) sortModeFlags {
+	return sortModeFlags{
+		numeric:        key.numeric,
+		generalNumeric: key.generalNumeric,
+		humanNumeric:   key.humanNumeric,
+		month:          key.monthSort,
+		version:        key.versionSort,
+	}
+}
+
+func validateSortOrderingOptions(inv *Invocation, flags sortModeFlags, dictionaryOrder, ignoreNonprinting bool) error {
+	modeCount := 0
+	for _, enabled := range []bool{flags.numeric, flags.generalNumeric, flags.humanNumeric, flags.month} {
+		if enabled {
+			modeCount++
+		}
+	}
+	if modeCount > 1 {
+		return sortOptionf(inv, "sort: options '-%s' are incompatible", sortOrderingFlagsString(flags, dictionaryOrder, ignoreNonprinting))
+	}
+	if modeCount == 1 && (flags.version || flags.random || dictionaryOrder || ignoreNonprinting) {
+		return sortOptionf(inv, "sort: options '-%s' are incompatible", sortOrderingFlagsString(flags, dictionaryOrder, ignoreNonprinting))
+	}
+	return nil
+}
+
+func sortOrderingFlagsString(flags sortModeFlags, dictionaryOrder, ignoreNonprinting bool) string {
+	var b strings.Builder
+	if dictionaryOrder {
+		b.WriteByte('d')
+	}
+	if flags.generalNumeric {
+		b.WriteByte('g')
+	}
+	if flags.humanNumeric {
+		b.WriteByte('h')
+	}
+	if !dictionaryOrder && ignoreNonprinting {
+		b.WriteByte('i')
+	}
+	if flags.month {
+		b.WriteByte('M')
+	}
+	if flags.numeric {
+		b.WriteByte('n')
+	}
+	if flags.random {
+		b.WriteByte('R')
+	}
+	if flags.version {
+		b.WriteByte('V')
+	}
+	return b.String()
 }
 
 func applySortMode(opts *sortOptions, value string, inv *Invocation) error {
@@ -584,6 +701,9 @@ func parseSortPositiveInt(inv *Invocation, name, value string, minimum int) (int
 		return 0, sortOptionf(inv, "sort: invalid --%s argument %q", name, value)
 	}
 	if parsed < minimum {
+		if name == "parallel" && parsed == 0 {
+			return 0, sortOptionf(inv, "sort: number in parallel must be nonzero")
+		}
 		if name == "batch-size" && parsed >= 0 {
 			return 0, sortOptionf(inv, "sort: invalid --batch-size argument %q\nsort: minimum --batch-size argument is '2'", value)
 		}
@@ -592,7 +712,62 @@ func parseSortPositiveInt(inv *Invocation, name, value string, minimum int) (int
 	return parsed, nil
 }
 
-func collectSortInput(ctx context.Context, inv *Invocation, opts *sortOptions, files []string) (lines []string, checkFile string, exitCode int, err error) {
+func validateSortBufferSize(inv *Invocation, value string) error {
+	match := sortBufferSizeRe.FindStringSubmatch(strings.TrimSpace(value))
+	if match == nil {
+		return sortOptionf(inv, "sort: invalid -S argument %q", value)
+	}
+	if match[2] == "%" {
+		return nil
+	}
+	count, ok := new(big.Int).SetString(match[1], 10)
+	if !ok {
+		return sortOptionf(inv, "sort: invalid -S argument %q", value)
+	}
+	factor := sortBufferMultiplier(match[2])
+	if factor.Sign() == 0 {
+		return sortOptionf(inv, "sort: invalid -S argument %q", value)
+	}
+	count.Mul(count, factor)
+	if !count.IsUint64() {
+		return sortOptionf(inv, "sort: -S argument %q too large", value)
+	}
+	return nil
+}
+
+func sortBufferMultiplier(suffix string) *big.Int {
+	if suffix == "" {
+		suffix = "K"
+	}
+	switch suffix {
+	case "%", "b", "B":
+		return big.NewInt(1)
+	case "k", "K":
+		return big.NewInt(1 << 10)
+	case "m", "M":
+		return big.NewInt(1 << 20)
+	case "g", "G":
+		return big.NewInt(1 << 30)
+	case "t", "T":
+		return big.NewInt(1 << 40)
+	case "p", "P":
+		return big.NewInt(1 << 50)
+	case "e", "E":
+		return big.NewInt(1 << 60)
+	case "z", "Z":
+		return new(big.Int).Lsh(big.NewInt(1), 70)
+	case "y", "Y":
+		return new(big.Int).Lsh(big.NewInt(1), 80)
+	case "r", "R":
+		return new(big.Int).Lsh(big.NewInt(1), 90)
+	case "q", "Q":
+		return new(big.Int).Lsh(big.NewInt(1), 100)
+	default:
+		return big.NewInt(0)
+	}
+}
+
+func collectSortInputs(ctx context.Context, inv *Invocation, opts *sortOptions, files []string) (runs []sortInputRun, checkFile string, exitCode int, err error) {
 	inputFiles, err := sortInputFiles(ctx, inv, opts, files)
 	if err != nil {
 		return nil, "", 0, err
@@ -600,7 +775,7 @@ func collectSortInput(ctx context.Context, inv *Invocation, opts *sortOptions, f
 
 	stdinData := []byte(nil)
 	stdinRead := false
-	lines = make([]string, 0)
+	runs = make([]sortInputRun, 0)
 	exitCode = 0
 	checkFile = "-"
 
@@ -609,7 +784,7 @@ func collectSortInput(ctx context.Context, inv *Invocation, opts *sortOptions, f
 		if err != nil {
 			return nil, "", 0, err
 		}
-		return decodeSortRecords(data, opts.zeroTerminated), "-", 0, nil
+		return []sortInputRun{{name: "-", lines: decodeSortRecords(data, opts.zeroTerminated)}}, "-", 0, nil
 	}
 
 	for idx, file := range inputFiles {
@@ -637,10 +812,10 @@ func collectSortInput(ctx context.Context, inv *Invocation, opts *sortOptions, f
 		if idx == 0 {
 			checkFile = file
 		}
-		lines = append(lines, decodeSortRecords(data, opts.zeroTerminated)...)
+		runs = append(runs, sortInputRun{name: file, lines: decodeSortRecords(data, opts.zeroTerminated)})
 	}
 
-	return lines, checkFile, exitCode, nil
+	return runs, checkFile, exitCode, nil
 }
 
 func sortInputFiles(ctx context.Context, inv *Invocation, opts *sortOptions, files []string) ([]string, error) {
@@ -694,29 +869,120 @@ func parseSortFiles0From(inv *Invocation, source string, data []byte) ([]string,
 	return files, nil
 }
 
-func sortRunCompressProgram(ctx context.Context, inv *Invocation, command string) error {
-	result, err := executeCommand(ctx, inv, &executeCommandOptions{
-		Argv:    []string{command},
-		WorkDir: inv.Cwd,
-		Stdin:   strings.NewReader(""),
-	})
+func flattenSortRuns(runs []sortInputRun) []string {
+	total := 0
+	for _, run := range runs {
+		total += len(run.lines)
+	}
+	lines := make([]string, 0, total)
+	for _, run := range runs {
+		lines = append(lines, run.lines...)
+	}
+	return lines
+}
+
+func mergeSortRuns(runs []sortInputRun, opts *sortOptions) []string {
+	total := 0
+	indexes := make([]int, len(runs))
+	for _, run := range runs {
+		total += len(run.lines)
+	}
+	out := make([]string, 0, total)
+	for {
+		bestRun := -1
+		bestLine := ""
+		for i, run := range runs {
+			if indexes[i] >= len(run.lines) {
+				continue
+			}
+			line := run.lines[indexes[i]]
+			if bestRun == -1 {
+				bestRun = i
+				bestLine = line
+				continue
+			}
+			cmp := compareSortLines(line, bestLine, opts)
+			if cmp < 0 || (cmp == 0 && i < bestRun) {
+				bestRun = i
+				bestLine = line
+			}
+		}
+		if bestRun == -1 {
+			break
+		}
+		out = append(out, bestLine)
+		indexes[bestRun]++
+	}
+	return out
+}
+
+func randomizeSortLines(ctx context.Context, inv *Invocation, lines []string, opts *sortOptions) ([]string, error) {
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	salt, err := sortRandomSalt(ctx, inv, opts)
 	if err != nil {
-		return &ExitError{Code: 1, Err: err}
+		return nil, err
 	}
-	if result == nil || result.ExitCode == 0 {
-		return nil
+	groups := sortEquivalentGroups(lines, opts)
+	gosort.SliceStable(groups, func(i, j int) bool {
+		return bytes.Compare(sortGroupRandomHash(groups[i], salt), sortGroupRandomHash(groups[j], salt)) < 0
+	})
+	out := make([]string, 0, len(lines))
+	for _, group := range groups {
+		out = append(out, group...)
 	}
-	if err := writeExecutionOutputs(inv, result); err != nil {
-		return err
+	return out, nil
+}
+
+func sortRandomSalt(ctx context.Context, inv *Invocation, opts *sortOptions) ([]byte, error) {
+	if opts.randomSource == "" {
+		salt := make([]byte, 16)
+		if _, err := rand.Read(salt); err != nil {
+			return nil, &ExitError{Code: 1, Err: err}
+		}
+		return salt, nil
 	}
-	return exitForExecutionResult(result)
+	data, _, err := readAllFile(ctx, inv, opts.randomSource)
+	if err != nil {
+		return nil, sortOptionf(inv, "sort: open failed: %s: %s", opts.randomSource, readAllErrorText(err))
+	}
+	if len(data) < 16 {
+		return nil, sortOptionf(inv, "sort: %s: end of file", quoteGNUOperand(opts.randomSource))
+	}
+	if len(data) > sortRandomSourceMaxBytes {
+		data = data[:sortRandomSourceMaxBytes]
+	}
+	sum := sha256.Sum256(data)
+	return sum[:16], nil
+}
+
+func sortEquivalentGroups(lines []string, opts *sortOptions) [][]string {
+	normalized := append([]string(nil), lines...)
+	groupOpts := *opts
+	groupOpts.randomSort = false
+	groupOpts.stable = true
+	gosort.SliceStable(normalized, func(i, j int) bool {
+		return compareSortLines(normalized[i], normalized[j], &groupOpts) < 0
+	})
+	groups := make([][]string, 0)
+	for _, line := range normalized {
+		if len(groups) == 0 || !sortLinesEquivalent(groups[len(groups)-1][0], line, &groupOpts) {
+			groups = append(groups, []string{line})
+			continue
+		}
+		groups[len(groups)-1] = append(groups[len(groups)-1], line)
+	}
+	return groups
+}
+
+func sortGroupRandomHash(group []string, salt []byte) []byte {
+	payload := group[0]
+	sum := sha256.Sum256(append(append([]byte{}, salt...), payload...))
+	return sum[:]
 }
 
 func compareSortLines(a, b string, opts *sortOptions) int {
-	if opts.randomSort {
-		return 0
-	}
-
 	lineA := a
 	lineB := b
 	if opts.ignoreLeadingBlanks {
@@ -781,14 +1047,14 @@ func compareSortLines(a, b string, opts *sortOptions) int {
 }
 
 func extractSortKeyValue(line string, key sortKey, delimiter *string) string {
-	fields := sortFields(line, delimiter)
+	fields := sortFieldInfos(line, delimiter)
 	start := key.startField - 1
 	if start < 0 || start >= len(fields) {
 		return ""
 	}
 
 	if !key.hasEndField {
-		return sliceFieldRange(fields[start], key.startChar, key.hasStartChar, 0, false)
+		return sliceFieldRange(fields[start].text, key.startChar, key.hasStartChar, 0, false)
 	}
 
 	end := key.endField - 1
@@ -800,7 +1066,7 @@ func extractSortKeyValue(line string, key sortKey, delimiter *string) string {
 	}
 
 	if start == end {
-		return sliceFieldRange(fields[start], key.startChar, key.hasStartChar, key.endChar, key.hasEndChar)
+		return sliceFieldRange(fields[start].text, key.startChar, key.hasStartChar, key.endChar, key.hasEndChar)
 	}
 
 	joiner := " "
@@ -810,7 +1076,7 @@ func extractSortKeyValue(line string, key sortKey, delimiter *string) string {
 
 	parts := make([]string, 0, end-start+1)
 	for i := start; i <= end; i++ {
-		field := fields[i]
+		field := fields[i].text
 		switch i {
 		case start:
 			field = sliceFieldRange(field, key.startChar, key.hasStartChar, 0, false)
@@ -822,11 +1088,43 @@ func extractSortKeyValue(line string, key sortKey, delimiter *string) string {
 	return strings.Join(parts, joiner)
 }
 
-func sortFields(line string, delimiter *string) []string {
+func sortFieldInfos(line string, delimiter *string) []sortFieldInfo {
 	if delimiter == nil {
-		return strings.Fields(line)
+		runes := []rune(line)
+		fields := make([]sortFieldInfo, 0)
+		for i := 0; i < len(runes); {
+			for i < len(runes) && unicode.IsSpace(runes[i]) {
+				i++
+			}
+			if i >= len(runes) {
+				break
+			}
+			start := i
+			for i < len(runes) && !unicode.IsSpace(runes[i]) {
+				i++
+			}
+			fields = append(fields, sortFieldInfo{
+				text:  string(runes[start:i]),
+				start: start,
+				end:   i,
+			})
+		}
+		return fields
 	}
-	return strings.Split(line, *delimiter)
+	delim := *delimiter
+	parts := strings.Split(line, delim)
+	fields := make([]sortFieldInfo, 0, len(parts))
+	byteOffset := 0
+	for idx, part := range parts {
+		start := utf8.RuneCountInString(line[:byteOffset])
+		end := start + utf8.RuneCountInString(part)
+		fields = append(fields, sortFieldInfo{text: part, start: start, end: end})
+		byteOffset += len(part)
+		if idx < len(parts)-1 {
+			byteOffset += len(delim)
+		}
+	}
+	return fields
 }
 
 func uniqueSortedLines(lines []string, opts *sortOptions) []string {
@@ -1163,6 +1461,168 @@ func encodeSortRecords(lines []string, zeroTerminated bool) []byte {
 	return []byte(b.String())
 }
 
+func renderSortDebugOutput(lines []string, opts *sortOptions) []byte {
+	if len(lines) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	for _, line := range lines {
+		b.WriteString(line)
+		b.WriteByte('\n')
+		b.WriteString(sortDebugKeyUnderline(line, opts))
+		b.WriteByte('\n')
+		if !opts.stable {
+			b.WriteString(sortDebugWholeLineUnderline(line))
+			b.WriteByte('\n')
+		}
+	}
+	return []byte(b.String())
+}
+
+func sortDebugKeyUnderline(line string, opts *sortOptions) string {
+	runes := []rune(line)
+	if len(opts.keys) == 0 {
+		start := 0
+		if opts.ignoreLeadingBlanks {
+			for start < len(runes) && unicode.IsSpace(runes[start]) {
+				start++
+			}
+		}
+		if start >= len(runes) {
+			return "^ no match for key"
+		}
+		marks := make([]rune, len(runes))
+		for i := range marks {
+			marks[i] = ' '
+		}
+		for i := start; i < len(runes); i++ {
+			marks[i] = '_'
+		}
+		return string(marks)
+	}
+
+	keyLine, offset := sortDebugWorkingLine(line, opts)
+	marks := make([]rune, len([]rune(line)))
+	for i := range marks {
+		marks[i] = ' '
+	}
+	matched := false
+	for _, key := range opts.keys {
+		start, end, ok := sortDebugKeySpan(keyLine, key, opts.fieldDelimiter)
+		if !ok {
+			continue
+		}
+		if key.ignoreLeading {
+			for start < end {
+				idx := start + offset
+				if idx < 0 || idx >= len(marks) || !unicode.IsSpace(runes[idx]) {
+					break
+				}
+				start++
+			}
+		}
+		for i := start + offset; i < end+offset && i < len(marks); i++ {
+			if i >= 0 {
+				marks[i] = '_'
+				matched = true
+			}
+		}
+	}
+	if !matched {
+		return "^ no match for key"
+	}
+	return string(marks)
+}
+
+func sortDebugWholeLineUnderline(line string) string {
+	if line == "" {
+		return "^ no match for key"
+	}
+	return strings.Repeat("_", utf8.RuneCountInString(line))
+}
+
+func sortDebugWorkingLine(line string, opts *sortOptions) (string, int) {
+	if !opts.ignoreLeadingBlanks {
+		return line, 0
+	}
+	runes := []rune(line)
+	offset := 0
+	for offset < len(runes) && unicode.IsSpace(runes[offset]) {
+		offset++
+	}
+	return string(runes[offset:]), offset
+}
+
+func sortDebugKeySpan(line string, key sortKey, delimiter *string) (int, int, bool) {
+	fields := sortFieldInfos(line, delimiter)
+	start := key.startField - 1
+	if start < 0 || start >= len(fields) {
+		return 0, 0, false
+	}
+	startPos := fields[start].start
+	if key.hasStartChar {
+		startPos += max(key.startChar-1, 0)
+	}
+	endPos := fields[start].end
+	if key.hasEndField {
+		end := key.endField - 1
+		if end >= len(fields) {
+			end = len(fields) - 1
+		}
+		if end < start {
+			end = start
+		}
+		endPos = fields[end].end
+		if key.hasEndChar {
+			endPos = fields[end].start + max(key.endChar, 0)
+		}
+	}
+	if endPos < startPos {
+		endPos = startPos
+	}
+	runeLen := utf8.RuneCountInString(line)
+	startPos = min(max(startPos, 0), runeLen)
+	endPos = min(max(endPos, 0), runeLen)
+	if startPos == endPos {
+		return 0, 0, false
+	}
+	return startPos, endPos, true
+}
+
+func sortWriteDebugWarnings(w io.Writer, opts *sortOptions) {
+	_, _ = fmt.Fprintln(w, "sort: text ordering performed using simple byte comparison")
+	if sortUsesNumericDebug(opts) {
+		_, _ = fmt.Fprintln(w, "sort: numbers use '.' as a decimal point in this locale")
+	}
+	if warning := sortLeadingBlanksDebugWarning(opts); warning != "" {
+		_, _ = fmt.Fprintln(w, warning)
+	}
+}
+
+func sortUsesNumericDebug(opts *sortOptions) bool {
+	if opts.numeric || opts.generalNumeric || opts.humanNumeric {
+		return true
+	}
+	for _, key := range opts.keys {
+		if key.numeric || key.generalNumeric || key.humanNumeric {
+			return true
+		}
+	}
+	return false
+}
+
+func sortLeadingBlanksDebugWarning(opts *sortOptions) string {
+	if opts.fieldDelimiter != nil || opts.ignoreLeadingBlanks {
+		return ""
+	}
+	for i, key := range opts.keys {
+		if key.startField > 1 && !key.ignoreLeading {
+			return fmt.Sprintf("sort: leading blanks are significant in key %d; consider also specifying 'b'", i+1)
+		}
+	}
+	return ""
+}
+
 func consumeDigits(value string) (digits, remainder string) {
 	end := 0
 	for end < len(value) && value[end] >= '0' && value[end] <= '9' {
@@ -1191,46 +1651,63 @@ func sortOptionf(inv *Invocation, format string, args ...any) error {
 
 var numericPrefixRe = regexp.MustCompile(`^[+-]?(?:\d+(?:\.\d*)?|\.\d+)`)
 var sortKeyModifierRe = regexp.MustCompile(`([bdfghiMnrRV]+)$`)
+var sortBufferSizeRe = regexp.MustCompile(`^(\d+)([%A-Za-z]?)$`)
 
-const sortHelpText = `sort - sort lines of text files
+const sortRandomSourceMaxBytes = 1024 * 1024
 
-Usage:
-  sort [OPTION]... [FILE]...
+const sortHelpText = `Usage: sort [OPTION]... [FILE]...
+  or:  sort [OPTION]... --files0-from=F
+Write sorted concatenation of all FILE(s) to standard output.
 
-Supported options:
-  -b, --ignore-leading-blanks
-                         ignore leading blanks
-  -c, --check           check whether input is sorted
-  -C                    like -c, but do not diagnose first disorder
-  -d, --dictionary-order
-                         consider only blanks and alphanumeric characters
-  --debug               annotate the part of the line used to sort, and warn
-  -f, --ignore-case     fold lower case to upper case characters
-  --files0-from=F       read input file names from NUL-terminated file F
-  -g, --general-numeric-sort
-                         compare according to general numeric value
-  -h, --human-numeric-sort
-                         compare human-readable numbers
-  -i, --ignore-nonprinting
-                         consider only printable characters
-  -k, --key=KEYDEF      sort via a key definition
-  -m, --merge           merge already sorted files
-  -M, --month-sort      compare month names
-  -n, --numeric-sort    compare according to numeric value
-  -o, --output=FILE     write result to FILE instead of stdout
-  --parallel=N          change the number of sorts run concurrently
-  -R, --random-sort     sort by random hash of keys
-  -r, --reverse         reverse the result of comparisons
-  -s, --stable          disable last-resort whole-line comparison
-  --sort=WORD           sort according to WORD: general-numeric, human-numeric,
-                         month, numeric, random, or version
-  -t, --field-separator=SEP
-                         use SEP instead of whitespace for field separation
-  -u, --unique          output only the first of equal lines
-  -V, --version-sort    natural sort of version numbers
-  --version             output version information and exit
-  -z, --zero-terminated line delimiter is NUL, not newline
-  --help                show this help text
+With no FILE, or when FILE is -, read standard input.
+
+Mandatory arguments to long options are mandatory for short options too.
+Ordering options:
+
+  -b, --ignore-leading-blanks  ignore leading blanks
+  -d, --dictionary-order      consider only blanks and alphanumeric characters
+  -f, --ignore-case           fold lower case to upper case characters
+  -g, --general-numeric-sort  compare according to general numerical value
+  -i, --ignore-nonprinting    consider only printable characters
+  -M, --month-sort            compare (unknown) < 'JAN' < ... < 'DEC'
+  -h, --human-numeric-sort    compare human readable numbers (e.g., 2K 1G)
+  -n, --numeric-sort          compare according to string numerical value
+  -R, --random-sort           shuffle, but group identical keys
+      --random-source=FILE    get random bytes from FILE
+  -r, --reverse               reverse the result of comparisons
+      --sort=WORD             sort according to WORD:
+                                general-numeric -g, human-numeric -h, month -M,
+                                numeric -n, random -R, version -V
+  -V, --version-sort          natural sort of (version) numbers within text
+
+Other options:
+
+      --batch-size=NMERGE     merge at most NMERGE inputs at once
+  -c, --check, --check=diagnose-first
+                              check for sorted input; do not sort
+  -C, --check=quiet, --check=silent
+                              like -c, but do not report first bad line
+      --compress-program=PROG
+                              compress temporaries with PROG; decompress with PROG -d
+      --debug                 annotate the part of the line used to sort, and warn
+      --files0-from=F         read input from the files specified by NUL-terminated names in file F
+  -k, --key=KEYDEF            sort via a key; KEYDEF gives location and type
+  -m, --merge                 merge already sorted files; do not sort
+  -o, --output=FILE           write result to FILE instead of standard output
+  -s, --stable                stabilize sort by disabling last-resort comparison
+  -S, --buffer-size=SIZE      use SIZE for main memory buffer
+  -t, --field-separator=SEP   use SEP instead of non-blank to blank transition
+  -T, --temporary-directory=DIR
+                              use DIR for temporaries, not $TMPDIR or /tmp
+      --parallel=N            change the number of sorts run concurrently to N
+  -u, --unique                output only the first of lines with equal keys
+  -z, --zero-terminated       line delimiter is NUL, not newline
+      --help                  display this help and exit
+      --version               output version information and exit
+
+KEYDEF is F[.C][OPTS][,F[.C][OPTS]] for start and stop position, where F is a
+field number and C a character position in the field. OPTS is one or more
+single-letter ordering options [bdfgiMhnRrV].
 `
 
 const sortVersionText = "sort (gbash) dev\n"
