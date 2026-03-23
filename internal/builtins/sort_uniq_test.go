@@ -295,17 +295,13 @@ func TestSortRandomSortUsesCanonicalKeyHash(t *testing.T) {
 	if len(parts) != 2 {
 		t.Fatalf("Stdout = %q, want two outputs", result.Stdout)
 	}
-
-	normalize := func(text string) string {
-		lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
-		for i, line := range lines {
-			lines[i] = strings.ToLower(line)
-		}
-		return strings.Join(lines, "\n")
+	if parts[0] != parts[1] {
+		t.Fatalf("outputs differ: %q vs %q", parts[0], parts[1])
 	}
-
-	if got1, got2 := normalize(parts[0]), normalize(parts[1]); got1 != got2 {
-		t.Fatalf("normalized outputs differ: %q vs %q", got1, got2)
+	const alphaFirst = "Alpha\nalpha\nbeta\n"
+	const betaFirst = "beta\nAlpha\nalpha\n"
+	if parts[0] != alphaFirst && parts[0] != betaFirst {
+		t.Fatalf("Stdout = %q, want canonical last-resort order within one random group ordering", result.Stdout)
 	}
 }
 
@@ -346,6 +342,33 @@ func TestSortRandomSortReverseReversesHashOrder(t *testing.T) {
 	}
 }
 
+func TestSortRandomSortReverseUsesLastResortOrderWithinGroups(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '0123456789abcdef' > /tmp/random\n" +
+			"printf 'Alpha\\nalpha\\n' > /tmp/in1\n" +
+			"printf 'alpha\\nAlpha\\n' > /tmp/in2\n" +
+			"sort -Rrf --random-source=/tmp/random /tmp/in1 > /tmp/out1\n" +
+			"sort -Rrf --random-source=/tmp/random /tmp/in2 > /tmp/out2\n" +
+			"cat /tmp/out1\n" +
+			"printf -- '---\\n'\n" +
+			"cat /tmp/out2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	const want = "alpha\nAlpha\n---\nalpha\nAlpha\n"
+	if result.Stdout != want {
+		t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+	}
+}
+
 func TestSortRandomSourceRequiresEnoughBytes(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -364,12 +387,30 @@ func TestSortRandomSourceRequiresEnoughBytes(t *testing.T) {
 	}
 }
 
-func TestSortRandomModeStillChecksOrdering(t *testing.T) {
+func TestSortRandomCheckIgnoresDistinctKeyOrder(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
-		Script: "printf 'b\\na\\n' | sort -Rc\n",
+		Script: "printf '0123456789abcdef' > /tmp/random\nprintf 'b\\na\\n' | sort -Rc --random-source=/tmp/random\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty stderr", result.Stderr)
+	}
+}
+
+func TestSortRandomCheckPreservesLastResortOrderWithinGroups(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'alpha\\nAlpha\\n' | sort -Rfc\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -377,8 +418,8 @@ func TestSortRandomModeStillChecksOrdering(t *testing.T) {
 	if result.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "disorder: a") {
-		t.Fatalf("Stderr = %q, want disorder report", result.Stderr)
+	if !strings.Contains(result.Stderr, "disorder: Alpha") {
+		t.Fatalf("Stderr = %q, want last-resort disorder report", result.Stderr)
 	}
 }
 

@@ -26,6 +26,7 @@ type sortOptions struct {
 	numeric             bool
 	generalNumeric      bool
 	randomSort          bool
+	randomSalt          []byte
 	unique              bool
 	ignoreCase          bool
 	ignoreNonprinting   bool
@@ -206,8 +207,14 @@ func (c *Sort) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		sortWriteDebugWarnings(inv.Stderr, &opts)
 	}
 
+	lines := flattenSortRuns(runs)
+	if opts.randomSort && len(lines) > 0 {
+		if _, err := sortRandomSalt(ctx, inv, &opts); err != nil {
+			return err
+		}
+	}
+
 	if opts.checkOnly {
-		lines := flattenSortRuns(runs)
 		for i := 1; i < len(lines); i++ {
 			cmp := compareSortLines(lines[i-1], lines[i], &opts)
 			if cmp > 0 || (opts.unique && sortLinesEquivalent(lines[i-1], lines[i], &opts)) {
@@ -223,7 +230,6 @@ func (c *Sort) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		return nil
 	}
 
-	lines := flattenSortRuns(runs)
 	switch {
 	case opts.randomSort:
 		lines, err = randomizeSortLines(ctx, inv, lines, &opts)
@@ -940,11 +946,15 @@ func randomizeSortLines(ctx context.Context, inv *Invocation, lines []string, op
 }
 
 func sortRandomSalt(ctx context.Context, inv *Invocation, opts *sortOptions) ([]byte, error) {
+	if len(opts.randomSalt) != 0 {
+		return opts.randomSalt, nil
+	}
 	if opts.randomSource == "" {
 		salt := make([]byte, 16)
 		if _, err := rand.Read(salt); err != nil {
 			return nil, &ExitError{Code: 1, Err: err}
 		}
+		opts.randomSalt = salt
 		return salt, nil
 	}
 	data, _, err := readAllFile(ctx, inv, opts.randomSource)
@@ -958,15 +968,14 @@ func sortRandomSalt(ctx context.Context, inv *Invocation, opts *sortOptions) ([]
 		data = data[:sortRandomSourceMaxBytes]
 	}
 	sum := sha256.Sum256(data)
-	return sum[:16], nil
+	opts.randomSalt = sum[:16]
+	return opts.randomSalt, nil
 }
 
 func sortEquivalentGroups(lines []string, opts *sortOptions) [][]string {
 	normalized := append([]string(nil), lines...)
 	groupOpts := *opts
 	groupOpts.randomSort = false
-	groupOpts.reverse = false
-	groupOpts.stable = true
 	gosort.SliceStable(normalized, func(i, j int) bool {
 		return compareSortLines(normalized[i], normalized[j], &groupOpts) < 0
 	})
@@ -982,16 +991,15 @@ func sortEquivalentGroups(lines []string, opts *sortOptions) [][]string {
 }
 
 func sortGroupRandomHash(group []string, salt []byte, opts *sortOptions) []byte {
-	payload := sortRandomHashPayload(group, opts)
+	if len(group) == 0 {
+		return nil
+	}
+	payload := sortRandomHashPayload(group[0], opts)
 	sum := sha256.Sum256(append(append([]byte{}, salt...), payload...))
 	return sum[:]
 }
 
-func sortRandomHashPayload(group []string, opts *sortOptions) []byte {
-	if len(group) == 0 {
-		return nil
-	}
-	line := group[0]
+func sortRandomHashPayload(line string, opts *sortOptions) []byte {
 	if opts.ignoreLeadingBlanks {
 		line = strings.TrimLeftFunc(line, unicode.IsSpace)
 	}
@@ -1105,6 +1113,19 @@ func sortCanonicalVersionText(value string) string {
 }
 
 func compareSortLines(a, b string, opts *sortOptions) int {
+	if opts.randomSort {
+		if sortLinesEquivalent(a, b, opts) {
+			nonRandomOpts := *opts
+			nonRandomOpts.randomSort = false
+			return compareSortLines(a, b, &nonRandomOpts)
+		}
+		return 0
+	}
+
+	return compareNonRandomSortLines(a, b, opts)
+}
+
+func compareNonRandomSortLines(a, b string, opts *sortOptions) int {
 	lineA := a
 	lineB := b
 	if opts.ignoreLeadingBlanks {
