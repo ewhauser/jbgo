@@ -1055,6 +1055,134 @@ func TestWhoAllMatchesExpandedFlagsAndMissingFilesAreSilent(t *testing.T) {
 	}
 }
 
+func TestUsersListsLoggedInUsers(t *testing.T) {
+	t.Parallel()
+	session := newWhoFixtureSession(t)
+	result := mustExecSession(t, session, "users /tmp/who.utmp\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "alice bob\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestUsersNoFileProducesNoOutput(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	result := mustExecSession(t, session, "users\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", result.Stdout)
+	}
+}
+
+func TestUsersMissingFileIsSilent(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	result := mustExecSession(t, session, "users /tmp/missing\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stdout != "" || result.Stderr != "" {
+		t.Fatalf("result = stdout %q stderr %q, want both empty", result.Stdout, result.Stderr)
+	}
+}
+
+func TestUsersHelpVersionAndErrors(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "short help",
+			script:   "users -h\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the user names of users currently logged in",
+				"Usage: users",
+				"-V, --version",
+				"-h, --help",
+			},
+		},
+		{
+			name:     "long help",
+			script:   "users --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the user names of users currently logged in",
+				"Usage: users",
+			},
+		},
+		{
+			name:     "short version",
+			script:   "users -V\n",
+			wantCode: 0,
+			wantOut:  "users (gbash)\n",
+		},
+		{
+			name:     "long version",
+			script:   "users --version\n",
+			wantCode: 0,
+			wantOut:  "users (gbash)\n",
+		},
+		{
+			name:     "inferred long version",
+			script:   "users --ver\n",
+			wantCode: 0,
+			wantOut:  "users (gbash)\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "users --bogus\n",
+			wantCode:   1,
+			wantStderr: "users: unrecognized option '--bogus'\nTry 'users --help' for more information.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "users -x\n",
+			wantCode:   1,
+			wantStderr: "users: invalid option -- 'x'\nTry 'users --help' for more information.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(got, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", got, want)
+					}
+				}
+			} else if got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestArchReportsMachineArchitecture(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
