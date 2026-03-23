@@ -2103,6 +2103,122 @@ func TestHostnameBuiltinUsesRuntimeNodename(t *testing.T) {
 	}
 }
 
+func TestHostidPrintsDeterministicHex(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "hostid\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "007f0101\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHostidHelpVersionAndErrors(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "short help",
+			script:   "hostid -h\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the numeric identifier for the current host",
+				"Usage: hostid",
+				"-V, --version",
+				"-h, --help",
+			},
+		},
+		{
+			name:     "long help",
+			script:   "hostid --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the numeric identifier for the current host",
+				"Usage: hostid",
+			},
+		},
+		{
+			name:     "short version",
+			script:   "hostid -V\n",
+			wantCode: 0,
+			wantOut:  "hostid (gbash)\n",
+		},
+		{
+			name:     "long version",
+			script:   "hostid --version\n",
+			wantCode: 0,
+			wantOut:  "hostid (gbash)\n",
+		},
+		{
+			name:     "inferred long version",
+			script:   "hostid --ver\n",
+			wantCode: 0,
+			wantOut:  "hostid (gbash)\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "hostid --bogus\n",
+			wantCode:   1,
+			wantStderr: "hostid: unrecognized option '--bogus'\nTry 'hostid --help' for more information.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "hostid -x\n",
+			wantCode:   1,
+			wantStderr: "hostid: invalid option -- 'x'\nTry 'hostid --help' for more information.\n",
+		},
+		{
+			name:       "extra operand",
+			script:     "hostid extra\n",
+			wantCode:   1,
+			wantStderr: "hostid: extra operand 'extra'\nTry 'hostid --help' for more information.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(got, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", got, want)
+					}
+				}
+			} else if got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestBashRunsScriptFileAndPassesArgs(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
