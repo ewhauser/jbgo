@@ -34,7 +34,7 @@ Shell parsing and execution are owned in-tree under `internal/shell`, with a pro
 
 - Virtual in-memory filesystem — no host access by default
 - Registry-backed command execution — unknown commands never run host binaries
-- 90+ built-in commands with GNU coreutils compatibility coverage ([compatibility report](https://ewhauser.github.io/gbash/docs/performance/compatibility/))
+- 90+ built-in commands with GNU coreutils compatibility coverage ([compatibility report](https://ewhauser.github.io/gbash/docs/compatibility/coreutils/))
 - Optional allowlisted network access via `curl`
 - Persistent sessions with shared filesystem state across executions
 - Shared JSON-RPC server mode for session-oriented hosts and wrapper binaries
@@ -330,16 +330,6 @@ gb, err := gbash.New(
 )
 ```
 
-The host adapter controls:
-
-- base environment defaults before `Config.BaseEnv` and per-request `Env`
-- shell-visible platform identity such as `OSTYPE`, `uname`, `hostname`, and `arch`
-- env-name case sensitivity and executable lookup behavior such as `PATHEXT`
-- initial PID, PPID, process-group metadata, and the pipe primitive used by pipelines and process substitution
-
-Precedence remains `host defaults -> Config.BaseEnv -> request Env`. `ReplaceEnv` still bypasses host defaults and `Config.BaseEnv`, after which the shell initializes its own startup-owned variables such as `PATH`, `PWD`, and `SHELL`.
-
-
 ### Network Access
 
 Network access is disabled by default. Enable it to register `curl` in the sandbox.
@@ -457,30 +447,6 @@ gb, err := gbash.New(gbash.WithRegistry(extras.FullRegistry()))
 
 The same stable set is bundled in the `gbash-extras` CLI at `github.com/ewhauser/gbash/contrib/extras/cmd/gbash-extras`.
 
-Use `github.com/ewhauser/gbash/contrib/bashtool` when you want a reusable LLM-facing bash tool contract with upstream-style prompt, schema, help, and response formatting on top of gbash execution:
-
-```go
-import "github.com/ewhauser/gbash/contrib/bashtool"
-
-tool := bashtool.New(bashtool.Config{
-	Profile: bashtool.CommandProfileExtras,
-})
-```
-
-Use `github.com/ewhauser/gbash/contrib/codingtools` when you want reusable `read`, `edit`, and `write` tool definitions over a gbash-owned filesystem abstraction:
-
-```go
-import (
-	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/contrib/codingtools"
-)
-
-tools := codingtools.New(codingtools.Config{
-	FS:         gbfs.NewMemory(),
-	WorkingDir: "/workspace",
-})
-```
-
 See the [`custom-zstd`](./examples/custom-zstd/) example for how to register custom commands.
 
 ## Shell Features
@@ -551,4 +517,4 @@ This project is licensed under the [Apache License 2.0](./LICENSE). Copyright
 - [`just-bash`](https://github.com/vercel-labs/just-bash) sparked the idea for `gbash` and provided the starting point for the initial port.
 - [`mvdan/sh`](https://github.com/mvdan/sh) provides the shell parser and interpreter foundation that `gbash` forks and builds on in-tree.
 - [`uutils/coreutils`](https://github.com/uutils/coreutils) provides the baseline behavior and implementations behind many of the command ports.
-- [`bashkit`](https://github.com/everruns/bashkit) is the upstream source for the `examples/gbash-eval` evaluator design and the vendored JSONL datasets copied from `crates/bashkit-eval`, adapted here under Apache-2.0 without carrying over upstream `results/` artifacts.
+- [`bashkit`](https://github.com/everruns/bashkit) provided the approach for bash conformance testing and agent evals
