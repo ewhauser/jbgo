@@ -684,6 +684,12 @@ func FuzzDataCommands(f *testing.F) {
 				"sum -s /tmp/input.json >/tmp/sum-sysv.txt\n" +
 				"cat /tmp/input.json | sum >/tmp/sum-stdin.txt\n" +
 				"cat /tmp/input.json | sum --sysv >/tmp/sum-sysv-stdin.txt\n" +
+				"expand /tmp/input.json >/tmp/expand-default.txt\n" +
+				"expand -i /tmp/input.json >/tmp/expand-initial.txt\n" +
+				"expand --tabs=4 /tmp/input.json >/tmp/expand-tabs-4.txt\n" +
+				"expand --tabs=1,+3 /tmp/input.json >/tmp/expand-tabs-plus.txt\n" +
+				"expand --tabs=1,/3 /tmp/input.json >/tmp/expand-tabs-slash.txt\n" +
+				"cat /tmp/input.json | expand -2,5 -7 >/tmp/expand-stdin.txt\n" +
 				"cksum /tmp/input.json >/tmp/cksum-crc.txt\n" +
 				"cksum -a md5 /tmp/input.json >/tmp/cksum-md5.txt\n" +
 				"cksum -a sha2 -l 256 /tmp/input.json >/tmp/cksum-sha256.txt\n" +
