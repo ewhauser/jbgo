@@ -746,6 +746,167 @@ func TestWhoamiHelpVersionAndErrors(t *testing.T) {
 	}
 }
 
+func TestLognameReportsLoginName(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "logname\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "agent\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLognameFallbackOrder(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name    string
+		script  string
+		wantOut string
+	}{
+		{
+			name:    "LOGNAME takes priority",
+			script:  "env LOGNAME=alice USER=bob logname\n",
+			wantOut: "alice\n",
+		},
+		{
+			name:    "falls back to USER when LOGNAME empty",
+			script:  "env LOGNAME= USER=bob logname\n",
+			wantOut: "bob\n",
+		},
+		{
+			name:    "falls back to default when both empty",
+			script:  "env LOGNAME= USER= logname\n",
+			wantOut: "agent\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+		})
+	}
+}
+
+func TestLognameHelpVersionAndErrors(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "short help",
+			script:   "logname -h\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the user's login name",
+				"Usage: logname",
+				"-V, --version",
+				"-h, --help",
+			},
+		},
+		{
+			name:     "long help",
+			script:   "logname --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the user's login name",
+				"Usage: logname",
+			},
+		},
+		{
+			name:     "short version",
+			script:   "logname -V\n",
+			wantCode: 0,
+			wantOut:  "logname (gbash)\n",
+		},
+		{
+			name:     "long version",
+			script:   "logname --version\n",
+			wantCode: 0,
+			wantOut:  "logname (gbash)\n",
+		},
+		{
+			name:     "inferred long version",
+			script:   "logname --ver\n",
+			wantCode: 0,
+			wantOut:  "logname (gbash)\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "logname --bogus\n",
+			wantCode:   1,
+			wantStderr: "logname: unrecognized option '--bogus'\nTry 'logname --help' for more information.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "logname -x\n",
+			wantCode:   1,
+			wantStderr: "logname: invalid option -- 'x'\nTry 'logname --help' for more information.\n",
+		},
+		{
+			name:       "extra operand",
+			script:     "logname extra\n",
+			wantCode:   1,
+			wantStderr: "logname: extra operand 'extra'\nTry 'logname --help' for more information.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(got, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", got, want)
+					}
+				}
+			} else if got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestWhoHelpVersionAndErrors(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
