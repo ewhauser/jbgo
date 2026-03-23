@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestDiffSupportsLongFlagAliases(t *testing.T) {
@@ -148,5 +150,79 @@ func TestDiffHelpAndVersionShortCircuitOptionParsing(t *testing.T) {
 	}
 	if !strings.Contains(versionResult.Stdout, "diff (GNU diffutils) 3.12") {
 		t.Fatalf("version Stdout = %q, want version text", versionResult.Stdout)
+	}
+}
+
+func TestDiffNoDereferenceReportsSymlinkTypeMismatch(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	writeSessionFile(t, session, "/tmp/regular", []byte("target\n"))
+	if err := session.FileSystem().Symlink(context.Background(), "target", "/tmp/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "diff --no-dereference /tmp/regular /tmp/link\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "File /tmp/regular is a regular file while file /tmp/link is a symbolic link\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
+func TestDiffIgnoreSpaceChangePreservesLeadingWhitespace(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'x\\n' > /tmp/a.txt\nprintf ' x\\n' > /tmp/b.txt\ndiff -b /tmp/a.txt /tmp/b.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "< x") || !strings.Contains(result.Stdout, ">  x") {
+		t.Fatalf("Stdout = %q, want leading-space difference", result.Stdout)
+	}
+}
+
+func TestDiffRejectsNegativeContextLengths(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	for _, script := range []string{
+		"diff --context=-1 /dev/null /dev/null\n",
+		"diff -U-1 /dev/null /dev/null\n",
+	} {
+		result, err := rt.Run(context.Background(), &ExecutionRequest{Script: script})
+		if err != nil {
+			t.Fatalf("Run(%q) error = %v", script, err)
+		}
+		if result.ExitCode != 2 {
+			t.Fatalf("Run(%q) ExitCode = %d, want 2; stdout=%q stderr=%q", script, result.ExitCode, result.Stdout, result.Stderr)
+		}
+		if result.Stdout != "" {
+			t.Fatalf("Run(%q) Stdout = %q, want empty", script, result.Stdout)
+		}
+		if !strings.Contains(result.Stderr, "invalid context length '-1'") {
+			t.Fatalf("Run(%q) Stderr = %q, want invalid context length", script, result.Stderr)
+		}
 	}
 }

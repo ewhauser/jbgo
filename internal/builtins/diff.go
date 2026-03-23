@@ -244,7 +244,7 @@ func parseDiffArgs(inv *Invocation) (diffOptions, []diffJob, error) {
 			case "report-identical-files":
 				opts.reportSame = true
 			case "context":
-				n, err := diffOptionalIntArg(inv, value, hasValue, 3)
+				n, err := diffOptionalContextLength(inv, value, hasValue, 3)
 				if err != nil {
 					return diffOptions{}, nil, err
 				}
@@ -252,7 +252,7 @@ func parseDiffArgs(inv *Invocation) (diffOptions, []diffJob, error) {
 				opts.contextLines = n
 				opts.sideBySide = false
 			case "unified":
-				n, err := diffOptionalIntArg(inv, value, hasValue, 3)
+				n, err := diffOptionalContextLength(inv, value, hasValue, 3)
 				if err != nil {
 					return diffOptions{}, nil, err
 				}
@@ -453,9 +453,9 @@ func parseDiffArgs(inv *Invocation) (diffOptions, []diffJob, error) {
 					return diffOptions{}, nil, err
 				}
 				shorts = ""
-				n, err := strconv.Atoi(v)
+				n, err := diffParseContextLength(inv, v)
 				if err != nil {
-					return diffOptions{}, nil, diffInvalidNumber(inv, v)
+					return diffOptions{}, nil, err
 				}
 				opts.mode = diffModeContext
 				opts.contextLines = n
@@ -470,9 +470,9 @@ func parseDiffArgs(inv *Invocation) (diffOptions, []diffJob, error) {
 					return diffOptions{}, nil, err
 				}
 				shorts = ""
-				n, err := strconv.Atoi(v)
+				n, err := diffParseContextLength(inv, v)
 				if err != nil {
-					return diffOptions{}, nil, diffInvalidNumber(inv, v)
+					return diffOptions{}, nil, err
 				}
 				opts.mode = diffModeUnified
 				opts.contextLines = n
@@ -631,6 +631,10 @@ func diffInvalidNumber(inv *Invocation, value string) error {
 	return exitf(inv, 2, "diff: invalid number %s\nTry 'diff --help' for more information.", quoteGNUOperand(value))
 }
 
+func diffInvalidContextLength(inv *Invocation, value string) error {
+	return exitf(inv, 2, "diff: invalid context length %s\nTry 'diff --help' for more information.", quoteGNUOperand(value))
+}
+
 func diffRequiredIntArg(inv *Invocation, opt, value string, hasValue bool, args []string, idx *int) (int, error) {
 	v, err := diffRequiredStringArg(inv, opt, value, hasValue, args, idx)
 	if err != nil {
@@ -643,15 +647,19 @@ func diffRequiredIntArg(inv *Invocation, opt, value string, hasValue bool, args 
 	return n, nil
 }
 
-func diffOptionalIntArg(inv *Invocation, value string, hasValue bool, def int) (int, error) {
+func diffParseContextLength(inv *Invocation, value string) (int, error) {
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		return 0, diffInvalidContextLength(inv, value)
+	}
+	return n, nil
+}
+
+func diffOptionalContextLength(inv *Invocation, value string, hasValue bool, def int) (int, error) {
 	if !hasValue {
 		return def, nil
 	}
-	n, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, diffInvalidNumber(inv, value)
-	}
-	return n, nil
+	return diffParseContextLength(inv, value)
 }
 
 func diffRequiredStringArg(inv *Invocation, opt, value string, hasValue bool, args []string, idx *int) (string, error) {
@@ -819,6 +827,13 @@ func (c *Diff) compareDirectories(ctx context.Context, inv *Invocation, opts *di
 				status = max(status, 2)
 				continue
 			}
+			if diffFileType(leftInfo) != diffFileType(rightInfo) {
+				if _, err := fmt.Fprintf(inv.Stdout, "File %s is a %s while file %s is a %s\n", leftChild, diffFileTypeName(leftInfo), rightChild, diffFileTypeName(rightInfo)); err != nil {
+					return 0, diffWriteError(err)
+				}
+				status = max(status, 1)
+				continue
+			}
 
 			switch {
 			case leftInfo.IsDir() && rightInfo.IsDir():
@@ -833,11 +848,6 @@ func (c *Diff) compareDirectories(ctx context.Context, inv *Invocation, opts *di
 						return 0, diffWriteError(err)
 					}
 				}
-			case leftInfo.IsDir() != rightInfo.IsDir():
-				if _, err := fmt.Fprintf(inv.Stdout, "File %s is a directory while file %s is a regular file\n", leftChild, rightChild); err != nil {
-					return 0, diffWriteError(err)
-				}
-				status = max(status, 1)
 			default:
 				subStatus, err := c.comparePathPair(ctx, inv, opts, loader, leftChild, rightChild, true)
 				if err != nil {
@@ -898,6 +908,12 @@ func (c *Diff) comparePathPair(ctx context.Context, inv *Invocation, opts *diffO
 			return 0, diffWriteError(err)
 		}
 		return 2, nil
+	}
+	if left.exists && right.exists && diffFileType(left.info) != diffFileType(right.info) {
+		if _, err := fmt.Fprintf(inv.Stdout, "File %s is a %s while file %s is a %s\n", left.name, diffFileTypeName(left.info), right.name, diffFileTypeName(right.info)); err != nil {
+			return 0, diffWriteError(err)
+		}
+		return 1, nil
 	}
 	if announce && !opts.brief {
 		if _, err := fmt.Fprintf(inv.Stdout, "%s %s %s\n", diffComparePrefix(opts), leftName, rightName); err != nil {
@@ -1137,13 +1153,59 @@ func diffCollapseHorizontalSpace(line string) string {
 			seenSpace = true
 			continue
 		}
-		if seenSpace && b.Len() > 0 {
+		if seenSpace {
 			b.WriteByte(' ')
 		}
 		seenSpace = false
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+func diffFileType(info stdfs.FileInfo) stdfs.FileMode {
+	if info == nil {
+		return 0
+	}
+	mode := info.Mode()
+	switch {
+	case mode&stdfs.ModeSymlink != 0:
+		return stdfs.ModeSymlink
+	case mode.IsDir():
+		return stdfs.ModeDir
+	case mode&stdfs.ModeNamedPipe != 0:
+		return stdfs.ModeNamedPipe
+	case mode&stdfs.ModeSocket != 0:
+		return stdfs.ModeSocket
+	case mode&stdfs.ModeDevice != 0 && mode&stdfs.ModeCharDevice != 0:
+		return stdfs.ModeDevice | stdfs.ModeCharDevice
+	case mode&stdfs.ModeDevice != 0:
+		return stdfs.ModeDevice
+	case mode&stdfs.ModeIrregular != 0:
+		return stdfs.ModeIrregular
+	default:
+		return 0
+	}
+}
+
+func diffFileTypeName(info stdfs.FileInfo) string {
+	switch diffFileType(info) {
+	case stdfs.ModeDir:
+		return "directory"
+	case stdfs.ModeSymlink:
+		return "symbolic link"
+	case stdfs.ModeNamedPipe:
+		return "fifo"
+	case stdfs.ModeSocket:
+		return "socket"
+	case stdfs.ModeDevice | stdfs.ModeCharDevice:
+		return "character special file"
+	case stdfs.ModeDevice:
+		return "block special file"
+	case stdfs.ModeIrregular:
+		return "weird file"
+	default:
+		return "regular file"
+	}
 }
 
 func diffRenderPair(ctx context.Context, inv *Invocation, opts *diffOptions, left, right *diffInput) (int, error) {
