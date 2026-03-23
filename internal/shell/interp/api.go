@@ -270,10 +270,13 @@ type Runner struct {
 	// inline stack to avoid per-runner heap churn on the common path.
 	fdSnapshotBootstrap [4]map[int]*shellFD
 	origStart           time.Time
-	origRandom          uint32
+	// origShellStart is the shell-visible start timestamp used by printf %T -2.
+	origShellStart time.Time
+	origRandom     uint32
 
-	startTime time.Time
-	random    uint32
+	startTime      time.Time
+	shellStartTime time.Time
+	random         uint32
 
 	inRedirectWord int
 	inAssignment   int
@@ -541,6 +544,8 @@ type RunnerConfig struct {
 	Stderr io.Writer
 	Params []string
 	Now    func() time.Time
+	// ShellStartTime is the shell-visible wall clock used for printf %T -2.
+	ShellStartTime time.Time
 
 	Interactive        bool
 	CommandString      bool
@@ -658,6 +663,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.startupHome = cfg.StartupHome
 	r.Dir = cfg.Dir
 	r.timeNow = cfg.Now
+	r.shellStartTime = cfg.ShellStartTime
 	r.callHandler = cfg.CallHandler
 	r.execHandler = cfg.ExecHandler
 	r.openHandler = cfg.OpenHandler
@@ -1000,6 +1006,10 @@ func (r *Runner) Reset() {
 		r.origStderr = r.stderr
 		r.origFDs = cloneFDTable(initialFDTable(r.stdin, r.stdout, r.stderr))
 		r.origStart = time.Now()
+		if r.shellStartTime.IsZero() {
+			r.shellStartTime = r.now()
+		}
+		r.origShellStart = r.shellStartTime
 		r.origRandom = randomSeed(r.bashPID, r.origStart)
 
 		if r.execHandler == nil {
@@ -1043,17 +1053,19 @@ func (r *Runner) Reset() {
 		commandString:      r.commandString,
 		commandStringValue: r.commandStringValue,
 
-		origDir:    r.origDir,
-		origParams: r.origParams,
-		origOpts:   r.origOpts,
-		origStdin:  r.origStdin,
-		origStdout: r.origStdout,
-		origStderr: r.origStderr,
-		origFDs:    cloneFDTable(r.origFDs),
-		origStart:  r.origStart,
-		origRandom: r.origRandom,
-		startTime:  r.origStart,
-		random:     r.origRandom,
+		origDir:        r.origDir,
+		origParams:     r.origParams,
+		origOpts:       r.origOpts,
+		origStdin:      r.origStdin,
+		origStdout:     r.origStdout,
+		origStderr:     r.origStderr,
+		origFDs:        cloneFDTable(r.origFDs),
+		origStart:      r.origStart,
+		origShellStart: r.origShellStart,
+		origRandom:     r.origRandom,
+		startTime:      r.origStart,
+		shellStartTime: r.origShellStart,
+		random:         r.origRandom,
 
 		funcs:     funcs,
 		printfEnv: newPrintfEnvCache(),
@@ -1330,7 +1342,9 @@ func (r *Runner) subshell(_ bool) *Runner {
 		commandHash:               r.commandHash,
 		startupHome:               r.startupHome,
 		origStart:                 r.origStart,
+		origShellStart:            r.origShellStart,
 		startTime:                 r.startTime,
+		shellStartTime:            r.shellStartTime,
 		timeNow:                   r.timeNow,
 		random:                    random,
 		origRandom:                random,

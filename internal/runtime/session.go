@@ -203,7 +203,7 @@ func (s *Session) setTime(when time.Time) error {
 	}
 	s.clockMu.Lock()
 	s.currentTime = when.UTC()
-	s.clockRealAt = time.Now().UTC()
+	s.clockRealAt = time.Now()
 	s.clockMu.Unlock()
 	return nil
 }

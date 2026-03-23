@@ -555,11 +555,11 @@ func TestDateSessionClockPersistsAcrossExecutions(t *testing.T) {
 		t.Fatalf("first Stdout = %q, want %q", got, want)
 	}
 
-	second := mustExecSession(t, session, "TZ=UTC touch /tmp/clock.txt\nTZ=UTC date -r /tmp/clock.txt +%F' '%T\nTZ=UTC date +%F' '%T\n")
+	second := mustExecSession(t, session, "TZ=UTC touch /tmp/clock.txt\nTZ=UTC date -r /tmp/clock.txt +%F' '%T\nTZ=UTC printf '%(%F)T\\n' -2\nTZ=UTC date +%F' '%T\n")
 	if second.ExitCode != 0 {
 		t.Fatalf("second ExitCode = %d, want 0; stderr=%q", second.ExitCode, second.Stderr)
 	}
-	if got, want := second.Stdout, "2024-05-06 07:08:09\n2024-05-06 07:08:09\n"; got != want {
+	if got, want := second.Stdout, "2024-05-06 07:08:09\n2024-05-06\n2024-05-06 07:08:09\n"; got != want {
 		t.Fatalf("second Stdout = %q, want %q", got, want)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSessionPersistsFilesystemAcrossExecs(t *testing.T) {
@@ -76,6 +77,23 @@ func TestSessionDoesNotPersistCDAcrossExecs(t *testing.T) {
 	}
 	if got, want := second.Stdout, "/home/agent\n"; got != want {
 		t.Fatalf("second Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSessionClockAnchorKeepsMonotonicReading(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	if !strings.Contains(session.clockRealAt.String(), "m=+") {
+		t.Fatalf("initial clockRealAt = %v, want monotonic reading", session.clockRealAt)
+	}
+
+	when := time.Date(2024, time.May, 6, 7, 8, 9, 0, time.UTC)
+	if err := session.setTime(when); err != nil {
+		t.Fatalf("setTime() error = %v", err)
+	}
+	if !strings.Contains(session.clockRealAt.String(), "m=+") {
+		t.Fatalf("setTime clockRealAt = %v, want monotonic reading", session.clockRealAt)
 	}
 }
 

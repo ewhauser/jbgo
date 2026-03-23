@@ -237,6 +237,9 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	cfg.Interactive = exec.Interactive
 	cfg.Platform = exec.HostPlatform
 	cfg.Now = exec.Now
+	if exec.Now != nil {
+		cfg.ShellStartTime = exec.Now()
+	}
 	cfg.PID = exec.HostProcessMeta.PID
 	cfg.PPID = exec.HostProcessMeta.PPID
 	cfg.NewPipe = exec.NewPipe

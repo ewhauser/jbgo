@@ -122,13 +122,13 @@ func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
 		}
 	}
 
-	now := time.Now().UTC()
+	now := time.Now()
 	return &Session{
 		cfg:         r.cfg,
 		id:          nextTraceID("sess"),
 		fs:          fsys,
-		bootAt:      now,
-		currentTime: now,
+		bootAt:      now.UTC(),
+		currentTime: now.UTC(),
 		clockRealAt: now,
 		layout:      newSandboxLayoutState(r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir),
 	}, nil
