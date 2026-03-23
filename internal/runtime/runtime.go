@@ -34,12 +34,15 @@ type Runtime struct {
 }
 
 type Session struct {
-	cfg    Config
-	id     string
-	fs     gbfs.FileSystem
-	bootAt time.Time
-	layout *sandboxLayoutState
-	mu     sync.Mutex
+	cfg         Config
+	id          string
+	fs          gbfs.FileSystem
+	bootAt      time.Time
+	currentTime time.Time
+	clockRealAt time.Time
+	layout      *sandboxLayoutState
+	mu          sync.Mutex
+	clockMu     sync.RWMutex
 }
 
 func New(opts ...Option) (*Runtime, error) {
@@ -119,12 +122,15 @@ func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {
 		}
 	}
 
+	now := time.Now()
 	return &Session{
-		cfg:    r.cfg,
-		id:     nextTraceID("sess"),
-		fs:     fsys,
-		bootAt: time.Now().UTC(),
-		layout: newSandboxLayoutState(r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir),
+		cfg:         r.cfg,
+		id:          nextTraceID("sess"),
+		fs:          fsys,
+		bootAt:      now.UTC(),
+		currentTime: now.UTC(),
+		clockRealAt: now,
+		layout:      newSandboxLayoutState(r.cfg.BaseEnv, r.cfg.FileSystem.WorkingDir),
 	}, nil
 }
 

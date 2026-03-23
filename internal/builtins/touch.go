@@ -155,9 +155,10 @@ func parseTouchMatches(inv *Invocation, matches *ParsedCommand) (touchOptions, e
 }
 
 func resolveTouchTimes(ctx context.Context, inv *Invocation, opts *touchOptions) (touchTimes, error) {
+	now := inv.Now().UTC()
 	base := touchTimes{
-		atime: time.Now().UTC(),
-		mtime: time.Now().UTC(),
+		atime: now,
+		mtime: now,
 	}
 	switch {
 	case opts.reference != "":
@@ -167,18 +168,18 @@ func resolveTouchTimes(ctx context.Context, inv *Invocation, opts *touchOptions)
 		}
 		base = ref
 	case opts.timestamp != "":
-		ts, err := parseTouchTimestamp(opts.timestamp)
+		ts, err := parseTouchTimestamp(opts.timestamp, now)
 		if err != nil {
 			return touchTimes{}, exitf(inv, 1, "touch: invalid date format %q", opts.timestamp)
 		}
 		base = touchTimes{atime: ts, mtime: ts}
 	}
 	if opts.date != "" {
-		atime, err := parseTouchDateValue(base.atime, opts.date)
+		atime, err := parseTouchDateValue(base.atime, opts.date, now)
 		if err != nil {
 			return touchTimes{}, exitf(inv, 1, "touch: invalid date format %q", opts.date)
 		}
-		mtime, err := parseTouchDateValue(base.mtime, opts.date)
+		mtime, err := parseTouchDateValue(base.mtime, opts.date, now)
 		if err != nil {
 			return touchTimes{}, exitf(inv, 1, "touch: invalid date format %q", opts.date)
 		}
@@ -267,9 +268,9 @@ func touchStatMaybe(ctx context.Context, inv *Invocation, name string, noDerefer
 	return statMaybe(ctx, inv, name)
 }
 
-func parseTouchDateValue(base time.Time, value string) (time.Time, error) {
+func parseTouchDateValue(base time.Time, value string, now time.Time) (time.Time, error) {
 	if value == "now" {
-		return time.Now().UTC(), nil
+		return now.UTC(), nil
 	}
 	if shifted, ok := parseTouchRelativeDate(base, value); ok {
 		return shifted, nil
@@ -313,7 +314,7 @@ func parseTouchTime(value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported time format")
 }
 
-func parseTouchTimestamp(value string) (time.Time, error) {
+func parseTouchTimestamp(value string, now time.Time) (time.Time, error) {
 	layouts := []string{
 		"200601021504.05",
 		"200601021504",
@@ -329,7 +330,7 @@ func parseTouchTimestamp(value string) (time.Time, error) {
 		parsed, err := time.ParseInLocation(layout, value, time.UTC)
 		if err == nil {
 			if strings.HasPrefix(layout, "0102") {
-				parsed = parsed.AddDate(time.Now().UTC().Year()-parsed.Year(), 0, 0)
+				parsed = parsed.AddDate(now.UTC().Year()-parsed.Year(), 0, 0)
 			}
 			return parsed.UTC(), nil
 		}

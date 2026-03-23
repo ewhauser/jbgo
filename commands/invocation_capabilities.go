@@ -31,6 +31,8 @@ type InvocationOptions struct {
 	Stdin                 io.Reader
 	Stdout                io.Writer
 	Stderr                io.Writer
+	Now                   func() time.Time
+	SetTime               func(time.Time) error
 	FileSystem            gbfs.FileSystem
 	Network               network.Client
 	Policy                policy.Policy
@@ -68,6 +70,8 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 		Stdin:                 opts.Stdin,
 		Stdout:                opts.Stdout,
 		Stderr:                opts.Stderr,
+		now:                   opts.Now,
+		setTime:               opts.SetTime,
 		Exec:                  opts.Exec,
 		Interact:              opts.Interact,
 		GetRegisteredCommands: getCommands,

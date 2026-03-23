@@ -174,10 +174,13 @@ That frontend is also exposed as a public `cli` package so shipped binaries can 
 - `Runtime` is a factory for configured sessions
 - `Runtime.Run` is a one-shot convenience that creates a fresh session and discards it after execution
 - `Session` owns the filesystem instance, command registry, policy, base environment, and default working directory
+- `Session` also owns a runtime-managed virtual wall clock used for user-visible timekeeping inside the sandbox
 - each `Exec` call creates a fresh `interp.Runner`
 - shell-local variables, shell functions, and option state are per-execution by default
 - programmable completion specs created by `complete` and modified by `compopt` are runner-local shell state shared by the shell builtins and the `/bin/complete` and `/bin/compopt` wrappers: they persist within one `Exec` call and within an interactive shell session, but not across separate `Session.Exec` calls
 - filesystem state persists across executions within the same session
+- the virtual wall clock persists across executions within the same session and is observable by time-based builtins such as `date`, `touch`, `uptime`, `who`, `ls`, and shell `printf %(... )T`
+- `date --set` and the legacy `date MMDDhhmm[[CC]YY][.ss]` form mutate only that session-local virtual wall clock; they never modify the host clock
 
 This matches the agent workflow we care about: a sequence of shell calls operating on a shared sandboxed workspace, without requiring shell-local state to leak between calls unless we explicitly add that feature later.
 
@@ -430,6 +433,7 @@ type Invocation struct {
     FS                    *CommandFS
     Fetch                 FetchFunc
     Exec                  func(context.Context, *ExecutionRequest) (*ExecutionResult, error)
+    Interact              func(context.Context, *InteractiveRequest) (*InteractiveResult, error)
     Limits                Limits
     GetRegisteredCommands func() []string
 }
@@ -507,6 +511,8 @@ type PolicyEvent struct {
 ```
 
 The command-facing `Invocation` is capability-only. Custom commands get sandboxed filesystem and fetch helpers plus nested execution and limits metadata, but they do not receive the raw policy object, raw trace recorder, or raw network client. Policy checks and file-access tracing happen behind `Invocation.FS`, and `Invocation.Fetch` is nil unless network access is configured.
+
+The command-facing `Invocation` also exposes runtime-owned wall-clock helpers. `Invocation.Now()` returns the current session clock and `Invocation.SetTime(time.Time)` updates it when the runtime supports mutation. The default runtime wires these helpers to the session-local virtual wall clock described above, so time-sensitive builtins stay deterministic and sandbox-scoped without exposing host clock mutation.
 
 Registry semantics are override-friendly: later registrations replace earlier ones so embedders can swap in custom implementations for built-ins, and `RegisterLazy` defers expensive command setup until first execution while still participating in `PATH` resolution and `Names()`.
 
