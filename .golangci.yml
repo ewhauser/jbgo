@@ -309,6 +309,31 @@ linters:
 
   exclusions:
     rules:
+      - path: (^|.*/)(contrib/awk/)?goawk/
+        linters:
+          - depguard
+          - errcheck
+          - forbidigo
+          - govet
+          - ineffassign
+          - staticcheck
+          - unused
+          - gocritic
+          - revive
+          - misspell
+          - modernize
+          - bodyclose
+          - containedctx
+          - contextcheck
+          - errorlint
+          - nilerr
+          - noctx
+          - paralleltest
+          - testifylint
+          - unconvert
+          - unparam
+          - nilaway
+          - regexponce
       - path-except: (commands|internal|trace|policy|network|contrib|third_party)/
         linters:
           - depguard
