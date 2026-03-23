@@ -158,7 +158,11 @@ func (p *openAIResponsesProvider) parseResponse(body map[string]any) (providerRe
 			}
 		case "function_call":
 			hasFunctionCalls = true
-			blocks = append(blocks, toolUseBlock(asString(obj["call_id"]), asString(obj["name"]), parseToolArguments(asString(obj["arguments"]))))
+			input, err := parseToolArguments(asString(obj["arguments"]))
+			if err != nil {
+				return providerResponse{}, fmt.Errorf("decode tool arguments for %q: %w", asString(obj["name"]), err)
+			}
+			blocks = append(blocks, toolUseBlock(asString(obj["call_id"]), asString(obj["name"]), input))
 		}
 	}
 

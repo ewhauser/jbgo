@@ -25,16 +25,6 @@ func bashToolDefinition() toolDefinition {
 	}
 }
 
-func extractCommands(input map[string]any) string {
-	req, err := bashtool.ParseRequest(input)
-	if err == nil {
-		return req.ResolvedCommands()
-	}
-	if input == nil {
-		return ""
-	}
-	if text := asString(input["commands"]); text != "" {
-		return text
-	}
-	return asString(input["script"])
+func parseEvalBashRequest(input map[string]any) (bashtool.Request, error) {
+	return bashtool.ParseRequest(input)
 }

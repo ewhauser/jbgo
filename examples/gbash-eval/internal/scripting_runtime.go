@@ -302,13 +302,22 @@ func (c *discoverCommand) Run(_ context.Context, inv *commands.Invocation) error
 	}
 
 	filtered := c.tools
-	if value, ok := argValue(inv.Args, "--category"); ok {
+	if value, ok, err := argValue(inv.Args, "--category"); err != nil {
+		exitCode = 1
+		return commands.Exitf(inv, exitCode, "%s", err)
+	} else if ok {
 		filtered = filterTools(c.tools, func(tool MockToolDef) bool { return tool.Category == value })
-	} else if value, ok := argValue(inv.Args, "--tag"); ok {
+	} else if value, ok, err := argValue(inv.Args, "--tag"); err != nil {
+		exitCode = 1
+		return commands.Exitf(inv, exitCode, "%s", err)
+	} else if ok {
 		filtered = filterTools(c.tools, func(tool MockToolDef) bool {
 			return slices.Contains(tool.Tags, value)
 		})
-	} else if value, ok := argValue(inv.Args, "--search"); ok {
+	} else if value, ok, err := argValue(inv.Args, "--search"); err != nil {
+		exitCode = 1
+		return commands.Exitf(inv, exitCode, "%s", err)
+	} else if ok {
 		needle := strings.ToLower(value)
 		filtered = filterTools(c.tools, func(tool MockToolDef) bool {
 			return strings.Contains(strings.ToLower(tool.Name), needle) || strings.Contains(strings.ToLower(tool.Description), needle)
@@ -366,18 +375,17 @@ func parseFlagArgs(rawArgs []string, schema map[string]any) (map[string]any, err
 		key := flag
 		prop := asObject(properties[key])
 		isBoolean := asString(prop["type"]) == "boolean"
-		if isBoolean {
-			result[key] = true
-			i++
-			continue
-		}
 		if i+1 < len(rawArgs) && !strings.HasPrefix(rawArgs[i+1], "--") {
 			result[key] = coerceFlagValue(rawArgs[i+1], prop)
 			i += 2
 			continue
 		}
-		result[key] = true
-		i++
+		if isBoolean {
+			result[key] = true
+			i++
+			continue
+		}
+		return nil, fmt.Errorf("missing value for --%s", key)
 	}
 	return result, nil
 }
@@ -411,13 +419,23 @@ func containsArg(args []string, target string) bool {
 	return slices.Contains(args, target)
 }
 
-func argValue(args []string, flag string) (string, bool) {
+func argValue(args []string, flag string) (string, bool, error) {
 	for i, arg := range args {
-		if arg == flag && i+1 < len(args) {
-			return args[i+1], true
+		if arg == flag {
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+				return "", false, fmt.Errorf("missing value for %s", flag)
+			}
+			return args[i+1], true, nil
+		}
+		if strings.HasPrefix(arg, flag+"=") {
+			value := strings.TrimPrefix(arg, flag+"=")
+			if value == "" {
+				return "", false, fmt.Errorf("missing value for %s", flag)
+			}
+			return value, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }
 
 func filterTools(tools []MockToolDef, keep func(MockToolDef) bool) []MockToolDef {

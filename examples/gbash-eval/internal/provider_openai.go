@@ -138,7 +138,11 @@ func (p *openAIChatProvider) parseResponse(body map[string]any) (providerRespons
 	for _, item := range asArray(msgObj["tool_calls"]) {
 		call := asObject(item)
 		fn := asObject(call["function"])
-		blocks = append(blocks, toolUseBlock(asString(call["id"]), asString(fn["name"]), parseToolArguments(asString(fn["arguments"]))))
+		input, err := parseToolArguments(asString(fn["arguments"]))
+		if err != nil {
+			return providerResponse{}, fmt.Errorf("decode tool arguments for %q: %w", asString(fn["name"]), err)
+		}
+		blocks = append(blocks, toolUseBlock(asString(call["id"]), asString(fn["name"]), input))
 	}
 
 	usage := asObject(body["usage"])

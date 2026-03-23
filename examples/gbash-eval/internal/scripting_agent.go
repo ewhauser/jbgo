@@ -112,20 +112,29 @@ func runScriptedAgent(ctx context.Context, provider Provider, task ScriptingEval
 
 		var resultBlocks []contentBlock
 		for _, use := range toolUses {
-			commands := extractCommands(use.Input)
-			state.beginExec()
-			result, err := session.Exec(ctx, &gbash.ExecutionRequest{Script: commands})
-			invocations := state.finishExec()
+			req, parseErr := parseEvalBashRequest(use.Input)
 			stdout := ""
 			stderr := ""
 			exitCode := 1
-			if err != nil {
-				stderr = err.Error()
+			commands := ""
+			if parseErr != nil {
+				stderr = parseErr.Error()
 			} else {
-				stdout = result.Stdout
-				stderr = result.Stderr
-				exitCode = result.ExitCode
+				commands = req.ResolvedCommands()
+				state.beginExec()
+				result, err := session.Exec(ctx, &gbash.ExecutionRequest{
+					Script:  commands,
+					Timeout: req.Timeout(),
+				})
+				if err != nil {
+					stderr = err.Error()
+				} else {
+					stdout = result.Stdout
+					stderr = result.Stderr
+					exitCode = result.ExitCode
+				}
 			}
+			invocations := state.finishExec()
 			rawBytes += len(stdout) + len(stderr)
 			content := bashtool.FormatToolResult(bashtool.Response{
 				Stdout:   stdout,

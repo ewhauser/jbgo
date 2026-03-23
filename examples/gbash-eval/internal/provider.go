@@ -153,15 +153,21 @@ func toolUseBlock(id, name string, input map[string]any) contentBlock {
 	}
 }
 
-func parseToolArguments(raw string) map[string]any {
-	if raw == "" {
-		return map[string]any{}
+func parseToolArguments(raw string) (map[string]any, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("tool arguments must be a JSON object")
 	}
-	var decoded map[string]any
+
+	var decoded any
 	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
-		return map[string]any{}
+		return nil, fmt.Errorf("decode tool arguments json: %w", err)
 	}
-	return decoded
+
+	obj, ok := decoded.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("tool arguments must be a JSON object")
+	}
+	return obj, nil
 }
 
 func retryMessage(w io.Writer, provider string, status int, delay time.Duration, attempt, total int) {

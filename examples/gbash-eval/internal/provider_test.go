@@ -158,6 +158,37 @@ func TestOpenAIChatProviderNormalizesMessagesAndParsesToolCalls(t *testing.T) {
 	}
 }
 
+func TestOpenAIChatProviderRejectsMalformedToolArguments(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"finish_reason":"tool_calls","message":{"tool_calls":[{"id":"tc_1","type":"function","function":{"name":"bash","arguments":"{\"commands\":"}}]}}]}`))
+	}))
+	defer server.Close()
+
+	provider := &openAIChatProvider{
+		client:      server.Client(),
+		apiKey:      "openai-test",
+		model:       "gpt-test",
+		baseURL:     server.URL,
+		retryDelays: []time.Duration{},
+	}
+
+	_, err := provider.Chat(context.Background(), []message{{
+		Role: roleUser,
+		Content: []contentBlock{{
+			Type: "text",
+			Text: "run bash",
+		}},
+	}}, []toolDefinition{bashToolDefinition()}, "system text")
+	if err == nil {
+		t.Fatal("Chat() error = nil, want malformed tool arguments error")
+	}
+	if !strings.Contains(err.Error(), `decode tool arguments for "bash"`) {
+		t.Fatalf("error = %q, want decode tool arguments context", err)
+	}
+}
+
 func TestOpenAIResponsesProviderBuildsInputAndParsesFunctionCalls(t *testing.T) {
 	t.Parallel()
 
@@ -227,5 +258,36 @@ func TestOpenAIResponsesProviderBuildsInputAndParsesFunctionCalls(t *testing.T) 
 	}
 	if len(resp.Message.Content) != 2 || resp.Message.Content[1].ID != "fc_1" {
 		t.Fatalf("response content = %#v, want text + function_call", resp.Message.Content)
+	}
+}
+
+func TestOpenAIResponsesProviderRejectsMalformedToolArguments(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"completed","output":[{"type":"function_call","call_id":"fc_1","name":"bash","arguments":"{\"commands\":"}]}`))
+	}))
+	defer server.Close()
+
+	provider := &openAIResponsesProvider{
+		client:      server.Client(),
+		apiKey:      "openai-test",
+		model:       "gpt-5-codex",
+		baseURL:     server.URL,
+		retryDelays: []time.Duration{},
+	}
+
+	_, err := provider.Chat(context.Background(), []message{{
+		Role: roleUser,
+		Content: []contentBlock{{
+			Type: "text",
+			Text: "run bash",
+		}},
+	}}, []toolDefinition{bashToolDefinition()}, "system text")
+	if err == nil {
+		t.Fatal("Chat() error = nil, want malformed tool arguments error")
+	}
+	if !strings.Contains(err.Error(), `decode tool arguments for "bash"`) {
+		t.Fatalf("error = %q, want decode tool arguments context", err)
 	}
 }

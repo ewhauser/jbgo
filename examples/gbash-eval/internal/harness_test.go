@@ -262,6 +262,49 @@ func TestRunBaselineAgentCallsMockToolsDirectly(t *testing.T) {
 	}
 }
 
+func TestRunScriptedAgentRejectsMalformedBashToolInput(t *testing.T) {
+	t.Parallel()
+
+	task := ScriptingEvalTask{
+		ID:          "scripted-parse-error",
+		Category:    "demo",
+		Description: "malformed bash tool input should not execute",
+		Prompt:      "run the bash tool",
+	}
+
+	provider := &fakeProvider{
+		t: t,
+		responses: []providerResponse{
+			assistantToolResponse("call_1", task.ID, map[string]any{
+				"commands": map[string]any{"unexpected": true},
+			}),
+			assistantStopResponse(),
+		},
+	}
+
+	trace, err := runScriptedAgent(context.Background(), provider, task, 3)
+	if err != nil {
+		t.Fatalf("runScriptedAgent() error = %v", err)
+	}
+
+	if trace.ToolCallCount != 1 {
+		t.Fatalf("trace.ToolCallCount = %d, want 1", trace.ToolCallCount)
+	}
+	call := trace.ToolCalls[0]
+	if call.ExitCode != 1 {
+		t.Fatalf("call.ExitCode = %d, want 1", call.ExitCode)
+	}
+	if !strings.Contains(call.Stderr, "`commands` must be a string") {
+		t.Fatalf("stderr = %q, want parse error", call.Stderr)
+	}
+	if call.Output != "" {
+		t.Fatalf("output = %q, want empty output on parse error", call.Output)
+	}
+	if len(call.Invocations) != 0 {
+		t.Fatalf("invocations = %#v, want none because no command should run", call.Invocations)
+	}
+}
+
 func TestRunBashEvalSavesReportsWithExpectedFilenames(t *testing.T) {
 	t.Parallel()
 

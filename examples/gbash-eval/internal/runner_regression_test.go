@@ -176,3 +176,25 @@ func TestCompatTraceFromScriptingPreservesStderr(t *testing.T) {
 		t.Fatalf("stderr_empty detail = %q, want stderr content", got)
 	}
 }
+
+func TestFailureScoreWithoutExpectationsStillFails(t *testing.T) {
+	t.Parallel()
+
+	score := failureScore("no-expectations", nil, errors.New("boom"))
+
+	if score.AllPassed() {
+		t.Fatal("score.AllPassed() = true, want explicit task failure")
+	}
+	if len(score.Results) != 1 {
+		t.Fatalf("len(score.Results) = %d, want 1", len(score.Results))
+	}
+	if got := score.Results[0].Check; got != "task_error" {
+		t.Fatalf("score.Results[0].Check = %q, want task_error", got)
+	}
+	if score.Results[0].Passed {
+		t.Fatal("score.Results[0].Passed = true, want false")
+	}
+	if got := score.Results[0].Weight; got != 0 {
+		t.Fatalf("score.Results[0].Weight = %v, want 0", got)
+	}
+}

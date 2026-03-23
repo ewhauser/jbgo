@@ -52,6 +52,14 @@ type toolCallResult struct {
 func failureScore(taskID string, expectations []Expectation, err error) TaskScore {
 	results := make([]ScoreResult, 0, len(expectations))
 	detail := fmt.Sprintf("task execution failed: %v", err)
+	if len(expectations) == 0 {
+		results = append(results, ScoreResult{
+			Check:  "task_error",
+			Passed: false,
+			Detail: detail,
+			Weight: 0,
+		})
+	}
 	for _, exp := range expectations {
 		results = append(results, ScoreResult{
 			Check:  exp.Check,
