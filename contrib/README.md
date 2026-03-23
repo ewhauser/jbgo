@@ -12,6 +12,7 @@ Today that includes:
 
 - `contrib/awk` for the optional sandboxed `awk` command
 - `contrib/bashtool` for a reusable LLM-facing bash tool contract backed by gbash execution
+- `contrib/codingtools` for reusable `read`, `edit`, and `write` tool contracts over `gbash/fs.FileSystem`
 - `contrib/extras` for a convenience helper that builds a registry with the stable contrib commands enabled
 - `contrib/htmltomarkdown` for the optional sandboxed `html-to-markdown` command
 - `contrib/jq` for the optional sandboxed `jq` command and its JSON/query stack

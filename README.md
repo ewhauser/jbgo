@@ -441,6 +441,7 @@ Optional contrib packages live in [`contrib/`](./contrib/) as separate Go module
 |---|---|---|
 | [`awk`](./contrib/awk/) | `github.com/ewhauser/gbash/contrib/awk` | [`benhoyt/goawk`](https://github.com/benhoyt/goawk) |
 | [`bashtool`](./contrib/bashtool/) | `github.com/ewhauser/gbash/contrib/bashtool` | `gbash` runtime execution plus the upstream [`bashkit`](https://github.com/everruns/bashkit) Bash tool contract |
+| [`codingtools`](./contrib/codingtools/) | `github.com/ewhauser/gbash/contrib/codingtools` | `gbash/fs.FileSystem` plus the upstream [`pi-mono` coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent/src/core/tools) `read`, `edit`, and `write` tool semantics |
 | [`html-to-markdown`](./contrib/htmltomarkdown/) | `github.com/ewhauser/gbash/contrib/htmltomarkdown` | [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) |
 | [`jq`](./contrib/jq/) | `github.com/ewhauser/gbash/contrib/jq` | [`itchyny/gojq`](https://github.com/itchyny/gojq) |
 | [`sqlite3`](./contrib/sqlite3/) | `github.com/ewhauser/gbash/contrib/sqlite3` | [`ncruces/go-sqlite3`](https://github.com/ncruces/go-sqlite3) |
@@ -463,6 +464,20 @@ import "github.com/ewhauser/gbash/contrib/bashtool"
 
 tool := bashtool.New(bashtool.Config{
 	Profile: bashtool.CommandProfileExtras,
+})
+```
+
+Use `github.com/ewhauser/gbash/contrib/codingtools` when you want reusable `read`, `edit`, and `write` tool definitions over a gbash-owned filesystem abstraction:
+
+```go
+import (
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/contrib/codingtools"
+)
+
+tools := codingtools.New(codingtools.Config{
+	FS:         gbfs.NewMemory(),
+	WorkingDir: "/workspace",
 })
 ```
 

@@ -4,6 +4,7 @@ use (
 	.
 	./contrib/awk
 	./contrib/bashtool
+	./contrib/codingtools
 	./contrib/extras
 	./contrib/htmltomarkdown
 	./contrib/jq
