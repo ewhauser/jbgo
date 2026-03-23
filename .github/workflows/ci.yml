@@ -35,6 +35,8 @@ jobs:
 
       - run: go mod download
 
+      - uses: cachix/install-nix-action@v30
+
       - run: make test
 
   bats:
