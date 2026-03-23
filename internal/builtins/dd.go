@@ -603,9 +603,14 @@ func runDd(ctx context.Context, inv *Invocation, settings *ddSettings) error {
 		return err
 	}
 
+	return runDdWithIO(ctx, inv, settings, input, output)
+}
+
+func runDdWithIO(ctx context.Context, inv *Invocation, settings *ddSettings, input *ddInput, output ddOutputWriter) error {
 	start := time.Now()
 	lastProgress := start
 	progressPrinted := false
+	hadReadError := false
 	var (
 		readStats  ddReadStats
 		writeStats ddWriteStats
@@ -625,10 +630,14 @@ func runDd(ctx context.Context, inv *Invocation, settings *ddSettings) error {
 
 		chunk, update, eof, readErr := readDdBlock(input.reader, requestSize, settings.iflags.fullblock)
 		if readErr != nil {
-			if settings.conv.noerror {
-				continue
+			if !settings.conv.noerror {
+				return exitf(inv, 1, "dd: error reading %s: %v", quoteGNUOperand(input.label), readErr)
 			}
-			return exitf(inv, 1, "dd: error reading %s: %v", quoteGNUOperand(input.label), readErr)
+			ddWarn(inv, "error reading %s: %v", quoteGNUOperand(input.label), readErr)
+			hadReadError = true
+			if len(chunk) == 0 {
+				break
+			}
 		}
 		if len(chunk) == 0 {
 			break
@@ -681,6 +690,9 @@ func runDd(ctx context.Context, inv *Invocation, settings *ddSettings) error {
 
 	if err := ddWriteFinalStats(inv.Stderr, settings.status, progressPrinted, readStats, writeStats, time.Since(start)); err != nil {
 		return &ExitError{Code: 1, Err: err}
+	}
+	if hadReadError {
+		return &ExitError{Code: 1}
 	}
 	return nil
 }
@@ -899,7 +911,10 @@ func ddDiscard(reader io.Reader, bytesToSkip uint64) (uint64, error) {
 		buf       = make([]byte, 32*1024)
 	)
 	for discarded < bytesToSkip {
-		want := minInt(len(buf), int(bytesToSkip-discarded))
+		want := len(buf)
+		if remaining := bytesToSkip - discarded; remaining < uint64(want) {
+			want = int(remaining)
+		}
 		n, err := reader.Read(buf[:want])
 		discarded += uint64(n)
 		if err == nil {
