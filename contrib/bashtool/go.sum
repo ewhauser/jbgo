@@ -14,8 +14,6 @@ github.com/alecthomas/repr v0.5.2 h1:SU73FTI9D1P5UNtvseffFSGmdNci/O6RsqzeXJtP0Qs
 github.com/alecthomas/repr v0.5.2/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
 github.com/apparentlymart/go-textseg/v15 v15.0.0 h1:uYvfpb3DyLSCGWnctWKGj857c6ew1u1fNQOlOtuGxQY=
 github.com/apparentlymart/go-textseg/v15 v15.0.0/go.mod h1:K8XmNZdhEBkdlyDdvbmmsvpAG721bKi0joRfFdHIWJ4=
-github.com/benhoyt/goawk v1.31.0 h1:TSdLys1rAWvmb3befdmLYpaHZbTrYtS+JkBWRcNsMNM=
-github.com/benhoyt/goawk v1.31.0/go.mod h1:jXTQxBxtQ0VsjFqc8dw7tIJj3SDzQN8kcdMq7r83/ZA=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -23,16 +21,6 @@ github.com/dimchansky/utfbom v1.1.1 h1:vV6w1AhK4VMnhBno/TPVCoK9U/LP0PkLCS9tbxHdi
 github.com/dimchansky/utfbom v1.1.1/go.mod h1:SxdoEBH5qIqFocHMyGOXVAybYJdr71b1Q/j0mACtrfE=
 github.com/elliotchance/orderedmap v1.8.0 h1:TrOREecvh3JbS+NCgwposXG5ZTFHtEsQiCGOhPElnMw=
 github.com/elliotchance/orderedmap v1.8.0/go.mod h1:wsDwEaX5jEoyhbs7x93zk2H/qv0zwuhg4inXhDkYqys=
-github.com/ewhauser/gbash/contrib/awk v0.0.25 h1:Dy7ednJqeln+Cd1E7lIb8pNh+52rEX+T8C7IT9TYnSc=
-github.com/ewhauser/gbash/contrib/awk v0.0.25/go.mod h1:y1a4umuRfZu1Jz0C/86v0pkoG5sbbX9HVHflK854miM=
-github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.25 h1:VU8RASnrIAekSuJA8e0odDz6c25aeEUd0ImYvbAJv3k=
-github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.25/go.mod h1:FoMXdbzmJotjEWAAZJpQnuDrMp+jtpXmfB0Y8Bfb5aE=
-github.com/ewhauser/gbash/contrib/jq v0.0.25 h1:JAE2UFlNClsHRw/dlfmnt0EJuv2VM3xnBL+/91kfE3c=
-github.com/ewhauser/gbash/contrib/jq v0.0.25/go.mod h1:uBm3jUHVXTYi91hI48bXLUr7QcuDjg7AmbokDXh9uUE=
-github.com/ewhauser/gbash/contrib/sqlite3 v0.0.25 h1:55K0kqlKJ/u5k+p+9ulQawT1PNac4nufPYRQsTiPnEs=
-github.com/ewhauser/gbash/contrib/sqlite3 v0.0.25/go.mod h1:enRsCkHukmyosToBfyekREEdkOaEwLNbFyV1s55OAHE=
-github.com/ewhauser/gbash/contrib/yq v0.0.25 h1:whGhSiSZF1B4ygbsy97zdVt3K5v8S5FRt4B7q+NGi9A=
-github.com/ewhauser/gbash/contrib/yq v0.0.25/go.mod h1:RovK1np1eoAqGuqZCo/GZJknd0YepfNQt8lfM9OUA38=
 github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
 github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=
 github.com/go-ini/ini v1.67.0 h1:z6ZrTEZqSWOTyH2FlglNbNgARyHG8oLW9gMELqKr06A=
