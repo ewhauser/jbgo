@@ -185,7 +185,7 @@ func expandTabsShortcut(arg string) ([]string, bool) {
 		return nil, false
 	}
 	for _, ch := range arg[1:] {
-		if (ch < '0' || ch > '9') && ch != ',' {
+		if (ch < '0' || ch > '9') && ch != ',' && ch != '+' && ch != '/' {
 			return nil, false
 		}
 	}
