@@ -221,24 +221,28 @@ func newAWKFileOpener(inv *commands.Invocation, stdin io.Reader, inputs *awkInpu
 }
 
 type lazyAWKStdin struct {
-	ctx    context.Context
-	inv    *commands.Invocation
 	once   sync.Once
+	load   func() ([]byte, error)
 	data   []byte
 	reader *bytes.Reader
 	err    error
 }
 
 func newLazyAWKStdin(ctx context.Context, inv *commands.Invocation) io.Reader {
-	return &lazyAWKStdin{ctx: ctx, inv: inv}
+	return &lazyAWKStdin{
+		load: func() ([]byte, error) {
+			return commands.ReadAllStdin(ctx, inv)
+		},
+	}
 }
 
 func (r *lazyAWKStdin) Read(p []byte) (int, error) {
 	r.once.Do(func() {
-		r.data, r.err = commands.ReadAllStdin(r.ctx, r.inv)
+		r.data, r.err = r.load()
 		if r.err == nil {
 			r.reader = bytes.NewReader(r.data)
 		}
+		r.load = nil
 	})
 	if r.err != nil {
 		return 0, r.err
