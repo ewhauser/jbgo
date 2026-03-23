@@ -179,20 +179,16 @@ func (t *Tool) InputSchema() map[string]any {
 		"properties": map[string]any{
 			"commands": map[string]any{
 				"type":        "string",
-				"description": "Bash commands to execute.",
+				"description": "Bash commands to execute. Preferred tool-call field.",
 			},
 			"script": map[string]any{
 				"type":        "string",
-				"description": "Alias for commands; the bash script to execute.",
+				"description": "Alias for commands; accepted for compatibility with existing callers.",
 			},
 			"timeout_ms": map[string]any{
 				"type":        "integer",
 				"description": "Per-call timeout in milliseconds.",
 			},
-		},
-		"anyOf": []map[string]any{
-			{"required": []string{"commands"}},
-			{"required": []string{"script"}},
 		},
 		"additionalProperties": false,
 	}

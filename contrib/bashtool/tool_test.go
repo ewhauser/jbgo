@@ -34,6 +34,11 @@ func TestDefaultToolDefinitionAndSchemas(t *testing.T) {
 	if _, ok := props["script"]; !ok {
 		t.Fatalf("InputSchema.properties missing script: %#v", props)
 	}
+	for _, forbidden := range []string{"oneOf", "anyOf", "allOf", "enum", "not"} {
+		if _, ok := def.InputSchema[forbidden]; ok {
+			t.Fatalf("InputSchema must not include top-level %s: %#v", forbidden, def.InputSchema)
+		}
+	}
 	if got := tool.OutputSchema()["type"]; got != "object" {
 		t.Fatalf("OutputSchema.type = %#v, want object", got)
 	}

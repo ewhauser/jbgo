@@ -16,6 +16,10 @@ Copied upstream artifacts in this example:
 - `data/scripting-tool/many-tools.jsonl`
 - `data/scripting-tool/paginated.jsonl`
 
+Documented gbash-specific dataset adaptation:
+
+- `data/eval-tasks.jsonl` keeps the upstream schema but updates `sysinfo_env_report` to expect the gbash evaluator identity (`user: agent`, `host: gbash`) instead of the upstream bashkit identity.
+
 Deliberately not copied from upstream:
 
 - anything under upstream `crates/bashkit-eval/results/`

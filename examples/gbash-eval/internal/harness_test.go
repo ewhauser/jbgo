@@ -76,6 +76,47 @@ func TestRunAgentLoopSupportsExtrasCommands(t *testing.T) {
 	}
 }
 
+func TestRunAgentLoopUsesGbashIdentity(t *testing.T) {
+	t.Parallel()
+
+	provider := &fakeProvider{
+		t: t,
+		responses: []providerResponse{
+			assistantToolResponse("call_1", "bash", map[string]any{
+				"commands": `printf 'user: %s
+host: %s
+cwd: %s
+' "$(whoami)" "$(hostname)" "$(pwd)"`,
+			}),
+			assistantStopResponse("done"),
+		},
+	}
+
+	trace, _, err := runAgentLoop(context.Background(), provider, EvalTask{
+		ID:          "identity",
+		Category:    "system_info",
+		Description: "report eval identity",
+		Prompt:      "print the current user, host, and cwd",
+	}, 3)
+	if err != nil {
+		t.Fatalf("runAgentLoop() error = %v", err)
+	}
+
+	if trace.ToolCallCount != 1 {
+		t.Fatalf("trace.ToolCallCount = %d, want 1", trace.ToolCallCount)
+	}
+	got := trace.ToolCalls[0].Stdout
+	if !strings.Contains(got, "user: agent") {
+		t.Fatalf("stdout = %q, want user: agent", got)
+	}
+	if !strings.Contains(got, "host: gbash") {
+		t.Fatalf("stdout = %q, want host: gbash", got)
+	}
+	if !strings.Contains(got, "cwd: /home/agent") {
+		t.Fatalf("stdout = %q, want cwd: /home/agent", got)
+	}
+}
+
 func TestRunScriptedAgentTracksDiscoverAndHelpJSON(t *testing.T) {
 	t.Parallel()
 

@@ -85,3 +85,40 @@ func TestVendoredDatasetsLoad(t *testing.T) {
 		t.Fatal("discovery dataset should not be empty")
 	}
 }
+
+func TestVendoredEvalDatasetUsesGbashSystemInfoIdentity(t *testing.T) {
+	t.Parallel()
+
+	tasks, err := loadDataset(filepath.Join(DefaultDataDir(), "eval-tasks.jsonl"))
+	if err != nil {
+		t.Fatalf("loadDataset(eval-tasks) error = %v", err)
+	}
+
+	for _, task := range tasks {
+		if task.ID != "sysinfo_env_report" {
+			continue
+		}
+		checks := make([]string, 0, len(task.Expectations))
+		for _, exp := range task.Expectations {
+			checks = append(checks, exp.Check)
+		}
+		if !sliceContainsString(checks, "stdout_contains:user: agent") {
+			t.Fatalf("sysinfo_env_report checks = %#v, want user: agent expectation", checks)
+		}
+		if !sliceContainsString(checks, "stdout_contains:host: gbash") {
+			t.Fatalf("sysinfo_env_report checks = %#v, want host: gbash expectation", checks)
+		}
+		return
+	}
+
+	t.Fatal("sysinfo_env_report task not found in eval-tasks.jsonl")
+}
+
+func sliceContainsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
