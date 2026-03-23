@@ -612,9 +612,33 @@ func runDdWithIO(ctx context.Context, inv *Invocation, settings *ddSettings, inp
 	progressPrinted := false
 	hadReadError := false
 	var (
+		swabCarry    byte
+		hasSwabCarry bool
+	)
+	var (
 		readStats  ddReadStats
 		writeStats ddWriteStats
 	)
+
+	writeChunk := func(chunk []byte) error {
+		transformed, trunc := ddTransformBlock(chunk, settings.conv, settings.cbs)
+		readStats.recordsTrunc += trunc
+
+		writeUpdate, writeErr := output.WriteData(transformed)
+		if writeErr != nil {
+			return &ExitError{Code: 1, Err: writeErr}
+		}
+		writeStats.add(writeUpdate)
+
+		if settings.status == ddStatusProgress && time.Since(lastProgress) >= time.Second {
+			if err := ddWriteProgressLine(inv.Stderr, writeStats.bytesTotal, time.Since(start), true); err != nil {
+				return &ExitError{Code: 1, Err: err}
+			}
+			progressPrinted = true
+			lastProgress = time.Now()
+		}
+		return nil
+	}
 
 	for ddBelowCount(settings.count, readStats) {
 		requestSize := settings.ibs
@@ -652,27 +676,24 @@ func runDdWithIO(ctx context.Context, inv *Invocation, settings *ddSettings, inp
 			chunk = append(chunk, bytes.Repeat([]byte{pad}, requestSize-len(chunk))...)
 		}
 		if settings.conv.swab {
-			ddSwab(chunk)
+			chunk, swabCarry, hasSwabCarry = ddPrepareSwabChunk(chunk, swabCarry, hasSwabCarry, eof)
 		}
-		transformed, trunc := ddTransformBlock(chunk, settings.conv, settings.cbs)
-		update.recordsTrunc = trunc
-		readStats.recordsTrunc += trunc
-
-		writeUpdate, writeErr := output.WriteData(transformed)
-		if writeErr != nil {
-			return &ExitError{Code: 1, Err: writeErr}
-		}
-		writeStats.add(writeUpdate)
-
-		if settings.status == ddStatusProgress && time.Since(lastProgress) >= time.Second {
-			if err := ddWriteProgressLine(inv.Stderr, writeStats.bytesTotal, time.Since(start), true); err != nil {
-				return &ExitError{Code: 1, Err: err}
+		if len(chunk) > 0 {
+			if err := writeChunk(chunk); err != nil {
+				return err
 			}
-			progressPrinted = true
-			lastProgress = time.Now()
 		}
 		if eof {
 			break
+		}
+	}
+
+	if settings.conv.swab && hasSwabCarry {
+		chunk, _, _ := ddPrepareSwabChunk(nil, swabCarry, hasSwabCarry, true)
+		if len(chunk) > 0 {
+			if err := writeChunk(chunk); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -705,6 +726,39 @@ func ddBelowCount(count *ddNumber, stats ddReadStats) bool {
 		return stats.bytesTotal < count.value
 	}
 	return stats.recordCount() < count.value
+}
+
+func ddPrepareSwabChunk(chunk []byte, carry byte, hasCarry, finalize bool) ([]byte, byte, bool) {
+	buf := make([]byte, 0, len(chunk)+1)
+	if hasCarry {
+		buf = append(buf, carry)
+	}
+	buf = append(buf, chunk...)
+	if len(buf) == 0 {
+		return nil, 0, false
+	}
+	if !finalize && len(buf)%2 == 1 {
+		carry = buf[len(buf)-1]
+		hasCarry = true
+		buf = buf[:len(buf)-1]
+	} else {
+		hasCarry = false
+	}
+	if len(buf) == 0 {
+		return nil, carry, hasCarry
+	}
+	ddSwab(buf)
+	return buf, carry, hasCarry
+}
+
+func ddScaledOffset(inv *Invocation, operand string, value ddNumber, blockSize int) (uint64, error) {
+	if value.bytes || value.value == 0 {
+		return value.value, nil
+	}
+	if value.value > math.MaxUint64/uint64(blockSize) {
+		return 0, exitf(inv, 1, "dd: %s offset is too large", operand)
+	}
+	return value.value * uint64(blockSize), nil
 }
 
 func openDdInput(ctx context.Context, inv *Invocation, settings *ddSettings) (*ddInput, error) {
@@ -744,9 +798,9 @@ func openDdInput(ctx context.Context, inv *Invocation, settings *ddSettings) (*d
 		label = settings.infile
 	}
 
-	skipBytes := settings.skip.value
-	if !settings.skip.bytes {
-		skipBytes *= uint64(settings.ibs)
+	skipBytes, err := ddScaledOffset(inv, "skip", settings.skip, settings.ibs)
+	if err != nil {
+		return nil, err
 	}
 	if skipBytes > 0 {
 		discarded, err := ddDiscard(reader, skipBytes)
@@ -761,9 +815,9 @@ func openDdInput(ctx context.Context, inv *Invocation, settings *ddSettings) (*d
 }
 
 func openDdOutput(ctx context.Context, inv *Invocation, settings *ddSettings) (ddOutputWriter, error) {
-	seekBytes := settings.seek.value
-	if !settings.seek.bytes {
-		seekBytes *= uint64(settings.obs)
+	seekBytes, err := ddScaledOffset(inv, "seek", settings.seek, settings.obs)
+	if err != nil {
+		return nil, err
 	}
 
 	if settings.oflags.directory && !settings.outfileSet {

@@ -134,6 +134,21 @@ func TestDdConversions(t *testing.T) {
 		}
 	})
 
+	t.Run("swab carries across reads", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{})
+		writeSessionFile(t, session, "/tmp/in.txt", []byte("abcde"))
+
+		result := execSessionScriptWithInput(t, session, "dd if=/tmp/in.txt of=/tmp/out.txt conv=swab ibs=3 obs=3 status=none\n", nil)
+		if got, want := result.ExitCode, 0; got != want {
+			t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if got, want := string(readSessionFile(t, session, "/tmp/out.txt")), "badce"; got != want {
+			t.Fatalf("output = %q, want %q", got, want)
+		}
+	})
+
 	t.Run("encodings", func(t *testing.T) {
 		t.Parallel()
 
@@ -194,6 +209,35 @@ func TestDdDiagnosticsAndStatusModes(t *testing.T) {
 		}
 		if !strings.Contains(result.Stderr, "cannot seek: Illegal seek") {
 			t.Fatalf("Stderr = %q, want illegal-seek diagnostic", result.Stderr)
+		}
+	})
+
+	t.Run("skip overflow is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{})
+		writeSessionFile(t, session, "/tmp/in.txt", []byte("abcdef"))
+
+		result := execSessionScriptWithInput(t, session, "dd if=/tmp/in.txt of=/tmp/out.txt skip=36028797018963968 status=none\n", nil)
+		if got, want := result.ExitCode, 1; got != want {
+			t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "skip offset is too large") {
+			t.Fatalf("Stderr = %q, want skip-overflow diagnostic", result.Stderr)
+		}
+	})
+
+	t.Run("seek overflow is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{})
+
+		result := execSessionScriptWithInput(t, session, "dd of=/tmp/out.txt seek=36028797018963968 status=none\n", []byte("x"))
+		if got, want := result.ExitCode, 1; got != want {
+			t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "seek offset is too large") {
+			t.Fatalf("Stderr = %q, want seek-overflow diagnostic", result.Stderr)
 		}
 	})
 

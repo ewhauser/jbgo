@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"strings"
 	"testing"
 )
@@ -155,5 +156,38 @@ func TestDdDiscardClampsHugeSkipBeforeIntConversion(t *testing.T) {
 	}
 	if got, want := reader.sizes[0], 32*1024; got != want {
 		t.Fatalf("Read() size = %d, want %d", got, want)
+	}
+}
+
+func TestDdPrepareSwabChunkCarriesOddByteAcrossReads(t *testing.T) {
+	t.Parallel()
+
+	first, carry, hasCarry := ddPrepareSwabChunk([]byte("abc"), 0, false, false)
+	if got, want := string(first), "ba"; got != want {
+		t.Fatalf("first chunk = %q, want %q", got, want)
+	}
+	if !hasCarry || carry != 'c' {
+		t.Fatalf("carry = (%v, %q), want (true, %q)", hasCarry, carry, byte('c'))
+	}
+
+	second, _, hasCarry := ddPrepareSwabChunk([]byte("de"), carry, hasCarry, true)
+	if got, want := string(second), "dce"; got != want {
+		t.Fatalf("second chunk = %q, want %q", got, want)
+	}
+	if hasCarry {
+		t.Fatalf("hasCarry = true, want false")
+	}
+}
+
+func TestDdScaledOffsetRejectsBlockOverflow(t *testing.T) {
+	t.Parallel()
+
+	_, err := ddScaledOffset(nil, "skip", ddNumber{value: math.MaxUint64/512 + 1}, 512)
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("ddScaledOffset() error = %v, want exit status 1", err)
+	}
+	if got := err.Error(); !strings.Contains(got, "skip offset is too large") {
+		t.Fatalf("error = %q, want overflow diagnostic", got)
 	}
 }
