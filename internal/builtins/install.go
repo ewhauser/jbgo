@@ -209,6 +209,9 @@ func parseInstallMode(spec string, set, directory bool) (stdfs.FileMode, bool, e
 		if err != nil {
 			return 0, false, err
 		}
+		if value > 0o7777 {
+			return 0, false, fmt.Errorf("mode out of range")
+		}
 		return installModeFromOctal(uint32(value)), true, nil
 	}
 	mode, err := computeChmodModeWithUmask(0, spec, 0, directory)
@@ -319,6 +322,10 @@ func runInstallFiles(ctx context.Context, inv *Invocation, db *permissionIdentit
 	if err != nil {
 		return err
 	}
+	targetPathForOps, err := installResolveTargetOperand(ctx, inv, targetArg, opts.targetDirectory != "" || len(sources) > 1)
+	if err != nil {
+		return err
+	}
 
 	if opts.createLeading {
 		switch {
@@ -327,7 +334,7 @@ func runInstallFiles(ctx context.Context, inv *Invocation, db *permissionIdentit
 				return err
 			}
 		case len(sources) == 1 && !installRawPathLooksDirectory(targetArg):
-			targetInfo, _, targetExists, err := installStatTarget(ctx, inv, targetArg)
+			targetInfo, _, targetExists, err := installStatTarget(ctx, inv, targetPathForOps)
 			if err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
@@ -339,7 +346,7 @@ func runInstallFiles(ctx context.Context, inv *Invocation, db *permissionIdentit
 		}
 	}
 
-	targetInfo, targetAbs, targetExists, err := installStatTarget(ctx, inv, targetArg)
+	targetInfo, targetAbs, targetExists, err := installStatTarget(ctx, inv, targetPathForOps)
 	if err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
@@ -686,36 +693,57 @@ func installEnsureRealDirectoryPath(ctx context.Context, inv *Invocation, abs st
 		return nil
 	}
 
-	current := "/"
+	currentRaw := "/"
+	currentResolved := "/"
 	for part := range strings.SplitSeq(strings.TrimPrefix(abs, "/"), "/") {
 		if part == "" {
 			continue
 		}
-		current = path.Join(current, part)
-		info, _, exists, err := lstatMaybe(ctx, inv, current)
+		rawPath := path.Join(currentRaw, part)
+		resolvedPath := path.Join(currentResolved, part)
+		info, _, exists, err := lstatMaybe(ctx, inv, resolvedPath)
 		if err != nil {
 			return &ExitError{Code: 1, Err: err}
 		}
 		if exists {
 			switch {
 			case info.Mode()&stdfs.ModeSymlink != 0:
-				if err := inv.FS.Remove(ctx, current, false); err != nil {
+				target, err := inv.FS.Readlink(ctx, resolvedPath)
+				if err != nil {
 					return &ExitError{Code: 1, Err: err}
 				}
+				nextResolved, err := canonicalizeReadlink(ctx, inv, path.Join(path.Dir(resolvedPath), target), readlinkModeCanonicalizeMissing)
+				if err != nil {
+					return &ExitError{Code: 1, Err: err}
+				}
+				nextInfo, err := inv.FS.Stat(ctx, nextResolved)
+				if err != nil {
+					return &ExitError{Code: 1, Err: err}
+				}
+				if !nextInfo.IsDir() {
+					return exitf(inv, 1, "install: failed to access %s: Not a directory", quoteGNUOperand(rawPath))
+				}
+				currentRaw = rawPath
+				currentResolved = nextResolved
+				continue
 			case info.IsDir():
+				currentRaw = rawPath
+				currentResolved = resolvedPath
 				continue
 			default:
-				return exitf(inv, 1, "install: failed to access %s: Not a directory", quoteGNUOperand(current))
+				return exitf(inv, 1, "install: failed to access %s: Not a directory", quoteGNUOperand(rawPath))
 			}
 		}
-		if err := inv.FS.MkdirAll(ctx, current, installDefaultMode); err != nil {
-			return exitf(inv, 1, "install: cannot create directory %s: %s", quoteGNUOperand(current), installErrorText(err))
+		if err := inv.FS.MkdirAll(ctx, resolvedPath, installDefaultMode); err != nil {
+			return exitf(inv, 1, "install: cannot create directory %s: %s", quoteGNUOperand(rawPath), installErrorText(err))
 		}
 		if verbose {
-			if _, err := fmt.Fprintf(inv.Stdout, "install: creating directory %s\n", quoteGNUOperand(current)); err != nil {
+			if _, err := fmt.Fprintf(inv.Stdout, "install: creating directory %s\n", quoteGNUOperand(rawPath)); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
+		currentRaw = rawPath
+		currentResolved = resolvedPath
 	}
 	return nil
 }
@@ -795,6 +823,26 @@ func installStatTarget(ctx context.Context, inv *Invocation, name string) (stdfs
 		return nil, labs, true, nil
 	}
 	return nil, "", false, err
+}
+
+func installResolveTargetOperand(ctx context.Context, inv *Invocation, raw string, directoryOperand bool) (string, error) {
+	abs := allowPath(inv, raw)
+	if directoryOperand {
+		resolved, err := canonicalizeReadlink(ctx, inv, abs, readlinkModeCanonicalizeMissing)
+		if err != nil {
+			return "", &ExitError{Code: 1, Err: err}
+		}
+		return resolved, nil
+	}
+
+	resolvedParent, err := canonicalizeReadlink(ctx, inv, path.Dir(abs), readlinkModeCanonicalizeMissing)
+	if err != nil {
+		return "", &ExitError{Code: 1, Err: err}
+	}
+	if resolvedParent == "/" {
+		return "/" + path.Base(abs), nil
+	}
+	return path.Join(resolvedParent, path.Base(abs)), nil
 }
 
 func installOwnershipForInfo(info stdfs.FileInfo) gbfs.FileOwnership {

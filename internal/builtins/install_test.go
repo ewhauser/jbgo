@@ -61,6 +61,34 @@ func TestInstallSupportsCreateLeadingAndTargetDirectory(t *testing.T) {
 	}
 }
 
+func TestInstallCreateLeadingFollowsSymlinkedDirectories(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/src.txt", []byte("one\n"))
+	if err := session.FileSystem().MkdirAll(context.Background(), "/tmp/real", 0o755); err != nil {
+		t.Fatalf("MkdirAll(real) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "real", "/tmp/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "install -D /tmp/src.txt /tmp/link/sub/out.txt\ncat /tmp/real/sub/out.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "one\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+
+	info, err := session.FileSystem().Lstat(context.Background(), "/tmp/link")
+	if err != nil {
+		t.Fatalf("Lstat(link) error = %v", err)
+	}
+	if info.Mode()&stdfs.ModeSymlink == 0 {
+		t.Fatalf("Lstat(link).Mode() = %v, want symlink", info.Mode())
+	}
+}
+
 func TestInstallCompareSkipsUnchangedCopiesAndWarnsOnSpecialBits(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
@@ -266,5 +294,22 @@ func TestInstallExistingBackupsDetectHigherNumberedSeries(t *testing.T) {
 	}
 	if _, err := session.FileSystem().Stat(context.Background(), "/tmp/dst.txt~"); err == nil {
 		t.Fatalf("Stat(simple backup) succeeded, want numbered backup")
+	}
+}
+
+func TestInstallRejectsOutOfRangeOctalMode(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/src.txt", []byte("payload\n"))
+
+	result := mustExecSession(t, session, "install -m 10000 /tmp/src.txt /tmp/dst.txt\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "install: invalid mode '10000'") {
+		t.Fatalf("Stderr = %q, want invalid mode error", result.Stderr)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/tmp/dst.txt"); err == nil {
+		t.Fatalf("Stat(dst) succeeded, want no file created")
 	}
 }
