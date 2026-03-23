@@ -2503,6 +2503,11 @@ func TestNprocOMPEnvVars(t *testing.T) {
 			script:  "OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=4 nproc --ignore=2\n",
 			wantOut: "2\n",
 		},
+		{
+			name:    "OMP_THREAD_LIMIT ignored with --all",
+			script:  "OMP_THREAD_LIMIT=1 nproc --all\n",
+			wantOut: "2\n",
+		},
 	}
 
 	for _, tc := range tests {
@@ -2579,6 +2584,12 @@ func TestNprocHelpVersionAndErrors(t *testing.T) {
 			script:     "nproc --ignore=abc\n",
 			wantCode:   1,
 			wantStderr: "nproc: invalid number: 'abc'\n",
+		},
+		{
+			name:       "negative ignore value",
+			script:     "nproc --ignore=-1\n",
+			wantCode:   1,
+			wantStderr: "nproc: invalid number: '-1'\n",
 		},
 	}
 
