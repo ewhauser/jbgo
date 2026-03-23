@@ -366,6 +366,8 @@ run_make_check() {
   local config_shell=$workdir/src/bash
   local overall_status=0
 
+  local per_test_timeout=${GNU_TEST_TIMEOUT:-120}
+
   : > "$log_path"
   for test_path in "${tests[@]}"; do
     local test_base log_target trs_path make_status status
@@ -374,10 +376,14 @@ run_make_check() {
     trs_path="$workdir/$test_base.trs"
     rm -f "$workdir/$log_target" "$trs_path"
 
+    printf '>>> running: %s\n' "$test_path" >&2
+
     make_status=0
     if (
       cd "$workdir"
-      if command -v setsid >/dev/null 2>&1; then
+      if [[ "$per_test_timeout" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
+        env CONFIG_SHELL="$config_shell" timeout "${per_test_timeout}s" make "$log_target" VERBOSE=no "srcdir=$workdir"
+      elif command -v setsid >/dev/null 2>&1; then
         env CONFIG_SHELL="$config_shell" setsid make "$log_target" VERBOSE=no "srcdir=$workdir"
       else
         env CONFIG_SHELL="$config_shell" make "$log_target" VERBOSE=no "srcdir=$workdir"
