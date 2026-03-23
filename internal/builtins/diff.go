@@ -229,11 +229,13 @@ func parseDiffArgs(inv *Invocation) (diffOptions, []diffJob, error) {
 					return diffOptions{}, nil, diffUsageAfter(inv, arg)
 				}
 				opts.showHelp = true
+				return opts, nil, nil
 			case "version":
 				if hasValue {
 					return diffOptions{}, nil, diffUsageAfter(inv, arg)
 				}
 				opts.showVersion = true
+				return opts, nil, nil
 			case "normal":
 				opts.mode = diffModeNormal
 				opts.sideBySide = false
@@ -576,14 +578,11 @@ func parseDiffArgs(inv *Invocation) (diffOptions, []diffJob, error) {
 				opts.minimal = true
 			case 'v':
 				opts.showVersion = true
+				return opts, nil, nil
 			default:
 				return diffOptions{}, nil, exitf(inv, 2, "diff: invalid option -- '%c'\nTry 'diff --help' for more information.", ch)
 			}
 		}
-	}
-
-	if opts.showHelp || opts.showVersion {
-		return opts, nil, nil
 	}
 	if opts.fromFile != "" && opts.toFile != "" {
 		return diffOptions{}, nil, exitf(inv, 2, "diff: options '--from-file' and '--to-file' are mutually exclusive\nTry 'diff --help' for more information.")
@@ -880,17 +879,24 @@ func (c *Diff) compareDirectories(ctx context.Context, inv *Invocation, opts *di
 }
 
 func (c *Diff) comparePathPair(ctx context.Context, inv *Invocation, opts *diffOptions, loader *diffLoader, leftName, rightName string, announce bool) (int, error) {
-	left, err := diffLoadInput(ctx, inv, opts, loader, leftName, opts.newFile || (opts.unidirectionalNew && leftName != opts.toFile))
+	left, err := diffLoadInput(ctx, inv, opts, loader, leftName, opts.newFile || opts.unidirectionalNew)
 	if err != nil {
 		_, _ = fmt.Fprintf(inv.Stderr, "diff: %s: %s\n", leftName, readAllErrorText(err))
 		return 2, nil
 	}
-	right, err := diffLoadInput(ctx, inv, opts, loader, rightName, opts.newFile || opts.unidirectionalNew)
+	right, err := diffLoadInput(ctx, inv, opts, loader, rightName, opts.newFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(inv.Stderr, "diff: %s: %s\n", rightName, readAllErrorText(err))
 		return 2, nil
 	}
 	if left.isDir || right.isDir {
+		dirName := leftName
+		if right.isDir {
+			dirName = rightName
+		}
+		if _, err := fmt.Fprintf(inv.Stderr, "diff: %s: Is a directory\n", dirName); err != nil {
+			return 0, diffWriteError(err)
+		}
 		return 2, nil
 	}
 	if announce && !opts.brief {
@@ -1398,6 +1404,22 @@ func diffWriteContext(out *strings.Builder, left, right *diffInput, units []diff
 	fmt.Fprintf(out, "*** %s\n", diffHeaderLabel(left, opts, 0))
 	fmt.Fprintf(out, "--- %s\n", diffHeaderLabel(right, opts, 1))
 	for _, hunk := range diffBuildHunks(units, changes, opts.contextLines) {
+		hasDelete := false
+		hasInsert := false
+		for _, unit := range hunk.units {
+			switch unit.kind {
+			case diffOpDelete:
+				hasDelete = true
+			case diffOpInsert:
+				hasInsert = true
+			}
+		}
+		deletePrefix := "- "
+		insertPrefix := "+ "
+		if hasDelete && hasInsert {
+			deletePrefix = "! "
+			insertPrefix = "! "
+		}
 		fmt.Fprintln(out, "***************")
 		oldStart, oldCount := diffUnifiedRange(hunk.units, true)
 		newStart, newCount := diffUnifiedRange(hunk.units, false)
@@ -1407,7 +1429,7 @@ func diffWriteContext(out *strings.Builder, left, right *diffInput, units []diff
 			case diffOpEqual:
 				diffWritePrefixedLine(out, "  ", left, unit.left, opts)
 			case diffOpDelete:
-				diffWritePrefixedLine(out, "! ", left, unit.left, opts)
+				diffWritePrefixedLine(out, deletePrefix, left, unit.left, opts)
 			}
 		}
 		fmt.Fprintf(out, "--- %s ----\n", diffContextRangeText(newStart, newCount))
@@ -1416,7 +1438,7 @@ func diffWriteContext(out *strings.Builder, left, right *diffInput, units []diff
 			case diffOpEqual:
 				diffWritePrefixedLine(out, "  ", right, unit.right, opts)
 			case diffOpInsert:
-				diffWritePrefixedLine(out, "! ", right, unit.right, opts)
+				diffWritePrefixedLine(out, insertPrefix, right, unit.right, opts)
 			}
 		}
 	}
