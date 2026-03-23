@@ -54,6 +54,7 @@ FUZZ_SMOKE_SHARD_PATHS := \
 	FuzzFilePathCommands \
 	FuzzRealpathCommand \
 	FuzzTruncateCommand \
+	FuzzDdCommand \
 	FuzzCompatPredicateCommands \
 	FuzzDirectoryTraversalCommands \
 	FuzzCsplitCommand \
@@ -98,6 +99,7 @@ FUZZ_FULL_SHARD_2 := \
 	FuzzFilePathCommands \
 	FuzzRealpathCommand \
 	FuzzTruncateCommand \
+	FuzzDdCommand \
 	FuzzCompatPredicateCommands \
 	./policy:FuzzCheckPathReadSymlinkPolicy \
 	./policy:FuzzCheckPathWriteSymlinkPolicy \
