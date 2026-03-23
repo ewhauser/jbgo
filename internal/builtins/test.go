@@ -104,16 +104,19 @@ func (p *testRPNParser) parseArgs(args []string) ([]testSymbol, error) {
 		return p.parseTwoArgs(args)
 	case 3:
 		return p.parseThreeArgs(args)
-	case 4:
-		switch {
-		case args[0] == "!":
+	default:
+		// POSIX: "!" prefix applies at any arg count.
+		if args[0] == "!" {
 			stack, err := p.parseArgs(args[1:])
 			if err != nil {
 				return nil, err
 			}
 			return append(stack, testSymbol{kind: testSymbolBang, token: "!"}), nil
-		case args[0] == "(" && args[3] == ")":
-			return p.parseArgs(args[1:3])
+		}
+		// POSIX: "( expr )" wrapping for 4-5 args where inner
+		// expression (2-3 args) is unambiguous.
+		if len(args) <= 5 && args[0] == "(" && args[len(args)-1] == ")" {
+			return p.parseArgs(args[1 : len(args)-1])
 		}
 	}
 	stack, pos, err := p.parseOr(args, 0)
@@ -228,14 +231,28 @@ func (p *testRPNParser) parsePrimary(args []string, pos int) ([]testSymbol, int,
 		return nil, pos, testParseExpectedValue()
 	}
 	if args[pos] == "(" {
-		stack, next, err := p.parseOr(args, pos+1)
+		// Find matching ")" using depth tracking, then apply
+		// arg-count-based disambiguation via parseArgs.
+		depth := 1
+		end := pos + 1
+		for end < len(args) && depth > 0 {
+			switch args[end] {
+			case "(":
+				depth++
+			case ")":
+				depth--
+			}
+			end++
+		}
+		if depth != 0 {
+			return nil, pos, testParseExpected(")")
+		}
+		inner := args[pos+1 : end-1]
+		stack, err := p.parseArgs(inner)
 		if err != nil {
 			return nil, pos, err
 		}
-		if next >= len(args) || args[next] != ")" {
-			return nil, pos, testParseExpected(")")
-		}
-		return stack, next + 1, nil
+		return stack, end, nil
 	}
 	if pos+2 < len(args) && isTestExprBinaryOp(args[pos+1]) {
 		op, _ := testBinarySymbol(args[pos+1], false)
