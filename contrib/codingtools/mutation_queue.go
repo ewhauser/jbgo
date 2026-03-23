@@ -44,6 +44,15 @@ func withMutationQueue[T any](ctx context.Context, q *mutationQueue, key string,
 		}
 	}
 
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			releaseMutationQueue(q, key, next)
+			return zero, ctx.Err()
+		default:
+		}
+	}
+
 	defer func() {
 		releaseMutationQueue(q, key, next)
 	}()

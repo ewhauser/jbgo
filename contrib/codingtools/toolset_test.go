@@ -655,6 +655,27 @@ func TestWriteSerializesSymlinkAliasPaths(t *testing.T) {
 	}
 }
 
+func TestWriteCanceledBeforeQueueEntryDoesNotMutate(t *testing.T) {
+	t.Parallel()
+
+	fsys := gbfs.NewMemory()
+	tools := New(Config{FS: fsys, WorkingDir: "/workspace"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := tools.Write(ctx, WriteRequest{
+		Path:    "note.txt",
+		Content: "hello\n",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Write() error = %v, want context canceled", err)
+	}
+	if _, statErr := fsys.Stat(context.Background(), "/workspace/note.txt"); !errors.Is(statErr, stdfs.ErrNotExist) {
+		t.Fatalf("Stat() error = %v, want not exist", statErr)
+	}
+}
+
 func TestToolsetWorksWithHostBackedFS(t *testing.T) {
 	t.Parallel()
 
