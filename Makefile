@@ -115,6 +115,7 @@ FUZZ_FULL_SHARD_3 := \
 	FuzzDirectoryTraversalCommands \
 	FuzzCsplitCommand \
 	FuzzNumfmtCommand \
+	FuzzTextCommands \
 	FuzzColumnCommand \
 	FuzzSedFlagsCommand \
 	FuzzXArgsFlagsCommand \
