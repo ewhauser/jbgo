@@ -506,7 +506,7 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 
 ## Development
 
-`make build`, `make test`, and `make lint` cover the Go modules. See [CONTRIBUTING.md](./CONTRIBUTING.md) for repository structure, module versioning, release process, benchmarks, and GNU coreutils compatibility testing.
+`make build`, `make test`, and `make lint` cover the Go modules. `make test` now resolves the pinned GNU `diff` oracle through Nix via `./scripts/ensure-diffutils.sh`; set `GBASH_CONFORMANCE_DIFF` if you want to override that path explicitly. See [CONTRIBUTING.md](./CONTRIBUTING.md) for repository structure, module versioning, release process, benchmarks, and GNU coreutils compatibility testing.
 
 For the documentation site, run `make website-dev` to start a local Next.js server seeded with the latest published compatibility assets from `/compat/latest/`.
 

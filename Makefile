@@ -1,4 +1,4 @@
-.PHONY: lint lint-contrib lint-examples lint-all test conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats nix-build nix-cache
+.PHONY: lint lint-contrib lint-examples lint-all test conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats ensure-diffutils nix-build nix-cache
 
 GO_CORE_PACKAGES := ./...
 GO_CONTRIB_PACKAGES := ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/sqlite3/... ./contrib/jq/... ./contrib/yq/...
@@ -206,7 +206,8 @@ lint-new:
 RACE := $(if $(CI),-race,$(if $(filter Darwin,$(shell uname -s)),,-race))
 
 test:
-	go test $(RACE) $(GO_PACKAGES)
+	@DIFF_PATH=$$(./scripts/ensure-diffutils.sh) || exit 1; \
+	GBASH_CONFORMANCE_DIFF="$$DIFF_PATH" go test $(RACE) $(GO_PACKAGES)
 
 CONFORMANCE_RUN ?= TestConformance
 
@@ -219,6 +220,9 @@ conformance-test:
 
 ensure-bash:
 	@./scripts/ensure-bash.sh
+
+ensure-diffutils:
+	@./scripts/ensure-diffutils.sh
 
 build:
 	go build $(GO_CORE_PACKAGES)

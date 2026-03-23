@@ -11,11 +11,13 @@ make build
 make test
 ```
 
+`make test` resolves the pinned GNU `diff` oracle through Nix via `./scripts/ensure-diffutils.sh`. Set `GBASH_CONFORMANCE_DIFF` if you need to point tests at an already-installed pinned `diff`.
+
 Before submitting or updating a PR, run `make lint` from the repo root and fix any reported issues.
 
 ## Conformance & Bats Tests
 
-Conformance tests compare gbash behavior against a pinned version of bash. Bats tests validate shell scripts in `scripts/`. Both require Nix installed to fetch pinned binaries.
+Conformance tests compare gbash behavior against a pinned version of bash. Bats tests validate shell scripts in `scripts/`. The `diff` oracle tests and these suites require Nix installed to fetch pinned binaries unless you provide the corresponding override env vars.
 
 ```sh
 make conformance-test   # compares gbash vs pinned bash

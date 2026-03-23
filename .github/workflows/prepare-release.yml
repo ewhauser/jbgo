@@ -81,6 +81,8 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
+      - uses: cachix/install-nix-action@v30
+
       - name: Run tests
         run: make test
 

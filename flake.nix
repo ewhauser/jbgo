@@ -20,6 +20,7 @@
       packages = forAllSystems (pkgs: {
         bash = pkgs.bash;
         bats = pkgs.bats;
+        diffutils = pkgs.diffutils;
 
         # Full coreutils build tree including test suite (matches Dockerfile)
         coreutils-test-suite = pkgs.stdenv.mkDerivation rec {
@@ -70,6 +71,7 @@
           packages = [
             pkgs.bash
             pkgs.bats
+            pkgs.diffutils
           ];
         };
       });
