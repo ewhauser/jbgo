@@ -1009,7 +1009,14 @@ func readDdBlock(reader io.Reader, size int, fullblock bool) ([]byte, ddReadStat
 				} else {
 					stats.recordsPartial = 1
 				}
-				return buf[:total], stats, false, nil
+				switch {
+				case err == nil:
+					return buf[:total], stats, false, nil
+				case errors.Is(err, io.EOF):
+					return buf[:total], stats, true, nil
+				default:
+					return buf[:total], stats, false, err
+				}
 			}
 		}
 		if err == nil {

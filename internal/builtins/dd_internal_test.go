@@ -206,6 +206,61 @@ func TestRunDdWithIONoerrorSyncPadsZeroByteReadError(t *testing.T) {
 	}
 }
 
+func TestReadDdBlockPreservesNonEOFErrorOnNonFullblockRead(t *testing.T) {
+	t.Parallel()
+
+	reader := &ddScriptedReader{
+		steps: []ddReadStep{
+			{data: []byte("abc"), err: errors.New("boom")},
+		},
+	}
+
+	chunk, stats, eof, err := readDdBlock(reader, 4, false)
+	if got, want := string(chunk), "abc"; got != want {
+		t.Fatalf("chunk = %q, want %q", got, want)
+	}
+	if stats.recordsComplete != 0 || stats.recordsPartial != 1 || stats.bytesTotal != 3 {
+		t.Fatalf("stats = %+v, want partial 3-byte record", stats)
+	}
+	if eof {
+		t.Fatalf("eof = true, want false")
+	}
+	if got := err; got == nil || got.Error() != "boom" {
+		t.Fatalf("err = %v, want boom", got)
+	}
+}
+
+func TestRunDdWithIONoerrorSurfacesNonFullblockReadError(t *testing.T) {
+	t.Parallel()
+
+	reader := &ddScriptedReader{
+		steps: []ddReadStep{
+			{data: []byte("abc"), err: errors.New("boom")},
+		},
+	}
+	writer := &ddCaptureWriter{}
+	var stderr bytes.Buffer
+
+	err := runDdWithIO(context.Background(), &Invocation{Stderr: &stderr}, &ddSettings{
+		ibs:    4,
+		obs:    4,
+		status: ddStatusNone,
+		conv: ddConvOptions{
+			noerror: true,
+		},
+	}, &ddInput{reader: reader, label: "input"}, writer)
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("runDdWithIO() error = %v, want exit status 1", err)
+	}
+	if got, want := string(writer.data), "abc"; got != want {
+		t.Fatalf("captured output = %q, want %q", got, want)
+	}
+	if got := stderr.String(); !strings.Contains(got, "dd: error reading 'input': boom\n") {
+		t.Fatalf("stderr = %q, want read warning", got)
+	}
+}
+
 func TestDdDiscardClampsHugeSkipBeforeIntConversion(t *testing.T) {
 	t.Parallel()
 
