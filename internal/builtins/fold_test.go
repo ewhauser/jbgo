@@ -440,13 +440,47 @@ func TestFoldMissingFile(t *testing.T) {
 func TestFoldInvalidWidth(t *testing.T) {
 	t.Parallel()
 
-	session := newSession(t, &Config{})
-	r := mustExecSession(t, session, "printf 'x' | fold -w abc\n")
-	if r.ExitCode == 0 {
-		t.Fatalf("ExitCode = 0, want nonzero for invalid width")
+	for _, tc := range []struct {
+		name, script string
+	}{
+		{"non-numeric", "printf 'x' | fold -w abc\n"},
+		{"zero", "printf 'x' | fold -w 0\n"},
+		{"negative", "printf 'x' | fold -w -1\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			session := newSession(t, &Config{})
+			r := mustExecSession(t, session, tc.script)
+			if r.ExitCode == 0 {
+				t.Fatalf("ExitCode = 0, want nonzero for invalid width")
+			}
+			if !strings.Contains(r.Stderr, "invalid") {
+				t.Fatalf("Stderr = %q, want error about invalid width", r.Stderr)
+			}
+		})
 	}
-	if !strings.Contains(r.Stderr, "invalid") {
-		t.Fatalf("Stderr = %q, want error about invalid width", r.Stderr)
+}
+
+func TestFoldGroupedObsoleteSyntax(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, script, want string
+	}{
+		{"s-and-width", "printf 'one two' | fold -s4\n", "one \ntwo"},
+		{"bs-and-width", "printf '12345678' | fold -bs4\n", "1234\n5678"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			session := newSession(t, &Config{})
+			r := mustExecSession(t, session, tc.script)
+			if r.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d; stderr=%q", r.ExitCode, r.Stderr)
+			}
+			if got := r.Stdout; got != tc.want {
+				t.Fatalf("Stdout = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -64,10 +64,19 @@ func (c *Fold) NormalizeInvocation(inv *Invocation) *Invocation {
 			normalized = append(normalized, inv.Args[i+1:]...)
 			break
 		}
-		if len(arg) >= 2 && arg[0] == '-' && arg[1] >= '0' && arg[1] <= '9' {
-			normalized = append(normalized, "-w", arg[1:])
-			changed = true
-			continue
+		if len(arg) >= 2 && arg[0] == '-' && arg[1] != '-' {
+			if arg[1] >= '0' && arg[1] <= '9' {
+				// Pure obsolete: -4, -20
+				normalized = append(normalized, "-w", arg[1:])
+				changed = true
+				continue
+			}
+			// Grouped flags ending with digits: -s4, -bs20
+			if digitIdx := foldFindTrailingDigits(arg); digitIdx > 0 {
+				normalized = append(normalized, arg[:digitIdx], "-w", arg[digitIdx:])
+				changed = true
+				continue
+			}
 		}
 		normalized = append(normalized, arg)
 	}
@@ -77,6 +86,26 @@ func (c *Fold) NormalizeInvocation(inv *Invocation) *Invocation {
 	clone := *inv
 	clone.Args = normalized
 	return &clone
+}
+
+// foldFindTrailingDigits returns the index where trailing digits start in a
+// short-option group like "-s4" or "-bs20". Returns -1 if no trailing digits,
+// or if the prefix contains non-flag characters (only b, c, s are boolean flags).
+func foldFindTrailingDigits(arg string) int {
+	i := len(arg) - 1
+	for i >= 2 && arg[i] >= '0' && arg[i] <= '9' {
+		i--
+	}
+	if i == len(arg)-1 {
+		return -1 // no trailing digits
+	}
+	// Verify all chars between '-' and the digits are known boolean flags.
+	for j := 1; j <= i; j++ {
+		if arg[j] != 'b' && arg[j] != 'c' && arg[j] != 's' {
+			return -1
+		}
+	}
+	return i + 1
 }
 
 func (c *Fold) Spec() CommandSpec {
@@ -119,6 +148,9 @@ func (c *Fold) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		v := matches.Value("width")
 		w, err := strconv.Atoi(v)
 		if err != nil {
+			return exitf(inv, 1, "fold: invalid number of columns: %s", quoteValue(v))
+		}
+		if w <= 0 {
 			return exitf(inv, 1, "fold: invalid number of columns: %s", quoteValue(v))
 		}
 		width = w
