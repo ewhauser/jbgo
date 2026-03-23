@@ -3,6 +3,7 @@ package awk
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -123,33 +124,36 @@ func TestLoadAWKInputsSkipsStdinWhenNamedFilesProvided(t *testing.T) {
 	if stdin.reads != 0 {
 		t.Fatalf("stdin reads = %d, want 0", stdin.reads)
 	}
-	if got := string(inputs.Stdin); got != "" {
-		t.Fatalf("stdin = %q, want empty", got)
-	}
 	if got := string(inputs.Files["/data/one.txt"]); got != "a\n" {
 		t.Fatalf("file contents = %q, want %q", got, "a\n")
 	}
 }
 
-func TestLoadAWKInputsReadsStdinWhenOnlyArgAssignmentsRemain(t *testing.T) {
+func TestLazyAWKStdinReadsOnDemand(t *testing.T) {
 	t.Parallel()
 
+	stdin := &trackingStdinReader{reader: strings.NewReader("stdin-data")}
 	inv := commands.NewInvocation(&commands.InvocationOptions{
 		Cwd:        "/",
-		Stdin:      strings.NewReader("stdin-data"),
+		Stdin:      stdin,
 		FileSystem: gbfs.NewMemory(),
 		Policy:     policy.NewStatic(&policy.Config{}),
 	})
 
-	inputs, err := loadAWKInputs(context.Background(), inv, []string{"prefix=1"})
-	if err != nil {
-		t.Fatalf("loadAWKInputs() error = %v", err)
+	reader := newLazyAWKStdin(context.Background(), inv)
+	if stdin.reads != 0 {
+		t.Fatalf("stdin reads before use = %d, want 0", stdin.reads)
 	}
-	if got := string(inputs.Stdin); got != "stdin-data" {
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if got := string(data); got != "stdin-data" {
 		t.Fatalf("stdin = %q, want %q", got, "stdin-data")
 	}
-	if len(inputs.Files) != 0 {
-		t.Fatalf("files = %d, want 0", len(inputs.Files))
+	if stdin.reads == 0 {
+		t.Fatal("stdin was not read on demand")
 	}
 }
 
@@ -160,4 +164,40 @@ type unexpectedStdinReader struct {
 func (r *unexpectedStdinReader) Read(_ []byte) (int, error) {
 	r.reads++
 	return 0, errors.New("unexpected stdin read")
+}
+
+func TestAWKMissingFileBeforeDashDoesNotReadStdin(t *testing.T) {
+	t.Parallel()
+
+	stdin := &unexpectedStdinReader{}
+	inv := commands.NewInvocation(&commands.InvocationOptions{
+		Args:       []string{"{ print }", "/data/missing.txt", "-"},
+		Cwd:        "/",
+		Stdin:      stdin,
+		Stdout:     io.Discard,
+		Stderr:     io.Discard,
+		FileSystem: gbfs.NewMemory(),
+		Policy:     policy.NewStatic(&policy.Config{}),
+	})
+
+	err := NewAWK().Run(context.Background(), inv)
+	if err == nil {
+		t.Fatal("Run() error = nil, want missing-file failure")
+	}
+	if stdin.reads != 0 {
+		t.Fatalf("stdin reads = %d, want 0", stdin.reads)
+	}
+	if !strings.Contains(err.Error(), "/data/missing.txt") {
+		t.Fatalf("error = %v, want missing input path", err)
+	}
+}
+
+type trackingStdinReader struct {
+	reader io.Reader
+	reads  int
+}
+
+func (r *trackingStdinReader) Read(p []byte) (int, error) {
+	r.reads++
+	return r.reader.Read(p)
 }
