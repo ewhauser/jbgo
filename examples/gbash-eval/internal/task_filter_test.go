@@ -63,7 +63,7 @@ func TestRunBashEvalFiltersRequestedTasks(t *testing.T) {
 		},
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "bash", map[string]any{"commands": "echo second"}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -111,7 +111,7 @@ func TestRunScriptingEvalFiltersRequestedTasks(t *testing.T) {
 		},
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "second", map[string]any{"commands": "second_tool"}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 

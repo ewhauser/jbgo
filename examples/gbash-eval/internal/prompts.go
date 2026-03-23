@@ -1,3 +1,4 @@
+//nolint:gocritic // Prompt rendering stays simpler with value parameters in this internal example package.
 package gbasheval
 
 import (

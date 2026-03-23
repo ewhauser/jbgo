@@ -1,3 +1,4 @@
+//nolint:forbidigo // The standalone evaluator intentionally uses raw HTTP clients.
 package gbasheval
 
 import (
@@ -52,7 +53,7 @@ func (p *anthropicProvider) Chat(ctx context.Context, messages []message, tools 
 			continue
 		}
 
-		return providerResponse{}, fmt.Errorf("Anthropic API error (%d): %s", status, asString(asObject(respBody["error"])["message"]))
+		return providerResponse{}, fmt.Errorf("anthropic API error (%d): %s", status, asString(asObject(respBody["error"])["message"]))
 	}
 }
 

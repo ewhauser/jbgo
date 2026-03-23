@@ -43,7 +43,6 @@ func TestParseRunFlagsRejectsInvalidCombinations(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := parseRunFlags(tc.args, io.Discard)
@@ -55,6 +54,8 @@ func TestParseRunFlagsRejectsInvalidCombinations(t *testing.T) {
 }
 
 func TestRunCLIRoutesRunCommandWithParsedConfig(t *testing.T) {
+	t.Parallel()
+
 	var captured RunConfig
 	prev := runCLIExecutor
 	runCLIExecutor = func(_ context.Context, cfg RunConfig, _, _ io.Writer) error {

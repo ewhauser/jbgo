@@ -1,3 +1,4 @@
+//nolint:forbidigo,gocritic // The host-side evaluator persists reports on disk and keeps report shaping straightforward.
 package gbasheval
 
 import (
@@ -7,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -58,7 +60,8 @@ func buildScriptingReport(providerName, model string, maxTurns int, baseline boo
 		TotalTasks: len(results),
 		ByCategory: map[string]CategorySummary{},
 	}
-	for _, result := range results {
+	for i := range results {
+		result := &results[i]
 		if result.Score.AllPassed() {
 			summary.TotalPassed++
 		}
@@ -126,53 +129,60 @@ func buildScriptingReport(providerName, model string, maxTurns int, baseline boo
 	}
 }
 
-func printScriptingTerminalReport(w io.Writer, report ScriptingEvalReport) {
+func printScriptingTerminalReport(w io.Writer, report *ScriptingEvalReport) {
 	if w == nil {
 		w = io.Discard
+	}
+	if report == nil {
+		return
 	}
 	mode := "scripted"
 	if report.Baseline {
 		mode = "baseline"
 	}
-	fmt.Fprintf(w, "\n=== Scripting Tool Eval: %s/%s (%s) ===\n\n", report.Provider, report.Model, mode)
-	for _, result := range report.Results {
+	_, _ = fmt.Fprintf(w, "\n=== Scripting Tool Eval: %s/%s (%s) ===\n\n", report.Provider, report.Model, mode)
+	for i := range report.Results {
+		result := &report.Results[i]
 		status := "FAIL"
 		if result.Score.AllPassed() {
 			status = "PASS"
 		}
-		fmt.Fprintf(w, "  [%s] %s (%s) - %.0f/%.0f\n", status, result.Task.ID, result.Task.Category, result.Score.Score, result.Score.MaxScore)
+		_, _ = fmt.Fprintf(w, "  [%s] %s (%s) - %.0f/%.0f\n", status, result.Task.ID, result.Task.Category, result.Score.Score, result.Score.MaxScore)
 	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "--- Summary ---")
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "--- Summary ---")
 	if report.Baseline {
-		fmt.Fprintln(w, "  Mode: baseline (individual tools)")
+		_, _ = fmt.Fprintln(w, "  Mode: baseline (individual tools)")
 	} else {
-		fmt.Fprintln(w, "  Mode: scripted (bash orchestration tool)")
+		_, _ = fmt.Fprintln(w, "  Mode: scripted (bash orchestration tool)")
 	}
-	fmt.Fprintf(w, "  Tasks: %d/%d passed\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
-	fmt.Fprintf(w, "  Score: %.1f/%.1f (%.0f%%)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
-	fmt.Fprintf(w, "  Turns: %d total, %.1f avg/task\n", report.Summary.TotalTurns, report.Summary.AverageTurnsPerTask)
-	fmt.Fprintf(w, "  Tool calls: %d total, %.1f avg/task (%d ok, %d error, %.0f%% success)\n", report.Summary.TotalToolCalls, report.Summary.AverageCallsPerTask, report.Summary.ToolCallsOK, report.Summary.ToolCallsError, report.Summary.ToolCallSuccessRate*100)
-	fmt.Fprintf(w, "  Inner commands: %d total, %.1f avg/task (%d tool, %d help, %d discover)\n", report.Summary.TotalInnerCommands, report.Summary.AverageInnerPerTask, report.Summary.TotalInnerToolCalls, report.Summary.TotalInnerHelpCalls, report.Summary.TotalInnerDiscoverCalls)
-	fmt.Fprintf(w, "  Tool output bytes: %d raw, %d sent to model\n", report.Summary.TotalRawOutputBytes, report.Summary.TotalSentOutputBytes)
-	fmt.Fprintf(w, "  Tokens: %d input, %d output\n", report.Summary.TotalInputTokens, report.Summary.TotalOutputTokens)
-	fmt.Fprintf(w, "  Duration: %.1fs total, %.1fs avg/task\n", float64(report.Summary.TotalDurationMS)/1000, report.Summary.AverageDurationMS/1000)
+	_, _ = fmt.Fprintf(w, "  Tasks: %d/%d passed\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
+	_, _ = fmt.Fprintf(w, "  Score: %.1f/%.1f (%.0f%%)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
+	_, _ = fmt.Fprintf(w, "  Turns: %d total, %.1f avg/task\n", report.Summary.TotalTurns, report.Summary.AverageTurnsPerTask)
+	_, _ = fmt.Fprintf(w, "  Tool calls: %d total, %.1f avg/task (%d ok, %d error, %.0f%% success)\n", report.Summary.TotalToolCalls, report.Summary.AverageCallsPerTask, report.Summary.ToolCallsOK, report.Summary.ToolCallsError, report.Summary.ToolCallSuccessRate*100)
+	_, _ = fmt.Fprintf(w, "  Inner commands: %d total, %.1f avg/task (%d tool, %d help, %d discover)\n", report.Summary.TotalInnerCommands, report.Summary.AverageInnerPerTask, report.Summary.TotalInnerToolCalls, report.Summary.TotalInnerHelpCalls, report.Summary.TotalInnerDiscoverCalls)
+	_, _ = fmt.Fprintf(w, "  Tool output bytes: %d raw, %d sent to model\n", report.Summary.TotalRawOutputBytes, report.Summary.TotalSentOutputBytes)
+	_, _ = fmt.Fprintf(w, "  Tokens: %d input, %d output\n", report.Summary.TotalInputTokens, report.Summary.TotalOutputTokens)
+	_, _ = fmt.Fprintf(w, "  Duration: %.1fs total, %.1fs avg/task\n", float64(report.Summary.TotalDurationMS)/1000, report.Summary.AverageDurationMS/1000)
 
 	keys := make([]string, 0, len(report.Summary.ByCategory))
 	for key := range report.Summary.ByCategory {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "--- By Category ---")
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "--- By Category ---")
 	for _, key := range keys {
 		cat := report.Summary.ByCategory[key]
-		fmt.Fprintf(w, "  %-25s %d/%d tasks  %.0f%%\n", key, cat.Passed, cat.Tasks, cat.Rate*100)
+		_, _ = fmt.Fprintf(w, "  %-25s %d/%d tasks  %.0f%%\n", key, cat.Passed, cat.Tasks, cat.Rate*100)
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
-func saveScriptingReport(report ScriptingEvalReport, outputDir, moniker string, stdout io.Writer) error {
+func saveScriptingReport(report *ScriptingEvalReport, outputDir, moniker string, stdout io.Writer) error {
+	if report == nil {
+		return fmt.Errorf("report is nil")
+	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir %q: %w", outputDir, err)
 	}
@@ -191,7 +201,7 @@ func saveScriptingReport(report ScriptingEvalReport, outputDir, moniker string, 
 		return fmt.Errorf("write report json: %w", err)
 	}
 	if stdout != nil {
-		fmt.Fprintf(stdout, "Saved JSON: %s\n", jsonPath)
+		_, _ = fmt.Fprintf(stdout, "Saved JSON: %s\n", jsonPath)
 	}
 
 	mdPath := base + ".md"
@@ -199,36 +209,40 @@ func saveScriptingReport(report ScriptingEvalReport, outputDir, moniker string, 
 		return fmt.Errorf("write report markdown: %w", err)
 	}
 	if stdout != nil {
-		fmt.Fprintf(stdout, "Saved Markdown: %s\n", mdPath)
+		_, _ = fmt.Fprintf(stdout, "Saved Markdown: %s\n", mdPath)
 	}
 	return nil
 }
 
-func generateScriptingMarkdown(report ScriptingEvalReport) string {
+func generateScriptingMarkdown(report *ScriptingEvalReport) string {
+	if report == nil {
+		return ""
+	}
 	mode := "scripted"
 	if report.Baseline {
 		mode = "baseline"
 	}
-	var out string
-	out += fmt.Sprintf("# Scripting Eval Report: %s/%s (%s)\n\n", report.Provider, report.Model, mode)
-	out += fmt.Sprintf("- Timestamp: `%s`\n", report.Timestamp)
-	out += fmt.Sprintf("- Max turns: `%d`\n\n", report.MaxTurns)
-	out += "## Summary\n\n"
-	out += fmt.Sprintf("- Tasks passed: `%d/%d`\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
-	out += fmt.Sprintf("- Score: `%.1f/%.1f` (`%.0f%%`)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
-	out += fmt.Sprintf("- Tool calls: `%d` total, `%.0f%%` success\n", report.Summary.TotalToolCalls, report.Summary.ToolCallSuccessRate*100)
-	out += fmt.Sprintf("- Inner commands: `%d` total (`%d` tool, `%d` help, `%d` discover)\n", report.Summary.TotalInnerCommands, report.Summary.TotalInnerToolCalls, report.Summary.TotalInnerHelpCalls, report.Summary.TotalInnerDiscoverCalls)
-	out += fmt.Sprintf("- Tool output bytes: `%d` raw, `%d` sent\n\n", report.Summary.TotalRawOutputBytes, report.Summary.TotalSentOutputBytes)
+	var out strings.Builder
+	_, _ = fmt.Fprintf(&out, "# Scripting Eval Report: %s/%s (%s)\n\n", report.Provider, report.Model, mode)
+	_, _ = fmt.Fprintf(&out, "- Timestamp: `%s`\n", report.Timestamp)
+	_, _ = fmt.Fprintf(&out, "- Max turns: `%d`\n\n", report.MaxTurns)
+	_, _ = fmt.Fprint(&out, "## Summary\n\n")
+	_, _ = fmt.Fprintf(&out, "- Tasks passed: `%d/%d`\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
+	_, _ = fmt.Fprintf(&out, "- Score: `%.1f/%.1f` (`%.0f%%`)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
+	_, _ = fmt.Fprintf(&out, "- Tool calls: `%d` total, `%.0f%%` success\n", report.Summary.TotalToolCalls, report.Summary.ToolCallSuccessRate*100)
+	_, _ = fmt.Fprintf(&out, "- Inner commands: `%d` total (`%d` tool, `%d` help, `%d` discover)\n", report.Summary.TotalInnerCommands, report.Summary.TotalInnerToolCalls, report.Summary.TotalInnerHelpCalls, report.Summary.TotalInnerDiscoverCalls)
+	_, _ = fmt.Fprintf(&out, "- Tool output bytes: `%d` raw, `%d` sent\n\n", report.Summary.TotalRawOutputBytes, report.Summary.TotalSentOutputBytes)
 
-	out += "## Task Results\n\n"
-	out += "| Task | Category | Status | Score | Turns | Calls | Inner |\n"
-	out += "|---|---|---|---:|---:|---:|---:|\n"
-	for _, result := range report.Results {
+	_, _ = fmt.Fprint(&out, "## Task Results\n\n")
+	_, _ = fmt.Fprint(&out, "| Task | Category | Status | Score | Turns | Calls | Inner |\n")
+	_, _ = fmt.Fprint(&out, "|---|---|---|---:|---:|---:|---:|\n")
+	for i := range report.Results {
+		result := &report.Results[i]
 		status := "FAIL"
 		if result.Score.AllPassed() {
 			status = "PASS"
 		}
-		out += fmt.Sprintf("| %s | %s | %s | %.0f/%.0f | %d | %d | %d |\n", result.Task.ID, result.Task.Category, status, result.Score.Score, result.Score.MaxScore, result.Trace.Turns, result.Trace.ToolCallCount, result.Trace.InnerCommandCount())
+		_, _ = fmt.Fprintf(&out, "| %s | %s | %s | %.0f/%.0f | %d | %d | %d |\n", result.Task.ID, result.Task.Category, status, result.Score.Score, result.Score.MaxScore, result.Trace.Turns, result.Trace.ToolCallCount, result.Trace.InnerCommandCount())
 	}
-	return out
+	return out.String()
 }

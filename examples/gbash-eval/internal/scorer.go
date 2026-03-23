@@ -1,3 +1,4 @@
+//nolint:gocritic,forbidigo // Internal eval scoring favors simple value semantics and host-side file reads.
 package gbasheval
 
 import (
@@ -36,10 +37,10 @@ func (s TaskScore) AllPassed() bool {
 	return true
 }
 
-func scoreTask(taskID string, trace agentTrace, fsys gbfs.FileSystem, expectations []Expectation) TaskScore {
+func scoreTask(ctx context.Context, taskID string, trace agentTrace, fsys gbfs.FileSystem, expectations []Expectation) TaskScore {
 	results := make([]ScoreResult, 0, len(expectations))
 	for _, exp := range expectations {
-		results = append(results, evaluateCheck(trace, fsys, exp))
+		results = append(results, evaluateCheck(ctx, trace, fsys, exp))
 	}
 
 	var maxScore float64
@@ -59,7 +60,7 @@ func scoreTask(taskID string, trace agentTrace, fsys gbfs.FileSystem, expectatio
 	}
 }
 
-func evaluateCheck(trace agentTrace, fsys gbfs.FileSystem, exp Expectation) ScoreResult {
+func evaluateCheck(ctx context.Context, trace agentTrace, fsys gbfs.FileSystem, exp Expectation) ScoreResult {
 	checkType, checkValue, _ := strings.Cut(exp.Check, ":")
 	switch checkType {
 	case "exit_code":
@@ -114,22 +115,23 @@ func evaluateCheck(trace agentTrace, fsys gbfs.FileSystem, exp Expectation) Scor
 		}
 		return ScoreResult{Check: exp.Check, Passed: true, Detail: "all stderr empty", Weight: exp.Weight}
 	case "file_exists":
-		err := statPath(fsys, checkValue)
+		err := statPath(ctx, fsys, checkValue)
 		return ScoreResult{Check: exp.Check, Passed: err == nil, Detail: existsDetail(err), Weight: exp.Weight}
 	case "dir_exists":
-		info, err := statPathInfo(fsys, checkValue)
-		passed := err == nil && info.IsDir()
-		detail := "directory not found"
-		if passed {
-			detail = "directory exists"
+		info, err := statPathInfo(ctx, fsys, checkValue)
+		if err != nil {
+			return ScoreResult{Check: exp.Check, Passed: false, Detail: "directory not found", Weight: exp.Weight}
 		}
-		return ScoreResult{Check: exp.Check, Passed: passed, Detail: detail, Weight: exp.Weight}
+		if info.IsDir() {
+			return ScoreResult{Check: exp.Check, Passed: true, Detail: "directory exists", Weight: exp.Weight}
+		}
+		return ScoreResult{Check: exp.Check, Passed: false, Detail: "directory not found", Weight: exp.Weight}
 	case "file_contains":
 		path, text, ok := strings.Cut(checkValue, ":")
 		if !ok {
 			return ScoreResult{Check: exp.Check, Passed: false, Detail: "invalid format, expected file_contains:/path:text", Weight: exp.Weight}
 		}
-		data, err := readFile(context.Background(), fsys, path)
+		data, err := readFile(ctx, fsys, path)
 		if err != nil {
 			return ScoreResult{Check: exp.Check, Passed: false, Detail: err.Error(), Weight: exp.Weight}
 		}
@@ -158,16 +160,16 @@ func readFile(ctx context.Context, fsys gbfs.FileSystem, name string) ([]byte, e
 	return io.ReadAll(file)
 }
 
-func statPath(fsys gbfs.FileSystem, name string) error {
-	_, err := statPathInfo(fsys, name)
+func statPath(ctx context.Context, fsys gbfs.FileSystem, name string) error {
+	_, err := statPathInfo(ctx, fsys, name)
 	return err
 }
 
-func statPathInfo(fsys gbfs.FileSystem, name string) (fs.FileInfo, error) {
+func statPathInfo(ctx context.Context, fsys gbfs.FileSystem, name string) (fs.FileInfo, error) {
 	if fsys == nil {
 		return nil, errors.New("filesystem is nil")
 	}
-	return fsys.Stat(context.Background(), name)
+	return fsys.Stat(ctx, name)
 }
 
 func existsDetail(err error) string {

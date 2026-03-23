@@ -1,3 +1,4 @@
+//nolint:gocritic // Internal evaluator wiring favors simpler value semantics than pointer-heavy call signatures.
 package gbasheval
 
 import (
@@ -5,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -79,7 +81,7 @@ func newScriptedSession(ctx context.Context, task ScriptingEvalTask) (*gbash.Ses
 		return nil, nil, fmt.Errorf("register help command: %w", err)
 	}
 
-	gb, err := gbash.New(
+	gb, err := gbash.New( //nolint:contextcheck // gbash.New does not accept a context.
 		gbash.WithRegistry(registry),
 		gbash.WithFileSystem(seedFiles(task.Files)),
 	)
@@ -304,12 +306,7 @@ func (c *discoverCommand) Run(_ context.Context, inv *commands.Invocation) error
 		filtered = filterTools(c.tools, func(tool MockToolDef) bool { return tool.Category == value })
 	} else if value, ok := argValue(inv.Args, "--tag"); ok {
 		filtered = filterTools(c.tools, func(tool MockToolDef) bool {
-			for _, tag := range tool.Tags {
-				if tag == value {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(tool.Tags, value)
 		})
 	} else if value, ok := argValue(inv.Args, "--search"); ok {
 		needle := strings.ToLower(value)
@@ -411,12 +408,7 @@ func coerceFlagValue(raw string, schema map[string]any) any {
 }
 
 func containsArg(args []string, target string) bool {
-	for _, arg := range args {
-		if arg == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(args, target)
 }
 
 func argValue(args []string, flag string) (string, bool) {

@@ -1,3 +1,4 @@
+//nolint:forbidigo // The standalone evaluator intentionally uses raw HTTP clients.
 package gbasheval
 
 import (
@@ -165,7 +166,7 @@ func (p *openAIResponsesProvider) parseResponse(body map[string]any) (providerRe
 	status := asString(body["status"])
 	return providerResponse{
 		Message:      message{Role: roleAssistant, Content: blocks},
-		Stop:         !hasFunctionCalls || status == "failed" || status == "cancelled",
+		Stop:         !hasFunctionCalls || status == "failed" || status == "canceled",
 		InputTokens:  asUint32(usage["input_tokens"]),
 		OutputTokens: asUint32(usage["output_tokens"]),
 	}, nil

@@ -1,3 +1,4 @@
+//nolint:forbidigo // The standalone evaluator intentionally reads datasets from the host filesystem.
 package gbasheval
 
 import (

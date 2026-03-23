@@ -25,10 +25,6 @@ func bashToolDefinition() toolDefinition {
 	}
 }
 
-func bashSystemPrompt() string {
-	return evalBashTool().SystemPrompt()
-}
-
 func extractCommands(input map[string]any) string {
 	req, err := bashtool.ParseRequest(input)
 	if err == nil {

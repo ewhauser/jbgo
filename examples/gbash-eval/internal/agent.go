@@ -1,3 +1,4 @@
+//nolint:gocritic // Internal evaluator wiring favors simpler value semantics than pointer-heavy call signatures.
 package gbasheval
 
 import (
@@ -12,7 +13,7 @@ import (
 )
 
 func runAgentLoop(ctx context.Context, provider Provider, task EvalTask, maxTurns int) (agentTrace, gbfs.FileSystem, error) {
-	gb, err := gbash.New(
+	gb, err := gbash.New( //nolint:contextcheck // gbash.New does not accept a context.
 		gbash.WithRegistry(extras.FullRegistry()),
 		gbash.WithFileSystem(seedFiles(task.Files)),
 	)
@@ -59,7 +60,7 @@ func runAgentLoop(ctx context.Context, provider Provider, task EvalTask, maxTurn
 		system = task.System
 	}
 
-	for turn := 0; turn < maxTurns; turn++ {
+	for range maxTurns {
 		resp, err := provider.Chat(ctx, messages, []toolDefinition{toolDef}, system)
 		if err != nil {
 			return currentTrace(), session.FileSystem(), fmt.Errorf("provider chat: %w", err)

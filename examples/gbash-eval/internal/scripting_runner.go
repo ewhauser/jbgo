@@ -1,3 +1,4 @@
+//nolint:gocritic // Internal evaluator wiring favors simple value semantics over pointer-heavy plumbing.
 package gbasheval
 
 import (
@@ -20,11 +21,11 @@ func runScriptingEval(ctx context.Context, cfg RunConfig, provider Provider, std
 	if cfg.Baseline {
 		mode = "baseline"
 	}
-	fmt.Fprintf(stdout, "Running %d scripting-tool tasks (%s mode) with %s/%s  (max_turns=%d)\n\n", len(tasks), mode, cfg.ProviderName, cfg.Model, cfg.MaxTurns)
+	_, _ = fmt.Fprintf(stdout, "Running %d scripting-tool tasks (%s mode) with %s/%s  (max_turns=%d)\n\n", len(tasks), mode, cfg.ProviderName, cfg.Model, cfg.MaxTurns)
 
 	results := make([]ScriptingEvalResult, 0, len(tasks))
 	for i, task := range tasks {
-		fmt.Fprintf(stdout, "[%d/%d] %s - %s (tools: %d)\n", i+1, len(tasks), task.ID, task.Description, len(task.Tools))
+		_, _ = fmt.Fprintf(stdout, "[%d/%d] %s - %s (tools: %d)\n", i+1, len(tasks), task.ID, task.Description, len(task.Tools))
 
 		var trace ScriptingTrace
 		if cfg.Baseline {
@@ -33,7 +34,7 @@ func runScriptingEval(ctx context.Context, cfg RunConfig, provider Provider, std
 			trace, err = runScriptedAgent(ctx, provider, task, cfg.MaxTurns)
 		}
 		if err != nil {
-			fmt.Fprintf(stdout, "  ERROR: %v\n\n", err)
+			_, _ = fmt.Fprintf(stdout, "  ERROR: %v\n\n", err)
 			results = append(results, ScriptingEvalResult{
 				Task:  task,
 				Trace: trace,
@@ -42,13 +43,13 @@ func runScriptingEval(ctx context.Context, cfg RunConfig, provider Provider, std
 			continue
 		}
 
-		score := scoreTask(task.ID, compatTraceFromScripting(trace), nil, task.Expectations)
+		score := scoreTask(ctx, task.ID, compatTraceFromScripting(trace), nil, task.Expectations)
 		for _, result := range score.Results {
 			icon := "FAIL"
 			if result.Passed {
 				icon = "PASS"
 			}
-			fmt.Fprintf(stdout, "  [%s] %s - %s\n", icon, result.Check, result.Detail)
+			_, _ = fmt.Fprintf(stdout, "  [%s] %s - %s\n", icon, result.Check, result.Detail)
 		}
 		callsOK := 0
 		for _, call := range trace.ToolCalls {
@@ -56,7 +57,7 @@ func runScriptingEval(ctx context.Context, cfg RunConfig, provider Provider, std
 				callsOK++
 			}
 		}
-		fmt.Fprintf(stdout, "  Score: %.0f/%.0f | Turns: %d | Calls: %d (%d ok, %d err) | Inner: %d (%d tool, %d help, %d discover) | Tokens: %din/%dout | Raw output: %d bytes | %.1fs\n\n",
+		_, _ = fmt.Fprintf(stdout, "  Score: %.0f/%.0f | Turns: %d | Calls: %d (%d ok, %d err) | Inner: %d (%d tool, %d help, %d discover) | Tokens: %din/%dout | Raw output: %d bytes | %.1fs\n\n",
 			score.Score, score.MaxScore, trace.Turns, trace.ToolCallCount, callsOK, trace.ToolCallCount-callsOK,
 			trace.InnerCommandCount(), trace.InnerCommandCountByKind(ScriptedCommandKindTool), trace.InnerCommandCountByKind(ScriptedCommandKindHelp), trace.InnerCommandCountByKind(ScriptedCommandKindDiscover),
 			trace.TotalInputTokens, trace.TotalOutputTokens, trace.RawToolOutputBytes, float64(trace.DurationMS)/1000,
@@ -65,9 +66,9 @@ func runScriptingEval(ctx context.Context, cfg RunConfig, provider Provider, std
 	}
 
 	report := buildScriptingReport(cfg.ProviderName, cfg.Model, cfg.MaxTurns, cfg.Baseline, results)
-	printScriptingTerminalReport(stdout, report)
+	printScriptingTerminalReport(stdout, &report)
 	if cfg.Save {
-		if err := saveScriptingReport(report, cfg.OutputDir, cfg.Moniker, stdout); err != nil {
+		if err := saveScriptingReport(&report, cfg.OutputDir, cfg.Moniker, stdout); err != nil {
 			return err
 		}
 	}

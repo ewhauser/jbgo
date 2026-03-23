@@ -1,3 +1,4 @@
+//nolint:forbidigo,gocritic // The host-side evaluator persists reports on disk and keeps report shaping straightforward.
 package gbasheval
 
 import (
@@ -7,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -59,7 +61,8 @@ func buildEvalReport(providerName, model, mode string, maxTurns int, results []E
 		TotalTasks: len(results),
 		ByCategory: map[string]CategorySummary{},
 	}
-	for _, result := range results {
+	for i := range results {
+		result := &results[i]
 		if result.Score.AllPassed() {
 			summary.TotalPassed++
 		}
@@ -121,43 +124,50 @@ func buildEvalReport(providerName, model, mode string, maxTurns int, results []E
 	}
 }
 
-func printEvalTerminalReport(w io.Writer, report EvalReport) {
+func printEvalTerminalReport(w io.Writer, report *EvalReport) {
 	if w == nil {
 		w = io.Discard
 	}
-	fmt.Fprintf(w, "\n=== Eval Report: %s/%s (%s) ===\n\n", report.Provider, report.Model, report.Mode)
-	for _, result := range report.Results {
+	if report == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\n=== Eval Report: %s/%s (%s) ===\n\n", report.Provider, report.Model, report.Mode)
+	for i := range report.Results {
+		result := &report.Results[i]
 		status := "FAIL"
 		if result.Score.AllPassed() {
 			status = "PASS"
 		}
-		fmt.Fprintf(w, "  [%s] %s (%s) - %.0f/%.0f\n", status, result.Task.ID, result.Task.Category, result.Score.Score, result.Score.MaxScore)
+		_, _ = fmt.Fprintf(w, "  [%s] %s (%s) - %.0f/%.0f\n", status, result.Task.ID, result.Task.Category, result.Score.Score, result.Score.MaxScore)
 	}
 
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "--- Summary ---")
-	fmt.Fprintf(w, "  Tasks: %d/%d passed\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
-	fmt.Fprintf(w, "  Score: %.1f/%.1f (%.0f%%)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
-	fmt.Fprintf(w, "  Turns: %d total, %.1f avg/task\n", report.Summary.TotalTurns, report.Summary.AverageTurnsPerTask)
-	fmt.Fprintf(w, "  Tool calls: %d total, %.1f avg/task (%d ok, %d error, %.0f%% success)\n", report.Summary.TotalToolCalls, report.Summary.AverageCallsPerTask, report.Summary.ToolCallsOK, report.Summary.ToolCallsError, report.Summary.ToolCallSuccessRate*100)
-	fmt.Fprintf(w, "  Tokens: %d input, %d output\n", report.Summary.TotalInputTokens, report.Summary.TotalOutputTokens)
-	fmt.Fprintf(w, "  Duration: %.1fs total, %.1fs avg/task\n", float64(report.Summary.TotalDurationMS)/1000, report.Summary.AverageDurationMS/1000)
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "--- Summary ---")
+	_, _ = fmt.Fprintf(w, "  Tasks: %d/%d passed\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
+	_, _ = fmt.Fprintf(w, "  Score: %.1f/%.1f (%.0f%%)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
+	_, _ = fmt.Fprintf(w, "  Turns: %d total, %.1f avg/task\n", report.Summary.TotalTurns, report.Summary.AverageTurnsPerTask)
+	_, _ = fmt.Fprintf(w, "  Tool calls: %d total, %.1f avg/task (%d ok, %d error, %.0f%% success)\n", report.Summary.TotalToolCalls, report.Summary.AverageCallsPerTask, report.Summary.ToolCallsOK, report.Summary.ToolCallsError, report.Summary.ToolCallSuccessRate*100)
+	_, _ = fmt.Fprintf(w, "  Tokens: %d input, %d output\n", report.Summary.TotalInputTokens, report.Summary.TotalOutputTokens)
+	_, _ = fmt.Fprintf(w, "  Duration: %.1fs total, %.1fs avg/task\n", float64(report.Summary.TotalDurationMS)/1000, report.Summary.AverageDurationMS/1000)
 
 	keys := make([]string, 0, len(report.Summary.ByCategory))
 	for key := range report.Summary.ByCategory {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "--- By Category ---")
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "--- By Category ---")
 	for _, key := range keys {
 		cat := report.Summary.ByCategory[key]
-		fmt.Fprintf(w, "  %-25s %d/%d tasks  %.0f%%\n", key, cat.Passed, cat.Tasks, cat.Rate*100)
+		_, _ = fmt.Fprintf(w, "  %-25s %d/%d tasks  %.0f%%\n", key, cat.Passed, cat.Tasks, cat.Rate*100)
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
-func saveEvalReport(report EvalReport, outputDir, moniker string, stdout io.Writer) error {
+func saveEvalReport(report *EvalReport, outputDir, moniker string, stdout io.Writer) error {
+	if report == nil {
+		return fmt.Errorf("report is nil")
+	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir %q: %w", outputDir, err)
 	}
@@ -172,7 +182,7 @@ func saveEvalReport(report EvalReport, outputDir, moniker string, stdout io.Writ
 		return fmt.Errorf("write report json: %w", err)
 	}
 	if stdout != nil {
-		fmt.Fprintf(stdout, "Saved JSON: %s\n", jsonPath)
+		_, _ = fmt.Fprintf(stdout, "Saved JSON: %s\n", jsonPath)
 	}
 
 	mdPath := base + ".md"
@@ -180,28 +190,32 @@ func saveEvalReport(report EvalReport, outputDir, moniker string, stdout io.Writ
 		return fmt.Errorf("write report markdown: %w", err)
 	}
 	if stdout != nil {
-		fmt.Fprintf(stdout, "Saved Markdown: %s\n", mdPath)
+		_, _ = fmt.Fprintf(stdout, "Saved Markdown: %s\n", mdPath)
 	}
 	return nil
 }
 
-func generateEvalMarkdown(report EvalReport) string {
-	var out string
-	out += fmt.Sprintf("# Eval Report: %s/%s\n\n", report.Provider, report.Model)
-	out += fmt.Sprintf("- Mode: `%s`\n", report.Mode)
-	out += fmt.Sprintf("- Timestamp: `%s`\n", report.Timestamp)
-	out += fmt.Sprintf("- Max turns: `%d`\n\n", report.MaxTurns)
+func generateEvalMarkdown(report *EvalReport) string {
+	if report == nil {
+		return ""
+	}
 
-	out += "## Summary\n\n"
-	out += fmt.Sprintf("- Tasks passed: `%d/%d`\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
-	out += fmt.Sprintf("- Score: `%.1f/%.1f` (`%.0f%%`)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
-	out += fmt.Sprintf("- Tool call success: `%d/%d` (`%.0f%%`)\n", report.Summary.ToolCallsOK, report.Summary.TotalToolCalls, report.Summary.ToolCallSuccessRate*100)
-	out += fmt.Sprintf("- Tokens: `%d` input / `%d` output\n", report.Summary.TotalInputTokens, report.Summary.TotalOutputTokens)
-	out += fmt.Sprintf("- Duration: `%.1fs`\n\n", float64(report.Summary.TotalDurationMS)/1000)
+	var out strings.Builder
+	_, _ = fmt.Fprintf(&out, "# Eval Report: %s/%s\n\n", report.Provider, report.Model)
+	_, _ = fmt.Fprintf(&out, "- Mode: `%s`\n", report.Mode)
+	_, _ = fmt.Fprintf(&out, "- Timestamp: `%s`\n", report.Timestamp)
+	_, _ = fmt.Fprintf(&out, "- Max turns: `%d`\n\n", report.MaxTurns)
 
-	out += "## By Category\n\n"
-	out += "| Category | Passed | Tasks | Score |\n"
-	out += "|---|---:|---:|---:|\n"
+	_, _ = fmt.Fprint(&out, "## Summary\n\n")
+	_, _ = fmt.Fprintf(&out, "- Tasks passed: `%d/%d`\n", report.Summary.TotalPassed, report.Summary.TotalTasks)
+	_, _ = fmt.Fprintf(&out, "- Score: `%.1f/%.1f` (`%.0f%%`)\n", report.Summary.TotalScore, report.Summary.TotalMaxScore, report.Summary.OverallRate*100)
+	_, _ = fmt.Fprintf(&out, "- Tool call success: `%d/%d` (`%.0f%%`)\n", report.Summary.ToolCallsOK, report.Summary.TotalToolCalls, report.Summary.ToolCallSuccessRate*100)
+	_, _ = fmt.Fprintf(&out, "- Tokens: `%d` input / `%d` output\n", report.Summary.TotalInputTokens, report.Summary.TotalOutputTokens)
+	_, _ = fmt.Fprintf(&out, "- Duration: `%.1fs`\n\n", float64(report.Summary.TotalDurationMS)/1000)
+
+	_, _ = fmt.Fprint(&out, "## By Category\n\n")
+	_, _ = fmt.Fprint(&out, "| Category | Passed | Tasks | Score |\n")
+	_, _ = fmt.Fprint(&out, "|---|---:|---:|---:|\n")
 	keys := make([]string, 0, len(report.Summary.ByCategory))
 	for key := range report.Summary.ByCategory {
 		keys = append(keys, key)
@@ -209,18 +223,19 @@ func generateEvalMarkdown(report EvalReport) string {
 	sort.Strings(keys)
 	for _, key := range keys {
 		cat := report.Summary.ByCategory[key]
-		out += fmt.Sprintf("| %s | %d | %d | %.0f%% |\n", key, cat.Passed, cat.Tasks, cat.Rate*100)
+		_, _ = fmt.Fprintf(&out, "| %s | %d | %d | %.0f%% |\n", key, cat.Passed, cat.Tasks, cat.Rate*100)
 	}
 
-	out += "\n## Task Results\n\n"
-	out += "| Task | Category | Status | Score | Turns | Calls |\n"
-	out += "|---|---|---|---:|---:|---:|\n"
-	for _, result := range report.Results {
+	_, _ = fmt.Fprint(&out, "\n## Task Results\n\n")
+	_, _ = fmt.Fprint(&out, "| Task | Category | Status | Score | Turns | Calls |\n")
+	_, _ = fmt.Fprint(&out, "|---|---|---|---:|---:|---:|\n")
+	for i := range report.Results {
+		result := &report.Results[i]
 		status := "FAIL"
 		if result.Score.AllPassed() {
 			status = "PASS"
 		}
-		out += fmt.Sprintf("| %s | %s | %s | %.0f/%.0f | %d | %d |\n", result.Task.ID, result.Task.Category, status, result.Score.Score, result.Score.MaxScore, result.Trace.Turns, result.Trace.ToolCallCount)
+		_, _ = fmt.Fprintf(&out, "| %s | %s | %s | %.0f/%.0f | %d | %d |\n", result.Task.ID, result.Task.Category, status, result.Score.Score, result.Score.MaxScore, result.Trace.Turns, result.Trace.ToolCallCount)
 	}
-	return out
+	return out.String()
 }

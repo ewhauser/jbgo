@@ -15,7 +15,7 @@ func TestRunAgentLoopPersistsFilesystemAcrossTurns(t *testing.T) {
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "bash", map[string]any{"commands": "mkdir -p /tmp && printf hello >/tmp/note.txt"}),
 			assistantToolResponse("call_2", "bash", map[string]any{"commands": "cat /tmp/note.txt"}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -51,7 +51,7 @@ func TestRunAgentLoopSupportsExtrasCommands(t *testing.T) {
 		t: t,
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "bash", map[string]any{"commands": `printf '{"name":"alice"}' | jq -r '.name'`}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -88,7 +88,7 @@ host: %s
 cwd: %s
 ' "$(whoami)" "$(hostname)" "$(pwd)"`,
 			}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -120,6 +120,7 @@ cwd: %s
 func TestRunScriptedAgentTracksDiscoverAndHelpJSON(t *testing.T) {
 	t.Parallel()
 
+	staticResponse := `{"ticket_id":"TK-5001","status":"open"}`
 	task := ScriptingEvalTask{
 		ID:            "scripted-discovery",
 		Category:      "discovery",
@@ -142,7 +143,7 @@ func TestRunScriptedAgentTracksDiscoverAndHelpJSON(t *testing.T) {
 				Category: "support",
 				Tags:     []string{"write"},
 				Mock: MockBehavior{
-					Static: ptr("{" + `"ticket_id":"TK-5001","status":"open"` + "}"),
+					Static: &staticResponse,
 				},
 			},
 		},
@@ -164,7 +165,7 @@ func TestRunScriptedAgentTracksDiscoverAndHelpJSON(t *testing.T) {
 			assistantToolResponse("call_1", task.ID, map[string]any{"commands": "discover --category support"}),
 			assistantToolResponse("call_2", task.ID, map[string]any{"commands": "help create_ticket --json"}),
 			assistantToolResponse("call_3", task.ID, map[string]any{"commands": `create_ticket --account_ref C-50 --ticket_subject "Login broken" --severity_level high --details "Login broken"`}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -234,7 +235,7 @@ func TestRunBaselineAgentCallsMockToolsDirectly(t *testing.T) {
 		},
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "check_inventory", map[string]any{"product_code": "SKU-200"}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -273,7 +274,7 @@ func TestRunBashEvalSavesReportsWithExpectedFilenames(t *testing.T) {
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "bash", map[string]any{"commands": "mkdir -p /tmp && printf hello >/tmp/note.txt"}),
 			assistantToolResponse("call_2", "bash", map[string]any{"commands": "cat /tmp/note.txt"}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -318,7 +319,7 @@ func TestRunScriptingEvalSavesReportsWithExpectedFilenames(t *testing.T) {
 		t: t,
 		responses: []providerResponse{
 			assistantToolResponse("call_1", "ping", map[string]any{}),
-			assistantStopResponse("done"),
+			assistantStopResponse(),
 		},
 	}
 
@@ -352,8 +353,4 @@ func TestRunScriptingEvalSavesReportsWithExpectedFilenames(t *testing.T) {
 	if !strings.Contains(out.String(), "Saved JSON:") || !strings.Contains(out.String(), "Saved Markdown:") {
 		t.Fatalf("stdout = %q, want saved report messages", out.String())
 	}
-}
-
-func ptr(value string) *string {
-	return &value
 }

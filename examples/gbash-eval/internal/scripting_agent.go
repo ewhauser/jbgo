@@ -1,3 +1,4 @@
+//nolint:gocritic // Internal evaluator wiring favors simpler value semantics than pointer-heavy call signatures.
 package gbasheval
 
 import (
@@ -90,7 +91,7 @@ func runScriptedAgent(ctx context.Context, provider Provider, task ScriptingEval
 		}
 	}
 
-	for turn := 0; turn < maxTurns; turn++ {
+	for range maxTurns {
 		resp, err := provider.Chat(ctx, messages, []toolDefinition{toolDef}, scriptedSystemPrompt(task))
 		if err != nil {
 			return currentTrace(), fmt.Errorf("provider chat: %w", err)
@@ -201,7 +202,7 @@ func runBaselineAgent(ctx context.Context, provider Provider, task ScriptingEval
 		}
 	}
 
-	for turn := 0; turn < maxTurns; turn++ {
+	for range maxTurns {
 		resp, err := provider.Chat(ctx, messages, toolDefs, system)
 		if err != nil {
 			return currentTrace(), fmt.Errorf("provider chat: %w", err)

@@ -15,10 +15,16 @@ func normalizeSchema(schema map[string]any) map[string]any {
 	}
 	if _, ok := schema["type"]; !ok {
 		schema = cloneMap(schema)
+		if schema == nil {
+			schema = map[string]any{}
+		}
 		schema["type"] = "object"
 	}
 	if _, ok := schema["properties"]; !ok {
 		schema = cloneMap(schema)
+		if schema == nil {
+			schema = map[string]any{}
+		}
 		schema["properties"] = map[string]any{}
 	}
 	return schema

@@ -15,14 +15,6 @@ func decodeJSONObject(data []byte, out any) error {
 	return nil
 }
 
-func marshalPretty(value any) string {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
 func asObject(value any) map[string]any {
 	obj, _ := value.(map[string]any)
 	return obj

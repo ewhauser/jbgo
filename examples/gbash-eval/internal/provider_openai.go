@@ -1,3 +1,4 @@
+//nolint:forbidigo // The standalone evaluator intentionally uses raw HTTP clients.
 package gbasheval
 
 import (

@@ -2,6 +2,7 @@ package gbasheval
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -103,10 +104,10 @@ func TestVendoredEvalDatasetUsesGbashSystemInfoIdentity(t *testing.T) {
 		for _, exp := range task.Expectations {
 			checks = append(checks, exp.Check)
 		}
-		if !sliceContainsString(checks, "stdout_contains:user: agent") {
+		if !slices.Contains(checks, "stdout_contains:user: agent") {
 			t.Fatalf("sysinfo_env_report checks = %#v, want user: agent expectation", checks)
 		}
-		if !sliceContainsString(checks, "stdout_contains:host: gbash") {
+		if !slices.Contains(checks, "stdout_contains:host: gbash") {
 			t.Fatalf("sysinfo_env_report checks = %#v, want host: gbash expectation", checks)
 		}
 		if !strings.Contains(task.Prompt, "single bash command or short bash script") {
@@ -119,13 +120,4 @@ func TestVendoredEvalDatasetUsesGbashSystemInfoIdentity(t *testing.T) {
 	}
 
 	t.Fatal("sysinfo_env_report task not found in eval-tasks.jsonl")
-}
-
-func sliceContainsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }

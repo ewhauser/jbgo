@@ -73,7 +73,7 @@ func parseRunFlags(args []string, stderr io.Writer) (RunConfig, error) {
 	fs.StringVar(&cfg.Moniker, "moniker", "", "custom run identifier")
 	fs.Var(&taskIDs, "task", "run only specific task ID(s); repeat the flag or pass a comma-separated list")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: gbash-eval run --dataset PATH --provider NAME --model NAME [options]\n\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Usage: gbash-eval run --dataset PATH --provider NAME --model NAME [options]\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -111,11 +111,11 @@ func printCLIUsage(w io.Writer) {
 	if w == nil {
 		w = io.Discard
 	}
-	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  gbash-eval run --dataset PATH --provider NAME --model NAME [options]")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  run     Run the evaluator against a dataset")
+	_, _ = fmt.Fprintln(w, "Usage:")
+	_, _ = fmt.Fprintln(w, "  gbash-eval run --dataset PATH --provider NAME --model NAME [options]")
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Commands:")
+	_, _ = fmt.Fprintln(w, "  run     Run the evaluator against a dataset")
 }
 
 func sanitizeMoniker(value string) string {
@@ -133,8 +133,7 @@ func (f *taskIDFlag) String() string {
 }
 
 func (f *taskIDFlag) Set(value string) error {
-	parts := strings.Split(value, ",")
-	for _, part := range parts {
+	for part := range strings.SplitSeq(value, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

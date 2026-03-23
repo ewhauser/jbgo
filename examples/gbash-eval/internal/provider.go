@@ -1,3 +1,4 @@
+//nolint:forbidigo // The standalone evaluator intentionally uses host env vars and raw HTTP clients.
 package gbasheval
 
 import (
@@ -167,5 +168,5 @@ func retryMessage(w io.Writer, provider string, status int, delay time.Duration,
 	if w == nil {
 		return
 	}
-	fmt.Fprintf(w, "  [retry] %s %d - waiting %s (attempt %d/%d)\n", provider, status, delay, attempt, total)
+	_, _ = fmt.Fprintf(w, "  [retry] %s %d - waiting %s (attempt %d/%d)\n", provider, status, delay, attempt, total)
 }

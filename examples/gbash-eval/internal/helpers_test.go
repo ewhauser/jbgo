@@ -62,13 +62,13 @@ func assistantToolResponse(id, name string, input map[string]any) providerRespon
 	}
 }
 
-func assistantStopResponse(text string) providerResponse {
+func assistantStopResponse() providerResponse {
 	return providerResponse{
 		Message: message{
 			Role: roleAssistant,
 			Content: []contentBlock{{
 				Type: "text",
-				Text: text,
+				Text: "done",
 			}},
 		},
 		Stop:         true,

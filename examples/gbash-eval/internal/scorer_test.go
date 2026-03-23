@@ -39,7 +39,7 @@ func TestScoreTaskSupportsCoreChecks(t *testing.T) {
 		LastToolResponse: &call,
 	}
 
-	score := scoreTask("task-1", trace, fsys, []Expectation{
+	score := scoreTask(context.Background(), "task-1", trace, fsys, []Expectation{
 		{Check: "exit_code:0", Weight: 1},
 		{Check: "stdout_contains:count=3", Weight: 1},
 		{Check: "stdout_regex:hello\\s+report", Weight: 1},
@@ -71,7 +71,7 @@ func TestScoreTaskReportsRegexAndFilesystemFailures(t *testing.T) {
 		LastToolResponse: &call,
 	}
 
-	score := scoreTask("task-2", trace, nil, []Expectation{
+	score := scoreTask(context.Background(), "task-2", trace, nil, []Expectation{
 		{Check: "stdout_regex:[", Weight: 1},
 		{Check: "stdout_regex:must-match", Weight: 1},
 		{Check: "stderr_empty", Weight: 1},

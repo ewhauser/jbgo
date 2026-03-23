@@ -168,7 +168,7 @@ func TestCompatTraceFromScriptingPreservesStderr(t *testing.T) {
 		t.Fatalf("compat stderr = %q, want warning: partial output", got)
 	}
 
-	score := scoreTask("stderr-check", trace, nil, []Expectation{{Check: "stderr_empty", Weight: 1}})
+	score := scoreTask(context.Background(), "stderr-check", trace, nil, []Expectation{{Check: "stderr_empty", Weight: 1}})
 	if score.AllPassed() {
 		t.Fatalf("score.AllPassed() = true, want stderr_empty failure")
 	}
