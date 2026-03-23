@@ -907,6 +907,188 @@ func TestLognameHelpVersionAndErrors(t *testing.T) {
 	}
 }
 
+func TestGroupsDefaultOutput(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "groups\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "agent\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestGroupsWithUsername(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "groups agent\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "agent : agent\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestGroupsCustomEnv(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Env: map[string]string{
+			"GROUPS": "1000,1001,1002",
+			"GROUP":  "staff",
+		},
+		Script: "groups\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "staff 1001 1002\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestGroupsUnknownAndInvalidUsers(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name   string
+		script string
+	}{
+		{name: "unknown name", script: "groups nobody\n"},
+		{name: "numeric UID rejected", script: "groups 1000\n"},
+		{name: "empty string rejected", script: "groups ''\n"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 1 {
+				t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+			}
+			if !strings.Contains(result.Stderr, "no such user") {
+				t.Fatalf("Stderr = %q, want to contain 'no such user'", result.Stderr)
+			}
+		})
+	}
+}
+
+func TestGroupsHelpVersionAndErrors(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "short help",
+			script:   "groups -h\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print group memberships",
+				"Usage: groups",
+				"-V, --version",
+				"-h, --help",
+			},
+		},
+		{
+			name:     "long help",
+			script:   "groups --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print group memberships",
+				"Usage: groups",
+			},
+		},
+		{
+			name:     "short version",
+			script:   "groups -V\n",
+			wantCode: 0,
+			wantOut:  "groups (gbash)\n",
+		},
+		{
+			name:     "long version",
+			script:   "groups --version\n",
+			wantCode: 0,
+			wantOut:  "groups (gbash)\n",
+		},
+		{
+			name:     "inferred long version",
+			script:   "groups --ver\n",
+			wantCode: 0,
+			wantOut:  "groups (gbash)\n",
+		},
+		{
+			name:       "invalid long option",
+			script:     "groups --bogus\n",
+			wantCode:   1,
+			wantStderr: "groups: unrecognized option '--bogus'\nTry 'groups --help' for more information.\n",
+		},
+		{
+			name:       "invalid short option",
+			script:     "groups -x\n",
+			wantCode:   1,
+			wantStderr: "groups: invalid option -- 'x'\nTry 'groups --help' for more information.\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(got, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", got, want)
+					}
+				}
+			} else if got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestWhoHelpVersionAndErrors(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
