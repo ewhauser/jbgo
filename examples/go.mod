@@ -3,10 +3,10 @@ module github.com/ewhauser/gbash/examples
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.26
-	github.com/ewhauser/gbash/contrib/bashtool v0.0.26
-	github.com/ewhauser/gbash/contrib/extras v0.0.26
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.26
+	github.com/ewhauser/gbash v0.0.27
+	github.com/ewhauser/gbash/contrib/bashtool v0.0.27
+	github.com/ewhauser/gbash/contrib/extras v0.0.27
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.27
 	github.com/klauspost/compress v1.18.4
 	github.com/ncruces/go-sqlite3 v0.31.1
 	github.com/openai/openai-go v1.12.0
@@ -32,14 +32,13 @@ require (
 	github.com/agext/levenshtein v1.2.1 // indirect
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
-	github.com/benhoyt/goawk v1.31.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
-	github.com/ewhauser/gbash/contrib/awk v0.0.26 // indirect
-	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.26 // indirect
-	github.com/ewhauser/gbash/contrib/jq v0.0.26 // indirect
-	github.com/ewhauser/gbash/contrib/yq v0.0.26 // indirect
+	github.com/ewhauser/gbash/contrib/awk v0.0.27 // indirect
+	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.27 // indirect
+	github.com/ewhauser/gbash/contrib/jq v0.0.27 // indirect
+	github.com/ewhauser/gbash/contrib/yq v0.0.27 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -99,3 +98,11 @@ replace github.com/ewhauser/gbash/contrib/bashtool => ../contrib/bashtool
 replace github.com/ewhauser/gbash/contrib/extras => ../contrib/extras
 
 replace github.com/ewhauser/gbash/contrib/sqlite3 => ../contrib/sqlite3
+
+replace github.com/ewhauser/gbash/contrib/awk => ../contrib/awk
+
+replace github.com/ewhauser/gbash/contrib/htmltomarkdown => ../contrib/htmltomarkdown
+
+replace github.com/ewhauser/gbash/contrib/jq => ../contrib/jq
+
+replace github.com/ewhauser/gbash/contrib/yq => ../contrib/yq
