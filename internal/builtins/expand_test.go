@@ -2,6 +2,7 @@ package builtins_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -70,6 +71,14 @@ func TestExpandTransformsFilesAndStdin(t *testing.T) {
 	if got, want := stdinResult.Stdout, "x   y"; got != want {
 		t.Fatalf("stdin stdout = %q, want %q", got, want)
 	}
+
+	repeatedStdin := mustExecSession(t, session, "printf 'x\\ty' | expand --tabs=4 - -\n")
+	if repeatedStdin.ExitCode != 0 {
+		t.Fatalf("repeatedStdin ExitCode = %d, want 0; stderr=%q", repeatedStdin.ExitCode, repeatedStdin.Stderr)
+	}
+	if got, want := repeatedStdin.Stdout, "x   y"; got != want {
+		t.Fatalf("repeatedStdin stdout = %q, want %q", got, want)
+	}
 }
 
 func TestExpandTabListsAndShortcuts(t *testing.T) {
@@ -85,6 +94,10 @@ func TestExpandTabListsAndShortcuts(t *testing.T) {
 			"printf '%s\\n' ---\n" +
 			"printf '\\ta\\tb\\tc' | expand --tabs=1,+5\n" +
 			"printf '%s\\n' ---\n" +
+			"printf '\\ta\\tb\\tc' | expand --tabs=8,/4\n" +
+			"printf '%s\\n' ---\n" +
+			"printf '\\ta\\tb\\tc' | expand --tabs=8,+4\n" +
+			"printf '%s\\n' ---\n" +
 			"printf '\\ta\\tb\\tc' | expand -2,5 -7\n",
 	})
 	if err != nil {
@@ -98,9 +111,30 @@ func TestExpandTabListsAndShortcuts(t *testing.T) {
 		"a  b  c  d e---\n" +
 		" a   b    c---\n" +
 		" a    b    c---\n" +
+		"        a   b   c---\n" +
+		"        a   b   c---\n" +
 		"  a  b c"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestExpandHandlesHugeTabstopWithoutPanicking(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime(t, &Config{})
+	maxInt := strconv.FormatUint(uint64(^uint(0)>>1), 10)
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '' | expand --tabs=" + maxInt + "\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", result.Stdout)
 	}
 }
 

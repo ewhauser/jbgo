@@ -11,6 +11,7 @@ import (
 
 const (
 	expandDefaultTabStop = 8
+	expandMaxCachedSpace = 4096
 )
 
 const expandHelpText = `Usage: expand [OPTION]... [FILE]...
@@ -115,11 +116,12 @@ func (c *Expand) Spec() CommandSpec {
 }
 
 func (c *Expand) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+	spec := c.Spec()
 	if matches.Has("help") {
-		return renderStaticHelp(expandHelpText)(inv.Stdout, c.Spec())
+		return RenderCommandHelp(inv.Stdout, &spec)
 	}
 	if matches.Has("version") {
-		return RenderSimpleVersion(inv.Stdout, c.Name())
+		return RenderCommandVersion(inv.Stdout, &spec)
 	}
 
 	opts, err := parseExpandMatches(inv, matches)
@@ -132,23 +134,12 @@ func (c *Expand) RunParsed(ctx context.Context, inv *Invocation, matches *Parsed
 		files = []string{"-"}
 	}
 
-	var (
-		stdinData   []byte
-		stdinLoaded bool
-		hadErrors   bool
-	)
+	var hadErrors bool
 
 	for _, name := range files {
 		data, err := func() ([]byte, error) {
 			if name == "-" {
-				if !stdinLoaded {
-					stdinData, err = readAllStdin(ctx, inv)
-					if err != nil {
-						return nil, err
-					}
-					stdinLoaded = true
-				}
-				return stdinData, nil
+				return readAllStdin(ctx, inv)
 			}
 			read, _, err := readAllFile(ctx, inv, name)
 			if err != nil {
@@ -185,7 +176,7 @@ func parseExpandMatches(inv *Invocation, matches *ParsedCommand) (expandOptions,
 		files:         matches.Args("file"),
 		tabstops:      tabstops,
 		remainingMode: mode,
-		spaceCache:    bytes.Repeat([]byte(" "), expandMaxSpaceRun(tabstops, mode)),
+		spaceCache:    expandSpaceCache(tabstops, mode),
 	}, nil
 }
 
@@ -222,38 +213,40 @@ func parseExpandTabList(raw string) (expandRemainingMode, []int, error) {
 	var (
 		tabstops      []int
 		remainingMode expandRemainingMode
-		specifierUsed bool
 	)
-	for _, word := range strings.FieldsFunc(trimmed, expandTabSeparator) {
-		bytesWord := []byte(word)
-		for i := 0; i < len(bytesWord); i++ {
-			switch bytesWord[i] {
+	words := strings.FieldsFunc(trimmed, expandTabSeparator)
+	for idx, word := range words {
+		wordMode := expandRemainingNone
+		if word != "" {
+			switch word[0] {
 			case '+':
-				remainingMode = expandRemainingPlus
+				wordMode = expandRemainingPlus
 			case '/':
-				remainingMode = expandRemainingSlash
-			default:
-				value := word[i:]
-				num, err := parseExpandTabNumber(value)
-				if err != nil {
-					return expandRemainingNone, nil, err
-				}
-				if num == 0 {
-					return expandRemainingNone, nil, fmt.Errorf("tab size cannot be 0")
-				}
-				if len(tabstops) > 0 && tabstops[len(tabstops)-1] >= num {
-					return expandRemainingNone, nil, fmt.Errorf("tab sizes must be ascending")
-				}
-				if specifierUsed {
-					return expandRemainingNone, nil, fmt.Errorf("%s specifier only allowed with the last value", expandSpecifierQuote(remainingMode))
-				}
-				if remainingMode != expandRemainingNone {
-					specifierUsed = true
-				}
-				tabstops = append(tabstops, num)
-				i = len(bytesWord)
+				wordMode = expandRemainingSlash
 			}
 		}
+		if wordMode != expandRemainingNone {
+			if idx != len(words)-1 {
+				return expandRemainingNone, nil, fmt.Errorf("%s specifier only allowed with the last value", expandSpecifierQuote(wordMode))
+			}
+			remainingMode = wordMode
+			word = word[1:]
+			if word == "" {
+				continue
+			}
+		}
+
+		num, err := parseExpandTabNumber(word)
+		if err != nil {
+			return expandRemainingNone, nil, err
+		}
+		if num == 0 {
+			return expandRemainingNone, nil, fmt.Errorf("tab size cannot be 0")
+		}
+		if wordMode == expandRemainingNone && len(tabstops) > 0 && tabstops[len(tabstops)-1] >= num {
+			return expandRemainingNone, nil, fmt.Errorf("tab sizes must be ascending")
+		}
+		tabstops = append(tabstops, num)
 	}
 
 	if len(tabstops) == 0 {
@@ -285,7 +278,7 @@ func parseExpandTabNumber(raw string) (int, error) {
 }
 
 func expandTabSeparator(r rune) bool {
-	return r == ' ' || r == ','
+	return r == ' ' || r == '\t' || r == ','
 }
 
 func expandSpecifierQuote(mode expandRemainingMode) string {
@@ -322,6 +315,10 @@ func expandMaxSpaceRun(tabstops []int, mode expandRemainingMode) int {
 	return maxGap
 }
 
+func expandSpaceCache(tabstops []int, mode expandRemainingMode) []byte {
+	return bytes.Repeat([]byte(" "), min(expandMaxSpaceRun(tabstops, mode), expandMaxCachedSpace))
+}
+
 func expandBytes(data []byte, opts *expandOptions) []byte {
 	if len(data) == 0 {
 		return nil
@@ -336,7 +333,7 @@ func expandBytes(data []byte, opts *expandOptions) []byte {
 			spaces := expandNextTabstop(opts.tabstops, col, opts.remainingMode)
 			col += spaces
 			if initial || !opts.initial {
-				_, _ = out.Write(expandSpaces(opts.spaceCache, spaces))
+				expandWriteSpaces(&out, opts.spaceCache, spaces)
 			} else {
 				_ = out.WriteByte('\t')
 			}
@@ -361,11 +358,12 @@ func expandBytes(data []byte, opts *expandOptions) []byte {
 	return out.Bytes()
 }
 
-func expandSpaces(cache []byte, n int) []byte {
-	if n <= len(cache) {
-		return cache[:n]
+func expandWriteSpaces(out *bytes.Buffer, cache []byte, n int) {
+	for n > 0 {
+		chunk := min(len(cache), n)
+		_, _ = out.Write(cache[:chunk])
+		n -= chunk
 	}
-	return bytes.Repeat([]byte(" "), n)
 }
 
 func expandNextTabstop(tabstops []int, col int, mode expandRemainingMode) int {

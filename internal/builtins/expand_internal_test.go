@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 )
 
@@ -29,8 +30,11 @@ func TestParseExpandTabList(t *testing.T) {
 	}{
 		{name: "default", raw: "", wantMode: expandRemainingNone, wantStops: []int{8}},
 		{name: "space separated", raw: "3 6 9", wantMode: expandRemainingNone, wantStops: []int{3, 6, 9}},
+		{name: "tab separated", raw: "3\t6\t9", wantMode: expandRemainingNone, wantStops: []int{3, 6, 9}},
 		{name: "slash suffix", raw: "1,/5", wantMode: expandRemainingSlash, wantStops: []int{1, 5}},
+		{name: "slash repeat below last fixed", raw: "8,/4", wantMode: expandRemainingSlash, wantStops: []int{8, 4}},
 		{name: "plus suffix", raw: "1,+5", wantMode: expandRemainingPlus, wantStops: []int{1, 5}},
+		{name: "plus repeat below last fixed", raw: "8,+4", wantMode: expandRemainingPlus, wantStops: []int{8, 4}},
 		{name: "no numbers falls back", raw: "+,/,+,/", wantMode: expandRemainingNone, wantStops: []int{8}},
 		{name: "specifier not at start", raw: "1/", wantErr: "'/' specifier not at start of number: '/'"},
 		{name: "specifier only on last", raw: "1,+2,3", wantErr: "'+' specifier only allowed with the last value"},
@@ -55,7 +59,7 @@ func TestParseExpandTabList(t *testing.T) {
 			if gotMode != tc.wantMode {
 				t.Fatalf("parseExpandTabList(%q) mode = %v, want %v", tc.raw, gotMode, tc.wantMode)
 			}
-			if !equalInts(gotStops, tc.wantStops) {
+			if !slices.Equal(gotStops, tc.wantStops) {
 				t.Fatalf("parseExpandTabList(%q) tabstops = %#v, want %#v", tc.raw, gotStops, tc.wantStops)
 			}
 		})
@@ -97,16 +101,4 @@ func TestExpandBytes(t *testing.T) {
 	if got, want := string(expandBytes([]byte("界\tX"), &byteCountOpts)), "界     X"; got != want {
 		t.Fatalf("expandBytes(multibyte) = %q, want %q", got, want)
 	}
-}
-
-func equalInts(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
