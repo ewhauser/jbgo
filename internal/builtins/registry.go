@@ -103,7 +103,6 @@ func DefaultRegistry() *commands.Registry {
 		NewLogname(),
 		NewMktemp(),
 		NewRM(),
-		NewNohup(),
 		NewNproc(),
 		NewNumfmt(),
 		NewPathchk(),
