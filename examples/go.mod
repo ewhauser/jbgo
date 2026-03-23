@@ -3,8 +3,8 @@ module github.com/ewhauser/gbash/examples
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.25
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.25
+	github.com/ewhauser/gbash v0.0.26
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.26
 	github.com/klauspost/compress v1.18.4
 	github.com/ncruces/go-sqlite3 v0.31.1
 	github.com/openai/openai-go v1.12.0
