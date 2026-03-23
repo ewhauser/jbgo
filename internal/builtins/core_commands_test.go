@@ -2368,6 +2368,248 @@ func TestBashAcceptsLongStartupCompatibilityFlags(t *testing.T) {
 	}
 }
 
+func TestNprocDefaultCount(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "nproc\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestNprocAllFlag(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "nproc --all\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestNprocIgnoreFlag(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name    string
+		script  string
+		wantOut string
+	}{
+		{
+			name:    "ignore 1",
+			script:  "nproc --ignore=1\n",
+			wantOut: "1\n",
+		},
+		{
+			name:    "ignore all floors to 1",
+			script:  "nproc --ignore=2\n",
+			wantOut: "1\n",
+		},
+		{
+			name:    "ignore more than available floors to 1",
+			script:  "nproc --ignore=100\n",
+			wantOut: "1\n",
+		},
+		{
+			name:    "ignore 0 is no-op",
+			script:  "nproc --ignore=0\n",
+			wantOut: "2\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+		})
+	}
+}
+
+func TestNprocOMPEnvVars(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name    string
+		script  string
+		wantOut string
+	}{
+		{
+			name:    "OMP_NUM_THREADS overrides default",
+			script:  "OMP_NUM_THREADS=8 nproc\n",
+			wantOut: "8\n",
+		},
+		{
+			name:    "OMP_NUM_THREADS comma-separated takes first",
+			script:  "OMP_NUM_THREADS=4,2,1 nproc\n",
+			wantOut: "4\n",
+		},
+		{
+			name:    "OMP_NUM_THREADS=0 is ignored",
+			script:  "OMP_NUM_THREADS=0 nproc\n",
+			wantOut: "2\n",
+		},
+		{
+			name:    "OMP_NUM_THREADS invalid is ignored",
+			script:  "OMP_NUM_THREADS=abc nproc\n",
+			wantOut: "2\n",
+		},
+		{
+			name:    "OMP_NUM_THREADS ignored with --all",
+			script:  "OMP_NUM_THREADS=8 nproc --all\n",
+			wantOut: "2\n",
+		},
+		{
+			name:    "OMP_THREAD_LIMIT caps result",
+			script:  "OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=4 nproc\n",
+			wantOut: "4\n",
+		},
+		{
+			name:    "OMP_THREAD_LIMIT=0 is ignored",
+			script:  "OMP_THREAD_LIMIT=0 nproc\n",
+			wantOut: "2\n",
+		},
+		{
+			name:    "OMP_THREAD_LIMIT with --ignore",
+			script:  "OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=4 nproc --ignore=2\n",
+			wantOut: "2\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+		})
+	}
+}
+
+func TestNprocHelpVersionAndErrors(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name            string
+		script          string
+		wantCode        int
+		wantOut         string
+		wantOutContains []string
+		wantStderr      string
+	}{
+		{
+			name:     "short help",
+			script:   "nproc -h\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the number of processing units available",
+				"Usage: nproc",
+				"--all",
+				"--ignore",
+				"-h, --help",
+			},
+		},
+		{
+			name:     "long help",
+			script:   "nproc --help\n",
+			wantCode: 0,
+			wantOutContains: []string{
+				"Print the number of processing units available",
+			},
+		},
+		{
+			name:     "version",
+			script:   "nproc -V\n",
+			wantCode: 0,
+			wantOut:  "nproc (gbash)\n",
+		},
+		{
+			name:       "invalid option",
+			script:     "nproc --bogus\n",
+			wantCode:   1,
+			wantStderr: "nproc: unrecognized option '--bogus'\nTry 'nproc --help' for more information.\n",
+		},
+		{
+			name:       "extra operand",
+			script:     "nproc extra\n",
+			wantCode:   1,
+			wantStderr: "nproc: extra operand 'extra'\nTry 'nproc --help' for more information.\n",
+		},
+		{
+			name:       "invalid ignore value",
+			script:     "nproc --ignore=abc\n",
+			wantCode:   1,
+			wantStderr: "nproc: invalid number: 'abc'\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: tc.script,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantCode {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantCode, result.Stderr)
+			}
+			if got := result.Stdout; len(tc.wantOutContains) > 0 {
+				for _, want := range tc.wantOutContains {
+					if !strings.Contains(got, want) {
+						t.Fatalf("Stdout = %q, want to contain %q", got, want)
+					}
+				}
+			} else if got != tc.wantOut {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantOut)
+			}
+			if got := result.Stderr; got != tc.wantStderr {
+				t.Fatalf("Stderr = %q, want %q", got, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestHostnameBuiltinUsesRuntimeNodename(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
