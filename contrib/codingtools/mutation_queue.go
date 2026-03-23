@@ -31,29 +31,43 @@ func withMutationQueue[T any](ctx context.Context, q *mutationQueue, key string,
 	q.mu.Unlock()
 
 	if prev != nil {
-		select {
-		case <-prev:
-		case <-ctx.Done():
-			close(next)
-			q.mu.Lock()
-			if q.tails[key] == next {
-				delete(q.tails, key)
+		if ctx == nil {
+			<-prev
+		} else {
+			select {
+			case <-prev:
+			case <-ctx.Done():
+				releaseMutationQueueAfterPrev(q, key, prev, next)
+				return zero, ctx.Err()
 			}
-			q.mu.Unlock()
-			return zero, ctx.Err()
 		}
 	}
 
 	defer func() {
-		close(next)
-		q.mu.Lock()
-		if q.tails[key] == next {
-			delete(q.tails, key)
-		}
-		q.mu.Unlock()
+		releaseMutationQueue(q, key, next)
 	}()
 
 	return fn()
+}
+
+func releaseMutationQueueAfterPrev(q *mutationQueue, key string, prev, next chan struct{}) {
+	if prev == nil {
+		releaseMutationQueue(q, key, next)
+		return
+	}
+	go func() {
+		<-prev
+		releaseMutationQueue(q, key, next)
+	}()
+}
+
+func releaseMutationQueue(q *mutationQueue, key string, next chan struct{}) {
+	close(next)
+	q.mu.Lock()
+	if q.tails[key] == next {
+		delete(q.tails, key)
+	}
+	q.mu.Unlock()
 }
 
 func mutationQueueKey(ctx context.Context, fsys gbfs.FileSystem, resolvedPath string) string {

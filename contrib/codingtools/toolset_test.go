@@ -3,6 +3,7 @@ package codingtools
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	stdfs "io/fs"
 	"os"
@@ -211,6 +212,32 @@ func TestReadMissingFile(t *testing.T) {
 	_, err := tools.Read(context.Background(), ReadRequest{Path: "missing.txt"})
 	if err == nil {
 		t.Fatal("Read() error = nil, want not-exist error")
+	}
+}
+
+func TestReadRejectsNegativeOffsetAndLimit(t *testing.T) {
+	t.Parallel()
+
+	fsys := gbfs.NewMemory()
+	mustWriteVirtualFile(t, fsys, "/workspace/notes.txt", "hello\n")
+	tools := New(Config{FS: fsys, WorkingDir: "/workspace"})
+
+	negativeOffset := -1
+	_, err := tools.Read(context.Background(), ReadRequest{
+		Path:   "notes.txt",
+		Offset: &negativeOffset,
+	})
+	if err == nil || !strings.Contains(err.Error(), "offset must be non-negative") {
+		t.Fatalf("Read(negative offset) error = %v, want negative offset error", err)
+	}
+
+	negativeLimit := -1
+	_, err = tools.Read(context.Background(), ReadRequest{
+		Path:  "notes.txt",
+		Limit: &negativeLimit,
+	})
+	if err == nil || !strings.Contains(err.Error(), "limit must be non-negative") {
+		t.Fatalf("Read(negative limit) error = %v, want negative limit error", err)
 	}
 }
 
@@ -549,6 +576,83 @@ func TestToolsetWorksWithHostBackedFS(t *testing.T) {
 	}
 	if got := string(data); got != "done\n" {
 		t.Fatalf("written host file = %q, want done", got)
+	}
+}
+
+func TestMutationQueueCancellationPreservesOrdering(t *testing.T) {
+	t.Parallel()
+
+	queue := newMutationQueue()
+	const key = "test:/shared.txt"
+
+	firstStarted := make(chan struct{})
+	firstRelease := make(chan struct{})
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		_, err := withMutationQueue(context.Background(), queue, key, func() (struct{}, error) {
+			close(firstStarted)
+			<-firstRelease
+			return struct{}{}, nil
+		})
+		if err != nil {
+			t.Errorf("first mutation error = %v", err)
+		}
+	}()
+
+	<-firstStarted
+
+	waitingCtx, cancel := context.WithCancel(context.Background())
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := withMutationQueue(waitingCtx, queue, key, func() (struct{}, error) {
+			return struct{}{}, nil
+		})
+		secondDone <- err
+	}()
+	cancel()
+
+	thirdStarted := make(chan struct{})
+	thirdDone := make(chan error, 1)
+	go func() {
+		_, err := withMutationQueue(context.Background(), queue, key, func() (struct{}, error) {
+			close(thirdStarted)
+			return struct{}{}, nil
+		})
+		thirdDone <- err
+	}()
+
+	var secondErr error
+	var secondErrReceived bool
+	select {
+	case <-thirdStarted:
+		t.Fatal("third mutation started before the first mutation released the queue")
+	case err := <-secondDone:
+		secondErr = err
+		secondErrReceived = true
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("second mutation error = %v, want context canceled", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(firstRelease)
+	<-firstDone
+
+	select {
+	case <-thirdStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("third mutation did not start after the first mutation finished")
+	}
+
+	if !secondErrReceived {
+		secondErr = <-secondDone
+	}
+	if !errors.Is(secondErr, context.Canceled) {
+		t.Fatalf("second mutation final error = %v, want context canceled", secondErr)
+	}
+	if err := <-thirdDone; err != nil {
+		t.Fatalf("third mutation error = %v", err)
 	}
 }
 

@@ -136,6 +136,12 @@ func (t *Toolset) Read(ctx context.Context, req ReadRequest) (ReadResponse, erro
 	if req.Path == "" {
 		return ReadResponse{}, errors.New("path is required")
 	}
+	if req.Offset != nil && *req.Offset < 0 {
+		return ReadResponse{}, errors.New("offset must be non-negative")
+	}
+	if req.Limit != nil && *req.Limit < 0 {
+		return ReadResponse{}, errors.New("limit must be non-negative")
+	}
 
 	absolutePath := resolveReadPath(ctx, t.cfg.fsys, req.Path, t.cfg.workingDir, t.cfg.homeDir)
 	buffer, err := readFile(ctx, t.cfg.fsys, absolutePath)
