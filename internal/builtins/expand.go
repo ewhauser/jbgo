@@ -226,13 +226,13 @@ func parseExpandTabList(raw string) (expandRemainingMode, []int, error) {
 			}
 		}
 		if wordMode != expandRemainingNone {
-			if idx != len(words)-1 {
-				return expandRemainingNone, nil, fmt.Errorf("%s specifier only allowed with the last value", expandSpecifierQuote(wordMode))
-			}
 			remainingMode = wordMode
 			word = word[1:]
 			if word == "" {
 				continue
+			}
+			if idx != len(words)-1 {
+				return expandRemainingNone, nil, fmt.Errorf("%s specifier only allowed with the last value", expandSpecifierQuote(wordMode))
 			}
 		}
 
