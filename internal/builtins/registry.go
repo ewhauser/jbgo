@@ -82,7 +82,7 @@ func DefaultRegistry() *commands.Registry {
 		NewCksum(),
 		NewCsplit(),
 		NewDd(),
-		NewDf(),
+
 		NewExpand(),
 		NewFactor(),
 		NewFmt(),
