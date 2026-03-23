@@ -72,6 +72,26 @@
     { "pattern": "tests/*/selinux*", "reason": "SELinux tests are out of scope in v1" },
     { "pattern": "tests/df/*", "reason": "df command tests are out of scope in v1" },
     { "pattern": "tests/shred/*", "reason": "shred command tests are out of scope in v1" },
-    { "pattern": "tests/cat/cat-buf.sh", "reason": "hangs: FIFO-based buffering test deadlocks under gbash sandbox (#687)" }
+    { "pattern": "tests/cat/cat-buf.sh", "reason": "hangs: FIFO-based buffering test deadlocks under gbash sandbox (#687)" },
+    { "pattern": "tests/misc/false-status.sh", "reason": "test depends on --version/--help output from true/false builtins, out of scope in v1" },
+    { "pattern": "tests/misc/kill.sh", "reason": "kill command tests are out of scope in v1" },
+    { "pattern": "tests/misc/nohup.sh", "reason": "nohup command is out of scope in v1" },
+    { "pattern": "tests/misc/stdbuf.sh", "reason": "stdbuf command is out of scope in v1" },
+    { "pattern": "tests/misc/mknod.sh", "reason": "mknod/mkfifo: FIFO creation not supported in gbash sandbox" },
+    { "pattern": "tests/misc/sync.sh", "reason": "sync command is out of scope in v1" },
+    { "pattern": "tests/misc/stty*.sh", "reason": "stty command is out of scope in v1" },
+    { "pattern": "tests/misc/tty-eof.pl", "reason": "tty command is out of scope in v1" },
+    { "pattern": "tests/tty/*", "reason": "tty command is out of scope in v1" },
+    { "pattern": "tests/tail-2/inotify-dir-recreate.sh", "reason": "inotify is out of scope in v1" },
+    { "pattern": "tests/tail-2/inotify-race.sh", "reason": "inotify is out of scope in v1" },
+    { "pattern": "tests/tail-2/inotify-race2.sh", "reason": "inotify is out of scope in v1" },
+    { "pattern": "tests/tail-2/inotify-rotate.sh", "reason": "inotify is out of scope in v1" },
+    { "pattern": "tests/tail-2/inotify-rotate-resources.sh", "reason": "inotify is out of scope in v1" },
+    { "pattern": "tests/cksum/cksum-c.sh", "reason": "test uses strace which is out of scope in v1" },
+    { "pattern": "tests/chroot/*", "reason": "chroot command is out of scope in v1" },
+    { "pattern": "tests/nice/*", "reason": "nice command is out of scope in v1" },
+    { "pattern": "tests/misc/nice*.sh", "reason": "nice command is out of scope in v1" },
+    { "pattern": "tests/stty/*", "reason": "stty command is out of scope in v1" },
+    { "pattern": "tests/misc/stty*", "reason": "stty command is out of scope in v1" }
   ]
 }
