@@ -691,6 +691,12 @@ func FuzzDataCommands(f *testing.F) {
 				"expand --tabs=1,+3 /tmp/input.json >/tmp/expand-tabs-plus.txt\n" +
 				"expand --tabs=1,/3 /tmp/input.json >/tmp/expand-tabs-slash.txt\n" +
 				"cat /tmp/input.json | expand -2,5 -7 >/tmp/expand-stdin.txt\n" +
+				"fold /tmp/input.json >/tmp/fold-default.txt\n" +
+				"fold -w 40 /tmp/input.json >/tmp/fold-w40.txt\n" +
+				"fold -b -w 40 /tmp/input.json >/tmp/fold-bytes.txt\n" +
+				"fold -c -w 40 /tmp/input.json >/tmp/fold-chars.txt\n" +
+				"fold -s -w 40 /tmp/input.json >/tmp/fold-spaces.txt\n" +
+				"cat /tmp/input.json | fold -b -s -w 20 >/tmp/fold-stdin.txt\n" +
 				"cksum /tmp/input.json >/tmp/cksum-crc.txt\n" +
 				"cksum -a md5 /tmp/input.json >/tmp/cksum-md5.txt\n" +
 				"cksum -a sha2 -l 256 /tmp/input.json >/tmp/cksum-sha256.txt\n" +
