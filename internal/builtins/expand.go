@@ -184,24 +184,37 @@ func expandTabsShortcut(arg string) ([]string, bool) {
 	if len(arg) < 2 || arg[0] != '-' || arg == "--" {
 		return nil, false
 	}
-	for _, ch := range arg[1:] {
-		if (ch < '0' || ch > '9') && ch != ',' && ch != '+' && ch != '/' {
-			return nil, false
-		}
-	}
-
 	parts := strings.Split(arg[1:], ",")
 	normalized := make([]string, 0, len(parts))
-	for _, part := range parts {
+	for i, part := range parts {
 		if part == "" {
+			return nil, false
+		}
+		if i == len(parts)-1 && len(parts) > 1 && (part[0] == '+' || part[0] == '/') {
+			if len(part) == 1 || !expandTabsDigits(part[1:]) {
+				return nil, false
+			}
+			normalized = append(normalized, "--tabs="+part)
 			continue
+		}
+		if !expandTabsDigits(part) {
+			return nil, false
 		}
 		normalized = append(normalized, "--tabs="+part)
 	}
-	if len(normalized) == 0 {
-		return nil, false
-	}
 	return normalized, true
+}
+
+func expandTabsDigits(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	for _, ch := range raw {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func parseExpandTabList(raw string) (expandRemainingMode, []int, error) {

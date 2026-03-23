@@ -23,6 +23,12 @@ func TestExpandNormalizeInvocationShortcuts(t *testing.T) {
 	if repeatGot == nil || !equalStrings(repeatGot.Args, repeatWant) {
 		t.Fatalf("NormalizeInvocation() repeat args = %#v, want %#v", repeatGot.Args, repeatWant)
 	}
+
+	invalidInv := &Invocation{Args: []string{"-/4", "-+5", "-8,+4,5"}}
+	invalidGot := cmd.NormalizeInvocation(invalidInv)
+	if invalidGot == nil || !equalStrings(invalidGot.Args, invalidInv.Args) {
+		t.Fatalf("NormalizeInvocation() invalid args = %#v, want %#v", invalidGot.Args, invalidInv.Args)
+	}
 }
 
 func TestParseExpandTabList(t *testing.T) {

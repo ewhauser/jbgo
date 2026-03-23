@@ -171,6 +171,17 @@ func TestExpandErrorsMatchCoreutilsStyle(t *testing.T) {
 		t.Fatalf("invalidTabs stderr = %q, want %q", got, want)
 	}
 
+	invalidLegacyTabs, err := rt.Run(context.Background(), &ExecutionRequest{Script: "expand -+5\n"})
+	if err != nil {
+		t.Fatalf("Run(invalidLegacyTabs) error = %v", err)
+	}
+	if invalidLegacyTabs.ExitCode != 1 {
+		t.Fatalf("invalidLegacyTabs ExitCode = %d, want 1", invalidLegacyTabs.ExitCode)
+	}
+	if got, want := invalidLegacyTabs.Stderr, "expand: invalid option -- '+'\nTry 'expand --help' for more information.\n"; got != want {
+		t.Fatalf("invalidLegacyTabs stderr = %q, want %q", got, want)
+	}
+
 	session := newSession(t, &Config{})
 	writeSessionFile(t, session, "/tmp/ok.txt", []byte("a\tb\n"))
 	multiResult := mustExecSession(t, session, "mkdir /tmp/dir\nexpand --tabs=4 /tmp/ok.txt /tmp/dir /tmp/missing.txt\n")
