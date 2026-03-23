@@ -112,8 +112,12 @@ func TestShufSupportsOutputFilesAndZeroHeadCount(t *testing.T) {
 	result := mustExecSession(t, session,
 		"shuf --random-source=/tmp/random.bin -o /tmp/in.txt /tmp/in.txt\n"+
 			"shuf -n0 /tmp/missing\n"+
+			"printf '1\\n2\\n' | shuf -n0 > /tmp/stdin-zero.out\n"+
 			"shuf -n0 -o /tmp/zero.out /tmp/missing\n"+
-			"shuf -n0 -o /tmp/existing.out /tmp/in.txt\n",
+			"shuf -n0 -o /tmp/existing.out /tmp/in.txt\n"+
+			"printf '' | shuf -r -n0 > /tmp/repeat-zero-stdin.out\n"+
+			"shuf -e -r -n0 > /tmp/repeat-zero-echo.out\n"+
+			"shuf -r -n0 -i5-4 > /tmp/repeat-zero-range.out\n",
 	)
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
@@ -126,6 +130,16 @@ func TestShufSupportsOutputFilesAndZeroHeadCount(t *testing.T) {
 	}
 	if got := readSessionFile(t, session, "/tmp/existing.out"); len(got) != 0 {
 		t.Fatalf("existing output file after -n0 = %q, want empty", string(got))
+	}
+	for _, name := range []string{
+		"/tmp/stdin-zero.out",
+		"/tmp/repeat-zero-stdin.out",
+		"/tmp/repeat-zero-echo.out",
+		"/tmp/repeat-zero-range.out",
+	} {
+		if got := readSessionFile(t, session, name); len(got) != 0 {
+			t.Fatalf("%s = %q, want empty", name, string(got))
+		}
 	}
 }
 

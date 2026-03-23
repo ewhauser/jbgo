@@ -127,8 +127,11 @@ func (c *Shuf) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	if err != nil {
 		return err
 	}
-	if opts.outputSet && opts.headCountSet && opts.headCount == 0 {
-		return shufWriteOutputFile(ctx, inv, opts.output, nil)
+	if opts.headCountSet && opts.headCount == 0 {
+		if opts.outputSet {
+			return shufWriteOutputFile(ctx, inv, opts.output, nil)
+		}
+		return nil
 	}
 
 	return c.runShuf(ctx, inv, &opts)
