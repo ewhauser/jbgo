@@ -112,8 +112,8 @@ func fuzzyFindText(content, oldText string) fuzzyMatchResult {
 }
 
 func stripBOM(content string) (string, string) {
-	if strings.HasPrefix(content, "\uFEFF") {
-		return "\uFEFF", strings.TrimPrefix(content, "\uFEFF")
+	if stripped, ok := strings.CutPrefix(content, "\uFEFF"); ok {
+		return "\uFEFF", stripped
 	}
 	return "", content
 }
@@ -121,7 +121,7 @@ func stripBOM(content string) (string, string) {
 func generateDiffString(oldContent, newContent string, contextLines int) (string, int) {
 	oldLines := strings.Split(oldContent, "\n")
 	newLines := strings.Split(newContent, "\n")
-	maxLineNum := max(len(oldLines), len(newLines))
+	maxLineNum := maxInt(len(oldLines), len(newLines))
 	lineNumWidth := len(fmt.Sprintf("%d", maxLineNum))
 
 	prefix := 0
@@ -140,8 +140,8 @@ func generateDiffString(oldContent, newContent string, contextLines int) (string
 		firstChangedLine = len(newLines)
 	}
 
-	startContext := max(0, prefix-contextLines)
-	endContext := min(suffix, contextLines)
+	startContext := maxInt(0, prefix-contextLines)
+	endContext := minInt(suffix, contextLines)
 
 	var output []string
 	if startContext > 0 {
@@ -161,7 +161,7 @@ func generateDiffString(oldContent, newContent string, contextLines int) (string
 		output = append(output, fmt.Sprintf("+%*d %s", lineNumWidth, i+1, newLines[i]))
 	}
 
-	for i := 0; i < endContext; i++ {
+	for i := range endContext {
 		oldIdx := oldChangedEnd + i
 		output = append(output, fmt.Sprintf(" %*d %s", lineNumWidth, oldIdx+1, oldLines[oldIdx]))
 	}

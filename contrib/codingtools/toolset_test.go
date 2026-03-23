@@ -309,16 +309,14 @@ func TestWriteSerializesConcurrentMutations(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 2)
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+	for i := range 2 {
+		wg.Go(func() {
 			_, err := tools.Write(context.Background(), WriteRequest{
 				Path:    "shared.txt",
 				Content: strings.Repeat(string(rune('a'+i)), 16),
 			})
 			errCh <- err
-		}(i)
+		})
 	}
 	wg.Wait()
 	close(errCh)
@@ -461,16 +459,14 @@ func TestEditAndWriteSerializeSamePath(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, 2)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := tools.Edit(context.Background(), EditRequest{
 			Path:    "shared.txt",
 			OldText: "hello",
 			NewText: "goodbye",
 		})
 		errCh <- err
-	}()
+	})
 
 	select {
 	case <-fsys.started:
@@ -478,15 +474,13 @@ func TestEditAndWriteSerializeSamePath(t *testing.T) {
 		t.Fatal("timed out waiting for edit to enter write phase")
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := tools.Write(context.Background(), WriteRequest{
 			Path:    "shared.txt",
 			Content: "final\n",
 		})
 		errCh <- err
-	}()
+	})
 
 	wg.Wait()
 	close(errCh)

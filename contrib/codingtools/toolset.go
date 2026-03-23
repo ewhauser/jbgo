@@ -131,7 +131,7 @@ func (t *Toolset) WriteToolDefinition() ToolDefinition {
 // Read runs the read tool.
 func (t *Toolset) Read(ctx context.Context, req ReadRequest) (ReadResponse, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return ReadResponse{}, errors.New("context is required")
 	}
 	if req.Path == "" {
 		return ReadResponse{}, errors.New("path is required")
@@ -158,7 +158,7 @@ func (t *Toolset) Read(ctx context.Context, req ReadRequest) (ReadResponse, erro
 
 	startLine := 0
 	if req.Offset != nil {
-		startLine = max(0, *req.Offset-1)
+		startLine = maxInt(0, *req.Offset-1)
 	}
 	startLineDisplay := startLine + 1
 	if startLine >= len(allLines) {
@@ -168,7 +168,7 @@ func (t *Toolset) Read(ctx context.Context, req ReadRequest) (ReadResponse, erro
 	selectedContent := strings.Join(allLines[startLine:], "\n")
 	userLimitedLines := -1
 	if req.Limit != nil {
-		endLine := min(startLine+*req.Limit, len(allLines))
+		endLine := minInt(startLine+*req.Limit, len(allLines))
 		selectedContent = strings.Join(allLines[startLine:endLine], "\n")
 		userLimitedLines = endLine - startLine
 	}
@@ -227,7 +227,7 @@ func (t *Toolset) Read(ctx context.Context, req ReadRequest) (ReadResponse, erro
 // Write runs the write tool.
 func (t *Toolset) Write(ctx context.Context, req WriteRequest) (WriteResponse, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return WriteResponse{}, errors.New("context is required")
 	}
 	if req.Path == "" {
 		return WriteResponse{}, errors.New("path is required")
@@ -250,7 +250,7 @@ func (t *Toolset) Write(ctx context.Context, req WriteRequest) (WriteResponse, e
 // Edit runs the edit tool.
 func (t *Toolset) Edit(ctx context.Context, req EditRequest) (EditResponse, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return EditResponse{}, errors.New("context is required")
 	}
 	if req.Path == "" {
 		return EditResponse{}, errors.New("path is required")
@@ -330,13 +330,13 @@ func ParseReadRequest(input map[string]any) (ReadRequest, error) {
 		return ReadRequest{}, fmt.Errorf("tool arguments must be a JSON object")
 	}
 
-	path, err := parsePath(input)
+	filePath, err := parsePath(input)
 	if err != nil {
 		return ReadRequest{}, err
 	}
 
 	var req ReadRequest
-	req.Path = path
+	req.Path = filePath
 	if raw, ok := input["offset"]; ok {
 		value, err := parseNonNegativeInt(raw)
 		if err != nil {
@@ -360,7 +360,7 @@ func ParseWriteRequest(input map[string]any) (WriteRequest, error) {
 		return WriteRequest{}, fmt.Errorf("tool arguments must be a JSON object")
 	}
 
-	path, err := parsePath(input)
+	filePath, err := parsePath(input)
 	if err != nil {
 		return WriteRequest{}, err
 	}
@@ -372,7 +372,7 @@ func ParseWriteRequest(input map[string]any) (WriteRequest, error) {
 	if !ok {
 		return WriteRequest{}, fmt.Errorf("`content` must be a string")
 	}
-	return WriteRequest{Path: path, Content: text}, nil
+	return WriteRequest{Path: filePath, Content: text}, nil
 }
 
 // ParseEditRequest decodes a provider tool-call payload.
@@ -381,7 +381,7 @@ func ParseEditRequest(input map[string]any) (EditRequest, error) {
 		return EditRequest{}, fmt.Errorf("tool arguments must be a JSON object")
 	}
 
-	path, err := parsePath(input)
+	filePath, err := parsePath(input)
 	if err != nil {
 		return EditRequest{}, err
 	}
@@ -393,7 +393,7 @@ func ParseEditRequest(input map[string]any) (EditRequest, error) {
 	if err != nil {
 		return EditRequest{}, err
 	}
-	return EditRequest{Path: path, OldText: oldText, NewText: newText}, nil
+	return EditRequest{Path: filePath, OldText: oldText, NewText: newText}, nil
 }
 
 func normalizeConfig(cfg Config) normalizedConfig {
@@ -495,7 +495,20 @@ func readFile(ctx context.Context, fsys gbfs.FileSystem, absolutePath string) ([
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	return io.ReadAll(file)
+	var output []byte
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := file.Read(buf)
+		if n > 0 {
+			output = append(output, buf[:n]...)
+		}
+		if errors.Is(readErr, io.EOF) {
+			return output, nil
+		}
+		if readErr != nil {
+			return nil, readErr
+		}
+	}
 }
 
 func writeFile(ctx context.Context, fsys gbfs.FileSystem, absolutePath, content string) error {
@@ -531,14 +544,14 @@ func valueOrDefault(value *int, fallback int) int {
 	return *value
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
