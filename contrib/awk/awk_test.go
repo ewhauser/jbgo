@@ -1,8 +1,15 @@
 package awk
 
 import (
+	"context"
+	"errors"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/ewhauser/gbash/commands"
+	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestAWKSupportsProgramFilesFieldSeparatorsAndVars(t *testing.T) {
@@ -83,4 +90,74 @@ func TestAWKBlocksNonAllowlistedGetlineReads(t *testing.T) {
 	if !strings.Contains(result.Stderr, "can't read from file due to NoFileReads") {
 		t.Fatalf("Stderr = %q, want file-read denial", result.Stderr)
 	}
+}
+
+func TestLoadAWKInputsSkipsStdinWhenNamedFilesProvided(t *testing.T) {
+	t.Parallel()
+
+	mem := gbfs.NewMemory()
+	file, err := mem.OpenFile(context.Background(), "/data/one.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	if _, err := file.Write([]byte("a\n")); err != nil {
+		_ = file.Close()
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	stdin := &unexpectedStdinReader{}
+	inv := commands.NewInvocation(&commands.InvocationOptions{
+		Cwd:        "/",
+		Stdin:      stdin,
+		FileSystem: mem,
+		Policy:     policy.NewStatic(&policy.Config{}),
+	})
+
+	inputs, err := loadAWKInputs(context.Background(), inv, []string{"/data/one.txt"})
+	if err != nil {
+		t.Fatalf("loadAWKInputs() error = %v", err)
+	}
+	if stdin.reads != 0 {
+		t.Fatalf("stdin reads = %d, want 0", stdin.reads)
+	}
+	if got := string(inputs.Stdin); got != "" {
+		t.Fatalf("stdin = %q, want empty", got)
+	}
+	if got := string(inputs.Files["/data/one.txt"]); got != "a\n" {
+		t.Fatalf("file contents = %q, want %q", got, "a\n")
+	}
+}
+
+func TestLoadAWKInputsReadsStdinWhenOnlyArgAssignmentsRemain(t *testing.T) {
+	t.Parallel()
+
+	inv := commands.NewInvocation(&commands.InvocationOptions{
+		Cwd:        "/",
+		Stdin:      strings.NewReader("stdin-data"),
+		FileSystem: gbfs.NewMemory(),
+		Policy:     policy.NewStatic(&policy.Config{}),
+	})
+
+	inputs, err := loadAWKInputs(context.Background(), inv, []string{"prefix=1"})
+	if err != nil {
+		t.Fatalf("loadAWKInputs() error = %v", err)
+	}
+	if got := string(inputs.Stdin); got != "stdin-data" {
+		t.Fatalf("stdin = %q, want %q", got, "stdin-data")
+	}
+	if len(inputs.Files) != 0 {
+		t.Fatalf("files = %d, want 0", len(inputs.Files))
+	}
+}
+
+type unexpectedStdinReader struct {
+	reads int
+}
+
+func (r *unexpectedStdinReader) Read(_ []byte) (int, error) {
+	r.reads++
+	return 0, errors.New("unexpected stdin read")
 }

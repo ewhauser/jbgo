@@ -166,9 +166,13 @@ type awkInputs struct {
 var awkArgVarPattern = regexp.MustCompile(`^([_a-zA-Z][_a-zA-Z0-9]*)=(.*)`)
 
 func loadAWKInputs(ctx context.Context, inv *commands.Invocation, names []string) (*awkInputs, error) {
-	stdinData, err := commands.ReadAllStdin(ctx, inv)
-	if err != nil {
-		return nil, err
+	var stdinData []byte
+	if shouldReadAWKStdin(names) {
+		var err error
+		stdinData, err = commands.ReadAllStdin(ctx, inv)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	files := make(map[string][]byte)
@@ -190,6 +194,21 @@ func loadAWKInputs(ctx context.Context, inv *commands.Invocation, names []string
 		Stdin: stdinData,
 		Files: files,
 	}, nil
+}
+
+func shouldReadAWKStdin(names []string) bool {
+	hasNamedFile := false
+	for _, name := range names {
+		switch {
+		case name == "", awkArgVarPattern.MatchString(name):
+			continue
+		case name == "-":
+			return true
+		default:
+			hasNamedFile = true
+		}
+	}
+	return !hasNamedFile
 }
 
 func buildAWKVars(opts awkOptions) []string {
