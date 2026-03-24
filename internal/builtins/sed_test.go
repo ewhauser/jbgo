@@ -42,3 +42,47 @@ func TestSedBasicRegexpPlusMatchesOneOrMoreSpaces(t *testing.T) {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
+
+func TestSedPreservesFileBoundariesWithoutTrailingNewlines(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a' > /tmp/in1.txt\n" +
+			"printf 'b\\n' > /tmp/in2.txt\n" +
+			"sed -n '1,2p' /tmp/in1.txt /tmp/in2.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a\nb\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSedSupportsInPlaceBackupSuffix(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'x\\n' > /tmp/in.txt\n" +
+			"sed -i.bak 's/x/y/' /tmp/in.txt\n" +
+			"cat /tmp/in.txt\n" +
+			"cat /tmp/in.txt.bak\n" +
+			"sed --in-place=.orig 's/y/z/' /tmp/in.txt\n" +
+			"cat /tmp/in.txt\n" +
+			"cat /tmp/in.txt.orig\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "y\nx\nz\ny\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

@@ -10,10 +10,12 @@ import (
 type Sed struct{}
 
 type sedOptions struct {
-	quiet         bool
-	inPlace       bool
-	regexExtended bool
-	scripts       []string
+	quiet               bool
+	inPlace             bool
+	inPlaceBackup       bool
+	inPlaceBackupSuffix string
+	regexExtended       bool
+	scripts             []string
 }
 
 type sedCommand struct {
@@ -60,16 +62,29 @@ func (c *Sed) Run(ctx context.Context, inv *Invocation) error {
 	return RunCommand(ctx, c, inv)
 }
 
+func (c *Sed) NormalizeInvocation(inv *Invocation) *Invocation {
+	if inv == nil {
+		return nil
+	}
+	normalized := normalizeSedArgs(inv.Args)
+	if splitSliceEqual(normalized, inv.Args) {
+		return inv
+	}
+	parseInv := *inv
+	parseInv.Args = normalized
+	return &parseInv
+}
+
 func (c *Sed) Spec() CommandSpec {
 	return CommandSpec{
 		Name:  "sed",
 		About: "Stream editor",
-		Usage: "sed [OPTION]... {script-only-if-no-other-script} [input-file]...\n\n  -n, --quiet, --silent\n                 suppress automatic printing of pattern space\n      --debug\n                 annotate program execution\n  -e script, --expression=script\n                 add the script to the commands to be executed\n  -f script-file, --file=script-file\n                 add the contents of script-file to the commands to be executed\n  -i[SUFFIX], --in-place[=SUFFIX]\n                 edit files in place (makes backup if SUFFIX supplied)\n  -E, -r, --regexp-extended\n                 use extended regular expressions in the script",
+		Usage: "sed [OPTION]... {script-only-if-no-other-script} [input-file]...\n\n  -n, --quiet, --silent\n                 suppress automatic printing of pattern space\n  -e script, --expression=script\n                 add the script to the commands to be executed\n  -f script-file, --file=script-file\n                 add the contents of script-file to the commands to be executed\n  -i[SUFFIX], --in-place[=SUFFIX]\n                 edit files in place (makes backup if SUFFIX supplied)\n  -E, -r, --regexp-extended\n                 use extended regular expressions in the script",
 		Options: []OptionSpec{
 			{Name: "quiet", Short: 'n', Long: "quiet", Aliases: []string{"silent"}, Help: "suppress automatic printing of pattern space"},
 			{Name: "expression", Short: 'e', Long: "expression", Arity: OptionRequiredValue, ValueName: "script", Repeatable: true, Help: "add the script to the commands to be executed"},
 			{Name: "file", Short: 'f', Long: "file", Arity: OptionRequiredValue, ValueName: "script-file", Repeatable: true, Help: "add the contents of script-file to the commands to be executed"},
-			{Name: "in-place", Short: 'i', Long: "in-place", Help: "edit files in place"},
+			{Name: "in-place", Short: 'i', Long: "in-place", Arity: OptionOptionalValue, OptionalValueEqualsOnly: true, ValueName: "SUFFIX", Help: "edit files in place"},
 			{Name: "regexp-extended", Short: 'E', ShortAliases: []rune{'r'}, Long: "regexp-extended", Help: "use extended regular expressions in the script"},
 		},
 		Args: []ArgSpec{
@@ -128,15 +143,22 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 			if err != nil {
 				return err
 			}
+			if opts.inPlaceBackup {
+				if err := writeFileContents(ctx, inv, abs+opts.inPlaceBackupSuffix, data, info.Mode().Perm()); err != nil {
+					return err
+				}
+			}
 			if err := writeFileContents(ctx, inv, abs, output, info.Mode().Perm()); err != nil {
 				return err
 			}
 		}
 	} else {
-		// Non-in-place: concatenate all files into a single stream,
-		// matching GNU sed behavior where line numbers, $ address,
-		// and trailing-newline state span across files.
-		var combined []byte
+		// Non-in-place: line numbers and $ addresses span files, but each
+		// file still contributes distinct line boundaries even when it lacks
+		// a trailing newline.
+		var lines []string
+		trailingNL := false
+		seenLines := false
 		for _, file := range files {
 			data, _, err := readAllFile(ctx, inv, file)
 			if err != nil {
@@ -144,11 +166,16 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 				exitCode = 1
 				continue
 			}
-			combined = append(combined, data...)
+			fileLines := textLines(data)
+			if len(fileLines) == 0 {
+				continue
+			}
+			lines = append(lines, fileLines...)
+			trailingNL = data[len(data)-1] == '\n'
+			seenLines = true
 		}
-		if len(combined) > 0 {
-			trailingNL := combined[len(combined)-1] == '\n'
-			output := runSedProgram(program, textLines(combined), opts.quiet, trailingNL)
+		if seenLines {
+			output := runSedProgram(program, lines, opts.quiet, trailingNL)
 			if _, err := inv.Stdout.Write(output); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
@@ -164,8 +191,20 @@ func (c *Sed) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 func parseSedMatches(ctx context.Context, inv *Invocation, matches *ParsedCommand) (sedOptions, []string, error) {
 	opts := sedOptions{
 		quiet:         matches.Has("quiet"),
-		inPlace:       matches.Has("in-place"),
 		regexExtended: matches.Has("regexp-extended"),
+	}
+	for _, occurrence := range matches.OptionOccurrences() {
+		if occurrence.Name != "in-place" {
+			continue
+		}
+		opts.inPlace = true
+		if occurrence.HasValue && occurrence.Value != "" {
+			opts.inPlaceBackup = true
+			opts.inPlaceBackupSuffix = occurrence.Value
+		} else {
+			opts.inPlaceBackup = false
+			opts.inPlaceBackupSuffix = ""
+		}
 	}
 	for _, source := range matches.Values("expression") {
 		appendSedScriptSource(&opts.scripts, source)
@@ -205,6 +244,82 @@ func appendSedScriptSource(scripts *[]string, source string) {
 		}
 		*scripts = append(*scripts, line)
 	}
+}
+
+func normalizeSedArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(args))
+	changed := false
+	parsingOptions := true
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if !parsingOptions {
+			normalized = append(normalized, arg)
+			continue
+		}
+		switch {
+		case arg == "--":
+			normalized = append(normalized, arg)
+			parsingOptions = false
+			continue
+		case arg == "-" || !strings.HasPrefix(arg, "-"):
+			normalized = append(normalized, arg)
+			parsingOptions = false
+			continue
+		case arg == "-e" || arg == "-f" || arg == "--expression" || arg == "--file":
+			normalized = append(normalized, arg)
+			if index+1 < len(args) {
+				index++
+				normalized = append(normalized, args[index])
+			}
+			continue
+		case strings.HasPrefix(arg, "--expression=") || strings.HasPrefix(arg, "--file="):
+			normalized = append(normalized, arg)
+			continue
+		case strings.HasPrefix(arg, "--"):
+			normalized = append(normalized, arg)
+			continue
+		}
+
+		shorts := arg[1:]
+		rewritten := false
+		for shortIndex, ch := range shorts {
+			switch ch {
+			case 'n', 'E', 'r':
+				continue
+			case 'e', 'f':
+				normalized = append(normalized, arg)
+				rewritten = true
+			case 'i':
+				if shortIndex == len(shorts)-1 {
+					normalized = append(normalized, arg)
+					rewritten = true
+					break
+				}
+				prefix := shorts[:shortIndex]
+				if prefix != "" {
+					normalized = append(normalized, "-"+prefix)
+				}
+				normalized = append(normalized, "--in-place="+shorts[shortIndex+1:])
+				changed = true
+				rewritten = true
+			default:
+				normalized = append(normalized, arg)
+				rewritten = true
+			}
+			break
+		}
+		if rewritten {
+			continue
+		}
+		normalized = append(normalized, arg)
+	}
+	if !changed {
+		return append([]string(nil), args...)
+	}
+	return normalized
 }
 
 func parseSedProgram(scripts []string, regexExtended bool) ([]sedCommand, error) {
@@ -548,3 +663,4 @@ func expandSedReplacement(replacement, line string, match []int) string {
 }
 
 var _ Command = (*Sed)(nil)
+var _ ParseInvocationNormalizer = (*Sed)(nil)
