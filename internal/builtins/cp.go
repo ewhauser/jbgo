@@ -136,6 +136,8 @@ type cpOptions struct {
 	targetDirectory   string
 	removeDestination bool
 	copyMode          cpCopyMode
+	hardLinkMode      bool
+	symbolicLinkMode  bool
 	updateMode        cpUpdateMode
 	updateArg         string
 }
@@ -175,8 +177,10 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 			opts.removeDestination = true
 		case "hard-link":
 			opts.copyMode = cpCopyHardLink
+			opts.hardLinkMode = true
 		case "symbolic-link":
 			opts.copyMode = cpCopySymbolicLink
+			opts.symbolicLinkMode = true
 		case "update":
 			opts.updateArg = matches.Value("update")
 			switch opts.updateArg {
@@ -204,6 +208,9 @@ func validateCPOptions(inv *Invocation, opts *cpOptions) error {
 	}
 	if opts.updateMode == cpUpdateInvalid {
 		return commandUsageError(inv, "cp", "invalid argument %q for '--update'", opts.updateArg)
+	}
+	if opts.hardLinkMode && opts.symbolicLinkMode {
+		return commandUsageError(inv, "cp", "cannot make both hard and symbolic links")
 	}
 	return nil
 }

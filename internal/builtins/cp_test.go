@@ -184,6 +184,33 @@ func TestCPSupportsSymbolicLinkMode(t *testing.T) {
 	}
 }
 
+func TestCPRejectsConflictingLinkModes(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/src.txt\n" +
+			"cp -ls /tmp/src.txt /tmp/out-ls.txt\n" +
+			"printf 'ls=%s\\n' \"$?\"\n" +
+			"cp -sl /tmp/src.txt /tmp/out-sl.txt\n" +
+			"printf 'sl=%s\\n' \"$?\"\n" +
+			"test -e /tmp/out-ls.txt && echo out-ls || echo no-out-ls\n" +
+			"test -e /tmp/out-sl.txt && echo out-sl || echo no-out-sl\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "ls=1\nsl=1\nno-out-ls\nno-out-sl\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := strings.Count(result.Stderr, "cp: cannot make both hard and symbolic links"); got != 2 {
+		t.Fatalf("Stderr = %q, want conflict error twice", result.Stderr)
+	}
+}
+
 func TestCPSymbolicLinkModeNormalizesRelativeTargetsAcrossDirectories(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{
