@@ -92,7 +92,7 @@ func (c *CP) Spec() CommandSpec {
 }
 
 func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
-	opts := parseCPMatches(matches)
+	opts := parseCPMatches(inv, matches)
 	if err := validateCPOptions(inv, &opts); err != nil {
 		return err
 	}
@@ -142,12 +142,17 @@ type cpOptions struct {
 	updateArg         string
 }
 
-func parseCPMatches(matches *ParsedCommand) cpOptions {
+type cpParsedUpdate struct {
+	value            string
+	hasExplicitValue bool
+}
+
+func parseCPMatches(inv *Invocation, matches *ParsedCommand) cpOptions {
 	opts := cpOptions{updateMode: cpUpdateAll}
 	if matches == nil {
 		return opts
 	}
-	updateValues := matches.Values("update")
+	updateValues := cpParseUpdateOccurrences(inv)
 	updateIndex := 0
 	for _, name := range matches.OptionOrder() {
 		switch name {
@@ -184,23 +189,21 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 			opts.copyMode = cpCopySymbolicLink
 			opts.symbolicLinkMode = true
 		case "update":
-			updateArg := ""
+			update := cpParsedUpdate{}
 			if updateIndex < len(updateValues) {
-				updateArg = updateValues[updateIndex]
-			} else {
-				updateArg = ""
+				update = updateValues[updateIndex]
 			}
 			updateIndex++
-			updateMode := cpParseUpdateMode(updateArg)
+			updateMode := cpParseUpdateMode(update)
 			if updateMode == cpUpdateInvalid {
 				if opts.updateMode != cpUpdateInvalid {
-					opts.updateArg = updateArg
+					opts.updateArg = update.value
 					opts.updateMode = cpUpdateInvalid
 				}
 				continue
 			}
 			if opts.updateMode != cpUpdateInvalid {
-				opts.updateArg = updateArg
+				opts.updateArg = update.value
 				opts.updateMode = updateMode
 			}
 		case "backup", "attributes-only", "debug", "reflink":
@@ -210,9 +213,55 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 	return opts
 }
 
-func cpParseUpdateMode(arg string) cpUpdateMode {
-	switch arg {
-	case "", "older":
+func cpParseUpdateOccurrences(inv *Invocation) []cpParsedUpdate {
+	if inv == nil {
+		return nil
+	}
+	var updates []cpParsedUpdate
+	for _, arg := range inv.Args {
+		if arg == "--" {
+			break
+		}
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if name, ok := strings.CutPrefix(arg, "--"); ok {
+			opt, value, hasValue := strings.Cut(name, "=")
+			if opt != "" && len(opt) <= len("update") && "update"[:len(opt)] == opt {
+				updates = append(updates, cpParsedUpdate{value: value, hasExplicitValue: hasValue})
+			}
+			continue
+		}
+		shorts := strings.TrimPrefix(arg, "-")
+	shortLoop:
+		for i, ch := range shorts {
+			remaining := shorts[i+1:]
+			switch ch {
+			case 'u':
+				update := cpParsedUpdate{}
+				if strings.HasPrefix(remaining, "=") {
+					update.value = remaining[1:]
+					update.hasExplicitValue = true
+					updates = append(updates, update)
+					break shortLoop
+				}
+				updates = append(updates, update)
+			case 't':
+				if remaining != "" {
+					break shortLoop
+				}
+			}
+		}
+	}
+	return updates
+}
+
+func cpParseUpdateMode(update cpParsedUpdate) cpUpdateMode {
+	if !update.hasExplicitValue {
+		return cpUpdateOlder
+	}
+	switch update.value {
+	case "older":
 		return cpUpdateOlder
 	case "all":
 		return cpUpdateAll

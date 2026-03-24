@@ -548,6 +548,33 @@ func TestCPRejectsInvalidEarlierUpdateValue(t *testing.T) {
 	}
 }
 
+func TestCPRejectsExplicitEmptyUpdateValue(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/src.txt\n" +
+			"cp --update= /tmp/src.txt /tmp/dst-long.txt\n" +
+			"printf 'long=%s\\n' \"$?\"\n" +
+			"cp -u= /tmp/src.txt /tmp/dst-short.txt\n" +
+			"printf 'short=%s\\n' \"$?\"\n" +
+			"test -e /tmp/dst-long.txt && echo dst-long || echo no-dst-long\n" +
+			"test -e /tmp/dst-short.txt && echo dst-short || echo no-dst-short\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "long=1\nshort=1\nno-dst-long\nno-dst-short\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := strings.Count(result.Stderr, "cp: invalid argument \"\" for '--update'"); got != 2 {
+		t.Fatalf("Stderr = %q, want explicit-empty update error twice", result.Stderr)
+	}
+}
+
 func TestCPUpdateModeStillRejectsSameFile(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
