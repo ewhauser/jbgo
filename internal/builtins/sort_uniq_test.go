@@ -70,8 +70,8 @@ func TestSortReturnsErrorForMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 1 {
-		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
 	}
 	if !strings.Contains(result.Stderr, "/missing.txt") {
 		t.Fatalf("Stderr = %q, want missing-file error", result.Stderr)
@@ -221,6 +221,78 @@ func TestSortSupportsIgnoreNonprintingFlag(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, "a\n\x01b\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSortIgnoreNonprintingDropsNonASCIIBytes(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a👦🏻aa\\naaaa\\n' | sort -i\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a👦🏻aa\naaaa\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSortHumanNumericOrdersByUnitBeforeMagnitude(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '8981K\\n909991M\\n-8T\\n21G\\n0.8M\\n' | sort -h\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "-8T\n8981K\n0.8M\n909991M\n21G\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSortOpenEndedKeysUseOriginalLineSlice(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'aa bb cc\\ndd aa ff\\ngg aa cc\\n' | sort -k 2.3\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "gg aa cc\ndd aa ff\naa bb cc\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSortKeySelectionKeepsLeadingBlanksByDefault(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '\\tabc\\n\\tcab\\n\\tbca\\n' | sort -k 1.2b\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "\tcab\n\tabc\n\tbca\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
