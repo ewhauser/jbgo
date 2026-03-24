@@ -184,6 +184,64 @@ func TestCPSupportsSymbolicLinkMode(t *testing.T) {
 	}
 }
 
+func TestCPSymbolicLinkModeNormalizesRelativeTargetsAcrossDirectories(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cd /tmp\n" +
+			"echo new > src.txt\n" +
+			"mkdir dir\n" +
+			"cp -s src.txt dir/dst.txt\n" +
+			"readlink /tmp/dir/dst.txt\n" +
+			"cat /tmp/dir/dst.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "../src.txt\nnew\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPLinkModesStillUseDirectoryCopySemantics(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src/sub\n" +
+			"echo payload > /tmp/src/sub/file.txt\n" +
+			"cp -l /tmp/src /tmp/hard-no-r\n" +
+			"printf 'hard_no_r=%s\\n' \"$?\"\n" +
+			"cp -l -R /tmp/src /tmp/hard-r\n" +
+			"cat /tmp/hard-r/sub/file.txt\n" +
+			"cp -s -R /tmp/src /tmp/sym-r\n" +
+			"test -d /tmp/sym-r && echo sym-r-dir || echo sym-r-not-dir\n" +
+			"cat /tmp/sym-r/sub/file.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "hard_no_r=1\npayload\nsym-r-dir\npayload\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: omitting directory \"/tmp/src\"") {
+		t.Fatalf("Stderr = %q, want omitting-directory error", result.Stderr)
+	}
+}
+
 func TestCPSupportsUpdateModes(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
@@ -245,5 +303,28 @@ func TestCPSupportsUpdateModes(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "cp: not replacing '/tmp/dst-fail.txt'") {
 		t.Fatalf("Stderr = %q, want none-fail message", result.Stderr)
+	}
+}
+
+func TestCPUpdateModeStillRejectsSameFile(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/file.txt\n" +
+			"cp -u /tmp/file.txt /tmp/file.txt\n" +
+			"printf 'status=%s\\n' \"$?\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: '/tmp/file.txt' and 'file.txt' are the same file") {
+		t.Fatalf("Stderr = %q, want same-file error", result.Stderr)
 	}
 }

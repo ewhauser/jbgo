@@ -117,6 +117,12 @@ func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if err != nil {
 			return err
 		}
+		if cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists) {
+			if opts.copyMode == cpCopyHardLink {
+				continue
+			}
+			return exitf(inv, 1, "cp: %s and %s are the same file", quoteGNUOperand(source), quoteGNUOperand(path.Base(destAbs)))
+		}
 		skip, err := cpShouldSkipExisting(ctx, inv, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, &opts)
 		if err != nil {
 			return err
@@ -124,15 +130,22 @@ func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if skip {
 			continue
 		}
-		destInfo, destExists, err = prepareCPDestination(ctx, inv, source, srcAbs, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, &opts)
+		_, _, err = prepareCPDestination(ctx, inv, source, srcAbs, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, &opts)
 		if err != nil {
 			return err
 		}
-		if cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists) {
-			if opts.copyMode == cpCopyHardLink {
-				continue
+
+		if srcInfo.IsDir() {
+			if !opts.recursive {
+				return exitf(inv, 1, "cp: omitting directory %q", source)
 			}
-			return exitf(inv, 1, "cp: %s and %s are the same file", quoteGNUOperand(source), quoteGNUOperand(path.Base(destAbs)))
+			if destAbs == srcAbs || strings.HasPrefix(destAbs, srcAbs+"/") {
+				return exitf(inv, 1, "cp: cannot copy %q into itself", source)
+			}
+			if err := copyTree(ctx, inv, srcAbs, destAbs); err != nil {
+				return err
+			}
+			continue
 		}
 
 		switch opts.copyMode {
@@ -172,19 +185,6 @@ func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 				if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
 					return &ExitError{Code: 1, Err: err}
 				}
-			}
-			continue
-		}
-
-		if srcInfo.IsDir() {
-			if !opts.recursive {
-				return exitf(inv, 1, "cp: omitting directory %q", source)
-			}
-			if destAbs == srcAbs || strings.HasPrefix(destAbs, srcAbs+"/") {
-				return exitf(inv, 1, "cp: cannot copy %q into itself", source)
-			}
-			if err := copyTree(ctx, inv, srcAbs, destAbs); err != nil {
-				return err
 			}
 			continue
 		}
@@ -528,6 +528,10 @@ func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs s
 	if err := ensureParentDirExists(ctx, inv, dstAbs); err != nil {
 		return err
 	}
+	linkTarget := target
+	if !path.IsAbs(target) {
+		linkTarget = lnRelativeTarget(inv, target, dstAbs)
+	}
 	if info, _, exists, err := lstatMaybe(ctx, inv, dstAbs); err != nil {
 		return err
 	} else if exists {
@@ -538,10 +542,10 @@ func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs s
 			return &ExitError{Code: 1, Err: err}
 		}
 	}
-	if err := inv.FS.Symlink(ctx, target, dstAbs); err != nil {
+	if err := inv.FS.Symlink(ctx, linkTarget, dstAbs); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
-	recordFileMutation(inv.TraceRecorder(), "copy", dstAbs, target, dstAbs)
+	recordFileMutation(inv.TraceRecorder(), "copy", dstAbs, linkTarget, dstAbs)
 	return nil
 }
 
