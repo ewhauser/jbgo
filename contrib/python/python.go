@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	stdfs "io/fs"
+	"maps"
 	"os"
 	"path"
 	"reflect"
@@ -51,8 +52,8 @@ type pythonSource struct {
 }
 
 type invocationFS struct {
-	ctx context.Context
-	inv *commands.Invocation
+	requestContext func() context.Context
+	inv            *commands.Invocation
 }
 
 func New(name string) *Python {
@@ -129,9 +130,7 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 	}
 
 	env := montyvfs.MapEnvironment{}
-	for key, value := range inv.Env {
-		env[key] = value
-	}
+	maps.Copy(env, inv.Env)
 
 	_, err = runner.Run(ctx, monty.RunOptions{
 		Functions: map[string]monty.ExternalFunction{
@@ -142,7 +141,10 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 				return monty.Return(monty.None()), nil
 			},
 		},
-		OS: montyvfs.Handler(&invocationFS{ctx: ctx, inv: inv}, env),
+		OS: montyvfs.Handler(&invocationFS{
+			requestContext: func() context.Context { return ctx },
+			inv:            inv,
+		}, env),
 	})
 	if err != nil {
 		return pythonExit(inv, err)
@@ -238,7 +240,7 @@ func pythonExit(inv *commands.Invocation, err error) error {
 }
 
 func (fsys *invocationFS) Exists(pathValue string) (bool, error) {
-	_, err := fsys.commandFS().Stat(fsys.ctx, pathValue)
+	_, err := fsys.commandFS().Stat(fsys.ctx(), pathValue)
 	switch {
 	case err == nil:
 		return true, nil
@@ -250,7 +252,7 @@ func (fsys *invocationFS) Exists(pathValue string) (bool, error) {
 }
 
 func (fsys *invocationFS) IsFile(pathValue string) (bool, error) {
-	info, err := fsys.commandFS().Stat(fsys.ctx, pathValue)
+	info, err := fsys.commandFS().Stat(fsys.ctx(), pathValue)
 	switch {
 	case err == nil:
 		return !info.IsDir() && info.Mode()&stdfs.ModeSymlink == 0, nil
@@ -262,7 +264,7 @@ func (fsys *invocationFS) IsFile(pathValue string) (bool, error) {
 }
 
 func (fsys *invocationFS) IsDir(pathValue string) (bool, error) {
-	info, err := fsys.commandFS().Stat(fsys.ctx, pathValue)
+	info, err := fsys.commandFS().Stat(fsys.ctx(), pathValue)
 	switch {
 	case err == nil:
 		return info.IsDir(), nil
@@ -274,7 +276,7 @@ func (fsys *invocationFS) IsDir(pathValue string) (bool, error) {
 }
 
 func (fsys *invocationFS) IsSymlink(pathValue string) (bool, error) {
-	info, err := fsys.commandFS().Lstat(fsys.ctx, pathValue)
+	info, err := fsys.commandFS().Lstat(fsys.ctx(), pathValue)
 	switch {
 	case err == nil:
 		return info.Mode()&stdfs.ModeSymlink != 0, nil
@@ -286,7 +288,7 @@ func (fsys *invocationFS) IsSymlink(pathValue string) (bool, error) {
 }
 
 func (fsys *invocationFS) ReadText(pathValue string) (string, error) {
-	data, err := fsys.commandFS().ReadFile(fsys.ctx, pathValue)
+	data, err := fsys.commandFS().ReadFile(fsys.ctx(), pathValue)
 	if err != nil {
 		return "", err
 	}
@@ -297,10 +299,10 @@ func (fsys *invocationFS) ReadText(pathValue string) (string, error) {
 }
 
 func (fsys *invocationFS) ReadBytes(pathValue string) ([]byte, error) {
-	return fsys.commandFS().ReadFile(fsys.ctx, pathValue)
+	return fsys.commandFS().ReadFile(fsys.ctx(), pathValue)
 }
 
-func (fsys *invocationFS) WriteText(pathValue string, data string) (int, error) {
+func (fsys *invocationFS) WriteText(pathValue, data string) (int, error) {
 	return fsys.writeFile(pathValue, []byte(data))
 }
 
@@ -308,9 +310,9 @@ func (fsys *invocationFS) WriteBytes(pathValue string, data []byte) (int, error)
 	return fsys.writeFile(pathValue, data)
 }
 
-func (fsys *invocationFS) Mkdir(pathValue string, parents bool, existOK bool) error {
+func (fsys *invocationFS) Mkdir(pathValue string, parents, existOK bool) error {
 	cmdFS := fsys.commandFS()
-	info, err := cmdFS.Lstat(fsys.ctx, pathValue)
+	info, err := cmdFS.Lstat(fsys.ctx(), pathValue)
 	switch {
 	case err == nil:
 		if info.IsDir() && existOK {
@@ -323,7 +325,7 @@ func (fsys *invocationFS) Mkdir(pathValue string, parents bool, existOK bool) er
 
 	if !parents {
 		parent := path.Dir(cmdFS.Resolve(pathValue))
-		parentInfo, err := cmdFS.Stat(fsys.ctx, parent)
+		parentInfo, err := cmdFS.Stat(fsys.ctx(), parent)
 		if err != nil {
 			if errors.Is(err, stdfs.ErrNotExist) {
 				return &stdfs.PathError{Op: "mkdir", Path: pathValue, Err: stdfs.ErrNotExist}
@@ -335,37 +337,37 @@ func (fsys *invocationFS) Mkdir(pathValue string, parents bool, existOK bool) er
 		}
 	}
 
-	return cmdFS.MkdirAll(fsys.ctx, pathValue, 0o755)
+	return cmdFS.MkdirAll(fsys.ctx(), pathValue, 0o755)
 }
 
 func (fsys *invocationFS) Unlink(pathValue string) error {
 	cmdFS := fsys.commandFS()
-	info, err := cmdFS.Lstat(fsys.ctx, pathValue)
+	info, err := cmdFS.Lstat(fsys.ctx(), pathValue)
 	if err != nil {
 		return err
 	}
 	if info.IsDir() {
 		return &stdfs.PathError{Op: "unlink", Path: pathValue, Err: syscall.EISDIR}
 	}
-	return cmdFS.Remove(fsys.ctx, pathValue, false)
+	return cmdFS.Remove(fsys.ctx(), pathValue, false)
 }
 
 func (fsys *invocationFS) Rmdir(pathValue string) error {
 	cmdFS := fsys.commandFS()
-	info, err := cmdFS.Lstat(fsys.ctx, pathValue)
+	info, err := cmdFS.Lstat(fsys.ctx(), pathValue)
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() {
 		return &stdfs.PathError{Op: "rmdir", Path: pathValue, Err: syscall.ENOTDIR}
 	}
-	return cmdFS.Remove(fsys.ctx, pathValue, false)
+	return cmdFS.Remove(fsys.ctx(), pathValue, false)
 }
 
 func (fsys *invocationFS) Iterdir(pathValue string) ([]string, error) {
 	cmdFS := fsys.commandFS()
 	base := cmdFS.Resolve(pathValue)
-	entries, err := cmdFS.ReadDir(fsys.ctx, pathValue)
+	entries, err := cmdFS.ReadDir(fsys.ctx(), pathValue)
 	if err != nil {
 		return nil, err
 	}
@@ -378,28 +380,28 @@ func (fsys *invocationFS) Iterdir(pathValue string) ([]string, error) {
 }
 
 func (fsys *invocationFS) Stat(pathValue string) (monty.StatResult, error) {
-	info, err := fsys.commandFS().Stat(fsys.ctx, pathValue)
+	info, err := fsys.commandFS().Stat(fsys.ctx(), pathValue)
 	if err != nil {
 		return monty.StatResult{}, err
 	}
 	return statResultFromFileInfo(info), nil
 }
 
-func (fsys *invocationFS) Rename(oldPath string, newPath string) error {
-	return fsys.commandFS().Rename(fsys.ctx, oldPath, newPath)
+func (fsys *invocationFS) Rename(oldPath, newPath string) error {
+	return fsys.commandFS().Rename(fsys.ctx(), oldPath, newPath)
 }
 
 func (fsys *invocationFS) Resolve(pathValue string) (string, error) {
 	cmdFS := fsys.commandFS()
 	abs := cmdFS.Resolve(pathValue)
-	_, err := cmdFS.Lstat(fsys.ctx, abs)
+	_, err := cmdFS.Lstat(fsys.ctx(), abs)
 	if err != nil {
 		if errors.Is(err, stdfs.ErrNotExist) {
 			return abs, nil
 		}
 		return "", err
 	}
-	return cmdFS.Realpath(fsys.ctx, abs)
+	return cmdFS.Realpath(fsys.ctx(), abs)
 }
 
 func (fsys *invocationFS) Absolute(pathValue string) (string, error) {
@@ -413,8 +415,15 @@ func (fsys *invocationFS) commandFS() *commands.CommandFS {
 	return &commands.CommandFS{}
 }
 
+func (fsys *invocationFS) ctx() context.Context {
+	if fsys != nil && fsys.requestContext != nil {
+		return fsys.requestContext()
+	}
+	return context.Background()
+}
+
 func (fsys *invocationFS) writeFile(pathValue string, data []byte) (int, error) {
-	file, err := fsys.commandFS().OpenFile(fsys.ctx, pathValue, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	file, err := fsys.commandFS().OpenFile(fsys.ctx(), pathValue, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return 0, err
 	}
@@ -515,7 +524,10 @@ func int64Field(value reflect.Value, name string) (int64, bool) {
 }
 
 func instrumentSourceForPrint(source string) string {
-	source = rewritePrintCalls(source)
+	source, rewritten := rewritePrintCalls(source)
+	if !rewritten {
+		return source
+	}
 	if source == "" {
 		return pythonPrintPrelude
 	}
@@ -539,11 +551,11 @@ func instrumentSourceForPrint(source string) string {
 	consumeTrivia()
 	if index < len(lines) {
 		trimmed := strings.TrimSpace(lines[index])
-		if strings.HasPrefix(trimmed, `"""`) || strings.HasPrefix(trimmed, `'''`) {
-			delimiter := trimmed[:3]
+		if delimiter, ok := tripleQuotedDocstringDelimiter(trimmed); ok {
+			start := strings.Index(trimmed, delimiter)
 			prefix.WriteString(lines[index])
 			index++
-			if !strings.Contains(trimmed[3:], delimiter) {
+			if start == -1 || !strings.Contains(trimmed[start+3:], delimiter) {
 				for index < len(lines) {
 					prefix.WriteString(lines[index])
 					if strings.Contains(lines[index], delimiter) {
@@ -578,9 +590,12 @@ const (
 	pythonTokenOther
 )
 
-func rewritePrintCalls(source string) string {
+func rewritePrintCalls(source string) (string, bool) {
 	if source == "" {
-		return ""
+		return "", false
+	}
+	if sourceHasPrintRebinding(source) {
+		return source, false
 	}
 
 	var out strings.Builder
@@ -588,6 +603,7 @@ func rewritePrintCalls(source string) string {
 
 	lastKind := pythonTokenNone
 	lastIdentifier := ""
+	rewritten := false
 
 	for index := 0; index < len(source); {
 		switch ch := source[index]; {
@@ -615,6 +631,7 @@ func rewritePrintCalls(source string) string {
 				out.WriteString(pythonRewrittenPrintName)
 				lastKind = pythonTokenIdentifier
 				lastIdentifier = pythonRewrittenPrintName
+				rewritten = true
 				continue
 			}
 
@@ -636,7 +653,73 @@ func rewritePrintCalls(source string) string {
 		}
 	}
 
-	return out.String()
+	return out.String(), rewritten
+}
+
+func sourceHasPrintRebinding(source string) bool {
+	lastKind := pythonTokenNone
+	lastIdentifier := ""
+
+	for index := 0; index < len(source); {
+		switch ch := source[index]; {
+		case ch == '#':
+			index++
+			for index < len(source) && source[index] != '\n' {
+				index++
+			}
+		case ch == '"' || ch == '\'':
+			index = consumePythonString(source, index)
+			lastKind = pythonTokenOther
+			lastIdentifier = ""
+		case isPythonIdentifierStart(ch):
+			start := index
+			index++
+			for index < len(source) && isPythonIdentifierContinue(source[index]) {
+				index++
+			}
+			identifier := source[start:index]
+			if identifier == "print" && isPrintRebinding(lastKind, lastIdentifier, source, index) {
+				return true
+			}
+			lastKind = pythonTokenIdentifier
+			lastIdentifier = identifier
+		default:
+			index++
+			switch ch {
+			case ' ', '\t', '\n', '\r', '\f', '\v':
+				continue
+			case '.':
+				lastKind = pythonTokenDot
+			default:
+				lastKind = pythonTokenOther
+			}
+			lastIdentifier = ""
+		}
+	}
+
+	return false
+}
+
+func isPrintRebinding(lastKind pythonTokenKind, lastIdentifier, source string, index int) bool {
+	if lastKind == pythonTokenIdentifier {
+		switch lastIdentifier {
+		case "def", "class", "for", "import", "as", "global", "nonlocal":
+			return true
+		}
+	}
+
+	nextIndex, next := nextSignificantByte(source, index)
+	if nextIndex < 0 {
+		return false
+	}
+	if next == '=' || next == ':' {
+		return true
+	}
+	if next == '+' || next == '-' || next == '*' || next == '/' || next == '%' || next == '&' || next == '|' || next == '^' {
+		afterOpIndex, afterOp := nextSignificantByte(source, nextIndex+1)
+		return afterOpIndex >= 0 && afterOp == '='
+	}
+	return false
 }
 
 func shouldRewritePrintCall(source string, index int, lastKind pythonTokenKind, lastIdentifier string) bool {
@@ -687,6 +770,49 @@ func consumePythonString(source string, start int) int {
 		}
 	}
 	return len(source)
+}
+
+func tripleQuotedDocstringDelimiter(line string) (string, bool) {
+	for prefixLen := 0; prefixLen <= 2 && prefixLen <= len(line); prefixLen++ {
+		if prefixLen > 0 && !isPythonStringPrefix(line[:prefixLen]) {
+			continue
+		}
+		if len(line[prefixLen:]) < 3 {
+			continue
+		}
+		delimiter := line[prefixLen : prefixLen+3]
+		if delimiter == `"""` || delimiter == `'''` {
+			return delimiter, true
+		}
+	}
+	return "", false
+}
+
+func isPythonStringPrefix(value string) bool {
+	if value == "" || len(value) > 2 {
+		return false
+	}
+	for _, ch := range value {
+		switch ch {
+		case 'r', 'R', 'u', 'U', 'b', 'B', 'f', 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func nextSignificantByte(source string, index int) (int, byte) {
+	for index < len(source) {
+		switch source[index] {
+		case ' ', '\t', '\n', '\r', '\f', '\v':
+			index++
+			continue
+		default:
+			return index, source[index]
+		}
+	}
+	return -1, 0
 }
 
 func isPythonIdentifierStart(ch byte) bool {
