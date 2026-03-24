@@ -8,42 +8,6 @@ import (
 	"strings"
 )
 
-type headTailOptions struct {
-	lines    int
-	bytes    int
-	hasBytes bool
-	fromLine bool
-	quiet    bool
-	verbose  bool
-	files    []string
-}
-
-func headOptionsFromParsed(inv *Invocation, matches *ParsedCommand) (headTailOptions, error) {
-	opts := headTailOptions{
-		lines:   10,
-		quiet:   matches.Has("quiet"),
-		verbose: matches.Has("verbose"),
-		files:   matches.Args("file"),
-	}
-	if matches.Has("lines") {
-		count, fromLine, err := parseHeadTailCount(matches.Value("lines"), false)
-		if err != nil {
-			return headTailOptions{}, exitf(inv, 1, "head: invalid number of lines")
-		}
-		opts.lines = count
-		opts.fromLine = fromLine
-	}
-	if matches.Has("bytes") {
-		count, err := parseHeadTailNumber(matches.Value("bytes"))
-		if err != nil {
-			return headTailOptions{}, exitf(inv, 1, "head: invalid number of bytes")
-		}
-		opts.bytes = count
-		opts.hasBytes = true
-	}
-	return opts, nil
-}
-
 func isDecimalDigits(value string) bool {
 	if value == "" {
 		return false
