@@ -251,6 +251,35 @@ func TestRMLaterInteractiveStopsForceIgnoringMissingFiles(t *testing.T) {
 	}
 }
 
+func TestRMDecliningNestedDescentLeavesTreeUntouchedWithoutError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"mkdir -p /tmp/tree/sub\n"+
+			"printf 'leaf' > /tmp/tree/sub/file\n"+
+			"printf 'y\\nn\\n' | rm -ri /tmp/tree\n"+
+			"printf 'status=%s\\n' \"$?\"\n"+
+			"[ -e /tmp/tree/sub/file ] && echo kept || echo removed\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\nkept\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	for _, want := range []string{
+		"rm: descend into directory '/tmp/tree'? ",
+		"rm: descend into directory '/tmp/tree/sub'? ",
+	} {
+		if !strings.Contains(result.Stderr, want) {
+			t.Fatalf("Stderr = %q, want prompt %q", result.Stderr, want)
+		}
+	}
+	if strings.Contains(result.Stderr, "Directory not empty") {
+		t.Fatalf("Stderr = %q, want no synthetic directory-not-empty error", result.Stderr)
+	}
+}
+
 func TestCPSupportsNoClobberPreserveAndVerbose(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

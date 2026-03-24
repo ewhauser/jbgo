@@ -40,6 +40,11 @@ type rmPromptInput struct {
 	closer io.Closer
 }
 
+type rmResult struct {
+	hadErr  bool
+	removed bool
+}
+
 func NewRM() *RM {
 	return &RM{}
 }
@@ -125,11 +130,11 @@ func (c *RM) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 
 	hadErr := false
 	for _, name := range files {
-		opErr, err := rmRemovePath(ctx, inv, name, opts)
+		result, err := rmRemovePath(ctx, inv, name, opts)
 		if err != nil {
 			return err
 		}
-		hadErr = hadErr || opErr
+		hadErr = hadErr || result.hadErr
 	}
 	if hadErr {
 		return &ExitError{Code: 1}
@@ -210,32 +215,32 @@ func parseRMInteractiveMode(inv *Invocation, value string, hasValue bool) (rmInt
 	}
 }
 
-func rmRemovePath(ctx context.Context, inv *Invocation, raw string, opts rmOptions) (bool, error) {
+func rmRemovePath(ctx context.Context, inv *Invocation, raw string, opts rmOptions) (rmResult, error) {
 	display := rmDisplayPath(raw)
 	info, abs, exists, err := lstatMaybe(ctx, inv, raw)
 	if err != nil {
 		if opts.force && errorsIsNotExist(err) {
-			return false, nil
+			return rmResult{}, nil
 		}
 		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, false)); err != nil {
-			return false, err
+			return rmResult{}, err
 		}
-		return true, nil
+		return rmResult{hadErr: true}, nil
 	}
 	if !exists {
 		if opts.force {
-			return false, nil
+			return rmResult{}, nil
 		}
 		if err := rmWriteCannotRemove(inv, display, "No such file or directory"); err != nil {
-			return false, err
+			return rmResult{}, err
 		}
-		return true, nil
+		return rmResult{hadErr: true}, nil
 	}
 	if info == nil {
 		if err := rmWriteCannotRemove(inv, display, "No such file or directory"); err != nil {
-			return false, err
+			return rmResult{}, err
 		}
-		return true, nil
+		return rmResult{hadErr: true}, nil
 	}
 
 	if info.IsDir() {
@@ -244,20 +249,20 @@ func rmRemovePath(ctx context.Context, inv *Invocation, raw string, opts rmOptio
 	return rmRemoveFile(ctx, inv, display, abs, info, opts)
 }
 
-func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
+func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	if rmRefersToCurrentOrParent(display) {
 		if err := rmWriteRefusal(inv, display); err != nil {
-			return false, err
+			return rmResult{}, err
 		}
-		return true, nil
+		return rmResult{hadErr: true}, nil
 	}
 
 	if opts.recursive {
 		if rmIsPreserveRootViolation(ctx, inv, abs, opts.preserveRoot) {
 			if err := rmWritePreserveRootError(inv, display); err != nil {
-				return false, err
+				return rmResult{}, err
 			}
-			return true, nil
+			return rmResult{hadErr: true}, nil
 		}
 		return rmRemoveDirectoryRecursive(ctx, inv, display, abs, info, opts)
 	}
@@ -267,122 +272,136 @@ func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string
 	}
 
 	if err := rmWriteCannotRemove(inv, display, "Is a directory"); err != nil {
-		return false, err
+		return rmResult{}, err
 	}
-	return true, nil
+	return rmResult{hadErr: true}, nil
 }
 
-func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
+func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	if opts.interactive == rmInteractiveAlways {
 		entries, err := inv.FS.ReadDir(ctx, abs)
 		if err == nil && len(entries) > 0 {
 			ok, err := rmPromptYes(ctx, inv, fmt.Sprintf("descend into directory %s", quoteGNUOperand(display)), opts)
 			if err != nil {
-				return false, err
+				return rmResult{}, err
 			}
 			if !ok {
-				return false, nil
+				return rmResult{}, nil
 			}
 		}
 	}
 
-	hadErr := false
 	entries, err := inv.FS.ReadDir(ctx, abs)
-	if err == nil {
-		for _, entry := range entries {
-			childDisplay := joinChildPath(display, entry.Name())
-			childAbs := joinChildPath(abs, entry.Name())
-
-			childInfo, infoErr := entry.Info()
-			if infoErr != nil {
-				childInfo, _, infoErr = lstatPath(ctx, inv, childAbs)
-				if infoErr != nil {
-					if err := rmWriteCannotRemove(inv, childDisplay, rmRemovalErrorText(infoErr, false)); err != nil {
-						return false, err
-					}
-					hadErr = true
-					continue
-				}
-			}
-
-			childErr, err := rmRemoveExistingPath(ctx, inv, childDisplay, childAbs, childInfo, opts)
-			if err != nil {
-				return false, err
-			}
-			hadErr = hadErr || childErr
+	if err != nil {
+		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, true)); err != nil {
+			return rmResult{}, err
 		}
+		return rmResult{hadErr: true}, nil
+	}
+
+	result := rmResult{}
+	hasUnremovedChild := false
+	for _, entry := range entries {
+		childDisplay := joinChildPath(display, entry.Name())
+		childAbs := joinChildPath(abs, entry.Name())
+
+		childInfo, infoErr := entry.Info()
+		if infoErr != nil {
+			childInfo, _, infoErr = lstatPath(ctx, inv, childAbs)
+			if infoErr != nil {
+				if err := rmWriteCannotRemove(inv, childDisplay, rmRemovalErrorText(infoErr, false)); err != nil {
+					return rmResult{}, err
+				}
+				result.hadErr = true
+				hasUnremovedChild = true
+				continue
+			}
+		}
+
+		childResult, err := rmRemoveExistingPath(ctx, inv, childDisplay, childAbs, childInfo, opts)
+		if err != nil {
+			return rmResult{}, err
+		}
+		result.hadErr = result.hadErr || childResult.hadErr
+		hasUnremovedChild = hasUnremovedChild || !childResult.removed
+	}
+
+	if hasUnremovedChild {
+		return result, nil
 	}
 
 	ok, err := rmPromptDirectory(ctx, inv, display, info, opts)
 	if err != nil {
-		return false, err
+		return rmResult{}, err
 	}
 	if !ok {
-		return hadErr, nil
+		return result, nil
 	}
 
 	if err := inv.FS.Remove(ctx, abs, false); err != nil {
-		if !hadErr {
+		if !result.hadErr {
 			if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, true)); err != nil {
-				return false, err
+				return rmResult{}, err
 			}
 		}
-		return true, nil
+		result.hadErr = true
+		return result, nil
 	}
 
 	if err := rmWriteVerboseDirectory(inv, display, opts.verbose); err != nil {
-		return false, err
+		return rmResult{}, err
 	}
-	return hadErr, nil
+	result.removed = true
+	return result, nil
 }
 
-func rmRemoveExistingPath(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
+func rmRemoveExistingPath(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	if info.IsDir() {
 		return rmRemoveDirectory(ctx, inv, display, abs, info, opts)
 	}
 	return rmRemoveFile(ctx, inv, display, abs, info, opts)
 }
 
-func rmRemoveEmptyDirectory(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
+func rmRemoveEmptyDirectory(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	ok, err := rmPromptDirectory(ctx, inv, display, info, opts)
 	if err != nil {
-		return false, err
+		return rmResult{}, err
 	}
 	if !ok {
-		return false, nil
+		return rmResult{}, nil
 	}
 
 	if err := inv.FS.Remove(ctx, abs, false); err != nil {
 		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, true)); err != nil {
-			return false, err
+			return rmResult{}, err
 		}
-		return true, nil
+		return rmResult{hadErr: true}, nil
 	}
 	if err := rmWriteVerboseDirectory(inv, display, opts.verbose); err != nil {
-		return false, err
+		return rmResult{}, err
 	}
-	return false, nil
+	return rmResult{removed: true}, nil
 }
 
-func rmRemoveFile(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
+func rmRemoveFile(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	ok, err := rmPromptFile(ctx, inv, display, info, opts)
 	if err != nil {
-		return false, err
+		return rmResult{}, err
 	}
 	if !ok {
-		return false, nil
+		return rmResult{}, nil
 	}
 
 	if err := inv.FS.Remove(ctx, abs, false); err != nil {
 		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, false)); err != nil {
-			return false, err
+			return rmResult{}, err
 		}
-		return true, nil
+		return rmResult{hadErr: true}, nil
 	}
 	if err := rmWriteVerboseFile(inv, display, opts.verbose); err != nil {
-		return false, err
+		return rmResult{}, err
 	}
-	return false, nil
+	return rmResult{removed: true}, nil
 }
 
 func rmPromptFile(ctx context.Context, inv *Invocation, display string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
