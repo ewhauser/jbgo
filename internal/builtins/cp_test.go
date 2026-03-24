@@ -626,3 +626,21 @@ func TestCPUpdateOlderDoesNotSkipDanglingDestinationSymlink(t *testing.T) {
 		t.Fatalf("Stderr = %q, want dangling-symlink error", result.Stderr)
 	}
 }
+
+func TestCPUpdateNoneDoesNotSkipDanglingDestinationSymlink(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	mustExecSession(t, session, "echo payload > /tmp/src.txt\nln -s missing /tmp/dst.txt\n")
+
+	result := mustExecSession(t, session, "cp --update=none /tmp/src.txt /tmp/dst.txt\nprintf 'status=%s\\n' \"$?\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: not writing through dangling symlink 'dst.txt'") {
+		t.Fatalf("Stderr = %q, want dangling-symlink error", result.Stderr)
+	}
+}

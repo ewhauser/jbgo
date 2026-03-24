@@ -533,6 +533,22 @@ func cpPosixlyCorrect(inv *Invocation) bool {
 	return ok
 }
 
+func cpValidateSkippedDestination(ctx context.Context, inv *Invocation, copyingSymlink bool, destAbs string, destInfo stdfs.FileInfo) error {
+	if copyingSymlink || destInfo == nil || destInfo.Mode()&stdfs.ModeSymlink == 0 {
+		return nil
+	}
+	if _, _, err := statPath(ctx, inv, destAbs); err != nil {
+		switch {
+		case errors.Is(err, stdfs.ErrPermission):
+			return exitf(inv, 1, "cp: cannot stat %s: Permission denied", quoteGNUOperand(path.Base(destAbs)))
+		case cpPosixlyCorrect(inv):
+			return nil
+		}
+		return exitf(inv, 1, "cp: not writing through dangling symlink %s", quoteGNUOperand(path.Base(destAbs)))
+	}
+	return nil
+}
+
 func cpShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.FileInfo, copyingSymlink bool, destAbs string, destInfo stdfs.FileInfo, destExists, sameFile bool, opts *cpOptions) (bool, error) {
 	if !destExists {
 		return false, nil
@@ -541,12 +557,18 @@ func cpShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.Fi
 		return false, nil
 	}
 	if opts.noClobber {
+		if err := cpValidateSkippedDestination(ctx, inv, copyingSymlink, destAbs, destInfo); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 	switch opts.updateMode {
 	case cpUpdateAll:
 		return false, nil
 	case cpUpdateNone:
+		if err := cpValidateSkippedDestination(ctx, inv, copyingSymlink, destAbs, destInfo); err != nil {
+			return false, err
+		}
 		return true, nil
 	case cpUpdateNoneFail:
 		return false, exitf(inv, 1, "cp: not replacing %s", quoteGNUOperand(destAbs))
