@@ -251,6 +251,45 @@ func TestRMLaterInteractiveStopsForceIgnoringMissingFiles(t *testing.T) {
 	}
 }
 
+func TestRMInteractiveNeverPreservesForceIgnoringMissingFiles(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"rm -f --interactive=never /tmp/missing\n"+
+			"printf 'status=%s\\n' \"$?\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty when force is preserved", result.Stderr)
+	}
+}
+
+func TestRMInteractiveOnceSkipsPerFileProtectedPrompt(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"printf 'guard' > /tmp/protected\n"+
+			"chmod 400 /tmp/protected\n"+
+			"printf 'n\\n' | rm -I /tmp/protected\n"+
+			"printf 'status=%s\\n' \"$?\"\n"+
+			"[ -e /tmp/protected ] && echo kept || echo removed\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\nremoved\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if strings.Contains(result.Stderr, "write-protected") {
+		t.Fatalf("Stderr = %q, want no per-file write-protected prompt in -I mode", result.Stderr)
+	}
+}
+
 func TestRMDecliningNestedDescentLeavesTreeUntouchedWithoutError(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

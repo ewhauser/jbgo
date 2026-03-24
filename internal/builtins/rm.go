@@ -161,10 +161,12 @@ func parseRMMatches(inv *Invocation, matches *ParsedCommand) (rmOptions, error) 
 			opts.force = false
 			opts.interactive = rmInteractiveOnce
 		case "interactive":
-			opts.force = false
 			mode, err := parseRMInteractiveMode(inv, occurrence.Value, occurrence.HasValue)
 			if err != nil {
 				return rmOptions{}, err
+			}
+			if mode != rmInteractiveNever {
+				opts.force = false
 			}
 			opts.interactive = mode
 		case "one-file-system":
@@ -408,6 +410,9 @@ func rmPromptFile(ctx context.Context, inv *Invocation, display string, info std
 	if opts.interactive == rmInteractiveNever {
 		return true, nil
 	}
+	if opts.interactive == rmInteractiveOnce {
+		return true, nil
+	}
 
 	if info.Mode()&stdfs.ModeSymlink != 0 {
 		if opts.interactive == rmInteractiveAlways {
@@ -437,6 +442,9 @@ func rmPromptFile(ctx context.Context, inv *Invocation, display string, info std
 
 func rmPromptDirectory(ctx context.Context, inv *Invocation, display string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
 	if opts.interactive == rmInteractiveNever {
+		return true, nil
+	}
+	if opts.interactive == rmInteractiveOnce {
 		return true, nil
 	}
 

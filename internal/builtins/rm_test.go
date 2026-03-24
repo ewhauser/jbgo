@@ -83,6 +83,11 @@ func TestParseRMSpecUsesPerOccurrenceInteractiveValues(t *testing.T) {
 			args: []string{"-f", "-i", "target"},
 			want: rmInteractiveAlways,
 		},
+		{
+			name: "interactive never preserves prior force",
+			args: []string{"-f", "--interactive=never", "target"},
+			want: rmInteractiveNever,
+		},
 	}
 
 	for _, tt := range tests {
@@ -103,8 +108,15 @@ func TestParseRMSpecUsesPerOccurrenceInteractiveValues(t *testing.T) {
 			if got := opts.interactive; got != tt.want {
 				t.Fatalf("interactive = %v, want %v", got, tt.want)
 			}
-			if tt.name == "interactive clears prior force" && opts.force {
-				t.Fatalf("force = true, want false after later interactive option")
+			switch tt.name {
+			case "interactive clears prior force":
+				if opts.force {
+					t.Fatalf("force = true, want false after later interactive option")
+				}
+			case "interactive never preserves prior force":
+				if !opts.force {
+					t.Fatalf("force = false, want true when --interactive=never follows -f")
+				}
 			}
 		})
 	}
