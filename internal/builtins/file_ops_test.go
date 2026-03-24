@@ -230,6 +230,27 @@ func TestRMBareInteractiveOverridesPriorInteractiveValue(t *testing.T) {
 	}
 }
 
+func TestRMLaterInteractiveStopsForceIgnoringMissingFiles(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"rm -f -i /tmp/missing\n"+
+			"printf 'status=%s\\n' \"$?\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cannot remove '/tmp/missing': No such file or directory") {
+		t.Fatalf("Stderr = %q, want missing-file diagnostic", result.Stderr)
+	}
+	if strings.Contains(result.Stderr, "? ") {
+		t.Fatalf("Stderr = %q, want no prompt for missing file", result.Stderr)
+	}
+}
+
 func TestCPSupportsNoClobberPreserveAndVerbose(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

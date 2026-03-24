@@ -150,10 +150,13 @@ func parseRMMatches(inv *Invocation, matches *ParsedCommand) (rmOptions, error) 
 			opts.force = true
 			opts.interactive = rmInteractiveNever
 		case "prompt-always":
+			opts.force = false
 			opts.interactive = rmInteractiveAlways
 		case "prompt-once":
+			opts.force = false
 			opts.interactive = rmInteractiveOnce
 		case "interactive":
+			opts.force = false
 			mode, err := parseRMInteractiveMode(inv, occurrence.Value, occurrence.HasValue)
 			if err != nil {
 				return rmOptions{}, err
