@@ -213,6 +213,36 @@ func TestCPSymbolicLinkModeNormalizesRelativeTargetsAcrossDirectories(t *testing
 	}
 }
 
+func TestCPLinkModesDoNotOverwriteExistingDestinationsWithoutForce(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo source > /tmp/src.txt\n" +
+			"echo keep-hard > /tmp/hard.txt\n" +
+			"echo keep-sym > /tmp/sym.txt\n" +
+			"cp -l /tmp/src.txt /tmp/hard.txt\n" +
+			"printf 'hard_status=%s\\n' \"$?\"\n" +
+			"cat /tmp/hard.txt\n" +
+			"cp -s /tmp/src.txt /tmp/sym.txt\n" +
+			"printf 'sym_status=%s\\n' \"$?\"\n" +
+			"test -L /tmp/sym.txt && echo sym-link || echo sym-regular\n" +
+			"cat /tmp/sym.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "hard_status=1\nkeep-hard\nsym_status=1\nsym-regular\nkeep-sym\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "File exists") {
+		t.Fatalf("Stderr = %q, want file-exists errors", result.Stderr)
+	}
+}
+
 func TestCPLinkModesStillUseDirectoryCopySemantics(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -223,10 +253,11 @@ func TestCPLinkModesStillUseDirectoryCopySemantics(t *testing.T) {
 			"cp -l /tmp/src /tmp/hard-no-r\n" +
 			"printf 'hard_no_r=%s\\n' \"$?\"\n" +
 			"cp -l -R /tmp/src /tmp/hard-r\n" +
-			"cat /tmp/hard-r/sub/file.txt\n" +
+			"stat -c '%d:%i' /tmp/src/sub/file.txt /tmp/hard-r/sub/file.txt\n" +
 			"cp -s -R /tmp/src /tmp/sym-r\n" +
 			"test -d /tmp/sym-r && echo sym-r-dir || echo sym-r-not-dir\n" +
-			"cat /tmp/sym-r/sub/file.txt\n",
+			"test -L /tmp/sym-r/sub/file.txt && echo sym-r-link || echo sym-r-not-link\n" +
+			"readlink /tmp/sym-r/sub/file.txt\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -234,8 +265,24 @@ func TestCPLinkModesStillUseDirectoryCopySemantics(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "hard_no_r=1\npayload\nsym-r-dir\npayload\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 6 {
+		t.Fatalf("Stdout lines = %q, want 6 lines", result.Stdout)
+	}
+	if got, want := lines[0], "hard_no_r=1"; got != want {
+		t.Fatalf("hard_no_r = %q, want %q", got, want)
+	}
+	if lines[1] != lines[2] {
+		t.Fatalf("hard-link inode lines = %q and %q, want equal", lines[1], lines[2])
+	}
+	if got, want := lines[3], "sym-r-dir"; got != want {
+		t.Fatalf("sym-r-dir marker = %q, want %q", got, want)
+	}
+	if got, want := lines[4], "sym-r-link"; got != want {
+		t.Fatalf("sym-r-link marker = %q, want %q", got, want)
+	}
+	if got, want := lines[5], "/tmp/src/sub/file.txt"; got != want {
+		t.Fatalf("symlink target = %q, want %q", got, want)
 	}
 	if !strings.Contains(result.Stderr, "cp: omitting directory \"/tmp/src\"") {
 		t.Fatalf("Stderr = %q, want omitting-directory error", result.Stderr)
@@ -326,5 +373,61 @@ func TestCPUpdateModeStillRejectsSameFile(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "cp: '/tmp/file.txt' and 'file.txt' are the same file") {
 		t.Fatalf("Stderr = %q, want same-file error", result.Stderr)
+	}
+}
+
+func TestCPRecursiveUpdateStillEvaluatesFilesIndividually(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	mustExecSession(t, session, "mkdir -p /tmp/src /tmp/dst/src\n")
+	writeSessionFile(t, session, "/tmp/src/file.txt", []byte("fresh\n"))
+	writeSessionFile(t, session, "/tmp/dst/src/file.txt", []byte("stale\n"))
+
+	base := time.Unix(1_700_100_000, 0).UTC()
+	timestamps := []struct {
+		path  string
+		mtime time.Time
+	}{
+		{path: "/tmp/dst/src/file.txt", mtime: base},
+		{path: "/tmp/src/file.txt", mtime: base.Add(2 * time.Hour)},
+		{path: "/tmp/src", mtime: base.Add(3 * time.Hour)},
+		{path: "/tmp/dst/src", mtime: base.Add(4 * time.Hour)},
+	}
+	for _, item := range timestamps {
+		if err := session.FileSystem().Chtimes(context.Background(), item.path, item.mtime, item.mtime); err != nil {
+			t.Fatalf("Chtimes(%q) error = %v", item.path, err)
+		}
+	}
+
+	result := mustExecSession(t, session, "cp -u -R /tmp/src /tmp/dst\ncat /tmp/dst/src/file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "fresh\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPUpdateOlderDoesNotSkipDanglingDestinationSymlink(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	mustExecSession(t, session, "echo payload > /tmp/src.txt\nln -s missing /tmp/dst.txt\n")
+
+	base := time.Unix(1_700_200_000, 0).UTC()
+	if err := session.FileSystem().Chtimes(context.Background(), "/tmp/src.txt", base, base); err != nil {
+		t.Fatalf("Chtimes(src) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "cp -u /tmp/src.txt /tmp/dst.txt\nprintf 'status=%s\\n' \"$?\"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: not writing through dangling symlink 'dst.txt'") {
+		t.Fatalf("Stderr = %q, want dangling-symlink error", result.Stderr)
 	}
 }

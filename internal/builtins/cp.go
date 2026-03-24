@@ -117,86 +117,8 @@ func (c *CP) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		if err != nil {
 			return err
 		}
-		if cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists) {
-			if opts.copyMode == cpCopyHardLink {
-				continue
-			}
-			return exitf(inv, 1, "cp: %s and %s are the same file", quoteGNUOperand(source), quoteGNUOperand(path.Base(destAbs)))
-		}
-		skip, err := cpShouldSkipExisting(ctx, inv, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, &opts)
-		if err != nil {
+		if err := cpCopyResolvedSource(ctx, inv, source, srcAbs, srcInfo, srcLinkInfo, destAbs, destInfo, destExists, &opts); err != nil {
 			return err
-		}
-		if skip {
-			continue
-		}
-		_, _, err = prepareCPDestination(ctx, inv, source, srcAbs, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, &opts)
-		if err != nil {
-			return err
-		}
-
-		if srcInfo.IsDir() {
-			if !opts.recursive {
-				return exitf(inv, 1, "cp: omitting directory %q", source)
-			}
-			if destAbs == srcAbs || strings.HasPrefix(destAbs, srcAbs+"/") {
-				return exitf(inv, 1, "cp: cannot copy %q into itself", source)
-			}
-			if err := copyTree(ctx, inv, srcAbs, destAbs); err != nil {
-				return err
-			}
-			continue
-		}
-
-		switch opts.copyMode {
-		case cpCopySymbolicLink:
-			if err := cpCreateSymbolicLink(ctx, inv, source, destAbs); err != nil {
-				return err
-			}
-			if opts.verbose {
-				if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
-					return &ExitError{Code: 1, Err: err}
-				}
-			}
-			continue
-		case cpCopyHardLink:
-			linkSource := srcAbs
-			if srcLinkInfo == nil {
-				if resolved, err := inv.FS.Realpath(ctx, srcAbs); err == nil {
-					linkSource = resolved
-				}
-			}
-			if err := cpCreateHardLink(ctx, inv, source, linkSource, destAbs); err != nil {
-				return err
-			}
-			if opts.verbose {
-				if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
-					return &ExitError{Code: 1, Err: err}
-				}
-			}
-			continue
-		}
-
-		if srcLinkInfo != nil {
-			if err := copySymlink(ctx, inv, srcAbs, destAbs); err != nil {
-				return err
-			}
-			if opts.verbose {
-				if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
-					return &ExitError{Code: 1, Err: err}
-				}
-			}
-			continue
-		}
-
-		if err := copyFileContents(ctx, inv, srcAbs, destAbs, srcInfo.Mode().Perm()); err != nil {
-			return err
-		}
-
-		if opts.verbose {
-			if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
-				return &ExitError{Code: 1, Err: err}
-			}
 		}
 	}
 
@@ -365,7 +287,7 @@ func resolveCPSource(ctx context.Context, inv *Invocation, source string, opts *
 	}
 	deref := true
 	if opts != nil {
-		deref = !opts.recursive
+		deref = !opts.recursive || opts.copyMode == cpCopyHardLink
 	}
 	if commandLine && strings.HasSuffix(source, "/") {
 		deref = true
@@ -388,6 +310,119 @@ func resolveCPSource(ctx context.Context, inv *Invocation, source string, opts *
 		return nil, "", nil, err
 	}
 	return info, abs, nil, nil
+}
+
+func cpCopyResolvedSource(ctx context.Context, inv *Invocation, source, srcAbs string, srcInfo, srcLinkInfo stdfs.FileInfo, destAbs string, destInfo stdfs.FileInfo, destExists bool, opts *cpOptions) error {
+	if srcInfo.IsDir() {
+		return cpCopyDirectory(ctx, inv, source, srcAbs, srcInfo, destAbs, destInfo, destExists, opts)
+	}
+	if cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists) {
+		if opts != nil && opts.copyMode == cpCopyHardLink {
+			return nil
+		}
+		return exitf(inv, 1, "cp: %s and %s are the same file", quoteGNUOperand(source), quoteGNUOperand(path.Base(destAbs)))
+	}
+	skip, err := cpShouldSkipExisting(ctx, inv, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, opts)
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+
+	switch opts.copyMode {
+	case cpCopySymbolicLink:
+		if err := cpCreateSymbolicLink(ctx, inv, source, destAbs, opts); err != nil {
+			return err
+		}
+	case cpCopyHardLink:
+		linkSource := srcAbs
+		if srcLinkInfo == nil {
+			if resolved, err := inv.FS.Realpath(ctx, srcAbs); err == nil {
+				linkSource = resolved
+			}
+		}
+		if err := cpCreateHardLink(ctx, inv, source, linkSource, destAbs, opts); err != nil {
+			return err
+		}
+	default:
+		_, _, err = prepareCPDestination(ctx, inv, source, srcAbs, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, opts)
+		if err != nil {
+			return err
+		}
+		if srcLinkInfo != nil {
+			if err := copySymlink(ctx, inv, srcAbs, destAbs); err != nil {
+				return err
+			}
+		} else if err := copyFileContents(ctx, inv, srcAbs, destAbs, srcInfo.Mode().Perm()); err != nil {
+			return err
+		}
+	}
+
+	if opts != nil && opts.verbose {
+		if _, err := fmt.Fprintf(inv.Stdout, "'%s' -> '%s'\n", source, destAbs); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+	}
+	return nil
+}
+
+func cpCopyDirectory(ctx context.Context, inv *Invocation, source, srcAbs string, srcInfo stdfs.FileInfo, destAbs string, destInfo stdfs.FileInfo, destExists bool, opts *cpOptions) error {
+	if opts == nil || !opts.recursive {
+		return exitf(inv, 1, "cp: omitting directory %q", source)
+	}
+	if destAbs == srcAbs || strings.HasPrefix(destAbs, srcAbs+"/") {
+		return exitf(inv, 1, "cp: cannot copy %q into itself", source)
+	}
+	if err := cpPrepareDirectoryDestination(ctx, inv, source, srcInfo, destAbs, destInfo, destExists); err != nil {
+		return err
+	}
+
+	entries, err := readDir(ctx, inv, srcAbs)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		childSource := joinChildPath(source, entry.Name())
+		childInfo, childAbs, childLinkInfo, err := resolveCPSource(ctx, inv, childSource, opts, false)
+		if err != nil {
+			return err
+		}
+		childDestAbs := joinChildPath(destAbs, entry.Name())
+		childDestInfo, _, childDestExists, err := lstatMaybe(ctx, inv, childDestAbs)
+		if err != nil {
+			return err
+		}
+		if err := cpCopyResolvedSource(ctx, inv, childSource, childAbs, childInfo, childLinkInfo, childDestAbs, childDestInfo, childDestExists, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cpPrepareDirectoryDestination(ctx context.Context, inv *Invocation, source string, srcInfo stdfs.FileInfo, destAbs string, destInfo stdfs.FileInfo, destExists bool) error {
+	if destExists {
+		effectiveDestInfo := destInfo
+		if destInfo != nil && destInfo.Mode()&stdfs.ModeSymlink != 0 {
+			resolvedInfo, _, err := statPath(ctx, inv, destAbs)
+			if err != nil {
+				return exitf(inv, 1, "cp: cannot overwrite non-directory %q with directory %q", destAbs, source)
+			}
+			effectiveDestInfo = resolvedInfo
+		}
+		if effectiveDestInfo != nil && !effectiveDestInfo.IsDir() {
+			return exitf(inv, 1, "cp: cannot overwrite non-directory %q with directory %q", destAbs, source)
+		}
+		return nil
+	}
+	if err := ensureParentDirExists(ctx, inv, destAbs); err != nil {
+		return err
+	}
+	if err := inv.FS.MkdirAll(ctx, destAbs, srcInfo.Mode().Perm()); err != nil {
+		return &ExitError{Code: 1, Err: err}
+	}
+	recordFileMutation(inv.TraceRecorder(), "copy", destAbs, source, destAbs)
+	return nil
 }
 
 func cpSameFile(ctx context.Context, inv *Invocation, srcAbs string, srcInfo stdfs.FileInfo, destAbs string, destInfo stdfs.FileInfo, destExists bool) bool {
@@ -474,6 +509,8 @@ func cpShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.Fi
 		if !copyingSymlink && destInfo != nil && destInfo.Mode()&stdfs.ModeSymlink != 0 {
 			if resolvedInfo, _, err := statPath(ctx, inv, destAbs); err == nil {
 				effectiveDestInfo = resolvedInfo
+			} else {
+				return false, nil
 			}
 		}
 		if srcInfo == nil || effectiveDestInfo == nil {
@@ -524,7 +561,7 @@ func copySymlink(ctx context.Context, inv *Invocation, srcAbs, dstAbs string) er
 	return nil
 }
 
-func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs string) error {
+func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs string, opts *cpOptions) error {
 	if err := ensureParentDirExists(ctx, inv, dstAbs); err != nil {
 		return err
 	}
@@ -538,6 +575,9 @@ func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs s
 		if info.IsDir() {
 			return exitf(inv, 1, "cp: cannot overwrite directory %q with non-directory", dstAbs)
 		}
+		if opts == nil || (!opts.force && !opts.removeDestination) {
+			return exitf(inv, 1, "cp: cannot create symbolic link %s: File exists", quoteGNUOperand(path.Base(dstAbs)))
+		}
 		if err := inv.FS.Remove(ctx, dstAbs, true); err != nil && !errors.Is(err, stdfs.ErrNotExist) {
 			return &ExitError{Code: 1, Err: err}
 		}
@@ -549,7 +589,7 @@ func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs s
 	return nil
 }
 
-func cpCreateHardLink(ctx context.Context, inv *Invocation, source, srcAbs, dstAbs string) error {
+func cpCreateHardLink(ctx context.Context, inv *Invocation, source, srcAbs, dstAbs string, opts *cpOptions) error {
 	if err := ensureParentDirExists(ctx, inv, dstAbs); err != nil {
 		return err
 	}
@@ -558,6 +598,9 @@ func cpCreateHardLink(ctx context.Context, inv *Invocation, source, srcAbs, dstA
 	} else if exists {
 		if info.IsDir() {
 			return exitf(inv, 1, "cp: cannot overwrite directory %q with non-directory", dstAbs)
+		}
+		if opts == nil || (!opts.force && !opts.removeDestination) {
+			return exitf(inv, 1, "cp: cannot create hard link %s to %s: File exists", quoteGNUOperand(path.Base(dstAbs)), quoteGNUOperand(source))
 		}
 		if err := inv.FS.Remove(ctx, dstAbs, true); err != nil && !errors.Is(err, stdfs.ErrNotExist) {
 			return &ExitError{Code: 1, Err: err}

@@ -55,49 +55,6 @@ func copyFileContents(ctx context.Context, inv *Invocation, srcAbs, dstAbs strin
 	return nil
 }
 
-func copyTree(ctx context.Context, inv *Invocation, srcAbs, dstAbs string) error {
-	srcInfo, _, err := statPath(ctx, inv, srcAbs)
-	if err != nil {
-		return err
-	}
-	if !srcInfo.IsDir() {
-		return copyFileContents(ctx, inv, srcAbs, dstAbs, srcInfo.Mode().Perm())
-	}
-
-	if err := ensureParentDirExists(ctx, inv, dstAbs); err != nil {
-		return err
-	}
-	if err := inv.FS.MkdirAll(ctx, dstAbs, srcInfo.Mode().Perm()); err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-
-	entries, err := readDir(ctx, inv, srcAbs)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		childSrc := joinChildPath(srcAbs, entry.Name())
-		childDst := joinChildPath(dstAbs, entry.Name())
-		childInfo, infoErr := entry.Info()
-		if entry.Type()&stdfs.ModeSymlink != 0 || infoErr != nil {
-			childInfo, _, err = statPath(ctx, inv, childSrc)
-			if err != nil {
-				return err
-			}
-		}
-		if childInfo.IsDir() {
-			if err := copyTree(ctx, inv, childSrc, childDst); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := copyFileContents(ctx, inv, childSrc, childDst, childInfo.Mode().Perm()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func writeFileContents(ctx context.Context, inv *Invocation, targetAbs string, data []byte, perm stdfs.FileMode) error {
 	if err := ensureParentDirExists(ctx, inv, targetAbs); err != nil {
 		return err
