@@ -296,6 +296,11 @@ func sandboxPathForMountedHostPath(scriptPath, hostRoot, mountPoint string) (str
 	if err != nil {
 		return "", false, fmt.Errorf("resolve script path: %w", err)
 	}
+	rootVolume := filepath.VolumeName(resolvedRoot)
+	scriptVolume := filepath.VolumeName(resolvedScript)
+	if rootVolume != "" && scriptVolume != "" && !strings.EqualFold(rootVolume, scriptVolume) {
+		return "", false, nil
+	}
 
 	rel, err := filepath.Rel(filepath.Clean(resolvedRoot), filepath.Clean(resolvedScript))
 	if err != nil {
