@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	stdfs "io/fs"
-	"math/big"
 	"os"
 	"reflect"
 	"strconv"
@@ -495,11 +494,11 @@ func (s testSymbol) display() string {
 }
 
 func testCompareIntegers(a, b, op string) (bool, error) {
-	left, ok := new(big.Int).SetString(strings.TrimSpace(a), 10)
+	left, ok := parseDecimalBigInt(strings.TrimSpace(a))
 	if !ok {
 		return false, testParseInvalidInteger(a)
 	}
-	right, ok := new(big.Int).SetString(strings.TrimSpace(b), 10)
+	right, ok := parseDecimalBigInt(strings.TrimSpace(b))
 	if !ok {
 		return false, testParseInvalidInteger(b)
 	}
@@ -569,7 +568,7 @@ func testCompareFiles(ctx context.Context, inv *Invocation, a, b, op string) (bo
 
 func testFilePredicate(ctx context.Context, inv *Invocation, name, op string) (bool, error) {
 	if op == "-t" {
-		fd, ok := new(big.Int).SetString(strings.TrimSpace(name), 10)
+		fd, ok := parseDecimalBigInt(strings.TrimSpace(name))
 		if !ok {
 			return false, testParseInvalidInteger(name)
 		}
