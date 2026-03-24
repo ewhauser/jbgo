@@ -74,6 +74,8 @@ func TestGrepSupportsFilesWithoutMatchMaxCountAndEmptyPatternFile(t *testing.T) 
 			"grep -L hit /tmp/hits.txt /tmp/miss.txt\n" +
 			"grep --max-count=1 hit /tmp/hits.txt\n" +
 			"grep -m1 hit /tmp/hits.txt\n" +
+			"grep -c -f /tmp/empty-patterns.txt /tmp/hits.txt\n" +
+			"printf 'count_status=%d\\n' \"$?\"\n" +
 			"grep -f /tmp/empty-patterns.txt /tmp/hits.txt\n" +
 			"printf 'status=%d\\n' \"$?\"\n",
 	})
@@ -83,7 +85,7 @@ func TestGrepSupportsFilesWithoutMatchMaxCountAndEmptyPatternFile(t *testing.T) 
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "/tmp/miss.txt\n/tmp/miss.txt\nhit\nhit\nstatus=1\n"; got != want {
+	if got, want := result.Stdout, "/tmp/miss.txt\n/tmp/miss.txt\nhit\nhit\ncount_status=1\nstatus=1\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

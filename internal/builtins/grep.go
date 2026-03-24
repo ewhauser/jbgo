@@ -493,6 +493,10 @@ func grepSearchContent(matcher grepMatcher, data []byte, name string, showName b
 	lines := textLines(data)
 
 	if opts.count {
+		if matcher.re == nil && !opts.invert {
+			return grepSearchResult{}
+		}
+
 		total := 0
 		selectedLines := 0
 		countMatches := opts.onlyMatching && !opts.invert
