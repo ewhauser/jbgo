@@ -119,6 +119,7 @@ type ParsedCommand struct {
 // ParsedOptionOccurrence records one parsed option occurrence in order.
 type ParsedOptionOccurrence struct {
 	Name     string
+	Raw      string
 	Value    string
 	HasValue bool
 }
@@ -373,7 +374,7 @@ func parseShortOptions(inv *Invocation, spec *CommandSpec, parsed *ParsedCommand
 			return "version", true, nil
 		}
 		if opt.Arity == OptionNoValue {
-			recordOption(parsed, opt.Name, "", false)
+			recordOption(parsed, opt.Name, "-"+string(ch), "", false)
 			continue
 		}
 
@@ -426,7 +427,7 @@ func applyOptionValue(inv *Invocation, spec *CommandSpec, parsed *ParsedCommand,
 		if hasValue {
 			return commandUsageError(inv, spec.Name, "option '%s' doesn't allow an argument", shownName)
 		}
-		recordOption(parsed, opt.Name, "", false)
+		recordOption(parsed, opt.Name, shownName, "", false)
 		return nil
 	case OptionRequiredValue:
 		if !hasValue {
@@ -440,7 +441,7 @@ func applyOptionValue(inv *Invocation, spec *CommandSpec, parsed *ParsedCommand,
 			*rest = (*rest)[1:]
 			hasValue = true
 		}
-		recordOption(parsed, opt.Name, value, hasValue)
+		recordOption(parsed, opt.Name, shownName, value, hasValue)
 		return nil
 	case OptionOptionalValue:
 		if !hasValue && long && !opt.OptionalValueEqualsOnly && len(*rest) > 0 && !strings.HasPrefix((*rest)[0], "-") {
@@ -448,18 +449,19 @@ func applyOptionValue(inv *Invocation, spec *CommandSpec, parsed *ParsedCommand,
 			*rest = (*rest)[1:]
 			hasValue = true
 		}
-		recordOption(parsed, opt.Name, value, hasValue)
+		recordOption(parsed, opt.Name, shownName, value, hasValue)
 		return nil
 	default:
 		return nil
 	}
 }
 
-func recordOption(parsed *ParsedCommand, name, value string, hasValue bool) {
+func recordOption(parsed *ParsedCommand, name, raw, value string, hasValue bool) {
 	parsed.optionCount[name]++
 	parsed.optionOrder = append(parsed.optionOrder, name)
 	parsed.optionEvents = append(parsed.optionEvents, ParsedOptionOccurrence{
 		Name:     name,
+		Raw:      raw,
 		Value:    value,
 		HasValue: hasValue,
 	})

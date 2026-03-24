@@ -102,10 +102,48 @@ func TestParseRMSpecUsesPerOccurrenceInteractiveValues(t *testing.T) {
 	}
 }
 
+func TestParseRMSpecRejectsExplicitEmptyInteractiveValue(t *testing.T) {
+	t.Parallel()
+
+	inv, matches, action, err := parseRMSpec(t, "--interactive=", "target")
+	if err != nil {
+		t.Fatalf("ParseCommandSpec() error = %v", err)
+	}
+	if action != "" {
+		t.Fatalf("action = %q, want empty", action)
+	}
+	_, err = parseRMMatches(inv, matches)
+	if err == nil {
+		t.Fatal("parseRMMatches() error = nil, want empty interactive value failure")
+	}
+	if !strings.Contains(err.Error(), "invalid argument '' for '--interactive'") {
+		t.Fatalf("parseRMMatches() error = %v, want empty interactive diagnostic", err)
+	}
+}
+
 func TestParseRMSpecRejectsAbbreviatedNoPreserveRoot(t *testing.T) {
 	t.Parallel()
 
 	inv, matches, action, err := parseRMSpec(t, "-r", "--no-preserve-r", "/tmp/data")
+	if err != nil {
+		t.Fatalf("ParseCommandSpec() error = %v", err)
+	}
+	if action != "" {
+		t.Fatalf("action = %q, want empty", action)
+	}
+	_, err = parseRMMatches(inv, matches)
+	if err == nil {
+		t.Fatal("parseRMMatches() error = nil, want abbreviation failure")
+	}
+	if !strings.Contains(err.Error(), "may not abbreviate") {
+		t.Fatalf("parseRMMatches() error = %v, want abbreviation diagnostic", err)
+	}
+}
+
+func TestParseRMSpecRejectsAbbreviatedNoPreserveRootWithExactPositional(t *testing.T) {
+	t.Parallel()
+
+	inv, matches, action, err := parseRMSpec(t, "-r", "--no-preserve-r", "--", "--no-preserve-root")
 	if err != nil {
 		t.Fatalf("ParseCommandSpec() error = %v", err)
 	}

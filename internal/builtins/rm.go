@@ -8,7 +8,6 @@ import (
 	"io"
 	stdfs "io/fs"
 	"path"
-	"slices"
 	"strings"
 )
 
@@ -155,7 +154,7 @@ func parseRMMatches(inv *Invocation, matches *ParsedCommand) (rmOptions, error) 
 		case "prompt-once":
 			opts.interactive = rmInteractiveOnce
 		case "interactive":
-			mode, err := parseRMInteractiveMode(inv, occurrence.Value)
+			mode, err := parseRMInteractiveMode(inv, occurrence.Value, occurrence.HasValue)
 			if err != nil {
 				return rmOptions{}, err
 			}
@@ -167,6 +166,9 @@ func parseRMMatches(inv *Invocation, matches *ParsedCommand) (rmOptions, error) 
 		case "preserve-root":
 			opts.preserveRoot = true
 		case "no-preserve-root":
+			if occurrence.Raw != "--no-preserve-root" {
+				return rmOptions{}, exitf(inv, 1, "rm: you may not abbreviate the --no-preserve-root option")
+			}
 			opts.preserveRoot = false
 		case "recursive":
 			opts.recursive = true
@@ -183,14 +185,14 @@ func parseRMMatches(inv *Invocation, matches *ParsedCommand) (rmOptions, error) 
 		}
 	}
 
-	if matches.Has("no-preserve-root") && !rmHasExactNoPreserveRootArg(inv.Args) {
-		return rmOptions{}, exitf(inv, 1, "rm: you may not abbreviate the --no-preserve-root option")
-	}
-
 	return opts, nil
 }
 
-func parseRMInteractiveMode(inv *Invocation, value string) (rmInteractiveMode, error) {
+func parseRMInteractiveMode(inv *Invocation, value string, hasValue bool) (rmInteractiveMode, error) {
+	if hasValue && value == "" {
+		return rmInteractivePromptProtected, exitf(inv, 1, "rm: invalid argument %s for '--interactive'", quoteGNUOperand(value))
+	}
+
 	switch value {
 	case "":
 		return rmInteractiveAlways, nil
@@ -203,10 +205,6 @@ func parseRMInteractiveMode(inv *Invocation, value string) (rmInteractiveMode, e
 	default:
 		return rmInteractivePromptProtected, exitf(inv, 1, "rm: invalid argument %s for '--interactive'", quoteGNUOperand(value))
 	}
-}
-
-func rmHasExactNoPreserveRootArg(args []string) bool {
-	return slices.Contains(args, "--no-preserve-root")
 }
 
 func rmRemovePath(ctx context.Context, inv *Invocation, raw string, opts rmOptions) (bool, error) {
