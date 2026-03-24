@@ -34,6 +34,8 @@ func TestExprShortCircuitsBooleanOperatorsAndGNUTruthiness(t *testing.T) {
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
 		Script: "expr 0 '&' 1 / 0\n" +
 			"expr 1 '|' 1 / 0\n" +
+			"expr 0 '&' '(' 1 / 0 ')'\n" +
+			"expr 1 '|' '(' 1 / 0 ')'\n" +
 			"expr '' '|' ''\n" +
 			"expr 00\n" +
 			"expr -0\n",
@@ -44,7 +46,7 @@ func TestExprShortCircuitsBooleanOperatorsAndGNUTruthiness(t *testing.T) {
 	if result.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "0\n1\n0\n00\n-0\n"; got != want {
+	if got, want := result.Stdout, "0\n1\n0\n1\n0\n00\n-0\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	if got := result.Stderr; got != "" {

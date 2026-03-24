@@ -11,7 +11,7 @@ import (
 type exprNodeKind uint8
 
 const (
-	exprNodeEvaluated exprNodeKind = iota
+	exprNodeGroup exprNodeKind = iota
 	exprNodeLeaf
 	exprNodeBinary
 	exprNodeLength
@@ -223,21 +223,23 @@ func (p *exprParser) parseSimpleExpression() (*exprNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		value, err := exprEvaluateNode(group, p.locale)
-		if err != nil {
-			return nil, err
-		}
 		next, err := p.next()
 		if err != nil {
+			if _, evalErr := exprEvaluateNode(group, p.locale); evalErr != nil {
+				return nil, evalErr
+			}
 			return nil, exprExpectedClosingParenAfterError(p.tokens[p.pos-1])
 		}
 		if next != ")" {
+			if _, evalErr := exprEvaluateNode(group, p.locale); evalErr != nil {
+				return nil, evalErr
+			}
 			return nil, exprExpectedClosingParenInsteadOfError(next)
 		}
 		return &exprNode{
-			id:    exprNextNodeID(),
-			kind:  exprNodeEvaluated,
-			value: value,
+			id:   exprNextNodeID(),
+			kind: exprNodeGroup,
+			left: group,
 		}, nil
 	default:
 		return &exprNode{
@@ -296,9 +298,19 @@ func exprEvaluateNode(root *exprNode, locale builtinLocaleContext) (exprValue, e
 		frame := &frames[frameIndex]
 
 		switch frame.node.kind {
-		case exprNodeEvaluated, exprNodeLeaf:
+		case exprNodeLeaf:
 			results = append(results, exprEvalResult{value: frame.node.value})
 			frames = frames[:frameIndex]
+		case exprNodeGroup:
+			switch frame.stage {
+			case 0:
+				frame.stage = 1
+				frames = append(frames, exprEvalFrame{node: frame.node.left})
+			default:
+				value := exprPopEvalResult(&results)
+				frames = frames[:frameIndex]
+				results = append(results, value)
+			}
 		case exprNodeBinary:
 			switch frame.stage {
 			case 0:
