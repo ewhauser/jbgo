@@ -235,6 +235,43 @@ func TestCPSupportsSymbolicLinkMode(t *testing.T) {
 	}
 }
 
+func TestCPSymbolicLinkModeDoesNotUseSameFileShortcutForDestinationSymlink(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/src.txt\n" +
+			"ln -s /tmp/src.txt /tmp/dst.txt\n" +
+			"cp -s /tmp/src.txt /tmp/dst.txt\n" +
+			"printf 'plain=%s\\n' \"$?\"\n" +
+			"readlink /tmp/dst.txt\n" +
+			"cp -fs /tmp/src.txt /tmp/dst.txt\n" +
+			"printf 'force=%s\\n' \"$?\"\n" +
+			"readlink /tmp/dst.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "plain=1\n/tmp/src.txt\nforce=0\n/tmp/src.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: cannot create symbolic link 'dst.txt': File exists") {
+		t.Fatalf("Stderr = %q, want file-exists error", result.Stderr)
+	}
+	if strings.Contains(result.Stderr, "same file") {
+		t.Fatalf("Stderr = %q, want no same-file error", result.Stderr)
+	}
+}
+
 func TestCPRejectsConflictingLinkModes(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
