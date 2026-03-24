@@ -30,6 +30,16 @@ func TestParseTestClassicDisambiguation(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "grouped left paren literal stays valid",
+			args: []string{"(", "x", "=", "(", ")"},
+			want: false,
+		},
+		{
+			name:    "nested one-word group is rejected",
+			args:    []string{"(", "(", "x", ")", ")"},
+			wantErr: true,
+		},
+		{
 			name:    "grouped right paren literal is rejected",
 			args:    []string{"(", "x", "=", ")", ")"},
 			wantErr: true,

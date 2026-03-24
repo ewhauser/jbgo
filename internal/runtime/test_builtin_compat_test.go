@@ -26,7 +26,11 @@ func TestShellClassicTestMatchesBashClassicAmbiguities(t *testing.T) {
 			"test \\( x = \\) \\)\n"+
 			"printf 'test-rparen=%s\\n' \"$?\"\n"+
 			"[ \\( x = \\) \\) ]\n"+
-			"printf 'bracket-rparen=%s\\n' \"$?\"\n",
+			"printf 'bracket-rparen=%s\\n' \"$?\"\n"+
+			"test \\( x = \\( \\)\n"+
+			"printf 'test-lparen=%s\\n' \"$?\"\n"+
+			"[ \\( x = \\( \\) ]\n"+
+			"printf 'bracket-lparen=%s\\n' \"$?\"\n",
 	)
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
@@ -41,7 +45,9 @@ func TestShellClassicTestMatchesBashClassicAmbiguities(t *testing.T) {
 		"test-leading-bang=1\n"+
 		"bracket-leading-bang=1\n"+
 		"test-rparen=2\n"+
-		"bracket-rparen=2\n"; got != want {
+		"bracket-rparen=2\n"+
+		"test-lparen=1\n"+
+		"bracket-lparen=1\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	if got := result.Stderr; got != ""+

@@ -172,7 +172,9 @@ func (p *testParser) parsePrimary(args []string, pos int) (syntax.TestExpr, int,
 		for end < len(args) && depth > 0 {
 			switch args[end] {
 			case "(":
-				depth++
+				if p.parenStartsNestedGroup(args, pos, end) {
+					depth++
+				}
 			case ")":
 				depth--
 			}
@@ -203,6 +205,28 @@ func (p *testParser) parsePrimary(args []string, pos int) (syntax.TestExpr, int,
 		}, pos + 2, nil
 	}
 	return testWord(args[pos]), pos + 1, nil
+}
+
+func (p *testParser) parenStartsNestedGroup(args []string, groupPos, idx int) bool {
+	if idx > groupPos+1 {
+		prev := args[idx-1]
+		return testExprBinaryOp(prev) == illegalTok && !isClassicUnaryOp(prev)
+	}
+	nextClose := -1
+	for i := idx + 1; i < len(args); i++ {
+		if args[i] == ")" {
+			nextClose = i
+			break
+		}
+	}
+	if nextClose < 0 {
+		return true
+	}
+	if nextClose == idx+2 {
+		return false
+	}
+	next := args[idx+1]
+	return testExprBinaryOp(next) == illegalTok && next != "-a" && next != "-o"
 }
 
 func isClassicUnaryOp(val string) bool {

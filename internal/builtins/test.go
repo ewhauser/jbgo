@@ -228,14 +228,14 @@ func (p *testRPNParser) parsePrimary(args []string, pos int) ([]testSymbol, int,
 		return nil, pos, testParseExpectedValue()
 	}
 	if args[pos] == "(" {
-		// Find matching ")" using depth tracking, then apply
-		// arg-count-based disambiguation via parseArgs.
 		depth := 1
 		end := pos + 1
 		for end < len(args) && depth > 0 {
 			switch args[end] {
 			case "(":
-				depth++
+				if p.parenStartsNestedGroup(args, pos, end) {
+					depth++
+				}
 			case ")":
 				depth--
 			}
@@ -266,6 +266,28 @@ func (p *testRPNParser) parsePrimary(args []string, pos int) ([]testSymbol, int,
 		}, pos + 2, nil
 	}
 	return []testSymbol{testLiteralSymbol(args[pos])}, pos + 1, nil
+}
+
+func (p *testRPNParser) parenStartsNestedGroup(args []string, groupPos, idx int) bool {
+	if idx > groupPos+1 {
+		prev := args[idx-1]
+		return !isTestExprBinaryOp(prev) && !isTestUnaryOp(prev)
+	}
+	nextClose := -1
+	for i := idx + 1; i < len(args); i++ {
+		if args[i] == ")" {
+			nextClose = i
+			break
+		}
+	}
+	if nextClose < 0 {
+		return true
+	}
+	if nextClose == idx+2 {
+		return false
+	}
+	next := args[idx+1]
+	return !isTestExprBinaryOp(next) && next != "-a" && next != "-o"
 }
 
 func testLiteralSymbol(token string) testSymbol {
