@@ -48,6 +48,11 @@ func (c *grepAlias) RunParsed(ctx context.Context, inv *Invocation, _ *ParsedCom
 	return c.delegate.Run(ctx, &clone)
 }
 
+func (c *grepAlias) NormalizeParseError(inv *Invocation, err error) error {
+	return c.delegate.NormalizeParseError(inv, err)
+}
+
 var _ Command = (*grepAlias)(nil)
 var _ SpecProvider = (*grepAlias)(nil)
 var _ ParsedRunner = (*grepAlias)(nil)
+var _ ParseErrorNormalizer = (*grepAlias)(nil)

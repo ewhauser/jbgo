@@ -2,7 +2,9 @@ package builtins
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	stdfs "io/fs"
 	"path"
 	"regexp"
@@ -12,8 +14,37 @@ import (
 
 type Grep struct{}
 
+type grepPatternMode uint8
+
+const (
+	grepPatternModeBRE grepPatternMode = iota
+	grepPatternModeERE
+	grepPatternModeFixed
+	grepPatternModePCRE
+)
+
+type grepFilenameMode uint8
+
+const (
+	grepFilenameDefault grepFilenameMode = iota
+	grepFilenameWith
+	grepFilenameWithout
+)
+
+type grepPatternInputKind uint8
+
+const (
+	grepPatternInputText grepPatternInputKind = iota
+	grepPatternInputFile
+)
+
+type grepPatternInput struct {
+	kind  grepPatternInputKind
+	value string
+}
+
 type grepOptions struct {
-	pattern           string
+	patternInputs     []grepPatternInput
 	ignoreCase        bool
 	lineNumber        bool
 	invert            bool
@@ -23,20 +54,25 @@ type grepOptions struct {
 	recursive         bool
 	wordRegexp        bool
 	lineRegexp        bool
-	fixedStrings      bool
-	perlRegexp        bool
 	onlyMatching      bool
-	noFilename        bool
 	quiet             bool
+	suppressMessages  bool
+	matchMode         grepPatternMode
+	filenameMode      grepFilenameMode
 	maxCount          int
+	maxCountSet       bool
 	beforeContext     int
 	afterContext      int
 }
 
+type grepMatcher struct {
+	re *regexp.Regexp
+}
+
 type grepSearchResult struct {
-	output     string
-	matched    bool
-	matchCount int
+	output        string
+	matched       bool
+	selectedLines int
 }
 
 type grepRunState struct {
@@ -81,9 +117,12 @@ func (c *Grep) Spec() CommandSpec {
 			{Name: "fixed-strings", Short: 'F', Long: "fixed-strings", Help: "interpret PATTERNS as fixed strings"},
 			{Name: "perl-regexp", Short: 'P', Long: "perl-regexp", Help: "interpret PATTERNS as Perl-compatible regular expressions"},
 			{Name: "only-matching", Short: 'o', Long: "only-matching", Help: "show only the part of a line matching PATTERNS"},
+			{Name: "with-filename", Short: 'H', Long: "with-filename", Help: "print the file name for each match"},
 			{Name: "no-filename", Short: 'h', Long: "no-filename", Help: "suppress the file name prefix on output"},
 			{Name: "quiet", Short: 'q', Long: "quiet", Aliases: []string{"silent"}, HelpAliases: []string{"silent"}, Help: "suppress all normal output"},
+			{Name: "no-messages", Short: 's', Long: "no-messages", Help: "suppress error messages"},
 			{Name: "regexp", Short: 'e', Arity: OptionRequiredValue, ValueName: "PATTERNS", Help: "use PATTERNS for matching"},
+			{Name: "file", Short: 'f', Long: "file", Arity: OptionRequiredValue, ValueName: "FILE", Help: "take PATTERNS from FILE"},
 			{Name: "max-count", Short: 'm', Long: "max-count", Arity: OptionRequiredValue, ValueName: "NUM", Help: "stop after NUM selected lines"},
 			{Name: "after-context", Short: 'A', Arity: OptionRequiredValue, ValueName: "NUM", Help: "print NUM lines of trailing context"},
 			{Name: "before-context", Short: 'B', Arity: OptionRequiredValue, ValueName: "NUM", Help: "print NUM lines of leading context"},
@@ -102,31 +141,52 @@ func (c *Grep) Spec() CommandSpec {
 	}
 }
 
+func (c *Grep) NormalizeParseError(inv *Invocation, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		return err
+	}
+
+	if inv != nil && inv.Stderr != nil {
+		message := strings.TrimSpace(err.Error())
+		if message != "" {
+			_, _ = io.WriteString(inv.Stderr, message+"\n")
+		}
+	}
+	return &ExitError{Code: 2}
+}
+
 func (c *Grep) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	opts, files, err := parseGrepMatches(inv, matches)
 	if err != nil {
 		return err
 	}
 
-	re, err := compileGrepPattern(opts)
+	matcher, err := compileGrepPattern(ctx, inv, opts)
 	if err != nil {
-		return exitf(inv, 2, "grep: invalid pattern: %v", err)
+		return err
 	}
 
 	state := &grepRunState{}
+	defaultShowNames := (len(files) > 1 || opts.recursive)
+
 	if len(files) == 0 {
 		data, err := readAllStdin(ctx, inv)
 		if err != nil {
 			return err
 		}
-		if err := writeGrepResult(inv, re, data, "", false, opts, state); err != nil {
+		if err := writeGrepResult(inv, matcher, data, "", false, opts, state); err != nil {
 			return err
 		}
 	} else {
-		showNames := (len(files) > 1 || opts.recursive) && !opts.noFilename
 		for _, file := range files {
 			records := make([]grepFileRecord, 0, 8)
-			if _, err := c.enumerateTopLevelPath(ctx, inv, file, opts, state, &records); err != nil {
+			visitedDirs := make(map[string]struct{})
+			if err := c.enumerateTopLevelPath(ctx, inv, file, opts, state, visitedDirs, &records); err != nil {
 				return err
 			}
 			for _, record := range records {
@@ -135,9 +195,14 @@ func (c *Grep) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 				}
 				data, _, err := readAllFile(ctx, inv, record.abs)
 				if err != nil {
-					return err
+					if grepShouldPropagateError(err) {
+						return err
+					}
+					grepNoteFileError(inv, opts, state, record.abs, err)
+					continue
 				}
-				if err := writeGrepResult(inv, re, data, record.abs, showNames, opts, state); err != nil {
+				showNames := grepShouldShowFilename(record.abs, defaultShowNames, opts)
+				if err := writeGrepResult(inv, matcher, data, record.abs, showNames, opts, state); err != nil {
 					return err
 				}
 			}
@@ -166,7 +231,22 @@ func (c *Grep) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 }
 
 func parseGrepMatches(inv *Invocation, matches *ParsedCommand) (grepOptions, []string, error) {
-	var opts grepOptions
+	opts := grepOptions{
+		matchMode: grepPatternModeBRE,
+	}
+
+	regexpValues := matches.Values("regexp")
+	regexpIndex := 0
+	fileValues := matches.Values("file")
+	fileIndex := 0
+	maxCountValues := matches.Values("max-count")
+	maxCountIndex := 0
+	afterValues := matches.Values("after-context")
+	afterIndex := 0
+	beforeValues := matches.Values("before-context")
+	beforeIndex := 0
+	contextValues := matches.Values("context")
+	contextIndex := 0
 
 	for _, name := range matches.OptionOrder() {
 		switch name {
@@ -189,56 +269,87 @@ func parseGrepMatches(inv *Invocation, matches *ParsedCommand) (grepOptions, []s
 		case "line-regexp":
 			opts.lineRegexp = true
 		case "extended-regexp":
-			// accepted for compatibility; default regexp engine already handles the current surface
+			opts.matchMode = grepPatternModeERE
 		case "fixed-strings":
-			opts.fixedStrings = true
+			opts.matchMode = grepPatternModeFixed
 		case "perl-regexp":
-			opts.perlRegexp = true
+			opts.matchMode = grepPatternModePCRE
 		case "only-matching":
 			opts.onlyMatching = true
+		case "with-filename":
+			opts.filenameMode = grepFilenameWith
 		case "no-filename":
-			opts.noFilename = true
+			opts.filenameMode = grepFilenameWithout
 		case "quiet":
 			opts.quiet = true
+		case "no-messages":
+			opts.suppressMessages = true
 		case "regexp":
-			opts.pattern = matches.Value("regexp")
+			value := grepNextOptionValue(regexpValues, &regexpIndex)
+			opts.patternInputs = append(opts.patternInputs, grepPatternInput{
+				kind:  grepPatternInputText,
+				value: value,
+			})
+		case "file":
+			value := grepNextOptionValue(fileValues, &fileIndex)
+			opts.patternInputs = append(opts.patternInputs, grepPatternInput{
+				kind:  grepPatternInputFile,
+				value: value,
+			})
 		case "max-count":
-			value, err := parseGrepFlagInt(matches.Value("max-count"))
+			value := grepNextOptionValue(maxCountValues, &maxCountIndex)
+			number, err := parseGrepFlagInt(value)
 			if err != nil {
-				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid max count %q", matches.Value("max-count"))
+				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid max count %q", value)
 			}
-			opts.maxCount = value
+			opts.maxCount = number
+			opts.maxCountSet = true
 		case "after-context":
-			value, err := parseGrepFlagInt(matches.Value("after-context"))
+			value := grepNextOptionValue(afterValues, &afterIndex)
+			number, err := parseGrepFlagInt(value)
 			if err != nil {
-				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid context length %q", matches.Value("after-context"))
+				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid context length %q", value)
 			}
-			setGrepContext(&opts, "-A", value)
+			setGrepContext(&opts, "-A", number)
 		case "before-context":
-			value, err := parseGrepFlagInt(matches.Value("before-context"))
+			value := grepNextOptionValue(beforeValues, &beforeIndex)
+			number, err := parseGrepFlagInt(value)
 			if err != nil {
-				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid context length %q", matches.Value("before-context"))
+				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid context length %q", value)
 			}
-			setGrepContext(&opts, "-B", value)
+			setGrepContext(&opts, "-B", number)
 		case "context":
-			value, err := parseGrepFlagInt(matches.Value("context"))
+			value := grepNextOptionValue(contextValues, &contextIndex)
+			number, err := parseGrepFlagInt(value)
 			if err != nil {
-				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid context length %q", matches.Value("context"))
+				return grepOptions{}, nil, exitf(inv, 2, "grep: invalid context length %q", value)
 			}
-			setGrepContext(&opts, "-C", value)
+			setGrepContext(&opts, "-C", number)
 		}
 	}
 
 	args := matches.Args("arg")
-	if opts.pattern == "" {
+	if len(opts.patternInputs) == 0 {
 		if len(args) == 0 {
 			return grepOptions{}, nil, exitf(inv, 2, "grep: missing pattern")
 		}
-		opts.pattern = args[0]
+		opts.patternInputs = append(opts.patternInputs, grepPatternInput{
+			kind:  grepPatternInputText,
+			value: args[0],
+		})
 		args = args[1:]
 	}
 
 	return opts, args, nil
+}
+
+func grepNextOptionValue(values []string, index *int) string {
+	if index == nil || *index >= len(values) {
+		return ""
+	}
+	value := values[*index]
+	*index += 1
+	return value
 }
 
 func setGrepContext(opts *grepOptions, flag string, value int) {
@@ -261,79 +372,180 @@ func parseGrepFlagInt(value string) (int, error) {
 	return number, nil
 }
 
-func compileGrepPattern(opts grepOptions) (*regexp.Regexp, error) {
-	pattern := opts.pattern
-	if opts.fixedStrings {
-		patterns := strings.Split(pattern, "\n")
-		for i, part := range patterns {
-			patterns[i] = regexp.QuoteMeta(part)
-		}
-		pattern = strings.Join(patterns, "|")
-		if len(patterns) > 1 {
-			pattern = "(?:" + pattern + ")"
-		}
+func compileGrepPattern(ctx context.Context, inv *Invocation, opts grepOptions) (grepMatcher, error) {
+	if opts.matchMode == grepPatternModePCRE {
+		return grepMatcher{}, exitf(inv, 2, "grep: support for the -P option is not compiled into this build")
 	}
+
+	patterns, err := loadGrepPatterns(ctx, inv, opts)
+	if err != nil {
+		return grepMatcher{}, err
+	}
+	if len(patterns) == 0 {
+		return grepMatcher{}, nil
+	}
+
+	parts := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		part, err := grepCompilePart(pattern, opts.matchMode)
+		if err != nil {
+			return grepMatcher{}, exitf(inv, 2, "grep: invalid pattern: %v", err)
+		}
+		parts = append(parts, part)
+	}
+
+	compiledPattern := grepJoinPatterns(parts)
 	if opts.wordRegexp {
-		pattern = `\b(?:` + pattern + `)\b`
+		compiledPattern = `\b(?:` + compiledPattern + `)\b`
 	}
 	if opts.lineRegexp {
-		pattern = `^(?:` + pattern + `)$`
+		compiledPattern = `^(?:` + compiledPattern + `)$`
 	}
 	if opts.ignoreCase {
-		pattern = `(?i)` + pattern
+		compiledPattern = `(?i)` + compiledPattern
 	}
-	return regexp.Compile(pattern)
+
+	re, err := regexp.Compile(compiledPattern)
+	if err != nil {
+		return grepMatcher{}, exitf(inv, 2, "grep: invalid pattern: %v", err)
+	}
+	return grepMatcher{re: re}, nil
 }
 
-func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions) grepSearchResult {
-	if opts.count {
-		matchCount := 0
-		countMatches := opts.onlyMatching && !opts.invert
-		visitTextLines(data, func(line []byte, _ int) bool {
-			if countMatches {
-				matchCount += len(re.FindAllIndex(line, -1))
-				return true
-			}
-			if re.Match(line) != opts.invert {
-				matchCount++
-				if opts.maxCount > 0 && matchCount >= opts.maxCount {
-					return false
+func loadGrepPatterns(ctx context.Context, inv *Invocation, opts grepOptions) ([]string, error) {
+	patterns := make([]string, 0, len(opts.patternInputs))
+	for _, input := range opts.patternInputs {
+		switch input.kind {
+		case grepPatternInputText:
+			patterns = append(patterns, splitGrepPatternArg(input.value)...)
+		case grepPatternInputFile:
+			data, _, err := readAllFile(ctx, inv, input.value)
+			if err != nil {
+				if grepShouldPropagateError(err) {
+					return nil, err
 				}
+				grepPrintFileError(inv, opts, input.value, err)
+				return nil, &ExitError{Code: 2}
 			}
-			return true
-		})
+			patterns = append(patterns, splitGrepPatternFile(string(data))...)
+		}
+	}
+	return patterns, nil
+}
+
+func splitGrepPatternArg(value string) []string {
+	parts := strings.Split(value, "\n")
+	if strings.HasSuffix(value, "\n") && len(parts) > 0 {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
+
+func splitGrepPatternFile(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, "\n")
+	if strings.HasSuffix(value, "\n") && len(parts) > 0 {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
+
+func grepCompilePart(pattern string, mode grepPatternMode) (string, error) {
+	switch mode {
+	case grepPatternModeBRE:
+		return translateBasicRegexp(pattern), nil
+	case grepPatternModeERE:
+		return pattern, nil
+	case grepPatternModeFixed:
+		return regexp.QuoteMeta(pattern), nil
+	default:
+		return "", fmt.Errorf("unsupported grep mode")
+	}
+}
+
+func grepJoinPatterns(parts []string) string {
+	if len(parts) == 1 {
+		return parts[0]
+	}
+
+	var b strings.Builder
+	for i, part := range parts {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		b.WriteString("(?:")
+		b.WriteString(part)
+		b.WriteByte(')')
+	}
+	return b.String()
+}
+
+func (m grepMatcher) FindAllStringIndex(line string, count int) [][]int {
+	if m.re == nil {
+		return nil
+	}
+	return m.re.FindAllStringIndex(line, count)
+}
+
+func grepSearchContent(matcher grepMatcher, data []byte, name string, showName bool, opts grepOptions) grepSearchResult {
+	lines := textLines(data)
+
+	if opts.count {
+		if matcher.re == nil && !opts.invert {
+			return grepSearchResult{}
+		}
+
+		total := 0
+		selectedLines := 0
+		countMatches := opts.onlyMatching && !opts.invert
+		for _, line := range lines {
+			if opts.maxCountSet && selectedLines >= opts.maxCount {
+				break
+			}
+			matches := matcher.FindAllStringIndex(line, -1)
+			selected := (len(matches) > 0) != opts.invert
+			if !selected {
+				continue
+			}
+			selectedLines++
+			if countMatches {
+				total += len(matches)
+			} else {
+				total++
+			}
+		}
 
 		prefix := ""
 		if showName {
 			prefix = name + ":"
 		}
 		return grepSearchResult{
-			output:     fmt.Sprintf("%s%d\n", prefix, matchCount),
-			matched:    matchCount > 0,
-			matchCount: matchCount,
+			output:        fmt.Sprintf("%s%d\n", prefix, total),
+			matched:       selectedLines > 0,
+			selectedLines: selectedLines,
 		}
 	}
 
-	lines := textLines(data)
-
 	if opts.beforeContext == 0 && opts.afterContext == 0 {
 		outputLines := make([]string, 0)
-		matchCount := 0
+		selectedLines := 0
 		hasMatch := false
 
 		for i, line := range lines {
-			if opts.maxCount > 0 && matchCount >= opts.maxCount {
+			if opts.maxCountSet && selectedLines >= opts.maxCount {
 				break
 			}
 
-			matches := re.FindAllStringIndex(line, -1)
+			matches := matcher.FindAllStringIndex(line, -1)
 			selected := (len(matches) > 0) != opts.invert
 			if !selected {
 				continue
 			}
 
 			hasMatch = true
-			matchCount++
+			selectedLines++
 			if opts.onlyMatching {
 				for _, match := range matches {
 					prefix := grepLinePrefix(name, showName, i+1, opts.lineNumber, true)
@@ -347,22 +559,22 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 		}
 
 		return grepSearchResult{
-			output:     grepJoinOutput(outputLines),
-			matched:    hasMatch,
-			matchCount: matchCount,
+			output:        grepJoinOutput(outputLines),
+			matched:       hasMatch,
+			selectedLines: selectedLines,
 		}
 	}
 
 	matchingLines := make([]int, 0)
-	matchCount := 0
+	selectedLines := 0
 	for i, line := range lines {
-		if opts.maxCount > 0 && matchCount >= opts.maxCount {
+		if opts.maxCountSet && selectedLines >= opts.maxCount {
 			break
 		}
-		matches := re.FindAllStringIndex(line, -1)
+		matches := matcher.FindAllStringIndex(line, -1)
 		if (len(matches) > 0) != opts.invert {
 			matchingLines = append(matchingLines, i)
-			matchCount++
+			selectedLines++
 		}
 	}
 
@@ -392,7 +604,7 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 			lastPrintedLine = lineNumber
 
 			if opts.onlyMatching {
-				matches := re.FindAllStringIndex(lines[lineNumber], -1)
+				matches := matcher.FindAllStringIndex(lines[lineNumber], -1)
 				for _, match := range matches {
 					prefix := grepLinePrefix(name, showName, lineNumber+1, opts.lineNumber, true)
 					outputLines = append(outputLines, prefix+lines[lineNumber][match[0]:match[1]])
@@ -419,9 +631,9 @@ func grepSearchContent(re *regexp.Regexp, data []byte, name string, showName boo
 	}
 
 	return grepSearchResult{
-		output:     grepJoinOutput(outputLines),
-		matched:    matchCount > 0,
-		matchCount: matchCount,
+		output:        grepJoinOutput(outputLines),
+		matched:       selectedLines > 0,
+		selectedLines: selectedLines,
 	}
 }
 
@@ -450,8 +662,8 @@ func grepLinePrefix(name string, showName bool, lineNumber int, showLineNumber, 
 	return b.String()
 }
 
-func writeGrepResult(inv *Invocation, re *regexp.Regexp, data []byte, name string, showName bool, opts grepOptions, state *grepRunState) error {
-	result := grepSearchContent(re, data, name, showName, opts)
+func writeGrepResult(inv *Invocation, matcher grepMatcher, data []byte, name string, showName bool, opts grepOptions, state *grepRunState) error {
+	result := grepSearchContent(matcher, data, name, showName, opts)
 
 	if result.matched {
 		state.matchedAny = true
@@ -492,63 +704,100 @@ func writeGrepResult(inv *Invocation, re *regexp.Regexp, data []byte, name strin
 	return nil
 }
 
-func (c *Grep) enumerateTopLevelPath(ctx context.Context, inv *Invocation, file string, opts grepOptions, state *grepRunState, records *[]grepFileRecord) (bool, error) {
+func grepShouldShowFilename(name string, defaultShow bool, opts grepOptions) bool {
+	if name == "" {
+		return false
+	}
+	switch opts.filenameMode {
+	case grepFilenameWith:
+		return true
+	case grepFilenameWithout:
+		return false
+	default:
+		return defaultShow
+	}
+}
+
+func grepShouldPropagateError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func grepNoteFileError(inv *Invocation, opts grepOptions, state *grepRunState, name string, err error) {
+	grepPrintFileError(inv, opts, name, err)
+	state.hadError = true
+}
+
+func grepNoteDirectoryError(inv *Invocation, opts grepOptions, state *grepRunState, name string) {
+	if !opts.suppressMessages && inv != nil && inv.Stderr != nil {
+		_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: Is a directory\n", name)
+	}
+	state.hadError = true
+}
+
+func grepPrintFileError(inv *Invocation, opts grepOptions, name string, err error) {
+	if opts.suppressMessages || inv == nil || inv.Stderr == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: %s\n", name, readAllErrorText(err))
+}
+
+func (c *Grep) enumerateTopLevelPath(ctx context.Context, inv *Invocation, file string, opts grepOptions, state *grepRunState, visitedDirs map[string]struct{}, records *[]grepFileRecord) error {
 	linfo, abs, exists, err := lstatMaybe(ctx, inv, file)
 	if err != nil {
-		return false, err
+		if grepShouldPropagateError(err) {
+			return err
+		}
+		grepNoteFileError(inv, opts, state, file, err)
+		return nil
 	}
 	if !exists {
-		_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: No such file or directory\n", file)
-		state.hadError = true
-		return false, nil
+		grepNoteFileError(inv, opts, state, file, stdfs.ErrNotExist)
+		return nil
 	}
 
 	info := linfo
-	throughSymlinkDir := false
 	if linfo.Mode()&stdfs.ModeSymlink != 0 {
 		info, _, err = statPath(ctx, inv, abs)
 		if err != nil {
-			if errorsIsNotExist(err) {
-				_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: No such file or directory\n", file)
-				state.hadError = true
-				return false, nil
+			if grepShouldPropagateError(err) {
+				return err
 			}
-			return false, err
+			grepNoteFileError(inv, opts, state, file, err)
+			return nil
 		}
-		throughSymlinkDir = info.IsDir()
 	}
 
 	if info.IsDir() {
 		if !opts.recursive {
-			_, _ = fmt.Fprintf(inv.Stderr, "grep: %s: Is a directory\n", file)
-			state.hadError = true
-			return false, nil
+			grepNoteDirectoryError(inv, opts, state, file)
+			return nil
 		}
-		if err := c.enumerateRecursive(ctx, inv, abs, throughSymlinkDir, records); err != nil {
-			return false, err
-		}
-		return true, nil
+		return c.enumerateRecursive(ctx, inv, abs, opts, state, visitedDirs, records)
 	}
 
 	*records = append(*records, grepFileRecord{abs: abs})
-	return false, nil
+	return nil
 }
 
-func (c *Grep) enumerateRecursive(ctx context.Context, inv *Invocation, currentAbs string, throughSymlinkDir bool, records *[]grepFileRecord) error {
+func (c *Grep) enumerateRecursive(ctx context.Context, inv *Invocation, currentAbs string, opts grepOptions, state *grepRunState, visitedDirs map[string]struct{}, records *[]grepFileRecord) error {
 	linfo, _, err := lstatPath(ctx, inv, currentAbs)
 	if err != nil {
-		return err
+		if grepShouldPropagateError(err) {
+			return err
+		}
+		grepNoteFileError(inv, opts, state, currentAbs, err)
+		return nil
 	}
 
 	info := linfo
-	currentThroughSymlinkDir := throughSymlinkDir
 	if linfo.Mode()&stdfs.ModeSymlink != 0 {
 		info, _, err = statPath(ctx, inv, currentAbs)
 		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			currentThroughSymlinkDir = true
+			if grepShouldPropagateError(err) {
+				return err
+			}
+			grepNoteFileError(inv, opts, state, currentAbs, err)
+			return nil
 		}
 	}
 
@@ -557,13 +806,30 @@ func (c *Grep) enumerateRecursive(ctx context.Context, inv *Invocation, currentA
 		return nil
 	}
 
+	resolvedDir, err := inv.FS.Realpath(ctx, currentAbs)
+	if err != nil {
+		if grepShouldPropagateError(err) {
+			return err
+		}
+		grepNoteFileError(inv, opts, state, currentAbs, err)
+		return nil
+	}
+	if _, seen := visitedDirs[resolvedDir]; seen {
+		return nil
+	}
+	visitedDirs[resolvedDir] = struct{}{}
+
 	entries, err := readDir(ctx, inv, currentAbs)
 	if err != nil {
-		return err
+		if grepShouldPropagateError(err) {
+			return err
+		}
+		grepNoteFileError(inv, opts, state, currentAbs, err)
+		return nil
 	}
 	for _, entry := range entries {
 		childAbs := path.Join(currentAbs, entry.Name())
-		if err := c.enumerateRecursive(ctx, inv, childAbs, currentThroughSymlinkDir, records); err != nil {
+		if err := c.enumerateRecursive(ctx, inv, childAbs, opts, state, visitedDirs, records); err != nil {
 			return err
 		}
 	}
@@ -573,3 +839,4 @@ func (c *Grep) enumerateRecursive(ctx context.Context, inv *Invocation, currentA
 var _ Command = (*Grep)(nil)
 var _ SpecProvider = (*Grep)(nil)
 var _ ParsedRunner = (*Grep)(nil)
+var _ ParseErrorNormalizer = (*Grep)(nil)
