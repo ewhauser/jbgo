@@ -176,6 +176,44 @@ func TestSortSupportsAbbreviatedSortAndCheckModes(t *testing.T) {
 	}
 }
 
+func TestSortRejectsEmptySortAndCheckModes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name:   "empty sort mode",
+			script: "printf '' > /tmp/in.txt\nsort --sort= /tmp/in.txt\n",
+			want:   "invalid argument \"\" for --sort",
+		},
+		{
+			name:   "empty check mode",
+			script: "printf '' > /tmp/in.txt\nsort --check= /tmp/in.txt\n",
+			want:   "invalid argument \"\" for --check",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rt := newRuntime(t, &Config{})
+			result, err := rt.Run(context.Background(), &ExecutionRequest{Script: tc.script})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 2 {
+				t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if !strings.Contains(result.Stderr, tc.want) {
+				t.Fatalf("Stderr = %q, want to contain %q", result.Stderr, tc.want)
+			}
+		})
+	}
+}
+
 func TestSortRejectsCheckOutputAndExtraOperandCombinations(t *testing.T) {
 	t.Parallel()
 

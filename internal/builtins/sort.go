@@ -365,6 +365,9 @@ func parseSortMatches(inv *Invocation, matches *ParsedCommand) (sortOptions, []s
 			return sortOptions{}, nil, err
 		}
 	}
+	if matches.Has("check") && sortHasExplicitEmptyOptionalValue(inv.Args, "check", 'c') {
+		return sortOptions{}, nil, sortOptionf(inv, "sort: invalid argument %q for --check", "")
+	}
 	checkDiagnose := matches.Count("check") > len(matches.Values("check"))
 	checkQuiet := matches.Has("check-silent")
 	for _, mode := range matches.Values("check") {
@@ -730,8 +733,6 @@ func applySortMode(opts *sortOptions, value string, inv *Invocation) error {
 
 func parseSortCheckMode(inv *Invocation, value string) (bool, error) {
 	switch {
-	case value == "":
-		return false, nil
 	case sortHasAbbrev("diagnose-first", value):
 		return false, nil
 	case sortHasAbbrev("silent", value):
@@ -764,7 +765,35 @@ func sortCanonicalModeName(value string) string {
 }
 
 func sortHasAbbrev(candidate, value string) bool {
-	return len(value) <= len(candidate) && candidate[:len(value)] == value
+	return value != "" && len(value) <= len(candidate) && candidate[:len(value)] == value
+}
+
+func sortHasExplicitEmptyOptionalValue(args []string, long string, short rune) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return false
+		}
+		if name, value, ok := strings.Cut(strings.TrimPrefix(arg, "--"), "="); strings.HasPrefix(arg, "--") && ok {
+			if value == "" && sortHasAbbrev(long, name) {
+				return true
+			}
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") || arg == "-" {
+			continue
+		}
+		shorts := arg[1:]
+		for i := 0; i < len(shorts); i++ {
+			if rune(shorts[i]) != short {
+				continue
+			}
+			remaining := shorts[i+1:]
+			if remaining == "=" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func parseSortPositiveInt(inv *Invocation, name, value string, minimum int) (int, error) {
