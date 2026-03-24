@@ -77,6 +77,7 @@ type xargsExecResult struct {
 	stdout   string
 	stderr   string
 	exitCode int
+	status   int
 }
 
 func NewXArgs() *XArgs {
@@ -870,7 +871,7 @@ func runXArgsTasksSequential(ctx context.Context, inv *Invocation, opts *xargsOp
 			return 0, err
 		}
 		status = max(status, xargsStatusForExecResult(&result))
-		if err := writeXArgsExecOutputs(inv, opts, result); err != nil {
+		if err := writeXArgsExecOutputs(inv, opts, &result); err != nil {
 			return 0, err
 		}
 		if result.exitCode == 255 || status >= xargsExitNotFound {
@@ -957,6 +958,7 @@ func runXArgsTask(ctx context.Context, inv *Invocation, opts *xargsOptions, task
 		}
 		if exists && info.IsDir() {
 			result.exitCode = xargsExitCannotRun
+			result.status = xargsExitCannotRun
 			result.stderr = fmt.Sprintf("xargs: %s: Is a directory\n", task.argv[0])
 			return result, nil
 		}
@@ -966,6 +968,7 @@ func runXArgsTask(ctx context.Context, inv *Invocation, opts *xargsOptions, task
 		return result, &ExitError{Code: exitCodeForError(err), Err: err}
 	} else if !ok {
 		result.exitCode = xargsExitNotFound
+		result.status = xargsExitNotFound
 		result.stderr = fmt.Sprintf("xargs: %s: No such file or directory\n", task.argv[0])
 		return result, nil
 	}
@@ -1003,15 +1006,14 @@ func xargsChildStdin(ctx context.Context, inv *Invocation, opts *xargsOptions) (
 }
 
 func xargsStatusForExecResult(result *xargsExecResult) int {
+	if result.status != 0 {
+		return result.status
+	}
 	switch {
 	case result.exitCode == 0:
 		return 0
 	case result.exitCode == 255:
 		return xargsExitCommand255
-	case result.exitCode == xargsExitCannotRun:
-		return xargsExitCannotRun
-	case result.exitCode == xargsExitNotFound:
-		return xargsExitNotFound
 	case result.exitCode > 128:
 		return xargsExitCommandSignal
 	default:
@@ -1019,7 +1021,7 @@ func xargsStatusForExecResult(result *xargsExecResult) int {
 	}
 }
 
-func writeXArgsExecOutputs(inv *Invocation, opts *xargsOptions, result xargsExecResult) error {
+func writeXArgsExecOutputs(inv *Invocation, opts *xargsOptions, result *xargsExecResult) error {
 	if opts.verbose {
 		if _, err := fmt.Fprintln(inv.Stderr, shellJoinArgs(result.argv)); err != nil {
 			return &ExitError{Code: 1, Err: err}

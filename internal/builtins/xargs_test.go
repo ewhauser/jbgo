@@ -2,6 +2,7 @@ package builtins_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -330,6 +331,33 @@ func TestXArgsMapsDirectoryCommandToExit126(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "Is a directory") {
 		t.Fatalf("Stderr = %q, want directory diagnostic", result.Stderr)
+	}
+}
+
+func TestXArgsMapsChildExit126And127To123(t *testing.T) {
+	t.Parallel()
+
+	for _, exitCode := range []int{126, 127} {
+		t.Run(fmt.Sprintf("exit-%d", exitCode), func(t *testing.T) {
+			t.Parallel()
+			rt := newRuntime(t, &Config{})
+
+			result, err := rt.Run(context.Background(), &ExecutionRequest{
+				Script: fmt.Sprintf("printf 'one\\ntwo\\n' | xargs -n1 sh -c 'printf \"%%s\\\\n\" \"$1\"; exit %d' _\n", exitCode),
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 123 {
+				t.Fatalf("ExitCode = %d, want 123; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+			}
+			if got, want := result.Stdout, "one\ntwo\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+			if result.Stderr != "" {
+				t.Fatalf("Stderr = %q, want empty", result.Stderr)
+			}
+		})
 	}
 }
 
