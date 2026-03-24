@@ -111,7 +111,7 @@ func TestRunCLIHelpRendersFilesystemFlags(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR", "CLI output options:", "--json"} {
+	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR", "--copy-script", "CLI output options:", "--json"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want help to contain %q", stdout.String(), want)
 		}

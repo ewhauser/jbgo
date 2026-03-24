@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/ewhauser/gbash"
@@ -116,9 +117,9 @@ func run(ctx context.Context, cfg Config, args []string, stdin io.Reader, stdout
 		return runInteractiveShell(ctx, rt, parsed, stdin, stdout, stderr)
 	}
 	if runtimeOpts.json {
-		return runBashInvocationJSON(ctx, cfg.Name, rt, parsed, stdin, stdout)
+		return runBashInvocationJSON(ctx, cfg.Name, rt, parsed, &runtimeOpts, stdin, stdout)
 	}
-	return runBashInvocation(ctx, rt, parsed, stdin, stdout, stderr)
+	return runBashInvocation(ctx, rt, parsed, &runtimeOpts, stdin, stdout, stderr)
 }
 
 func serveServer(ctx context.Context, rt *gbash.Runtime, name, version string, runtimeOpts *runtimeOptions) error {
@@ -159,9 +160,17 @@ func validateLoopbackListenAddress(addr string) error {
 	return fmt.Errorf("--listen must use a loopback host such as 127.0.0.1, [::1], or localhost")
 }
 
-func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.BashInvocation, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.BashInvocation, runtimeOpts *runtimeOptions, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if parsed == nil {
 		parsed = &builtins.BashInvocation{Name: "gbash", Source: builtins.BashSourceStdin}
+	}
+
+	session, err := rt.NewSession(ctx)
+	if err != nil {
+		return 1, fmt.Errorf("new session: %w", err)
+	}
+	if exitCode, err := prepareBashInvocationScriptPath(ctx, session, parsed, runtimeOpts); err != nil {
+		return exitCode, err
 	}
 	script, execStdin, exitCode, err := loadBashInvocationScript(parsed, stdin)
 	if err != nil {
@@ -185,11 +194,6 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.
 		req.PassthroughArgs = []string{"-s"}
 	}
 
-	session, err := rt.NewSession(ctx)
-	if err != nil {
-		return 1, fmt.Errorf("new session: %w", err)
-	}
-
 	result, err := session.Exec(ctx, req)
 	if result != nil && result.ControlStderr != "" {
 		_, _ = io.WriteString(stderr, result.ControlStderr+"\n")
@@ -210,9 +214,23 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.
 	return result.ExitCode, nil
 }
 
-func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, parsed *builtins.BashInvocation, stdin io.Reader, stdout io.Writer) (int, error) {
+func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, parsed *builtins.BashInvocation, runtimeOpts *runtimeOptions, stdin io.Reader, stdout io.Writer) (int, error) {
 	if parsed == nil {
 		parsed = &builtins.BashInvocation{Name: "gbash", Source: builtins.BashSourceStdin}
+	}
+
+	session, err := rt.NewSession(ctx)
+	if err != nil {
+		if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(1, nil, formatCLIError(name, fmt.Errorf("new session: %w", err)))); jsonErr != nil {
+			return 1, jsonErr
+		}
+		return 1, nil
+	}
+	if exitCode, err := prepareBashInvocationScriptPath(ctx, session, parsed, runtimeOpts); err != nil {
+		if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(exitCode, nil, formatCLIError(name, err))); jsonErr != nil {
+			return 1, jsonErr
+		}
+		return exitCode, nil
 	}
 	script, execStdin, exitCode, err := loadBashInvocationScript(parsed, stdin)
 	if err != nil {
@@ -235,14 +253,6 @@ func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, 
 	}
 	if len(req.PassthroughArgs) == 0 {
 		req.PassthroughArgs = []string{"-s"}
-	}
-
-	session, err := rt.NewSession(ctx)
-	if err != nil {
-		if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(1, nil, formatCLIError(name, fmt.Errorf("new session: %w", err)))); jsonErr != nil {
-			return 1, jsonErr
-		}
-		return 1, nil
 	}
 
 	result, err := session.Exec(ctx, req)
@@ -276,6 +286,74 @@ func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, 
 		return 1, jsonErr
 	}
 	return result.ExitCode, nil
+}
+
+func prepareBashInvocationScriptPath(ctx context.Context, session *gbash.Session, parsed *builtins.BashInvocation, runtimeOpts *runtimeOptions) (int, error) {
+	if parsed == nil || parsed.Source != builtins.BashSourceFile {
+		return 0, nil
+	}
+	plan, err := runtimeOpts.planScriptPath(parsed.ScriptPath)
+	if err != nil {
+		return 1, err
+	}
+	if plan.sandboxPath != "" {
+		parsed.ScriptPath = plan.sandboxPath
+		parsed.ExecutionName = plan.sandboxPath
+	}
+	if plan.copySource == "" {
+		return 0, nil
+	}
+	if err := stageHostScriptFile(ctx, session, plan.copySource, plan.sandboxPath); err != nil {
+		return scriptStageExitCode(err), err
+	}
+	return 0, nil
+}
+
+func stageHostScriptFile(ctx context.Context, session *gbash.Session, sourcePath, sandboxPath string) error {
+	if session == nil {
+		return errors.New("session unavailable")
+	}
+	fsys := session.FileSystem()
+	if fsys == nil {
+		return errors.New("session filesystem unavailable")
+	}
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%s: No such file or directory", sourcePath)
+		}
+		return fmt.Errorf("open host script %s: %w", sourcePath, err)
+	}
+	defer func() { _ = source.Close() }()
+
+	mode := os.FileMode(0o644)
+	if info, statErr := source.Stat(); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+
+	if err := fsys.MkdirAll(ctx, path.Dir(sandboxPath), 0o755); err != nil {
+		return fmt.Errorf("create staged script directory: %w", err)
+	}
+	target, err := fsys.OpenFile(ctx, sandboxPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("create staged script %s: %w", sandboxPath, err)
+	}
+	defer func() { _ = target.Close() }()
+
+	if _, err := io.Copy(target, source); err != nil {
+		return fmt.Errorf("copy host script to sandbox: %w", err)
+	}
+	return nil
+}
+
+func scriptStageExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "no such file or directory") {
+		return 127
+	}
+	return 1
 }
 
 func loadBashInvocationScript(parsed *builtins.BashInvocation, stdin io.Reader) (script string, execStdin io.Reader, exitCode int, err error) {

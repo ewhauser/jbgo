@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ewhauser/gbash"
 )
 
 func TestRunFileScriptSetsScriptPathIntrospection(t *testing.T) {
@@ -123,6 +126,107 @@ func TestRunFileScriptDoesNotReadHostPathByDefault(t *testing.T) {
 	}
 }
 
+func TestRunFileScriptMapsAbsoluteHostPathWithinRoot(t *testing.T) {
+	t.Parallel()
+
+	rootDir := writeCLIRootScript(t, filepath.Join("nested", "main.sh"), strings.Join([]string{
+		"set -u",
+		`printf 'ZERO:%s\n' "$0"`,
+		`printf 'SRC:%s\n' "${BASH_SOURCE[0]}"`,
+		"",
+	}, "\n"))
+	scriptPath := filepath.Join(rootDir, "nested", "main.sh")
+	sandboxPath := path.Join(gbash.DefaultWorkspaceMountPoint, "nested", "main.sh")
+
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--root", rootDir, scriptPath}, "")
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr)
+	}
+	if got, want := stdout, "ZERO:"+sandboxPath+"\nSRC:"+sandboxPath+"\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, ""; got != want {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunFileScriptMapsAbsoluteHostPathWithinReadWriteRoot(t *testing.T) {
+	t.Parallel()
+
+	rootDir := writeCLIRootScript(t, filepath.Join("nested", "main.sh"), strings.Join([]string{
+		"set -u",
+		`printf 'ZERO:%s\n' "$0"`,
+		`printf 'SRC:%s\n' "${BASH_SOURCE[0]}"`,
+		"",
+	}, "\n"))
+	scriptPath := filepath.Join(rootDir, "nested", "main.sh")
+
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--readwrite-root", rootDir, scriptPath}, "")
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr)
+	}
+	if got, want := stdout, "ZERO:/nested/main.sh\nSRC:/nested/main.sh\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, ""; got != want {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunFileScriptCopyScriptStagesHostPath(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := writeCLIScript(t, strings.Join([]string{
+		"set -u",
+		`printf 'ZERO:%s\n' "$0"`,
+		`printf 'SRC:%s\n' "${BASH_SOURCE[0]}"`,
+		"",
+	}, "\n"))
+
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--copy-script", scriptPath}, "")
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr)
+	}
+	if got, want := stdout, "ZERO:/tmp/.gbash-host-script/main.sh\nSRC:/tmp/.gbash-host-script/main.sh\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, ""; got != want {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestRunFileScriptCopyScriptMissingHostFile(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "missing.sh")
+
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--copy-script", scriptPath}, "")
+	if err == nil {
+		t.Fatal("run() error = nil, want missing host file error")
+	}
+	if exitCode != 127 {
+		t.Fatalf("exitCode = %d, want 127", exitCode)
+	}
+	if got, want := stdout, ""; got != want {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if got, want := stderr, ""; got != want {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if got, want := err.Error(), scriptPath+": No such file or directory"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
+
 func TestRunCommandStringLeavesBashSourceUnset(t *testing.T) {
 	t.Parallel()
 
@@ -175,11 +279,11 @@ func runCLI(t *testing.T, args []string, stdin string) (exitCode int, stdoutText
 func writeCLIScript(t *testing.T, contents string) string {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "main.sh")
-	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	scriptPath := filepath.Join(t.TempDir(), "main.sh")
+	if err := os.WriteFile(scriptPath, []byte(contents), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
 	}
-	return path
+	return scriptPath
 }
 
 func writeCLIRootScript(t *testing.T, name, contents string) string {
@@ -192,12 +296,12 @@ func writeCLIRootFile(t *testing.T, name string, data []byte) string {
 	t.Helper()
 
 	root := t.TempDir()
-	path := filepath.Join(root, name)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
+	filePath := filepath.Join(root, name)
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(filePath), err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	if err := os.WriteFile(filePath, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", filePath, err)
 	}
 	return root
 }
