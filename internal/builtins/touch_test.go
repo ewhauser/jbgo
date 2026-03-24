@@ -2,6 +2,7 @@ package builtins_test
 
 import (
 	"context"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -131,6 +132,22 @@ touch - >> /home/agent/out.txt
 	}
 	if got, want := string(readSessionFile(t, session, "/home/agent/out.txt")), "keep\n"; got != want {
 		t.Fatalf("out.txt contents = %q, want %q", got, want)
+	}
+}
+
+func TestTouchDashWithoutRedirectDoesNotCreateStdoutPath(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, `touch -
+touch - | cat >/dev/null
+`)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	if _, err := session.FileSystem().Stat(context.Background(), "/dev/stdout"); !os.IsNotExist(err) {
+		t.Fatalf("Stat(/dev/stdout) error = %v, want not exist", err)
 	}
 }
 

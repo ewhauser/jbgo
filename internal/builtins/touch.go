@@ -212,6 +212,9 @@ func touchReferenceTimes(ctx context.Context, inv *Invocation, name string, noDe
 
 func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times touchTimes, name string) error {
 	targetName, displayName, noDereference := touchResolveTarget(inv, name, opts.noDereference)
+	if name == "-" && targetName == "" {
+		return nil
+	}
 	info, abs, exists, err := touchStatMaybe(ctx, inv, targetName, noDereference)
 	if err != nil {
 		return err
@@ -273,7 +276,7 @@ func touchResolveTarget(inv *Invocation, name string, noDereference bool) (targe
 			}
 		}
 	}
-	return "/dev/stdout", name, false
+	return "", name, false
 }
 
 func touchStatMaybe(ctx context.Context, inv *Invocation, name string, noDereference bool) (info stdfs.FileInfo, abs string, exists bool, err error) {
