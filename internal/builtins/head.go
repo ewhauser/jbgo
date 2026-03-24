@@ -1,13 +1,31 @@
 package builtins
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 )
 
 type Head struct{}
+
+type headMode int
+
+const (
+	headModeFirstLines headMode = iota
+	headModeAllButLastLines
+	headModeFirstBytes
+	headModeAllButLastBytes
+)
+
+type headOptions struct {
+	quiet            bool
+	verbose          bool
+	zeroTerminated   bool
+	presumeInputPipe bool
+	files            []string
+	mode             headMode
+	count            uint64
+}
 
 func NewHead() *Head {
 	return &Head{}
@@ -25,8 +43,12 @@ func (c *Head) NormalizeInvocation(inv *Invocation) *Invocation {
 	if inv == nil {
 		return nil
 	}
+	normalized := normalizeHeadArgs(inv.Args)
+	if splitSliceEqual(normalized, inv.Args) {
+		return inv
+	}
 	parseInv := *inv
-	parseInv.Args = normalizeHeadLegacyCount(inv.Args)
+	parseInv.Args = normalized
 	return &parseInv
 }
 
@@ -35,10 +57,12 @@ func (c *Head) Spec() CommandSpec {
 		Name:  "head",
 		Usage: "head [OPTION]... [FILE]...",
 		Options: []OptionSpec{
-			{Name: "lines", Short: 'n', Long: "lines", ValueName: "K", Arity: OptionRequiredValue, Help: "print the first K lines instead of the first 10"},
-			{Name: "bytes", Short: 'c', Long: "bytes", ValueName: "K", Arity: OptionRequiredValue, Help: "print the first K bytes of each file"},
+			{Name: "lines", Short: 'n', Long: "lines", ValueName: "[-]NUM", Arity: OptionRequiredValue, Help: "print the first NUM lines instead of the first 10; with leading '-', print all but the last NUM lines"},
+			{Name: "bytes", Short: 'c', Long: "bytes", ValueName: "[-]NUM", Arity: OptionRequiredValue, Help: "print the first NUM bytes of each file; with leading '-', print all but the last NUM bytes"},
 			{Name: "quiet", Short: 'q', Long: "quiet", Aliases: []string{"silent"}, Help: "never print headers giving file names"},
 			{Name: "verbose", Short: 'v', Long: "verbose", Help: "always print headers giving file names"},
+			{Name: "zero-terminated", Short: 'z', Long: "zero-terminated", Help: "line delimiter is NUL, not newline"},
+			{Name: "presume-input-pipe", Long: "-presume-input-pipe", Aliases: []string{"presume-input-pipe"}, Hidden: true, Help: "treat input as non-seekable even when seek is available"},
 		},
 		Args: []ArgSpec{
 			{Name: "file", ValueName: "FILE", Repeatable: true},
@@ -47,6 +71,7 @@ func (c *Head) Spec() CommandSpec {
 			GroupShortOptions:        true,
 			ShortOptionValueAttached: true,
 			LongOptionValueEquals:    true,
+			InferLongOptions:         true,
 			AutoHelp:                 true,
 			AutoVersion:              true,
 		},
@@ -54,20 +79,15 @@ func (c *Head) Spec() CommandSpec {
 }
 
 func (c *Head) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
-	opts, err := headOptionsFromParsed(inv, matches)
+	opts, err := parseHeadMatches(inv, matches)
 	if err != nil {
 		return err
-	}
-	if len(opts.files) == 0 {
-		if err := headWriteFromReader(inv.Stdin, inv.Stdout, opts); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	showHeaders := opts.verbose || (!opts.quiet && len(opts.files) > 1)
 	exitCode := 0
-	for i, file := range opts.files {
+	printedSection := false
+	for _, file := range opts.files {
 		var (
 			reader  io.Reader
 			closeFn func()
@@ -77,25 +97,34 @@ func (c *Head) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 			reader = inv.Stdin
 			closeFn = func() {}
 		default:
-			handle, _, err := openRead(ctx, inv, file)
-			if err != nil {
-				_, _ = fmt.Fprintf(inv.Stderr, "head: %s: No such file or directory\n", file)
-				exitCode = 1
+			handle, _, openErr := openRead(ctx, inv, file)
+			if openErr != nil {
+				_, _ = fmt.Fprintf(inv.Stderr, "head: cannot open %s for reading: %s\n", quoteGNUOperand(file), readAllErrorText(openErr))
+				if code := exitCodeForError(openErr); code > exitCode {
+					exitCode = code
+				}
 				continue
 			}
 			reader = handle
 			closeFn = func() { _ = handle.Close() }
 		}
+
+		displayName := headDisplayName(file)
 		if showHeaders {
-			if i > 0 {
-				_, _ = fmt.Fprintln(inv.Stdout)
+			if printedSection {
+				if _, err := fmt.Fprintln(inv.Stdout); err != nil {
+					closeFn()
+					return exitf(inv, 1, "head: error writing 'standard output': %s", err)
+				}
 			}
-			if _, err := fmt.Fprintf(inv.Stdout, "==> %s <==\n", file); err != nil {
+			if _, err := fmt.Fprintf(inv.Stdout, "==> %s <==\n", displayName); err != nil {
 				closeFn()
-				return &ExitError{Code: 1, Err: err}
+				return exitf(inv, 1, "head: error writing 'standard output': %s", err)
 			}
+			printedSection = true
 		}
-		if err := headWriteFromReader(reader, inv.Stdout, opts); err != nil {
+
+		if err := headWriteFromReader(inv, reader, displayName, opts); err != nil {
 			closeFn()
 			return err
 		}
@@ -107,61 +136,11 @@ func (c *Head) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	return nil
 }
 
-func normalizeHeadLegacyCount(args []string) []string {
-	normalized := append([]string(nil), args...)
-	for i, arg := range normalized {
-		if arg == "--" {
-			break
-		}
-		if len(arg) > 1 && arg[0] == '-' && isDecimalDigits(arg[1:]) {
-			normalized[i] = "-n" + arg[1:]
-		}
+func headDisplayName(file string) string {
+	if file == "-" {
+		return "standard input"
 	}
-	return normalized
-}
-
-func headWriteFromReader(src io.Reader, dst io.Writer, opts headTailOptions) error {
-	if opts.hasBytes {
-		return headWriteBytes(src, dst, opts.bytes)
-	}
-	return headWriteLines(src, dst, opts.lines)
-}
-
-func headWriteBytes(src io.Reader, dst io.Writer, count int) error {
-	if count <= 0 {
-		return nil
-	}
-	if _, err := io.Copy(dst, io.LimitReader(src, int64(count))); err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-	return nil
-}
-
-func headWriteLines(src io.Reader, dst io.Writer, count int) error {
-	if count <= 0 {
-		return nil
-	}
-
-	reader := bufio.NewReader(src)
-	for remaining := count; remaining > 0; {
-		chunk, err := reader.ReadBytes('\n')
-		if len(chunk) > 0 {
-			if _, writeErr := dst.Write(chunk); writeErr != nil {
-				return &ExitError{Code: 1, Err: writeErr}
-			}
-			if chunk[len(chunk)-1] == '\n' {
-				remaining--
-			}
-		}
-		if err == nil {
-			continue
-		}
-		if err == io.EOF {
-			return nil
-		}
-		return &ExitError{Code: 1, Err: err}
-	}
-	return nil
+	return file
 }
 
 var _ Command = (*Head)(nil)

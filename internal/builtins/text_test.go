@@ -177,6 +177,110 @@ func TestHeadSupportsLegacyNumericCountAndSilentAlias(t *testing.T) {
 	}
 }
 
+func TestHeadSupportsNegativeCountsAndZeroTermination(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf 'one\\ntwo\\nthree\\n' > /tmp/in.txt\nhead -n -1 /tmp/in.txt\nprintf '%s\\n' '---'\nhead -c -2 /tmp/in.txt\nprintf '%s\\n' '---'\nprintf 'x\\000y\\000z\\000' | head -z -n 2\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "one\ntwo\n---\none\ntwo\nthre---\nx\x00y\x00"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHeadOptionPrecedenceAndStandardInputHeaders(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf 'ab\\ncd\\n' | head -c 1 -n 1 -v\nprintf '%s\\n' '---'\nprintf 'one\\n' > /tmp/a.txt\nprintf 'two\\n' > /tmp/b.txt\nhead -v -q /tmp/a.txt /tmp/b.txt\nprintf '%s\\n' '---'\nhead -q -v /tmp/a.txt /tmp/b.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "==> standard input <==\nab\n---\none\ntwo\n---\n==> /tmp/a.txt <==\none\n\n==> /tmp/b.txt <==\ntwo\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHeadObsoleteSyntaxOnlyAppliesToFirstArgument(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	ok := mustExecSession(t, session, "cd /tmp\nprintf 'alpha\\nbeta\\n' > a\nhead -1 a\n")
+	if ok.ExitCode != 0 {
+		t.Fatalf("ok ExitCode = %d, want 0; stderr=%q", ok.ExitCode, ok.Stderr)
+	}
+	if got, want := ok.Stdout, "alpha\n"; got != want {
+		t.Fatalf("ok Stdout = %q, want %q", got, want)
+	}
+
+	bad := mustExecSession(t, session, "cd /tmp\nhead a -1\n")
+	if bad.ExitCode != 1 {
+		t.Fatalf("bad ExitCode = %d, want 1; stderr=%q", bad.ExitCode, bad.Stderr)
+	}
+	if got, want := bad.Stderr, "head: invalid option -- '1'\nTry 'head --help' for more information.\n"; got != want {
+		t.Fatalf("bad Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestHeadAcceptsLargeSuffixesAndReportsInvalidCounts(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	ok := mustExecSession(t, session, "printf '' > /tmp/empty\nhead -c 1Y /tmp/empty | wc -c\nhead -n 1024R /tmp/empty | wc -l\n")
+	if ok.ExitCode != 0 {
+		t.Fatalf("ok ExitCode = %d, want 0; stderr=%q", ok.ExitCode, ok.Stderr)
+	}
+	if got, want := ok.Stdout, "0\n0\n"; got != want {
+		t.Fatalf("ok Stdout = %q, want %q", got, want)
+	}
+
+	bad := mustExecSession(t, session, "head -c abc /tmp/empty\n")
+	if bad.ExitCode != 1 {
+		t.Fatalf("bad ExitCode = %d, want 1; stderr=%q", bad.ExitCode, bad.Stderr)
+	}
+	if got, want := bad.Stderr, "head: invalid number of bytes: 'abc'\n"; got != want {
+		t.Fatalf("bad Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestHeadMissingFilesUseGNUStyleOpenErrors(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf 'ok\\n' > /tmp/existing.txt\nhead /missing.txt /tmp/existing.txt\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "head: cannot open '/missing.txt' for reading: No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if got, want := result.Stdout, "==> /tmp/existing.txt <==\nok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHeadSingleMissingFileUsesGNUStyleOpenErrors(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "head /missing.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "head: cannot open '/missing.txt' for reading: No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestTailSupportsFromLineSyntax(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
