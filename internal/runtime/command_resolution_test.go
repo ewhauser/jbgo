@@ -226,3 +226,35 @@ func TestEnableBuiltinStatePropagatesToSubshells(t *testing.T) {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestDisabledBuiltinsEnvAffectsDirectShellFileExec(t *testing.T) {
+	t.Parallel()
+	session, err := newRuntime(t, &Config{}).NewSession(context.Background())
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	writeSessionFile(t, session, "/tmp/child.sh", []byte(
+		"foo=old\n"+
+			"printf -v foo %s hi\n"+
+			"printf '\\nchild-file=<%s>\\n' \"$foo\"\n",
+	))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Env: map[string]string{
+			"GBASH_DISABLED_BUILTINS": "printf",
+		},
+		Command: []string{"/bin/sh", "/tmp/child.sh"},
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "-v\nchild-file=<old>\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "sh: printf: warning: ignoring excess arguments, starting with 'foo'\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}

@@ -49,10 +49,16 @@ teardown() {
   run grep -F 'enable -n "$jbgo_builtin_"' "${WORKDIR}/src/bash"
   [ "$status" -eq 0 ]
 
+  run grep -F 'GBASH_DISABLED_BUILTINS="$jbgo_disabled_builtins" exec "/bin/bash" "$@"' "${WORKDIR}/src/bash"
+  [ "$status" -eq 0 ]
+
   run grep -F '["|echo|false|printf|pwd|test|true)' "${WORKDIR}/build-aux/gbash-harness/relink.sh"
   [ "$status" -eq 0 ]
 
   run grep -F 'enable -n "$jbgo_builtin_"' "${WORKDIR}/build-aux/gbash-harness/relink.sh"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'GBASH_DISABLED_BUILTINS=\"\$jbgo_disabled_builtins\" exec \"/bin/$name\" \"\$@\"' "${WORKDIR}/build-aux/gbash-harness/relink.sh"
   [ "$status" -eq 0 ]
 }
 
@@ -65,6 +71,29 @@ teardown() {
   [[ "$output" == *$'/src/sh\n'* ]]
   [[ "$output" == *$'parent=<old>\n'* ]]
   [[ "$output" == *$'child=<old>\n'* ]]
+  [[ "$output" == *'/src/['* ]]
+  [[ "$output" == *'/src/echo'* ]]
+  [[ "$output" == *'/src/false'* ]]
+  [[ "$output" == *'/src/printf'* ]]
+  [[ "$output" == *'/src/pwd'* ]]
+  [[ "$output" == *'/src/test'* ]]
+  [[ "$output" == *'/src/true'* ]]
+}
+
+@test "nested gnu shell wrappers disable builtins for script execution" {
+  cat > "${WORKDIR}/nested.sh" <<'EOF'
+foo=old
+printf -v foo %s hi
+printf '\nchild-file=<%s>\n' "$foo"
+command -v [ echo false printf pwd test true
+EOF
+
+  run env PATH=/src:/bin:/usr/bin "${WORKDIR}/src/sh" -c \
+    "PATH=/src:/bin:/usr/bin; export PATH; sh /nested.sh"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warning: ignoring excess arguments, starting with 'foo'"* ]]
+  [[ "$output" == *$'child-file=<old>\n'* ]]
   [[ "$output" == *'/src/['* ]]
   [[ "$output" == *'/src/echo'* ]]
   [[ "$output" == *'/src/false'* ]]

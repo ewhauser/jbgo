@@ -627,6 +627,7 @@ func (r *Runner) applyConstructorDefaults() error {
 			return err
 		}
 	}
+	r.applyDisabledBuiltinsEnv()
 	r.normalizeVirtualState()
 	return nil
 }
@@ -1116,6 +1117,8 @@ func (r *Runner) Reset() {
 	r.dirStackShared = false
 	// TODO(v4): Use the supplied Env directly if it implements enough methods.
 	r.writeEnv = newScopedOverlayEnviron(r.Env, r.platform.UsesCaseInsensitiveEnv())
+	r.applyDisabledBuiltinsEnv()
+	r.delVar(disabledBuiltinsEnvVar)
 	if !r.writeEnv.Get("TMPDIR").IsSet() {
 		r.setVarString("TMPDIR", r.tempDir)
 	}

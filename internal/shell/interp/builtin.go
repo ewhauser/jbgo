@@ -94,6 +94,8 @@ var runtimeBuiltinNames = []string{
 	"wait",
 }
 
+const disabledBuiltinsEnvVar = "GBASH_DISABLED_BUILTINS"
+
 var runtimeBuiltinSet = func() map[string]struct{} {
 	out := make(map[string]struct{}, len(runtimeBuiltinNames))
 	for _, name := range runtimeBuiltinNames {
@@ -123,6 +125,35 @@ func (r *Runner) isBuiltinActive(name string) bool {
 
 func (r *Runner) canDispatchBuiltin(name string) bool {
 	return isRuntimeBuiltin(name) && r.isBuiltinActive(name)
+}
+
+func parseDisabledBuiltins(value string) map[string]bool {
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(fields))
+	for _, name := range fields {
+		if isRuntimeBuiltin(name) {
+			out[name] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (r *Runner) applyDisabledBuiltinsEnv() {
+	if r == nil || r.Env == nil {
+		return
+	}
+	parsed := parseDisabledBuiltins(r.Env.Get(disabledBuiltinsEnvVar).String())
+	if len(parsed) == 0 {
+		return
+	}
+	r.disabledBuiltins = parsed
+	r.disabledBuiltinsShared = false
 }
 
 func (r *Runner) enabledBuiltinNames(prefix string) []string {

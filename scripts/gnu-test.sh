@@ -164,12 +164,12 @@ if [ -e /build-aux/gbash-harness/gnu-programs.txt ]; then
       jbgo_shell_name=\$1
       shift
     else
-      jbgo_shell_name=$name
-    fi
-    jbgo_enable_prefix='if [ -n "\$1" ]; then for jbgo_builtin_ in \$1; do enable -n "\$jbgo_builtin_"; done; fi; shift; '
-    exec "/bin/$name" -c "\$jbgo_enable_prefix\$jbgo_command_string" "\$jbgo_shell_name" "\$jbgo_disabled_builtins" "\$@"
+    jbgo_shell_name=$name
   fi
-  exec "/bin/$name" "\$@"
+  jbgo_enable_prefix='if [ -n "\$1" ]; then for jbgo_builtin_ in \$1; do enable -n "\$jbgo_builtin_"; done; fi; shift; '
+  exec "/bin/$name" -c "\$jbgo_enable_prefix\$jbgo_command_string" "\$jbgo_shell_name" "\$jbgo_disabled_builtins" "\$@"
+  fi
+  GBASH_DISABLED_BUILTINS="\$jbgo_disabled_builtins" exec "/bin/$name" "\$@"
 fi
 
 if [ "\${1-}" = "-c" ]; then
@@ -283,7 +283,7 @@ write_wrapper() {
       printf '%s\n' '    jbgo_enable_prefix='\''if [ -n "$1" ]; then for jbgo_builtin_ in $1; do enable -n "$jbgo_builtin_"; done; fi; shift; '\'''
       printf '%s\n' "    exec \"/bin/$name\" -c \"\$jbgo_enable_prefix\$jbgo_command_string\" \"\$jbgo_shell_name\" \"\$jbgo_disabled_builtins\" \"\$@\""
       printf '%s\n' '  fi'
-      printf '%s\n' "  exec \"/bin/$name\" \"\$@\""
+      printf '%s\n' "  GBASH_DISABLED_BUILTINS=\"\$jbgo_disabled_builtins\" exec \"/bin/$name\" \"\$@\""
       printf '%s\n' 'fi'
 
       printf '%s\n' 'if [ "${1-}" = "-c" ]; then'
