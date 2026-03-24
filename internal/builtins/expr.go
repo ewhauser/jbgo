@@ -331,7 +331,7 @@ func exprCompare(left, right exprValue, op string) (exprValue, error) {
 }
 
 func exprRegexMatch(left, right exprValue) (exprValue, error) {
-	re, err := regexp.Compile(translateExprBRE(right.text))
+	re, err := regexp.Compile("^" + translateBasicRegexp(right.text))
 	if err != nil {
 		return exprValue{}, fmt.Errorf("invalid regular expression")
 	}
@@ -346,40 +346,6 @@ func exprRegexMatch(left, right exprValue) (exprValue, error) {
 		return newExprString(match[1]), nil
 	}
 	return newExprInt(big.NewInt(int64(utf8.RuneCountInString(match[0])))), nil
-}
-
-func translateExprBRE(pattern string) string {
-	var b strings.Builder
-	b.WriteByte('^')
-	escaped := false
-	for _, r := range pattern {
-		if escaped {
-			switch r {
-			case '(', ')', '{', '}', '+', '?', '|':
-				b.WriteRune(r)
-			default:
-				b.WriteByte('\\')
-				b.WriteRune(r)
-			}
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		switch r {
-		case '+', '?', '{', '}', '|':
-			b.WriteByte('\\')
-			b.WriteRune(r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	if escaped {
-		b.WriteString(`\\`)
-	}
-	return b.String()
 }
 
 var _ Command = (*Expr)(nil)
