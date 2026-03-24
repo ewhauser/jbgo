@@ -30,6 +30,7 @@ const (
 		"    if file is not None:\n" +
 		"        raise NotImplementedError(\"print(file=...) is not supported\")\n" +
 		"    __gbash_internal_print(sep.join(str(arg) for arg in args) + end)\n\n"
+	pythonPrintBinding = "print = __gbash_print\n\n"
 )
 
 type Python struct {
@@ -141,6 +142,7 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 				return monty.Return(monty.None()), nil
 			},
 		},
+		Print: monty.WriterPrintCallback(inv.Stdout),
 		OS: montyvfs.Handler(&invocationFS{
 			requestContext: func() context.Context { return ctx },
 			inv:            inv,
@@ -524,12 +526,13 @@ func int64Field(value reflect.Value, name string) (int64, bool) {
 }
 
 func instrumentSourceForPrint(source string) string {
+	needsPrintPrelude := sourceReferencesBarePrint(source)
 	source, rewritten := rewritePrintCalls(source)
-	if !rewritten {
+	if !needsPrintPrelude && !rewritten {
 		return source
 	}
 	if source == "" {
-		return pythonPrintPrelude
+		return pythonPrintPrelude + pythonPrintBinding
 	}
 
 	lines := strings.SplitAfter(source, "\n")
@@ -577,7 +580,7 @@ func instrumentSourceForPrint(source string) string {
 		break
 	}
 
-	return prefix.String() + pythonPrintPrelude + strings.Join(lines[index:], "")
+	return prefix.String() + pythonPrintPrelude + pythonPrintBinding + strings.Join(lines[index:], "")
 }
 
 type pythonTokenKind uint8
@@ -693,6 +696,45 @@ func sourceHasUnsafePrintReference(source string) bool {
 				lastKind = pythonTokenOther
 			}
 			lastIdentifier = ""
+		}
+	}
+
+	return false
+}
+
+func sourceReferencesBarePrint(source string) bool {
+	lastKind := pythonTokenNone
+
+	for index := 0; index < len(source); {
+		switch ch := source[index]; {
+		case ch == '#':
+			index++
+			for index < len(source) && source[index] != '\n' {
+				index++
+			}
+		case ch == '"' || ch == '\'':
+			index = consumePythonString(source, index)
+			lastKind = pythonTokenOther
+		case isPythonIdentifierStart(ch):
+			start := index
+			index++
+			for index < len(source) && isPythonIdentifierContinue(source[index]) {
+				index++
+			}
+			if source[start:index] == "print" && lastKind != pythonTokenDot {
+				return true
+			}
+			lastKind = pythonTokenIdentifier
+		default:
+			index++
+			switch ch {
+			case ' ', '\t', '\n', '\r', '\f', '\v':
+				continue
+			case '.':
+				lastKind = pythonTokenDot
+			default:
+				lastKind = pythonTokenOther
+			}
 		}
 	}
 

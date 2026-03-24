@@ -92,6 +92,9 @@ func TestInstrumentSourceForPrintKeepsPrefixedDocstringsBeforeFutureImports(t *t
 	if !strings.Contains(instrumented, pythonPrintPrelude) {
 		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
 	}
+	if !strings.Contains(instrumented, pythonPrintBinding) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
+	}
 }
 
 func TestInstrumentSourceForPrintKeepsSingleLineDocstringsBeforeFutureImports(t *testing.T) {
@@ -106,5 +109,25 @@ func TestInstrumentSourceForPrintKeepsSingleLineDocstringsBeforeFutureImports(t 
 	}
 	if !strings.Contains(instrumented, pythonPrintPrelude) {
 		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
+	}
+	if !strings.Contains(instrumented, pythonPrintBinding) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
+	}
+}
+
+func TestInstrumentSourceForPrintInjectsBindingForAliasedPrint(t *testing.T) {
+	t.Parallel()
+
+	source := "alias = print\nalias('x')\n"
+
+	instrumented := instrumentSourceForPrint(source)
+	if !strings.Contains(instrumented, pythonPrintPrelude) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
+	}
+	if !strings.Contains(instrumented, pythonPrintBinding) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
+	}
+	if !strings.Contains(instrumented, source) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want original source preserved", instrumented)
 	}
 }
