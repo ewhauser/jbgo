@@ -627,6 +627,10 @@ func exprInvalidBackReferenceError() error {
 	return exprStaticError("Invalid back reference")
 }
 
+func exprInvalidCharacterClassNameError() error {
+	return exprStaticError("Invalid character class name")
+}
+
 func exprRegexTooBigError() error {
 	return exprStaticError("Regular expression too big")
 }

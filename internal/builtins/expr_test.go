@@ -172,6 +172,46 @@ func TestExprCharacterClassesHandleLeadingBracketAndPOSIXClasses(t *testing.T) {
 	}
 }
 
+func TestExprRejectsInvalidPOSIXCharacterClassName(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "expr a : '[[:bogus:]]'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
+	}
+	if got, want := result.Stderr, "expr: Invalid character class name\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestExprDigitClassMatchesASCIIOnly(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "export LC_ALL=C.UTF-8\n" +
+			"expr '١' : '[[:digit:]]'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if got, want := result.Stdout, "0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestExprReportsGNUSyntaxDiagnostics(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

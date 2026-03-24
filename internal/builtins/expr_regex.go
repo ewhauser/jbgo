@@ -502,6 +502,9 @@ func (p *exprRegexParser) parseClassAtom() (exprRegexCharClassElem, error) {
 		return exprRegexCharClassElem{}, exprInvalidRegexExpressionError()
 	}
 	if element, ok := p.tryParsePOSIXClass(); ok {
+		if element.posixClass == "__invalid__" {
+			return exprRegexCharClassElem{}, exprInvalidCharacterClassNameError()
+		}
 		return element, nil
 	}
 	current := p.current()
@@ -522,8 +525,11 @@ func (p *exprRegexParser) tryParsePOSIXClass() (exprRegexCharClassElem, bool) {
 	for i := p.pos + 2; i+1 < len(p.units); i++ {
 		if p.units[i].isByte(':') && p.units[i+1].isByte(']') {
 			className := string(name)
-			if !exprRegexIsPOSIXClass(className) {
+			if className == "" {
 				return exprRegexCharClassElem{}, false
+			}
+			if !exprRegexIsPOSIXClass(className) {
+				return exprRegexCharClassElem{posixClass: "__invalid__"}, true
 			}
 			p.pos = i + 2
 			return exprRegexCharClassElem{posixClass: className}, true
@@ -730,6 +736,14 @@ func (c exprRegexCharClass) matches(unit exprRegexUnit) bool {
 }
 
 func exprRegexMatchesPOSIXClass(name string, unit exprRegexUnit) bool {
+	if name == "digit" {
+		if len(unit.text) != 1 {
+			return false
+		}
+		b := unit.text[0]
+		return '0' <= b && b <= '9'
+	}
+
 	if len(unit.text) == 1 {
 		b := unit.text[0]
 		if b < utf8.RuneSelf {
