@@ -104,19 +104,16 @@ func (p *testRPNParser) parseArgs(args []string) ([]testSymbol, error) {
 		return p.parseTwoArgs(args)
 	case 3:
 		return p.parseThreeArgs(args)
-	default:
-		// POSIX: "!" prefix applies at any arg count.
-		if args[0] == "!" {
+	case 4:
+		switch {
+		case args[0] == "!":
 			stack, err := p.parseArgs(args[1:])
 			if err != nil {
 				return nil, err
 			}
 			return append(stack, testSymbol{kind: testSymbolBang, token: "!"}), nil
-		}
-		// POSIX: "( expr )" wrapping for 4-5 args where inner
-		// expression (2-3 args) is unambiguous.
-		if len(args) <= 5 && args[0] == "(" && args[len(args)-1] == ")" {
-			return p.parseArgs(args[1 : len(args)-1])
+		case args[0] == "(" && args[3] == ")":
+			return p.parseArgs(args[1:3])
 		}
 	}
 	stack, pos, err := p.parseOr(args, 0)

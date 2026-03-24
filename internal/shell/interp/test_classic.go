@@ -45,7 +45,7 @@ func (p *testParser) parseArgs(args []string) (syntax.TestExpr, error) {
 		return p.parseTwoArgs(args)
 	case 3:
 		return p.parseThreeArgs(args)
-	default:
+	case 4:
 		switch {
 		case args[0] == "!":
 			expr, err := p.parseArgs(args[1:])
@@ -53,8 +53,8 @@ func (p *testParser) parseArgs(args []string) (syntax.TestExpr, error) {
 				return nil, err
 			}
 			return &syntax.UnaryTest{Op: syntax.TsNot, X: expr}, nil
-		case len(args) <= 5 && args[0] == "(" && args[len(args)-1] == ")":
-			expr, err := p.parseArgs(args[1 : len(args)-1])
+		case args[0] == "(" && args[3] == ")":
+			expr, err := p.parseArgs(args[1:3])
 			if err != nil {
 				return nil, err
 			}
