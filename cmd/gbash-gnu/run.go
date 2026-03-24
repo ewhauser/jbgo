@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -42,14 +44,34 @@ func run(ctx context.Context, mf *manifest, opts *options) error {
 }
 
 func listGNUPrograms(ctx context.Context, workDir string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, filepath.Join(workDir, "build-aux", "gen-lists-of-programs.sh"), "--list-progs")
-	cmd.Dir = workDir
-	out, err := cmd.Output()
+	scriptPath := filepath.Join(workDir, "build-aux", "gen-lists-of-programs.sh")
+	out, err := outputWithETXTBSYRetry(func() ([]byte, error) {
+		cmd := exec.CommandContext(ctx, scriptPath, "--list-progs")
+		cmd.Dir = workDir
+		return cmd.Output()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list GNU programs: %w", err)
 	}
 	lines := strings.Fields(string(out))
 	return uniqueSortedStrings(lines), nil
+}
+
+func outputWithETXTBSYRetry(run func() ([]byte, error)) ([]byte, error) {
+	const maxAttempts = 5
+
+	var (
+		out []byte
+		err error
+	)
+	for attempt := range maxAttempts {
+		out, err = run()
+		if err == nil || !errors.Is(err, syscall.ETXTBSY) {
+			return out, err
+		}
+		time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
+	}
+	return out, err
 }
 
 func buildRunPlan(ctx context.Context, mf *manifest, workDir string, opts *options) (*runPlan, error) {

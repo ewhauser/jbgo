@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"syscall"
 	"testing"
 )
 
@@ -206,6 +209,45 @@ func TestRunWritesSummaryFromSharedLog(t *testing.T) {
 	}
 	if got, want := len(summary.Utilities), 1; got != want {
 		t.Fatalf("len(utilities) = %d, want %d", got, want)
+	}
+}
+
+func TestOutputWithETXTBSYRetryRetriesTransientExecRace(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	out, err := outputWithETXTBSYRetry(func() ([]byte, error) {
+		calls++
+		if calls < 3 {
+			return nil, &fs.PathError{Op: "fork/exec", Path: "/tmp/gen-lists-of-programs.sh", Err: syscall.ETXTBSY}
+		}
+		return []byte("basename dirname\n"), nil
+	})
+	if err != nil {
+		t.Fatalf("outputWithETXTBSYRetry() error = %v", err)
+	}
+	if got, want := string(out), "basename dirname\n"; got != want {
+		t.Fatalf("outputWithETXTBSYRetry() = %q, want %q", got, want)
+	}
+	if got, want := calls, 3; got != want {
+		t.Fatalf("call count = %d, want %d", got, want)
+	}
+}
+
+func TestOutputWithETXTBSYRetryDoesNotRetryOtherErrors(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("boom")
+	calls := 0
+	_, err := outputWithETXTBSYRetry(func() ([]byte, error) {
+		calls++
+		return nil, wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("outputWithETXTBSYRetry() error = %v, want %v", err, wantErr)
+	}
+	if got, want := calls, 1; got != want {
+		t.Fatalf("call count = %d, want %d", got, want)
 	}
 }
 
