@@ -57,7 +57,10 @@ func (fs *blockingScriptFS) Open(ctx context.Context, name string) (gbfs.File, e
 	if err != nil {
 		return nil, err
 	}
-	return &blockingScriptFile{info: info}, nil
+	return &blockingScriptFile{
+		info: info,
+		done: make(chan struct{}),
+	}, nil
 }
 
 func (fs *blockingScriptFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (gbfs.File, error) {
@@ -68,9 +71,6 @@ func (fs *blockingScriptFS) OpenFile(ctx context.Context, name string, flag int,
 }
 
 func (f *blockingScriptFile) Read([]byte) (int, error) {
-	if f.done == nil {
-		f.done = make(chan struct{})
-	}
 	<-f.done
 	return 0, nil
 }
@@ -80,9 +80,6 @@ func (f *blockingScriptFile) Write([]byte) (int, error) {
 }
 
 func (f *blockingScriptFile) Close() error {
-	if f.done == nil {
-		f.done = make(chan struct{})
-	}
 	f.closer.Do(func() { close(f.done) })
 	return nil
 }
