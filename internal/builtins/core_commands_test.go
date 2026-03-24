@@ -3437,7 +3437,7 @@ func TestXArgsSupportsLongFlags(t *testing.T) {
 	if got, want := result.Stdout, "a\nb\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if got, want := result.Stderr, "'echo' 'a'\n'echo' 'b'\n"; got != want {
+	if got, want := result.Stderr, "echo a\necho b\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
