@@ -305,6 +305,24 @@ func TestWCCountsWordsFromStdin(t *testing.T) {
 	}
 }
 
+func TestWCDefaultCountsFromStdinMatchGNUPadding(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a b\\nc\\n' | wc\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, wcExpectedLine("", 2, 3, 6); got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestWCCountsBinaryBytes(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
@@ -433,6 +451,20 @@ func TestWCMatchesGNUPaddingForMultipleFiles(t *testing.T) {
 	}
 }
 
+func TestWCFiles0FromStdinRedirectMatchesGNUWidth(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "cd /tmp\nprintf '%s\\n' '2' > 2b\nprintf '%s\\n' '2 words' > 2w\nprintf '2b\\0' > names\nprintf '2w\\0' >> names\nwc --files0-from=- < names\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = " 1  1  2 2b\n 1  2  8 2w\n 2  3 10 total\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestWCFiles0FromKeepsZeroCountOutputUnpadded(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
@@ -549,6 +581,7 @@ func TestWCFiles0FromReportsSourceReadErrorsAndMixedEntries(t *testing.T) {
 		"mkdir -p '/tmp/dir with spaces'",
 		"wc --files0-from='/tmp/dir with spaces' || true",
 		"cd /tmp",
+		"wc --files0-from=missing || true",
 		"wc --files0-from=. || true",
 		"printf '/tmp/a.txt\\0\\0/tmp/missing file\\0' > /tmp/names",
 		"wc --files0-from=/tmp/names || true",
@@ -559,6 +592,7 @@ func TestWCFiles0FromReportsSourceReadErrorsAndMixedEntries(t *testing.T) {
 	}
 	for _, want := range []string{
 		"wc: '/tmp/dir with spaces': read error: Is a directory\n",
+		"wc: cannot open 'missing' for reading: No such file or directory\n",
 		"wc: .: read error: Is a directory\n",
 		"wc: /tmp/names:2: invalid zero-length file name\n",
 		"wc: '/tmp/missing file': No such file or directory\n",

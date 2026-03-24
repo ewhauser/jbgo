@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"math"
 	goruntime "runtime"
 	"strconv"
@@ -76,7 +77,7 @@ func wcMinimumWidth() int {
 	if goruntime.GOOS == "darwin" {
 		return 8
 	}
-	return 1
+	return 7
 }
 
 func (c *WC) Name() string {
@@ -253,12 +254,15 @@ func (c *WC) runWCFiles0From(ctx context.Context, inv *Invocation, opts wcOption
 	source := opts.files0From
 
 	if source == "-" {
+		if wcStdinIsRegularFile(inv) {
+			return wcRunFiles0FromMaterializedReader(ctx, inv, opts, source, inv.Stdin)
+		}
 		return wcRunFiles0FromStream(ctx, inv, opts, source, inv.Stdin, 1)
 	}
 
 	info, _, err := statPath(ctx, inv, source)
 	if err != nil {
-		return exitf(inv, 1, "wc: cannot open %s for reading: %s", wcErrorOperand(source), readAllErrorText(err))
+		return exitf(inv, 1, "wc: cannot open %s for reading: %s", quoteGNUOperand(source), readAllErrorText(err))
 	}
 	if info.IsDir() {
 		return exitf(inv, 1, "wc: %s: read error: Is a directory", wcErrorOperand(source))
@@ -276,7 +280,7 @@ func (c *WC) runWCFiles0From(ctx context.Context, inv *Invocation, opts wcOption
 func wcRunFiles0FromMaterialized(ctx context.Context, inv *Invocation, opts wcOptions, source string) error {
 	file, _, err := openRead(ctx, inv, source)
 	if err != nil {
-		return exitf(inv, 1, "wc: cannot open %s for reading: %s", wcErrorOperand(source), readAllErrorText(err))
+		return exitf(inv, 1, "wc: cannot open %s for reading: %s", quoteGNUOperand(source), readAllErrorText(err))
 	}
 	defer func() { _ = file.Close() }()
 
@@ -292,10 +296,23 @@ func wcRunFiles0FromMaterialized(ctx context.Context, inv *Invocation, opts wcOp
 	return wcRunEntries(ctx, inv, opts, entries, len(entries), false, false)
 }
 
+func wcRunFiles0FromMaterializedReader(ctx context.Context, inv *Invocation, opts wcOptions, source string, reader io.Reader) error {
+	data, readErr, overflow := wcReadAllReaderPartial(ctx, inv, reader)
+	if overflow {
+		return exitf(inv, 1, "wc: %s: read error: %s", wcFiles0SourceOperand(source), readAllErrorText(readErr))
+	}
+	if readErr != nil {
+		return exitf(inv, 1, "wc: %s: read error: %s", wcFiles0SourceOperand(source), readAllErrorText(readErr))
+	}
+
+	entries := parseWCFiles0Entries(source, data)
+	return wcRunEntries(ctx, inv, opts, entries, len(entries), false, false)
+}
+
 func wcRunFiles0FromPathStream(ctx context.Context, inv *Invocation, opts wcOptions, source string, columnWidth int) error {
 	file, _, err := openRead(ctx, inv, source)
 	if err != nil {
-		return exitf(inv, 1, "wc: cannot open %s for reading: %s", wcErrorOperand(source), readAllErrorText(err))
+		return exitf(inv, 1, "wc: cannot open %s for reading: %s", quoteGNUOperand(source), readAllErrorText(err))
 	}
 	defer func() { _ = file.Close() }()
 
@@ -375,6 +392,23 @@ func wcFiles0StreamWidthForRegularSource(ctx context.Context, inv *Invocation, o
 	}
 
 	return acc.width(opts)
+}
+
+func wcStdinIsRegularFile(inv *Invocation) bool {
+	if inv == nil || inv.Stdin == nil {
+		return false
+	}
+	file, ok := inv.Stdin.(interface {
+		Stat() (stdfs.FileInfo, error)
+	})
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
 }
 
 func wcLimitReaderForInvocation(inv *Invocation, reader io.Reader) io.Reader {

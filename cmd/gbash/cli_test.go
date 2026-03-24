@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -116,6 +117,9 @@ func TestRunCLIHelpRendersFilesystemFlags(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want help to contain %q", stdout.String(), want)
 		}
+	}
+	if !strings.Contains(stdout.String(), "--inherit-env VARS") {
+		t.Fatalf("stdout = %q, want help to contain %q", stdout.String(), "--inherit-env VARS")
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("stderr = %q, want empty", got)
@@ -943,6 +947,73 @@ func TestRunCLIHostUtilityPassesStdin(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
+
+func TestRunCLIHostUtilityWCInheritsLocaleOnlyWhenRequested(t *testing.T) {
+	tmp := t.TempDir()
+
+	cases := []struct {
+		name   string
+		locale string
+		input  []byte
+	}{
+		{
+			name:   "iso8859_1_nbsp",
+			locale: "en_US.iso8859-1",
+			input:  []byte{'=', 0xA0, '='},
+		},
+		{
+			name:   "koi8_r_nbsp",
+			locale: "ru_RU.KOI8-R",
+			input:  []byte{'=', 0x9A, '='},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LC_ALL", tc.locale)
+			t.Setenv("LC_CTYPE", "")
+			t.Setenv("LANG", "")
+			t.Setenv("LANGUAGE", "")
+
+			var stdout strings.Builder
+			var stderr strings.Builder
+
+			exitCode, err := runCLIHostUtility(t, context.Background(), tmp, "wc", []string{"-w"}, bytes.NewReader(tc.input), &stdout, &stderr, nil)
+			if err != nil {
+				t.Fatalf("runCLI() without inherit-env error = %v", err)
+			}
+			if exitCode != 0 {
+				t.Fatalf("exitCode without inherit-env = %d, want 0; stderr=%q", exitCode, stderr.String())
+			}
+			if got, want := stdout.String(), "1\n"; got != want {
+				t.Fatalf("stdout without inherit-env = %q, want %q", got, want)
+			}
+			if got := stderr.String(); got != "" {
+				t.Fatalf("stderr without inherit-env = %q, want empty", got)
+			}
+
+			stdout.Reset()
+			stderr.Reset()
+
+			exitCode, err = runCLIHostUtility(t, context.Background(), tmp, "wc", []string{"-w"}, bytes.NewReader(tc.input), &stdout, &stderr, &hostUtilityOpts{
+				inheritEnv: []string{"LC_ALL"},
+			})
+			if err != nil {
+				t.Fatalf("runCLI() with inherit-env error = %v", err)
+			}
+			if exitCode != 0 {
+				t.Fatalf("exitCode with inherit-env = %d, want 0; stderr=%q", exitCode, stderr.String())
+			}
+			if got, want := stdout.String(), "2\n"; got != want {
+				t.Fatalf("stdout with inherit-env = %q, want %q", got, want)
+			}
+			if got := stderr.String(); got != "" {
+				t.Fatalf("stderr with inherit-env = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestRunCLIHostUtilityCatRejectsAppendToSelf(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
@@ -2139,6 +2210,7 @@ type hostUtilityOpts struct {
 	cwd            string // defaults to root when empty
 	gbashUmask     string
 	posixlyCorrect string
+	inheritEnv     []string
 }
 
 func runCLIHostUtility(t *testing.T, ctx context.Context, root, utility string, utilityArgs []string, stdin io.Reader, stdout, stderr io.Writer, opts *hostUtilityOpts) (int, error) {
@@ -2146,12 +2218,14 @@ func runCLIHostUtility(t *testing.T, ctx context.Context, root, utility string, 
 
 	cwd := root
 	var gbashUmask, posixlyCorrect string
+	var inheritEnv []string
 	if opts != nil {
 		if opts.cwd != "" {
 			cwd = opts.cwd
 		}
 		gbashUmask = opts.gbashUmask
 		posixlyCorrect = opts.posixlyCorrect
+		inheritEnv = append(inheritEnv, opts.inheritEnv...)
 	}
 
 	sandboxCwd, err := currentSandboxCwd(root, cwd)
@@ -2167,6 +2241,13 @@ func runCLIHostUtility(t *testing.T, ctx context.Context, root, utility string, 
 		gbashUmask,
 		posixlyCorrect,
 		utility,
+	}
+	if len(inheritEnv) > 0 {
+		args = append([]string{
+			"--readwrite-root", root,
+			"--cwd", sandboxCwd,
+			"--inherit-env", strings.Join(inheritEnv, ","),
+		}, args[4:]...)
 	}
 	args = append(args, utilityArgs...)
 	return runCLI(ctx, args, stdin, stdout, stderr, false)

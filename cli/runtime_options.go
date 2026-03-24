@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 type runtimeOptions struct {
 	root          string
 	readWriteRoot string
+	inheritEnv    []string
 	copyScript    bool
 	cwd           string
 	maxFileBytes  int64
@@ -57,6 +59,22 @@ func parseRuntimeOptions(args []string) (runtimeOptions, []string, error) {
 			opts.readWriteRoot = args[i]
 		case strings.HasPrefix(arg, "--readwrite-root="):
 			opts.readWriteRoot = strings.TrimPrefix(arg, "--readwrite-root=")
+		case arg == "--inherit-env":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("--inherit-env requires a variable list")
+			}
+			i++
+			names, err := parseInheritEnvNames(args[i])
+			if err != nil {
+				return opts, nil, err
+			}
+			opts.inheritEnv = appendUniqueStrings(opts.inheritEnv, names...)
+		case strings.HasPrefix(arg, "--inherit-env="):
+			names, err := parseInheritEnvNames(strings.TrimPrefix(arg, "--inherit-env="))
+			if err != nil {
+				return opts, nil, err
+			}
+			opts.inheritEnv = appendUniqueStrings(opts.inheritEnv, names...)
 		case arg == "--copy-script":
 			opts.copyScript = true
 		case arg == "--cwd":
@@ -160,6 +178,63 @@ func parseMaxFileBytes(value string) (int64, error) {
 	return parsed, nil
 }
 
+func parseInheritEnvNames(value string) ([]string, error) {
+	parts := strings.Split(value, ",")
+	names := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := strings.TrimSpace(part)
+		if err := validateInheritEnvName(name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func validateInheritEnvName(name string) error {
+	if name == "" {
+		return fmt.Errorf("--inherit-env requires one or more variable names")
+	}
+	if !isShellEnvName(name) {
+		return fmt.Errorf("invalid --inherit-env name %q", name)
+	}
+	return nil
+}
+
+func isShellEnvName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		switch {
+		case ch == '_':
+		case ch >= 'A' && ch <= 'Z':
+		case ch >= 'a' && ch <= 'z':
+		case i > 0 && ch >= '0' && ch <= '9':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func appendUniqueStrings(dst []string, values ...string) []string {
+	seen := make(map[string]struct{}, len(dst)+len(values))
+	out := append([]string(nil), dst...)
+	for _, value := range out {
+		seen[value] = struct{}{}
+	}
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
 func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 	if opts == nil {
 		return nil, nil
@@ -172,6 +247,7 @@ func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 	}
 
 	runtimeOpts := make([]gbash.Option, 0, 4)
+	var baseEnv map[string]string
 	switch {
 	case rootValue != "":
 		root, err := filepath.Abs(rootValue)
@@ -196,11 +272,15 @@ func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 			gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(root, gbash.ReadWriteDirectoryOptions{
 				MaxFileReadBytes: opts.maxFileBytes,
 			})),
-			gbash.WithBaseEnv(readWriteRootBaseEnv()),
 		)
+		baseEnv = readWriteRootBaseEnv()
 		if cwdValue == "" {
 			cwdValue = "/"
 		}
+	}
+	baseEnv = inheritSelectedEnv(baseEnv, opts.inheritEnv)
+	if baseEnv != nil {
+		runtimeOpts = append(runtimeOpts, gbash.WithBaseEnv(baseEnv))
 	}
 
 	if cwdValue != "" {
@@ -240,6 +320,30 @@ func readWriteRootBaseEnv() map[string]string {
 		}
 	}
 	return env
+}
+
+func inheritSelectedEnv(baseEnv map[string]string, names []string) map[string]string {
+	if len(names) == 0 {
+		return baseEnv
+	}
+
+	var out map[string]string
+	if baseEnv != nil {
+		out = make(map[string]string, len(baseEnv)+len(names))
+		maps.Copy(out, baseEnv)
+	} else {
+		out = make(map[string]string, len(names))
+	}
+
+	for _, name := range names {
+		if value, ok := os.LookupEnv(name); ok {
+			out[name] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func ensureReadWriteRootIsTemporary(root string) error {
@@ -386,6 +490,7 @@ func renderHelp(w io.Writer, name string) error {
 		"  --root DIR            mount DIR read-only at /home/agent/project with a writable in-memory overlay\n"+
 		"  --cwd DIR             set the initial sandbox working directory\n"+
 		"  --readwrite-root DIR  mount DIR as sandbox / with writes persisted back to the host filesystem\n"+
+		"  --inherit-env VARS    copy comma-separated host env var names into the runtime base environment\n"+
 		"  --copy-script         copy the positional host script into the sandbox before execution\n"+
 		"  --max-file-bytes N    override the sandbox file-size/read-size limit in bytes\n"+
 		"\nCLI output options:\n"+

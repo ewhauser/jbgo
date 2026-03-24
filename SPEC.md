@@ -153,6 +153,7 @@ The normal CLI entrypoint also accepts filesystem selection flags before the she
 - `gbash --root <dir> ...` mounts `<dir>` read-only at `/home/agent/project` with an in-memory writable overlay
 - `gbash --cwd <dir> ...` sets the initial sandbox working directory
 - `gbash --readwrite-root <dir> ...` mounts `<dir>` as sandbox `/` so writes persist back to the host, but only when `<dir>` is inside the system temp directory
+- `gbash --inherit-env <vars> ...` copies the named host environment variables into the runtime base environment without otherwise widening the default environment surface; the value is a comma-separated list of shell variable names
 - `gbash --copy-script ...` stages the positional host regular file into the sandbox before execution instead of requiring it to already exist in the sandbox namespace
 - `gbash --json ...` emits one JSON object for a non-interactive execution with `stdout`, `stderr`, `exitCode`, truncation flags, timing metadata, and optional trace metadata when tracing is enabled
 - `gbash --server --socket <path>` serves a long-lived JSON-RPC protocol over a Unix domain socket instead of executing a script
@@ -163,7 +164,7 @@ The normal CLI entrypoint also accepts filesystem selection flags before the she
 - when that positional script path is an absolute host path underneath `--root` or `--readwrite-root`, the CLI rewrites it to the corresponding sandbox path before execution instead of reading the host file directly
 - otherwise, the CLI does not read host files directly by positional path unless the caller explicitly opts into staging with `--copy-script`
 
-External test harnesses should use the normal CLI entrypoint together with the filesystem selection flags above. In particular, GNU-style wrapper scripts may invoke `gbash --readwrite-root <tempdir> --cwd <dir> -c 'exec "$@"' _ <utility> ...` so the harness exercises the same shell and runtime path as normal `gbash` execution.
+External test harnesses should use the normal CLI entrypoint together with the filesystem selection flags above. In particular, GNU-style wrapper scripts may invoke `gbash --readwrite-root <tempdir> --cwd <dir> --inherit-env LC_ALL,LC_CTYPE,LANG,LANGUAGE -c 'exec "$@"' _ <utility> ...` so the harness exercises the same shell and runtime path as normal `gbash` execution while still opting into the locale variables those suites require.
 
 That frontend is also exposed as a public `cli` package so shipped binaries can reuse the same flag parsing, version rendering, interactive behavior, JSON result rendering, and runtime setup:
 

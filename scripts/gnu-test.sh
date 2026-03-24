@@ -9,6 +9,7 @@ GNU_RESULTS_DIR=${GNU_RESULTS_DIR:-"$REPO_ROOT/.cache/gnu/results/docker-latest"
 GNU_GBASH_BIN=${GNU_GBASH_BIN:-"$GNU_CACHE_DIR/bin/gbash"}
 GNU_SOURCE_DIR=${GNU_SOURCE_DIR:-/opt/gnu/coreutils-9.10}
 GNU_GBASH_MAX_FILE_BYTES=${GNU_GBASH_MAX_FILE_BYTES:-52428800}
+GNU_GBASH_INHERIT_ENV=${GNU_GBASH_INHERIT_ENV:-LC_ALL,LC_CTYPE,LANG,LANGUAGE}
 
 resolve_repo_path() {
   local path=$1
@@ -95,12 +96,16 @@ write_launcher() {
   local workdir=$1
   local gbash_bin=$2
   local hook_dir=$workdir/build-aux/gbash-harness
+  local inherit_env_arg=""
+  if [[ -n "$GNU_GBASH_INHERIT_ENV" ]]; then
+    inherit_env_arg=" --inherit-env $(shell_quote "$GNU_GBASH_INHERIT_ENV")"
+  fi
   mkdir -p "$hook_dir"
 cat > "$hook_dir/gbash" <<EOF
 #!/bin/sh
 set -eu
 
-exec $(shell_quote "$gbash_bin") --max-file-bytes $(shell_quote "$GNU_GBASH_MAX_FILE_BYTES") "\$@"
+exec $(shell_quote "$gbash_bin") --max-file-bytes $(shell_quote "$GNU_GBASH_MAX_FILE_BYTES")$inherit_env_arg "\$@"
 EOF
   chmod 755 "$hook_dir/gbash"
 }

@@ -93,6 +93,7 @@
     { "pattern": "tests/misc/nice*.sh", "reason": "nice command is out of scope in v1" },
     { "pattern": "tests/stty/*", "reason": "stty command is out of scope in v1" },
     { "pattern": "tests/misc/stty*", "reason": "stty command is out of scope in v1" },
-    { "pattern": "tests/test/test-file.sh", "reason": "symlink traversal in test -ef denied by gbash sandbox" }
+    { "pattern": "tests/test/test-file.sh", "reason": "symlink traversal in test -ef denied by gbash sandbox" },
+    { "pattern": "tests/wc/wc-proc.sh", "reason": "wc proc/sysfs test requires /proc/version and /sys/kernel/profiling, which are not mounted inside the gbash compat sandbox root" }
   ]
 }

@@ -3,9 +3,12 @@ package interp
 import (
 	"errors"
 	"io"
+	stdfs "io/fs"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
 const shellNamedFDStart = 10
@@ -30,6 +33,43 @@ type shellFD struct {
 	closed     bool
 	writeErr   error
 	writeErrMu sync.Mutex
+}
+
+func (fd *shellFD) Stat() (stdfs.FileInfo, error) {
+	if fd == nil {
+		return nil, errors.New("bad file descriptor")
+	}
+	type statter interface {
+		Stat() (stdfs.FileInfo, error)
+	}
+	if statter, ok := fd.reader.(statter); ok {
+		return statter.Stat()
+	}
+	if statter, ok := fd.closer.(statter); ok {
+		return statter.Stat()
+	}
+	return nil, errors.New("bad file descriptor")
+}
+
+func (fd *shellFD) RedirectPath() string {
+	if meta, ok := fd.reader.(commandutil.RedirectMetadata); ok {
+		return meta.RedirectPath()
+	}
+	return ""
+}
+
+func (fd *shellFD) RedirectFlags() int {
+	if meta, ok := fd.reader.(commandutil.RedirectMetadata); ok {
+		return meta.RedirectFlags()
+	}
+	return 0
+}
+
+func (fd *shellFD) RedirectOffset() int64 {
+	if meta, ok := fd.reader.(commandutil.RedirectMetadata); ok {
+		return meta.RedirectOffset()
+	}
+	return 0
 }
 
 func newShellInputFD(reader io.Reader) *shellFD {
