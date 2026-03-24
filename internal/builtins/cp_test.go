@@ -32,6 +32,32 @@ func TestCPSupportsParityFlagsIsolated(t *testing.T) {
 	}
 }
 
+func TestCPSkipModesTreatSameFileAsNoop(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/file.txt\n" +
+			"cp -n /tmp/file.txt /tmp/file.txt\n" +
+			"printf 'no_clobber=%s\\n' \"$?\"\n" +
+			"cp --update=none /tmp/file.txt /tmp/file.txt\n" +
+			"printf 'update_none=%s\\n' \"$?\"\n" +
+			"cat /tmp/file.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "no_clobber=0\nupdate_none=0\npayload\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if strings.Contains(result.Stderr, "same file") {
+		t.Fatalf("Stderr = %q, want no same-file error", result.Stderr)
+	}
+}
+
 func TestCPAcceptsForceFlagForOverwrite(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -328,6 +354,36 @@ func TestCPSymbolicLinkModeNormalizesRelativeTargetsAcrossDirectories(t *testing
 	}
 }
 
+func TestCPSymbolicLinkModeResolvesRelativeTargetsFromRealDestinationDir(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cd /tmp\n" +
+			"echo payload > src.txt\n" +
+			"mkdir -p real/nested\n" +
+			"ln -s real/nested alias\n" +
+			"cp -s src.txt alias/dst.txt\n" +
+			"readlink /tmp/real/nested/dst.txt\n" +
+			"cat /tmp/real/nested/dst.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "../../src.txt\npayload\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCPLinkModesDoNotOverwriteExistingDestinationsWithoutForce(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -465,6 +521,30 @@ func TestCPSupportsUpdateModes(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "cp: not replacing '/tmp/dst-fail.txt'") {
 		t.Fatalf("Stderr = %q, want none-fail message", result.Stderr)
+	}
+}
+
+func TestCPRejectsInvalidEarlierUpdateValue(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/src.txt\n" +
+			"cp --update=bogus --update=older /tmp/src.txt /tmp/dst.txt\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"test -e /tmp/dst.txt && echo dst || echo no-dst\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nno-dst\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: invalid argument \"bogus\" for '--update'") {
+		t.Fatalf("Stderr = %q, want invalid-update error", result.Stderr)
 	}
 }
 

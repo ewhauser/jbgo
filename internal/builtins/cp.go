@@ -147,6 +147,8 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 	if matches == nil {
 		return opts
 	}
+	updateValues := matches.Values("update")
+	updateIndex := 0
 	for _, name := range matches.OptionOrder() {
 		switch name {
 		case "archive":
@@ -182,24 +184,45 @@ func parseCPMatches(matches *ParsedCommand) cpOptions {
 			opts.copyMode = cpCopySymbolicLink
 			opts.symbolicLinkMode = true
 		case "update":
-			opts.updateArg = matches.Value("update")
-			switch opts.updateArg {
-			case "", "older":
-				opts.updateMode = cpUpdateOlder
-			case "all":
-				opts.updateMode = cpUpdateAll
-			case "none":
-				opts.updateMode = cpUpdateNone
-			case "none-fail":
-				opts.updateMode = cpUpdateNoneFail
-			default:
-				opts.updateMode = cpUpdateInvalid
+			updateArg := ""
+			if updateIndex < len(updateValues) {
+				updateArg = updateValues[updateIndex]
+			} else {
+				updateArg = ""
+			}
+			updateIndex++
+			updateMode := cpParseUpdateMode(updateArg)
+			if updateMode == cpUpdateInvalid {
+				if opts.updateMode != cpUpdateInvalid {
+					opts.updateArg = updateArg
+					opts.updateMode = cpUpdateInvalid
+				}
+				continue
+			}
+			if opts.updateMode != cpUpdateInvalid {
+				opts.updateArg = updateArg
+				opts.updateMode = updateMode
 			}
 		case "backup", "attributes-only", "debug", "reflink":
 			// Accepted for forward GNU compatibility; semantics will be filled in incrementally.
 		}
 	}
 	return opts
+}
+
+func cpParseUpdateMode(arg string) cpUpdateMode {
+	switch arg {
+	case "", "older":
+		return cpUpdateOlder
+	case "all":
+		return cpUpdateAll
+	case "none":
+		return cpUpdateNone
+	case "none-fail":
+		return cpUpdateNoneFail
+	default:
+		return cpUpdateInvalid
+	}
 }
 
 func validateCPOptions(inv *Invocation, opts *cpOptions) error {
@@ -324,7 +347,15 @@ func cpCopyResolvedSource(ctx context.Context, inv *Invocation, source, srcAbs s
 		return cpCopyDirectory(ctx, inv, source, srcAbs, srcInfo, destAbs, destInfo, destExists, opts)
 	}
 	destIsSymlink := destInfo != nil && destInfo.Mode()&stdfs.ModeSymlink != 0
-	if cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists) {
+	sameFile := cpSameFile(ctx, inv, srcAbs, srcInfo, destAbs, destInfo, destExists)
+	skip, err := cpShouldSkipExisting(ctx, inv, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, sameFile, opts)
+	if err != nil {
+		return err
+	}
+	if skip {
+		return nil
+	}
+	if sameFile {
 		bypassSameFile := false
 		if opts != nil {
 			switch opts.copyMode {
@@ -345,14 +376,6 @@ func cpCopyResolvedSource(ctx context.Context, inv *Invocation, source, srcAbs s
 			return exitf(inv, 1, "cp: %s and %s are the same file", quoteGNUOperand(source), quoteGNUOperand(path.Base(destAbs)))
 		}
 	}
-	skip, err := cpShouldSkipExisting(ctx, inv, srcInfo, srcLinkInfo != nil, destAbs, destInfo, destExists, opts)
-	if err != nil {
-		return err
-	}
-	if skip {
-		return nil
-	}
-
 	switch opts.copyMode {
 	case cpCopySymbolicLink:
 		if err := cpCreateSymbolicLink(ctx, inv, source, destAbs, opts); err != nil {
@@ -510,7 +533,7 @@ func cpPosixlyCorrect(inv *Invocation) bool {
 	return ok
 }
 
-func cpShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.FileInfo, copyingSymlink bool, destAbs string, destInfo stdfs.FileInfo, destExists bool, opts *cpOptions) (bool, error) {
+func cpShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.FileInfo, copyingSymlink bool, destAbs string, destInfo stdfs.FileInfo, destExists, sameFile bool, opts *cpOptions) (bool, error) {
 	if !destExists {
 		return false, nil
 	}
@@ -528,6 +551,9 @@ func cpShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.Fi
 	case cpUpdateNoneFail:
 		return false, exitf(inv, 1, "cp: not replacing %s", quoteGNUOperand(destAbs))
 	case cpUpdateOlder:
+		if sameFile {
+			return false, nil
+		}
 		effectiveDestInfo := destInfo
 		if !copyingSymlink && destInfo != nil && destInfo.Mode()&stdfs.ModeSymlink != 0 {
 			if resolvedInfo, _, err := statPath(ctx, inv, destAbs); err == nil {
@@ -590,7 +616,11 @@ func cpCreateSymbolicLink(ctx context.Context, inv *Invocation, target, dstAbs s
 	}
 	linkTarget := target
 	if !path.IsAbs(target) {
-		linkTarget = lnRelativeTarget(inv, target, dstAbs)
+		linkPath := dstAbs
+		if resolvedParent, err := inv.FS.Realpath(ctx, path.Dir(dstAbs)); err == nil {
+			linkPath = path.Join(resolvedParent, path.Base(dstAbs))
+		}
+		linkTarget = lnRelativeTarget(inv, target, linkPath)
 	}
 	if info, _, exists, err := lstatMaybe(ctx, inv, dstAbs); err != nil {
 		return err
