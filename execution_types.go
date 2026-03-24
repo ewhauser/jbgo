@@ -10,8 +10,10 @@ import (
 
 // ExecutionRequest describes a single shell execution.
 //
-// Callers usually populate [ExecutionRequest.Script] and optionally provide
-// stdin, environment overrides, or a working directory override.
+// Callers usually populate [ExecutionRequest.Script] directly or set
+// [ExecutionRequest.ScriptPath] to execute a script that already exists in the
+// sandbox filesystem, then optionally provide stdin, environment overrides, or
+// a working directory override.
 type ExecutionRequest struct {
 	Name            string
 	Interpreter     string

@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-22
+Last updated: 2026-03-23
 
 ## 1. Purpose
 
@@ -158,6 +158,7 @@ The normal CLI entrypoint also accepts filesystem selection flags before the she
 - `gbash --server --listen <host:port>` serves the same protocol over an explicit loopback TCP listener instead of executing a script
 - `gbash --session-ttl <duration>` controls how long idle server sessions survive without active work
 - when `--cwd` is omitted, `--root` starts at `/home/agent/project` and `--readwrite-root` starts at `/`
+- when a positional script path is supplied, the CLI resolves and reads it from the configured sandbox filesystem relative to the sandbox working directory; it does not read host files directly unless the caller explicitly mounted them into the sandbox
 
 External test harnesses should use the normal CLI entrypoint together with the filesystem selection flags above. In particular, GNU-style wrapper scripts may invoke `gbash --readwrite-root <tempdir> --cwd <dir> -c 'exec "$@"' _ <utility> ...` so the harness exercises the same shell and runtime path as normal `gbash` execution.
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/trace"
 )
 
@@ -36,6 +37,101 @@ func TestExecScriptPathSetsBashIntrospection(t *testing.T) {
 		"",
 	}, "\n"); got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestExecScriptPathLoadsScriptFromSandboxFile(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/main.sh", []byte(strings.Join([]string{
+		"set -u",
+		`printf 'ZERO:%s\n' "$0"`,
+		`printf 'SRC:%s\n' "${BASH_SOURCE[0]}"`,
+		`printf 'LINE:%s\n' "${BASH_LINENO[0]}"`,
+		"",
+	}, "\n")))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		ScriptPath: "main.sh",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+
+	if got, want := result.Stdout, strings.Join([]string{
+		"ZERO:main.sh",
+		"SRC:main.sh",
+		"LINE:0",
+		"",
+	}, "\n"); got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestExecScriptPathResolvesFromWorkDir(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/work/scripts/child.sh", []byte("echo relative\n"))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		WorkDir:    "/work/scripts",
+		ScriptPath: "child.sh",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.Stdout, "relative\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestExecScriptPathRejectsBinaryFiles(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/binary.sh", []byte("echo one \x00 echo two"))
+
+	_, err := session.Exec(context.Background(), &ExecutionRequest{
+		ScriptPath: "binary.sh",
+	})
+	if err == nil {
+		t.Fatal("Exec() error = nil, want binary-file failure")
+	}
+
+	exitCode, ok := commands.ExitCode(err)
+	if !ok {
+		t.Fatalf("ExitCode(%v) = ok false, want true", err)
+	}
+	if exitCode != 126 {
+		t.Fatalf("exitCode = %d, want 126", exitCode)
+	}
+	if got, want := err.Error(), "binary.sh: binary.sh: cannot execute binary file"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
+
+func TestExecScriptPathMissingFileReturnsSandboxNotFound(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	_, err := session.Exec(context.Background(), &ExecutionRequest{
+		ScriptPath: "missing.sh",
+	})
+	if err == nil {
+		t.Fatal("Exec() error = nil, want missing file failure")
+	}
+
+	exitCode, ok := commands.ExitCode(err)
+	if !ok {
+		t.Fatalf("ExitCode(%v) = ok false, want true", err)
+	}
+	if exitCode != 127 {
+		t.Fatalf("exitCode = %d, want 127", exitCode)
+	}
+	if got, want := err.Error(), "missing.sh: No such file or directory"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
 	}
 }
 

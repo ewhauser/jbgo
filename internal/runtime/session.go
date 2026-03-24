@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"os"
 	"path"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/host"
+	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/internal/shell"
 	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/trace"
@@ -105,12 +107,38 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Name:        baseLogEvent.Name,
 		WorkDir:     baseLogEvent.WorkDir,
 	})
+	script, err := s.loadExecutionScript(ctx, req, workDir, recorder)
+	if err != nil {
+		finished := time.Now().UTC()
+		var events []trace.Event
+		if traceBuffer != nil {
+			events = traceBuffer.Snapshot()
+		}
+		exitCode := 1
+		if code, ok := commands.ExitCode(err); ok {
+			exitCode = code
+		}
+		result := &ExecutionResult{
+			ExitCode:        exitCode,
+			Stdout:          stdout.String(),
+			Stderr:          stderr.String(),
+			StartedAt:       started,
+			FinishedAt:      finished,
+			Duration:        finished.Sub(started),
+			Events:          events,
+			StdoutTruncated: stdout.Truncated(),
+			StderrTruncated: stderr.Truncated(),
+		}
+		logExecutionOutputs(ctx, s.cfg.Logger, &baseLogEvent, result)
+		logExecutionCompletion(ctx, s.cfg.Logger, &baseLogEvent, result, err, false)
+		return result, err
+	}
 	execReq := &shell.Execution{
 		Name:            baseLogEvent.Name,
 		Interpreter:     req.Interpreter,
 		PassthroughArgs: cloneStrings(req.PassthroughArgs),
 		ScriptPath:      req.ScriptPath,
-		Script:          req.Script,
+		Script:          script,
 		Command:         cloneStrings(req.Command),
 		Args:            req.Args,
 		StartupOptions:  req.StartupOptions,
@@ -180,6 +208,30 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		return result, runErr
 	}
 	return result, nil
+}
+
+func (s *Session) loadExecutionScript(ctx context.Context, req *ExecutionRequest, workDir string, recorder trace.Recorder) (string, error) {
+	if req == nil || req.Script != "" || req.ScriptPath == "" {
+		if req == nil {
+			return "", nil
+		}
+		return req.Script, nil
+	}
+
+	inv := commands.NewInvocation(&commands.InvocationOptions{
+		Cwd:        workDir,
+		FileSystem: s.fs,
+		Policy:     s.cfg.Policy,
+		Trace:      recorder,
+	})
+	data, err := inv.FS.ReadFile(ctx, req.ScriptPath)
+	if err != nil {
+		return "", executionScriptLoadError(req.ScriptPath, err)
+	}
+	if err := builtins.ValidateShellScriptFileData(req.ScriptPath, data); err != nil {
+		return "", &commands.ExitError{Code: 126, Err: err}
+	}
+	return string(data), nil
 }
 
 func (s *Session) now() time.Time {
@@ -340,6 +392,54 @@ func validateExecutionRequest(req *ExecutionRequest) error {
 		return errors.New("execution request cannot set both ScriptPath and Command")
 	}
 	return nil
+}
+
+func executionScriptLoadError(scriptPath string, err error) error {
+	if executionScriptLoadIsNotExist(err) {
+		return &commands.ExitError{
+			Code: 127,
+			Err:  fmt.Errorf("%s: No such file or directory", scriptPath),
+		}
+	}
+
+	code := 1
+	if exitCode, ok := commands.ExitCode(err); ok {
+		code = exitCode
+	}
+	return &commands.ExitError{
+		Code: code,
+		Err:  fmt.Errorf("%s: %s", scriptPath, executionScriptLoadErrorText(err)),
+	}
+}
+
+func executionScriptLoadErrorText(err error) string {
+	switch {
+	case executionScriptLoadIsNotExist(err):
+		return "No such file or directory"
+	case executionScriptLoadIsDirectory(err):
+		return "Is a directory"
+	default:
+		return err.Error()
+	}
+}
+
+func executionScriptLoadIsNotExist(err error) bool {
+	return err != nil &&
+		(os.IsNotExist(err) ||
+			errors.Is(err, stdfs.ErrNotExist) ||
+			strings.Contains(strings.ToLower(err.Error()), "no such file or directory") ||
+			strings.Contains(strings.ToLower(err.Error()), "file does not exist"))
+}
+
+func executionScriptLoadIsDirectory(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pathErr *stdfs.PathError
+	if errors.As(err, &pathErr) && errors.Is(pathErr.Err, stdfs.ErrInvalid) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "is a directory")
 }
 
 func executionLogName(req *ExecutionRequest) string {

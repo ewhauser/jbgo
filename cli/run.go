@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 	gbserver "github.com/ewhauser/gbash/server"
@@ -198,6 +199,9 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.
 		if errors.As(err, &parseErr) {
 			return 2, errors.New(parseErr.BashError())
 		}
+		if exitCode, ok := commands.ExitCode(err); ok {
+			return exitCode, err
+		}
 		return 1, fmt.Errorf("runtime error: %w", err)
 	}
 	if result == nil {
@@ -251,6 +255,12 @@ func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, 
 			}
 			return 2, nil
 		}
+		if exitCode, ok := commands.ExitCode(err); ok {
+			if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(exitCode, result, formatCLIError(name, err))); jsonErr != nil {
+				return 1, jsonErr
+			}
+			return exitCode, nil
+		}
 		if jsonErr := writeJSONExecutionResult(stdout, buildJSONExecutionResult(1, result, formatCLIError(name, fmt.Errorf("runtime error: %w", err)))); jsonErr != nil {
 			return 1, jsonErr
 		}
@@ -273,25 +283,14 @@ func loadBashInvocationScript(parsed *builtins.BashInvocation, stdin io.Reader) 
 		parsed = &builtins.BashInvocation{Name: "gbash", Source: builtins.BashSourceStdin}
 	}
 
-	var (
-		readErr     error
-		missingPath string
-	)
+	var readErr error
 	execStdin = stdin
 	switch parsed.Source {
 	case builtins.BashSourceCommandString:
 		script = parsed.CommandString
 	case builtins.BashSourceFile:
-		data, readFileErr := os.ReadFile(parsed.ScriptPath)
-		if readFileErr != nil {
-			readErr = readFileErr
-			missingPath = parsed.ScriptPath
-			break
-		}
-		if validateErr := builtins.ValidateShellScriptFileData(parsed.ScriptPath, data); validateErr != nil {
-			return "", nil, 126, validateErr
-		}
-		script = string(data)
+		// File-backed executions are loaded inside the runtime from the sandbox
+		// filesystem so the CLI never reads host files directly by path.
 	default:
 		var data []byte
 		data, readErr = io.ReadAll(stdin)
@@ -301,9 +300,6 @@ func loadBashInvocationScript(parsed *builtins.BashInvocation, stdin io.Reader) 
 		execStdin = nil
 	}
 	if readErr != nil {
-		if missingPath != "" {
-			return "", nil, 127, fmt.Errorf("%s: No such file or directory", missingPath)
-		}
 		return "", nil, 1, fmt.Errorf("read script: %w", readErr)
 	}
 	return script, execStdin, 0, nil

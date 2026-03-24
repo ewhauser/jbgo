@@ -12,7 +12,7 @@ import (
 func TestRunFileScriptSetsScriptPathIntrospection(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := writeCLIScript(t, strings.Join([]string{
+	rootDir := writeCLIRootScript(t, "main.sh", strings.Join([]string{
 		"set -u",
 		`printf 'ZERO:%s\n' "$0"`,
 		`printf 'SRC:%s\n' "${BASH_SOURCE[0]}"`,
@@ -20,7 +20,7 @@ func TestRunFileScriptSetsScriptPathIntrospection(t *testing.T) {
 		"",
 	}, "\n"))
 
-	exitCode, stdout, stderr, err := runCLI(t, []string{scriptPath}, "")
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--root", rootDir, "main.sh"}, "")
 	if err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
@@ -31,8 +31,8 @@ func TestRunFileScriptSetsScriptPathIntrospection(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", got)
 	}
 	if got, want := stdout, strings.Join([]string{
-		"ZERO:" + scriptPath,
-		"SRC:" + scriptPath,
+		"ZERO:main.sh",
+		"SRC:main.sh",
 		"LINE:0",
 		"",
 	}, "\n"); got != want {
@@ -43,14 +43,14 @@ func TestRunFileScriptSetsScriptPathIntrospection(t *testing.T) {
 func TestRunJSONFileScriptSetsScriptPathIntrospection(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := writeCLIScript(t, strings.Join([]string{
+	rootDir := writeCLIRootScript(t, "main.sh", strings.Join([]string{
 		"set -u",
 		`printf 'ZERO:%s\n' "$0"`,
 		`printf 'SRC:%s\n' "${BASH_SOURCE[0]}"`,
 		"",
 	}, "\n"))
 
-	exitCode, stdout, stderr, err := runCLI(t, []string{"--json", scriptPath}, "")
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--root", rootDir, "--json", "main.sh"}, "")
 	if err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
@@ -69,8 +69,8 @@ func TestRunJSONFileScriptSetsScriptPathIntrospection(t *testing.T) {
 		t.Fatalf("payload.ExitCode = %d, want 0", payload.ExitCode)
 	}
 	if got, want := payload.Stdout, strings.Join([]string{
-		"ZERO:" + scriptPath,
-		"SRC:" + scriptPath,
+		"ZERO:main.sh",
+		"SRC:main.sh",
 		"",
 	}, "\n"); got != want {
 		t.Fatalf("payload.Stdout = %q, want %q", got, want)
@@ -80,12 +80,9 @@ func TestRunJSONFileScriptSetsScriptPathIntrospection(t *testing.T) {
 func TestRunFileScriptRejectsNULBytes(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := filepath.Join(t.TempDir(), "nul-script.sh")
-	if err := os.WriteFile(scriptPath, []byte("echo one \x00 echo two"), 0o755); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
-	}
+	rootDir := writeCLIRootFile(t, "nul-script.sh", []byte("echo one \x00 echo two"))
 
-	exitCode, stdout, stderr, err := runCLI(t, []string{scriptPath}, "")
+	exitCode, stdout, stderr, err := runCLI(t, []string{"--root", rootDir, "nul-script.sh"}, "")
 	if err == nil {
 		t.Fatal("run() error = nil, want file execution failure")
 	}
@@ -95,11 +92,34 @@ func TestRunFileScriptRejectsNULBytes(t *testing.T) {
 	if got, want := stdout, ""; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
-	if got, want := err.Error(), scriptPath+": "+scriptPath+": cannot execute binary file"; got != want {
+	if got, want := err.Error(), "nul-script.sh: nul-script.sh: cannot execute binary file"; got != want {
 		t.Fatalf("error = %q, want %q", got, want)
 	}
 	if got, want := stderr, ""; got != want {
 		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRunFileScriptDoesNotReadHostPathByDefault(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := writeCLIScript(t, "echo host-only\n")
+
+	exitCode, stdout, stderr, err := runCLI(t, []string{scriptPath}, "")
+	if err == nil {
+		t.Fatal("run() error = nil, want missing sandbox file error")
+	}
+	if exitCode != 127 {
+		t.Fatalf("exitCode = %d, want 127", exitCode)
+	}
+	if got, want := stdout, ""; got != want {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if got, want := stderr, ""; got != want {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if got, want := err.Error(), scriptPath+": No such file or directory"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
 	}
 }
 
@@ -160,4 +180,24 @@ func writeCLIScript(t *testing.T, contents string) string {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
 	return path
+}
+
+func writeCLIRootScript(t *testing.T, name, contents string) string {
+	t.Helper()
+
+	return writeCLIRootFile(t, name, []byte(contents))
+}
+
+func writeCLIRootFile(t *testing.T, name string, data []byte) string {
+	t.Helper()
+
+	root := t.TempDir()
+	path := filepath.Join(root, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+	return root
 }
