@@ -331,7 +331,7 @@ func exprCompare(left, right exprValue, op string) (exprValue, error) {
 }
 
 func exprRegexMatch(left, right exprValue) (exprValue, error) {
-	re, err := regexp.Compile("^" + translateBasicRegexp(right.text))
+	re, err := regexp.CompilePOSIX("^" + translateBasicRegexp(right.text))
 	if err != nil {
 		return exprValue{}, fmt.Errorf("invalid regular expression")
 	}
