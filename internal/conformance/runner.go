@@ -667,6 +667,7 @@ func reorderBadFDTriplet(first, second, third string) (missing, badFD string, ok
 			}
 			badFDIndex = i
 		case strings.Contains(line, ": No such file or directory"):
+			line = normalizeBadFDMissingLine(line)
 			key := canonicalBadFDMissingLine(line)
 			missingCounts[key]++
 			if best := missingLines[key]; len(line) > len(best) {
@@ -685,6 +686,20 @@ func reorderBadFDTriplet(first, second, third string) (missing, badFD string, ok
 		}
 	}
 	return "", "", false
+}
+
+func normalizeBadFDMissingLine(line string) string {
+	for {
+		prefix, rest, ok := strings.Cut(line, ": ")
+		if !ok || prefix == "" || rest == "" {
+			return line
+		}
+		nextPrefix, nextRest, ok := strings.Cut(rest, ": ")
+		if !ok || nextPrefix != prefix || !strings.Contains(nextRest, ": No such file or directory") {
+			return line
+		}
+		line = prefix + ": " + nextRest
+	}
 }
 
 func canonicalBadFDMissingLine(line string) string {
