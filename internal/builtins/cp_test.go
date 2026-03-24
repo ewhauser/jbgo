@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ewhauser/gbash/policy"
 )
@@ -132,22 +133,16 @@ func TestCPSymlinkCopyOverwritesExistingDestinationByDefault(t *testing.T) {
 	}
 }
 
-func TestCPRejectsUnsupportedLinkModes(t *testing.T) {
+func TestCPSupportsHardLinkModeAndSameFileNoop(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
 
 	result, err := rt.Run(context.Background(), &ExecutionRequest{
 		Script: "echo new > /tmp/src.txt\n" +
-			"echo old > /tmp/dst.txt\n" +
-			"cp -l /tmp/src.txt /tmp/dst.txt\n" +
-			"printf 'hard=%s\\n' \"$?\"\n" +
-			"cat /tmp/dst.txt\n" +
-			"cp -s /tmp/src.txt /tmp/dst.txt\n" +
-			"printf 'sym=%s\\n' \"$?\"\n" +
-			"cat /tmp/dst.txt\n" +
-			"cp --update=older /tmp/src.txt /tmp/dst.txt\n" +
-			"printf 'update=%s\\n' \"$?\"\n" +
-			"cat /tmp/dst.txt\n",
+			"cp -l /tmp/src.txt /tmp/hard.txt\n" +
+			"cp -l /tmp/src.txt /tmp/src.txt\n" +
+			"printf 'same=%s\\n' \"$?\"\n" +
+			"stat -c '%d:%i' /tmp/src.txt /tmp/hard.txt\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -155,16 +150,100 @@ func TestCPRejectsUnsupportedLinkModes(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "hard=1\nold\nsym=1\nold\nupdate=1\nold\n"; got != want {
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("Stdout lines = %q, want 3 lines", result.Stdout)
+	}
+	if got, want := lines[0], "same=0"; got != want {
+		t.Fatalf("same-file status = %q, want %q", got, want)
+	}
+	if lines[1] != lines[2] {
+		t.Fatalf("hard-link inode lines = %q and %q, want equal", lines[1], lines[2])
+	}
+}
+
+func TestCPSupportsSymbolicLinkMode(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo new > /tmp/src.txt\n" +
+			"cp -s /tmp/src.txt /tmp/dst.txt\n" +
+			"test -L /tmp/dst.txt && echo symlink || echo regular\n" +
+			"readlink /tmp/dst.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "symlink\n/tmp/src.txt\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if !strings.Contains(result.Stderr, "cp: --link is not yet supported") {
-		t.Fatalf("Stderr = %q, want hard-link rejection", result.Stderr)
+}
+
+func TestCPSupportsUpdateModes(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	type fileSpec struct {
+		path    string
+		content string
+		mtime   time.Time
 	}
-	if !strings.Contains(result.Stderr, "cp: --symbolic-link is not yet supported") {
-		t.Fatalf("Stderr = %q, want symbolic-link rejection", result.Stderr)
+
+	base := time.Unix(1_700_000_000, 0).UTC()
+	files := []fileSpec{
+		{path: "/tmp/src-none.txt", content: "fresh-none\n", mtime: base.Add(4 * time.Hour)},
+		{path: "/tmp/dst-none.txt", content: "keep-none\n", mtime: base},
+		{path: "/tmp/src-fail.txt", content: "fresh-fail\n", mtime: base.Add(4 * time.Hour)},
+		{path: "/tmp/dst-fail.txt", content: "keep-fail\n", mtime: base},
+		{path: "/tmp/src-all.txt", content: "fresh-all\n", mtime: base.Add(4 * time.Hour)},
+		{path: "/tmp/dst-all.txt", content: "stale-all\n", mtime: base},
+		{path: "/tmp/src-older.txt", content: "fresh-older\n", mtime: base.Add(4 * time.Hour)},
+		{path: "/tmp/dst-older.txt", content: "stale-older\n", mtime: base},
+		{path: "/tmp/src-short.txt", content: "old-short\n", mtime: base},
+		{path: "/tmp/dst-short.txt", content: "keep-short\n", mtime: base.Add(4 * time.Hour)},
 	}
-	if !strings.Contains(result.Stderr, "cp: --update is not yet supported") {
-		t.Fatalf("Stderr = %q, want update rejection", result.Stderr)
+	for _, file := range files {
+		writeSessionFile(t, session, file.path, []byte(file.content))
+		if err := session.FileSystem().Chtimes(context.Background(), file.path, file.mtime, file.mtime); err != nil {
+			t.Fatalf("Chtimes(%q) error = %v", file.path, err)
+		}
+	}
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"cp --update=none /tmp/src-none.txt /tmp/dst-none.txt",
+		"cat /tmp/dst-none.txt",
+		"cp --update=none-fail /tmp/src-fail.txt /tmp/dst-fail.txt",
+		"printf 'none_fail=%s\\n' \"$?\"",
+		"cat /tmp/dst-fail.txt",
+		"cp --update=all /tmp/src-all.txt /tmp/dst-all.txt",
+		"cat /tmp/dst-all.txt",
+		"cp --update=older /tmp/src-older.txt /tmp/dst-older.txt",
+		"cat /tmp/dst-older.txt",
+		"cp -u /tmp/src-short.txt /tmp/dst-short.txt",
+		"cat /tmp/dst-short.txt",
+		"",
+	}, "\n"))
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	if got, want := result.Stdout, strings.Join([]string{
+		"keep-none",
+		"none_fail=1",
+		"keep-fail",
+		"fresh-all",
+		"fresh-older",
+		"keep-short",
+		"",
+	}, "\n"); got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: not replacing '/tmp/dst-fail.txt'") {
+		t.Fatalf("Stderr = %q, want none-fail message", result.Stderr)
 	}
 }
