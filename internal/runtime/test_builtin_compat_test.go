@@ -38,7 +38,11 @@ func TestShellClassicTestMatchesBashClassicAmbiguities(t *testing.T) {
 			"test \\( x -o \\( y \\) \\)\n"+
 			"printf 'test-nested-or=%s\\n' \"$?\"\n"+
 			"[ \\( x -o \\( y \\) \\) ]\n"+
-			"printf 'bracket-nested-or=%s\\n' \"$?\"\n",
+			"printf 'bracket-nested-or=%s\\n' \"$?\"\n"+
+			"test \\( x -a \\( y -a \\( z \\) \\) \\)\n"+
+			"printf 'test-deep-nested-and=%s\\n' \"$?\"\n"+
+			"[ \\( x -a \\( y -a \\( z \\) \\) \\) ]\n"+
+			"printf 'bracket-deep-nested-and=%s\\n' \"$?\"\n",
 	)
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
@@ -59,7 +63,9 @@ func TestShellClassicTestMatchesBashClassicAmbiguities(t *testing.T) {
 		"test-nested-and=0\n"+
 		"bracket-nested-and=0\n"+
 		"test-nested-or=0\n"+
-		"bracket-nested-or=0\n"; got != want {
+		"bracket-nested-or=0\n"+
+		"test-deep-nested-and=0\n"+
+		"bracket-deep-nested-and=0\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 	if got := result.Stderr; got != ""+

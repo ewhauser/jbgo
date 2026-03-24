@@ -34,6 +34,12 @@ printf 'test-nested-or:%s\n' "$?"
 [ \( x -o \( y \) \) ]
 printf 'bracket-nested-or:%s\n' "$?"
 
+test \( x -a \( y -a \( z \) \) \)
+printf 'test-deep-nested-and:%s\n' "$?"
+
+[ \( x -a \( y -a \( z \) \) \) ]
+printf 'bracket-deep-nested-and:%s\n' "$?"
+
 test \( \( x \) \)
 printf 'test-nested-word:%s\n' "$?"
 

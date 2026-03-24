@@ -40,6 +40,11 @@ func TestParseTestClassicDisambiguation(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "deeply nested grouped bool expression still parses",
+			args: []string{"(", "x", "-a", "(", "y", "-a", "(", "z", ")", ")", ")"},
+			want: true,
+		},
+		{
 			name:    "empty grouped expression is rejected",
 			args:    []string{"x", "-a", "(", ")"},
 			wantErr: true,

@@ -229,15 +229,19 @@ func (p *testRPNParser) parsePrimary(args []string, pos int) ([]testSymbol, int,
 	}
 	if args[pos] == "(" {
 		depth := 1
+		groupStarts := []int{pos}
 		end := pos + 1
 		for end < len(args) && depth > 0 {
 			switch args[end] {
 			case "(":
-				if p.parenStartsNestedGroup(args, pos, end) {
+				currentGroupStart := groupStarts[len(groupStarts)-1]
+				if p.parenStartsNestedGroup(args, currentGroupStart, end) {
 					depth++
+					groupStarts = append(groupStarts, end)
 				}
 			case ")":
 				depth--
+				groupStarts = groupStarts[:len(groupStarts)-1]
 			}
 			end++
 		}
