@@ -319,11 +319,6 @@ func readWriteRootBaseEnv() map[string]string {
 			env[key] = value
 		}
 	}
-	for _, key := range []string{"LANG", "LANGUAGE", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES", "LC_NUMERIC", "LC_TIME"} {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			env[key] = value
-		}
-	}
 	return env
 }
 

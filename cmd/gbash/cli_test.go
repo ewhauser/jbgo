@@ -244,6 +244,7 @@ func TestRunCLIReadWriteRootPreservesLocaleForExecedExpr(t *testing.T) {
 
 	exitCode, err := runCLI(context.Background(), []string{
 		"--readwrite-root", root,
+		"--inherit-env", "LC_ALL",
 		"-c", "exec expr length αbcdef",
 	}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
