@@ -17,6 +17,7 @@ import (
 
 	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/cli"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type cliJSONTiming struct {
@@ -111,7 +112,7 @@ func TestRunCLIHelpRendersFilesystemFlags(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR", "--copy-script", "CLI output options:", "--json"} {
+	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR", "--copy-script", "--max-file-bytes N", "CLI output options:", "--json"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want help to contain %q", stdout.String(), want)
 		}
@@ -467,6 +468,117 @@ func TestRunCLIReadWriteRootPersistsHostWritesAcrossExecutions(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("read stderr = %q, want empty", got)
+	}
+}
+
+func TestRunCLIMaxFileBytesFlagLimitsReadWriteRootFileReads(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "input.txt"), []byte("abcd"), 0o644); err != nil {
+		t.Fatalf("WriteFile(input.txt) error = %v", err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), []string{"--readwrite-root", tmp, "--cwd", "/", "--max-file-bytes", "3", "-c", "cat /input.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if got, want := exitCode, 1; got != want {
+		t.Fatalf("exitCode = %d, want %d; stdout=%q stderr=%q", got, want, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if got, want := stderr.String(), "cat: /input.txt: file too large (4 bytes, max 3)\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRunCLIMaxFileBytesFlagLimitsStdinReads(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), []string{"--max-file-bytes", "3", "-c", "grep a"}, strings.NewReader("abcd"), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if got, want := exitCode, 1; got != want {
+		t.Fatalf("exitCode = %d, want %d; stdout=%q stderr=%q", got, want, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if got, want := stderr.String(), "input exceeds maximum file size of 3 bytes\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRunCLIMaxFileBytesFlagMergesExistingLimitOverrides(t *testing.T) {
+	t.Parallel()
+
+	cfg := newCLIConfig()
+	cfg.BaseOptions = []gbash.Option{
+		gbash.WithLimitOverrides(policy.Limits{MaxStdoutBytes: 3}),
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLIWithConfig(context.Background(), cfg, []string{"--json", "--max-file-bytes", "3", "-c", "printf abcd"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLIWithConfig() error = %v", err)
+	}
+	if got, want := exitCode, 0; got != want {
+		t.Fatalf("exitCode = %d, want %d; stdout=%q stderr=%q", got, want, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+
+	payload := mustParseCLIJSONResult(t, stdout.String())
+	if got, want := payload.Stdout, "abc"; got != want {
+		t.Fatalf("payload stdout = %q, want %q", got, want)
+	}
+	if !payload.StdoutTruncated {
+		t.Fatalf("payload stdoutTruncated = %t, want true", payload.StdoutTruncated)
+	}
+}
+
+func TestRunCLIMaxFileBytesFlagOverridesBaseOptionsHostFileCap(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "input.txt"), []byte("abcd"), 0o644); err != nil {
+		t.Fatalf("WriteFile(input.txt) error = %v", err)
+	}
+
+	cfg := newCLIConfig()
+	cfg.BaseOptions = []gbash.Option{
+		gbash.WithFileSystem(gbash.HostDirectoryFileSystem(root, gbash.HostDirectoryOptions{
+			MaxFileReadBytes: 3,
+		})),
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLIWithConfig(context.Background(), cfg, []string{"--max-file-bytes", "4", "-c", "cat input.txt"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLIWithConfig() error = %v", err)
+	}
+	if got, want := exitCode, 0; got != want {
+		t.Fatalf("exitCode = %d, want %d; stdout=%q stderr=%q", got, want, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "abcd"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
 

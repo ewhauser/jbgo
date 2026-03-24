@@ -24,6 +24,9 @@ func WithConfig(cfg *Config) Option {
 		if cfg.Policy != nil {
 			target.Policy = cfg.Policy
 		}
+		if cfg.LimitOverrides != (policy.Limits{}) {
+			target.LimitOverrides = mergedLimits(target.LimitOverrides, cfg.LimitOverrides)
+		}
 		if cfg.BaseEnv != nil {
 			target.BaseEnv = cfg.BaseEnv
 		}

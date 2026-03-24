@@ -85,6 +85,11 @@ type Config struct {
 	// When nil, the default static policy is used.
 	Policy policy.Policy
 
+	// LimitOverrides overrides selected runtime limits without replacing the
+	// active policy. Zero-valued fields leave the underlying policy/defaults
+	// unchanged.
+	LimitOverrides policy.Limits
+
 	// BaseEnv provides the base environment visible to each execution before any
 	// per-request environment overrides are applied.
 	BaseEnv map[string]string
@@ -250,15 +255,16 @@ func (cfg *Config) runtimeConfig() *internalruntime.Config {
 		return &internalruntime.Config{}
 	}
 	return &internalruntime.Config{
-		FileSystem:    cfg.FileSystem.runtimeConfig(),
-		Registry:      cfg.Registry,
-		Policy:        cfg.Policy,
-		BaseEnv:       copyStringMap(cfg.BaseEnv),
-		Host:          cfg.Host,
-		Network:       cfg.networkConfig(),
-		NetworkClient: cfg.NetworkClient,
-		Tracing:       cfg.Tracing,
-		Logger:        cfg.Logger,
+		FileSystem:     cfg.FileSystem.runtimeConfig(),
+		Registry:       cfg.Registry,
+		Policy:         cfg.Policy,
+		LimitOverrides: cfg.LimitOverrides,
+		BaseEnv:        copyStringMap(cfg.BaseEnv),
+		Host:           cfg.Host,
+		Network:        cfg.networkConfig(),
+		NetworkClient:  cfg.NetworkClient,
+		Tracing:        cfg.Tracing,
+		Logger:         cfg.Logger,
 	}
 }
 
@@ -281,6 +287,22 @@ func (cfg FileSystemConfig) runtimeConfig() internalruntime.FileSystemConfig {
 		Factory:    cfg.Factory,
 		WorkingDir: cfg.WorkingDir,
 	}
+}
+
+type maxFileReadBytesOverrider interface {
+	WithMaxFileReadBytes(maxBytes int64) gbfs.Factory
+}
+
+func overrideMaxFileReadBytes(cfg FileSystemConfig, maxBytes int64) (FileSystemConfig, bool) {
+	if maxBytes <= 0 || cfg.Factory == nil {
+		return cfg, false
+	}
+	overrider, ok := cfg.Factory.(maxFileReadBytesOverrider)
+	if !ok {
+		return cfg, false
+	}
+	cfg.Factory = overrider.WithMaxFileReadBytes(maxBytes)
+	return cfg, true
 }
 
 func copyStringMap(src map[string]string) map[string]string {
@@ -347,6 +369,25 @@ func MountableFileSystem(opts MountableFileSystemOptions) FileSystemConfig {
 	}
 }
 
+type hostDirectoryFactory struct {
+	root             string
+	mountPoint       string
+	maxFileReadBytes int64
+}
+
+func (f hostDirectoryFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
+	return gbfs.Overlay(gbfs.Host(gbfs.HostOptions{
+		Root:             f.root,
+		VirtualRoot:      f.mountPoint,
+		MaxFileReadBytes: f.maxFileReadBytes,
+	})).New(ctx)
+}
+
+func (f hostDirectoryFactory) WithMaxFileReadBytes(maxBytes int64) gbfs.Factory {
+	f.maxFileReadBytes = maxBytes
+	return f
+}
+
 // HostDirectoryFileSystem mounts a real host directory into the sandbox under a
 // writable in-memory overlay.
 //
@@ -359,13 +400,30 @@ func HostDirectoryFileSystem(root string, opts HostDirectoryOptions) FileSystemC
 		mountPoint = DefaultWorkspaceMountPoint
 	}
 	return FileSystemConfig{
-		Factory: gbfs.Overlay(gbfs.Host(gbfs.HostOptions{
-			Root:             root,
-			VirtualRoot:      mountPoint,
-			MaxFileReadBytes: opts.MaxFileReadBytes,
-		})),
+		Factory: hostDirectoryFactory{
+			root:             root,
+			mountPoint:       mountPoint,
+			maxFileReadBytes: opts.MaxFileReadBytes,
+		},
 		WorkingDir: mountPoint,
 	}
+}
+
+type readWriteDirectoryFactory struct {
+	root             string
+	maxFileReadBytes int64
+}
+
+func (f readWriteDirectoryFactory) New(ctx context.Context) (gbfs.FileSystem, error) {
+	return gbfs.ReadWrite(gbfs.ReadWriteOptions{
+		Root:             f.root,
+		MaxFileReadBytes: f.maxFileReadBytes,
+	}).New(ctx)
+}
+
+func (f readWriteDirectoryFactory) WithMaxFileReadBytes(maxBytes int64) gbfs.Factory {
+	f.maxFileReadBytes = maxBytes
+	return f
 }
 
 // ReadWriteDirectoryFileSystem mounts a real host directory as the mutable
@@ -376,10 +434,10 @@ func HostDirectoryFileSystem(root string, opts HostDirectoryOptions) FileSystemC
 // to the host directory.
 func ReadWriteDirectoryFileSystem(root string, opts ReadWriteDirectoryOptions) FileSystemConfig {
 	return FileSystemConfig{
-		Factory: gbfs.ReadWrite(gbfs.ReadWriteOptions{
-			Root:             root,
-			MaxFileReadBytes: opts.MaxFileReadBytes,
-		}),
+		Factory: readWriteDirectoryFactory{
+			root:             root,
+			maxFileReadBytes: opts.MaxFileReadBytes,
+		},
 		WorkingDir: "/",
 	}
 }

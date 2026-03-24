@@ -8,6 +8,7 @@ GNU_CACHE_DIR=${GNU_CACHE_DIR:-"$REPO_ROOT/.cache/gnu"}
 GNU_RESULTS_DIR=${GNU_RESULTS_DIR:-"$REPO_ROOT/.cache/gnu/results/docker-latest"}
 GNU_GBASH_BIN=${GNU_GBASH_BIN:-"$GNU_CACHE_DIR/bin/gbash"}
 GNU_SOURCE_DIR=${GNU_SOURCE_DIR:-/opt/gnu/coreutils-9.10}
+GNU_GBASH_MAX_FILE_BYTES=${GNU_GBASH_MAX_FILE_BYTES:-52428800}
 
 resolve_repo_path() {
   local path=$1
@@ -95,11 +96,11 @@ write_launcher() {
   local gbash_bin=$2
   local hook_dir=$workdir/build-aux/gbash-harness
   mkdir -p "$hook_dir"
-  cat > "$hook_dir/gbash" <<EOF
+cat > "$hook_dir/gbash" <<EOF
 #!/bin/sh
 set -eu
 
-exec $(shell_quote "$gbash_bin") "\$@"
+exec $(shell_quote "$gbash_bin") --max-file-bytes $(shell_quote "$GNU_GBASH_MAX_FILE_BYTES") "\$@"
 EOF
   chmod 755 "$hook_dir/gbash"
 }

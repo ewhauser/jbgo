@@ -17,15 +17,16 @@ import (
 )
 
 type Config struct {
-	FileSystem    FileSystemConfig
-	Registry      commands.CommandRegistry
-	Policy        policy.Policy
-	BaseEnv       map[string]string
-	Host          host.Adapter
-	Network       *network.Config
-	NetworkClient network.Client
-	Tracing       TraceConfig
-	Logger        LogCallback
+	FileSystem     FileSystemConfig
+	Registry       commands.CommandRegistry
+	Policy         policy.Policy
+	LimitOverrides policy.Limits
+	BaseEnv        map[string]string
+	Host           host.Adapter
+	Network        *network.Config
+	NetworkClient  network.Client
+	Tracing        TraceConfig
+	Logger         LogCallback
 }
 
 type Runtime struct {
@@ -67,22 +68,28 @@ func New(opts ...Option) (*Runtime, error) {
 			return nil, err
 		}
 	}
+	defaultLimits := mergedLimits(policy.Limits{
+		MaxCommandCount:      10000,
+		MaxGlobOperations:    100000,
+		MaxLoopIterations:    10000,
+		MaxSubstitutionDepth: 50,
+		MaxStdoutBytes:       1 << 20,
+		MaxStderrBytes:       1 << 20,
+		MaxFileBytes:         8 << 20,
+	}, resolved.LimitOverrides)
 	if resolved.Policy == nil {
 		resolved.Policy = policy.NewStatic(&policy.Config{
 			AllowedCommands: resolved.Registry.Names(),
 			ReadRoots:       []string{"/"},
 			WriteRoots:      []string{"/"},
-			Limits: policy.Limits{
-				MaxCommandCount:      10000,
-				MaxGlobOperations:    100000,
-				MaxLoopIterations:    10000,
-				MaxSubstitutionDepth: 50,
-				MaxStdoutBytes:       1 << 20,
-				MaxStderrBytes:       1 << 20,
-				MaxFileBytes:         8 << 20,
-			},
-			SymlinkMode: policy.SymlinkDeny,
+			Limits:          defaultLimits,
+			SymlinkMode:     policy.SymlinkDeny,
 		})
+	} else if resolved.LimitOverrides != (policy.Limits{}) {
+		resolved.Policy = limitOverridePolicy{
+			base:   resolved.Policy,
+			limits: mergedLimits(resolved.Policy.Limits(), resolved.LimitOverrides),
+		}
 	}
 	if resolved.Host == nil {
 		resolved.Host = newVirtualHost()
@@ -107,6 +114,56 @@ func New(opts ...Option) (*Runtime, error) {
 		cfg:            resolved,
 		sessionFactory: factory,
 	}, nil
+}
+
+type limitOverridePolicy struct {
+	base   policy.Policy
+	limits policy.Limits
+}
+
+func (p limitOverridePolicy) AllowCommand(ctx context.Context, name string, argv []string) error {
+	return p.base.AllowCommand(ctx, name, argv)
+}
+
+func (p limitOverridePolicy) AllowBuiltin(ctx context.Context, name string, argv []string) error {
+	return p.base.AllowBuiltin(ctx, name, argv)
+}
+
+func (p limitOverridePolicy) AllowPath(ctx context.Context, action policy.FileAction, target string) error {
+	return p.base.AllowPath(ctx, action, target)
+}
+
+func (p limitOverridePolicy) Limits() policy.Limits {
+	return p.limits
+}
+
+func (p limitOverridePolicy) SymlinkMode() policy.SymlinkMode {
+	return p.base.SymlinkMode()
+}
+
+func mergedLimits(base, overrides policy.Limits) policy.Limits {
+	if overrides.MaxCommandCount != 0 {
+		base.MaxCommandCount = overrides.MaxCommandCount
+	}
+	if overrides.MaxGlobOperations != 0 {
+		base.MaxGlobOperations = overrides.MaxGlobOperations
+	}
+	if overrides.MaxLoopIterations != 0 {
+		base.MaxLoopIterations = overrides.MaxLoopIterations
+	}
+	if overrides.MaxSubstitutionDepth != 0 {
+		base.MaxSubstitutionDepth = overrides.MaxSubstitutionDepth
+	}
+	if overrides.MaxStdoutBytes != 0 {
+		base.MaxStdoutBytes = overrides.MaxStdoutBytes
+	}
+	if overrides.MaxStderrBytes != 0 {
+		base.MaxStderrBytes = overrides.MaxStderrBytes
+	}
+	if overrides.MaxFileBytes != 0 {
+		base.MaxFileBytes = overrides.MaxFileBytes
+	}
+	return base
 }
 
 func (r *Runtime) NewSession(ctx context.Context) (*Session, error) {

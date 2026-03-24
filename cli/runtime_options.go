@@ -6,11 +6,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/internal/builtins"
+	"github.com/ewhauser/gbash/policy"
 )
 
 type runtimeOptions struct {
@@ -18,6 +20,7 @@ type runtimeOptions struct {
 	readWriteRoot string
 	copyScript    bool
 	cwd           string
+	maxFileBytes  int64
 	json          bool
 	server        bool
 	socket        string
@@ -64,6 +67,22 @@ func parseRuntimeOptions(args []string) (runtimeOptions, []string, error) {
 			opts.cwd = args[i]
 		case strings.HasPrefix(arg, "--cwd="):
 			opts.cwd = strings.TrimPrefix(arg, "--cwd=")
+		case arg == "--max-file-bytes":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("--max-file-bytes requires a byte count")
+			}
+			i++
+			value, err := parseMaxFileBytes(args[i])
+			if err != nil {
+				return opts, nil, err
+			}
+			opts.maxFileBytes = value
+		case strings.HasPrefix(arg, "--max-file-bytes="):
+			value, err := parseMaxFileBytes(strings.TrimPrefix(arg, "--max-file-bytes="))
+			if err != nil {
+				return opts, nil, err
+			}
+			opts.maxFileBytes = value
 		case arg == "--json":
 			opts.json = true
 		case arg == "--server":
@@ -130,6 +149,17 @@ func bashInvocationValueCount(arg string) int {
 	return count
 }
 
+func parseMaxFileBytes(value string) (int64, error) {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse --max-file-bytes: %w", err)
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("--max-file-bytes must be a positive integer")
+	}
+	return parsed, nil
+}
+
 func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 	if opts == nil {
 		return nil, nil
@@ -141,14 +171,16 @@ func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 		return nil, fmt.Errorf("--root and --readwrite-root are mutually exclusive")
 	}
 
-	runtimeOpts := make([]gbash.Option, 0, 3)
+	runtimeOpts := make([]gbash.Option, 0, 4)
 	switch {
 	case rootValue != "":
 		root, err := filepath.Abs(rootValue)
 		if err != nil {
 			return nil, fmt.Errorf("resolve --root: %w", err)
 		}
-		runtimeOpts = append(runtimeOpts, gbash.WithFileSystem(gbash.HostDirectoryFileSystem(root, gbash.HostDirectoryOptions{})))
+		runtimeOpts = append(runtimeOpts, gbash.WithFileSystem(gbash.HostDirectoryFileSystem(root, gbash.HostDirectoryOptions{
+			MaxFileReadBytes: opts.maxFileBytes,
+		})))
 		if cwdValue == "" {
 			cwdValue = gbash.DefaultWorkspaceMountPoint
 		}
@@ -161,7 +193,9 @@ func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 			return nil, err
 		}
 		runtimeOpts = append(runtimeOpts,
-			gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(root, gbash.ReadWriteDirectoryOptions{})),
+			gbash.WithFileSystem(gbash.ReadWriteDirectoryFileSystem(root, gbash.ReadWriteDirectoryOptions{
+				MaxFileReadBytes: opts.maxFileBytes,
+			})),
 			gbash.WithBaseEnv(readWriteRootBaseEnv()),
 		)
 		if cwdValue == "" {
@@ -331,6 +365,11 @@ func newRuntime(cfg Config, opts *runtimeOptions) (*gbash.Runtime, error) {
 	}
 	allOpts := append([]gbash.Option(nil), cfg.BaseOptions...)
 	allOpts = append(allOpts, runtimeOpts...)
+	if opts != nil && opts.maxFileBytes > 0 {
+		allOpts = append(allOpts, gbash.WithLimitOverrides(policy.Limits{
+			MaxFileBytes: opts.maxFileBytes,
+		}))
+	}
 	return gbash.New(allOpts...)
 }
 
@@ -348,6 +387,7 @@ func renderHelp(w io.Writer, name string) error {
 		"  --cwd DIR             set the initial sandbox working directory\n"+
 		"  --readwrite-root DIR  mount DIR as sandbox / with writes persisted back to the host filesystem\n"+
 		"  --copy-script         copy the positional host script into the sandbox before execution\n"+
+		"  --max-file-bytes N    override the sandbox file-size/read-size limit in bytes\n"+
 		"\nCLI output options:\n"+
 		"  --json                emit one JSON result object for a non-interactive execution\n"+
 		"\nCLI server options:\n"+
