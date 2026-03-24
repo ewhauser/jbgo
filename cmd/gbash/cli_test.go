@@ -231,6 +231,31 @@ func TestRunCLIJSONOutputRejectsInteractiveShell(t *testing.T) {
 	}
 }
 
+func TestRunCLIReadWriteRootPreservesLocaleForExecedExpr(t *testing.T) {
+	t.Setenv("LC_ALL", "fr_FR.UTF-8")
+
+	root := t.TempDir()
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), []string{
+		"--readwrite-root", root,
+		"-c", "exec expr length αbcdef",
+	}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "6\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestRunCLIServerRequiresTransport(t *testing.T) {
 	t.Parallel()
 	var stdout strings.Builder
