@@ -279,25 +279,19 @@ func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string
 }
 
 func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
-	if opts.interactive == rmInteractiveAlways {
-		entries, err := inv.FS.ReadDir(ctx, abs)
-		if err == nil && len(entries) > 0 {
-			ok, err := rmPromptYes(ctx, inv, fmt.Sprintf("descend into directory %s", quoteGNUOperand(display)), opts)
-			if err != nil {
-				return rmResult{}, err
-			}
-			if !ok {
-				return rmResult{}, nil
-			}
-		}
-	}
-
 	entries, err := inv.FS.ReadDir(ctx, abs)
 	if err != nil {
 		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, true)); err != nil {
 			return rmResult{}, err
 		}
 		return rmResult{hadErr: true}, nil
+	}
+	ok, err := rmPromptDescendDirectory(ctx, inv, display, info, entries, opts)
+	if err != nil {
+		return rmResult{}, err
+	}
+	if !ok {
+		return rmResult{}, nil
 	}
 
 	result := rmResult{}
@@ -331,7 +325,7 @@ func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, a
 		return result, nil
 	}
 
-	ok, err := rmPromptDirectory(ctx, inv, display, info, opts)
+	ok, err = rmPromptDirectory(ctx, inv, display, info, opts)
 	if err != nil {
 		return rmResult{}, err
 	}
@@ -382,6 +376,23 @@ func rmRemoveEmptyDirectory(ctx context.Context, inv *Invocation, display, abs s
 		return rmResult{}, err
 	}
 	return rmResult{removed: true}, nil
+}
+
+func rmPromptDescendDirectory(ctx context.Context, inv *Invocation, display string, info stdfs.FileInfo, entries []stdfs.DirEntry, opts rmOptions) (bool, error) {
+	if len(entries) == 0 {
+		return true, nil
+	}
+	switch opts.interactive {
+	case rmInteractiveAlways:
+		return rmPromptYes(ctx, inv, fmt.Sprintf("descend into directory %s", quoteGNUOperand(display)), opts)
+	case rmInteractivePromptProtected:
+		if !rmInputIsTTY(inv, opts) || rmIsOwnerWritable(info.Mode()) {
+			return true, nil
+		}
+		return rmPromptYes(ctx, inv, fmt.Sprintf("descend into directory %s", quoteGNUOperand(display)), opts)
+	default:
+		return true, nil
+	}
 }
 
 func rmRemoveFile(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {

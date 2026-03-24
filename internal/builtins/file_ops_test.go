@@ -350,6 +350,36 @@ func TestRMDecliningNestedDescentLeavesTreeUntouchedWithoutError(t *testing.T) {
 	}
 }
 
+func TestRMDefaultProtectedModePromptsBeforeDescendingWriteProtectedDirectory(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"mkdir -p /tmp/tree/sub\n"+
+			"printf 'leaf' > /tmp/tree/sub/file\n"+
+			"chmod 500 /tmp/tree\n"+
+			"printf 'n\\n' | rm ---presume-input-tty -r /tmp/tree\n"+
+			"printf 'status=%s\\n' \"$?\"\n"+
+			"[ -e /tmp/tree/sub/file ] && echo kept || echo removed\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\nkept\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "rm: descend into directory '/tmp/tree'? ") {
+		t.Fatalf("Stderr = %q, want pre-descent prompt for protected directory", result.Stderr)
+	}
+	for _, unwanted := range []string{
+		"/tmp/tree/sub/file",
+		"remove write-protected directory '/tmp/tree'",
+	} {
+		if strings.Contains(result.Stderr, unwanted) {
+			t.Fatalf("Stderr = %q, want no later traversal/removal prompt %q after declining descent", result.Stderr, unwanted)
+		}
+	}
+}
+
 func TestCPSupportsNoClobberPreserveAndVerbose(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
