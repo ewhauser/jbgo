@@ -40,6 +40,11 @@ func TestParseTestClassicDisambiguation(t *testing.T) {
 			want: true,
 		},
 		{
+			name:    "empty grouped expression is rejected",
+			args:    []string{"x", "-a", "(", ")"},
+			wantErr: true,
+		},
+		{
 			name:    "nested one-word group is rejected",
 			args:    []string{"(", "(", "x", ")", ")"},
 			wantErr: true,

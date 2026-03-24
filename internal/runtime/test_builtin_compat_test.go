@@ -70,3 +70,28 @@ func TestShellClassicTestMatchesBashClassicAmbiguities(t *testing.T) {
 		t.Fatalf("Stderr = %q, want one of the expected parse diagnostics", got)
 	}
 }
+
+func TestShellClassicTestRejectsEmptyGroupedExpression(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session,
+		"test x -a \\( \\)\n"+
+			"printf 'test-empty=%s\\n' \"$?\"\n"+
+			"[ x -a \\( \\) ]\n"+
+			"printf 'bracket-empty=%s\\n' \"$?\"\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, ""+
+		"test-empty=2\n"+
+		"bracket-empty=2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, ""+
+		"test: `)' expected\n"+
+		"[: `)' expected\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}

@@ -183,7 +183,11 @@ func (p *testParser) parsePrimary(args []string, pos int) (syntax.TestExpr, int,
 		if depth != 0 {
 			return nil, pos, fmt.Errorf("reached %q without matching '(' with ')'", args[len(args)-1])
 		}
-		expr, err := p.parseArgs(args[pos+1 : end-1])
+		inner := args[pos+1 : end-1]
+		if len(inner) == 0 {
+			return nil, pos, fmt.Errorf("`)' expected")
+		}
+		expr, err := p.parseArgs(inner)
 		if err != nil {
 			return nil, pos, err
 		}

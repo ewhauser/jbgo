@@ -245,6 +245,9 @@ func (p *testRPNParser) parsePrimary(args []string, pos int) ([]testSymbol, int,
 			return nil, pos, testParseExpected(")")
 		}
 		inner := args[pos+1 : end-1]
+		if len(inner) == 0 {
+			return nil, pos, testParseExpected(")")
+		}
 		stack, err := p.parseArgs(inner)
 		if err != nil {
 			return nil, pos, err
