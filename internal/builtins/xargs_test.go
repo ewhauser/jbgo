@@ -23,7 +23,7 @@ func TestXArgsLongFlagsIsolated(t *testing.T) {
 	if got, want := result.Stdout, "a\nb\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	if got, want := result.Stderr, "'echo' 'a'\n'echo' 'b'\n"; got != want {
+	if got, want := result.Stderr, "echo a\necho b\n"; got != want {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
@@ -287,6 +287,66 @@ func TestXArgsRunsShebangScriptViaDirectExec(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, "fixed:left\nfixed:right\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestXArgsVerboseOutputUsesShellEscapesWhenNeeded(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/my command", []byte("#!/bin/sh\necho \"$@\"\n"))
+	writeSessionFile(t, session, "/tmp/xargs-null.bin", []byte("000\x0010 0\x0020\"0\x0030'0\x0040\n0\x00"))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "chmod 755 '/tmp/my command'\n" +
+			"cat /tmp/xargs-null.bin | xargs -0t -I{} '/tmp/my command' 'hel lo' '{}' world\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "hel lo 000 world\nhel lo 10 0 world\nhel lo 20\"0 world\nhel lo 30'0 world\nhel lo 40\n0 world\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "'/tmp/my command' 'hel lo' 000 world\n'/tmp/my command' 'hel lo' '10 0' world\n'/tmp/my command' 'hel lo' '20\"0' world\n'/tmp/my command' 'hel lo' \"30'0\" world\n'/tmp/my command' 'hel lo' '40'$'\\n''0' world\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestXArgsMapsDirectoryCommandToExit126(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '' | xargs /\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 126 {
+		t.Fatalf("ExitCode = %d, want 126; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "Is a directory") {
+		t.Fatalf("Stderr = %q, want directory diagnostic", result.Stderr)
+	}
+}
+
+func TestXArgsSetsProcessSlotVar(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'one\\ntwo\\n' | xargs -n1 --process-slot-var=SLOT sh -c 'printf \"%s:%s\\\\n\" \"$SLOT\" \"$1\"' _\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "0:one\n0:two\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

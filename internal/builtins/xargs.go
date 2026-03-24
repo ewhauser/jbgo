@@ -950,6 +950,18 @@ func runXArgsTask(ctx context.Context, inv *Invocation, opts *xargsOptions, task
 		defer func() { _ = closer.Close() }()
 	}
 
+	if strings.Contains(task.argv[0], "/") {
+		info, _, exists, statErr := statMaybe(ctx, inv, task.argv[0])
+		if statErr != nil {
+			return result, &ExitError{Code: exitCodeForError(statErr), Err: statErr}
+		}
+		if exists && info.IsDir() {
+			result.exitCode = xargsExitCannotRun
+			result.stderr = fmt.Sprintf("xargs: %s: Is a directory\n", task.argv[0])
+			return result, nil
+		}
+	}
+
 	if _, ok, err := resolveCommand(ctx, inv, env, inv.Cwd, task.argv[0]); err != nil {
 		return result, &ExitError{Code: exitCodeForError(err), Err: err}
 	} else if !ok {
@@ -996,6 +1008,8 @@ func xargsStatusForExecResult(result *xargsExecResult) int {
 		return 0
 	case result.exitCode == 255:
 		return xargsExitCommand255
+	case result.exitCode == xargsExitCannotRun:
+		return xargsExitCannotRun
 	case result.exitCode == xargsExitNotFound:
 		return xargsExitNotFound
 	case result.exitCode > 128:
