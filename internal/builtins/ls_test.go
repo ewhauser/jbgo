@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -73,6 +74,35 @@ func TestParseLSTimeStylePosixPrefixRespectsLCAllPrecedence(t *testing.T) {
 				t.Fatalf("parseLSTimeStyle() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseLSTimeStyleRejectsEmptyPosixSuffixOutsidePosixLocale(t *testing.T) {
+	t.Parallel()
+
+	spec := NewLS().Spec()
+	inv := &Invocation{
+		Args: []string{"-l", "--time-style=posix-"},
+		Env: map[string]string{
+			"LC_ALL": "C.UTF-8",
+		},
+	}
+
+	matches, _, err := ParseCommandSpec(inv, &spec)
+	if err != nil {
+		t.Fatalf("ParseCommandSpec() error = %v", err)
+	}
+
+	_, err = parseLSTimeStyle(inv, matches)
+	if err == nil {
+		t.Fatal("parseLSTimeStyle() error = nil, want invalid argument error")
+	}
+	code, ok := ExitCode(err)
+	if !ok || code != 2 {
+		t.Fatalf("ExitCode = %d, ok=%v; want code 2", code, ok)
+	}
+	if got := err.Error(); got == "" || !strings.Contains(got, "invalid argument 'posix-' for 'time style'") {
+		t.Fatalf("error = %q, want invalid time style diagnostic", got)
 	}
 }
 
