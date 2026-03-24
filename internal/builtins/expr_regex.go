@@ -378,6 +378,9 @@ func exprBoundedRepeat(units []exprRegexUnit) (exprRepeatBounds, error) {
 	}
 
 	if comma < 0 {
+		if text == "" {
+			return exprRepeatBounds{}, exprInvalidBraceContentError()
+		}
 		value, err := exprRepeatBoundValue(text)
 		if err != nil {
 			return exprRepeatBounds{}, err
@@ -483,9 +486,6 @@ func (p *exprRegexParser) parseCharClassElement() ([]exprRegexCharClassElem, err
 	}
 	low, _ := utf8.DecodeRuneInString(first.literal)
 	high, _ := utf8.DecodeRuneInString(second.literal)
-	if low > high {
-		low, high = high, low
-	}
 	return []exprRegexCharClassElem{{
 		low:     low,
 		high:    high,
