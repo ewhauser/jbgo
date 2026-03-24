@@ -874,7 +874,7 @@ func runXArgsTasksSequential(ctx context.Context, inv *Invocation, opts *xargsOp
 		if err := writeXArgsExecOutputs(inv, opts, &result); err != nil {
 			return 0, err
 		}
-		if result.exitCode == 255 || status >= xargsExitNotFound {
+		if result.exitCode == 255 || result.status != 0 {
 			break
 		}
 	}
