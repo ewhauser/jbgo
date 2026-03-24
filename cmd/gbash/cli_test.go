@@ -111,7 +111,7 @@ func TestRunCLIHelpRendersFilesystemFlags(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR", "CLI output options:", "--json"} {
+	for _, want := range []string{"CLI filesystem options:", "--root DIR", "--cwd DIR", "--readwrite-root DIR", "--copy-script", "CLI output options:", "--json"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want help to contain %q", stdout.String(), want)
 		}
@@ -637,14 +637,14 @@ func TestRunCLISupportsScriptFileArgs(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), []string{scriptPath, "left", "right"}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--root", tmp, "script.sh", "left", "right"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
 	}
-	if got, want := stdout.String(), scriptPath+"|left|right\n"; got != want {
+	if got, want := stdout.String(), "script.sh|left|right\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {
@@ -795,7 +795,7 @@ func TestRunCLIInteractiveScriptUsesInteractiveShellSemantics(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), []string{"-i", scriptPath}, strings.NewReader(""), &stdout, &stderr, false)
+	exitCode, err := runCLI(context.Background(), []string{"--root", tmp, "-i", "script.sh"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}

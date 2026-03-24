@@ -16,6 +16,7 @@ import (
 type runtimeOptions struct {
 	root          string
 	readWriteRoot string
+	copyScript    bool
 	cwd           string
 	json          bool
 	server        bool
@@ -53,6 +54,8 @@ func parseRuntimeOptions(args []string) (runtimeOptions, []string, error) {
 			opts.readWriteRoot = args[i]
 		case strings.HasPrefix(arg, "--readwrite-root="):
 			opts.readWriteRoot = strings.TrimPrefix(arg, "--readwrite-root=")
+		case arg == "--copy-script":
+			opts.copyScript = true
 		case arg == "--cwd":
 			if i+1 >= len(args) {
 				return opts, nil, fmt.Errorf("--cwd requires a path")
@@ -243,6 +246,84 @@ func normalizeSandboxPath(value string) string {
 	return path.Clean(value)
 }
 
+type scriptPathPlan struct {
+	sandboxPath string
+	copySource  string
+}
+
+func (opts *runtimeOptions) planScriptPath(scriptPath string) (scriptPathPlan, error) {
+	if scriptPath == "" {
+		return scriptPathPlan{}, nil
+	}
+	if sandboxPath, ok, err := opts.mapMountedHostScriptPath(scriptPath); err != nil {
+		return scriptPathPlan{}, err
+	} else if ok {
+		return scriptPathPlan{sandboxPath: sandboxPath}, nil
+	}
+	if opts == nil || !opts.copyScript {
+		return scriptPathPlan{sandboxPath: scriptPath}, nil
+	}
+	source, err := filepath.Abs(scriptPath)
+	if err != nil {
+		return scriptPathPlan{}, fmt.Errorf("resolve --copy-script source: %w", err)
+	}
+	return scriptPathPlan{
+		sandboxPath: stagedSandboxScriptPath(filepath.Base(source)),
+		copySource:  source,
+	}, nil
+}
+
+func (opts *runtimeOptions) mapMountedHostScriptPath(scriptPath string) (string, bool, error) {
+	if opts == nil || !filepath.IsAbs(scriptPath) {
+		return "", false, nil
+	}
+	switch {
+	case strings.TrimSpace(opts.root) != "":
+		return sandboxPathForMountedHostPath(scriptPath, opts.root, gbash.DefaultWorkspaceMountPoint)
+	case strings.TrimSpace(opts.readWriteRoot) != "":
+		return sandboxPathForMountedHostPath(scriptPath, opts.readWriteRoot, "/")
+	default:
+		return "", false, nil
+	}
+}
+
+func sandboxPathForMountedHostPath(scriptPath, hostRoot, mountPoint string) (string, bool, error) {
+	resolvedRoot, err := filepath.Abs(hostRoot)
+	if err != nil {
+		return "", false, fmt.Errorf("resolve mounted root: %w", err)
+	}
+	resolvedScript, err := filepath.Abs(scriptPath)
+	if err != nil {
+		return "", false, fmt.Errorf("resolve script path: %w", err)
+	}
+	rootVolume := filepath.VolumeName(resolvedRoot)
+	scriptVolume := filepath.VolumeName(resolvedScript)
+	if rootVolume != "" && scriptVolume != "" && !strings.EqualFold(rootVolume, scriptVolume) {
+		return "", false, nil
+	}
+
+	rel, err := filepath.Rel(filepath.Clean(resolvedRoot), filepath.Clean(resolvedScript))
+	if err != nil {
+		return "", false, err
+	}
+	if rel == "." {
+		return normalizeSandboxPath(mountPoint), true, nil
+	}
+	parent := ".." + string(os.PathSeparator)
+	if rel == ".." || strings.HasPrefix(rel, parent) {
+		return "", false, nil
+	}
+	return normalizeSandboxPath(path.Join(mountPoint, filepath.ToSlash(rel))), true, nil
+}
+
+func stagedSandboxScriptPath(base string) string {
+	switch base {
+	case "", ".", string(os.PathSeparator):
+		base = "script.sh"
+	}
+	return path.Join("/tmp/.gbash-host-script", base)
+}
+
 func newRuntime(cfg Config, opts *runtimeOptions) (*gbash.Runtime, error) {
 	runtimeOpts, err := opts.gbashOptions()
 	if err != nil {
@@ -266,6 +347,7 @@ func renderHelp(w io.Writer, name string) error {
 		"  --root DIR            mount DIR read-only at /home/agent/project with a writable in-memory overlay\n"+
 		"  --cwd DIR             set the initial sandbox working directory\n"+
 		"  --readwrite-root DIR  mount DIR as sandbox / with writes persisted back to the host filesystem\n"+
+		"  --copy-script         copy the positional host script into the sandbox before execution\n"+
 		"\nCLI output options:\n"+
 		"  --json                emit one JSON result object for a non-interactive execution\n"+
 		"\nCLI server options:\n"+

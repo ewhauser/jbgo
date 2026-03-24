@@ -341,6 +341,36 @@ func TestExecutionLoggerReportsUnexpectedErrors(t *testing.T) {
 	}
 }
 
+func TestExecutionLoggerReportsScriptPathLoadFailuresAsFinishedExecutions(t *testing.T) {
+	t.Parallel()
+	var events []LogEvent
+	rt := newRuntime(t, &Config{
+		Logger: func(_ context.Context, event LogEvent) {
+			events = append(events, event)
+		},
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{ScriptPath: "missing.sh"})
+	if err == nil {
+		t.Fatal("Run() error = nil, want missing script failure")
+	}
+	if result == nil {
+		t.Fatal("Run() result = nil")
+	}
+	if got, want := result.ExitCode, 127; got != want {
+		t.Fatalf("result.ExitCode = %d, want %d", got, want)
+	}
+	if exitCode, ok := commands.ExitCode(err); !ok || exitCode != 127 {
+		t.Fatalf("ExitCode(%v) = (%d, %t), want (127, true)", err, exitCode, ok)
+	}
+	if got, want := logKinds(events), []LogKind{LogExecStart, LogExecFinish}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("log kinds = %#v, want %#v", got, want)
+	}
+	if got, want := events[1].ExitCode, 127; got != want {
+		t.Fatalf("finish exit code = %d, want %d", got, want)
+	}
+}
+
 func TestObservabilityCallbackPanicsAreRecovered(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{

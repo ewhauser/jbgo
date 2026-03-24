@@ -447,3 +447,15 @@ func (s *Session) FileSystem() gbfs.FileSystem {
 	}
 	return s.inner.FileSystem()
 }
+
+// Limits returns the effective runtime policy limits for the session.
+//
+// This is mainly useful for integrations that need to align pre-execution
+// behavior with the same caps the runtime enforces during command and file
+// reads.
+func (s *Session) Limits() policy.Limits {
+	if s == nil || s.inner == nil {
+		return policy.Limits{}
+	}
+	return s.inner.Limits()
+}

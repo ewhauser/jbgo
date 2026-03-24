@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-22
+Last updated: 2026-03-23
 
 ## 1. Purpose
 
@@ -153,11 +153,15 @@ The normal CLI entrypoint also accepts filesystem selection flags before the she
 - `gbash --root <dir> ...` mounts `<dir>` read-only at `/home/agent/project` with an in-memory writable overlay
 - `gbash --cwd <dir> ...` sets the initial sandbox working directory
 - `gbash --readwrite-root <dir> ...` mounts `<dir>` as sandbox `/` so writes persist back to the host, but only when `<dir>` is inside the system temp directory
+- `gbash --copy-script ...` stages the positional host regular file into the sandbox before execution instead of requiring it to already exist in the sandbox namespace
 - `gbash --json ...` emits one JSON object for a non-interactive execution with `stdout`, `stderr`, `exitCode`, truncation flags, timing metadata, and optional trace metadata when tracing is enabled
 - `gbash --server --socket <path>` serves a long-lived JSON-RPC protocol over a Unix domain socket instead of executing a script
 - `gbash --server --listen <host:port>` serves the same protocol over an explicit loopback TCP listener instead of executing a script
 - `gbash --session-ttl <duration>` controls how long idle server sessions survive without active work
 - when `--cwd` is omitted, `--root` starts at `/home/agent/project` and `--readwrite-root` starts at `/`
+- when a positional script path is supplied, the CLI resolves and reads it from the configured sandbox filesystem relative to the sandbox working directory, preserving the argv path exactly as provided
+- when that positional script path is an absolute host path underneath `--root` or `--readwrite-root`, the CLI rewrites it to the corresponding sandbox path before execution instead of reading the host file directly
+- otherwise, the CLI does not read host files directly by positional path unless the caller explicitly opts into staging with `--copy-script`
 
 External test harnesses should use the normal CLI entrypoint together with the filesystem selection flags above. In particular, GNU-style wrapper scripts may invoke `gbash --readwrite-root <tempdir> --cwd <dir> -c 'exec "$@"' _ <utility> ...` so the harness exercises the same shell and runtime path as normal `gbash` execution.
 
@@ -181,6 +185,7 @@ That frontend is also exposed as a public `cli` package so shipped binaries can 
 - filesystem state persists across executions within the same session
 - the virtual wall clock persists across executions within the same session and is observable by time-based builtins such as `date`, `touch`, `uptime`, `who`, `ls`, and shell `printf %(... )T`
 - `date --set` and the legacy `date MMDDhhmm[[CC]YY][.ss]` form mutate only that session-local virtual wall clock; they never modify the host clock
+- integrations may inspect the session's effective policy limits when they need to align frontend staging or preflight behavior with runtime-enforced caps such as `MaxFileBytes`
 
 This matches the agent workflow we care about: a sequence of shell calls operating on a shared sandboxed workspace, without requiring shell-local state to leak between calls unless we explicitly add that feature later.
 
