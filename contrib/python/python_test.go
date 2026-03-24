@@ -63,6 +63,22 @@ func TestRewritePrintCallsSkipsReboundPrint(t *testing.T) {
 	}
 }
 
+func TestRewritePrintCallsSkipsParameterBindings(t *testing.T) {
+	t.Parallel()
+
+	source := "" +
+		"def wrap(print):\n" +
+		"    print('msg')\n"
+
+	rewritten, didRewrite := rewritePrintCalls(source)
+	if didRewrite {
+		t.Fatalf("rewritePrintCalls() unexpectedly rewrote %q into %q", source, rewritten)
+	}
+	if rewritten != source {
+		t.Fatalf("rewritePrintCalls() = %q, want original source", rewritten)
+	}
+}
+
 func TestInstrumentSourceForPrintKeepsPrefixedDocstringsBeforeFutureImports(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +86,21 @@ func TestInstrumentSourceForPrintKeepsPrefixedDocstringsBeforeFutureImports(t *t
 
 	instrumented := instrumentSourceForPrint(source)
 	prefix := "r\"\"\"docs\"\"\"\nfrom __future__ import annotations\n"
+	if !strings.HasPrefix(instrumented, prefix) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
+	}
+	if !strings.Contains(instrumented, pythonPrintPrelude) {
+		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
+	}
+}
+
+func TestInstrumentSourceForPrintKeepsSingleLineDocstringsBeforeFutureImports(t *testing.T) {
+	t.Parallel()
+
+	source := "\"docs\"\nfrom __future__ import annotations\nprint('x')\n"
+
+	instrumented := instrumentSourceForPrint(source)
+	prefix := "\"docs\"\nfrom __future__ import annotations\n"
 	if !strings.HasPrefix(instrumented, prefix) {
 		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
 	}

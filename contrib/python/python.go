@@ -551,11 +551,10 @@ func instrumentSourceForPrint(source string) string {
 	consumeTrivia()
 	if index < len(lines) {
 		trimmed := strings.TrimSpace(lines[index])
-		if delimiter, ok := tripleQuotedDocstringDelimiter(trimmed); ok {
-			start := strings.Index(trimmed, delimiter)
+		if start, delimiter, multiline, ok := moduleDocstringLiteral(trimmed); ok {
 			prefix.WriteString(lines[index])
 			index++
-			if start == -1 || !strings.Contains(trimmed[start+3:], delimiter) {
+			if multiline && !strings.Contains(trimmed[start+len(delimiter):], delimiter) {
 				for index < len(lines) {
 					prefix.WriteString(lines[index])
 					if strings.Contains(lines[index], delimiter) {
@@ -594,7 +593,7 @@ func rewritePrintCalls(source string) (string, bool) {
 	if source == "" {
 		return "", false
 	}
-	if sourceHasPrintRebinding(source) {
+	if sourceHasUnsafePrintReference(source) {
 		return source, false
 	}
 
@@ -656,7 +655,7 @@ func rewritePrintCalls(source string) (string, bool) {
 	return out.String(), rewritten
 }
 
-func sourceHasPrintRebinding(source string) bool {
+func sourceHasUnsafePrintReference(source string) bool {
 	lastKind := pythonTokenNone
 	lastIdentifier := ""
 
@@ -678,7 +677,7 @@ func sourceHasPrintRebinding(source string) bool {
 				index++
 			}
 			identifier := source[start:index]
-			if identifier == "print" && isPrintRebinding(lastKind, lastIdentifier, source, index) {
+			if identifier == "print" && isUnsafePrintReference(lastKind, lastIdentifier, source, index) {
 				return true
 			}
 			lastKind = pythonTokenIdentifier
@@ -700,26 +699,18 @@ func sourceHasPrintRebinding(source string) bool {
 	return false
 }
 
-func isPrintRebinding(lastKind pythonTokenKind, lastIdentifier, source string, index int) bool {
+func isUnsafePrintReference(lastKind pythonTokenKind, lastIdentifier, source string, index int) bool {
+	if lastKind == pythonTokenDot {
+		return false
+	}
 	if lastKind == pythonTokenIdentifier {
 		switch lastIdentifier {
-		case "def", "class", "for", "import", "as", "global", "nonlocal":
+		case "def", "class":
 			return true
 		}
 	}
-
-	nextIndex, next := nextSignificantByte(source, index)
-	if nextIndex < 0 {
-		return false
-	}
-	if next == '=' || next == ':' {
-		return true
-	}
-	if next == '+' || next == '-' || next == '*' || next == '/' || next == '%' || next == '&' || next == '|' || next == '^' {
-		afterOpIndex, afterOp := nextSignificantByte(source, nextIndex+1)
-		return afterOpIndex >= 0 && afterOp == '='
-	}
-	return false
+	_, next := nextSignificantByte(source, index)
+	return next != '('
 }
 
 func shouldRewritePrintCall(source string, index int, lastKind pythonTokenKind, lastIdentifier string) bool {
@@ -772,20 +763,42 @@ func consumePythonString(source string, start int) int {
 	return len(source)
 }
 
-func tripleQuotedDocstringDelimiter(line string) (string, bool) {
+func moduleDocstringLiteral(line string) (int, string, bool, bool) {
+	start, ok := pythonStringLiteralStart(line)
+	if !ok {
+		return 0, "", false, false
+	}
+
+	end := consumePythonString(line, start)
+	rest := strings.TrimSpace(line[end:])
+	if rest != "" && !strings.HasPrefix(rest, "#") {
+		return 0, "", false, false
+	}
+
+	quote := line[start]
+	delimiter := string(quote)
+	multiline := start+2 < len(line) && line[start+1] == quote && line[start+2] == quote
+	if multiline {
+		delimiter = strings.Repeat(string(quote), 3)
+	}
+
+	return start, delimiter, multiline, true
+}
+
+func pythonStringLiteralStart(line string) (int, bool) {
 	for prefixLen := 0; prefixLen <= 2 && prefixLen <= len(line); prefixLen++ {
 		if prefixLen > 0 && !isPythonStringPrefix(line[:prefixLen]) {
 			continue
 		}
-		if len(line[prefixLen:]) < 3 {
+		if prefixLen >= len(line) {
 			continue
 		}
-		delimiter := line[prefixLen : prefixLen+3]
-		if delimiter == `"""` || delimiter == `'''` {
-			return delimiter, true
+		switch line[prefixLen] {
+		case '\'', '"':
+			return prefixLen, true
 		}
 	}
-	return "", false
+	return 0, false
 }
 
 func isPythonStringPrefix(value string) bool {
