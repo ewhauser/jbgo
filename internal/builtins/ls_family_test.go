@@ -61,6 +61,59 @@ func TestLSSupportsHelpDirectoryAndHumanReadableFlags(t *testing.T) {
 	}
 }
 
+func TestLSVersionLongAliasDiredShortAndTabsizeCompat(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-compat/file.txt", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-tab-compat/a\t", []byte("a"))
+	writeSessionFile(t, session, "/tmp/ls-tab-compat/b", []byte("b"))
+
+	result := mustExecSession(t, session,
+		"ls --version\n"+
+			"echo ---\n"+
+			"ls --help\n"+
+			"echo ---\n"+
+			"ls --long /tmp/ls-compat/file.txt\n"+
+			"echo ---\n"+
+			"ls -D /tmp/ls-compat\n"+
+			"echo ---\n"+
+			"cd /tmp/ls-tab-compat\n"+
+			"ls -w0 -x -T1 .\n"+
+			"echo ---\n"+
+			"ls -w0 -x --tab-size=1 .\n"+
+			"echo ---\n"+
+			"TABSIZE=1 ls -w0 -x .\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 7 {
+		t.Fatalf("Stdout blocks = %q, want 7 blocks", result.Stdout)
+	}
+
+	if got, want := strings.TrimSpace(parts[0]), "ls (gbash) dev"; got != want {
+		t.Fatalf("version output = %q, want %q", got, want)
+	}
+	if !strings.Contains(parts[1], "--version") || !strings.Contains(parts[1], "-l, --long") {
+		t.Fatalf("help output = %q, want version and long alias", parts[1])
+	}
+	if !strings.Contains(parts[2], "-rw") || !strings.Contains(parts[2], "/tmp/ls-compat/file.txt") {
+		t.Fatalf("--long output = %q, want long-format listing", parts[2])
+	}
+	if !strings.Contains(parts[3], "//DIRED//") || !strings.Contains(parts[3], "file.txt") {
+		t.Fatalf("-D output = %q, want dired metadata", parts[3])
+	}
+	if parts[4] != parts[5] {
+		t.Fatalf("--tab-size output = %q, want %q", parts[5], parts[4])
+	}
+	if parts[4] != parts[6] {
+		t.Fatalf("TABSIZE output = %q, want %q", parts[6], parts[4])
+	}
+}
+
 func TestLSShortHRemainsHumanReadableAfterSpecMigration(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

@@ -165,22 +165,27 @@ Usage:
 Supported options:
   -1                  list one file per line
   -C                  list entries by columns
+  -D, --dired         generate output designed for Emacs' dired mode
+  -T, --tabsize=COLS  assume tab stops every COLS instead of 8
   -x                  list entries by lines instead of by columns
   -m                  fill width with a comma separated list of entries
   -a, --all           do not ignore entries starting with .
   -A, --almost-all    do not list implied . and ..
   -B, --ignore-backups
                       do not list implied entries ending with ~
+  -b, --escape        print C-style escapes for nongraphic characters
   -d, --directory     list directories themselves, not their contents
   -F, --classify[=WHEN]
                       append indicator (one of */=>@) to entries
+      --file-type     append indicator except for executables
+  -f                  list all entries in directory order
   -h, --human-readable
                       with -l, print sizes like 1K 234M 2G
   -I, --ignore=PATTERN
                       do not list implied entries matching shell PATTERN
   -i, --inode         print the index number of each file
   -k, --kibibytes     default to 1024-byte blocks for block counts
-  -l                  use a long listing format
+  -l, --long          use a long listing format
   -n, --numeric-uid-gid
                       like -l, but list numeric user and group IDs
   -N, --literal       print entry names without quoting
@@ -205,7 +210,6 @@ Supported options:
   --group-directories-first
                       group directories before files
   --hide=PATTERN      do not list implied entries matching shell PATTERN
-  --dired             generate output designed for Emacs' dired mode
   --hyperlink[=WHEN]  hyperlink file names; WHEN can be 'always', 'auto', or 'never'
   --indicator-style=WORD
                       append indicators with 'none', 'slash', 'file-type', or 'classify'
@@ -225,8 +229,11 @@ Supported options:
   --width=COLS        set output width to COLS
   --zero              end each output entry with NUL, not newline
   --color[=WHEN]      colorize the output; WHEN can be 'always', 'auto', or 'never'
+  --version           show version information
   --help              show this help text
 `
+
+const lsVersionText = "ls (gbash) dev\n"
 
 func NewLS() *LS {
 	return &LS{}
@@ -253,8 +260,10 @@ func (c *LS) Spec() CommandSpec {
 			GroupShortOptions:        true,
 			ShortOptionValueAttached: true,
 			LongOptionValueEquals:    true,
+			AutoVersion:              true,
 		},
-		HelpRenderer: renderStaticHelp(lsHelpText),
+		HelpRenderer:    renderStaticHelp(lsHelpText),
+		VersionRenderer: renderStaticVersion(lsVersionText),
 	}
 }
 
@@ -297,7 +306,7 @@ func lsOptionSpecs() []OptionSpec {
 		{Name: "human-readable", Short: 'h', Long: "human-readable", Help: "with -l, print sizes like 1K 234M 2G"},
 		{Name: "inode", Short: 'i', Long: "inode", Help: "print the index number of each file"},
 		{Name: "kibibytes", Short: 'k', Long: "kibibytes", Help: "default to 1024-byte blocks for block counts"},
-		{Name: "long", Short: 'l', Help: "use a long listing format"},
+		{Name: "long", Short: 'l', Long: "long", Help: "use a long listing format"},
 		{Name: "numeric-uid-gid", Short: 'n', Long: "numeric-uid-gid", Help: "like -l, but list numeric user and group IDs"},
 		{Name: "literal", Short: 'N', Long: "literal", Help: "print entry names without quoting", Overrides: []string{"quoting-style", "literal", "escape", "quote-name"}},
 		{Name: "long-no-group", Short: 'o', Help: "like -l, but do not list group information"},
@@ -326,9 +335,9 @@ func lsOptionSpecs() []OptionSpec {
 		{Name: "time-style", Long: "time-style", ValueName: "STYLE", Arity: OptionRequiredValue, Help: "full-iso, long-iso, iso, locale, or +FORMAT"},
 		{Name: "full-time", Long: "full-time", Help: "like -l --time-style=full-iso"},
 		{Name: "hyperlink", Long: "hyperlink", ValueName: "WHEN", Arity: OptionOptionalValue, OptionalValueEqualsOnly: true, Help: "hyperlink file names; WHEN can be 'always', 'auto', or 'never'"},
-		{Name: "dired", Long: "dired", Help: "generate output designed for Emacs' dired mode"},
+		{Name: "dired", Short: 'D', Long: "dired", Help: "generate output designed for Emacs' dired mode"},
 		{Name: "group-directories-first", Long: "group-directories-first", Help: "group directories before files"},
-		{Name: "tabsize", Short: 'T', Long: "tabsize", ValueName: "COLS", Arity: OptionRequiredValue, Help: "assume tab stops every COLS instead of 8"},
+		{Name: "tabsize", Short: 'T', Long: "tabsize", Aliases: []string{"tab-size"}, ValueName: "COLS", Arity: OptionRequiredValue, Help: "assume tab stops every COLS instead of 8"},
 		{Name: "width", Short: 'w', Long: "width", ValueName: "COLS", Arity: OptionRequiredValue, Help: "set output width to COLS"},
 		{Name: "zero", Long: "zero", Help: "end each output entry with NUL, not newline"},
 		{Name: "unsorted-all", Short: 'f', Help: "list all entries in directory order"},
@@ -1294,6 +1303,16 @@ func parseLSWidth(inv *Invocation, matches *ParsedCommand) (int, error) {
 
 func parseLSTabSize(inv *Invocation, matches *ParsedCommand) (int, error) {
 	if !matches.Has("tabsize") {
+		if value := strings.TrimSpace(inv.Env["TABSIZE"]); value != "" {
+			tabSize, err := strconv.ParseUint(value, 0, 64)
+			if err == nil {
+				maxInt := uint64(^uint(0) >> 1)
+				if tabSize > maxInt {
+					return int(maxInt), nil
+				}
+				return int(tabSize), nil
+			}
+		}
 		return 8, nil
 	}
 	value := matches.Value("tabsize")
@@ -1374,12 +1393,33 @@ func parseLSTimeStyle(inv *Invocation, matches *ParsedCommand) (string, error) {
 			style = "full-iso"
 		}
 	}
-	switch style {
+	lookupStyle := style
+	if strippedStyle, ok := strings.CutPrefix(lookupStyle, "posix-"); ok {
+		effectiveLocale := "C"
+		if lang := strings.TrimSpace(inv.Env["LANG"]); lang != "" {
+			effectiveLocale = lang
+		}
+		if lcTime := strings.TrimSpace(inv.Env["LC_TIME"]); lcTime != "" {
+			effectiveLocale = lcTime
+		}
+		if lcAll := strings.TrimSpace(inv.Env["LC_ALL"]); lcAll != "" {
+			effectiveLocale = lcAll
+		}
+		switch {
+		case effectiveLocale == "POSIX" || effectiveLocale == "C":
+			lookupStyle = "locale"
+		case strippedStyle == "":
+			lookupStyle = style
+		default:
+			lookupStyle = strippedStyle
+		}
+	}
+	switch lookupStyle {
 	case "", "full-iso", "long-iso", "iso", "locale":
-		return style, nil
+		return lookupStyle, nil
 	default:
-		if strings.HasPrefix(style, "+") {
-			return style, nil
+		if strings.HasPrefix(lookupStyle, "+") {
+			return lookupStyle, nil
 		}
 		return "", exitf(inv, 2, "ls: invalid argument %s for 'time style'\nValid arguments are:\n  - [posix-]full-iso\n  - [posix-]long-iso\n  - [posix-]iso\n  - [posix-]locale\n  - +FORMAT (e.g., +%%H:%%M) for a 'date'-style format\nTry 'ls --help' for more information.", quoteGNUOperand(style))
 	}
