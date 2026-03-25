@@ -1112,6 +1112,19 @@ func TestLNNoTargetDirectoryRejectsTrailingSlashDestination(t *testing.T) {
 	}
 }
 
+func TestLNNoTargetDirectoryExistingDirectorySlashReportsFileExists(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "printf 'payload\\n' > /tmp/src.txt\nmkdir /tmp/existing-dir\nln -T /tmp/src.txt /tmp/existing-dir/\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "ln: failed to create link '/tmp/existing-dir/': File exists\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestLNNoDereferenceTreatsTrailingSlashSymlinkDestAsDirectory(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{

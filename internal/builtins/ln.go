@@ -138,7 +138,11 @@ func runLN(ctx context.Context, inv *Invocation, opts *lnOptions, files []string
 		destHasTrailingSlash := hasTrailingSlash(files[1])
 		if opts.noTargetDir {
 			if destHasTrailingSlash {
-				return exitf(inv, 1, "ln: failed to access %s: Not a directory", quoteGNUOperand(files[1]))
+				if info, _, exists, err := statMaybe(ctx, inv, files[1]); err != nil {
+					return err
+				} else if !exists || !info.IsDir() {
+					return exitf(inv, 1, "ln: failed to access %s: Not a directory", quoteGNUOperand(files[1]))
+				}
 			}
 		} else {
 			statFn := statMaybe
