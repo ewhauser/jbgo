@@ -3,8 +3,8 @@ module github.com/ewhauser/gbash/contrib/bashtool
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.27
-	github.com/ewhauser/gbash/contrib/extras v0.0.27
+	github.com/ewhauser/gbash v0.0.28
+	github.com/ewhauser/gbash/contrib/extras v0.0.28
 )
 
 require (
@@ -16,11 +16,11 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
-	github.com/ewhauser/gbash/contrib/awk v0.0.27 // indirect
-	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.27 // indirect
-	github.com/ewhauser/gbash/contrib/jq v0.0.27 // indirect
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.27 // indirect
-	github.com/ewhauser/gbash/contrib/yq v0.0.27 // indirect
+	github.com/ewhauser/gbash/contrib/awk v0.0.28 // indirect
+	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.28 // indirect
+	github.com/ewhauser/gbash/contrib/jq v0.0.28 // indirect
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.28 // indirect
+	github.com/ewhauser/gbash/contrib/yq v0.0.28 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
