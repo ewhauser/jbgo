@@ -3,10 +3,10 @@ module github.com/ewhauser/gbash/examples
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.28
-	github.com/ewhauser/gbash/contrib/bashtool v0.0.28
-	github.com/ewhauser/gbash/contrib/extras v0.0.28
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.28
+	github.com/ewhauser/gbash v0.0.29
+	github.com/ewhauser/gbash/contrib/bashtool v0.0.29
+	github.com/ewhauser/gbash/contrib/extras v0.0.29
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.29
 	github.com/klauspost/compress v1.18.4
 	github.com/ncruces/go-sqlite3 v0.31.1
 	github.com/openai/openai-go v1.12.0
@@ -35,10 +35,12 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
-	github.com/ewhauser/gbash/contrib/awk v0.0.28 // indirect
-	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.28 // indirect
-	github.com/ewhauser/gbash/contrib/jq v0.0.28 // indirect
-	github.com/ewhauser/gbash/contrib/yq v0.0.28 // indirect
+	github.com/ewhauser/gbash/contrib/awk v0.0.29 // indirect
+	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.29 // indirect
+	github.com/ewhauser/gbash/contrib/jq v0.0.29 // indirect
+	github.com/ewhauser/gbash/contrib/python v0.0.29 // indirect
+	github.com/ewhauser/gbash/contrib/yq v0.0.29 // indirect
+	github.com/ewhauser/gomonty v0.0.11 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -70,6 +72,8 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -106,3 +110,5 @@ replace github.com/ewhauser/gbash/contrib/htmltomarkdown => ../contrib/htmltomar
 replace github.com/ewhauser/gbash/contrib/jq => ../contrib/jq
 
 replace github.com/ewhauser/gbash/contrib/yq => ../contrib/yq
+
+replace github.com/ewhauser/gbash/contrib/python => ../contrib/python
