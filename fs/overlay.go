@@ -286,23 +286,6 @@ func (o *OverlayFS) Chtimes(ctx context.Context, name string, atime, mtime time.
 	return nil
 }
 
-func (o *OverlayFS) ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error {
-	abs := o.resolve(name)
-	_, source, err := o.visibleInfo(ctx, abs)
-	if err != nil {
-		return &os.PathError{Op: "chtimes", Path: abs, Err: stdfs.ErrNotExist}
-	}
-	if source == overlaySourceLower {
-		if err := clonePath(ctx, o.lower, abs, o.upper, abs); err != nil {
-			return toPathError("chtimes", abs, err)
-		}
-	}
-	if err := o.upper.ChtimesNoFollow(ctx, abs, atime, mtime); err != nil {
-		return toPathError("chtimes", abs, err)
-	}
-	return nil
-}
-
 func (o *OverlayFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {
 	abs := o.resolve(name)
 	if abs == "/" {

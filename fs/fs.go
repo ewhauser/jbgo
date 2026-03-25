@@ -35,12 +35,6 @@ type FileSystem interface {
 	Chdir(name string) error
 }
 
-// ChtimesNoFollowFileSystem is an optional filesystem capability for updating
-// the timestamps of a symlink itself rather than its referent.
-type ChtimesNoFollowFileSystem interface {
-	ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error
-}
-
 // Factory creates a fresh filesystem instance for a runtime session.
 type Factory interface {
 	New(ctx context.Context) (FileSystem, error)

@@ -348,16 +348,6 @@ func (m *MountableFS) Chtimes(ctx context.Context, name string, atime, mtime tim
 	return fsys.Chtimes(ctx, rel, atime, mtime)
 }
 
-func (m *MountableFS) ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error {
-	abs := m.resolve(name)
-	fsys, rel := m.routedView(abs)
-	noFollowFS, ok := fsys.(ChtimesNoFollowFileSystem)
-	if !ok {
-		return &os.PathError{Op: "chtimes", Path: rel, Err: syscall.ENOSYS}
-	}
-	return noFollowFS.ChtimesNoFollow(ctx, rel, atime, mtime)
-}
-
 func (m *MountableFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {
 	abs := m.resolve(name)
 	_, _, mounted, synthetic := m.route(abs)
@@ -679,14 +669,6 @@ func (f namespacedFS) Chmod(ctx context.Context, name string, mode stdfs.FileMod
 
 func (f namespacedFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
 	return namespaceError(f.inner.Chtimes(ctx, name, atime, mtime), f.mountPoint)
-}
-
-func (f namespacedFS) ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error {
-	noFollowFS, ok := f.inner.(ChtimesNoFollowFileSystem)
-	if !ok {
-		return namespaceError(&os.PathError{Op: "chtimes", Path: name, Err: syscall.ENOSYS}, f.mountPoint)
-	}
-	return namespaceError(noFollowFS.ChtimesNoFollow(ctx, name, atime, mtime), f.mountPoint)
 }
 
 func (f namespacedFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {

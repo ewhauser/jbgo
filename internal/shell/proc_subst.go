@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -465,17 +464,6 @@ func (f *procSubstFS) Chtimes(ctx context.Context, name string, atime, mtime tim
 		return err
 	}
 	return f.inner.Chtimes(ctx, name, atime, mtime)
-}
-
-func (f *procSubstFS) ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error {
-	if err := f.procSubstDeny("chtimes", name); err != nil {
-		return err
-	}
-	noFollowFS, ok := f.inner.(gbfs.ChtimesNoFollowFileSystem)
-	if !ok {
-		return &os.PathError{Op: "chtimes", Path: name, Err: syscall.ENOSYS}
-	}
-	return noFollowFS.ChtimesNoFollow(ctx, name, atime, mtime)
 }
 
 func (f *procSubstFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {

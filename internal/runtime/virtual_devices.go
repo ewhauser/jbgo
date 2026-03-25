@@ -223,18 +223,6 @@ func (f *virtualDeviceFS) Chtimes(ctx context.Context, name string, atime, mtime
 	return f.base.Chtimes(ctx, abs, atime, mtime)
 }
 
-func (f *virtualDeviceFS) ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error {
-	abs := f.resolve(name)
-	if err := rejectVirtualDeviceMutation("chtimes", abs); err != nil {
-		return err
-	}
-	noFollowFS, ok := f.base.(gbfs.ChtimesNoFollowFileSystem)
-	if !ok {
-		return &os.PathError{Op: "chtimes", Path: abs, Err: syscall.ENOSYS}
-	}
-	return noFollowFS.ChtimesNoFollow(ctx, abs, atime, mtime)
-}
-
 func (f *virtualDeviceFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {
 	abs := f.resolve(name)
 	switch {

@@ -75,14 +75,6 @@ func resolveTarget(ctx context.Context, fsys gbfs.FileSystem, action FileAction,
 		}
 		resolved = cleanAbs(path.Join(parentResolved, path.Base(target)))
 		return resolved, resolved != cleanAbs(target), nil
-	case FileActionWriteNoFollow:
-		parent := cleanAbs(path.Dir(target))
-		parentResolved, err := fsys.Realpath(ctx, parent)
-		if err != nil {
-			return "", false, err
-		}
-		resolved = cleanAbs(path.Join(parentResolved, path.Base(target)))
-		return resolved, resolved != cleanAbs(target), nil
 	default:
 		return target, false, nil
 	}

@@ -215,41 +215,6 @@ func TestTouchReportsCreateFailures(t *testing.T) {
 	}
 }
 
-func TestTouchNoDereferenceUpdatesSymlinkTimes(t *testing.T) {
-	t.Parallel()
-	session := newSession(t, &Config{})
-
-	writeSessionFile(t, session, "/home/agent/target.txt", []byte("keep\n"))
-	old := time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)
-	if err := session.FileSystem().Chtimes(context.Background(), "/home/agent/target.txt", old, old); err != nil {
-		t.Fatalf("Chtimes(target.txt) error = %v", err)
-	}
-	if err := session.FileSystem().Symlink(context.Background(), "/home/agent/target.txt", "/home/agent/link.txt"); err != nil {
-		t.Fatalf("Symlink() error = %v", err)
-	}
-
-	result := mustExecSession(t, session, "touch -m -h -d '2009-10-10 00:00:00 UTC' /home/agent/link.txt\n")
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
-	}
-
-	linkInfo, err := session.FileSystem().Lstat(context.Background(), "/home/agent/link.txt")
-	if err != nil {
-		t.Fatalf("Lstat(link.txt) error = %v", err)
-	}
-	if got, want := linkInfo.ModTime().UTC(), time.Date(2009, time.October, 10, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
-		t.Fatalf("link.txt ModTime = %v, want %v", got, want)
-	}
-
-	targetInfo, err := session.FileSystem().Stat(context.Background(), "/home/agent/target.txt")
-	if err != nil {
-		t.Fatalf("Stat(target.txt) error = %v", err)
-	}
-	if got, want := targetInfo.ModTime().UTC(), old; !got.Equal(want) {
-		t.Fatalf("target.txt ModTime = %v, want %v", got, want)
-	}
-}
-
 func parseTouchUnixTimePairs(tb testing.TB, output string) [][2]int64 {
 	tb.Helper()
 

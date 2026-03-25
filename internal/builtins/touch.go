@@ -284,7 +284,7 @@ func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times to
 			mtime = info.ModTime() //nolint:nilaway // info is non-nil when exists is true
 		}
 	}
-	return touchSetTimes(ctx, inv, displayName, targetName, abs, info, noDereference, atime, mtime)
+	return touchSetTimes(ctx, inv, displayName, abs, atime, mtime)
 }
 
 func touchResolveTarget(inv *Invocation, name string, noDereference bool) (targetName, displayName string, effectiveNoDereference bool) {
@@ -318,13 +318,7 @@ func touchResolveCreateTarget(ctx context.Context, inv *Invocation, name string)
 	return gbfs.Resolve(path.Dir(abs), target), nil
 }
 
-func touchSetTimes(ctx context.Context, inv *Invocation, displayName, targetName, abs string, info stdfs.FileInfo, noDereference bool, atime, mtime time.Time) error {
-	if noDereference && !hasTrailingSlash(targetName) && info.Mode()&stdfs.ModeSymlink != 0 { //nolint:nilaway // info is non-nil for existing paths
-		if err := inv.FS.ChtimesNoFollow(ctx, abs, atime, mtime); err != nil {
-			return touchSetTimesError(inv, displayName, err)
-		}
-		return nil
-	}
+func touchSetTimes(ctx context.Context, inv *Invocation, displayName, abs string, atime, mtime time.Time) error {
 	if err := inv.FS.Chtimes(ctx, abs, atime, mtime); err != nil {
 		return touchSetTimesError(inv, displayName, err)
 	}

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 )
 
 func TestReadWriteFSReadsWritesAndResolvesSymlinks(t *testing.T) {
@@ -181,43 +180,6 @@ func TestReadWriteFSChownOverridesOwnershipWithoutHostMutation(t *testing.T) {
 	}
 	if got, want := hostOwnership, beforeOwnership; got != want {
 		t.Fatalf("host ownership = %#v, want unchanged %#v", got, want)
-	}
-}
-
-func TestReadWriteFSChtimesNoFollowUpdatesSymlinkOnly(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	if err := os.Symlink("note.txt", filepath.Join(root, "link.txt")); err != nil {
-		t.Fatalf("Symlink() error = %v", err)
-	}
-
-	fsys, err := NewReadWrite(ReadWriteOptions{Root: root})
-	if err != nil {
-		t.Fatalf("NewReadWrite() error = %v", err)
-	}
-
-	want := time.Unix(1_700_000_000, 0).UTC()
-	if err := fsys.ChtimesNoFollow(context.Background(), "/link.txt", want, want); err != nil {
-		t.Fatalf("ChtimesNoFollow() error = %v", err)
-	}
-
-	linkInfo, err := os.Lstat(filepath.Join(root, "link.txt"))
-	if err != nil {
-		t.Fatalf("Lstat(link.txt) error = %v", err)
-	}
-	if got, wantUnix := linkInfo.ModTime().UTC().Unix(), want.Unix(); got != wantUnix {
-		t.Fatalf("link.txt ModTime unix = %d, want %d", got, wantUnix)
-	}
-
-	fileInfo, err := os.Stat(filepath.Join(root, "note.txt"))
-	if err != nil {
-		t.Fatalf("Stat(note.txt) error = %v", err)
-	}
-	if got := fileInfo.ModTime().UTC().Unix(); got == want.Unix() {
-		t.Fatalf("note.txt ModTime unix = %d, want unchanged", got)
 	}
 }
 

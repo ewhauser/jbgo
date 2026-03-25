@@ -8,7 +8,6 @@ import (
 	stdfs "io/fs"
 	"maps"
 	"os"
-	"syscall"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -296,23 +295,6 @@ func (fs *CommandFS) Chtimes(ctx context.Context, name string, atime, mtime time
 		return err
 	}
 	if err := fs.raw().Chtimes(ctx, abs, atime, mtime); err != nil {
-		return wrapCommandError(err)
-	}
-	return nil
-}
-
-// ChtimesNoFollow updates file timestamps without following a final symlink
-// after enforcing write policy.
-func (fs *CommandFS) ChtimesNoFollow(ctx context.Context, name string, atime, mtime time.Time) error {
-	abs, err := fs.prepare(ctx, policy.FileActionWriteNoFollow, name)
-	if err != nil {
-		return err
-	}
-	noFollowFS, ok := fs.raw().(gbfs.ChtimesNoFollowFileSystem)
-	if !ok {
-		return wrapCommandError(&os.PathError{Op: "chtimes", Path: abs, Err: syscall.ENOSYS})
-	}
-	if err := noFollowFS.ChtimesNoFollow(ctx, abs, atime, mtime); err != nil {
 		return wrapCommandError(err)
 	}
 	return nil

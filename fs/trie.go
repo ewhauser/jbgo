@@ -588,18 +588,7 @@ func (f *TrieFS) Chtimes(_ context.Context, name string, atime, mtime time.Time)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.chtimesLocked(name, true, atime, mtime)
-}
-
-func (f *TrieFS) ChtimesNoFollow(_ context.Context, name string, atime, mtime time.Time) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return f.chtimesLocked(name, false, atime, mtime)
-}
-
-func (f *TrieFS) chtimesLocked(name string, follow bool, atime, mtime time.Time) error {
-	_, entry, err := f.resolvePathLocked(name, follow, false)
+	_, entry, err := f.resolvePathLocked(name, true, false)
 	if err != nil {
 		return &os.PathError{Op: "chtimes", Path: Resolve(f.cwd, name), Err: err}
 	}

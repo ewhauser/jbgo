@@ -15,8 +15,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // ReadWriteFS exposes a mutable host directory as the sandbox root.
@@ -288,30 +286,6 @@ func (h *ReadWriteFS) Chtimes(_ context.Context, name string, atime, mtime time.
 		return h.pathError("chtimes", abs, err)
 	}
 	if err := os.Chtimes(target, atime, mtime); err != nil {
-		return h.pathError("chtimes", abs, err)
-	}
-	return nil
-}
-
-func (h *ReadWriteFS) ChtimesNoFollow(_ context.Context, name string, atime, mtime time.Time) error {
-	abs := h.resolve(name)
-
-	target, err := h.resolveLeaf(abs)
-	if err != nil {
-		return h.pathError("chtimes", abs, err)
-	}
-	now := time.Now().UTC()
-	if atime.IsZero() {
-		atime = now
-	}
-	if mtime.IsZero() {
-		mtime = now
-	}
-	times := []unix.Timespec{
-		unix.NsecToTimespec(atime.UnixNano()),
-		unix.NsecToTimespec(mtime.UnixNano()),
-	}
-	if err := unix.UtimesNanoAt(unix.AT_FDCWD, target, times, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return h.pathError("chtimes", abs, err)
 	}
 	return nil

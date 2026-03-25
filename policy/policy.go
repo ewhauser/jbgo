@@ -12,16 +12,15 @@ import (
 type FileAction string
 
 const (
-	FileActionRead          FileAction = "read"
-	FileActionWrite         FileAction = "write"
-	FileActionWriteNoFollow FileAction = "write_nofollow"
-	FileActionStat          FileAction = "stat"
-	FileActionLstat         FileAction = "lstat"
-	FileActionReadlink      FileAction = "readlink"
-	FileActionReadDir       FileAction = "readdir"
-	FileActionMkdir         FileAction = "mkdir"
-	FileActionRemove        FileAction = "remove"
-	FileActionRename        FileAction = "rename"
+	FileActionRead     FileAction = "read"
+	FileActionWrite    FileAction = "write"
+	FileActionStat     FileAction = "stat"
+	FileActionLstat    FileAction = "lstat"
+	FileActionReadlink FileAction = "readlink"
+	FileActionReadDir  FileAction = "readdir"
+	FileActionMkdir    FileAction = "mkdir"
+	FileActionRemove   FileAction = "remove"
+	FileActionRename   FileAction = "rename"
 )
 
 type SymlinkMode string
@@ -130,7 +129,7 @@ func (p *Static) AllowPath(_ context.Context, action FileAction, target string) 
 
 	var roots []string
 	switch action {
-	case FileActionWrite, FileActionWriteNoFollow, FileActionMkdir, FileActionRemove, FileActionRename:
+	case FileActionWrite, FileActionMkdir, FileActionRemove, FileActionRename:
 		roots = p.writeRoots
 	default:
 		roots = p.readRoots

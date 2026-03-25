@@ -504,18 +504,7 @@ func (m *MemoryFS) Chtimes(_ context.Context, name string, atime, mtime time.Tim
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.chtimesLocked(name, true, atime, mtime)
-}
-
-func (m *MemoryFS) ChtimesNoFollow(_ context.Context, name string, atime, mtime time.Time) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	return m.chtimesLocked(name, false, atime, mtime)
-}
-
-func (m *MemoryFS) chtimesLocked(name string, follow bool, atime, mtime time.Time) error {
-	_, node, err := m.resolvePathLocked(name, follow, false)
+	_, node, err := m.resolvePathLocked(name, true, false)
 	if err != nil {
 		return &os.PathError{Op: "chtimes", Path: Resolve(m.cwd, name), Err: err}
 	}
