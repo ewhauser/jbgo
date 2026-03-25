@@ -421,12 +421,32 @@ func resolveTrustedTempRootCandidate(root, name string) (string, error) {
 func defaultSystemTempRootCandidates() []string {
 	switch runtime.GOOS {
 	case "darwin":
-		return []string{"/tmp", "/private/tmp", "/var/folders", "/private/var/folders"}
+		candidates := []string{"/tmp", "/private/tmp"}
+		if tempRoot, ok := darwinVarFoldersTempRoot(os.TempDir()); ok {
+			candidates = append(candidates, tempRoot)
+		}
+		return candidates
 	case "windows":
 		return []string{os.TempDir()}
 	default:
 		return []string{"/tmp"}
 	}
+}
+
+func darwinVarFoldersTempRoot(pathValue string) (string, bool) {
+	clean := filepath.Clean(pathValue)
+	for _, prefix := range []string{"/var/folders", "/private/var/folders"} {
+		if clean == prefix || !strings.HasPrefix(clean, prefix+string(os.PathSeparator)) {
+			continue
+		}
+		rel := strings.TrimPrefix(clean, prefix+string(os.PathSeparator))
+		parts := strings.Split(rel, string(os.PathSeparator))
+		if len(parts) < 3 || parts[2] != "T" {
+			return "", false
+		}
+		return filepath.Join(prefix, parts[0], parts[1], "T"), true
+	}
+	return "", false
 }
 
 func pathWithinRoot(pathValue, root string) bool {
