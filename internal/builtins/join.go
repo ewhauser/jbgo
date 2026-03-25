@@ -2,6 +2,7 @@ package builtins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -60,6 +61,18 @@ type joinDisorder struct {
 	content    string
 }
 
+type joinCursor struct {
+	fileName          string
+	field             int
+	records           []joinRecord
+	index             int
+	issuedDisorderMsg bool
+}
+
+type joinRuntimeState struct {
+	seenUnpairable bool
+}
+
 func NewJoin() *Join {
 	return &Join{}
 }
@@ -112,6 +125,7 @@ func (c *Join) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	if err != nil {
 		return err
 	}
+	joinApplyCompatArgs(inv.Args, matches, &opts)
 
 	leftData, rightData, err := readTwoInputs(ctx, inv, leftName, rightName)
 	if err != nil {
@@ -123,101 +137,44 @@ func (c *Join) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 
 	var leftHeader *joinRecord
 	var rightHeader *joinRecord
+	leftStartLine := 1
+	rightStartLine := 1
 	if opts.header {
-		leftHeader, leftLines = joinTakeHeader(leftLines, opts.field1, &opts)
-		rightHeader, rightLines = joinTakeHeader(rightLines, opts.field2, &opts)
+		leftHeader, leftLines = joinTakeHeader(leftLines, opts.field1, &opts, leftStartLine)
+		rightHeader, rightLines = joinTakeHeader(rightLines, opts.field2, &opts, rightStartLine)
+		leftStartLine++
+		rightStartLine++
 	}
 
-	leftRecords := parseJoinRecords(leftLines, opts.field1, &opts)
-	rightRecords := parseJoinRecords(rightLines, opts.field2, &opts)
+	leftRecords := parseJoinRecords(leftLines, opts.field1, &opts, leftStartLine)
+	rightRecords := parseJoinRecords(rightLines, opts.field2, &opts, rightStartLine)
 	if opts.autoOutput {
-		opts.output = joinAutoOutput(leftRecords, rightRecords, leftHeader, rightHeader)
+		opts.output = joinAutoOutput(
+			joinAutoCount(leftHeader, leftRecords),
+			opts.field1,
+			joinAutoCount(rightHeader, rightRecords),
+			opts.field2,
+		)
 	}
-
-	leftDisorder := joinDetectDisorder(leftRecords, leftName)
-	rightDisorder := joinDetectDisorder(rightRecords, rightName)
 
 	if opts.header {
 		if err := writeJoinLine(inv, &opts, leftHeader, rightHeader); err != nil {
 			return err
 		}
 	}
-	if opts.checkOrder == joinCheckOrderEnabled {
-		if disorder := joinFirstDisorder(leftDisorder, rightDisorder); disorder != nil {
-			return joinWriteDisorder(inv, disorder)
-		}
-	}
 
-	rightByKey := make(map[string][]int)
-	for i, record := range rightRecords {
-		rightByKey[record.key] = append(rightByKey[record.key], i)
-	}
-	rightMatched := make([]bool, len(rightRecords))
-	leftUnpaired := false
-	rightUnpaired := false
-	printJoined := !opts.onlyUnpaired[1] && !opts.onlyUnpaired[2]
+	left := joinCursor{fileName: leftName, field: opts.field1, records: leftRecords}
+	right := joinCursor{fileName: rightName, field: opts.field2, records: rightRecords}
+	state := joinRuntimeState{}
 
-	for _, left := range leftRecords {
-		matches := rightByKey[left.key]
-		if len(matches) == 0 {
-			leftUnpaired = true
-			if opts.include[1] || opts.onlyUnpaired[1] {
-				if err := writeJoinLine(inv, &opts, &left, nil); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-		for _, index := range matches {
-			rightMatched[index] = true
-			if !printJoined {
-				continue
-			}
-			current := rightRecords[index]
-			if err := writeJoinLine(inv, &opts, &left, &current); err != nil {
-				return err
-			}
-		}
+	if err := joinRecords(inv, &opts, &state, &left, &right); err != nil {
+		return err
 	}
-
-	if opts.include[2] || opts.onlyUnpaired[2] {
-		for index, matched := range rightMatched {
-			if matched {
-				continue
-			}
-			rightUnpaired = true
-			current := rightRecords[index]
-			if err := writeJoinLine(inv, &opts, nil, &current); err != nil {
-				return err
-			}
+	if opts.checkOrder == joinCheckOrderDefault && (left.issuedDisorderMsg || right.issuedDisorderMsg) {
+		if _, err := fmt.Fprintln(inv.Stderr, "join: input is not in sorted order"); err != nil {
+			return &ExitError{Code: 1, Err: err}
 		}
-	} else {
-		for _, matched := range rightMatched {
-			if !matched {
-				rightUnpaired = true
-				break
-			}
-		}
-	}
-
-	if opts.checkOrder == joinCheckOrderDefault && (leftUnpaired || rightUnpaired) {
-		wroteAny := false
-		if leftDisorder != nil {
-			if err := joinWriteDisorder(inv, leftDisorder); err != nil {
-				return err
-			}
-			wroteAny = true
-		}
-		if rightDisorder != nil {
-			if err := joinWriteDisorder(inv, rightDisorder); err != nil {
-				return err
-			}
-			wroteAny = true
-		}
-		if wroteAny {
-			_, _ = fmt.Fprintln(inv.Stderr, "join: input is not in sorted order")
-			return &ExitError{Code: 1}
-		}
+		return &ExitError{Code: 1}
 	}
 
 	return nil
@@ -311,11 +268,30 @@ func parseJoinMatches(inv *Invocation, matches *ParsedCommand) (opts joinOptions
 }
 
 func parseJoinFieldNumber(value string) (int, error) {
-	field, err := strconv.Atoi(value)
-	if err != nil || field <= 0 {
+	const maxInt = int(^uint(0) >> 1)
+
+	if value == "" {
 		return 0, fmt.Errorf("invalid")
 	}
-	return field, nil
+	value = strings.TrimPrefix(value, "+")
+	if value == "" {
+		return 0, fmt.Errorf("invalid")
+	}
+	if parsed, err := strconv.ParseUint(value, 10, 64); err == nil {
+		if parsed == 0 {
+			return 0, fmt.Errorf("invalid")
+		}
+		if parsed > uint64(maxInt) {
+			return maxInt, nil
+		}
+		return int(parsed), nil
+	} else {
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+			return maxInt, nil
+		}
+	}
+	return 0, fmt.Errorf("invalid")
 }
 
 func parseJoinFileNumber(value string) (int, error) {
@@ -401,18 +377,18 @@ func joinSplitLines(data []byte, zeroTerminated bool) []string {
 	return parts
 }
 
-func joinTakeHeader(lines []string, fieldIndex int, opts *joinOptions) (header *joinRecord, remaining []string) {
+func joinTakeHeader(lines []string, fieldIndex int, opts *joinOptions, lineNumber int) (header *joinRecord, remaining []string) {
 	if len(lines) == 0 {
 		return nil, nil
 	}
-	record := parseJoinRecord(lines[0], fieldIndex, opts, 1)
+	record := parseJoinRecord(lines[0], fieldIndex, opts, lineNumber)
 	return &record, lines[1:]
 }
 
-func parseJoinRecords(lines []string, fieldIndex int, opts *joinOptions) []joinRecord {
+func parseJoinRecords(lines []string, fieldIndex int, opts *joinOptions, startLine int) []joinRecord {
 	records := make([]joinRecord, 0, len(lines))
 	for i, line := range lines {
-		records = append(records, parseJoinRecord(line, fieldIndex, opts, i+1))
+		records = append(records, parseJoinRecord(line, fieldIndex, opts, startLine+i))
 	}
 	return records
 }
@@ -438,7 +414,7 @@ func joinSplitFields(line string, opts *joinOptions) []string {
 	case joinDelimiterLiteral:
 		return strings.Split(line, opts.delimiter)
 	default:
-		return strings.Fields(line)
+		return joinSplitBlankFields(line, opts.zeroTerminated)
 	}
 }
 
@@ -449,42 +425,32 @@ func joinFieldValue(fields []string, index int) string {
 	return fields[index-1]
 }
 
-func joinAutoOutput(left, right []joinRecord, leftHeader, rightHeader *joinRecord) []joinOutputField {
-	leftFields := joinAutoWidth(left, leftHeader)
-	rightFields := joinAutoWidth(right, rightHeader)
-
-	output := make([]joinOutputField, 0, leftFields+rightFields-1)
+func joinAutoOutput(leftCount, leftField, rightCount, rightField int) []joinOutputField {
+	output := make([]joinOutputField, 0, 1+leftCount+rightCount)
 	output = append(output, joinOutputField{join: true})
-	for field := 2; field <= leftFields; field++ {
+	for field := 1; field <= leftCount; field++ {
+		if field == leftField {
+			continue
+		}
 		output = append(output, joinOutputField{file: 1, field: field})
 	}
-	for field := 2; field <= rightFields; field++ {
+	for field := 1; field <= rightCount; field++ {
+		if field == rightField {
+			continue
+		}
 		output = append(output, joinOutputField{file: 2, field: field})
 	}
 	return output
 }
 
-func joinAutoWidth(records []joinRecord, header *joinRecord) int {
-	if header != nil && len(records) == 0 {
+func joinAutoCount(header *joinRecord, records []joinRecord) int {
+	if header != nil {
 		return len(header.fields)
 	}
 	if len(records) == 0 {
-		return 1
+		return 0
 	}
 	return len(records[0].fields)
-}
-
-func joinDetectDisorder(records []joinRecord, fileName string) *joinDisorder {
-	for i := 1; i < len(records); i++ {
-		if joinCompareKeys(records[i-1].key, records[i].key) > 0 {
-			return &joinDisorder{
-				fileName:   fileName,
-				lineNumber: records[i].lineNumber + 1,
-				content:    records[i].line,
-			}
-		}
-	}
-	return nil
 }
 
 func joinCompareKeys(left, right string) int {
@@ -498,21 +464,189 @@ func joinCompareKeys(left, right string) int {
 	}
 }
 
-func joinFirstDisorder(left, right *joinDisorder) *joinDisorder {
-	if left != nil {
-		return left
-	}
-	return right
-}
-
-func joinWriteDisorder(inv *Invocation, disorder *joinDisorder) error {
+func joinWriteDisorder(inv *Invocation, disorder *joinDisorder, fatal bool) error {
 	if disorder == nil {
 		return nil
 	}
 	if _, err := fmt.Fprintf(inv.Stderr, "join: %s:%d: is not sorted: %s\n", disorder.fileName, disorder.lineNumber, disorder.content); err != nil {
 		return &ExitError{Code: 1, Err: err}
 	}
+	if fatal {
+		return &ExitError{Code: 1}
+	}
 	return nil
+}
+
+func (c *joinCursor) current() *joinRecord {
+	if c == nil || c.index >= len(c.records) {
+		return nil
+	}
+	return &c.records[c.index]
+}
+
+func (c *joinCursor) advance(inv *Invocation, opts *joinOptions, state *joinRuntimeState) error {
+	current := c.current()
+	if current == nil {
+		return nil
+	}
+	c.index++
+	next := c.current()
+	if next == nil {
+		return nil
+	}
+	return c.checkOrder(inv, opts, state, current, next)
+}
+
+func (c *joinCursor) checkOrder(inv *Invocation, opts *joinOptions, state *joinRuntimeState, prev, current *joinRecord) error {
+	if prev == nil || current == nil {
+		return nil
+	}
+	if opts.checkOrder == joinCheckOrderDisabled {
+		return nil
+	}
+	if opts.checkOrder == joinCheckOrderDefault && (!state.seenUnpairable || c.issuedDisorderMsg) {
+		return nil
+	}
+	if joinCompareKeys(prev.key, current.key) <= 0 {
+		return nil
+	}
+	disorder := &joinDisorder{
+		fileName:   c.fileName,
+		lineNumber: current.lineNumber,
+		content:    current.line,
+	}
+	if err := joinWriteDisorder(inv, disorder, opts.checkOrder == joinCheckOrderEnabled); err != nil {
+		return err
+	}
+	c.issuedDisorderMsg = true
+	return nil
+}
+
+func joinRecords(inv *Invocation, opts *joinOptions, state *joinRuntimeState, left, right *joinCursor) error {
+	printJoined := !opts.onlyUnpaired[1] && !opts.onlyUnpaired[2]
+
+	for left.current() != nil && right.current() != nil {
+		leftCurrent := left.current()
+		rightCurrent := right.current()
+		diff := joinCompareKeys(leftCurrent.key, rightCurrent.key)
+		switch {
+		case diff < 0:
+			if opts.include[1] || opts.onlyUnpaired[1] {
+				if err := writeJoinLine(inv, opts, leftCurrent, nil); err != nil {
+					return err
+				}
+			}
+			if err := left.advance(inv, opts, state); err != nil {
+				return err
+			}
+			state.seenUnpairable = true
+		case diff > 0:
+			if opts.include[2] || opts.onlyUnpaired[2] {
+				if err := writeJoinLine(inv, opts, nil, rightCurrent); err != nil {
+					return err
+				}
+			}
+			if err := right.advance(inv, opts, state); err != nil {
+				return err
+			}
+			state.seenUnpairable = true
+		default:
+			leftStart := left.index
+			matchKey := leftCurrent.key
+			for {
+				if err := left.advance(inv, opts, state); err != nil {
+					return err
+				}
+				next := left.current()
+				if next == nil || joinCompareKeys(next.key, matchKey) != 0 {
+					break
+				}
+			}
+			leftEnd := left.index
+
+			rightStart := right.index
+			for {
+				if err := right.advance(inv, opts, state); err != nil {
+					return err
+				}
+				next := right.current()
+				if next == nil || joinCompareKeys(next.key, matchKey) != 0 {
+					break
+				}
+			}
+			rightEnd := right.index
+
+			if !printJoined {
+				continue
+			}
+			for i := leftStart; i < leftEnd; i++ {
+				for j := rightStart; j < rightEnd; j++ {
+					if err := writeJoinLine(inv, opts, &left.records[i], &right.records[j]); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+
+	if err := joinDrainCursor(inv, opts, state, left, right.current() != nil, 1); err != nil {
+		return err
+	}
+	if err := joinDrainCursor(inv, opts, state, right, left.current() != nil, 2); err != nil {
+		return err
+	}
+	return nil
+}
+
+func joinDrainCursor(inv *Invocation, opts *joinOptions, state *joinRuntimeState, cursor *joinCursor, otherHasCurrent bool, fileNum int) error {
+	current := cursor.current()
+	if current == nil {
+		return nil
+	}
+
+	printCurrent := false
+	switch fileNum {
+	case 1:
+		printCurrent = opts.include[1] || opts.onlyUnpaired[1]
+		if printCurrent {
+			if err := writeJoinLine(inv, opts, current, nil); err != nil {
+				return err
+			}
+		}
+	case 2:
+		printCurrent = opts.include[2] || opts.onlyUnpaired[2]
+		if printCurrent {
+			if err := writeJoinLine(inv, opts, nil, current); err != nil {
+				return err
+			}
+		}
+	}
+
+	if otherHasCurrent {
+		state.seenUnpairable = true
+	}
+	for {
+		if err := cursor.advance(inv, opts, state); err != nil {
+			return err
+		}
+		current = cursor.current()
+		if current == nil {
+			return nil
+		}
+		if !printCurrent {
+			continue
+		}
+		switch fileNum {
+		case 1:
+			if err := writeJoinLine(inv, opts, current, nil); err != nil {
+				return err
+			}
+		case 2:
+			if err := writeJoinLine(inv, opts, nil, current); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func writeJoinLine(inv *Invocation, opts *joinOptions, left, right *joinRecord) error {
@@ -614,6 +748,50 @@ func replaceJoinEmpty(fields []string, empty string) []string {
 
 func unicodeSpace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
+func joinSplitBlankFields(line string, zeroTerminated bool) []string {
+	if line == "" {
+		return nil
+	}
+	fields := make([]string, 0, 4)
+	start := -1
+	for i := 0; i < len(line); i++ {
+		if joinIsBlankByte(line[i], zeroTerminated) {
+			if start >= 0 {
+				fields = append(fields, line[start:i])
+				start = -1
+			}
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		fields = append(fields, line[start:])
+	}
+	return fields
+}
+
+func joinIsBlankByte(b byte, zeroTerminated bool) bool {
+	return b == ' ' || b == '\t' || (zeroTerminated && b == '\n')
+}
+
+func joinApplyCompatArgs(rawArgs []string, matches *ParsedCommand, opts *joinOptions) {
+	if opts == nil || matches == nil || matches.Has("2") || matches.Has("j") {
+		return
+	}
+	for _, arg := range rawArgs {
+		if arg == "--" {
+			return
+		}
+		if arg == "-12" {
+			opts.field1 = 2
+			opts.field2 = 2
+			return
+		}
+	}
 }
 
 var _ Command = (*Join)(nil)
