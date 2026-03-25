@@ -28,7 +28,11 @@ func TestRunReadWriteRootTouchDashUsesInheritedStdoutPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open(%q) error = %v", target, err)
 	}
-	defer stdoutFile.Close()
+	t.Cleanup(func() {
+		if closeErr := stdoutFile.Close(); closeErr != nil {
+			t.Fatalf("Close(%q) error = %v", target, closeErr)
+		}
+	})
 
 	var stderr strings.Builder
 	exitCode, err := run(
