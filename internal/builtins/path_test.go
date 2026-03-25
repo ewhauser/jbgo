@@ -357,6 +357,83 @@ func TestRmdirIgnoresFailOnNonEmptyParents(t *testing.T) {
 	}
 }
 
+func TestRmdirIgnoreFailOnNonEmptyKeepsPermissionFailures(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, strings.Join([]string{
+		"mkdir -p x/y",
+		"chmod a-w x",
+		"touch x/y/z",
+		"rmdir --ignore-fail-on-non-empty x/y",
+		"printf 'status=%s\\n' \"$?\"",
+	}, "\n")+"\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, ""; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRmdirReportsSymlinkSlashErrorsWithDefaultPolicy(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	setup := mustExecSession(t, session, "mkdir dir\nmkdir dir/dir2\necho hi > file\nln -s dir sl\nln -s missing dl\nln -s file fl\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	fileLink := mustExecSession(t, session, "rmdir fl/\n")
+	if fileLink.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", fileLink.ExitCode)
+	}
+	if got, want := fileLink.Stderr, "rmdir: failed to remove 'fl/': Not a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+
+	dirLink := mustExecSession(t, session, "rmdir sl/\n")
+	if dirLink.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", dirLink.ExitCode)
+	}
+	if got, want := dirLink.Stderr, "rmdir: failed to remove 'sl/': Symbolic link not followed\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+
+	danglingLink := mustExecSession(t, session, "rmdir dl/\n")
+	if danglingLink.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", danglingLink.ExitCode)
+	}
+	if got, want := danglingLink.Stderr, "rmdir: failed to remove 'dl/': Symbolic link not followed\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestRmdirParentsKeepRelativeSymlinkDiagnosticsWithDefaultPolicy(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	setup := mustExecSession(t, session, "mkdir -p dir/dir2\nln -s dir sl\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	result := mustExecSession(t, session, "rmdir -p sl/dir2\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if got, want := result.Stderr, "rmdir: failed to remove 'sl': Not a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/dir/dir2"); err != nil {
+		t.Fatalf("Stat(dir/dir2) error = %v, want present", err)
+	}
+}
+
 func TestRmdirReportsSymlinkSlashErrors(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{
@@ -413,6 +490,33 @@ func TestRmdirParentsKeepRelativeSymlinkDiagnostics(t *testing.T) {
 	}
 
 	result := mustExecSession(t, session, "rmdir -p sl/dir2\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if got, want := result.Stderr, "rmdir: failed to remove 'sl': Not a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/dir/dir2"); !os.IsNotExist(err) {
+		t.Fatalf("Stat(dir/dir2) error = %v, want not exist", err)
+	}
+}
+
+func TestRmdirParentsKeepRelativeSymlinkDiagnosticsWithEmptyPath(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	setup := mustExecSession(t, session, "mkdir -p dir/dir2\nln -s dir sl\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	result := mustExecSession(t, session, "PATH=\n/bin/rmdir -p sl/dir2\n")
 	if result.ExitCode == 0 {
 		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
 	}
@@ -1227,7 +1331,6 @@ func TestLNNoDereferenceReplacesSymlinkToDirectory(t *testing.T) {
 		t.Fatalf("Lstat(link-dir).Mode() = %v, want symlink", info.Mode())
 	}
 }
-
 func TestLinkHardLinkSharesContent(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

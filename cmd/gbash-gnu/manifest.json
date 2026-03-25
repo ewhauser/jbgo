@@ -97,6 +97,7 @@
     { "pattern": "tests/ln/hard-to-sym.sh", "reason": "ln hard-link-to-symlink cases require symlink traversal or symlink inode linking, which the default gbash sandbox denies" },
     { "pattern": "tests/ln/relative.sh", "reason": "ln --relative cases require following source symlinks, which the default gbash sandbox denies" },
     { "pattern": "tests/ln/sf-1.sh", "reason": "ln -sf same-file cases in the GNU suite require symlink traversal that the default gbash sandbox denies" },
+    { "pattern": "tests/mkdir/p-thru-slink.sh", "reason": "mkdir -p through a symlinked directory requires symlink traversal, which the default gbash sandbox denies" },
     { "pattern": "tests/wc/wc-proc.sh", "reason": "wc proc/sysfs test requires /proc/version and /sys/kernel/profiling, which are not mounted inside the gbash compat sandbox root" }
   ]
 }

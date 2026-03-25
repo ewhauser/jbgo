@@ -60,11 +60,19 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 
 	workDir := resolveWorkDir(s.cfg.FileSystem.WorkingDir, req.WorkDir)
 	execEnv := executionEnv(s.cfg.BaseEnv, req)
-	projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
 	visiblePWD, hasVisiblePWD := execEnv["PWD"]
-	execEnv["PWD"] = workDir
-	if !s.bootAt.IsZero() {
-		execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
+	if !req.ReplaceEnv {
+		projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
+	}
+	if !req.ReplaceEnv || hasVisiblePWD {
+		execEnv["PWD"] = workDir
+	} else {
+		delete(execEnv, "PWD")
+	}
+	if !req.ReplaceEnv && !s.bootAt.IsZero() {
+		if _, ok := execEnv["GBASH_SESSION_BOOT_AT"]; !ok {
+			execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
+		}
 	}
 
 	if err := s.layout.ensure(ctx, s.fs, execEnv, workDir, s.cfg.Registry.Names()); err != nil {
@@ -145,6 +153,8 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		ScriptPath:      req.ScriptPath,
 		Script:          script,
 		Command:         cloneStrings(req.Command),
+		CommandPath:     req.CommandPath,
+		CommandName:     req.CommandName,
 		Args:            req.Args,
 		StartupOptions:  req.StartupOptions,
 		StartupHome:     req.StartupHome,
@@ -282,14 +292,22 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 		ReplaceEnv: req.ReplaceEnv,
 	}
 	execEnv := executionEnv(s.cfg.BaseEnv, execReq)
-	projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
 	visiblePWD, hasVisiblePWD := execEnv["PWD"]
-	execEnv["PWD"] = workDir
+	if !req.ReplaceEnv {
+		projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
+	}
+	if !req.ReplaceEnv || hasVisiblePWD {
+		execEnv["PWD"] = workDir
+	} else {
+		delete(execEnv, "PWD")
+	}
 	if _, ok := execEnv["TTY"]; !ok {
 		execEnv["TTY"] = "/dev/tty"
 	}
-	if !s.bootAt.IsZero() {
-		execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
+	if !req.ReplaceEnv && !s.bootAt.IsZero() {
+		if _, ok := execEnv["GBASH_SESSION_BOOT_AT"]; !ok {
+			execEnv["GBASH_SESSION_BOOT_AT"] = s.bootAt.Format(time.RFC3339)
+		}
 	}
 
 	if err := initializeSandboxLayout(ctx, s.fs, execEnv, workDir, s.cfg.Registry.Names()); err != nil {

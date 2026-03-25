@@ -103,7 +103,11 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	case BashSourceCommandString:
 		return c.executeInlineScript(ctx, inv, parsed, parsed.CommandString, inv.Stdin)
 	case BashSourceFile:
-		scriptData, _, err := readAllFile(ctx, inv, parsed.ScriptPath)
+		scriptReadPath := parsed.ScriptPath
+		if resolvedPath, resolveErr := canonicalizeReadlink(ctx, inv, parsed.ScriptPath, readlinkModeCanonicalizeExisting); resolveErr == nil && resolvedPath != "" {
+			scriptReadPath = resolvedPath
+		}
+		scriptData, _, err := readAllFile(ctx, inv, scriptReadPath)
 		if err != nil {
 			if errors.Is(err, stdfs.ErrNotExist) {
 				exitCode := 127

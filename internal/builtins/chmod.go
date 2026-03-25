@@ -493,6 +493,9 @@ func applyChmodClause(current, naive stdfs.FileMode, clause string, umask stdfs.
 	whoPart := clause[:idx]
 	op := clause[idx]
 	permPart := clause[idx+1:]
+	if op == '=' {
+		permPart = strings.TrimLeft(permPart, "+-=")
+	}
 	if permPart == "" && op != '=' {
 		return 0, 0, fmt.Errorf("invalid clause")
 	}

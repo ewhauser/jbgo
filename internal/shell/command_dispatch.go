@@ -16,6 +16,8 @@ import (
 
 type commandExecuteRequest struct {
 	Argv          []string
+	CommandPath   string
+	CommandName   string
 	VirtualWD     string
 	Env           expand.Environ
 	CurrentEnv    map[string]string
@@ -41,7 +43,16 @@ func (m *core) executeCommand(ctx context.Context, exec *Execution, req *command
 		return req.CurrentEnv, nil
 	}
 
-	resolved, ok, err := lookupCommand(ctx, exec, req.VirtualWD, req.Env, req.Argv[0])
+	var (
+		resolved *resolvedCommand
+		ok       bool
+		err      error
+	)
+	if req.CommandPath != "" {
+		resolved, ok, err = lookupCommandPath(ctx, exec, req.VirtualWD, req.CommandPath, "path", req.Argv[0])
+	} else {
+		resolved, ok, err = lookupCommand(ctx, exec, req.VirtualWD, req.Env, req.Argv[0])
+	}
 	if err != nil {
 		if policy.IsDenied(err) {
 			recordPolicyDenied(exec.Trace, err, "stat", "", req.Argv[0], "")
@@ -51,6 +62,9 @@ func (m *core) executeCommand(ctx context.Context, exec *Execution, req *command
 	}
 	if !ok {
 		return req.CurrentEnv, shellFailureToWriter(ctx, req.Stderr, 127, "%s: command not found", req.Argv[0])
+	}
+	if req.CommandName != "" {
+		resolved.name = req.CommandName
 	}
 
 	start := time.Now().UTC()

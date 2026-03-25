@@ -465,7 +465,7 @@ func recordOption(parsed *ParsedCommand, name, raw, value string, hasValue bool)
 		Value:    value,
 		HasValue: hasValue,
 	})
-	if value != "" || slices.Contains([]string{"output-error"}, name) {
+	if hasValue || slices.Contains([]string{"output-error"}, name) {
 		parsed.optionValues[name] = append(parsed.optionValues[name], value)
 	}
 }

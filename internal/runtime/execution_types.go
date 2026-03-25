@@ -16,6 +16,8 @@ type ExecutionRequest struct {
 	ScriptPath      string
 	Script          string
 	Command         []string
+	CommandPath     string
+	CommandName     string
 	Args            []string
 	StartupOptions  []string
 	StartupHome     string
@@ -35,6 +37,7 @@ type ExecutionResult struct {
 	Stdout          string
 	Stderr          string
 	ControlStderr   string
+	CommandNotFound bool
 	FinalEnv        map[string]string
 	StartedAt       time.Time
 	FinishedAt      time.Time
@@ -71,6 +74,8 @@ func executionRequestFromCommand(req *commands.ExecutionRequest) *ExecutionReque
 		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
 		Command:         cloneStrings(req.Command),
+		CommandPath:     req.CommandPath,
+		CommandName:     req.CommandName,
 		Args:            cloneStrings(req.Args),
 		StartupOptions:  cloneStrings(req.StartupOptions),
 		Env:             copyStringMap(req.Env),
@@ -94,6 +99,7 @@ func (result *ExecutionResult) commandResult() *commands.ExecutionResult {
 		Stdout:          result.Stdout,
 		Stderr:          result.Stderr,
 		ControlStderr:   result.ControlStderr,
+		CommandNotFound: result.CommandNotFound,
 		FinalEnv:        copyStringMap(result.FinalEnv),
 		StartedAt:       result.StartedAt,
 		FinishedAt:      result.FinishedAt,

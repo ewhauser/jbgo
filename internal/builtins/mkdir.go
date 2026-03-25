@@ -6,6 +6,9 @@ import (
 	"fmt"
 	stdfs "io/fs"
 	"path"
+	"strings"
+
+	gbfs "github.com/ewhauser/gbash/fs"
 )
 
 type Mkdir struct{}
@@ -65,26 +68,18 @@ func (c *Mkdir) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 		return exitf(inv, 1, "mkdir: missing operand")
 	}
 
-	createMode := stdfs.FileMode(0o755)
-	if opts.modeSet {
-		createMode = opts.mode
-	}
+	defaultMode := mkdirDefaultMode(inv)
 
 	for _, name := range args {
-		abs := allowPath(inv, name)
-
-		created, err := mkdirPath(ctx, inv, abs, createMode, opts.parents)
+		created, err := mkdirPath(ctx, inv, name, defaultMode, opts)
 		if err != nil {
 			return err
 		}
-		if opts.modeSet && created {
-			if err := inv.FS.Chmod(ctx, abs, opts.mode); err != nil {
-				return &ExitError{Code: 1, Err: err}
-			}
-		}
-		if opts.verbose && created {
-			if _, err := fmt.Fprintf(inv.Stdout, "mkdir: created directory %s\n", quoteGNUOperand(name)); err != nil {
-				return &ExitError{Code: 1, Err: err}
+		if opts.verbose {
+			for _, abs := range created {
+				if _, err := fmt.Fprintf(inv.Stdout, "mkdir: created directory %s\n", quoteGNUOperand(mkdirVerbosePath(inv, name, abs))); err != nil {
+					return &ExitError{Code: 1, Err: err}
+				}
 			}
 		}
 	}
@@ -116,34 +111,189 @@ func parseMkdirMode(inv *Invocation, spec string) (stdfs.FileMode, error) {
 	return mode & (stdfs.ModePerm | stdfs.ModeSetuid | stdfs.ModeSetgid | stdfs.ModeSticky), nil
 }
 
-func mkdirPath(ctx context.Context, inv *Invocation, abs string, perm stdfs.FileMode, parents bool) (bool, error) {
-	if info, err := inv.FS.Lstat(ctx, abs); err == nil {
-		if parents && info.IsDir() {
-			return false, nil
-		}
-		return false, exitf(inv, 1, "mkdir: cannot create directory %q: File exists", abs)
+func mkdirDefaultMode(inv *Invocation) stdfs.FileMode {
+	return 0o777 &^ chmodCurrentUmask(inv)
+}
+
+func mkdirCompatUsesProcessUmask(inv *Invocation) bool {
+	return inv != nil && inv.Env != nil && strings.TrimSpace(inv.Env["GBASH_COMPAT_ROOT"]) != ""
+}
+
+func mkdirPath(ctx context.Context, inv *Invocation, raw string, defaultMode stdfs.FileMode, opts mkdirOptions) ([]string, error) {
+	rawAbs, abs := mkdirResolveOperand(inv, raw)
+	if opts.parents {
+		return mkdirParentsPath(ctx, inv, rawAbs, abs, defaultMode, opts)
+	}
+	return mkdirSinglePath(ctx, inv, abs, defaultMode, opts)
+}
+
+func mkdirResolveOperand(inv *Invocation, raw string) (string, string) {
+	raw = remapCompatHostPath(inv, raw)
+	if raw == "" {
+		raw = "."
+	}
+	if strings.HasPrefix(raw, "/") {
+		return raw, gbfs.Clean(raw)
+	}
+	cwd := "/"
+	switch {
+	case inv != nil && inv.FS != nil:
+		cwd = inv.FS.Getwd()
+	case inv != nil && inv.Cwd != "":
+		cwd = gbfs.Clean(inv.Cwd)
+	}
+	if cwd == "/" {
+		raw = "/" + raw
+	} else {
+		raw = cwd + "/" + raw
+	}
+	return raw, gbfs.Clean(raw)
+}
+
+func mkdirSinglePath(ctx context.Context, inv *Invocation, abs string, defaultMode stdfs.FileMode, opts mkdirOptions) ([]string, error) {
+	if _, err := inv.FS.Lstat(ctx, abs); err == nil {
+		return nil, exitf(inv, 1, "mkdir: cannot create directory %q: File exists", abs)
 	} else if !errors.Is(err, stdfs.ErrNotExist) {
-		return false, &ExitError{Code: 1, Err: err}
+		return nil, &ExitError{Code: 1, Err: err}
 	}
 
-	if !parents {
-		parent := path.Dir(abs)
-		info, err := inv.FS.Stat(ctx, parent)
-		if err != nil {
-			if errors.Is(err, stdfs.ErrNotExist) {
-				return false, exitf(inv, 1, "mkdir: cannot create directory %q: No such file or directory", abs)
+	parent := path.Dir(abs)
+	info, err := inv.FS.Stat(ctx, parent)
+	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) {
+			return nil, exitf(inv, 1, "mkdir: cannot create directory %q: No such file or directory", abs)
+		}
+		return nil, &ExitError{Code: 1, Err: err}
+	}
+	if !info.IsDir() {
+		return nil, exitf(inv, 1, "mkdir: cannot create directory %q: Not a directory", abs)
+	}
+
+	if err := inv.FS.MkdirAll(ctx, abs, 0o777); err != nil {
+		return nil, &ExitError{Code: 1, Err: err}
+	}
+	mode := defaultMode
+	if opts.modeSet {
+		mode = opts.mode
+	}
+	if opts.modeSet || !mkdirCompatUsesProcessUmask(inv) {
+		if err := inv.FS.Chmod(ctx, abs, mode); err != nil {
+			return nil, &ExitError{Code: 1, Err: err}
+		}
+	}
+	return []string{abs}, nil
+}
+
+func mkdirParentsPath(ctx context.Context, inv *Invocation, rawAbs, abs string, defaultMode stdfs.FileMode, opts mkdirOptions) ([]string, error) {
+	current := "/"
+	created := make([]string, 0)
+
+	for part := range strings.SplitSeq(rawAbs, "/") {
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			current = path.Dir(current)
+			continue
+		}
+
+		next := gbfs.Resolve(current, part)
+		info, err := inv.FS.Stat(ctx, next)
+		if err == nil {
+			if !info.IsDir() {
+				if next == abs {
+					return nil, exitf(inv, 1, "mkdir: cannot create directory %q: File exists", next)
+				}
+				return nil, exitf(inv, 1, "mkdir: cannot create directory %q: Not a directory", next)
 			}
-			return false, &ExitError{Code: 1, Err: err}
+			current = next
+			continue
 		}
-		if !info.IsDir() {
-			return false, exitf(inv, 1, "mkdir: cannot create directory %q: Not a directory", abs)
+		if !errors.Is(err, stdfs.ErrNotExist) {
+			return nil, &ExitError{Code: 1, Err: err}
 		}
-	}
+		if _, lstatErr := inv.FS.Lstat(ctx, next); lstatErr == nil {
+			return nil, exitf(inv, 1, "mkdir: cannot create directory %q: No such file or directory", next)
+		} else if !errors.Is(lstatErr, stdfs.ErrNotExist) {
+			return nil, &ExitError{Code: 1, Err: lstatErr}
+		}
 
-	if err := inv.FS.MkdirAll(ctx, abs, perm); err != nil {
-		return false, &ExitError{Code: 1, Err: err}
+		if err := inv.FS.MkdirAll(ctx, next, 0o777); err != nil {
+			return nil, &ExitError{Code: 1, Err: err}
+		}
+
+		applyMode := true
+		mode := defaultMode
+		switch {
+		case next != abs:
+			mode |= 0o300
+		case opts.modeSet:
+			mode = opts.mode
+		case mkdirCompatUsesProcessUmask(inv):
+			applyMode = false
+		}
+		created = append(created, next)
+		if applyMode {
+			if err := inv.FS.Chmod(ctx, next, mode); err != nil {
+				return nil, &ExitError{Code: 1, Err: err}
+			}
+		}
+		current = next
 	}
-	return true, nil
+	return created, nil
+}
+
+func mkdirVerbosePath(inv *Invocation, raw, abs string) string {
+	raw = remapCompatHostPath(inv, raw)
+	if raw == "" {
+		raw = "."
+	}
+	if strings.HasPrefix(raw, "/") {
+		return abs
+	}
+	leadingDotSlash := strings.HasPrefix(raw, "./")
+	cwd := "/"
+	if inv != nil && inv.FS != nil {
+		cwd = inv.FS.Getwd()
+	}
+	current := cwd
+	display := ""
+	for part := range strings.SplitSeq(raw, "/") {
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			current = path.Dir(current)
+			if display == "" {
+				display = ".."
+			} else {
+				display += "/.."
+			}
+		default:
+			current = gbfs.Resolve(current, part)
+			if display == "" {
+				display = part
+			} else {
+				display += "/" + part
+			}
+		}
+		if current == abs && display != "" {
+			if leadingDotSlash && display != "." && !strings.HasPrefix(display, "./") && !strings.HasPrefix(display, "../") {
+				return "./" + display
+			}
+			return display
+		}
+	}
+	if display != "" {
+		if leadingDotSlash && display != "." && !strings.HasPrefix(display, "./") && !strings.HasPrefix(display, "../") {
+			return "./" + display
+		}
+		return display
+	}
+	if cwd == "/" {
+		return strings.TrimPrefix(abs, "/")
+	}
+	return strings.TrimPrefix(abs, cwd+"/")
 }
 
 var _ Command = (*Mkdir)(nil)

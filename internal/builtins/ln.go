@@ -308,7 +308,6 @@ func lnCheckSameFile(ctx context.Context, inv *Invocation, opts *lnOptions, targ
 	}
 	return nil
 }
-
 func lnRelativeTarget(inv *Invocation, target, linkAbs string) string {
 	targetAbs := inv.FS.Resolve(target)
 	baseDir := path.Dir(linkAbs)

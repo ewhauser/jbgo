@@ -27,6 +27,7 @@ func exitCodeForError(err error) int {
 }
 
 func allowPath(inv *Invocation, name string) string {
+	name = remapCompatHostPath(inv, name)
 	if inv == nil || inv.FS == nil {
 		return gbfs.Clean(name)
 	}

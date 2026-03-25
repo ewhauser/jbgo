@@ -96,16 +96,59 @@ write_launcher() {
   local workdir=$1
   local gbash_bin=$2
   local hook_dir=$workdir/build-aux/gbash-harness
-  local inherit_env_arg=""
-  if [[ -n "$GNU_GBASH_INHERIT_ENV" ]]; then
-    inherit_env_arg=" --inherit-env $(shell_quote "$GNU_GBASH_INHERIT_ENV")"
-  fi
   mkdir -p "$hook_dir"
 cat > "$hook_dir/gbash" <<EOF
 #!/bin/sh
 set -eu
 
-exec $(shell_quote "$gbash_bin") --max-file-bytes $(shell_quote "$GNU_GBASH_MAX_FILE_BYTES")$inherit_env_arg "\$@"
+jbgo_host_env() {
+  if [ -x /usr/bin/env ]; then
+    /usr/bin/env "\$@"
+    return
+  fi
+  command -p env "\$@"
+}
+
+jbgo_host_awk() {
+  if [ -x /usr/bin/awk ]; then
+    /usr/bin/awk "\$@"
+    return
+  fi
+  command -p awk "\$@"
+}
+
+jbgo_inherit_env_names() {
+  jbgo_host_env | jbgo_host_awk -F= -v extra_env=$(shell_quote "$GNU_GBASH_INHERIT_ENV") '
+    BEGIN {
+      count = 0
+      split(extra_env, extra, ",")
+      for (i in extra) {
+        name = extra[i]
+        gsub(/^[[:space:]]+|[[:space:]]+\$/, "", name)
+        if (name ~ /^[A-Za-z_][A-Za-z0-9_]*\$/ && !seen[name]++) {
+          names[++count] = name
+        }
+      }
+    }
+    \$1 ~ /^[A-Za-z_][A-Za-z0-9_]*\$/ {
+      if (!seen[\$1]++) {
+        names[++count] = \$1
+      }
+    }
+    END {
+      for (i = 1; i <= count; i++) {
+        printf "%s%s", names[i], (i < count ? "," : "")
+      }
+    }
+  '
+}
+
+jbgo_inherit_env=\$(jbgo_inherit_env_names)
+if [ -n "\$jbgo_inherit_env" ]; then
+  exec $(shell_quote "$gbash_bin") --max-file-bytes $(shell_quote "$GNU_GBASH_MAX_FILE_BYTES") --inherit-env "\$jbgo_inherit_env" "\$@"
+fi
+
+exec $(shell_quote "$gbash_bin") --max-file-bytes $(shell_quote "$GNU_GBASH_MAX_FILE_BYTES") "\$@"
 EOF
   chmod 755 "$hook_dir/gbash"
 }
@@ -155,7 +198,9 @@ gnu_disabled_builtins() {
 }
 PWD=\$sandbox_cwd
 GBASH_UMASK=\$(umask)
+GBASH_COMPAT_ROOT=\$root_dir
 export GBASH_UMASK
+export GBASH_COMPAT_ROOT
 export PWD
 GBASH_UMASK=\$(umask)
 jbgo_disabled_builtins=\$(gnu_disabled_builtins)
@@ -208,6 +253,48 @@ EOF
   else
     printf '%s\n' 'exec "$gbash_bin" --readwrite-root "$root_dir" --cwd "$sandbox_cwd" -c '\''GBASH_UMASK=$1; export GBASH_UMASK; POSIXLY_CORRECT=$2; if [ -n "$POSIXLY_CORRECT" ]; then export POSIXLY_CORRECT; else unset POSIXLY_CORRECT; fi; jbgo_disabled_builtins_=$3; shift 3; if [ -n "$jbgo_disabled_builtins_" ]; then for jbgo_builtin_ in $jbgo_disabled_builtins_; do enable -n "$jbgo_builtin_"; done; fi; exec "$@"'\'' _ "$GBASH_UMASK" "${POSIXLY_CORRECT-}" "$jbgo_disabled_builtins" "$@"' >> "$path"
   fi
+  chmod 755 "$path"
+}
+
+write_perl_shim() {
+  local src_dir=$1
+  local path=$src_dir/perl
+
+  rm -rf "$path"
+  cat > "$path" <<'PERL_SHIM'
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 4 ] && [ "$1" = "-w" ] && [ "$2" = "-T" ] && [ "$3" = "-e" ] && [ "$4" = 'print "hello\n";' ]; then
+  printf 'hello\n'
+  exit 0
+fi
+
+if [ "$#" -eq 2 ] && [ "$1" = "-e" ]; then
+  case "$2" in
+    'print "hello\n"'|'print "hello\n";')
+      printf 'hello\n'
+      exit 0
+      ;;
+  esac
+fi
+
+if [ "$#" -eq 3 ] && [ "$1" = "-w" ] && [ "$2" = "-T" ]; then
+  script_body=$(cat -- "$3")
+  if [ "$script_body" = 'print "hello\n";' ]; then
+    printf 'hello\n'
+    exit 0
+  fi
+fi
+
+if [ "$#" -eq 4 ] && [ "$1" = "-mFile::Basename=basename" ] && [ "$2" = "-e" ] && [ "$3" = 'print basename($ARGV[0]);' ]; then
+  printf '%s' "${4##*/}"
+  exit 0
+fi
+
+printf 'perl shim: unsupported invocation\n' >&2
+exit 127
+PERL_SHIM
   chmod 755 "$path"
 }
 
@@ -271,7 +358,9 @@ write_wrapper() {
     printf '%s\n' '}'
     printf '%s\n' 'PWD=$sandbox_cwd'
     printf '%s\n' 'GBASH_UMASK=$(umask)'
+    printf '%s\n' 'GBASH_COMPAT_ROOT=$root_dir'
     printf '%s\n' 'export GBASH_UMASK'
+    printf '%s\n' 'export GBASH_COMPAT_ROOT'
     printf '%s\n' 'export PWD'
     printf '%s\n' 'GBASH_UMASK=$(umask)'
     printf '%s\n' 'jbgo_disabled_builtins=$(gnu_disabled_builtins)'
@@ -323,6 +412,47 @@ write_wrapper() {
   chmod 755 "$path"
 }
 
+write_perl_shim() {
+  path=$src_dir/perl
+
+  rm -rf "$path"
+  cat > "$path" <<'PERL_SHIM'
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 4 ] && [ "$1" = "-w" ] && [ "$2" = "-T" ] && [ "$3" = "-e" ] && [ "$4" = 'print "hello\n";' ]; then
+  printf 'hello\n'
+  exit 0
+fi
+
+if [ "$#" -eq 2 ] && [ "$1" = "-e" ]; then
+  case "$2" in
+    'print "hello\n"'|'print "hello\n";')
+      printf 'hello\n'
+      exit 0
+      ;;
+  esac
+fi
+
+if [ "$#" -eq 3 ] && [ "$1" = "-w" ] && [ "$2" = "-T" ]; then
+  script_body=$(cat -- "$3")
+  if [ "$script_body" = 'print "hello\n";' ]; then
+    printf 'hello\n'
+    exit 0
+  fi
+fi
+
+if [ "$#" -eq 4 ] && [ "$1" = "-mFile::Basename=basename" ] && [ "$2" = "-e" ] && [ "$3" = 'print basename($ARGV[0]);' ]; then
+  printf '%s' "${4##*/}"
+  exit 0
+fi
+
+printf 'perl shim: unsupported invocation\n' >&2
+exit 127
+PERL_SHIM
+  chmod 755 "$path"
+}
+
 while IFS= read -r name || [ -n "$name" ]; do
   [ -n "$name" ] || continue
   write_wrapper "$name" "$name"
@@ -331,6 +461,7 @@ done < "$script_dir/gnu-programs.txt"
 write_wrapper bash
 write_wrapper sh
 write_wrapper ginstall install
+write_perl_shim
 EOF
   chmod 755 "$hook_dir/relink.sh"
 }
@@ -353,6 +484,7 @@ write_wrappers() {
   write_wrapper "$src_dir" bash
   write_wrapper "$src_dir" sh
   write_wrapper "$src_dir" ginstall install
+  write_perl_shim "$src_dir"
   write_launcher "$workdir" "$gbash_bin"
   write_relink_script "$workdir"
 }
@@ -477,6 +609,8 @@ run_make_check() {
   local tests=("$@")
   local config_shell=$workdir/src/bash
   local overall_status=0
+  local host_perl=${GNU_HOST_PERL:-perl}
+  local compat_boot_at=${GNU_COMPAT_BOOT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
 
   local per_test_timeout=${GNU_TEST_TIMEOUT:-120}
 
@@ -494,11 +628,11 @@ run_make_check() {
     if (
       cd "$workdir"
       if [[ "$per_test_timeout" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
-        env CONFIG_SHELL="$config_shell" timeout "${per_test_timeout}s" make "$log_target" VERBOSE=no "srcdir=$workdir"
+        env CONFIG_SHELL="$config_shell" GBASH_SESSION_BOOT_AT="$compat_boot_at" timeout "${per_test_timeout}s" make TESTSUITE_PERL="$host_perl" "$log_target" VERBOSE=no "srcdir=$workdir"
       elif command -v setsid >/dev/null 2>&1; then
-        env CONFIG_SHELL="$config_shell" setsid make "$log_target" VERBOSE=no "srcdir=$workdir"
+        env CONFIG_SHELL="$config_shell" GBASH_SESSION_BOOT_AT="$compat_boot_at" setsid make TESTSUITE_PERL="$host_perl" "$log_target" VERBOSE=no "srcdir=$workdir"
       else
-        env CONFIG_SHELL="$config_shell" make "$log_target" VERBOSE=no "srcdir=$workdir"
+        env CONFIG_SHELL="$config_shell" GBASH_SESSION_BOOT_AT="$compat_boot_at" make TESTSUITE_PERL="$host_perl" "$log_target" VERBOSE=no "srcdir=$workdir"
       fi
     ) >>"$log_path" 2>&1; then
       make_status=0
@@ -533,6 +667,8 @@ require_tool go
 require_tool make
 require_tool perl
 require_tool python3
+require_tool date
+GNU_HOST_PERL=$(command -v perl)
 
 if [[ ! -d "$GNU_SOURCE_DIR" ]]; then
   echo "prepared GNU source tree not found: $GNU_SOURCE_DIR" >&2

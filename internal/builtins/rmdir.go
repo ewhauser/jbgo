@@ -9,6 +9,8 @@ import (
 	"path"
 	"strings"
 	"syscall"
+
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Rmdir struct{}
@@ -85,6 +87,9 @@ func removeEmptyDir(ctx context.Context, inv *Invocation, raw, abs string, opts 
 	if err := rmdirSymlinkSlashError(ctx, inv, raw, abs); err != nil {
 		return err
 	}
+	if err := rmdirTraversalPathError(ctx, inv, raw); err != nil {
+		return err
+	}
 	info, err := inv.FS.Lstat(ctx, abs)
 	if err != nil {
 		return rmdirFailure(inv, raw, err)
@@ -106,31 +111,102 @@ func rmdirSymlinkSlashError(ctx context.Context, inv *Invocation, raw, abs strin
 		return nil
 	}
 
-	trimmedRaw := strings.TrimRight(raw, "/")
-	if trimmedRaw == "" {
-		trimmedRaw = raw
-	}
-
 	info, err := inv.FS.Lstat(ctx, abs)
 	if err != nil || info.Mode()&stdfs.ModeSymlink == 0 {
 		return nil //nolint:nilerr // lstat error on symlink means path doesn't exist
 	}
 
-	targetInfo, statErr := inv.FS.Stat(ctx, abs)
-	if statErr == nil && !targetInfo.IsDir() {
-		return rmdirFailure(inv, raw, syscall.ENOTDIR)
-	}
-	if statErr == nil || errors.Is(statErr, stdfs.ErrNotExist) {
+	resolvedTarget, resolveErr := canonicalizeReadlink(ctx, inv, abs, readlinkModeCanonicalizeExisting)
+	switch {
+	case resolveErr == nil:
+		targetInfo, statErr := inv.FS.Lstat(ctx, resolvedTarget)
+		if statErr != nil {
+			return rmdirFailure(inv, raw, statErr)
+		}
+		if !targetInfo.IsDir() {
+			return rmdirFailure(inv, raw, syscall.ENOTDIR)
+		}
 		return exitf(inv, 1, "rmdir: failed to remove '%s': Symbolic link not followed", raw)
+	case errors.Is(resolveErr, syscall.ENOTDIR):
+		return rmdirFailure(inv, raw, syscall.ENOTDIR)
+	case errors.Is(resolveErr, stdfs.ErrNotExist):
+		return exitf(inv, 1, "rmdir: failed to remove '%s': Symbolic link not followed", raw)
+	default:
+		return rmdirFailure(inv, raw, resolveErr)
 	}
-	return rmdirFailure(inv, trimmedRaw, statErr)
+}
+
+func rmdirTraversalPathError(ctx context.Context, inv *Invocation, raw string) error {
+	cleaned := path.Clean(strings.TrimRight(raw, "/"))
+	if cleaned == "." || cleaned == "/" {
+		return nil
+	}
+
+	absolute, parts := splitReadlinkPath(cleaned)
+	if len(parts) < 2 {
+		return nil
+	}
+
+	currentAbs := inv.FS.Getwd()
+	if absolute {
+		currentAbs = "/"
+	}
+
+	for i := 0; i < len(parts)-1; i++ {
+		currentAbs = path.Join(currentAbs, parts[i])
+		info, err := inv.FS.Lstat(ctx, currentAbs)
+		if err != nil {
+			return nil //nolint:nilerr // ancestor lookup failures should defer to the final rmdir path error
+		}
+		if info.Mode()&stdfs.ModeSymlink != 0 {
+			targetIsDir, checkErr := rmdirPathIsDirectory(ctx, inv, currentAbs)
+			if checkErr != nil {
+				return rmdirFailure(inv, rmdirDisplayPath(absolute, parts[:i+1]), checkErr)
+			}
+			if targetIsDir {
+				continue
+			}
+			return rmdirFailure(inv, rmdirDisplayPath(absolute, parts[:i+1]), syscall.ENOTDIR)
+		}
+		if !info.IsDir() {
+			return rmdirFailure(inv, rmdirDisplayPath(absolute, parts[:i+1]), syscall.ENOTDIR)
+		}
+	}
+	return nil
+}
+
+func rmdirDisplayPath(absolute bool, parts []string) string {
+	if len(parts) == 0 {
+		if absolute {
+			return "/"
+		}
+		return "."
+	}
+	if absolute {
+		return "/" + path.Join(parts...)
+	}
+	return path.Join(parts...)
+}
+
+func rmdirPathIsDirectory(ctx context.Context, inv *Invocation, name string) (bool, error) {
+	if inv == nil || inv.FS == nil {
+		return false, nil
+	}
+	info, err := inv.FS.StatQuiet(ctx, name)
+	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) || policy.IsDenied(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return info.IsDir(), nil
 }
 
 func rmdirDirNotEmpty(ctx context.Context, inv *Invocation, abs string, err error) bool {
 	switch {
 	case errors.Is(err, stdfs.ErrInvalid), errors.Is(err, syscall.ENOTEMPTY), errors.Is(err, syscall.EEXIST):
 		return true
-	case errors.Is(err, syscall.EACCES), errors.Is(err, syscall.EBUSY), errors.Is(err, syscall.EPERM), errors.Is(err, syscall.EROFS):
+	case errors.Is(err, stdfs.ErrPermission), errors.Is(err, syscall.EACCES), errors.Is(err, syscall.EBUSY), errors.Is(err, syscall.EPERM), errors.Is(err, syscall.EROFS):
 		entries, readErr := inv.FS.ReadDir(ctx, abs)
 		return readErr == nil && len(entries) > 0
 	default:

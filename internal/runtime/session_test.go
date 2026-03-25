@@ -207,6 +207,24 @@ func TestReplaceEnvDoesNotUseSessionBaseEnv(t *testing.T) {
 	}
 }
 
+func TestExecPreservesExplicitSessionBootTimestamp(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Env: map[string]string{
+			"GBASH_SESSION_BOOT_AT": "2001-02-03T04:05:06Z",
+		},
+		Script: "printf '%s\\n' \"$GBASH_SESSION_BOOT_AT\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.Stdout, "2001-02-03T04:05:06Z\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestReplaceEnvLetsShellInitializeShellOwnedStartupVars(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

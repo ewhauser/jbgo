@@ -226,3 +226,28 @@ func TestParseCommandSpecContinueShortGroupValuesSupportsMultiplePendingOptions(
 		t.Fatalf("command = %q, want %q", got, want)
 	}
 }
+
+func TestParseCommandSpecPreservesExplicitEmptyRequiredOptionValue(t *testing.T) {
+	t.Parallel()
+	spec := CommandSpec{
+		Name: "probe",
+		Options: []OptionSpec{
+			{Name: "unset", Short: 'u', Arity: OptionRequiredValue},
+		},
+		Args: []ArgSpec{{Name: "arg", Repeatable: true}},
+	}
+
+	matches, action, err := ParseCommandSpec(&Invocation{Args: []string{"-u", "", "tail"}}, &spec)
+	if err != nil {
+		t.Fatalf("ParseCommandSpec() error = %v", err)
+	}
+	if action != "" {
+		t.Fatalf("action = %q, want empty", action)
+	}
+	if got, want := matches.Values("unset"), []string{""}; !equalStrings(got, want) {
+		t.Fatalf("unset values = %v, want %v", got, want)
+	}
+	if got, want := matches.Args("arg"), []string{"tail"}; !equalStrings(got, want) {
+		t.Fatalf("args = %v, want %v", got, want)
+	}
+}

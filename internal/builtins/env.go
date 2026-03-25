@@ -29,13 +29,28 @@ func (c *PrintEnv) Name() string {
 }
 
 func (c *Env) Run(ctx context.Context, inv *Invocation) error {
-	parseInv := *inv
-	parseInv.Args = normalizeEnvDashAlias(inv.Args)
-
 	spec := c.Spec()
+	normalizedArgs := normalizeEnvDashAlias(inv.Args)
+	if action, ok := envAutoAction(inv, &spec, normalizedArgs); ok {
+		switch action {
+		case "help":
+			return RenderCommandHelp(inv.Stdout, &spec)
+		case "version":
+			return RenderCommandVersion(inv.Stdout, &spec)
+		}
+	}
+
+	parseInv := *inv
+	args, err := expandEnvArgs(inv, &spec, normalizedArgs)
+	if err != nil {
+		return err
+	}
+	parseInv.Args = args
+	parseInv.Stderr = io.Discard
+
 	matches, action, err := ParseCommandSpec(&parseInv, &spec)
 	if err != nil {
-		return rewriteEnvParseError(err)
+		return rewriteEnvParseError(inv, err)
 	}
 	switch action {
 	case "help":
@@ -43,25 +58,28 @@ func (c *Env) Run(ctx context.Context, inv *Invocation) error {
 	case "version":
 		return RenderCommandVersion(inv.Stdout, &spec)
 	default:
-		return c.RunParsed(ctx, inv, matches)
+		return c.runParsed(ctx, inv, matches)
 	}
 }
 
 func (c *Env) Spec() CommandSpec {
 	return CommandSpec{
 		Name:  "env",
-		Usage: "env [-i] [-u NAME] [NAME=VALUE ...] [COMMAND [ARG...]]",
+		Usage: "env [-0iv] [-a ARG] [-C DIR] [-S STRING] [-u NAME] [NAME=VALUE ...] [COMMAND [ARG...]]",
 		Options: []OptionSpec{
 			{Name: "ignore-environment", Short: 'i', Long: "ignore-environment", Help: "start with an empty environment"},
+			{Name: "null", Short: '0', Long: "null", Help: "end each output line with NUL, not newline"},
 			{Name: "chdir", Short: 'C', Long: "chdir", ValueName: "DIR", Arity: OptionRequiredValue, Help: "change working directory to DIR"},
 			{Name: "argv0", Short: 'a', Long: "argv0", ValueName: "ARG", Arity: OptionRequiredValue, Help: "pass ARG as argv[0] of the command to execute"},
 			{Name: "debug", Short: 'v', Long: "debug", Help: "print verbose information for each processing step"},
+			{Name: "split-string", Short: 'S', Long: "split-string", ValueName: "STRING", Arity: OptionRequiredValue, Help: "process and split STRING into separate arguments"},
 			{Name: "unset", Short: 'u', Long: "unset", ValueName: "NAME", Arity: OptionRequiredValue, Repeatable: true, Help: "remove variable from the environment"},
 		},
 		Args: []ArgSpec{
 			{Name: "item", ValueName: "ARG", Repeatable: true},
 		},
 		Parse: ParseConfig{
+			GroupShortOptions:        true,
 			StopAtFirstPositional:    true,
 			ShortOptionValueAttached: true,
 			LongOptionValueEquals:    true,
@@ -75,7 +93,7 @@ func (c *Env) Spec() CommandSpec {
 	}
 }
 
-func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
+func (c *Env) runParsed(ctx context.Context, inv *Invocation, matches *ParsedCommand) error {
 	replaceEnv := matches.Has("ignore-environment")
 	unset := matches.Values("unset")
 	for _, name := range unset {
@@ -85,12 +103,11 @@ func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 	}
 
 	setPairs, argv := splitEnvAssignments(matches.Args("item"))
-	if len(argv) > 0 && argv[0] == "--" {
-		argv = argv[1:]
-	}
 
 	env := buildEnv(inv.Env, replaceEnv, unset, setPairs)
 	workDir := inv.Cwd
+	argv0, argv0Set := envOptionValue(matches, "argv0")
+	nullOutput := matches.Has("null")
 	if matches.Has("chdir") {
 		if len(argv) == 0 {
 			return exitf(inv, 125, "env: must specify command with --chdir (-C)\nTry 'env --help' for more information.")
@@ -102,12 +119,22 @@ func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 		workDir = resolved
 	}
 	if len(argv) == 0 {
+		if argv0Set {
+			return exitf(inv, 125, "env: must specify command with --argv0 (-a)\nTry 'env --help' for more information.")
+		}
+		separator := "\n"
+		if nullOutput {
+			separator = "\x00"
+		}
 		for _, line := range sortedEnvPairs(env) {
-			if _, err := fmt.Fprintln(inv.Stdout, line); err != nil {
+			if _, err := io.WriteString(inv.Stdout, line+separator); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
 		return nil
+	}
+	if nullOutput {
+		return exitf(inv, 125, "env: cannot specify --null (-0) with command\nTry 'env --help' for more information.")
 	}
 
 	searchEnv := env
@@ -118,7 +145,7 @@ func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 		}
 	}
 	if matches.Has("debug") && len(argv) > 0 {
-		if err := writeEnvDebug(inv, argv, matches); err != nil {
+		if err := writeEnvDebug(inv, argv, argv0, argv0Set); err != nil {
 			return err
 		}
 	}
@@ -134,6 +161,9 @@ func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 	if err != nil {
 		return err
 	}
+	if result != nil && result.CommandNotFound {
+		return envCommandNotFound(inv, argv[0])
+	}
 	if err := writeExecutionOutputs(inv, result); err != nil {
 		return err
 	}
@@ -142,6 +172,23 @@ func (c *Env) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 
 func (c *PrintEnv) Run(ctx context.Context, inv *Invocation) error {
 	return RunCommand(ctx, c, inv)
+}
+
+func (c *PrintEnv) NormalizeParseError(inv *Invocation, err error) error {
+	if err == nil {
+		return nil
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		return err
+	}
+	if inv != nil && inv.Stderr != nil {
+		message := strings.TrimSpace(err.Error())
+		if message != "" {
+			_, _ = io.WriteString(inv.Stderr, message+"\n")
+		}
+	}
+	return &ExitError{Code: 2}
 }
 
 func (c *PrintEnv) Spec() CommandSpec {
@@ -199,13 +246,15 @@ func (c *PrintEnv) RunParsed(_ context.Context, inv *Invocation, matches *Parsed
 
 func splitEnvAssignments(args []string) (setPairs map[string]string, argv []string) {
 	setPairs = make(map[string]string)
+	sawAssignment := false
 	for i, arg := range args {
-		if arg == "--" {
+		if arg == "--" && !sawAssignment {
 			return setPairs, args[i+1:]
 		}
 		if strings.Contains(arg, "=") && !strings.HasPrefix(arg, "=") {
 			name, value, _ := strings.Cut(arg, "=")
 			setPairs[name] = value
+			sawAssignment = true
 			continue
 		}
 		return setPairs, args[i:]
@@ -233,12 +282,52 @@ func normalizeEnvDashAlias(args []string) []string {
 	return normalized
 }
 
-func rewriteEnvParseError(err error) error {
+func envAutoAction(inv *Invocation, spec *CommandSpec, args []string) (string, bool) {
+	if spec == nil {
+		return "", false
+	}
+	parseInv := *inv
+	parseInv.Args = args
+	parseInv.Stderr = io.Discard
+	_, action, err := ParseCommandSpec(&parseInv, spec)
+	if err != nil || action == "" {
+		return "", false
+	}
+	return action, true
+}
+
+func rewriteEnvParseError(inv *Invocation, err error) error {
 	var exitErr *ExitError
 	if errors.As(err, &exitErr) && exitErr.Code == 1 {
-		return &ExitError{Code: 125, Err: exitErr.Err}
+		message := err.Error()
+		message = envNormalizeShebangParseError(message)
+		if inv != nil && inv.Stderr != nil && strings.TrimSpace(message) != "" {
+			_, _ = io.WriteString(inv.Stderr, strings.TrimSpace(message)+"\n")
+		}
+		return &ExitError{Code: 125, Err: errors.New(strings.TrimSpace(message))}
 	}
 	return err
+}
+
+func envNormalizeShebangParseError(message string) string {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return trimmed
+	}
+	switch {
+	case strings.Contains(trimmed, "invalid option -- ' '"),
+		strings.Contains(trimmed, "invalid option -- '\t'"),
+		strings.Contains(trimmed, "invalid option -- '\n'"),
+		strings.Contains(trimmed, "invalid option -- '\v'"),
+		strings.Contains(trimmed, "invalid option -- '\f'"),
+		strings.Contains(trimmed, "invalid option -- '\r'"):
+		tryHelp := "Try 'env --help' for more information."
+		if prefix, ok := strings.CutSuffix(trimmed, tryHelp); ok {
+			prefix = strings.TrimRight(prefix, "\n")
+			return prefix + "\nenv: use -[v]S to pass options in shebang lines\n" + tryHelp
+		}
+	}
+	return trimmed
 }
 
 func validateEnvUnsetName(inv *Invocation, name string) error {
@@ -259,10 +348,10 @@ func resolveEnvWorkingDir(ctx context.Context, inv *Invocation, dir string) (str
 	return abs, nil
 }
 
-func writeEnvDebug(inv *Invocation, argv []string, matches *ParsedCommand) error {
+func writeEnvDebug(inv *Invocation, argv []string, argv0Value string, argv0Set bool) error {
 	argv0 := argv[0]
-	if matches.Has("argv0") {
-		argv0 = matches.Value("argv0")
+	if argv0Set {
+		argv0 = argv0Value
 	}
 	lines := []string{
 		fmt.Sprintf("argv0:     %s", quoteGNUOperand(argv0)),
@@ -293,9 +382,37 @@ func mergeStringMap(src map[string]string) map[string]string {
 	return out
 }
 
+func envOptionValue(matches *ParsedCommand, name string) (string, bool) {
+	if matches == nil {
+		return "", false
+	}
+	occurrences := matches.OptionOccurrences()
+	if len(occurrences) == 0 {
+		return "", false
+	}
+	for i := len(occurrences); i > 0; i-- {
+		occurrence := occurrences[i-1]
+		if occurrence.Name != name {
+			continue
+		}
+		if occurrence.HasValue {
+			return occurrence.Value, true
+		}
+		return "", true
+	}
+	return "", false
+}
+
+func envCommandNotFound(inv *Invocation, name string) error {
+	if strings.ContainsAny(name, " \t\n\v\f\r") {
+		return exitf(inv, 127, "env: %s: No such file or directory\nenv: use -[v]S to pass options in shebang lines", quoteGNUOperand(name))
+	}
+	return exitf(inv, 127, "env: %s: No such file or directory", quoteGNUOperand(name))
+}
+
 var _ Command = (*Env)(nil)
 var _ Command = (*PrintEnv)(nil)
 var _ SpecProvider = (*Env)(nil)
-var _ ParsedRunner = (*Env)(nil)
 var _ SpecProvider = (*PrintEnv)(nil)
 var _ ParsedRunner = (*PrintEnv)(nil)
+var _ ParseErrorNormalizer = (*PrintEnv)(nil)

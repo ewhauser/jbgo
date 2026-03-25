@@ -163,6 +163,20 @@ func (fs *CommandFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, err
 	return info, nil
 }
 
+// StatQuiet returns file info for name after enforcing stat policy without
+// emitting policy denials to stderr. This is intended for speculative probes.
+func (fs *CommandFS) StatQuiet(ctx context.Context, name string) (stdfs.FileInfo, error) {
+	abs, err := fs.prepareQuiet(ctx, policy.FileActionStat, name)
+	if err != nil {
+		return nil, err
+	}
+	info, err := fs.raw().Stat(ctx, abs)
+	if err != nil {
+		return nil, wrapCommandError(err)
+	}
+	return info, nil
+}
+
 // Lstat returns file info for name without following the final path element.
 func (fs *CommandFS) Lstat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	abs, err := fs.prepare(ctx, policy.FileActionLstat, name)
@@ -380,13 +394,29 @@ func (fs *CommandFS) prepare(ctx context.Context, action policy.FileAction, name
 	return abs, nil
 }
 
+func (fs *CommandFS) prepareQuiet(ctx context.Context, action policy.FileAction, name string) (string, error) {
+	abs := fs.Resolve(name)
+	if err := fs.checkQuiet(ctx, action, abs); err != nil {
+		return "", err
+	}
+	return abs, nil
+}
+
 func (fs *CommandFS) check(ctx context.Context, action policy.FileAction, abs string) error {
+	return fs.checkWithStderr(ctx, action, abs, true)
+}
+
+func (fs *CommandFS) checkQuiet(ctx context.Context, action policy.FileAction, abs string) error {
+	return fs.checkWithStderr(ctx, action, abs, false)
+}
+
+func (fs *CommandFS) checkWithStderr(ctx context.Context, action policy.FileAction, abs string, emitStderr bool) error {
 	if fs == nil || fs.fsys == nil {
 		return &ExitError{Code: 1, Err: errors.New("command filesystem not available")}
 	}
 	if err := policy.CheckPath(ctx, fs.pol, fs.fsys, action, abs); err != nil {
 		recordPolicyDenied(fs.trace, err, action, abs, "", exitCodeForError(err))
-		if fs.stderr != nil {
+		if emitStderr && fs.stderr != nil {
 			_, _ = fmt.Fprintln(fs.stderr, err)
 		}
 		return &ExitError{Code: exitCodeForError(err), Err: err}

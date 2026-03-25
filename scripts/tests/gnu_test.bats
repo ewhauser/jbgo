@@ -30,7 +30,7 @@ if [ "${1-}" != "--list-progs" ]; then
   exit 1
 fi
 
-printf '%s\n' '[' echo false printf pwd test true
+printf '%s\n' '[' env echo false printenv printf pwd test true
 EOF
   chmod +x "${WORKDIR}/build-aux/gen-lists-of-programs.sh"
 
@@ -101,4 +101,32 @@ EOF
   [[ "$output" == *'/src/pwd'* ]]
   [[ "$output" == *'/src/test'* ]]
   [[ "$output" == *'/src/true'* ]]
+}
+
+@test "gnu env wrapper preserves exported env for nested absolute wrapper commands" {
+  run env KEEP=present "${WORKDIR}/src/env" -- "${WORKDIR}/src/printenv" KEEP
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "present" ]
+}
+
+@test "gnu launcher avoids wrapped env recursion when src is on PATH" {
+  run env KEEP=present PATH="${WORKDIR}/src:${PATH}" "${WORKDIR}/src/printenv" KEEP
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "present" ]
+}
+
+@test "gnu env wrapper can execute perl via compat shim" {
+  run env PATH="${WORKDIR}/src:${PATH}" "${WORKDIR}/src/env" perl -e 'print "hello\n"'
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "hello" ]
+}
+
+@test "gnu wrappers preserve explicit session boot timestamp" {
+  run env GBASH_SESSION_BOOT_AT=2001-02-03T04:05:06Z "${WORKDIR}/src/printenv" GBASH_SESSION_BOOT_AT
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "2001-02-03T04:05:06Z" ]
 }

@@ -2,20 +2,32 @@ package builtins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
 type commandResolution struct {
-	Name string
-	Path string
+	Name           string
+	Path           string
+	InvocationPath string
 }
+
+const (
+	compatWrapperMarker       = "build-aux/gbash-harness/gbash"
+	compatDisabledBuiltinText = "jbgo_disabled_builtins"
+	compatWrapperReadwriteArg = `--readwrite-root "$root_dir" --cwd "$sandbox_cwd"`
+	maxCompatWrapperProbeSize = 4096
+)
 
 func executeCommand(ctx context.Context, inv *Invocation, opts *executeCommandOptions) (*ExecutionResult, error) {
 	if opts == nil {
@@ -45,19 +57,32 @@ func executeCommand(ctx context.Context, inv *Invocation, opts *executeCommandOp
 		return nil, err
 	}
 	if !ok {
-		return &ExecutionResult{ExitCode: 127}, nil
+		return &ExecutionResult{ExitCode: 127, CommandNotFound: true}, nil
+	}
+	if resolved == nil {
+		return nil, fmt.Errorf("command resolution returned nil result")
 	}
 
-	argv := append([]string{resolved.Path}, opts.Argv[1:]...) //nolint:nilaway // resolved is non-nil when ok is true
+	argv0 := resolved.InvocationPath
+	if argv0 == "" {
+		argv0 = resolved.Path
+	}
+	argv := append([]string{argv0}, opts.Argv[1:]...) //nolint:nilaway // resolved is non-nil when ok is true
+	commandName := ""
+	if resolved.InvocationPath != "" && resolved.InvocationPath != resolved.Path && registeredCommand(inv, path.Base(resolved.Path)) {
+		commandName = resolved.Name
+	}
 	return inv.Exec(ctx, &ExecutionRequest{
-		Command:    argv,
-		Env:        env,
-		WorkDir:    workDir,
-		ReplaceEnv: opts.ReplaceEnv,
-		Stdin:      opts.Stdin,
-		Stdout:     opts.Stdout,
-		Stderr:     opts.Stderr,
-		Timeout:    opts.Timeout,
+		Command:     argv,
+		CommandPath: resolved.Path,
+		CommandName: commandName,
+		Env:         env,
+		WorkDir:     workDir,
+		ReplaceEnv:  opts.ReplaceEnv,
+		Stdin:       opts.Stdin,
+		Stdout:      opts.Stdout,
+		Stderr:      opts.Stderr,
+		Timeout:     opts.Timeout,
 	})
 }
 
@@ -74,64 +99,159 @@ type executeCommandOptions struct {
 }
 
 func resolveCommand(ctx context.Context, inv *Invocation, env map[string]string, dir, name string) (*commandResolution, bool, error) {
+	name = remapCompatHostPath(inv, name)
 	if strings.Contains(name, "/") {
-		info, abs, exists, err := statMaybe(ctx, inv, name)
-		if err != nil {
-			return nil, false, err
-		}
-		if !exists || info.IsDir() {
-			return nil, false, nil
-		}
-		return &commandResolution{Name: path.Base(abs), Path: abs}, true, nil
+		return resolveCommandPath(ctx, inv, name)
 	}
 
-	for _, pathDir := range commandSearchDirs(env, dir) {
+	for _, pathDir := range commandSearchDirs(inv, env, dir) {
 		candidate := gbfs.Resolve(pathDir, name)
-		info, abs, exists, err := statMaybe(ctx, inv, candidate)
+		resolved, ok, err := resolveCommandPath(ctx, inv, candidate)
 		if err != nil {
 			return nil, false, err
 		}
-		if !exists || info.IsDir() {
-			continue
+		if ok {
+			return resolved, true, nil
 		}
-		return &commandResolution{Name: path.Base(abs), Path: abs}, true, nil
 	}
 	return nil, false, nil
 }
 
+func resolveCommandPath(ctx context.Context, inv *Invocation, candidate string) (*commandResolution, bool, error) {
+	resolvedPath, invocationPath, exists, err := resolveExecutableCommandPath(ctx, inv, candidate)
+	if err != nil {
+		return nil, false, err
+	}
+	if !exists {
+		return nil, false, nil
+	}
+	if compatPath, ok, err := maybeCompatWrapperCommand(ctx, inv, invocationPath); ok || err != nil {
+		if err != nil {
+			return nil, false, err
+		}
+		return &commandResolution{
+			Name:           path.Base(compatPath),
+			Path:           compatPath,
+			InvocationPath: compatPath,
+		}, true, nil
+	}
+	return &commandResolution{
+		Name:           path.Base(invocationPath),
+		Path:           resolvedPath,
+		InvocationPath: invocationPath,
+	}, true, nil
+}
+
+func resolveExecutableCommandPath(ctx context.Context, inv *Invocation, candidate string) (string, string, bool, error) {
+	info, abs, exists, err := lstatMaybe(ctx, inv, candidate)
+	if err != nil {
+		return "", "", false, err
+	}
+	if !exists || info.IsDir() {
+		return "", "", false, nil
+	}
+	if info.Mode()&stdfs.ModeSymlink == 0 {
+		return abs, abs, true, nil
+	}
+
+	resolved, err := canonicalizeReadlink(ctx, inv, abs, readlinkModeCanonicalizeExisting)
+	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) {
+			return "", "", false, nil
+		}
+		return "", "", false, err
+	}
+
+	info, resolvedAbs, exists, err := lstatMaybe(ctx, inv, resolved)
+	if err != nil {
+		return "", "", false, err
+	}
+	if !exists || info.IsDir() {
+		return "", "", false, nil
+	}
+	return resolvedAbs, abs, true, nil
+}
+
+func maybeCompatWrapperCommand(ctx context.Context, inv *Invocation, fullPath string) (string, bool, error) {
+	name := path.Base(fullPath)
+	if !registeredCommand(inv, name) || inv == nil || inv.FS == nil {
+		return "", false, nil
+	}
+	file, err := inv.FS.Open(ctx, fullPath)
+	if err != nil {
+		return "", false, nil
+	}
+	defer func() { _ = file.Close() }()
+
+	reader := commandutil.ReaderWithContext(ctx, file)
+	data := make([]byte, maxCompatWrapperProbeSize+1)
+	n, err := io.ReadFull(reader, data)
+	switch {
+	case err == nil:
+		return "", false, nil
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		data = data[:n]
+	default:
+		return "", false, err
+	}
+	text := string(data)
+	if !looksLikeCompatWrapper(text, name) {
+		return "", false, nil
+	}
+	return path.Join("/bin", name), true, nil
+}
+
+func looksLikeCompatWrapper(text, name string) bool {
+	if !strings.Contains(text, compatWrapperMarker) || !strings.Contains(text, compatDisabledBuiltinText) {
+		return false
+	}
+	if !strings.Contains(text, compatWrapperReadwriteArg) {
+		return false
+	}
+	return strings.Contains(text, `exec "/bin/`+name+`"`)
+}
+
+func registeredCommand(inv *Invocation, name string) bool {
+	if inv == nil || inv.GetRegisteredCommands == nil {
+		return false
+	}
+	return slices.Contains(inv.GetRegisteredCommands(), name)
+}
+
 func resolveAllCommands(ctx context.Context, inv *Invocation, env map[string]string, dir, name string) ([]string, error) {
+	name = remapCompatHostPath(inv, name)
 	if strings.Contains(name, "/") {
-		info, abs, exists, err := statMaybe(ctx, inv, name)
+		_, invocationPath, exists, err := resolveExecutableCommandPath(ctx, inv, name)
 		if err != nil {
 			return nil, err
 		}
-		if !exists || info.IsDir() {
+		if !exists {
 			return nil, nil
 		}
-		return []string{abs}, nil
+		return []string{invocationPath}, nil
 	}
 
 	matches := make([]string, 0)
 	seen := make(map[string]struct{})
-	for _, pathDir := range commandSearchDirs(env, dir) {
+	for _, pathDir := range commandSearchDirs(inv, env, dir) {
 		candidate := gbfs.Resolve(pathDir, name)
-		info, abs, exists, err := statMaybe(ctx, inv, candidate)
+		_, invocationPath, exists, err := resolveExecutableCommandPath(ctx, inv, candidate)
 		if err != nil {
 			return nil, err
 		}
-		if !exists || info.IsDir() {
+		if !exists {
 			continue
 		}
-		if _, ok := seen[abs]; ok {
+		if _, ok := seen[invocationPath]; ok {
 			continue
 		}
-		seen[abs] = struct{}{}
-		matches = append(matches, abs)
+		seen[invocationPath] = struct{}{}
+		matches = append(matches, invocationPath)
 	}
 	return matches, nil
 }
 
-func commandSearchDirs(env map[string]string, dir string) []string {
+func commandSearchDirs(inv *Invocation, env map[string]string, dir string) []string {
 	pathValue := strings.TrimSpace(env["PATH"])
 	if pathValue == "" {
 		return nil
@@ -144,6 +264,7 @@ func commandSearchDirs(env map[string]string, dir string) []string {
 			entry = "."
 		}
 		resolved := gbfs.Resolve(dir, entry)
+		resolved = remapCompatHostPath(inv, resolved)
 		if _, ok := seen[resolved]; ok {
 			continue
 		}
@@ -151,6 +272,61 @@ func commandSearchDirs(env map[string]string, dir string) []string {
 		dirs = append(dirs, resolved)
 	}
 	return dirs
+}
+
+func remapCompatHostPath(inv *Invocation, name string) string {
+	if inv == nil || inv.Env == nil || !strings.HasPrefix(name, "/") {
+		return name
+	}
+	candidates := compatHostPathCandidates(name)
+	for _, key := range []string{"GBASH_COMPAT_ROOT", "abs_top_builddir", "abs_top_srcdir"} {
+		root := strings.TrimSpace(inv.Env[key])
+		if root == "" || !strings.HasPrefix(root, "/") {
+			continue
+		}
+		for _, prefix := range compatHostPathCandidates(root) {
+			for _, candidate := range candidates {
+				rel, ok := trimCompatHostPrefix(candidate, prefix)
+				if !ok {
+					continue
+				}
+				if rel == "" {
+					return "/"
+				}
+				return path.Join("/", rel)
+			}
+		}
+	}
+	return name
+}
+
+func compatHostPathCandidates(name string) []string {
+	out := []string{path.Clean(name)}
+	resolved, err := filepath.EvalSymlinks(filepath.FromSlash(name))
+	if err != nil {
+		return out
+	}
+	resolved = filepath.ToSlash(resolved)
+	resolved = path.Clean(resolved)
+	if resolved != out[0] {
+		out = append(out, resolved)
+	}
+	return out
+}
+
+func trimCompatHostPrefix(name, root string) (string, bool) {
+	name = path.Clean(name)
+	root = path.Clean(root)
+	switch {
+	case name == root:
+		return "", true
+	case root == "/":
+		return strings.TrimPrefix(name, "/"), strings.HasPrefix(name, "/")
+	case strings.HasPrefix(name, root+"/"):
+		return strings.TrimPrefix(name, root+"/"), true
+	default:
+		return "", false
+	}
 }
 
 func shellJoinArgs(args []string) string {
