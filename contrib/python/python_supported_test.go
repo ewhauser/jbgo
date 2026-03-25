@@ -16,7 +16,7 @@ func TestPythonEvalSupportsPythonAndPython3(t *testing.T) {
 	t.Parallel()
 
 	result, err := newPythonRuntime(t).Run(context.Background(), &gbruntime.ExecutionRequest{
-		Script: "python -c 'print(\"eval\")'\npython3 -c 'print(\"eval3\")'\n",
+		Script: "python -c 'pass'\npython3 -c 'value = 3'\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -24,7 +24,7 @@ func TestPythonEvalSupportsPythonAndPython3(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "eval\neval3\n"; got != want {
+	if got, want := result.Stdout, ""; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -33,13 +33,13 @@ func TestPythonFileExecutionWorks(t *testing.T) {
 	t.Parallel()
 
 	session := newPythonSession(t)
-	writePythonSessionFile(t, session, "/home/agent/main.py", []byte("print('file')\n"))
+	writePythonSessionFile(t, session, "/home/agent/main.py", []byte("value = 1\n"))
 
 	result := mustExecPythonSession(t, session, "python ./main.py\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "file\n"; got != want {
+	if got, want := result.Stdout, ""; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
@@ -48,7 +48,7 @@ func TestPythonReadsSourceFromStdin(t *testing.T) {
 	t.Parallel()
 
 	result, err := newPythonRuntime(t).Run(context.Background(), &gbruntime.ExecutionRequest{
-		Script: "printf \"print('stdin')\\n\" | python\n",
+		Script: "printf \"value = 1\\n\" | python\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -56,12 +56,29 @@ func TestPythonReadsSourceFromStdin(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "stdin\n"; got != want {
+	if got, want := result.Stdout, ""; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
-func TestPythonNativePrintCallbackHandlesAliases(t *testing.T) {
+func TestPythonRejectsBarePrint(t *testing.T) {
+	t.Parallel()
+
+	result, err := newPythonRuntime(t).Run(context.Background(), &gbruntime.ExecutionRequest{
+		Script: "python -c 'print(\"alias\")'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "print is not supported yet") {
+		t.Fatalf("Stderr = %q, want unsupported print diagnostic", result.Stderr)
+	}
+}
+
+func TestPythonRejectsAliasedPrint(t *testing.T) {
 	t.Parallel()
 
 	result, err := newPythonRuntime(t).Run(context.Background(), &gbruntime.ExecutionRequest{
@@ -70,31 +87,28 @@ func TestPythonNativePrintCallbackHandlesAliases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
 	}
-	if got, want := result.Stdout, "alias\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
+	if !strings.Contains(result.Stderr, "print is not supported yet") {
+		t.Fatalf("Stderr = %q, want unsupported print diagnostic", result.Stderr)
 	}
 }
 
-func TestPythonPrintSupportsStdoutAndStderrTargets(t *testing.T) {
+func TestPythonRejectsPrintFileTargets(t *testing.T) {
 	t.Parallel()
 
 	result, err := newPythonRuntime(t).Run(context.Background(), &gbruntime.ExecutionRequest{
-		Script: "python -c 'import sys\nprint(\"out\", file=sys.stdout)\nprint(\"err\", file=sys.stderr)'\n",
+		Script: "python -c 'import sys\nprint(\"out\", file=sys.stdout)'\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 0 {
-		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
 	}
-	if got, want := result.Stdout, "out\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
-	}
-	if got, want := result.Stderr, "err\n"; got != want {
-		t.Fatalf("Stderr = %q, want %q", got, want)
+	if !strings.Contains(result.Stderr, "print is not supported yet") {
+		t.Fatalf("Stderr = %q, want unsupported print diagnostic", result.Stderr)
 	}
 }
 
@@ -139,7 +153,7 @@ func TestPythonRejectsExtraScriptArguments(t *testing.T) {
 	t.Parallel()
 
 	session := newPythonSession(t)
-	writePythonSessionFile(t, session, "/home/agent/main.py", []byte("print('ignored')\n"))
+	writePythonSessionFile(t, session, "/home/agent/main.py", []byte("value = 1\n"))
 
 	result := mustExecPythonSession(t, session, "python main.py extra\n")
 	if result.ExitCode == 0 {
@@ -153,17 +167,17 @@ func TestPythonRejectsExtraScriptArguments(t *testing.T) {
 func TestPythonUsesSandboxEnvironment(t *testing.T) {
 	t.Parallel()
 
-	result, err := newPythonRuntime(t).Run(context.Background(), &gbruntime.ExecutionRequest{
-		Script: "FOO=bar python -c 'import os\nprint(os.getenv(\"FOO\"))\nprint(os.environ[\"FOO\"])'\n",
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	session := newPythonSession(t)
+
+	result := mustExecPythonSession(t, session, ""+
+		"FOO=bar python -c 'import os\n"+
+		"from pathlib import Path\n"+
+		"Path(\"env.txt\").write_text(os.getenv(\"FOO\") + \"\\n\" + os.environ[\"FOO\"] + \"\\n\")'\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "bar\nbar\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
+	if got := string(readPythonSessionFile(t, session, "/home/agent/env.txt")); got != "bar\nbar\n" {
+		t.Fatalf("env.txt = %q, want %q", got, "bar\nbar\n")
 	}
 }
 
@@ -177,15 +191,16 @@ func TestPythonUsesSandboxFilesystemAndRelativePaths(t *testing.T) {
 		"cd /home/agent/project\n"+
 		"python -c 'from pathlib import Path\n"+
 		"Path(\"note.txt\").write_text(\"hello\")\n"+
-		"print(Path(\"note.txt\").read_text())'\n")
+		"copy = Path(\"note.txt\").read_text()\n"+
+		"Path(\"copy.txt\").write_text(copy)'\n")
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "hello\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
-	}
 	if got := string(readPythonSessionFile(t, session, "/home/agent/project/note.txt")); got != "hello" {
 		t.Fatalf("file contents = %q, want hello", got)
+	}
+	if got := string(readPythonSessionFile(t, session, "/home/agent/project/copy.txt")); got != "hello" {
+		t.Fatalf("copy contents = %q, want hello", got)
 	}
 }
 
@@ -222,13 +237,15 @@ func TestPythonFileSystemUsesSandboxPolicyAndTraces(t *testing.T) {
 	allowed := mustExecPythonSession(t, session, ""+
 		"python -c 'from pathlib import Path\n"+
 		"text = Path(\"/allowed/input.txt\").read_text()\n"+
-		"Path(\"/tmp/out.txt\").write_text(text)\n"+
-		"print(Path(\"/tmp/out.txt\").read_text())'\n")
+		"Path(\"/tmp/out.txt\").write_text(text)'\n")
 	if allowed.ExitCode != 0 {
 		t.Fatalf("allowed ExitCode = %d, want 0; stderr=%q", allowed.ExitCode, allowed.Stderr)
 	}
-	if got, want := allowed.Stdout, "ok\n\n"; got != want {
+	if got, want := allowed.Stdout, ""; got != want {
 		t.Fatalf("allowed Stdout = %q, want %q", got, want)
+	}
+	if got := string(readPythonSessionFile(t, session, "/tmp/out.txt")); got != "ok\n" {
+		t.Fatalf("/tmp/out.txt = %q, want %q", got, "ok\n")
 	}
 	if !hasFileAccess(allowed.Events, "read", "/allowed/input.txt") {
 		t.Fatalf("allowed events missing read access: %#v", allowed.Events)
@@ -255,7 +272,7 @@ func TestPythonShebangViaEnvWorks(t *testing.T) {
 	t.Parallel()
 
 	session := newPythonSession(t)
-	writePythonSessionFile(t, session, "/home/agent/tool.py", []byte("#!/usr/bin/env python3\nprint('shebang')\n"))
+	writePythonSessionFile(t, session, "/home/agent/tool.py", []byte("#!/usr/bin/env python3\nfrom pathlib import Path\nPath('/home/agent/shebang.txt').write_text('ok')\n"))
 	if err := session.FileSystem().Chmod(context.Background(), "/home/agent/tool.py", 0o755); err != nil {
 		t.Fatalf("Chmod(tool.py) error = %v", err)
 	}
@@ -264,8 +281,8 @@ func TestPythonShebangViaEnvWorks(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if got, want := result.Stdout, "shebang\n"; got != want {
-		t.Fatalf("Stdout = %q, want %q", got, want)
+	if got := string(readPythonSessionFile(t, session, "/home/agent/shebang.txt")); got != "ok" {
+		t.Fatalf("shebang.txt = %q, want ok", got)
 	}
 }
 

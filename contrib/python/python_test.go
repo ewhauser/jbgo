@@ -2,7 +2,6 @@ package python
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	gbruntime "github.com/ewhauser/gbash"
@@ -24,215 +23,26 @@ func TestRegisterAddsPythonAndPython3Commands(t *testing.T) {
 	}
 }
 
-func TestRewritePrintCallsRewritesBarePrintOnly(t *testing.T) {
+func TestSourceReferencesBarePrintDetectsDirectCalls(t *testing.T) {
+	t.Parallel()
+
+	if !sourceReferencesBarePrint("print('x')\n") {
+		t.Fatal("sourceReferencesBarePrint() = false, want true for direct print call")
+	}
+	if !sourceReferencesBarePrint("alias = print\nalias('x')\n") {
+		t.Fatal("sourceReferencesBarePrint() = false, want true for bare print reference")
+	}
+}
+
+func TestSourceReferencesBarePrintIgnoresMethodsStringsAndComments(t *testing.T) {
 	t.Parallel()
 
 	source := "" +
-		"print('top')\n" +
-		"message = \"print('inside string')\"\n" +
-		"obj.print('method')\n"
+		"obj.print('method')\n" +
+		"text = \"print('inside string')\"\n" +
+		"# print('inside comment')\n"
 
-	rewritten, didRewrite := rewritePrintCalls(source)
-	if !didRewrite {
-		t.Fatalf("rewritePrintCalls() did not rewrite %q", source)
-	}
-	if !strings.Contains(rewritten, "__gbash_print('top')") {
-		t.Fatalf("rewritePrintCalls() = %q, want bare print rewritten", rewritten)
-	}
-	if strings.Contains(rewritten, "obj.__gbash_print") {
-		t.Fatalf("rewritePrintCalls() = %q, want method access preserved", rewritten)
-	}
-	if !strings.Contains(rewritten, "\"print('inside string')\"") {
-		t.Fatalf("rewritePrintCalls() = %q, want string literal preserved", rewritten)
-	}
-}
-
-func TestRewritePrintCallsSkipsReboundPrint(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"print = logger.info\n" +
-		"print('msg')\n"
-
-	rewritten, didRewrite := rewritePrintCalls(source)
-	if didRewrite {
-		t.Fatalf("rewritePrintCalls() unexpectedly rewrote %q into %q", source, rewritten)
-	}
-	if rewritten != source {
-		t.Fatalf("rewritePrintCalls() = %q, want original source", rewritten)
-	}
-}
-
-func TestRewritePrintCallsSkipsParameterBindings(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"def wrap(print):\n" +
-		"    print('msg')\n"
-
-	rewritten, didRewrite := rewritePrintCalls(source)
-	if didRewrite {
-		t.Fatalf("rewritePrintCalls() unexpectedly rewrote %q into %q", source, rewritten)
-	}
-	if rewritten != source {
-		t.Fatalf("rewritePrintCalls() = %q, want original source", rewritten)
-	}
-}
-
-func TestRewritePrintCallsIgnoresEscapedTripleQuotedContent(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"s = \"\"\"line 1\\n\\\\\\\"\\\\\\\"\\\\\\\" print('inside')\\nline 3\"\"\"\n" +
-		"print('outside')\n"
-
-	rewritten, didRewrite := rewritePrintCalls(source)
-	if !didRewrite {
-		t.Fatalf("rewritePrintCalls() did not rewrite %q", source)
-	}
-	if !strings.Contains(rewritten, "print('inside')") {
-		t.Fatalf("rewritePrintCalls() = %q, want triple-quoted content preserved", rewritten)
-	}
-	if !strings.Contains(rewritten, "__gbash_print('outside')") {
-		t.Fatalf("rewritePrintCalls() = %q, want outer print rewritten", rewritten)
-	}
-}
-
-func TestInstrumentSourceForPrintKeepsPrefixedDocstringsBeforeFutureImports(t *testing.T) {
-	t.Parallel()
-
-	source := "r\"\"\"docs\"\"\"\nfrom __future__ import annotations\nprint('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	prefix := "r\"\"\"docs\"\"\"\nfrom __future__ import annotations\n"
-	if !strings.HasPrefix(instrumented, prefix) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
-	}
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
-	}
-}
-
-func TestInstrumentSourceForPrintKeepsSingleLineDocstringsBeforeFutureImports(t *testing.T) {
-	t.Parallel()
-
-	source := "\"docs\"\nfrom __future__ import annotations\nprint('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	prefix := "\"docs\"\nfrom __future__ import annotations\n"
-	if !strings.HasPrefix(instrumented, prefix) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
-	}
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
-	}
-}
-
-func TestInstrumentSourceForPrintInjectsBindingForAliasedPrint(t *testing.T) {
-	t.Parallel()
-
-	source := "alias = print\nalias('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
-	}
-	if !strings.Contains(instrumented, source) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want original source preserved", instrumented)
-	}
-}
-
-func TestInstrumentSourceForPrintKeepsEscapedTripleQuoteDocstringsBeforeFutureImports(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"\"\"\"docs\n" +
-		"escaped \\\\\\\"\\\\\\\"\\\\\\\" text\n" +
-		"\"\"\"\n" +
-		"from __future__ import annotations\n" +
-		"print('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	prefix := "\"\"\"docs\nescaped \\\\\\\"\\\\\\\"\\\\\\\" text\n\"\"\"\nfrom __future__ import annotations\n"
-	if !strings.HasPrefix(instrumented, prefix) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
-	}
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
-	}
-}
-
-func TestInstrumentSourceForPrintKeepsParenthesizedFutureImportsTogether(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"from __future__ import (\n" +
-		"    annotations,\n" +
-		")\n" +
-		"print('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	prefix := "from __future__ import (\n    annotations,\n)\n"
-	if !strings.HasPrefix(instrumented, prefix) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
-	}
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
-	}
-}
-
-func TestInstrumentSourceForPrintKeepsBackslashContinuedFutureImportsTogether(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"from __future__ import annotations, \\\n" +
-		"    generator_stop\n" +
-		"print('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	prefix := "from __future__ import annotations, \\\n    generator_stop\n"
-	if !strings.HasPrefix(instrumented, prefix) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
-	}
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
-	}
-}
-
-func TestInstrumentSourceForPrintKeepsFlexibleWhitespaceFutureImportsTogether(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"from  __future__\timport annotations\n" +
-		"print('x')\n"
-
-	instrumented := instrumentSourceForPrint(source)
-	prefix := "from  __future__\timport annotations\n"
-	if !strings.HasPrefix(instrumented, prefix) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want prefix %q", instrumented, prefix)
-	}
-	if !strings.Contains(instrumented, pythonPrintPrelude) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected prelude", instrumented)
-	}
-	if !strings.Contains(instrumented, pythonPrintBinding) {
-		t.Fatalf("instrumentSourceForPrint() = %q, want injected print binding", instrumented)
+	if sourceReferencesBarePrint(source) {
+		t.Fatalf("sourceReferencesBarePrint() = true, want false for %q", source)
 	}
 }

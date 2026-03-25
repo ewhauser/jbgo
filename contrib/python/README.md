@@ -23,12 +23,15 @@ The v1 command intentionally stays small:
 Unsupported flags such as `-m` and extra script arguments are rejected with a
 usage error.
 
+Builtin `print` is also rejected for now. With the pinned `gomonty` runtime,
+plain builtin `print(...)` drops output and upstream Monty rejects
+`print(..., file=...)`, so `gbash` fails fast instead of rewriting user code.
+
 ## Sandbox Rules
 
 - filesystem access flows through `commands.Invocation.FS`
 - environment access flows through `commands.Invocation.Env`
 - relative paths resolve from the gbash working directory
-- print output goes to gbash stdout
 - command execution never escapes to the host OS
 
 `gomonty` is cgo-backed and requires a supported target archive. When the

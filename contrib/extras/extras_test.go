@@ -64,7 +64,7 @@ func TestRegisterSupportsBundledPythonWhenAvailable(t *testing.T) {
 	}
 
 	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
-		Script: "python -c 'print(\"py\")'\npython3 -c 'print(\"py3\")'\n",
+		Script: "python -c 'pass'\npython3 -c 'value = 3'\n",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -75,7 +75,7 @@ func TestRegisterSupportsBundledPythonWhenAvailable(t *testing.T) {
 	if got, want := result.ExitCode, 0; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
 	}
-	if got, want := result.Stdout, "py\npy3\n"; got != want {
+	if got, want := result.Stdout, ""; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

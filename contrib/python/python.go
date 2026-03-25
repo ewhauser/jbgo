@@ -22,24 +22,8 @@ import (
 )
 
 const (
-	pythonEvalEntry          = ".gbash-python-eval.py"
-	pythonStdinEntry         = ".gbash-python-stdin.py"
-	pythonHostPrintName      = "__gbash_internal_print"
-	pythonRewrittenPrintName = "__gbash_print"
-	pythonPrintPrelude       = "import sys\n\n" +
-		"def __gbash_print(*args, sep=\" \", end=\"\\n\", file=None, flush=False):\n" +
-		"    text = sep.join(str(arg) for arg in args) + end\n" +
-		"    target = sys.stdout if file is None else file\n" +
-		"    if target is sys.stdout:\n" +
-		"        __gbash_internal_print(\"stdout\", text)\n" +
-		"        return\n" +
-		"    if target is sys.stderr:\n" +
-		"        __gbash_internal_print(\"stderr\", text)\n" +
-		"        return\n" +
-		"    target.write(text)\n" +
-		"    if flush and hasattr(target, \"flush\"):\n" +
-		"        target.flush()\n\n"
-	pythonPrintBinding = "print = __gbash_print\n\n"
+	pythonEvalEntry  = ".gbash-python-eval.py"
+	pythonStdinEntry = ".gbash-python-stdin.py"
 )
 
 type Python struct {
@@ -138,29 +122,17 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 	if err != nil {
 		return pythonExit(inv, err)
 	}
+	if sourceReferencesBarePrint(source.code) {
+		return commands.Exitf(inv, 1,
+			"%s: print is not supported yet with the pinned gomonty runtime; builtin print output is unavailable and print(..., file=...) is unsupported upstream",
+			c.Name(),
+		)
+	}
 
 	env := montyvfs.MapEnvironment{}
 	maps.Copy(env, inv.Env)
 
 	_, err = runner.Run(ctx, monty.RunOptions{
-		Functions: map[string]monty.ExternalFunction{
-			pythonHostPrintName: func(_ context.Context, call monty.Call) (monty.Result, error) {
-				if len(call.Args) < 2 {
-					return monty.Return(monty.None()), nil
-				}
-				if call.Args[0].Kind() != "string" || call.Args[1].Kind() != "string" {
-					return monty.Return(monty.None()), nil
-				}
-				text := call.Args[1].Raw().(string)
-				switch call.Args[0].Raw().(string) {
-				case "stderr":
-					_, _ = io.WriteString(inv.Stderr, text)
-				default:
-					_, _ = io.WriteString(inv.Stdout, text)
-				}
-				return monty.Return(monty.None()), nil
-			},
-		},
 		Print: monty.WriterPrintCallback(inv.Stdout),
 		OS: montyvfs.Handler(&invocationFS{
 			requestContext: func() context.Context { return ctx },
@@ -198,7 +170,7 @@ func (c *Python) classifySource(ctx context.Context, inv *commands.Invocation, m
 func (c *Python) prepareEvalSource(inv *commands.Invocation, code string) pythonSource {
 	return pythonSource{
 		kind:      sourceEval,
-		code:      instrumentSourceForPrint(code),
+		code:      code,
 		entryPath: gbfs.Resolve(inv.Cwd, pythonEvalEntry),
 	}
 }
@@ -210,7 +182,7 @@ func (c *Python) prepareStdinSource(ctx context.Context, inv *commands.Invocatio
 	}
 	return pythonSource{
 		kind:      sourceStdin,
-		code:      instrumentSourceForPrint(string(data)),
+		code:      string(data),
 		entryPath: gbfs.Resolve(inv.Cwd, pythonStdinEntry),
 	}, nil
 }
@@ -234,7 +206,7 @@ func (c *Python) prepareFileSource(ctx context.Context, inv *commands.Invocation
 	}
 	return pythonSource{
 		kind:      sourceFile,
-		code:      instrumentSourceForPrint(string(data)),
+		code:      string(data),
 		scriptArg: scriptArg,
 		entryPath: abs,
 	}, nil
@@ -544,149 +516,13 @@ func int64Field(value reflect.Value, name string) (int64, bool) {
 	}
 }
 
-func instrumentSourceForPrint(source string) string {
-	needsPrintPrelude := sourceReferencesBarePrint(source)
-	source, rewritten := rewritePrintCalls(source)
-	if !needsPrintPrelude && !rewritten {
-		return source
-	}
-	if source == "" {
-		return pythonPrintPrelude + pythonPrintBinding
-	}
-
-	index := consumePythonTriviaLines(source, 0)
-	if docstringEnd, ok := consumeModuleDocstring(source, index); ok {
-		index = consumePythonTriviaLines(source, docstringEnd)
-	}
-	for index < len(source) {
-		index = consumePythonTriviaLines(source, index)
-		if !hasFutureImportPrefix(source, index) {
-			break
-		}
-		index = consumePythonStatement(source, index)
-	}
-
-	return source[:index] + pythonPrintPrelude + pythonPrintBinding + source[index:]
-}
-
 type pythonTokenKind uint8
 
 const (
 	pythonTokenNone pythonTokenKind = iota
-	pythonTokenIdentifier
 	pythonTokenDot
 	pythonTokenOther
 )
-
-func rewritePrintCalls(source string) (string, bool) {
-	if source == "" {
-		return "", false
-	}
-	if sourceHasUnsafePrintReference(source) {
-		return source, false
-	}
-
-	var out strings.Builder
-	out.Grow(len(source) + len(pythonPrintPrelude))
-
-	lastKind := pythonTokenNone
-	lastIdentifier := ""
-	rewritten := false
-
-	for index := 0; index < len(source); {
-		switch ch := source[index]; {
-		case ch == '#':
-			next := index + 1
-			for next < len(source) && source[next] != '\n' {
-				next++
-			}
-			out.WriteString(source[index:next])
-			index = next
-		case ch == '"' || ch == '\'':
-			next := consumePythonString(source, index)
-			out.WriteString(source[index:next])
-			index = next
-			lastKind = pythonTokenOther
-			lastIdentifier = ""
-		case isPythonIdentifierStart(ch):
-			start := index
-			index++
-			for index < len(source) && isPythonIdentifierContinue(source[index]) {
-				index++
-			}
-			identifier := source[start:index]
-			if identifier == "print" && shouldRewritePrintCall(source, index, lastKind, lastIdentifier) {
-				out.WriteString(pythonRewrittenPrintName)
-				lastKind = pythonTokenIdentifier
-				lastIdentifier = pythonRewrittenPrintName
-				rewritten = true
-				continue
-			}
-
-			out.WriteString(identifier)
-			lastKind = pythonTokenIdentifier
-			lastIdentifier = identifier
-		default:
-			out.WriteByte(ch)
-			index++
-			switch ch {
-			case ' ', '\t', '\n', '\r', '\f', '\v':
-				continue
-			case '.':
-				lastKind = pythonTokenDot
-			default:
-				lastKind = pythonTokenOther
-			}
-			lastIdentifier = ""
-		}
-	}
-
-	return out.String(), rewritten
-}
-
-func sourceHasUnsafePrintReference(source string) bool {
-	lastKind := pythonTokenNone
-	lastIdentifier := ""
-
-	for index := 0; index < len(source); {
-		switch ch := source[index]; {
-		case ch == '#':
-			index++
-			for index < len(source) && source[index] != '\n' {
-				index++
-			}
-		case ch == '"' || ch == '\'':
-			index = consumePythonString(source, index)
-			lastKind = pythonTokenOther
-			lastIdentifier = ""
-		case isPythonIdentifierStart(ch):
-			start := index
-			index++
-			for index < len(source) && isPythonIdentifierContinue(source[index]) {
-				index++
-			}
-			identifier := source[start:index]
-			if identifier == "print" && isUnsafePrintReference(lastKind, lastIdentifier, source, index) {
-				return true
-			}
-			lastKind = pythonTokenIdentifier
-			lastIdentifier = identifier
-		default:
-			index++
-			switch ch {
-			case ' ', '\t', '\n', '\r', '\f', '\v':
-				continue
-			case '.':
-				lastKind = pythonTokenDot
-			default:
-				lastKind = pythonTokenOther
-			}
-			lastIdentifier = ""
-		}
-	}
-
-	return false
-}
 
 func sourceReferencesBarePrint(source string) bool {
 	lastKind := pythonTokenNone
@@ -710,7 +546,7 @@ func sourceReferencesBarePrint(source string) bool {
 			if source[start:index] == "print" && lastKind != pythonTokenDot {
 				return true
 			}
-			lastKind = pythonTokenIdentifier
+			lastKind = pythonTokenOther
 		default:
 			index++
 			switch ch {
@@ -724,39 +560,6 @@ func sourceReferencesBarePrint(source string) bool {
 		}
 	}
 
-	return false
-}
-
-func isUnsafePrintReference(lastKind pythonTokenKind, lastIdentifier, source string, index int) bool {
-	if lastKind == pythonTokenDot {
-		return false
-	}
-	if lastKind == pythonTokenIdentifier {
-		switch lastIdentifier {
-		case "def", "class":
-			return true
-		}
-	}
-	_, next := nextSignificantByte(source, index)
-	return next != '('
-}
-
-func shouldRewritePrintCall(source string, index int, lastKind pythonTokenKind, lastIdentifier string) bool {
-	if lastKind == pythonTokenDot {
-		return false
-	}
-	if lastKind == pythonTokenIdentifier && (lastIdentifier == "def" || lastIdentifier == "class") {
-		return false
-	}
-	for index < len(source) {
-		switch source[index] {
-		case ' ', '\t', '\n', '\r', '\f', '\v':
-			index++
-			continue
-		default:
-			return source[index] == '('
-		}
-	}
 	return false
 }
 
@@ -797,114 +600,6 @@ func consumePythonString(source string, start int) int {
 	return len(source)
 }
 
-func consumePythonTriviaLines(source string, index int) int {
-	for index < len(source) {
-		lineEnd := nextPythonLineEnd(source, index)
-		trimmed := strings.TrimSpace(source[index:lineEnd])
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			index = lineEnd
-			continue
-		}
-		break
-	}
-	return index
-}
-
-func consumePythonStatement(source string, index int) int {
-	parenDepth := 0
-	lineContinued := false
-
-	for index < len(source) {
-		switch source[index] {
-		case '#':
-			for index < len(source) && source[index] != '\n' {
-				index++
-			}
-		case '"', '\'':
-			index = consumePythonString(source, index)
-		case '(', '[', '{':
-			parenDepth++
-			index++
-		case ')', ']', '}':
-			if parenDepth > 0 {
-				parenDepth--
-			}
-			index++
-		case '\\':
-			lineContinued = pythonLineContinuationAt(source, index)
-			index++
-		case '\n':
-			index++
-			if parenDepth == 0 && !lineContinued {
-				return index
-			}
-			lineContinued = false
-		default:
-			index++
-		}
-	}
-
-	return len(source)
-}
-
-func consumeModuleDocstring(source string, index int) (int, bool) {
-	if index >= len(source) {
-		return 0, false
-	}
-	lineEnd := nextPythonLineEnd(source, index)
-	line := source[index:lineEnd]
-	trimmed := strings.TrimSpace(line)
-	start, _, _, ok := moduleDocstringLiteral(trimmed)
-	if !ok {
-		return 0, false
-	}
-
-	stringStart := index + leadingPythonWhitespace(line) + start
-	stringEnd := consumePythonString(source, stringStart)
-	if stringEnd > len(source) {
-		return 0, false
-	}
-
-	docLineEnd := nextPythonLineEnd(source, stringEnd)
-	remainder := strings.TrimSpace(source[stringEnd:docLineEnd])
-	if remainder != "" && !strings.HasPrefix(remainder, "#") {
-		return 0, false
-	}
-	return docLineEnd, true
-}
-
-func nextPythonLineEnd(source string, index int) int {
-	for index < len(source) {
-		if source[index] == '\n' {
-			return index + 1
-		}
-		index++
-	}
-	return len(source)
-}
-
-func hasFutureImportPrefix(source string, index int) bool {
-	if index >= len(source) {
-		return false
-	}
-	lineEnd := nextPythonLineEnd(source, index)
-	fields := strings.Fields(strings.TrimSpace(source[index:lineEnd]))
-	return len(fields) >= 3 && fields[0] == "from" && fields[1] == "__future__" && fields[2] == "import"
-}
-
-func leadingPythonWhitespace(line string) int {
-	index := 0
-	for index < len(line) {
-		switch line[index] {
-		case ' ', '\t', '\r', '\f', '\v':
-			index++
-		default:
-			return index
-		}
-	}
-	return index
-}
-
 func isEscapedPythonDelimiter(source string, index int) bool {
 	backslashes := 0
 	for index > 0 {
@@ -915,81 +610,6 @@ func isEscapedPythonDelimiter(source string, index int) bool {
 		backslashes++
 	}
 	return backslashes%2 == 1
-}
-
-func pythonLineContinuationAt(source string, index int) bool {
-	if index+1 >= len(source) {
-		return false
-	}
-	if source[index+1] == '\n' {
-		return true
-	}
-	return index+2 < len(source) && source[index+1] == '\r' && source[index+2] == '\n'
-}
-
-func moduleDocstringLiteral(line string) (int, string, bool, bool) {
-	start, ok := pythonStringLiteralStart(line)
-	if !ok {
-		return 0, "", false, false
-	}
-
-	end := consumePythonString(line, start)
-	rest := strings.TrimSpace(line[end:])
-	if rest != "" && !strings.HasPrefix(rest, "#") {
-		return 0, "", false, false
-	}
-
-	quote := line[start]
-	delimiter := string(quote)
-	multiline := start+2 < len(line) && line[start+1] == quote && line[start+2] == quote
-	if multiline {
-		delimiter = strings.Repeat(string(quote), 3)
-	}
-
-	return start, delimiter, multiline, true
-}
-
-func pythonStringLiteralStart(line string) (int, bool) {
-	for prefixLen := 0; prefixLen <= 2 && prefixLen <= len(line); prefixLen++ {
-		if prefixLen > 0 && !isPythonStringPrefix(line[:prefixLen]) {
-			continue
-		}
-		if prefixLen >= len(line) {
-			continue
-		}
-		switch line[prefixLen] {
-		case '\'', '"':
-			return prefixLen, true
-		}
-	}
-	return 0, false
-}
-
-func isPythonStringPrefix(value string) bool {
-	if value == "" || len(value) > 2 {
-		return false
-	}
-	for _, ch := range value {
-		switch ch {
-		case 'r', 'R', 'u', 'U', 'b', 'B', 'f', 'F':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func nextSignificantByte(source string, index int) (int, byte) {
-	for index < len(source) {
-		switch source[index] {
-		case ' ', '\t', '\n', '\r', '\f', '\v':
-			index++
-			continue
-		default:
-			return index, source[index]
-		}
-	}
-	return -1, 0
 }
 
 func isPythonIdentifierStart(ch byte) bool {
