@@ -12,6 +12,8 @@ import (
 type LN struct{}
 
 type lnOptions struct {
+	backupMode      backupMode
+	backupSuffix    string
 	symbolic        bool
 	force           bool
 	verbose         bool
@@ -52,6 +54,8 @@ func (c *LN) Spec() CommandSpec {
 			"  can hold arbitrary text; if later resolved, a relative link is\n" +
 			"  interpreted in relation to its parent directory.",
 		Options: []OptionSpec{
+			{Name: "backup-short", Short: 'b', Help: "like --backup but does not accept an argument"},
+			{Name: "backup", Long: "backup", Arity: OptionOptionalValue, OptionalValueEqualsOnly: true, ValueName: "CONTROL", Help: "make a backup of each existing destination file"},
 			{Name: "force", Short: 'f', Long: "force", Help: "remove existing destination files"},
 			{Name: "no-dereference", Short: 'n', Long: "no-dereference", Help: "treat LINK_NAME as a normal file if it is a\n                          symbolic link to a directory"},
 			{Name: "logical", Short: 'L', Long: "logical", Help: "follow TARGETs that are symbolic links"},
@@ -60,6 +64,7 @@ func (c *LN) Spec() CommandSpec {
 			{Name: "target-directory", Short: 't', Long: "target-directory", Arity: OptionRequiredValue, ValueName: "DIRECTORY", Help: "specify the DIRECTORY in which to create the links"},
 			{Name: "no-target-directory", Short: 'T', Long: "no-target-directory", Help: "treat LINK_NAME as a normal file always"},
 			{Name: "relative", Short: 'r', Long: "relative", Help: "create symbolic links relative to link location"},
+			{Name: "suffix", Short: 'S', Long: "suffix", Arity: OptionRequiredValue, ValueName: "SUFFIX", Help: "override the usual backup suffix"},
 			{Name: "verbose", Short: 'v', Long: "verbose", Help: "print name of each linked file"},
 		},
 		Args: []ArgSpec{
@@ -86,7 +91,13 @@ func (c *LN) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 		physical:      matches.Has("physical"),
 		noTargetDir:   matches.Has("no-target-directory"),
 		relative:      matches.Has("relative"),
+		backupSuffix:  determineBackupSuffix(inv, matches),
 	}
+	backupMode, err := determineBackupMode(inv, matches, "ln")
+	if err != nil {
+		return err
+	}
+	opts.backupMode = backupMode
 	if matches.Has("target-directory") {
 		opts.targetDirectory = matches.Value("target-directory")
 	}
@@ -124,8 +135,16 @@ func runLN(ctx context.Context, inv *Invocation, opts *lnOptions, files []string
 		}
 		return lnLinkIntoDirectory(ctx, inv, opts, files, ".")
 	case 2:
-		if !opts.noTargetDir {
-			if info, _, exists, err := statMaybe(ctx, inv, files[1]); err != nil {
+		if opts.noTargetDir {
+			if hasTrailingSlash(files[1]) {
+				return exitf(inv, 1, "ln: failed to access %s: Not a directory", quoteGNUOperand(files[1]))
+			}
+		} else {
+			statFn := statMaybe
+			if opts.noDereference {
+				statFn = lstatMaybe
+			}
+			if info, _, exists, err := statFn(ctx, inv, files[1]); err != nil {
 				return err
 			} else if exists && info.IsDir() {
 				return lnLinkIntoDirectory(ctx, inv, opts, files[:1], files[1])
@@ -225,23 +244,51 @@ func lnPrepareDestination(ctx context.Context, inv *Invocation, opts *lnOptions,
 		return nil
 	}
 
-	if !opts.force {
+	replacing := opts.force || opts.backupMode != backupNone
+	if !replacing {
 		return exitf(inv, 1, "ln: failed to create link %s: File exists", quoteGNUOperand(linkName))
 	}
-
-	if !opts.symbolic {
-		if targetAbs, err := inv.FS.Realpath(ctx, target); err == nil {
-			if destAbs, err := inv.FS.Realpath(ctx, linkName); err == nil && targetAbs == destAbs {
-				return exitf(inv, 1, "ln: %s and %s are the same file", quoteGNUOperand(target), quoteGNUOperand(linkName))
-			}
-		}
+	if err := lnCheckSameFile(ctx, inv, opts, target, linkName); err != nil {
+		return err
 	}
 
 	if info.IsDir() && !info.Mode().Type().IsRegular() && !opts.noDereference {
 		return exitf(inv, 1, "ln: failed to create link %s: File exists", quoteGNUOperand(linkName))
 	}
+	if opts.backupMode != backupNone {
+		backupAbs, err := backupPath(ctx, inv, opts.backupMode, linkAbs, opts.backupSuffix)
+		if err != nil {
+			return err
+		}
+		if _, _, backupExists, err := lstatMaybe(ctx, inv, backupAbs); err != nil {
+			return err
+		} else if backupExists {
+			if err := inv.FS.Remove(ctx, backupAbs, false); err != nil {
+				return exitf(inv, 1, "ln: failed to remove %s: %s", quoteGNUOperand(backupAbs), lnErrText(err))
+			}
+		}
+		if err := inv.FS.Rename(ctx, linkAbs, backupAbs); err != nil {
+			return exitf(inv, 1, "ln: failed to create backup %s: %s", quoteGNUOperand(backupAbs), lnErrText(err))
+		}
+		return nil
+	}
 	if err := inv.FS.Remove(ctx, linkAbs, true); err != nil && !errors.Is(err, stdfs.ErrNotExist) {
 		return exitf(inv, 1, "ln: failed to remove %s: %s", quoteGNUOperand(linkName), lnErrText(err))
+	}
+	return nil
+}
+
+func lnCheckSameFile(ctx context.Context, inv *Invocation, opts *lnOptions, target, linkName string) error {
+	if allowPath(inv, target) == allowPath(inv, linkName) {
+		return exitf(inv, 1, "ln: %s and %s are the same file", quoteGNUOperand(target), quoteGNUOperand(linkName))
+	}
+	if opts.symbolic {
+		return nil
+	}
+	if targetAbs, err := inv.FS.Realpath(ctx, target); err == nil {
+		if destAbs, err := inv.FS.Realpath(ctx, linkName); err == nil && targetAbs == destAbs {
+			return exitf(inv, 1, "ln: %s and %s are the same file", quoteGNUOperand(target), quoteGNUOperand(linkName))
+		}
 	}
 	return nil
 }

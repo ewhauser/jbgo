@@ -16,36 +16,15 @@ import (
 
 type Install struct{}
 
-type installBackupMode uint8
-
-const (
-	installBackupNone installBackupMode = iota
-	installBackupSimple
-	installBackupNumbered
-	installBackupExisting
-)
-
 const (
 	installDefaultMode         = stdfs.FileMode(0o755)
-	installDefaultBackupSuffix = "~"
 	installDefaultStripProgram = "strip"
 	installSpecialModeBits     = stdfs.ModeSetuid | stdfs.ModeSetgid | stdfs.ModeSticky
 	installAllModeBits         = stdfs.ModePerm | installSpecialModeBits
 )
 
-var installBackupModeValues = []string{
-	"simple",
-	"never",
-	"numbered",
-	"t",
-	"existing",
-	"nil",
-	"none",
-	"off",
-}
-
 type installOptions struct {
-	backupMode         installBackupMode
+	backupMode         backupMode
 	backupSuffix       string
 	mode               stdfs.FileMode
 	modeSpecified      bool
@@ -201,8 +180,8 @@ func parseInstallMatches(inv *Invocation, matches *ParsedCommand) (installOption
 	opts.mode = mode
 	opts.modeSpecified = modeSpecified
 
-	opts.backupSuffix = determineInstallBackupSuffix(inv, matches)
-	opts.backupMode, err = determineInstallBackupMode(inv, matches)
+	opts.backupSuffix = determineBackupSuffix(inv, matches)
+	opts.backupMode, err = determineBackupMode(inv, matches, "install")
 	if err != nil {
 		return installOptions{}, err
 	}
@@ -230,68 +209,6 @@ func parseInstallMode(spec string, set, directory bool) (stdfs.FileMode, bool, e
 		return 0, false, err
 	}
 	return mode & installAllModeBits, true, nil
-}
-
-func determineInstallBackupSuffix(inv *Invocation, matches *ParsedCommand) string {
-	suffix := strings.TrimSpace(matches.Value("suffix"))
-	if suffix == "" && inv != nil {
-		suffix = strings.TrimSpace(inv.Env["SIMPLE_BACKUP_SUFFIX"])
-	}
-	if suffix == "" || strings.Contains(suffix, "/") {
-		return installDefaultBackupSuffix
-	}
-	return suffix
-}
-
-func determineInstallBackupMode(inv *Invocation, matches *ParsedCommand) (installBackupMode, error) {
-	if matches.Has("backup") {
-		if value := strings.TrimSpace(matches.Value("backup")); value != "" {
-			return matchInstallBackupMode(value, "backup type")
-		}
-		if value := strings.TrimSpace(installEnv(inv, "VERSION_CONTROL")); value != "" {
-			return matchInstallBackupMode(value, "$VERSION_CONTROL")
-		}
-		return installBackupExisting, nil
-	}
-	if matches.Has("backup-short") {
-		if value := strings.TrimSpace(installEnv(inv, "VERSION_CONTROL")); value != "" {
-			return matchInstallBackupMode(value, "$VERSION_CONTROL")
-		}
-		return installBackupExisting, nil
-	}
-	if matches.Has("suffix") {
-		if value := strings.TrimSpace(installEnv(inv, "VERSION_CONTROL")); value != "" {
-			return matchInstallBackupMode(value, "$VERSION_CONTROL")
-		}
-		return installBackupExisting, nil
-	}
-	return installBackupNone, nil
-}
-
-func matchInstallBackupMode(method, origin string) (installBackupMode, error) {
-	matches := make([]string, 0, len(installBackupModeValues))
-	for _, candidate := range installBackupModeValues {
-		if strings.HasPrefix(candidate, method) {
-			matches = append(matches, candidate)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return installBackupNone, exitf(nil, 1, "install: invalid argument %s for '%s'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'", quoteGNUOperand(method), origin)
-	case 1:
-		switch matches[0] {
-		case "simple", "never":
-			return installBackupSimple, nil
-		case "numbered", "t":
-			return installBackupNumbered, nil
-		case "existing", "nil":
-			return installBackupExisting, nil
-		default:
-			return installBackupNone, nil
-		}
-	default:
-		return installBackupNone, exitf(nil, 1, "install: ambiguous argument %s for '%s'\nValid arguments are:\n  - 'none', 'off'\n  - 'simple', 'never'\n  - 'existing', 'nil'\n  - 'numbered', 't'", quoteGNUOperand(method), origin)
-	}
 }
 
 func runInstallDirectories(ctx context.Context, inv *Invocation, db *permissionIdentityDB, opts *installOptions) error {
@@ -520,8 +437,8 @@ func installPrepareDestination(ctx context.Context, inv *Invocation, opts *insta
 			return "", &ExitError{Code: 1, Err: err}
 		}
 	}
-	if opts.backupMode != installBackupNone {
-		backupAbs, err := installBackupPath(ctx, inv, opts.backupMode, destAbs, opts.backupSuffix)
+	if opts.backupMode != backupNone {
+		backupAbs, err := backupPath(ctx, inv, opts.backupMode, destAbs, opts.backupSuffix)
 		if err != nil {
 			return "", err
 		}
@@ -541,45 +458,6 @@ func installPrepareDestination(ctx context.Context, inv *Invocation, opts *insta
 		return "", &ExitError{Code: 1, Err: err}
 	}
 	return "", nil
-}
-
-func installBackupPath(ctx context.Context, inv *Invocation, mode installBackupMode, destAbs, suffix string) (string, error) {
-	switch mode {
-	case installBackupSimple:
-		return installSimpleBackupPath(destAbs, suffix), nil
-	case installBackupNumbered:
-		return installNumberedBackupPath(ctx, inv, destAbs)
-	case installBackupExisting:
-		if _, exists, err := installHighestBackupIndex(ctx, inv, destAbs); err != nil {
-			return "", err
-		} else if exists {
-			return installNumberedBackupPath(ctx, inv, destAbs)
-		}
-		return installSimpleBackupPath(destAbs, suffix), nil
-	default:
-		return "", nil
-	}
-}
-
-func installSimpleBackupPath(destAbs, suffix string) string {
-	dir := path.Dir(destAbs)
-	name := path.Base(destAbs) + suffix
-	if dir == "/" {
-		return "/" + name
-	}
-	return path.Join(dir, name)
-}
-
-func installNumberedBackupPath(ctx context.Context, inv *Invocation, destAbs string) (string, error) {
-	maxIndex, exists, err := installHighestBackupIndex(ctx, inv, destAbs)
-	if err != nil {
-		return "", err
-	}
-	next := uint64(1)
-	if exists {
-		next = maxIndex + 1
-	}
-	return installSimpleBackupPath(destAbs, fmt.Sprintf(".~%d~", next)), nil
 }
 
 func installCopyFile(ctx context.Context, inv *Invocation, sourceAbs, destAbs string) error {
@@ -794,41 +672,6 @@ func installModeFromOctal(value uint32) stdfs.FileMode {
 	return mode
 }
 
-func installHighestBackupIndex(ctx context.Context, inv *Invocation, destAbs string) (uint64, bool, error) {
-	dir := path.Dir(destAbs)
-	base := path.Base(destAbs)
-	entries, err := readDir(ctx, inv, dir)
-	if err != nil {
-		if errorsIsNotExist(err) {
-			return 0, false, nil
-		}
-		return 0, false, err
-	}
-
-	prefix := base + ".~"
-	var maxIndex uint64
-	found := false
-	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, "~") {
-			continue
-		}
-		indexText := strings.TrimSuffix(strings.TrimPrefix(name, prefix), "~")
-		if indexText == "" {
-			continue
-		}
-		index, err := strconv.ParseUint(indexText, 10, 64)
-		if err != nil || index == 0 {
-			continue
-		}
-		if !found || index > maxIndex {
-			maxIndex = index
-			found = true
-		}
-	}
-	return maxIndex, found, nil
-}
-
 func installStatTarget(ctx context.Context, inv *Invocation, name string) (stdfs.FileInfo, string, bool, error) {
 	info, abs, exists, err := statMaybe(ctx, inv, name)
 	if err == nil {
@@ -866,13 +709,6 @@ func installOwnershipForInfo(info stdfs.FileInfo) gbfs.FileOwnership {
 		return ownership
 	}
 	return gbfs.DefaultOwnership()
-}
-
-func installEnv(inv *Invocation, key string) string {
-	if inv == nil || inv.Env == nil {
-		return ""
-	}
-	return inv.Env[key]
 }
 
 func installErrorText(err error) string {
