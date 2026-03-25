@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"maps"
 	"path"
 	"strconv"
@@ -708,7 +709,7 @@ func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser,
 	}
 	switch r := r.(type) {
 	case StdinReader:
-		return wrapRedirectedStdinReader(r, redirectMeta)
+		return wrapRedirectedStdinReader(r, r, redirectMeta)
 	case nil:
 		return nil
 	default:
@@ -720,20 +721,24 @@ func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser,
 			io.Copy(pw, r)
 			pw.Close()
 		}()
-		return wrapRedirectedStdinReader(pr, redirectMeta)
+		return wrapRedirectedStdinReader(pr, r, redirectMeta)
 	}
 }
 
 type redirectedStdinReader struct {
 	StdinReader
-	meta commandutil.RedirectMetadata
+	underlying io.Reader
+	meta       commandutil.RedirectMetadata
 }
 
-func wrapRedirectedStdinReader(reader StdinReader, meta commandutil.RedirectMetadata) StdinReader {
+func wrapRedirectedStdinReader(reader StdinReader, underlying io.Reader, meta commandutil.RedirectMetadata) StdinReader {
 	if reader == nil || meta == nil {
 		return reader
 	}
-	return redirectedStdinReader{StdinReader: reader, meta: meta}
+	if underlying == nil {
+		underlying = reader
+	}
+	return redirectedStdinReader{StdinReader: reader, underlying: underlying, meta: meta}
 }
 
 func (r redirectedStdinReader) RedirectPath() string {
@@ -746,6 +751,23 @@ func (r redirectedStdinReader) RedirectFlags() int {
 
 func (r redirectedStdinReader) RedirectOffset() int64 {
 	return r.meta.RedirectOffset()
+}
+
+func (r redirectedStdinReader) UnderlyingReader() io.Reader {
+	if r.underlying == nil {
+		return r.StdinReader
+	}
+	return r.underlying
+}
+
+func (r redirectedStdinReader) Stat() (stdfs.FileInfo, error) {
+	type statter interface {
+		Stat() (stdfs.FileInfo, error)
+	}
+	if statter, ok := r.UnderlyingReader().(statter); ok {
+		return statter.Stat()
+	}
+	return nil, errors.New("bad file descriptor")
 }
 
 func newPipe(pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) (StdinReader, io.WriteCloser, error) {

@@ -561,15 +561,15 @@ func touchHasExplicitSource(args []string) bool {
 			continue
 		}
 		switch {
-		case arg == "-d", arg == "--date", strings.HasPrefix(arg, "--date="):
+		case arg == "-d", arg == "-r", arg == "-t":
 			return true
-		case arg == "-r", arg == "--reference", strings.HasPrefix(arg, "--reference="):
-			return true
-		case arg == "-t", arg == "--timestamp", strings.HasPrefix(arg, "--timestamp="), arg == "--posix-stamp", strings.HasPrefix(arg, "--posix-stamp="):
-			return true
-		case !strings.HasPrefix(arg, "-") || arg == "-":
-			continue
 		case strings.HasPrefix(arg, "--"):
+			name, _, _ := strings.Cut(arg[2:], "=")
+			if touchMatchesExplicitSourceLongOption(name) {
+				return true
+			}
+			continue
+		case !strings.HasPrefix(arg, "-") || arg == "-":
 			continue
 		default:
 			for idx := 1; idx < len(arg); idx++ {
@@ -581,6 +581,38 @@ func touchHasExplicitSource(args []string) bool {
 		}
 	}
 	return false
+}
+
+func touchMatchesExplicitSourceLongOption(name string) bool {
+	if name == "" {
+		return false
+	}
+	spec := NewTouch().Spec()
+	var matched *OptionSpec
+	matchCount := 0
+	for i := range spec.Options {
+		opt := &spec.Options[i]
+		names := append([]string{opt.Long}, opt.Aliases...)
+		for _, candidate := range names {
+			if candidate == "" {
+				continue
+			}
+			if candidate == name || (spec.Parse.InferLongOptions && strings.HasPrefix(candidate, name)) {
+				matched = opt
+				matchCount++
+				break
+			}
+		}
+	}
+	if matchCount != 1 || matched == nil {
+		return false
+	}
+	switch matched.Name {
+	case "date", "reference", "timestamp", "posix-stamp":
+		return true
+	default:
+		return false
+	}
 }
 
 func touchLegacyTimestampIndex(args []string) (timestampIndex, endOfOptions int) {

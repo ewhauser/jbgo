@@ -174,6 +174,28 @@ _POSIX2_VERSION=199209 touch -- 01010000 /home/agent/out.txt
 	}
 }
 
+func TestTouchLegacyTimestampRewriteRespectsInferredLongDateOption(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, `TZ=UTC _POSIX2_VERSION=199209 touch --dat='2024-01-02 03:04:05 UTC' /home/agent/01010000 /home/agent/out.txt
+`)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+	for _, name := range []string{"/home/agent/01010000", "/home/agent/out.txt"} {
+		info, err := session.FileSystem().Stat(context.Background(), name)
+		if err != nil {
+			t.Fatalf("Stat(%s) error = %v", name, err)
+		}
+		if got := info.ModTime().UTC(); !got.Equal(want) {
+			t.Fatalf("%s ModTime = %v, want %v", name, got, want)
+		}
+	}
+}
+
 func TestTouchCreatesDanglingSymlinkTarget(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
