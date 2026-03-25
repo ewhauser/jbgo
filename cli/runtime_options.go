@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -347,18 +348,75 @@ func inheritSelectedEnv(baseEnv map[string]string, names []string) map[string]st
 }
 
 func ensureReadWriteRootIsTemporary(root string) error {
-	tempRoot, err := filepath.EvalSymlinks(os.TempDir())
-	if err != nil {
-		return fmt.Errorf("resolve system temp directory: %w", err)
-	}
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return fmt.Errorf("resolve --readwrite-root: %w", err)
 	}
-	if !pathWithinRoot(filepath.Clean(canonicalRoot), filepath.Clean(tempRoot)) {
-		return fmt.Errorf("--readwrite-root must be inside the system temp directory")
+	tempRoots, err := systemTempRoots()
+	if err != nil {
+		return err
 	}
-	return nil
+	canonicalRoot = filepath.Clean(canonicalRoot)
+	for _, tempRoot := range tempRoots {
+		if pathWithinRoot(canonicalRoot, tempRoot) {
+			return nil
+		}
+	}
+	return fmt.Errorf("--readwrite-root must be inside the system temp directory")
+}
+
+func systemTempRoots() ([]string, error) {
+	roots := make([]string, 0, 4)
+	for _, candidate := range defaultSystemTempRootCandidates() {
+		resolved, err := resolveTempRootCandidate(candidate)
+		if err != nil {
+			continue
+		}
+		roots = appendUniqueStrings(roots, resolved)
+	}
+
+	if current, err := resolveTempRootCandidate(os.TempDir()); err == nil {
+		if len(roots) == 0 || pathWithinAnyRoot(current, roots) {
+			roots = appendUniqueStrings(roots, current)
+		}
+	}
+
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("resolve system temp directory: no usable temp roots")
+	}
+	return roots, nil
+}
+
+func defaultSystemTempRootCandidates() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"/tmp", "/private/tmp", "/var/folders", "/private/var/folders"}
+	case "windows":
+		return []string{os.TempDir()}
+	default:
+		return []string{"/tmp"}
+	}
+}
+
+func resolveTempRootCandidate(candidate string) (string, error) {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return "", fmt.Errorf("empty temp root")
+	}
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(resolved), nil
+}
+
+func pathWithinAnyRoot(pathValue string, roots []string) bool {
+	for _, root := range roots {
+		if pathWithinRoot(pathValue, root) {
+			return true
+		}
+	}
+	return false
 }
 
 func pathWithinRoot(pathValue, root string) bool {

@@ -962,6 +962,46 @@ func TestMktempSupportsDryRunSuffixAndQuiet(t *testing.T) {
 	}
 }
 
+func TestMktempSupportsImplicitTemplateSuffixAndTmpdirErrors(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "TMPDIR=. mktemp --suffix=.txt\nTMPDIR=no/such/dir mktemp -u\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout lines = %d, want 2; stdout=%q", len(lines), result.Stdout)
+	}
+	if !strings.HasPrefix(lines[0], "./tmp.") || !strings.HasSuffix(lines[0], ".txt") {
+		t.Fatalf("implicit-template output = %q, want ./tmp.*.txt", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "no/such/dir/tmp.") {
+		t.Fatalf("dry-run output = %q, want no/such/dir/tmp.*", lines[1])
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(lines[0])); err != nil {
+		t.Fatalf("Stat(%q) error = %v, want created file", lines[0], err)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), mktempRuntimePath(lines[1])); !os.IsNotExist(err) {
+		t.Fatalf("Stat(%q) error = %v, want not exist for dry run", lines[1], err)
+	}
+}
+
+func TestMktempReportsCreateErrorForInvalidTmpdir(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "TMPDIR=no/such/dir mktemp\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stderr, "mktemp: failed to create file via template 'no/such/dir/tmp.XXXXXXXXXX': No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestMktempTmpdirAndDeprecatedTHandling(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

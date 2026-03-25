@@ -62,6 +62,11 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "gnu launcher inherits temp-related environment variables" {
+  run grep -F -- "--inherit-env 'LC_ALL,LC_CTYPE,LANG,LANGUAGE,TMP,TEMP,TMPDIR'" "${WORKDIR}/build-aux/gbash-harness/gbash"
+  [ "$status" -eq 0 ]
+}
+
 @test "nested gnu shell wrappers use external commands after disabling builtins" {
   run env PATH=/src:/bin:/usr/bin "${WORKDIR}/src/sh" -c \
     "PATH=/src:/bin:/usr/bin; export PATH; command -v sh; foo=old; printf -v foo %s hi; printf '\\nparent=<%s>\\n' \"\$foo\"; sh -c 'command -v sh; foo=old; printf -v foo %s hi; printf \"\\\\nchild=<%s>\\\\n\" \"\$foo\"; command -v [ echo false printf pwd test true'"

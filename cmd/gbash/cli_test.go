@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -690,7 +691,7 @@ func TestRunCLIReadWriteRootRejectsNonTempDirectories(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	nonTempRoot := filepath.Dir(filepath.Clean(os.TempDir()))
+	nonTempRoot := filepath.VolumeName(os.TempDir()) + string(os.PathSeparator)
 	exitCode, err := runCLI(context.Background(), []string{"--readwrite-root", nonTempRoot, "--cwd", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
 	if err == nil {
 		t.Fatalf("runCLI() error = nil, want temp-directory restriction")
@@ -700,6 +701,61 @@ func TestRunCLIReadWriteRootRejectsNonTempDirectories(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "system temp directory") {
 		t.Fatalf("error = %v, want temp-directory diagnostic", err)
+	}
+}
+
+func TestRunCLIReadWriteRootAllowsTempRootWhenTMPDIRIsOverridden(t *testing.T) {
+	t.Parallel()
+
+	root, err := os.MkdirTemp("/tmp", "gbash-cli-root-")
+	if err != nil {
+		t.Skipf("MkdirTemp(/tmp) failed: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Fatalf("RemoveAll(%q) error = %v", root, err)
+		}
+	})
+
+	cmd := exec.CommandContext(context.Background(), os.Args[0], "-test.run=^TestRunCLIReadWriteRootAllowsTempRootWhenTMPDIRIsOverriddenHelper$")
+	cmd.Env = append(os.Environ(),
+		"GO_WANT_GBASH_TMPDIR_HELPER=1",
+		"GBASH_TEST_READWRITE_ROOT="+root,
+		"TMPDIR=.",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helper process error = %v; output=%s", err, output)
+	}
+}
+
+func TestRunCLIReadWriteRootAllowsTempRootWhenTMPDIRIsOverriddenHelper(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv("GO_WANT_GBASH_TMPDIR_HELPER") != "1" {
+		t.Skip("helper subprocess only")
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	root := os.Getenv("GBASH_TEST_READWRITE_ROOT")
+	if root == "" {
+		t.Fatal("GBASH_TEST_READWRITE_ROOT is empty")
+	}
+
+	exitCode, err := runCLI(context.Background(), []string{"--readwrite-root", root, "--cwd", "/", "-c", "pwd"}, strings.NewReader(""), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stderr=%q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "/\n" {
+		t.Fatalf("stdout = %q, want %q", got, "/\n")
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
 	}
 }
 
