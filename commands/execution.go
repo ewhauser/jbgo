@@ -20,7 +20,10 @@ type ExecutionRequest struct {
 	Command []string
 	// CommandPath optionally overrides the executable looked up for Command[0]
 	// while preserving Command[0] as the presented argv0.
-	CommandPath    string
+	CommandPath string
+	// CommandName optionally overrides the resolved command name used for
+	// policy checks and tracing when CommandPath is set.
+	CommandName    string
 	Args           []string
 	StartupOptions []string
 	Env            map[string]string

@@ -218,6 +218,35 @@ func TestRestrictivePolicyTimeoutRespectsCommandAllowlist(t *testing.T) {
 	}
 }
 
+func TestRestrictivePolicyTimeoutUsesInvocationAliasForCommandAllowlist(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			AllowedCommands: []string{"timeout", "echo-via-link"},
+			AllowedBuiltins: []string{"cd"},
+			ReadRoots:       []string{"/", "/usr/bin", "/bin"},
+			WriteRoots:      []string{defaultHomeDir},
+			Limits: policy.Limits{
+				MaxStdoutBytes: 1 << 20,
+				MaxStderrBytes: 1 << 20,
+				MaxFileBytes:   8 << 20,
+			},
+		}),
+	})
+	if err := session.FileSystem().Symlink(context.Background(), "/bin/echo", "/home/agent/echo-via-link"); err != nil {
+		t.Fatalf("Symlink(/home/agent/echo-via-link) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "timeout 1 /home/agent/echo-via-link alias-ok\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "alias-ok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
+	}
+}
+
 func TestRestrictivePolicyXArgsRespectsCommandAllowlist(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{

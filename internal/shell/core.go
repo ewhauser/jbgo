@@ -38,6 +38,7 @@ type Execution struct {
 	Script            string
 	Command           []string
 	CommandPath       string
+	CommandName       string
 	Args              []string
 	StartupOptions    []string
 	StartupHome       string
@@ -206,6 +207,7 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 	finalEnv, err := m.executeCommand(ctx, exec, &commandExecuteRequest{
 		Argv:        exec.Command,
 		CommandPath: exec.CommandPath,
+		CommandName: exec.CommandName,
 		VirtualWD:   gbfs.Clean(exec.Dir),
 		Env:         executionEnviron(exec, finalEnv),
 		CurrentEnv:  finalEnv,
@@ -780,6 +782,7 @@ func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[stri
 		Script:          req.Script,
 		Command:         append([]string(nil), req.Command...),
 		CommandPath:     req.CommandPath,
+		CommandName:     req.CommandName,
 		Args:            append([]string(nil), req.Args...),
 		StartupOptions:  append([]string(nil), req.StartupOptions...),
 		Env:             mergeEnv(currentEnv, req.Env),

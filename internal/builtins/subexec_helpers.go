@@ -68,9 +68,14 @@ func executeCommand(ctx context.Context, inv *Invocation, opts *executeCommandOp
 		argv0 = resolved.Path
 	}
 	argv := append([]string{argv0}, opts.Argv[1:]...) //nolint:nilaway // resolved is non-nil when ok is true
+	commandName := ""
+	if resolved.InvocationPath != "" && resolved.InvocationPath != resolved.Path && registeredCommand(inv, path.Base(resolved.Path)) {
+		commandName = resolved.Name
+	}
 	return inv.Exec(ctx, &ExecutionRequest{
 		Command:     argv,
 		CommandPath: resolved.Path,
+		CommandName: commandName,
 		Env:         env,
 		WorkDir:     workDir,
 		ReplaceEnv:  opts.ReplaceEnv,

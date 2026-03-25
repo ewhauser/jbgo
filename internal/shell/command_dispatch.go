@@ -17,6 +17,7 @@ import (
 type commandExecuteRequest struct {
 	Argv          []string
 	CommandPath   string
+	CommandName   string
 	VirtualWD     string
 	Env           expand.Environ
 	CurrentEnv    map[string]string
@@ -61,6 +62,9 @@ func (m *core) executeCommand(ctx context.Context, exec *Execution, req *command
 	}
 	if !ok {
 		return req.CurrentEnv, shellFailureToWriter(ctx, req.Stderr, 127, "%s: command not found", req.Argv[0])
+	}
+	if req.CommandName != "" {
+		resolved.name = req.CommandName
 	}
 
 	start := time.Now().UTC()

@@ -251,6 +251,7 @@ func mkdirVerbosePath(inv *Invocation, raw, abs string) string {
 	if strings.HasPrefix(raw, "/") {
 		return abs
 	}
+	leadingDotSlash := strings.HasPrefix(raw, "./")
 	cwd := "/"
 	if inv != nil && inv.FS != nil {
 		cwd = inv.FS.Getwd()
@@ -277,10 +278,16 @@ func mkdirVerbosePath(inv *Invocation, raw, abs string) string {
 			}
 		}
 		if current == abs && display != "" {
+			if leadingDotSlash && display != "." && !strings.HasPrefix(display, "./") && !strings.HasPrefix(display, "../") {
+				return "./" + display
+			}
 			return display
 		}
 	}
 	if display != "" {
+		if leadingDotSlash && display != "." && !strings.HasPrefix(display, "./") && !strings.HasPrefix(display, "../") {
+			return "./" + display
+		}
 		return display
 	}
 	if cwd == "/" {

@@ -71,6 +71,23 @@ func TestMkdirParentsVerbosePreservesDotDotRelativePaths(t *testing.T) {
 	}
 }
 
+func TestMkdirParentsVerbosePreservesDotSlashPrefix(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "cd /home/agent\nmkdir -pv ./c/d\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	const want = "mkdir: created directory './c'\nmkdir: created directory './c/d'\n"
+	if result.Stdout != want {
+		t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/c/d"); err != nil {
+		t.Fatalf("Stat(/home/agent/c/d) error = %v, want created directory", err)
+	}
+}
+
 func TestMkdirParentsCreatesLexicalAncestorsBeforeDotDot(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

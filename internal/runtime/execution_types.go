@@ -17,6 +17,7 @@ type ExecutionRequest struct {
 	Script          string
 	Command         []string
 	CommandPath     string
+	CommandName     string
 	Args            []string
 	StartupOptions  []string
 	StartupHome     string
@@ -74,6 +75,7 @@ func executionRequestFromCommand(req *commands.ExecutionRequest) *ExecutionReque
 		Script:          req.Script,
 		Command:         cloneStrings(req.Command),
 		CommandPath:     req.CommandPath,
+		CommandName:     req.CommandName,
 		Args:            cloneStrings(req.Args),
 		StartupOptions:  cloneStrings(req.StartupOptions),
 		Env:             copyStringMap(req.Env),

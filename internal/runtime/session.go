@@ -154,6 +154,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 		Script:          script,
 		Command:         cloneStrings(req.Command),
 		CommandPath:     req.CommandPath,
+		CommandName:     req.CommandName,
 		Args:            req.Args,
 		StartupOptions:  req.StartupOptions,
 		StartupHome:     req.StartupHome,
