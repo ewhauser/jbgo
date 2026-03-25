@@ -158,6 +158,34 @@ func TestDUInodesThresholdAndWarnings(t *testing.T) {
 	}
 }
 
+func TestDURejectsOverflowingSizeArguments(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+
+	blockSize := mustExecSession(t, session, "du --block-size=9223372036854775807K .\n")
+	if got, want := blockSize.ExitCode, 1; got != want {
+		t.Fatalf("blockSize.ExitCode = %d, want %d; stderr=%q", got, want, blockSize.Stderr)
+	}
+	if got, want := blockSize.Stdout, ""; got != want {
+		t.Fatalf("blockSize.Stdout = %q, want %q", got, want)
+	}
+	if got, want := blockSize.Stderr, "du: invalid --block-size argument '9223372036854775807K'\n"; got != want {
+		t.Fatalf("blockSize.Stderr = %q, want %q", got, want)
+	}
+
+	threshold := mustExecSession(t, session, "du --threshold=9223372036854775807K .\n")
+	if got, want := threshold.ExitCode, 1; got != want {
+		t.Fatalf("threshold.ExitCode = %d, want %d; stderr=%q", got, want, threshold.Stderr)
+	}
+	if got, want := threshold.Stdout, ""; got != want {
+		t.Fatalf("threshold.Stdout = %q, want %q", got, want)
+	}
+	if got, want := threshold.Stderr, "du: invalid --threshold=9223372036854775807K argument '9223372036854775807K'\n"; got != want {
+		t.Fatalf("threshold.Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestDUMaxDepthAndUnreadableDirectoryContinuation(t *testing.T) {
 	t.Parallel()
 

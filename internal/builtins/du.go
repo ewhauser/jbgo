@@ -329,11 +329,15 @@ func parseDUThreshold(inv *Invocation, origin, value string) (duThreshold, error
 	if err != nil || number < 0 || (negative && number == 0) {
 		return duThreshold{}, exitf(inv, 1, "du: invalid %s argument %s", origin, quoteGNUOperand(value))
 	}
+	total, ok := checkedNonNegativeInt64Product(number, multiplier)
+	if !ok {
+		return duThreshold{}, exitf(inv, 1, "du: invalid %s argument %s", origin, quoteGNUOperand(value))
+	}
 
 	return duThreshold{
 		set:      true,
 		negative: negative,
-		value:    number * multiplier,
+		value:    total,
 	}, nil
 }
 
@@ -481,10 +485,7 @@ func (c *DU) walkRoot(ctx context.Context, inv *Invocation, state *duWalkState, 
 	}
 
 	if state.opts.oneFileSystem {
-		if device, ok := fileInfoDevice(linfo); ok {
-			state.rootDevice = device
-			state.rootDeviceKnown = true
-		} else if device, ok := fileInfoDevice(info); ok {
+		if device, ok := fileInfoDevice(duPreferredRootDeviceInfo(info, linfo)); ok {
 			state.rootDevice = device
 			state.rootDeviceKnown = true
 		}
@@ -625,6 +626,13 @@ func duShouldFollowRoot(opts *duOptions, visible string, info stdfs.FileInfo) bo
 		return true
 	}
 	return visible != "/" && strings.HasSuffix(visible, "/")
+}
+
+func duPreferredRootDeviceInfo(info, fallback stdfs.FileInfo) stdfs.FileInfo {
+	if _, ok := fileInfoDevice(info); ok {
+		return info
+	}
+	return fallback
 }
 
 func duSelfCount(info stdfs.FileInfo, opts *duOptions) int64 {
