@@ -166,7 +166,7 @@ FUZZ_FULL_TARGETS := \
 # Depend on local plugin sources referenced via "path:" in .custom-gcl.yml so
 # the binary rebuilds when they change.
 CUSTOM_GCL_LOCAL_PLUGIN_DIRS := $(shell grep '^ *path:' .custom-gcl.yml 2>/dev/null | sed 's/^ *path: *//')
-CUSTOM_GCL_LOCAL_DEPS := $(foreach d,$(CUSTOM_GCL_LOCAL_PLUGIN_DIRS),$(shell find $(d) -type f -name '*.go' 2>/dev/null))
+CUSTOM_GCL_LOCAL_DEPS := $(foreach d,$(CUSTOM_GCL_LOCAL_PLUGIN_DIRS),$(shell find $(d) -type f -name '*.go' 2>/dev/null | sort))
 $(CUSTOM_GCL): .custom-gcl.yml $(CUSTOM_GCL_LOCAL_DEPS)
 	@hash=$$(cat .custom-gcl.yml $(CUSTOM_GCL_LOCAL_DEPS) | if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -c1-12); \
 	tag="custom-gcl/$${hash}"; \
