@@ -363,8 +363,56 @@ func runCLIWithConfig(t *testing.T, cfg Config, args []string, stdin string) (ex
 
 	var stdout strings.Builder
 	var stderr strings.Builder
+	systemTempRoots, err := testSystemTempRoots(args)
+	if err != nil {
+		return 0, "", "", err
+	}
+	if len(systemTempRoots) > 0 {
+		cfg.SystemTempRoots = func() []string { return append([]string(nil), systemTempRoots...) }
+	}
 	exitCode, err = run(context.Background(), cfg, args, strings.NewReader(stdin), &stdout, &stderr, false)
 	return exitCode, stdout.String(), stderr.String(), err
+}
+
+func testSystemTempRoots(args []string) ([]string, error) {
+	readWriteRoot := readWriteRootArg(args)
+	if readWriteRoot == "" {
+		return nil, nil
+	}
+
+	root, err := filepath.Abs(readWriteRoot)
+	if err != nil {
+		return nil, err
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
+
+	tempDir, err := filepath.Abs(os.TempDir())
+	if err != nil {
+		return nil, err
+	}
+	tempDir, err = filepath.EvalSymlinks(tempDir)
+	if err != nil {
+		return nil, err
+	}
+	if root == tempDir || strings.HasPrefix(root, tempDir+string(os.PathSeparator)) {
+		return []string{tempDir}, nil
+	}
+	return nil, nil
+}
+
+func readWriteRootArg(args []string) string {
+	for i := range args {
+		if args[i] == "--readwrite-root" && i+1 < len(args) {
+			return args[i+1]
+		}
+		if value, ok := strings.CutPrefix(args[i], "--readwrite-root="); ok {
+			return value
+		}
+	}
+	return ""
 }
 
 func writeCLIScript(t *testing.T, contents string) string {

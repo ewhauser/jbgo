@@ -18,17 +18,18 @@ import (
 )
 
 type runtimeOptions struct {
-	root          string
-	readWriteRoot string
-	inheritEnv    []string
-	copyScript    bool
-	cwd           string
-	maxFileBytes  int64
-	json          bool
-	server        bool
-	socket        string
-	listen        string
-	sessionTTL    time.Duration
+	root            string
+	readWriteRoot   string
+	inheritEnv      []string
+	copyScript      bool
+	cwd             string
+	maxFileBytes    int64
+	json            bool
+	server          bool
+	socket          string
+	listen          string
+	sessionTTL      time.Duration
+	systemTempRoots []string
 }
 
 func parseRuntimeOptions(args []string) (runtimeOptions, []string, error) {
@@ -266,7 +267,7 @@ func (opts *runtimeOptions) gbashOptions() ([]gbash.Option, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve --readwrite-root: %w", err)
 		}
-		if err := ensureReadWriteRootIsTemporary(root); err != nil {
+		if err := ensureReadWriteRootIsTemporary(root, opts.systemTempRoots); err != nil {
 			return nil, err
 		}
 		runtimeOpts = append(runtimeOpts,
@@ -347,8 +348,8 @@ func inheritSelectedEnv(baseEnv map[string]string, names []string) map[string]st
 	return out
 }
 
-func ensureReadWriteRootIsTemporary(root string) error {
-	tempRoots, err := trustedSystemTempRoots()
+func ensureReadWriteRootIsTemporary(root string, systemTempRoots []string) error {
+	tempRoots, err := trustedSystemTempRoots(systemTempRoots)
 	if err != nil {
 		return err
 	}
@@ -365,19 +366,28 @@ func ensureReadWriteRootIsTemporary(root string) error {
 	return fmt.Errorf("--readwrite-root must be inside the system temp directory")
 }
 
-func trustedSystemTempRoots() ([]string, error) {
+func trustedSystemTempRoots(systemTempRoots []string) ([]string, error) {
 	const tempRootEnvVar = "GBASH_SYSTEM_TMPDIR"
+
+	if len(systemTempRoots) > 0 {
+		roots := make([]string, 0, len(systemTempRoots))
+		for _, candidate := range systemTempRoots {
+			resolved, err := resolveTrustedTempRootCandidate(strings.TrimSpace(candidate), tempRootEnvVar)
+			if err != nil {
+				return nil, err
+			}
+			roots = appendUniqueStrings(roots, resolved)
+		}
+		return roots, nil
+	}
 
 	tempRoot := strings.TrimSpace(os.Getenv(tempRootEnvVar))
 	if tempRoot != "" {
-		if !filepath.IsAbs(tempRoot) {
-			return nil, fmt.Errorf("%s must be an absolute path", tempRootEnvVar)
-		}
-		resolved, err := filepath.EvalSymlinks(tempRoot)
+		resolved, err := resolveTrustedTempRootCandidate(tempRoot, tempRootEnvVar)
 		if err != nil {
-			return nil, fmt.Errorf("resolve system temp directory: %w", err)
+			return nil, err
 		}
-		return []string{filepath.Clean(resolved)}, nil
+		return []string{resolved}, nil
 	}
 
 	roots := make([]string, 0, 4)
@@ -392,6 +402,20 @@ func trustedSystemTempRoots() ([]string, error) {
 		return nil, fmt.Errorf("resolve system temp directory: no usable temp roots")
 	}
 	return roots, nil
+}
+
+func resolveTrustedTempRootCandidate(root, name string) (string, error) {
+	if root == "" {
+		return "", fmt.Errorf("%s must not be empty", name)
+	}
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("%s must be an absolute path", name)
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve system temp directory: %w", err)
+	}
+	return filepath.Clean(resolved), nil
 }
 
 func defaultSystemTempRootCandidates() []string {
@@ -507,15 +531,22 @@ func stagedSandboxScriptPath(base string) string {
 }
 
 func newRuntime(cfg Config, opts *runtimeOptions) (*gbash.Runtime, error) {
-	runtimeOpts, err := opts.gbashOptions()
+	if opts == nil {
+		opts = &runtimeOptions{}
+	}
+	runtimeOptsCopy := *opts
+	if cfg.SystemTempRoots != nil {
+		runtimeOptsCopy.systemTempRoots = append([]string(nil), cfg.SystemTempRoots()...)
+	}
+	runtimeOpts, err := runtimeOptsCopy.gbashOptions()
 	if err != nil {
 		return nil, err
 	}
 	allOpts := append([]gbash.Option(nil), cfg.BaseOptions...)
 	allOpts = append(allOpts, runtimeOpts...)
-	if opts != nil && opts.maxFileBytes > 0 {
+	if runtimeOptsCopy.maxFileBytes > 0 {
 		allOpts = append(allOpts, gbash.WithLimitOverrides(policy.Limits{
-			MaxFileBytes: opts.maxFileBytes,
+			MaxFileBytes: runtimeOptsCopy.maxFileBytes,
 		}))
 	}
 	return gbash.New(allOpts...)

@@ -24,6 +24,11 @@ type Config struct {
 	// TTYDetector overrides how stdin terminal detection is performed. When nil,
 	// [Run] uses the default os.File-based detector.
 	TTYDetector func(io.Reader) bool
+
+	// SystemTempRoots resolves trusted host temp roots used to validate
+	// --readwrite-root. This is primarily useful for tests and host launchers
+	// that already know the canonical temp root outside the sandbox.
+	SystemTempRoots func() []string
 }
 
 // BuildInfo describes the build metadata rendered by --version.
