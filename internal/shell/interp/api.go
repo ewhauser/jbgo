@@ -703,9 +703,9 @@ func (r *Runner) now() time.Time {
 }
 
 func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) StdinReader {
-	var redirectMeta commandutil.RedirectMetadata
+	var redirectMeta redirectedStdinMetadata
 	if meta, ok := r.(commandutil.RedirectMetadata); ok {
-		redirectMeta = meta
+		redirectMeta = snapshotRedirectedStdinMetadata(meta)
 	}
 	switch r := r.(type) {
 	case StdinReader:
@@ -725,6 +725,23 @@ func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser,
 	}
 }
 
+type redirectedStdinMetadata struct {
+	path   string
+	flags  int
+	offset int64
+}
+
+func snapshotRedirectedStdinMetadata(meta commandutil.RedirectMetadata) redirectedStdinMetadata {
+	if meta == nil {
+		return redirectedStdinMetadata{}
+	}
+	return redirectedStdinMetadata{
+		path:   meta.RedirectPath(),
+		flags:  meta.RedirectFlags(),
+		offset: meta.RedirectOffset(),
+	}
+}
+
 type redirectedStdinReader struct {
 	StdinReader
 	handle io.Reader
@@ -733,8 +750,8 @@ type redirectedStdinReader struct {
 	offset int64
 }
 
-func wrapRedirectedStdinReader(reader StdinReader, underlying io.Reader, meta commandutil.RedirectMetadata) StdinReader {
-	if reader == nil || meta == nil {
+func wrapRedirectedStdinReader(reader StdinReader, underlying io.Reader, meta redirectedStdinMetadata) StdinReader {
+	if reader == nil || meta.path == "" {
 		return reader
 	}
 	if underlying == nil {
@@ -743,9 +760,9 @@ func wrapRedirectedStdinReader(reader StdinReader, underlying io.Reader, meta co
 	return redirectedStdinReader{
 		StdinReader: reader,
 		handle:      underlying,
-		path:        meta.RedirectPath(),
-		flags:       meta.RedirectFlags(),
-		offset:      meta.RedirectOffset(),
+		path:        meta.path,
+		flags:       meta.flags,
+		offset:      meta.offset,
 	}
 }
 
