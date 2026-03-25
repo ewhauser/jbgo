@@ -24,10 +24,13 @@ setup() {
 	TEST_TEMP_DIR="$(mktemp -d)"
 	SANDBOX="${TEST_TEMP_DIR}/sandbox"
 	STUB_BIN="${SANDBOX}/bin"
+	GBASH_SYSTEM_TMPDIR="${TEST_TEMP_DIR}"
+	export GBASH_SYSTEM_TMPDIR
 	mkdir -p "${STUB_BIN}"
 }
 
 teardown() {
+	unset GBASH_SYSTEM_TMPDIR
 	rm -rf "${TEST_TEMP_DIR}"
 }
 

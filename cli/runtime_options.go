@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -347,7 +348,7 @@ func inheritSelectedEnv(baseEnv map[string]string, names []string) map[string]st
 }
 
 func ensureReadWriteRootIsTemporary(root string) error {
-	tempRoot, err := trustedSystemTempRoot()
+	tempRoots, err := trustedSystemTempRoots()
 	if err != nil {
 		return err
 	}
@@ -355,26 +356,53 @@ func ensureReadWriteRootIsTemporary(root string) error {
 	if err != nil {
 		return fmt.Errorf("resolve --readwrite-root: %w", err)
 	}
-	if !pathWithinRoot(filepath.Clean(canonicalRoot), tempRoot) {
-		return fmt.Errorf("--readwrite-root must be inside the system temp directory")
+	canonicalRoot = filepath.Clean(canonicalRoot)
+	for _, tempRoot := range tempRoots {
+		if pathWithinRoot(canonicalRoot, tempRoot) {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("--readwrite-root must be inside the system temp directory")
 }
 
-func trustedSystemTempRoot() (string, error) {
+func trustedSystemTempRoots() ([]string, error) {
 	const tempRootEnvVar = "GBASH_SYSTEM_TMPDIR"
 
 	tempRoot := strings.TrimSpace(os.Getenv(tempRootEnvVar))
-	if tempRoot == "" {
-		tempRoot = os.TempDir()
-	} else if !filepath.IsAbs(tempRoot) {
-		return "", fmt.Errorf("%s must be an absolute path", tempRootEnvVar)
+	if tempRoot != "" {
+		if !filepath.IsAbs(tempRoot) {
+			return nil, fmt.Errorf("%s must be an absolute path", tempRootEnvVar)
+		}
+		resolved, err := filepath.EvalSymlinks(tempRoot)
+		if err != nil {
+			return nil, fmt.Errorf("resolve system temp directory: %w", err)
+		}
+		return []string{filepath.Clean(resolved)}, nil
 	}
-	resolved, err := filepath.EvalSymlinks(tempRoot)
-	if err != nil {
-		return "", fmt.Errorf("resolve system temp directory: %w", err)
+
+	roots := make([]string, 0, 4)
+	for _, candidate := range defaultSystemTempRootCandidates() {
+		resolved, err := filepath.EvalSymlinks(candidate)
+		if err != nil {
+			continue
+		}
+		roots = appendUniqueStrings(roots, filepath.Clean(resolved))
 	}
-	return filepath.Clean(resolved), nil
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("resolve system temp directory: no usable temp roots")
+	}
+	return roots, nil
+}
+
+func defaultSystemTempRootCandidates() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"/tmp", "/private/tmp", "/var/folders", "/private/var/folders"}
+	case "windows":
+		return []string{os.TempDir()}
+	default:
+		return []string{"/tmp"}
+	}
 }
 
 func pathWithinRoot(pathValue, root string) bool {
