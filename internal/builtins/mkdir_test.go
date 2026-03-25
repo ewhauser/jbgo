@@ -2,8 +2,13 @@ package builtins_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	gbruntime "github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/policy"
 )
 
 func TestMkdirSupportsModeFlags(t *testing.T) {
@@ -106,6 +111,32 @@ func TestMkdirRemapsCompatHostAbsolutePaths(t *testing.T) {
 
 	result := mustExecSession(t, session, "mkdir /testdir\ncd /testdir\nmkdir -p /compat/testdir/t\nprintf 'status=%s\\n' \"$?\"\ntest -d /testdir/t\nprintf 'exists=%s\\n' \"$?\"\n")
 	if got, want := result.Stdout, "status=0\nexists=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
+	}
+}
+
+func TestMkdirParentsFollowsSymlinkedDirectoryAncestorsWhenAllowed(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "real"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(real) error = %v", err)
+	}
+	if err := os.Symlink("real", filepath.Join(root, "link")); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	session := newSession(t, &Config{
+		FileSystem: gbruntime.ReadWriteDirectoryFileSystem(root, gbruntime.ReadWriteDirectoryOptions{}),
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/", "/usr/bin", "/bin"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result := mustExecSession(t, session, "mkdir -p /link/sub\nprintf 'status=%s\\n' \"$?\"\ntest -d /real/sub\nprintf 'exists=%s\\n' \"$?\"\nmkdir -p /link\nprintf 'status_link=%s\\n' \"$?\"\n")
+	if got, want := result.Stdout, "status=0\nexists=0\nstatus_link=0\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
 	}
 }

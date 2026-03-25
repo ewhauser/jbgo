@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gbruntime "github.com/ewhauser/gbash"
@@ -689,5 +690,39 @@ func TestEnvMapsHostAbsoluteCompatWrapperPathsFromTopBuilddir(t *testing.T) {
 	}
 	if got, want := result.Stdout, "xAx\nxBx\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestEnvIgnoresLargeBuiltinNamedExecutablesWhenProbingCompatWrappers(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"printf 'pass\\n'\n" +
+		strings.Repeat("# padding to exceed compat probe size\n", 128)
+	if err := os.WriteFile(filepath.Join(root, "printf"), []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(printf) error = %v", err)
+	}
+
+	rt := newRuntime(t, &Config{
+		FileSystem: gbruntime.ReadWriteDirectoryFileSystem(root, gbruntime.ReadWriteDirectoryOptions{}),
+	})
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		WorkDir: "/",
+		Script: "PATH=:/bin:/usr/bin\n" +
+			"export PATH\n" +
+			"env printf\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "pass\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
 	}
 }

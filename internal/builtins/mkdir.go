@@ -198,7 +198,7 @@ func mkdirParentsPath(ctx context.Context, inv *Invocation, rawAbs, abs string, 
 		}
 
 		next := gbfs.Resolve(current, part)
-		info, err := inv.FS.Lstat(ctx, next)
+		info, err := inv.FS.Stat(ctx, next)
 		if err == nil {
 			if !info.IsDir() {
 				if next == abs {
@@ -211,6 +211,11 @@ func mkdirParentsPath(ctx context.Context, inv *Invocation, rawAbs, abs string, 
 		}
 		if !errors.Is(err, stdfs.ErrNotExist) {
 			return nil, &ExitError{Code: 1, Err: err}
+		}
+		if _, lstatErr := inv.FS.Lstat(ctx, next); lstatErr == nil {
+			return nil, exitf(inv, 1, "mkdir: cannot create directory %q: No such file or directory", next)
+		} else if !errors.Is(lstatErr, stdfs.ErrNotExist) {
+			return nil, &ExitError{Code: 1, Err: lstatErr}
 		}
 
 		if err := inv.FS.MkdirAll(ctx, next, 0o777); err != nil {

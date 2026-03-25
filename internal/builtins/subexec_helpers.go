@@ -13,6 +13,7 @@ import (
 	"time"
 
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
 type commandResolution struct {
@@ -177,10 +178,15 @@ func maybeCompatWrapperCommand(ctx context.Context, inv *Invocation, fullPath st
 	}
 	defer func() { _ = file.Close() }()
 
-	probeInv := *inv
-	probeInv.Limits.MaxFileBytes = maxCompatWrapperProbeSize
-	data, err := readAllReader(ctx, &probeInv, file)
-	if err != nil {
+	reader := commandutil.ReaderWithContext(ctx, file)
+	data := make([]byte, maxCompatWrapperProbeSize+1)
+	n, err := io.ReadFull(reader, data)
+	switch {
+	case err == nil:
+		return "", false, nil
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		data = data[:n]
+	default:
 		return "", false, err
 	}
 	text := string(data)
