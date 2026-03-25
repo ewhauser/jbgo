@@ -430,6 +430,47 @@ func TestEnvSplitStringRejectsInvalidEscape(t *testing.T) {
 	}
 }
 
+func TestEnvHelpAndVersionShortCircuitMalformedSplitString(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	tests := []struct {
+		name       string
+		script     string
+		wantStdout string
+	}{
+		{
+			name:       "help",
+			script:     "env --help -S'\"'\n",
+			wantStdout: "usage: env [-0iv] [-a ARG] [-C DIR] [-S STRING] [-u NAME] [NAME=VALUE ...] [COMMAND [ARG...]]\n",
+		},
+		{
+			name:       "version",
+			script:     "env --version -S'\"'\n",
+			wantStdout: "env (gbash)\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := rt.Run(context.Background(), &ExecutionRequest{Script: tc.script})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+			}
+			if got := result.Stdout; got != tc.wantStdout {
+				t.Fatalf("Stdout = %q, want %q", got, tc.wantStdout)
+			}
+			if got := result.Stderr; got != "" {
+				t.Fatalf("Stderr = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestEnvRejectsWhitespaceShebangMisuse(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

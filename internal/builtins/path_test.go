@@ -501,6 +501,33 @@ func TestRmdirParentsKeepRelativeSymlinkDiagnostics(t *testing.T) {
 	}
 }
 
+func TestRmdirParentsKeepRelativeSymlinkDiagnosticsWithEmptyPath(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	setup := mustExecSession(t, session, "mkdir -p dir/dir2\nln -s dir sl\n")
+	if setup.ExitCode != 0 {
+		t.Fatalf("setup ExitCode = %d, want 0; stderr=%q", setup.ExitCode, setup.Stderr)
+	}
+
+	result := mustExecSession(t, session, "PATH=\n/bin/rmdir -p sl/dir2\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if got, want := result.Stderr, "rmdir: failed to remove 'sl': Not a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/dir/dir2"); !os.IsNotExist(err) {
+		t.Fatalf("Stat(dir/dir2) error = %v, want not exist", err)
+	}
+}
+
 func TestLNCreatesSymlinkAndReadlinkPrintsTarget(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{

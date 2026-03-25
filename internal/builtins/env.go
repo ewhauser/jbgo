@@ -29,15 +29,25 @@ func (c *PrintEnv) Name() string {
 }
 
 func (c *Env) Run(ctx context.Context, inv *Invocation) error {
+	spec := c.Spec()
+	normalizedArgs := normalizeEnvDashAlias(inv.Args)
+	if action, ok := envAutoAction(inv, &spec, normalizedArgs); ok {
+		switch action {
+		case "help":
+			return RenderCommandHelp(inv.Stdout, &spec)
+		case "version":
+			return RenderCommandVersion(inv.Stdout, &spec)
+		}
+	}
+
 	parseInv := *inv
-	args, err := expandEnvArgs(inv, normalizeEnvDashAlias(inv.Args))
+	args, err := expandEnvArgs(inv, normalizedArgs)
 	if err != nil {
 		return err
 	}
 	parseInv.Args = args
 	parseInv.Stderr = io.Discard
 
-	spec := c.Spec()
 	matches, action, err := ParseCommandSpec(&parseInv, &spec)
 	if err != nil {
 		return rewriteEnvParseError(inv, err)
@@ -270,6 +280,20 @@ func normalizeEnvDashAlias(args []string) []string {
 		}
 	}
 	return normalized
+}
+
+func envAutoAction(inv *Invocation, spec *CommandSpec, args []string) (string, bool) {
+	if spec == nil {
+		return "", false
+	}
+	parseInv := *inv
+	parseInv.Args = args
+	parseInv.Stderr = io.Discard
+	_, action, err := ParseCommandSpec(&parseInv, spec)
+	if err != nil || action == "" {
+		return "", false
+	}
+	return action, true
 }
 
 func rewriteEnvParseError(inv *Invocation, err error) error {

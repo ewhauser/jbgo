@@ -9,6 +9,8 @@ import (
 	"path"
 	"strings"
 	"syscall"
+
+	"github.com/ewhauser/gbash/policy"
 )
 
 type Rmdir struct{}
@@ -187,16 +189,17 @@ func rmdirDisplayPath(absolute bool, parts []string) string {
 }
 
 func rmdirPathIsDirectory(ctx context.Context, inv *Invocation, name string) (bool, error) {
-	if inv == nil || inv.Exec == nil {
+	if inv == nil || inv.FS == nil {
 		return false, nil
 	}
-	result, err := inv.Exec(ctx, &ExecutionRequest{
-		Command: []string{"test", "-d", name},
-	})
+	info, err := inv.FS.StatQuiet(ctx, name)
 	if err != nil {
+		if errors.Is(err, stdfs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) || policy.IsDenied(err) {
+			return false, nil
+		}
 		return false, err
 	}
-	return result.ExitCode == 0, nil
+	return info.IsDir(), nil
 }
 
 func rmdirDirNotEmpty(ctx context.Context, inv *Invocation, abs string, err error) bool {
