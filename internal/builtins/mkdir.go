@@ -245,12 +245,43 @@ func mkdirParentsPath(ctx context.Context, inv *Invocation, rawAbs, abs string, 
 
 func mkdirVerbosePath(inv *Invocation, raw, abs string) string {
 	raw = remapCompatHostPath(inv, raw)
+	if raw == "" {
+		raw = "."
+	}
 	if strings.HasPrefix(raw, "/") {
 		return abs
 	}
 	cwd := "/"
 	if inv != nil && inv.FS != nil {
 		cwd = inv.FS.Getwd()
+	}
+	current := cwd
+	display := ""
+	for part := range strings.SplitSeq(raw, "/") {
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			current = path.Dir(current)
+			if display == "" {
+				display = ".."
+			} else {
+				display += "/.."
+			}
+		default:
+			current = gbfs.Resolve(current, part)
+			if display == "" {
+				display = part
+			} else {
+				display += "/" + part
+			}
+		}
+		if current == abs && display != "" {
+			return display
+		}
+	}
+	if display != "" {
+		return display
 	}
 	if cwd == "/" {
 		return strings.TrimPrefix(abs, "/")

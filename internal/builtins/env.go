@@ -41,7 +41,7 @@ func (c *Env) Run(ctx context.Context, inv *Invocation) error {
 	}
 
 	parseInv := *inv
-	args, err := expandEnvArgs(inv, normalizedArgs)
+	args, err := expandEnvArgs(inv, &spec, normalizedArgs)
 	if err != nil {
 		return err
 	}

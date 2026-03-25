@@ -449,6 +449,16 @@ func TestEnvHelpAndVersionShortCircuitMalformedSplitString(t *testing.T) {
 			script:     "env --version -S'\"'\n",
 			wantStdout: "env (gbash)\n",
 		},
+		{
+			name:       "expanded help",
+			script:     "env -S '--help' -S'\"'\n",
+			wantStdout: "usage: env [-0iv] [-a ARG] [-C DIR] [-S STRING] [-u NAME] [NAME=VALUE ...] [COMMAND [ARG...]]\n",
+		},
+		{
+			name:       "expanded version",
+			script:     "env -S '--version' -S'\"'\n",
+			wantStdout: "env (gbash)\n",
+		},
 	}
 
 	for _, tc := range tests {

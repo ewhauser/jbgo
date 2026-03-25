@@ -4,8 +4,11 @@ import (
 	"strings"
 )
 
-func expandEnvArgs(inv *Invocation, args []string) ([]string, error) {
+func expandEnvArgs(inv *Invocation, spec *CommandSpec, args []string) ([]string, error) {
 	expanded := append([]string{}, args...)
+	if _, ok := envAutoAction(inv, spec, expanded); ok {
+		return expanded, nil
+	}
 	for {
 		next, changed, err := expandOneEnvSplitArg(inv, expanded)
 		if err != nil {
@@ -15,6 +18,9 @@ func expandEnvArgs(inv *Invocation, args []string) ([]string, error) {
 			return expanded, nil
 		}
 		expanded = next
+		if _, ok := envAutoAction(inv, spec, expanded); ok {
+			return expanded, nil
+		}
 	}
 }
 
