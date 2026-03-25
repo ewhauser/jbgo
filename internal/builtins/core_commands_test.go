@@ -2368,7 +2368,7 @@ func TestUptimeDefaultSincePrettyAndVersion(t *testing.T) {
 	if prettyResult.ExitCode != 0 {
 		t.Fatalf("pretty ExitCode = %d, want 0; stderr=%q", prettyResult.ExitCode, prettyResult.Stderr)
 	}
-	if got := prettyResult.Stdout; !strings.HasPrefix(got, "up ") || !strings.Contains(got, "minute") {
+	if got := prettyResult.Stdout; !strings.HasPrefix(got, "up ") || !strings.Contains(got, "day") {
 		t.Fatalf("Stdout = %q, want pretty uptime output", got)
 	}
 
