@@ -22,27 +22,3 @@ func TestRegisterAddsPythonAndPython3Commands(t *testing.T) {
 		}
 	}
 }
-
-func TestSourceReferencesBarePrintDetectsDirectCalls(t *testing.T) {
-	t.Parallel()
-
-	if !sourceReferencesBarePrint("print('x')\n") {
-		t.Fatal("sourceReferencesBarePrint() = false, want true for direct print call")
-	}
-	if !sourceReferencesBarePrint("alias = print\nalias('x')\n") {
-		t.Fatal("sourceReferencesBarePrint() = false, want true for bare print reference")
-	}
-}
-
-func TestSourceReferencesBarePrintIgnoresMethodsStringsAndComments(t *testing.T) {
-	t.Parallel()
-
-	source := "" +
-		"obj.print('method')\n" +
-		"text = \"print('inside string')\"\n" +
-		"# print('inside comment')\n"
-
-	if sourceReferencesBarePrint(source) {
-		t.Fatalf("sourceReferencesBarePrint() = true, want false for %q", source)
-	}
-}

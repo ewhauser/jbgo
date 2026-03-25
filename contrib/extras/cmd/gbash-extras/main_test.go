@@ -106,7 +106,7 @@ func TestCLIRegistersBundledPythonWhenAvailable(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	exitCode, err := runCLI(context.Background(), []string{"-c", "python -c 'pass'\npython3 -c 'value = 3'"}, strings.NewReader(""), &stdout, &stderr)
+	exitCode, err := runCLI(context.Background(), []string{"-c", "python -c 'print(\"py\")'\npython3 -c 'print(\"py3\")'"}, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("runCLI() error = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestCLIRegistersBundledPythonWhenAvailable(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
-	if got, want := stdout.String(), ""; got != want {
+	if got, want := stdout.String(), "py\npy3\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if got := stderr.String(); got != "" {

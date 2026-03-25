@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/ewhauser/gbash v0.0.27
-	github.com/ewhauser/gomonty v0.0.9
+	github.com/ewhauser/gomonty v0.0.11
 )
 
 require (
