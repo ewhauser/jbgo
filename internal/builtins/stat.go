@@ -475,7 +475,7 @@ func decodeStatEscapes(inv *Invocation, value string) string {
 				for end < len(value) && end < i+3 && value[end] >= '0' && value[end] <= '7' {
 					end++
 				}
-				n, _ := strconv.ParseUint(value[i:end], 8, 8)
+				n, _ := strconv.ParseUint(value[i:end], 8, 16)
 				b.WriteByte(byte(n))
 				i = end - 1
 				continue

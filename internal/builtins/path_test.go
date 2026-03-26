@@ -2193,11 +2193,11 @@ func TestStatPrintfEscapesWarningsAndDirectiveErrorsMatchGNU(t *testing.T) {
 		session := newSession(t, &Config{})
 		writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
 
-		result := mustExecSession(t, session, "stat --printf='.\\012a\\377b' /home/agent/target.txt\nstat --printf='.\\x18p\\xfq' /home/agent/target.txt\n")
+		result := mustExecSession(t, session, "stat --printf='.\\012a\\377b' /home/agent/target.txt\nstat --printf='.\\x18p\\xfq' /home/agent/target.txt\nstat --printf='.\\400x\\401y' /home/agent/target.txt\n")
 		if result.ExitCode != 0 {
 			t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 		}
-		want := []byte{'.', '\n', 'a', 0xff, 'b', '.', 0x18, 'p', 0x0f, 'q'}
+		want := []byte{'.', '\n', 'a', 0xff, 'b', '.', 0x18, 'p', 0x0f, 'q', '.', 0x00, 'x', 0x01, 'y'}
 		if got := []byte(result.Stdout); !bytes.Equal(got, want) {
 			t.Fatalf("Stdout bytes = %v, want %v", got, want)
 		}
