@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	stdfs "io/fs"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -17,6 +20,15 @@ type statOptions struct {
 	format      string
 	printf      bool
 	dereference bool
+}
+
+type statDirectiveSpec struct {
+	leftAlign bool
+	zeroPad   bool
+	width     int
+	precision int
+	modifier  byte
+	directive byte
 }
 
 func NewStat() *Stat {
@@ -77,7 +89,7 @@ func (c *Stat) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 			exitCode = 1
 			continue
 		}
-		output, err := renderStatOutput(ctx, inv, abs, info, opts)
+		output, err := renderStatOutput(ctx, inv, name, abs, info, opts)
 		if err != nil {
 			return err
 		}
@@ -107,8 +119,11 @@ func parseStatMatches(inv *Invocation, matches *ParsedCommand) (statOptions, err
 }
 
 func statPathForOptions(ctx context.Context, inv *Invocation, name string, opts statOptions) (stdfs.FileInfo, string, error) {
+	if name == "-" {
+		return statStdin(inv)
+	}
 	if opts.dereference || hasTrailingSlash(name) {
-		return statPath(ctx, inv, name)
+		return statFollowPath(ctx, inv, name)
 	}
 	return lstatPath(ctx, inv, name)
 }
@@ -117,20 +132,20 @@ func hasTrailingSlash(name string) bool {
 	return len(name) > 1 && strings.HasSuffix(name, "/")
 }
 
-func renderStatOutput(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, opts statOptions) (string, error) {
+func renderStatOutput(ctx context.Context, inv *Invocation, name, abs string, info stdfs.FileInfo, opts statOptions) (string, error) {
 	if opts.format == "" {
-		return defaultStatOutput(abs, info), nil
+		return defaultStatOutput(name, info), nil
 	}
 	format := opts.format
 	if opts.printf {
-		decoded, err := decodeStatEscapes(format)
-		if err != nil {
-			return "", err
-		}
-		format = decoded
+		format = decodeStatEscapes(inv, format)
 	}
-	rendered, err := renderStatFormat(ctx, inv, abs, info, format)
+	rendered, err := renderStatFormat(ctx, inv, name, abs, info, format)
 	if err != nil {
+		var invalid *statInvalidDirectiveError
+		if errors.As(err, &invalid) {
+			return "", exitf(inv, 1, "stat: '%s': invalid directive", invalid.spec)
+		}
 		return "", &ExitError{Code: 1, Err: err}
 	}
 	if opts.printf {
@@ -139,10 +154,10 @@ func renderStatOutput(ctx context.Context, inv *Invocation, abs string, info std
 	return rendered + "\n", nil
 }
 
-func defaultStatOutput(abs string, info stdfs.FileInfo) string {
+func defaultStatOutput(name string, info stdfs.FileInfo) string {
 	return fmt.Sprintf(
 		"  File: %s\n  Size: %d\n  Type: %s\n  Mode: (%s/%s)\n",
-		abs,
+		name,
 		info.Size(),
 		fileTypeName(info),
 		formatModeOctal(info.Mode()),
@@ -150,7 +165,7 @@ func defaultStatOutput(abs string, info stdfs.FileInfo) string {
 	)
 }
 
-func renderStatFormat(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, format string) (string, error) {
+func renderStatFormat(ctx context.Context, inv *Invocation, name, abs string, info stdfs.FileInfo, format string) (string, error) {
 	identities := loadPermissionIdentityDB(ctx, inv)
 	owner := permissionLookupOwnership(identities, info)
 	var b strings.Builder
@@ -164,43 +179,44 @@ func renderStatFormat(ctx context.Context, inv *Invocation, abs string, info std
 			b.WriteByte('%')
 			continue
 		}
-		start := i
-		leftAlign, zeroPad, width, precision, directive := parseStatDirective(format, &i)
-		value, err := statDirectiveValue(ctx, inv, abs, info, owner, directive, precision)
-		if err != nil {
-			return "", err
+		specStart := i - 1
+		spec := parseStatDirective(format, &i)
+		specEnd := len(format)
+		if i < len(format) {
+			specEnd = i + 1
 		}
-		if precision >= 0 && directive == 'Y' && strings.Contains(value, ".") {
-			value = trimStatFloatPrecision(value, precision)
+		value, ok := statDirectiveValue(ctx, inv, name, abs, info, owner, spec.modifier, spec.directive, spec.precision)
+		if !ok {
+			return "", &statInvalidDirectiveError{spec: format[specStart:specEnd]}
 		}
-		if width > 0 {
+		if spec.precision >= 0 && spec.directive == 'Y' && strings.Contains(value, ".") {
+			value = trimStatFloatPrecision(value, spec.precision)
+		}
+		if spec.width > 0 {
 			pad := " "
-			if zeroPad && !leftAlign {
+			if spec.zeroPad && !spec.leftAlign {
 				pad = "0"
 			}
-			if leftAlign {
-				value += strings.Repeat(pad, max(0, width-len(value)))
+			if spec.leftAlign {
+				value += strings.Repeat(pad, max(0, spec.width-len(value)))
 			} else {
-				value = strings.Repeat(pad, max(0, width-len(value))) + value
+				value = strings.Repeat(pad, max(0, spec.width-len(value))) + value
 			}
-		}
-		if start == i && value == "" {
-			return "", fmt.Errorf("unsupported format sequence %%%c", directive)
 		}
 		b.WriteString(value)
 	}
 	return b.String(), nil
 }
 
-func parseStatDirective(format string, idx *int) (leftAlign, zeroPad bool, width, precision int, directive byte) {
-	precision = -1
+func parseStatDirective(format string, idx *int) statDirectiveSpec {
+	spec := statDirectiveSpec{precision: -1}
 	for *idx < len(format) {
 		switch format[*idx] {
 		case '-':
-			leftAlign = true
+			spec.leftAlign = true
 			*idx++
 		case '0':
-			zeroPad = true
+			spec.zeroPad = true
 			*idx++
 		default:
 			goto widthParse
@@ -208,105 +224,188 @@ func parseStatDirective(format string, idx *int) (leftAlign, zeroPad bool, width
 	}
 widthParse:
 	for *idx < len(format) && format[*idx] >= '0' && format[*idx] <= '9' {
-		width = width*10 + int(format[*idx]-'0')
+		spec.width = spec.width*10 + int(format[*idx]-'0')
 		*idx++
 	}
 	if *idx < len(format) && format[*idx] == '.' {
 		*idx++
-		precision = 0
+		spec.precision = 0
 		for *idx < len(format) && format[*idx] >= '0' && format[*idx] <= '9' {
-			precision = precision*10 + int(format[*idx]-'0')
+			spec.precision = spec.precision*10 + int(format[*idx]-'0')
 			*idx++
 		}
 	}
-	if *idx < len(format) {
-		directive = format[*idx]
+	if *idx < len(format) && (format[*idx] == 'H' || format[*idx] == 'L') {
+		spec.modifier = format[*idx]
+		*idx++
 	}
-	return
+	if *idx < len(format) {
+		spec.directive = format[*idx]
+	}
+	return spec
 }
 
-func statDirectiveValue(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo, owner permissionOwnership, directive byte, precision int) (string, error) {
+func statDirectiveValue(ctx context.Context, inv *Invocation, name, abs string, info stdfs.FileInfo, owner permissionOwnership, modifier, directive byte, precision int) (string, bool) {
 	switch directive {
 	case 'n':
-		return abs, nil
+		if modifier != 0 {
+			return "", false
+		}
+		return name, true
 	case 'N':
-		return statQuotedName(ctx, inv, abs, info), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return statQuotedName(ctx, inv, name, abs, info), true
 	case 's':
-		return strconv.FormatInt(info.Size(), 10), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return strconv.FormatInt(info.Size(), 10), true
 	case 'd':
-		return strconv.FormatUint(statDevice(info), 10), nil
+		if modifier == 'H' || modifier == 'L' {
+			return statMajorMinorValue(statDevice(info), modifier), true
+		}
+		if modifier != 0 {
+			return "", false
+		}
+		return strconv.FormatUint(statDevice(info), 10), true
 	case 'i':
-		return strconv.FormatUint(statInode(info), 10), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return strconv.FormatUint(statInode(info), 10), true
 	case 'F':
-		return fileTypeName(info), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return fileTypeName(info), true
 	case 'a':
-		return formatModeOctalBare(info.Mode()), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return formatModeOctalBare(info.Mode()), true
 	case 'A':
-		return formatModeLong(info.Mode()), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return formatModeLong(info.Mode()), true
 	case 'u':
-		return strconv.FormatUint(uint64(owner.uid), 10), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return strconv.FormatUint(uint64(owner.uid), 10), true
 	case 'g':
-		return strconv.FormatUint(uint64(owner.gid), 10), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return strconv.FormatUint(uint64(owner.gid), 10), true
 	case 'U':
-		return permissionNameOrID(owner.user, owner.uid), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return permissionNameOrID(owner.user, owner.uid), true
 	case 'G':
-		return permissionNameOrID(owner.group, owner.gid), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return permissionNameOrID(owner.group, owner.gid), true
 	case 'm':
-		return "/", nil
+		if modifier != 0 {
+			return "", false
+		}
+		return "/", true
+	case 'r':
+		if modifier == 'H' || modifier == 'L' {
+			return statMajorMinorValue(statRawDevice(info), modifier), true
+		}
+		if modifier != 0 {
+			return "", false
+		}
+		return strconv.FormatUint(statRawDevice(info), 10), true
+	case 'R':
+		if modifier != 0 {
+			return "", false
+		}
+		return fmt.Sprintf("%x", statRawDevice(info)), true
 	case 'X':
-		if atime, ok := statAccessTime(info); ok {
-			return strconv.FormatInt(atime.Unix(), 10), nil
+		if modifier != 0 {
+			return "", false
 		}
-		return "0", nil
+		if atime, ok := statAccessTime(info); ok {
+			return strconv.FormatInt(atime.Unix(), 10), true
+		}
+		return "0", true
 	case 'x':
+		if modifier != 0 {
+			return "", false
+		}
 		if atime, ok := statAccessTime(info); ok {
-			return formatStatTimestamp(atime), nil
+			return formatStatTimestamp(atime), true
 		}
-		return "-", nil
+		return "-", true
 	case 'Y':
+		if modifier != 0 {
+			return "", false
+		}
 		if precision >= 0 {
-			return formatStatTimeWithPrecision(info.ModTime(), precision), nil
+			return formatStatTimeWithPrecision(info.ModTime(), precision), true
 		}
-		return strconv.FormatInt(info.ModTime().Unix(), 10), nil
+		return strconv.FormatInt(info.ModTime().Unix(), 10), true
 	case 'y':
-		return formatStatTimestamp(info.ModTime()), nil
+		if modifier != 0 {
+			return "", false
+		}
+		return formatStatTimestamp(info.ModTime()), true
 	case 'Z':
-		if ctime, ok := statChangeTime(info); ok {
-			return strconv.FormatInt(ctime.Unix(), 10), nil
+		if modifier != 0 {
+			return "", false
 		}
-		return strconv.FormatInt(info.ModTime().Unix(), 10), nil
+		if ctime, ok := statChangeTime(info); ok {
+			return strconv.FormatInt(ctime.Unix(), 10), true
+		}
+		return strconv.FormatInt(info.ModTime().Unix(), 10), true
 	case 'z':
+		if modifier != 0 {
+			return "", false
+		}
 		if ctime, ok := statChangeTime(info); ok {
-			return formatStatTimestamp(ctime), nil
+			return formatStatTimestamp(ctime), true
 		}
-		return formatStatTimestamp(info.ModTime()), nil
+		return formatStatTimestamp(info.ModTime()), true
 	case 'W':
-		if birth, ok := statBirthTime(info); ok {
-			return strconv.FormatInt(birth.Unix(), 10), nil
+		if modifier != 0 {
+			return "", false
 		}
-		return "0", nil
+		if birth, ok := statBirthTime(info); ok {
+			return strconv.FormatInt(birth.Unix(), 10), true
+		}
+		return "0", true
 	case 'w':
-		if birth, ok := statBirthTime(info); ok {
-			return formatStatTimestamp(birth), nil
+		if modifier != 0 {
+			return "", false
 		}
-		return "-", nil
+		if birth, ok := statBirthTime(info); ok {
+			return formatStatTimestamp(birth), true
+		}
+		return "-", true
 	default:
-		return "", fmt.Errorf("unsupported format sequence %%%c", directive)
+		return "", false
 	}
 }
 
-func statQuotedName(ctx context.Context, inv *Invocation, abs string, info stdfs.FileInfo) string {
-	if info.Mode()&stdfs.ModeSymlink != 0 {
+func statQuotedName(ctx context.Context, inv *Invocation, name, abs string, info stdfs.FileInfo) string {
+	if info.Mode()&stdfs.ModeSymlink != 0 && abs != "" && abs != "-" {
 		target, err := inv.FS.Readlink(ctx, abs)
 		if err == nil {
-			return fmt.Sprintf("%q -> %q", abs, target)
+			return fmt.Sprintf("%q -> %q", name, target)
 		}
 	}
 	style := inv.Env["QUOTING_STYLE"]
 	if style == "locale" {
-		return "'" + strings.ReplaceAll(abs, "'", "\\'") + "'"
+		return "'" + strings.ReplaceAll(name, "'", "\\'") + "'"
 	}
-	return fmt.Sprintf("%q", abs)
+	return fmt.Sprintf("%q", name)
 }
 
 func runStatFilesystemMode(_ context.Context, inv *Invocation, _ statOptions, files []string) error {
@@ -328,11 +427,16 @@ func runStatFilesystemMode(_ context.Context, inv *Invocation, _ statOptions, fi
 	return nil
 }
 
-func decodeStatEscapes(value string) (string, error) {
+func decodeStatEscapes(inv *Invocation, value string) string {
 	var b strings.Builder
 	for i := 0; i < len(value); i++ {
-		if value[i] != '\\' || i == len(value)-1 {
+		if value[i] != '\\' {
 			b.WriteByte(value[i])
+			continue
+		}
+		if i == len(value)-1 {
+			statWarnf(inv, "stat: warning: backslash at end of format")
+			b.WriteByte('\\')
 			continue
 		}
 		i++
@@ -351,32 +455,26 @@ func decodeStatEscapes(value string) (string, error) {
 			b.WriteByte('\t')
 		case '\\':
 			b.WriteByte('\\')
-		case '0':
-			b.WriteByte(0)
 		case 'x':
-			if i+1 >= len(value) {
+			end := i + 1
+			for end < len(value) && end < i+3 && isStatHexDigit(value[end]) {
+				end++
+			}
+			if end == i+1 {
+				statWarnf(inv, "stat: warning: unrecognized escape '\\x'")
 				b.WriteByte('x')
 				continue
 			}
-			end := min(i+3, len(value))
-			hex := value[i+1 : end]
-			n, err := strconv.ParseUint(hex, 16, 8)
-			if err != nil {
-				b.WriteByte('x')
-				continue
-			}
+			n, _ := strconv.ParseUint(value[i+1:end], 16, 8)
 			b.WriteByte(byte(n))
-			i += len(hex)
+			i = end - 1
 		default:
 			if value[i] >= '0' && value[i] <= '7' {
 				end := i + 1
 				for end < len(value) && end < i+3 && value[end] >= '0' && value[end] <= '7' {
 					end++
 				}
-				n, err := strconv.ParseUint(value[i:end], 8, 8)
-				if err != nil {
-					return "", err
-				}
+				n, _ := strconv.ParseUint(value[i:end], 8, 8)
 				b.WriteByte(byte(n))
 				i = end - 1
 				continue
@@ -384,7 +482,7 @@ func decodeStatEscapes(value string) (string, error) {
 			b.WriteByte(value[i])
 		}
 	}
-	return b.String(), nil
+	return b.String()
 }
 
 func formatStatTimeWithPrecision(ts time.Time, precision int) string {
@@ -435,6 +533,42 @@ func statInode(info stdfs.FileInfo) uint64 {
 		return 0
 	}
 	return ino
+}
+
+func statRawDevice(info stdfs.FileInfo) uint64 {
+	sys := reflect.ValueOf(info.Sys())
+	if !sys.IsValid() {
+		return 0
+	}
+	if sys.Kind() == reflect.Pointer {
+		if sys.IsNil() {
+			return 0
+		}
+		sys = sys.Elem()
+	}
+	if sys.Kind() != reflect.Struct {
+		return 0
+	}
+	field := sys.FieldByName("Rdev")
+	if !field.IsValid() {
+		return 0
+	}
+	return statUintField(field)
+}
+
+func statMajorMinorValue(dev uint64, modifier byte) string {
+	if modifier == 'H' {
+		return strconv.FormatUint(statMajor(dev), 10)
+	}
+	return strconv.FormatUint(statMinor(dev), 10)
+}
+
+func statMajor(dev uint64) uint64 {
+	return (dev >> 8) & 0xfff
+}
+
+func statMinor(dev uint64) uint64 {
+	return (dev & 0xff) | ((dev >> 12) & 0xfff00)
 }
 
 func statAccessTime(info stdfs.FileInfo) (time.Time, bool) {
@@ -508,6 +642,72 @@ func statUintField(value reflect.Value) uint64 {
 	default:
 		return 0
 	}
+}
+
+func statFollowPath(ctx context.Context, inv *Invocation, name string) (stdfs.FileInfo, string, error) {
+	resolvedName := remapCompatHostPath(inv, name)
+	if hasTrailingSlash(name) && !strings.HasSuffix(resolvedName, "/") {
+		resolvedName += "/"
+	}
+	resolved, err := canonicalizeReadlink(ctx, inv, resolvedName, readlinkModeCanonicalizeExisting)
+	if err != nil {
+		return nil, "", err
+	}
+	info, err := inv.FS.Stat(ctx, resolved)
+	if err != nil {
+		return nil, "", err
+	}
+	return info, resolved, nil
+}
+
+func statStdin(inv *Invocation) (stdfs.FileInfo, string, error) {
+	reader := io.Reader(nil)
+	if inv != nil {
+		reader = inv.Stdin
+	}
+	for {
+		unwrapper, ok := reader.(interface {
+			UnderlyingReader() io.Reader
+		})
+		if !ok {
+			break
+		}
+		next := unwrapper.UnderlyingReader()
+		if next == nil || next == reader {
+			break
+		}
+		reader = next
+	}
+	statter, ok := reader.(interface {
+		Stat() (stdfs.FileInfo, error)
+	})
+	if !ok {
+		return nil, "-", &os.PathError{Op: "stat", Path: "-", Err: syscall.EBADF}
+	}
+	info, err := statter.Stat()
+	if err != nil {
+		return nil, "-", err
+	}
+	return info, "-", nil
+}
+
+func statWarnf(inv *Invocation, format string, args ...any) {
+	if inv == nil || inv.Stderr == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(inv.Stderr, format+"\n", args...)
+}
+
+func isStatHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+type statInvalidDirectiveError struct {
+	spec string
+}
+
+func (e *statInvalidDirectiveError) Error() string {
+	return fmt.Sprintf("invalid directive %s", e.spec)
 }
 
 var _ Command = (*Stat)(nil)

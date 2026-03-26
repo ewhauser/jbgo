@@ -1,6 +1,7 @@
 package builtins_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -2136,6 +2137,97 @@ func TestStatSupportsHumanReadableTimeFormat(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, "2009-10-10 00:00:00.000000000 +0000\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestStatUsesOperandNameForFormatsAndStdinDash(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
+	writeSessionFile(t, session, "/home/agent/input.txt", []byte("stdin\n"))
+
+	result := mustExecSession(t, session, "cd /home/agent\nstat --printf='[%n][%N]\\n' target.txt\nstat --format=%n - < /home/agent/input.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "[target.txt][\"target.txt\"]\n-\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestStatPrintfEscapesWarningsAndDirectiveErrorsMatchGNU(t *testing.T) {
+	t.Parallel()
+
+	t.Run("octal and hex escapes", func(t *testing.T) {
+		t.Parallel()
+		session := newSession(t, &Config{})
+		writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
+
+		result := mustExecSession(t, session, "stat --printf='.\\012a\\377b' /home/agent/target.txt\nstat --printf='.\\x18p\\xfq' /home/agent/target.txt\n")
+		if result.ExitCode != 0 {
+			t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		want := []byte{'.', '\n', 'a', 0xff, 'b', '.', 0x18, 'p', 0x0f, 'q'}
+		if got := []byte(result.Stdout); !bytes.Equal(got, want) {
+			t.Fatalf("Stdout bytes = %v, want %v", got, want)
+		}
+		if got := result.Stderr; got != "" {
+			t.Fatalf("Stderr = %q, want empty", got)
+		}
+	})
+
+	t.Run("warnings", func(t *testing.T) {
+		t.Parallel()
+		session := newSession(t, &Config{})
+		writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
+
+		result := mustExecSession(t, session, "stat --printf='\\x' /home/agent/target.txt\nstat --printf='\\' /home/agent/target.txt\n")
+		if result.ExitCode != 0 {
+			t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if got, want := result.Stdout, "x\\"; got != want {
+			t.Fatalf("Stdout = %q, want %q", got, want)
+		}
+		if got, want := result.Stderr, "stat: warning: unrecognized escape '\\x'\nstat: warning: backslash at end of format\n"; got != want {
+			t.Fatalf("Stderr = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("invalid directives", func(t *testing.T) {
+		t.Parallel()
+		session := newSession(t, &Config{})
+		writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
+
+		result := mustExecSession(t, session, "stat --printf=%9 /home/agent/target.txt\n")
+		if result.ExitCode != 1 {
+			t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+		}
+		if got := result.Stdout; got != "" {
+			t.Fatalf("Stdout = %q, want empty", got)
+		}
+		if got, want := result.Stderr, "stat: '%9': invalid directive\n"; got != want {
+			t.Fatalf("Stderr = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestStatDereferenceTrailingSlashAndDeviceModifiers(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/file.txt", []byte("hello"))
+	if err := session.FileSystem().MkdirAll(context.Background(), "/home/agent/dir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "dir", "/home/agent/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "cd /home/agent\nstat --format='%F' link\nstat -L --format='%F' link\nstat --format='%F' link/\nstat --format='%r %R %Hd,%Ld %Hr,%Lr' file.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "symbolic link\ndirectory\ndirectory\n0 0 0,0 0,0\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
