@@ -61,14 +61,26 @@ func (fd *shellFD) Seek(offset int64, whence int) (int64, error) {
 	type seeker interface {
 		Seek(offset int64, whence int) (int64, error)
 	}
+	seek := func(target seeker) (int64, error) {
+		seekOffset := offset
+		if fd.buffered && whence == io.SeekCurrent {
+			// PeekByte has already advanced the underlying descriptor by one byte.
+			seekOffset--
+		}
+		position, err := target.Seek(seekOffset, whence)
+		if err == nil {
+			fd.buffered = false
+		}
+		return position, err
+	}
 	if seeker, ok := fd.reader.(seeker); ok {
-		return seeker.Seek(offset, whence)
+		return seek(seeker)
 	}
 	if seeker, ok := fd.writer.(seeker); ok {
-		return seeker.Seek(offset, whence)
+		return seek(seeker)
 	}
 	if seeker, ok := fd.closer.(seeker); ok {
-		return seeker.Seek(offset, whence)
+		return seek(seeker)
 	}
 	return 0, errors.New("bad file descriptor")
 }

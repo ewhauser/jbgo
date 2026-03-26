@@ -77,6 +77,39 @@ func TestSetFDDoesNotCloseNonOwnedStandardDescriptors(t *testing.T) {
 	}
 }
 
+func TestShellFDSeekUsesLogicalCurrentOffsetAfterPeek(t *testing.T) {
+	t.Parallel()
+
+	fd := newShellInputFD(bytes.NewReader([]byte("abc")))
+
+	peeked, err := fd.PeekByte()
+	if err != nil {
+		t.Fatalf("PeekByte() error = %v", err)
+	}
+	if got, want := peeked, byte('a'); got != want {
+		t.Fatalf("PeekByte() = %q, want %q", got, want)
+	}
+
+	position, err := fd.Seek(1, io.SeekCurrent)
+	if err != nil {
+		t.Fatalf("Seek() error = %v", err)
+	}
+	if got, want := position, int64(1); got != want {
+		t.Fatalf("Seek() position = %d, want %d", got, want)
+	}
+	if fd.buffered {
+		t.Fatalf("buffered = true, want false")
+	}
+
+	next, err := fd.ReadByte()
+	if err != nil {
+		t.Fatalf("ReadByte() error = %v", err)
+	}
+	if got, want := next, byte('b'); got != want {
+		t.Fatalf("ReadByte() = %q, want %q", got, want)
+	}
+}
+
 func TestSetStandardFDsDoesNotCloseOwnedDescriptorWhenRewiringStdout(t *testing.T) {
 	t.Parallel()
 

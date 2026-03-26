@@ -445,6 +445,29 @@ func TestDdGNUCompatRegressions(t *testing.T) {
 		}
 	})
 
+	t.Run("append redirected stdout seek does not materialize holes", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{})
+		writeSessionFile(t, session, "/tmp/out", []byte("AB"))
+
+		result := execSessionScriptWithInput(t, session, "dd seek=1 bs=1 count=0 status=none >> /tmp/out\n", nil)
+		if got, want := result.ExitCode, 0; got != want {
+			t.Fatalf("count=0 ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if got, want := readSessionFile(t, session, "/tmp/out"), []byte("AB"); !bytes.Equal(got, want) {
+			t.Fatalf("count=0 output = %v, want %v", got, want)
+		}
+
+		result = execSessionScriptWithInput(t, session, "dd seek=1 bs=1 count=1 status=none >> /tmp/out\n", []byte("Z"))
+		if got, want := result.ExitCode, 0; got != want {
+			t.Fatalf("count=1 ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if got, want := readSessionFile(t, session, "/tmp/out"), []byte("ABZ"); !bytes.Equal(got, want) {
+			t.Fatalf("count=1 output = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("skip past eof on file is silent", func(t *testing.T) {
 		t.Parallel()
 

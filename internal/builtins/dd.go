@@ -8,6 +8,7 @@ import (
 	"io"
 	stdfs "io/fs"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -950,6 +951,14 @@ func ddRedirectOffset(handle any) int64 {
 	return meta.RedirectOffset()
 }
 
+func ddRedirectFlags(handle any) int {
+	meta, ok := handle.(commandutil.RedirectMetadata)
+	if !ok {
+		return 0
+	}
+	return meta.RedirectFlags()
+}
+
 func ddStatHandle(ctx context.Context, inv *Invocation, handle any, path string) (stdfs.FileInfo, error) {
 	if statter, ok := handle.(interface {
 		Stat() (stdfs.FileInfo, error)
@@ -1071,6 +1080,16 @@ func openDdOutput(ctx context.Context, inv *Invocation, settings *ddSettings) (d
 
 	if !settings.outfileSet {
 		if path := ddRedirectPath(inv.Stdout); path != "" {
+			if flags := ddRedirectFlags(inv.Stdout); flags&os.O_APPEND != 0 {
+				if seekBytes > math.MaxInt64 {
+					return nil, exitf(inv, 1, "dd: invalid number: %s", quoteGNUOperand(strconv.FormatUint(seekBytes, 10)))
+				}
+				return &ddStdoutWriter{
+					writer:   inv.Stdout,
+					obs:      settings.obs,
+					buffered: settings.buffered,
+				}, nil
+			}
 			if seekBytes == 0 {
 				return &ddStdoutWriter{
 					writer:   inv.Stdout,
