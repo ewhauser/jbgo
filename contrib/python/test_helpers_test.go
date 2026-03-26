@@ -33,30 +33,10 @@ func newPythonRuntime(tb testing.TB) *gbruntime.Runtime {
 	return rt
 }
 
-func newPythonRuntimeWithRegistry(tb testing.TB, registry *commands.Registry) *gbruntime.Runtime {
-	tb.Helper()
-
-	rt, err := gbruntime.New(gbruntime.WithConfig(&gbruntime.Config{Registry: registry}))
-	if err != nil {
-		tb.Fatalf("runtime.New() error = %v", err)
-	}
-	return rt
-}
-
 func newPythonSession(tb testing.TB) *gbruntime.Session {
 	tb.Helper()
 
 	session, err := newPythonRuntime(tb).NewSession(context.Background())
-	if err != nil {
-		tb.Fatalf("Runtime.NewSession() error = %v", err)
-	}
-	return session
-}
-
-func newPythonSessionWithRegistry(tb testing.TB, registry *commands.Registry) *gbruntime.Session {
-	tb.Helper()
-
-	session, err := newPythonRuntimeWithRegistry(tb, registry).NewSession(context.Background())
 	if err != nil {
 		tb.Fatalf("Runtime.NewSession() error = %v", err)
 	}
