@@ -196,3 +196,35 @@ func TestODWithNoAddressProducesNoOutputForEmptyInput(t *testing.T) {
 		t.Fatalf("Stdout = %q, want empty", got)
 	}
 }
+
+func TestODCharASCIIDumpMatchesGNUWidthAccounting(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/in.bin", []byte("x"))
+
+	result := mustExecSession(t, session, "od -w10 -tcz /tmp/in.bin\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := "0000000" + "   x" + strings.Repeat("    ", 9) + "  >x<\n0000001\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestODOverflowingTraditionalOffsetReportsGNUERANGEText(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	offset := strings.Repeat("7", 255)
+	result := mustExecSession(t, session, "od - "+offset+"\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+
+	want := "od: " + offset + ": Numerical result out of range\n"
+	if got := result.Stderr; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}

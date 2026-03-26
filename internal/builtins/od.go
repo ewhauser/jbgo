@@ -391,7 +391,7 @@ func parseODTraditionalInputs(operands []string) (inputs []string, offset, label
 
 var (
 	errODOffsetParse = errors.New("parse failed")
-	errODOffsetRange = errors.New("result too large")
+	errODOffsetRange = errors.New("numerical result out of range")
 )
 
 func parseODOffsetOperand(value string) (uint64, error) {
@@ -768,7 +768,6 @@ func writeODLine(w io.Writer, prefix string, raw []byte, lineLen int, info odOut
 		var b strings.Builder
 		switch {
 		case format.addASCIIDump:
-			b.WriteString(strings.Repeat(" ", odLeadingDelimiter(format.format)))
 			for j := 0; j < info.lineBytes; j += format.format.byteSize {
 				if j > 0 {
 					gap := format.spacing[j%info.byteSizeBlock] + odInterItemSpacing(format.format)
