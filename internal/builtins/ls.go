@@ -2292,7 +2292,10 @@ func formatLSDateStyle(ts time.Time, opts *lsOptions, now time.Time) string {
 		return formatLSDate(ts, now)
 	default:
 		if format, ok := strings.CutPrefix(opts.timeStyle, "+"); ok {
-			return ts.Format(format)
+			formatted, err := formatDateString(ts, format)
+			if err == nil {
+				return formatted
+			}
 		}
 		return formatLSDate(ts, now)
 	}

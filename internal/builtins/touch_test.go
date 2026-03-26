@@ -151,6 +151,92 @@ touch - | cat >/dev/null
 	}
 }
 
+func TestTouchSupportsLegacyTimestampAfterDoubleDash(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, `TZ=UTC date --set '2024-05-06 07:08:09' >/dev/null
+_POSIX2_VERSION=199209 touch -- 01010000 /home/agent/out.txt
+`)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	info, err := session.FileSystem().Stat(context.Background(), "/home/agent/out.txt")
+	if err != nil {
+		t.Fatalf("Stat(out.txt) error = %v", err)
+	}
+	if got, want := info.ModTime().UTC(), time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Fatalf("out.txt ModTime = %v, want %v", got, want)
+	}
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/01010000"); !os.IsNotExist(err) {
+		t.Fatalf("Stat(01010000) error = %v, want not exist", err)
+	}
+}
+
+func TestTouchLegacyTimestampRewriteRespectsInferredLongDateOption(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, `TZ=UTC _POSIX2_VERSION=199209 touch --dat='2024-01-02 03:04:05 UTC' /home/agent/01010000 /home/agent/out.txt
+`)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+	for _, name := range []string{"/home/agent/01010000", "/home/agent/out.txt"} {
+		info, err := session.FileSystem().Stat(context.Background(), name)
+		if err != nil {
+			t.Fatalf("Stat(%s) error = %v", name, err)
+		}
+		if got := info.ModTime().UTC(); !got.Equal(want) {
+			t.Fatalf("%s ModTime = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestTouchCreatesDanglingSymlinkTarget(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/home/agent", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/home/agent) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "target.txt", "/home/agent/link.txt"); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "touch /home/agent/link.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/target.txt"); err != nil {
+		t.Fatalf("Stat(target.txt) error = %v", err)
+	}
+	info, err := session.FileSystem().Lstat(context.Background(), "/home/agent/link.txt")
+	if err != nil {
+		t.Fatalf("Lstat(link.txt) error = %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("Lstat(link.txt).Mode() = %v, want symlink", info.Mode())
+	}
+}
+
+func TestTouchReportsCreateFailures(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "touch /home/agent/missing/child\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "touch: cannot touch '/home/agent/missing/child': No such file or directory\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func parseTouchUnixTimePairs(tb testing.TB, output string) [][2]int64 {
 	tb.Helper()
 

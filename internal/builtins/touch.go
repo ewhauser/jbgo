@@ -2,13 +2,17 @@ package builtins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	stdfs "io/fs"
 	"os"
+	"path"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
+	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/commandutil"
 )
 
@@ -80,12 +84,21 @@ func (c *Touch) NormalizeInvocation(inv *Invocation) *Invocation {
 	if touchHasExplicitSource(inv.Args) {
 		return inv
 	}
-	first := inv.Args[0]
-	if !isTouchLegacyTimestamp(first) {
+	index, endOfOptions := touchLegacyTimestampIndex(inv.Args)
+	if index < 0 {
 		return inv
 	}
 	clone := *inv
-	clone.Args = append([]string{"--posix-stamp", normalizeTouchLegacyTimestamp(first)}, inv.Args[1:]...)
+	normalized := normalizeTouchLegacyTimestamp(inv.Args[index])
+	if endOfOptions >= 0 && index > endOfOptions {
+		clone.Args = append([]string{}, inv.Args[:endOfOptions]...)
+		clone.Args = append(clone.Args, "--posix-stamp", normalized, "--")
+		clone.Args = append(clone.Args, inv.Args[index+1:]...)
+		return &clone
+	}
+	clone.Args = append([]string{}, inv.Args[:index]...)
+	clone.Args = append(clone.Args, "--posix-stamp", normalized)
+	clone.Args = append(clone.Args, inv.Args[index+1:]...)
 	return &clone
 }
 
@@ -224,23 +237,35 @@ func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times to
 			return nil
 		}
 		if noDereference && !hasTrailingSlash(targetName) {
-			return exitf(inv, 1, "touch: cannot touch %q: No such file or directory", displayName)
+			return touchCreateError(inv, displayName, stdfs.ErrNotExist)
 		}
-		abs = allowPath(inv, targetName)
-		if err := ensureParentDirExists(ctx, inv, abs); err != nil {
-			return err
-		}
-		file, err := inv.FS.OpenFile(ctx, abs, os.O_CREATE|os.O_WRONLY, 0o644)
+		createName, err := touchResolveCreateTarget(ctx, inv, targetName)
 		if err != nil {
-			return &ExitError{Code: 1, Err: err}
+			return touchCreateError(inv, displayName, err)
+		}
+		createAbs := allowPath(inv, createName)
+		parentInfo, _, parentExists, err := statMaybe(ctx, inv, path.Dir(createAbs))
+		if err != nil {
+			return touchCreateError(inv, displayName, err)
+		}
+		if !parentExists {
+			return touchCreateError(inv, displayName, stdfs.ErrNotExist)
+		}
+		if !parentInfo.IsDir() {
+			return touchCreateMessage(inv, displayName, "Not a directory")
+		}
+		file, err := inv.FS.OpenFile(ctx, createAbs, os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return touchCreateError(inv, displayName, err)
 		}
 		if err := file.Close(); err != nil {
-			return &ExitError{Code: 1, Err: err}
+			return touchCreateError(inv, displayName, err)
 		}
-		recordFileMutation(inv.TraceRecorder(), "touch", abs, "", abs)
-		info, _, err = statPath(ctx, inv, targetName)
+		recordFileMutation(inv.TraceRecorder(), "touch", createAbs, "", createAbs)
+		targetName = createName
+		info, abs, err = statPath(ctx, inv, targetName)
 		if err != nil {
-			return err
+			return touchCreateError(inv, displayName, err)
 		}
 		exists = true
 	}
@@ -259,10 +284,7 @@ func touchOne(ctx context.Context, inv *Invocation, opts *touchOptions, times to
 			mtime = info.ModTime() //nolint:nilaway // info is non-nil when exists is true
 		}
 	}
-	if err := inv.FS.Chtimes(ctx, abs, atime, mtime); err != nil {
-		return &ExitError{Code: 1, Err: err}
-	}
-	return nil
+	return touchSetTimes(ctx, inv, displayName, abs, atime, mtime)
 }
 
 func touchResolveTarget(inv *Invocation, name string, noDereference bool) (targetName, displayName string, effectiveNoDereference bool) {
@@ -270,13 +292,84 @@ func touchResolveTarget(inv *Invocation, name string, noDereference bool) (targe
 		return name, name, noDereference
 	}
 	if inv != nil && inv.Stdout != nil {
+		if redirected, ok := inv.Stdout.(commandutil.RedirectMetadata); ok {
+			if redirectPath := redirected.RedirectPath(); redirectPath != "" {
+				return redirectPath, name, false
+			}
+		}
 		if redirected, ok := resolveUnderlyingWriter(inv.Stdout).(commandutil.RedirectMetadata); ok {
-			if path := redirected.RedirectPath(); path != "" {
-				return path, name, false
+			if redirectPath := redirected.RedirectPath(); redirectPath != "" {
+				return redirectPath, name, false
 			}
 		}
 	}
 	return "", name, false
+}
+
+func touchResolveCreateTarget(ctx context.Context, inv *Invocation, name string) (string, error) {
+	info, abs, exists, err := lstatMaybe(ctx, inv, name)
+	if err != nil || !exists || info.Mode()&stdfs.ModeSymlink == 0 {
+		return name, err
+	}
+	target, err := inv.FS.Readlink(ctx, abs)
+	if err != nil {
+		return "", err
+	}
+	return gbfs.Resolve(path.Dir(abs), target), nil
+}
+
+func touchSetTimes(ctx context.Context, inv *Invocation, displayName, abs string, atime, mtime time.Time) error {
+	if err := inv.FS.Chtimes(ctx, abs, atime, mtime); err != nil {
+		return touchSetTimesError(inv, displayName, err)
+	}
+	return nil
+}
+
+func touchCreateError(inv *Invocation, name string, err error) error {
+	return touchCreateMessage(inv, name, touchErrorText(err))
+}
+
+func touchCreateMessage(inv *Invocation, name, message string) error {
+	return exitf(inv, 1, "touch: cannot touch %s: %s", quoteGNUOperand(name), message)
+}
+
+func touchSetTimesError(inv *Invocation, name string, err error) error {
+	return exitf(inv, 1, "touch: setting times of %s: %s", quoteGNUOperand(name), touchErrorText(err))
+}
+
+func touchErrorText(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errorsIsNotExist(err):
+		return "No such file or directory"
+	case touchIsNotDirectory(err):
+		return "Not a directory"
+	case errorsIsDirectory(err):
+		return "Is a directory"
+	case errors.Is(err, syscall.ENOSYS):
+		return "Function not implemented"
+	default:
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) && pathErr != nil && pathErr.Err != nil {
+			return capitalizeErrorText(pathErr.Err.Error())
+		}
+		return capitalizeErrorText(err.Error())
+	}
+}
+
+func touchIsNotDirectory(err error) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "not a directory") {
+		return true
+	}
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || pathErr == nil {
+		return false
+	}
+	return errors.Is(pathErr.Err, stdfs.ErrInvalid)
 }
 
 func touchStatMaybe(ctx context.Context, inv *Invocation, name string, noDereference bool) (info stdfs.FileInfo, abs string, exists bool, err error) {
@@ -468,15 +561,15 @@ func touchHasExplicitSource(args []string) bool {
 			continue
 		}
 		switch {
-		case arg == "-d", arg == "--date", strings.HasPrefix(arg, "--date="):
+		case arg == "-d", arg == "-r", arg == "-t":
 			return true
-		case arg == "-r", arg == "--reference", strings.HasPrefix(arg, "--reference="):
-			return true
-		case arg == "-t", arg == "--posix-stamp", strings.HasPrefix(arg, "--posix-stamp="):
-			return true
-		case !strings.HasPrefix(arg, "-") || arg == "-":
-			continue
 		case strings.HasPrefix(arg, "--"):
+			name, _, _ := strings.Cut(arg[2:], "=")
+			if touchMatchesExplicitSourceLongOption(name) {
+				return true
+			}
+			continue
+		case !strings.HasPrefix(arg, "-") || arg == "-":
 			continue
 		default:
 			for idx := 1; idx < len(arg); idx++ {
@@ -488,6 +581,86 @@ func touchHasExplicitSource(args []string) bool {
 		}
 	}
 	return false
+}
+
+func touchResolveLongOption(name string) *OptionSpec {
+	if name == "" {
+		return nil
+	}
+	spec := NewTouch().Spec()
+	var matched *OptionSpec
+	matchCount := 0
+	for i := range spec.Options {
+		opt := &spec.Options[i]
+		names := append([]string{opt.Long}, opt.Aliases...)
+		for _, candidate := range names {
+			if candidate == "" {
+				continue
+			}
+			if candidate == name || (spec.Parse.InferLongOptions && strings.HasPrefix(candidate, name)) {
+				matched = opt
+				matchCount++
+				break
+			}
+		}
+	}
+	if matchCount != 1 {
+		return nil
+	}
+	return matched
+}
+
+func touchMatchesExplicitSourceLongOption(name string) bool {
+	matched := touchResolveLongOption(name)
+	if matched == nil {
+		return false
+	}
+	switch matched.Name {
+	case "date", "reference", "timestamp", "posix-stamp":
+		return true
+	default:
+		return false
+	}
+}
+
+func touchLegacyTimestampIndex(args []string) (timestampIndex, endOfOptions int) {
+	endOfOptions = -1
+	end := false
+	positionals := make([]int, 0, 2)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !end {
+			switch {
+			case arg == "--":
+				end = true
+				endOfOptions = i
+				continue
+			case arg == "-":
+				positionals = append(positionals, i)
+				continue
+			case strings.HasPrefix(arg, "--"):
+				name, hasValue := arg[2:], false
+				if optionName, _, found := strings.Cut(name, "="); found {
+					name = optionName
+					hasValue = true
+				}
+				if opt := touchResolveLongOption(name); opt != nil && opt.Arity == OptionRequiredValue && !hasValue {
+					i++
+				}
+				continue
+			case strings.HasPrefix(arg, "-"):
+				continue
+			}
+		}
+		positionals = append(positionals, i)
+	}
+	if len(positionals) < 2 {
+		return -1, -1
+	}
+	if !isTouchLegacyTimestamp(args[positionals[0]]) {
+		return -1, -1
+	}
+	return positionals[0], endOfOptions
 }
 
 func touchMatchesTimeWord(value string, words ...string) bool {

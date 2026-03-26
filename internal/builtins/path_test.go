@@ -2122,6 +2122,24 @@ func TestStatSupportsPrintfFormat(t *testing.T) {
 	}
 }
 
+func TestStatSupportsHumanReadableTimeFormat(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/home/agent/target.txt", []byte("hello"))
+	when := time.Date(2009, time.October, 10, 0, 0, 0, 0, time.UTC)
+	if err := session.FileSystem().Chtimes(context.Background(), "/home/agent/target.txt", when, when); err != nil {
+		t.Fatalf("Chtimes(target.txt) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "TZ=UTC stat --format=%y /home/agent/target.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2009-10-10 00:00:00.000000000 +0000\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestBasenameAndDirnameHandleSuffixesAndMultipleOperands(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

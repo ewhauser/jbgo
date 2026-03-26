@@ -98,6 +98,9 @@
     { "pattern": "tests/ln/relative.sh", "reason": "ln --relative cases require following source symlinks, which the default gbash sandbox denies" },
     { "pattern": "tests/ln/sf-1.sh", "reason": "ln -sf same-file cases in the GNU suite require symlink traversal that the default gbash sandbox denies" },
     { "pattern": "tests/mkdir/p-thru-slink.sh", "reason": "mkdir -p through a symlinked directory requires symlink traversal, which the default gbash sandbox denies" },
+    { "pattern": "tests/touch/no-dereference.sh", "reason": "touch -h symlink timestamp updates are not supported in gbash v1" },
+    { "pattern": "tests/touch/not-owner.sh", "reason": "touch not-owner cases assume a real filesystem root with host ownership and read-only semantics, but the gbash compat sandbox maps / to a writable temp root owned by the runner" },
+    { "pattern": "tests/touch/trailing-slash.sh", "reason": "touch trailing-slash cases require traversing symlink-to-file and symlink-loop paths, which the default gbash sandbox denies" },
     { "pattern": "tests/wc/wc-proc.sh", "reason": "wc proc/sysfs test requires /proc/version and /sys/kernel/profiling, which are not mounted inside the gbash compat sandbox root" }
   ]
 }

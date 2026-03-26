@@ -57,6 +57,28 @@ func (f *redirectedFile) Stat() (stdfs.FileInfo, error) {
 	return f.file.Stat()
 }
 
+func (f *redirectedFile) Seek(offset int64, whence int) (int64, error) {
+	seeker, ok := f.file.(interface {
+		Seek(offset int64, whence int) (int64, error)
+	})
+	if !ok {
+		return 0, stdfs.ErrInvalid
+	}
+	position, err := seeker.Seek(offset, whence)
+	if err == nil && position >= 0 {
+		f.offset = position
+	}
+	return position, err
+}
+
+func (f *redirectedFile) Fd() uintptr {
+	file, ok := f.file.(interface{ Fd() uintptr })
+	if !ok {
+		return 0
+	}
+	return file.Fd()
+}
+
 func (f *redirectedFile) RedirectPath() string {
 	return f.path
 }

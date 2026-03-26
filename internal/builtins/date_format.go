@@ -25,11 +25,13 @@ func formatDateString(current time.Time, format string) (string, error) {
 			continue
 		}
 		if i+1 >= len(format) {
-			return "", fmt.Errorf("dangling %% in format")
+			b.WriteByte('%')
+			break
 		}
 		token, next, err := parseDateFormatToken(format, i)
 		if err != nil {
-			return "", err
+			b.WriteString(format[i:])
+			break
 		}
 		text, ok := renderDateFormatToken(current, token)
 		if !ok {

@@ -115,6 +115,9 @@ func run(ctx context.Context, cfg Config, args []string, stdin io.Reader, stdout
 		return 0, nil
 	}
 
+	stdin = wrapInheritedStdin(stdin, &runtimeOpts)
+	stdout = wrapInheritedStdout(stdout, &runtimeOpts)
+
 	if parsed.Source == builtins.BashSourceStdin && (parsed.Interactive || stdinTTY) {
 		return runInteractiveShell(ctx, rt, parsed, stdin, stdout, stderr)
 	}
@@ -188,7 +191,7 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.
 		Args:            append([]string(nil), parsed.Args...),
 		StartupOptions:  append([]string(nil), parsed.StartupOptions...),
 		Interactive:     parsed.Interactive,
-		Stdin:           execStdin,
+		Stdin:           wrapInheritedStdin(execStdin, runtimeOpts),
 		Stdout:          stdout,
 		Stderr:          stderr,
 	}
@@ -251,7 +254,7 @@ func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, 
 		Args:            append([]string(nil), parsed.Args...),
 		StartupOptions:  append([]string(nil), parsed.StartupOptions...),
 		Interactive:     parsed.Interactive,
-		Stdin:           execStdin,
+		Stdin:           wrapInheritedStdin(execStdin, runtimeOpts),
 	}
 	if len(req.PassthroughArgs) == 0 {
 		req.PassthroughArgs = []string{"-s"}

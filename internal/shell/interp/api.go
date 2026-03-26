@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	stdfs "io/fs"
 	"maps"
 	"path"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/host"
+	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
@@ -701,9 +703,13 @@ func (r *Runner) now() time.Time {
 }
 
 func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) StdinReader {
+	var redirectMeta redirectedStdinMetadata
+	if meta, ok := r.(commandutil.RedirectMetadata); ok {
+		redirectMeta = snapshotRedirectedStdinMetadata(meta)
+	}
 	switch r := r.(type) {
 	case StdinReader:
-		return r
+		return wrapRedirectedStdinReader(r, r, redirectMeta)
 	case nil:
 		return nil
 	default:
@@ -715,8 +721,113 @@ func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser,
 			io.Copy(pw, r)
 			pw.Close()
 		}()
-		return pr
+		return wrapRedirectedStdinReader(pr, r, redirectMeta)
 	}
+}
+
+type redirectedStdinMetadata struct {
+	path   string
+	flags  int
+	offset int64
+}
+
+func snapshotRedirectedStdinMetadata(meta commandutil.RedirectMetadata) redirectedStdinMetadata {
+	if meta == nil {
+		return redirectedStdinMetadata{}
+	}
+	return redirectedStdinMetadata{
+		path:   meta.RedirectPath(),
+		flags:  meta.RedirectFlags(),
+		offset: meta.RedirectOffset(),
+	}
+}
+
+type redirectedStdinReader struct {
+	StdinReader
+	handle io.Reader
+	path   string
+	flags  int
+	offset atomic.Int64
+}
+
+type seekableRedirectedStdinReader struct {
+	*redirectedStdinReader
+	seeker interface {
+		Seek(offset int64, whence int) (int64, error)
+	}
+}
+
+func wrapRedirectedStdinReader(reader StdinReader, underlying io.Reader, meta redirectedStdinMetadata) StdinReader {
+	if reader == nil || meta.path == "" {
+		return reader
+	}
+	if underlying == nil {
+		underlying = reader
+	}
+	wrapped := &redirectedStdinReader{
+		StdinReader: reader,
+		handle:      underlying,
+		path:        meta.path,
+		flags:       meta.flags,
+	}
+	wrapped.offset.Store(meta.offset)
+	if seeker, ok := reader.(interface {
+		Seek(offset int64, whence int) (int64, error)
+	}); ok {
+		return &seekableRedirectedStdinReader{
+			redirectedStdinReader: wrapped,
+			seeker:                seeker,
+		}
+	}
+	return wrapped
+}
+
+func (r *redirectedStdinReader) Read(p []byte) (int, error) {
+	n, err := r.StdinReader.Read(p)
+	if n > 0 {
+		r.offset.Add(int64(n))
+	}
+	return n, err
+}
+
+func (r *redirectedStdinReader) RedirectPath() string {
+	return r.path
+}
+
+func (r *redirectedStdinReader) RedirectFlags() int {
+	return r.flags
+}
+
+func (r *redirectedStdinReader) RedirectOffset() int64 {
+	return r.offset.Load()
+}
+
+func (r *redirectedStdinReader) Stat() (stdfs.FileInfo, error) {
+	type statter interface {
+		Stat() (stdfs.FileInfo, error)
+	}
+	if statter, ok := r.handle.(statter); ok {
+		return statter.Stat()
+	}
+	return nil, errors.New("bad file descriptor")
+}
+
+func (r *seekableRedirectedStdinReader) Seek(offset int64, whence int) (int64, error) {
+	position, err := r.seeker.Seek(offset, whence)
+	if err == nil && position >= 0 {
+		r.offset.Store(position)
+	}
+	return position, err
+}
+
+func (r *redirectedStdinReader) Fd() uintptr {
+	type fileDescriber interface {
+		Fd() uintptr
+	}
+	if file, ok := r.handle.(fileDescriber); ok {
+		return file.Fd()
+	}
+	return 0
 }
 
 func newPipe(pipeFactory func() (io.ReadCloser, io.WriteCloser, error)) (StdinReader, io.WriteCloser, error) {

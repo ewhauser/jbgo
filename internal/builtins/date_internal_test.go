@@ -47,6 +47,19 @@ func TestFormatDateStringGNUModifiers(t *testing.T) {
 	}
 }
 
+func TestFormatDateStringPreservesIncompleteDirectiveLiterally(t *testing.T) {
+	t.Parallel()
+
+	when := time.Date(1999, time.June, 1, 5, 4, 3, 0, time.UTC)
+	got, err := formatDateString(when, "%Y%")
+	if err != nil {
+		t.Fatalf("formatDateString(%q) error = %v", "%Y%", err)
+	}
+	if want := "1999%"; got != want {
+		t.Fatalf("formatDateString(%q) = %q, want %q", "%Y%", got, want)
+	}
+}
+
 func TestParseDateValueVariants(t *testing.T) {
 	t.Parallel()
 

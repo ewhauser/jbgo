@@ -260,13 +260,21 @@ func (r *Runner) syncStandardFDs() {
 	if fd := r.fds[1]; fd != nil && fd.writer != nil {
 		r.stdout = fd
 	} else {
-		r.stdout = io.Discard
+		if fd != nil {
+			r.stdout = fd
+		} else {
+			r.stdout = io.Discard
+		}
 	}
 
 	if fd := r.fds[2]; fd != nil && fd.writer != nil {
 		r.stderr = fd
 	} else {
-		r.stderr = io.Discard
+		if fd != nil {
+			r.stderr = fd
+		} else {
+			r.stderr = io.Discard
+		}
 	}
 }
 

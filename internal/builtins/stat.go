@@ -258,21 +258,38 @@ func statDirectiveValue(ctx context.Context, inv *Invocation, abs string, info s
 			return strconv.FormatInt(atime.Unix(), 10), nil
 		}
 		return "0", nil
+	case 'x':
+		if atime, ok := statAccessTime(info); ok {
+			return formatStatTimestamp(atime), nil
+		}
+		return "-", nil
 	case 'Y':
 		if precision >= 0 {
 			return formatStatTimeWithPrecision(info.ModTime(), precision), nil
 		}
 		return strconv.FormatInt(info.ModTime().Unix(), 10), nil
+	case 'y':
+		return formatStatTimestamp(info.ModTime()), nil
 	case 'Z':
 		if ctime, ok := statChangeTime(info); ok {
 			return strconv.FormatInt(ctime.Unix(), 10), nil
 		}
 		return strconv.FormatInt(info.ModTime().Unix(), 10), nil
+	case 'z':
+		if ctime, ok := statChangeTime(info); ok {
+			return formatStatTimestamp(ctime), nil
+		}
+		return formatStatTimestamp(info.ModTime()), nil
 	case 'W':
 		if birth, ok := statBirthTime(info); ok {
 			return strconv.FormatInt(birth.Unix(), 10), nil
 		}
 		return "0", nil
+	case 'w':
+		if birth, ok := statBirthTime(info); ok {
+			return formatStatTimestamp(birth), nil
+		}
+		return "-", nil
 	default:
 		return "", fmt.Errorf("unsupported format sequence %%%c", directive)
 	}
@@ -381,6 +398,10 @@ func formatStatTimeWithPrecision(ts time.Time, precision int) string {
 		return fmt.Sprintf("%d.%s", sec, fraction[:precision])
 	}
 	return fmt.Sprintf("%d.%s%s", sec, fraction, strings.Repeat("0", precision-9))
+}
+
+func formatStatTimestamp(ts time.Time) string {
+	return ts.Format("2006-01-02 15:04:05.000000000 -0700")
 }
 
 func trimStatFloatPrecision(value string, precision int) string {
