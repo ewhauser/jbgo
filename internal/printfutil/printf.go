@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const gnuMaxArgIndex = 1<<31 - 1
+
 type Options struct {
 	LookupEnv func(name string) (string, bool)
 	Now       func() time.Time
@@ -30,21 +32,30 @@ type Result struct {
 }
 
 type formatSpec struct {
-	verb             byte
-	timeLayout       string
-	leftJustify      bool
-	forceSign        bool
-	spaceSign        bool
-	alternate        bool
-	zeroPad          bool
-	width            int
-	widthSet         bool
-	widthFromArg     bool
-	precision        int
-	precisionSet     bool
-	precisionFromArg bool
-	quoteFlag        bool
-	lengthModifier   bool
+	verb              byte
+	timeLayout        string
+	leftJustify       bool
+	forceSign         bool
+	spaceSign         bool
+	alternate         bool
+	zeroPad           bool
+	width             int
+	widthSet          bool
+	widthFromArg      bool
+	precision         int
+	precisionSet      bool
+	precisionFromArg  bool
+	quoteFlag         bool
+	lengthModifier    bool
+	argIndex          int
+	argIndexed        bool
+	widthArgIndex     int
+	widthIndexed      bool
+	precisionArgIndex int
+	precisionIndexed  bool
+	argSlot           int
+	widthSlot         int
+	precisionSlot     int
 }
 
 type formatToken struct {
@@ -58,6 +69,7 @@ type parsedFormat struct {
 	verbs     int
 	hardStop  bool
 	diagLines []string
+	cycleArgs int
 }
 
 type formatter struct {
@@ -80,10 +92,24 @@ func Format(format string, args []string, opts Options) Result {
 		f.addDiagnostic(diag)
 	}
 
-	for {
-		stop := f.run(parsed.tokens)
-		if stop || parsed.hardStop || parsed.verbs == 0 || f.index >= len(f.args) {
-			break
+	if opts.Dialect == DialectGNU {
+		cycleBase := 0
+		for {
+			stop := f.runGNU(parsed.tokens, cycleBase)
+			if stop || parsed.hardStop || parsed.verbs == 0 || parsed.cycleArgs <= 0 {
+				break
+			}
+			cycleBase += parsed.cycleArgs
+			if cycleBase >= len(f.args) {
+				break
+			}
+		}
+	} else {
+		for {
+			stop := f.run(parsed.tokens)
+			if stop || parsed.hardStop || parsed.verbs == 0 || f.index >= len(f.args) {
+				break
+			}
 		}
 	}
 	if !parsed.hardStop && parsed.verbs == 0 && f.opts.Dialect == DialectGNU && f.index < len(f.args) {
@@ -109,6 +135,8 @@ func parseFormat(format string, dialect Dialect) parsedFormat {
 	parsed := parsedFormat{
 		tokens: make([]formatToken, 0, 8),
 	}
+	seqCursor := 1
+	maxSlot := 0
 	var literal strings.Builder
 	flushLiteral := func() {
 		if literal.Len() == 0 {
@@ -151,6 +179,9 @@ func parseFormat(format string, dialect Dialect) parsedFormat {
 				parsed.hardStop = hardStop
 				return parsed
 			}
+			if dialect == DialectGNU {
+				assignGNUSlots(spec, &seqCursor, &maxSlot)
+			}
 			parsed.tokens = append(parsed.tokens, formatToken{spec: spec})
 			parsed.verbs++
 			i = next
@@ -160,12 +191,27 @@ func parseFormat(format string, dialect Dialect) parsedFormat {
 		}
 	}
 	flushLiteral()
+	if dialect == DialectGNU {
+		parsed.cycleArgs = maxSlot
+	}
 	return parsed
 }
 
 func parseSpec(format string, start int, dialect Dialect) (*formatSpec, int, string, bool) {
 	spec := &formatSpec{}
 	i := start + 1
+	invalidGNUIndex := false
+
+	if dialect == DialectGNU {
+		if index, next, ok, invalid := readGNUIndex(format, i); ok {
+			spec.argIndex = index
+			spec.argIndexed = true
+			i = next
+		} else if invalid {
+			invalidGNUIndex = true
+			i = next
+		}
+	}
 
 	for i < len(format) {
 		switch format[i] {
@@ -196,6 +242,16 @@ width:
 		spec.widthFromArg = true
 		spec.widthSet = true
 		i++
+		if dialect == DialectGNU {
+			if index, next, ok, invalid := readGNUIndex(format, i); ok {
+				spec.widthArgIndex = index
+				spec.widthIndexed = true
+				i = next
+			} else if invalid {
+				invalidGNUIndex = true
+				i = next
+			}
+		}
 	} else {
 		width, next, ok := readDigits(format, i)
 		if ok {
@@ -211,6 +267,16 @@ width:
 		if i < len(format) && format[i] == '*' {
 			spec.precisionFromArg = true
 			i++
+			if dialect == DialectGNU {
+				if index, next, ok, invalid := readGNUIndex(format, i); ok {
+					spec.precisionArgIndex = index
+					spec.precisionIndexed = true
+					i = next
+				} else if invalid {
+					invalidGNUIndex = true
+					i = next
+				}
+			}
 		} else {
 			precision, next, ok := readDigits(format, i)
 			if ok {
@@ -232,6 +298,9 @@ width:
 	}
 
 	if i >= len(format) {
+		if dialect == DialectGNU && invalidGNUIndex {
+			return nil, len(format), gnuInvalidConversionSpec(format[start:]), true
+		}
 		if dialect == DialectGNU {
 			return nil, len(format), gnuFormatEndsInPercent(format[start:]), true
 		}
@@ -253,10 +322,7 @@ width:
 	if isSupportedVerb(format[i], dialect) {
 		spec.verb = format[i]
 		if dialect == DialectGNU {
-			if spec.quoteFlag && !gnuAllowsQuoteFlag(spec.verb) {
-				return nil, i + 1, gnuInvalidConversionSpec(format[start : i+1]), true
-			}
-			if (spec.verb == 'b' || spec.verb == 'q') && spec.hasGNUUnsupportedFieldParams() {
+			if invalidGNUIndex || validateGNUSpec(spec, format[start:i+1]) != "" {
 				return nil, i + 1, gnuInvalidConversionSpec(format[start : i+1]), true
 			}
 		}
@@ -288,6 +354,33 @@ func readDigits(s string, start int) (int, int, bool) {
 	return value, end, true
 }
 
+func readGNUIndex(s string, start int) (int, int, bool, bool) {
+	end := start
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	if end == start || end >= len(s) || s[end] != '$' {
+		return 0, start, false, false
+	}
+	value := 0
+	allZero := true
+	for i := start; i < end; i++ {
+		digit := int(s[i] - '0')
+		if digit != 0 {
+			allZero = false
+		}
+		if value > (gnuMaxArgIndex-digit)/10 {
+			value = gnuMaxArgIndex
+			break
+		}
+		value = value*10 + digit
+	}
+	if allZero {
+		return 0, end + 1, false, true
+	}
+	return value, end + 1, true, false
+}
+
 func isSupportedVerb(ch byte, dialect Dialect) bool {
 	switch dialect {
 	case DialectGNU:
@@ -305,7 +398,25 @@ func (f *formatter) run(tokens []formatToken) bool {
 		case token.spec == nil:
 			f.out.WriteString(token.literal)
 		default:
-			if f.applySpec(*token.spec) {
+			spec := *token.spec
+			if f.applySpec(&spec) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (f *formatter) runGNU(tokens []formatToken, cycleBase int) bool {
+	for _, token := range tokens {
+		switch {
+		case token.stop:
+			return true
+		case token.spec == nil:
+			f.out.WriteString(token.literal)
+		default:
+			spec := *token.spec
+			if f.applyGNUSpec(&spec, cycleBase) {
 				return true
 			}
 		}
@@ -339,12 +450,15 @@ func (f *formatter) addWarning(message string) {
 	f.warnings = append(f.warnings, message)
 }
 
-func (f *formatter) applySpec(spec formatSpec) bool {
+func (f *formatter) applySpec(spec *formatSpec) bool {
 	if spec.widthFromArg {
 		arg, present := f.nextArg()
-		width, ok, diag := parseWidthArg(arg, present)
-		if diag != "" {
+		width, ok, diags, hard := parseWidthArg(arg, present, f.opts)
+		for _, diag := range diags {
 			f.addDiagnostic(diag)
+		}
+		if hard {
+			return true
 		}
 		if ok {
 			if width < 0 {
@@ -360,9 +474,12 @@ func (f *formatter) applySpec(spec formatSpec) bool {
 	}
 	if spec.precisionFromArg {
 		arg, present := f.nextArg()
-		precision, ok, diag := parseWidthArg(arg, present)
-		if diag != "" {
+		precision, ok, diags, hard := parsePrecisionArg(arg, present, f.opts)
+		for _, diag := range diags {
 			f.addDiagnostic(diag)
+		}
+		if hard {
+			return true
 		}
 		switch {
 		case ok && precision >= 0:
@@ -381,7 +498,7 @@ func (f *formatter) applySpec(spec formatSpec) bool {
 	case 's':
 		f.out.WriteString(applyStringFormat(arg, spec))
 	case 'q':
-		f.out.WriteString(applyStringFormat(quoteShell(arg, f.opts.Dialect), spec))
+		f.out.WriteString(applyStringFormat(quoteShell(arg, f.opts), spec))
 	case 'b':
 		decoded, stop, diag := decodeEscapeString(arg, escapeModePercentB, f.opts.Dialect)
 		if diag != "" {
@@ -398,21 +515,30 @@ func (f *formatter) applySpec(spec formatSpec) bool {
 		}
 		f.out.WriteString(applyStringFormat(text, spec))
 	case 'd', 'i':
-		text, diag := formatSigned(arg, present, spec)
+		text, diag, warning := formatSigned(arg, present, spec, f.opts)
 		if diag != "" {
 			f.addDiagnostic(diag)
+		}
+		if warning != "" {
+			f.addWarning(warning)
 		}
 		f.out.WriteString(text)
 	case 'u', 'o', 'x', 'X':
-		text, diag := formatUnsigned(arg, present, spec)
+		text, diag, warning := formatUnsigned(arg, present, spec, f.opts)
 		if diag != "" {
 			f.addDiagnostic(diag)
 		}
+		if warning != "" {
+			f.addWarning(warning)
+		}
 		f.out.WriteString(text)
 	case 'e', 'E', 'f', 'F', 'g', 'G':
-		text, diag := formatFloat(arg, present, spec)
+		text, diag, warning := formatFloat(arg, present, spec, f.opts)
 		if diag != "" {
 			f.addDiagnostic(diag)
+		}
+		if warning != "" {
+			f.addWarning(warning)
 		}
 		f.out.WriteString(text)
 	case 'T':
@@ -423,20 +549,6 @@ func (f *formatter) applySpec(spec formatSpec) bool {
 		f.out.WriteString(text)
 	}
 	return false
-}
-
-func (s formatSpec) hasGNUUnsupportedFieldParams() bool {
-	return s.leftJustify ||
-		s.forceSign ||
-		s.spaceSign ||
-		s.alternate ||
-		s.zeroPad ||
-		s.widthSet ||
-		s.widthFromArg ||
-		s.precisionSet ||
-		s.precisionFromArg ||
-		s.quoteFlag ||
-		s.lengthModifier
 }
 
 func gnuAllowsQuoteFlag(verb byte) bool {
@@ -472,7 +584,191 @@ func skipGNULengthModifier(format string, start int) int {
 	}
 }
 
-func applyStringFormat(value string, spec formatSpec) string {
+func assignGNUSlots(spec *formatSpec, seqCursor, maxSlot *int) {
+	if spec == nil {
+		return
+	}
+	if spec.widthFromArg {
+		if spec.widthIndexed {
+			spec.widthSlot = spec.widthArgIndex
+		} else {
+			spec.widthSlot = *seqCursor
+			(*seqCursor)++
+		}
+		if spec.widthSlot > *maxSlot {
+			*maxSlot = spec.widthSlot
+		}
+	}
+	if spec.precisionFromArg {
+		if spec.precisionIndexed {
+			spec.precisionSlot = spec.precisionArgIndex
+		} else {
+			spec.precisionSlot = *seqCursor
+			(*seqCursor)++
+		}
+		if spec.precisionSlot > *maxSlot {
+			*maxSlot = spec.precisionSlot
+		}
+	}
+	if spec.argIndexed {
+		spec.argSlot = spec.argIndex
+	} else {
+		spec.argSlot = *seqCursor
+		(*seqCursor)++
+	}
+	if spec.argSlot > *maxSlot {
+		*maxSlot = spec.argSlot
+	}
+}
+
+func validateGNUSpec(spec *formatSpec, raw string) string {
+	if spec.quoteFlag && !gnuAllowsQuoteFlag(spec.verb) {
+		return raw
+	}
+	switch spec.verb {
+	case 'b', 'q':
+		if spec.leftJustify ||
+			spec.forceSign ||
+			spec.spaceSign ||
+			spec.alternate ||
+			spec.zeroPad ||
+			spec.widthSet ||
+			spec.widthFromArg ||
+			spec.precisionSet ||
+			spec.precisionFromArg ||
+			spec.quoteFlag ||
+			spec.lengthModifier {
+			return raw
+		}
+	case 's':
+		if spec.forceSign || spec.spaceSign || spec.alternate || spec.zeroPad || spec.quoteFlag {
+			return raw
+		}
+	case 'c':
+		if spec.forceSign || spec.spaceSign || spec.alternate || spec.zeroPad || spec.quoteFlag || spec.precisionSet || spec.precisionFromArg {
+			return raw
+		}
+	case 'd', 'i', 'u':
+		if spec.alternate {
+			return raw
+		}
+	}
+	return ""
+}
+
+func (f *formatter) gnuArgAt(base, slot int) (string, bool) {
+	if slot <= 0 {
+		return "", false
+	}
+	index := base + slot - 1
+	if index < 0 || index >= len(f.args) {
+		return "", false
+	}
+	return f.args[index], true
+}
+
+func (f *formatter) applyGNUSpec(spec *formatSpec, cycleBase int) bool {
+	if spec.widthFromArg {
+		arg, present := f.gnuArgAt(cycleBase, spec.widthSlot)
+		width, ok, diags, hard := parseWidthArg(arg, present, f.opts)
+		for _, diag := range diags {
+			f.addDiagnostic(diag)
+		}
+		if hard {
+			return true
+		}
+		if ok {
+			if width < 0 {
+				spec.leftJustify = true
+				width = -width
+			}
+			spec.width = width
+			spec.widthSet = true
+		} else {
+			spec.width = 0
+			spec.widthSet = true
+		}
+	}
+	if spec.precisionFromArg {
+		arg, present := f.gnuArgAt(cycleBase, spec.precisionSlot)
+		precision, ok, diags, hard := parsePrecisionArg(arg, present, f.opts)
+		for _, diag := range diags {
+			f.addDiagnostic(diag)
+		}
+		if hard {
+			return true
+		}
+		switch {
+		case ok && precision >= 0:
+			spec.precision = precision
+			spec.precisionSet = true
+		case ok && precision < 0:
+			spec.precisionSet = false
+		default:
+			spec.precision = 0
+			spec.precisionSet = true
+		}
+	}
+
+	arg, present := f.gnuArgAt(cycleBase, spec.argSlot)
+	switch spec.verb {
+	case 's':
+		f.out.WriteString(applyStringFormat(arg, spec))
+	case 'q':
+		f.out.WriteString(applyStringFormat(quoteShell(arg, f.opts), spec))
+	case 'b':
+		decoded, stop, diag := decodeEscapeString(arg, escapeModePercentB, f.opts.Dialect)
+		if diag != "" {
+			f.addDiagnostic(diag)
+		}
+		f.out.WriteString(applyStringFormat(decoded, spec))
+		return stop
+	case 'c':
+		var text string
+		if present && arg != "" {
+			text = string([]byte{arg[0]})
+		} else {
+			text = string([]byte{0})
+		}
+		f.out.WriteString(applyStringFormat(text, spec))
+	case 'd', 'i':
+		text, diag, warning := formatSigned(arg, present, spec, f.opts)
+		if diag != "" {
+			f.addDiagnostic(diag)
+		}
+		if warning != "" {
+			f.addWarning(warning)
+		}
+		f.out.WriteString(text)
+	case 'u', 'o', 'x', 'X':
+		text, diag, warning := formatUnsigned(arg, present, spec, f.opts)
+		if diag != "" {
+			f.addDiagnostic(diag)
+		}
+		if warning != "" {
+			f.addWarning(warning)
+		}
+		f.out.WriteString(text)
+	case 'e', 'E', 'f', 'F', 'g', 'G':
+		text, diag, warning := formatFloat(arg, present, spec, f.opts)
+		if diag != "" {
+			f.addDiagnostic(diag)
+		}
+		if warning != "" {
+			f.addWarning(warning)
+		}
+		f.out.WriteString(text)
+	case 'T':
+		text, diag := formatTime(arg, present, spec, f.opts)
+		if diag != "" {
+			f.addDiagnostic(diag)
+		}
+		f.out.WriteString(text)
+	}
+	return false
+}
+
+func applyStringFormat(value string, spec *formatSpec) string {
 	if spec.precisionSet && spec.precision < len(value) {
 		value = value[:spec.precision]
 	}

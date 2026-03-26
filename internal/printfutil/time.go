@@ -14,7 +14,7 @@ var (
 	minusTwoBig = big.NewInt(-2)
 )
 
-func formatTime(arg string, present bool, spec formatSpec, opts Options) (string, string) {
+func formatTime(arg string, present bool, spec *formatSpec, opts Options) (string, string) {
 	when := opts.Now()
 	if present {
 		parsed := parseInteger(arg, true)
