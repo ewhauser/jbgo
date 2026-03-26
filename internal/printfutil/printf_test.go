@@ -438,6 +438,20 @@ func TestFormatGNUFieldArgumentsPreserveParsedPrefixAndReportDiagnostics(t *test
 				"invalid field width: '2147483648z'",
 			},
 		},
+		{
+			name:       "oversized negative width is rejected",
+			format:     "%*dX",
+			args:       []string{"-2147483649", "1"},
+			wantOutput: "",
+			wantDiag:   []string{"invalid field width: '-2147483649'"},
+		},
+		{
+			name:       "oversized negative precision is omitted",
+			format:     "%.*d",
+			args:       []string{"-2147483649", "1"},
+			wantOutput: "1",
+			wantDiag:   nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -467,10 +481,12 @@ func TestFormatGNUHandlesBareHexPrefixesAndFloatOverflow(t *testing.T) {
 		{name: "bare hex prefix with trailing text", format: "%d", args: []string{"0xg"}, wantOutput: "0", wantDiag: "'0xg': value not completely converted"},
 		{name: "float overflow", format: "%f", args: []string{"1e5000"}, wantOutput: "inf", wantDiag: "'1e5000': Result too large"},
 		{name: "uppercase float overflow", format: "%F", args: []string{"1e5000"}, wantOutput: "INF", wantDiag: "'1e5000': Result too large"},
+		{name: "space signed float overflow", format: "% f", args: []string{"1e5000"}, wantOutput: " inf", wantDiag: "'1e5000': Result too large"},
 	}
 	if runtime.GOOS == "linux" {
 		tests[2].wantDiag = "'1e5000': Numerical result out of range"
 		tests[3].wantDiag = "'1e5000': Numerical result out of range"
+		tests[4].wantDiag = "'1e5000': Numerical result out of range"
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

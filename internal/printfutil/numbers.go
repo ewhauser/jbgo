@@ -29,7 +29,7 @@ type gnuNumericParse struct {
 
 func parseWidthArg(arg string, present bool, opts Options) (int, bool, []string, bool) {
 	if opts.Dialect == DialectGNU {
-		return parseGNUFieldArg(arg, present, opts, "field width")
+		return parseGNUFieldArg(arg, present, opts, "field width", true)
 	}
 	value, ok, diag := parseShellWidthArg(arg, present)
 	return value, ok, singleDiagnostic(diag), false
@@ -37,7 +37,7 @@ func parseWidthArg(arg string, present bool, opts Options) (int, bool, []string,
 
 func parsePrecisionArg(arg string, present bool, opts Options) (int, bool, []string, bool) {
 	if opts.Dialect == DialectGNU {
-		return parseGNUFieldArg(arg, present, opts, "precision")
+		return parseGNUFieldArg(arg, present, opts, "precision", false)
 	}
 	value, ok, diag := parseShellWidthArg(arg, present)
 	return value, ok, singleDiagnostic(diag), false
@@ -54,7 +54,7 @@ func parseShellWidthArg(arg string, present bool) (int, bool, string) {
 	return clampInt(parsed.value), true, ""
 }
 
-func parseGNUFieldArg(arg string, present bool, opts Options, label string) (int, bool, []string, bool) {
+func parseGNUFieldArg(arg string, present bool, opts Options, label string, rejectNegativeOverflow bool) (int, bool, []string, bool) {
 	if !present {
 		return 0, true, nil, false
 	}
@@ -63,7 +63,12 @@ func parseGNUFieldArg(arg string, present bool, opts Options, label string) (int
 	diags := singleDiagnostic(parsed.diagnose)
 	if parsed.value != nil {
 		maxLimit := big.NewInt(int64(gnuMaxArgIndex))
+		minLimit := big.NewInt(-int64(gnuMaxArgIndex))
 		if parsed.value.Sign() < 0 {
+			if rejectNegativeOverflow && parsed.value.Cmp(minLimit) < 0 {
+				diags = append(diags, fmt.Sprintf("invalid %s: %s", label, quoteGNUDiagnosticOperand(arg)))
+				return value, false, diags, true
+			}
 			return value, true, diags, false
 		}
 		if parsed.value.Cmp(maxLimit) > 0 {
@@ -326,6 +331,8 @@ func formatGNUFloat(spec *formatSpec, value float64) string {
 		sign = "-"
 	case spec.forceSign:
 		sign = "+"
+	case spec.spaceSign:
+		sign = " "
 	}
 	text := sign + token
 	if !spec.widthSet || len(text) >= spec.width {
