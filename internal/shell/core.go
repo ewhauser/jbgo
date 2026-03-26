@@ -53,7 +53,6 @@ type Execution struct {
 	BuiltinCommandDir string
 	CompletionState   *shellstate.CompletionState
 	Stdin             io.Reader
-	TTY               io.Reader
 	Stdout            io.Writer
 	Stderr            io.Writer
 	FS                gbfs.FileSystem
@@ -133,9 +132,6 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	if exec.Stdin == nil {
 		exec.Stdin = strings.NewReader("")
 	}
-	if exec.TTY == nil {
-		exec.TTY = exec.Stdin
-	}
 	if exec.Stdout == nil {
 		exec.Stdout = io.Discard
 	}
@@ -192,9 +188,6 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 	}
 	if exec.Stdin == nil {
 		exec.Stdin = strings.NewReader("")
-	}
-	if exec.TTY == nil {
-		exec.TTY = exec.Stdin
 	}
 	if exec.Stdout == nil {
 		exec.Stdout = io.Discard
@@ -728,7 +721,6 @@ func invokeResolvedCommand(
 		Env:        currentEnv,
 		Cwd:        virtualWD,
 		Stdin:      stdin,
-		TTY:        exec.TTY,
 		Stdout:     stdout,
 		Stderr:     stderr,
 		Now:        exec.Now,

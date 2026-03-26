@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	stdfs "io/fs"
 	"os"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestNullDeviceSemanticsAcrossSandboxBackends(t *testing.T) {
@@ -103,6 +106,40 @@ func TestVirtualDeviceChildrenCanBeCreatedOnHostReadWriteFS(t *testing.T) {
 	}
 }
 
+func TestExecutionTTYShadowsSandboxTTYPath(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/dev/tty", []byte("sandbox tty\n"))
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "cat /dev/tty\n",
+		Stdin:  fakeRuntimeTTYReader{Reader: strings.NewReader("virtual tty\n")},
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "virtual tty\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+
+	file, err := session.FileSystem().Open(context.Background(), "/dev/tty")
+	if err != nil {
+		t.Fatalf("Open(/dev/tty) error = %v", err)
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("ReadAll(/dev/tty) error = %v", err)
+	}
+	if got, want := string(data), "sandbox tty\n"; got != want {
+		t.Fatalf("sandbox /dev/tty = %q, want %q", got, want)
+	}
+}
+
 func TestFullDeviceReadAndWriteSemantics(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +166,23 @@ func TestFullDeviceReadAndWriteSemantics(t *testing.T) {
 		t.Fatal("Write(/dev/full) unexpectedly succeeded")
 	}
 }
+
+type fakeRuntimeTTYReader struct {
+	*strings.Reader
+}
+
+func (r fakeRuntimeTTYReader) Stat() (stdfs.FileInfo, error) {
+	return fakeRuntimeTTYInfo{}, nil
+}
+
+type fakeRuntimeTTYInfo struct{}
+
+func (fakeRuntimeTTYInfo) Name() string         { return "tty" }
+func (fakeRuntimeTTYInfo) Size() int64          { return 0 }
+func (fakeRuntimeTTYInfo) Mode() stdfs.FileMode { return stdfs.ModeCharDevice | 0o600 }
+func (fakeRuntimeTTYInfo) ModTime() time.Time   { return time.Time{} }
+func (fakeRuntimeTTYInfo) IsDir() bool          { return false }
+func (fakeRuntimeTTYInfo) Sys() any             { return nil }
 
 func TestBuiltinWritesToFullDeviceFail(t *testing.T) {
 	t.Parallel()

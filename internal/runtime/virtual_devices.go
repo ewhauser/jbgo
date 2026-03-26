@@ -19,8 +19,10 @@ import (
 
 const (
 	virtualDeviceDir            = "/dev"
+	virtualConsoleDevice        = "/dev/console"
 	virtualFullDevice           = "/dev/full"
 	virtualNullDevice           = "/dev/null"
+	virtualTTYDevice            = "/dev/tty"
 	virtualUrandomDevice        = "/dev/urandom"
 	virtualZeroDevice           = "/dev/zero"
 	virtualUrandomSeed   uint64 = 0x9e3779b97f4a7c15
@@ -58,6 +60,12 @@ func (f *virtualDeviceFS) Open(ctx context.Context, name string) (gbfs.File, err
 
 func (f *virtualDeviceFS) OpenFile(ctx context.Context, name string, flag int, perm stdfs.FileMode) (gbfs.File, error) {
 	abs := f.resolve(name)
+	if (abs == virtualConsoleDevice || abs == virtualTTYDevice) && executionTTYFromContext(ctx) != nil {
+		if flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
+			return nil, &os.PathError{Op: "open", Path: abs, Err: stdfs.ErrExist}
+		}
+		return newExecutionTTYFile(abs, flag, executionTTYFromContext(ctx)), nil
+	}
 	switch {
 	case abs == virtualFullDevice:
 		if flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
@@ -93,6 +101,12 @@ func (f *virtualDeviceFS) OpenFile(ctx context.Context, name string, flag int, p
 
 func (f *virtualDeviceFS) Stat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	abs := f.resolve(name)
+	if abs == virtualConsoleDevice && executionTTYFromContext(ctx) != nil {
+		return virtualTTYInfo("console"), nil
+	}
+	if abs == virtualTTYDevice && executionTTYFromContext(ctx) != nil {
+		return virtualTTYInfo("tty"), nil
+	}
 	switch {
 	case abs == virtualDeviceDir:
 		return virtualDirInfo("dev"), nil
@@ -113,6 +127,12 @@ func (f *virtualDeviceFS) Stat(ctx context.Context, name string) (stdfs.FileInfo
 
 func (f *virtualDeviceFS) Lstat(ctx context.Context, name string) (stdfs.FileInfo, error) {
 	abs := f.resolve(name)
+	if abs == virtualConsoleDevice && executionTTYFromContext(ctx) != nil {
+		return virtualTTYInfo("console"), nil
+	}
+	if abs == virtualTTYDevice && executionTTYFromContext(ctx) != nil {
+		return virtualTTYInfo("tty"), nil
+	}
 	switch {
 	case abs == virtualDeviceDir:
 		return virtualDirInfo("dev"), nil
@@ -371,11 +391,16 @@ func (f *virtualDeviceFS) readVirtualDeviceDir(ctx context.Context) ([]stdfs.Dir
 		return nil, err
 	}
 	byName := make(map[string]stdfs.DirEntry, len(baseEntries)+1)
+	hasTTY := executionTTYFromContext(ctx) != nil
 	for _, entry := range baseEntries {
-		if entry == nil || entry.Name() == "full" || entry.Name() == "null" {
+		if entry == nil || entry.Name() == "full" || entry.Name() == "null" || (hasTTY && (entry.Name() == "console" || entry.Name() == "tty")) {
 			continue
 		}
 		byName[entry.Name()] = entry
+	}
+	if hasTTY {
+		byName["console"] = stdfs.FileInfoToDirEntry(virtualTTYInfo("console"))
+		byName["tty"] = stdfs.FileInfoToDirEntry(virtualTTYInfo("tty"))
 	}
 	byName["full"] = stdfs.FileInfoToDirEntry(virtualFullInfo())
 	byName["null"] = stdfs.FileInfoToDirEntry(virtualNullInfo())

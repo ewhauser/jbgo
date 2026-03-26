@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -91,6 +92,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	stderr := newCaptureBuffer(limits.MaxStderrBytes)
 	stdoutWriter := newCapturePassthroughWriter(stdout, req.Stdout)
 	stderrWriter := newCapturePassthroughWriter(stderr, req.Stderr)
+	ctx = bindExecutionTTY(ctx, req.Stdin, stdoutWriter)
 	executionID := nextTraceID("exec")
 	recorder, traceBuffer := newExecutionTraceRecorder(ctx, s.id, executionID, s.cfg.Tracing, true)
 	if s.layout != nil {
@@ -331,6 +333,8 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 			recorder = trace.NewFanout(recorder, layoutRecorder)
 		}
 	}
+	terminalStdin := bufio.NewReader(stdinOrEmpty(req.Stdin))
+	ctx = forceExecutionTTY(ctx, terminalStdin, writerOrDiscard(req.Stdout))
 	result, err := shell.Interact(ctx, &shell.Execution{
 		Name:            defaultName(req.Name),
 		Args:            req.Args,
@@ -343,7 +347,7 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 		HostPlatform:    hostPlatform(s.cfg.Host),
 		HostProcessMeta: processMeta,
 		NewPipe:         s.cfg.Host.NewPipe,
-		Stdin:           stdinOrEmpty(req.Stdin),
+		Stdin:           terminalStdin,
 		Stdout:          writerOrDiscard(req.Stdout),
 		Stderr:          writerOrDiscard(req.Stderr),
 		FS:              s.fs,

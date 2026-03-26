@@ -35,7 +35,6 @@ type Invocation struct {
 	Env                   map[string]string
 	Cwd                   string
 	Stdin                 io.Reader
-	TTY                   io.Reader
 	Stdout                io.Writer
 	Stderr                io.Writer
 	FS                    *CommandFS

@@ -39,10 +39,10 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 	}
 	ctx = shellstate.WithCompletionState(ctx, exec.CompletionState)
 	exec.Interactive = true
-	if exec.TTY == nil {
-		exec.TTY = exec.Stdin
+	input, ok := exec.Stdin.(*bufio.Reader)
+	if !ok {
+		input = bufio.NewReader(exec.Stdin)
 	}
-	input := bufio.NewReader(exec.Stdin)
 	exec.Stdin = strings.NewReader("")
 	runnerExec := *exec
 	cleanupProcSubst := withProcSubstScope(&runnerExec)

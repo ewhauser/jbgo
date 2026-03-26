@@ -247,9 +247,6 @@ func (c *Python) runRepl(ctx context.Context, inv *commands.Invocation, source p
 }
 
 func (c *Python) terminalReader(ctx context.Context, inv *commands.Invocation) (io.Reader, io.Closer, string, error) {
-	if terminal := pythonTTYReader(inv.TTY); terminal != nil {
-		return terminal, nil, "", nil
-	}
 	if terminal := pythonTTYReader(inv.Stdin); terminal != nil {
 		return terminal, nil, "", nil
 	}
@@ -377,9 +374,6 @@ func pythonInputIsTTY(inv *commands.Invocation) bool {
 			if descriptor := fd.Fd(); descriptor != 0 {
 				return term.IsTerminal(int(descriptor))
 			}
-		}
-		if terminal := pythonTTYReader(inv.TTY); terminal != nil {
-			return true
 		}
 		if terminal := pythonTTYReader(inv.Stdin); terminal != nil {
 			return true

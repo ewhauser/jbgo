@@ -29,7 +29,6 @@ type InvocationOptions struct {
 	Env                   map[string]string
 	Cwd                   string
 	Stdin                 io.Reader
-	TTY                   io.Reader
 	Stdout                io.Writer
 	Stderr                io.Writer
 	Now                   func() time.Time
@@ -69,7 +68,6 @@ func NewInvocation(opts *InvocationOptions) *Invocation {
 		Env:                   cloneEnv(opts.Env),
 		Cwd:                   gbfs.Resolve("/", opts.Cwd),
 		Stdin:                 opts.Stdin,
-		TTY:                   opts.TTY,
 		Stdout:                opts.Stdout,
 		Stderr:                opts.Stderr,
 		now:                   opts.Now,
