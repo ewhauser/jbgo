@@ -595,7 +595,6 @@ func cpCopyResolvedSource(ctx context.Context, inv *Invocation, source, srcAbs s
 		return err
 	}
 	if skip {
-		cpRememberPreservedLink(state, opts, srcAbs, srcInfo, srcLinkInfo, destAbs, destExists)
 		if opts != nil && opts.debug {
 			return cpWriteCopyResult(inv, source, destDisplay, opts, "skipped")
 		}
@@ -686,7 +685,7 @@ func cpCopyResolvedSource(ctx context.Context, inv *Invocation, source, srcAbs s
 					return err
 				}
 			} else if cpShouldPreserveNamedPipe(opts) {
-				if err := cpCopyNamedPipe(ctx, inv, destAbs, srcInfo); err != nil {
+				if err := cpCopyNamedPipe(ctx, inv, destAbs, destDisplay, srcInfo, destInfo, destExists); err != nil {
 					return err
 				}
 			} else if err := copyFileContents(ctx, inv, copySourceAbs, writeTargetAbs, cpCreateFileMode(inv, srcInfo)); err != nil {
@@ -1061,6 +1060,9 @@ func cpEnsureParentHierarchy(ctx context.Context, inv *Invocation, source, destA
 	}
 	suffix := cpParentsPath(source)
 	rootDest := strings.TrimSuffix(destAbs, "/"+suffix)
+	if rootDest == "" {
+		rootDest = "/"
+	}
 	if rootDest == destAbs {
 		return nil, nil
 	}
@@ -1207,7 +1209,15 @@ func cpEnsureSpecialDestination(inv *Invocation, destDisplay string, destInfo st
 	return nil
 }
 
-func cpCopyNamedPipe(ctx context.Context, inv *Invocation, destAbs string, srcInfo stdfs.FileInfo) error {
+func cpCopyNamedPipe(ctx context.Context, inv *Invocation, destAbs, destDisplay string, srcInfo, destInfo stdfs.FileInfo, destExists bool) error {
+	if destExists {
+		if destInfo != nil && destInfo.IsDir() {
+			return exitf(inv, 1, "cp: cannot overwrite directory %q with non-directory", destDisplay)
+		}
+		if err := inv.FS.Remove(ctx, destAbs, true); err != nil && !errors.Is(err, stdfs.ErrNotExist) {
+			return &ExitError{Code: 1, Err: err}
+		}
+	}
 	if err := ensureParentDirExists(ctx, inv, destAbs); err != nil {
 		return err
 	}

@@ -879,6 +879,29 @@ func TestCPParentsKeepsLeadingDotDotInsideTargetTree(t *testing.T) {
 	}
 }
 
+func TestCPParentsRootTargetKeepsIntermediatePathsAbsolute(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/case/root/cwd /tmp/case/root/peer/a/b\n" +
+			"echo payload > /tmp/case/root/peer/a/b/file\n" +
+			"cd /tmp/case/root/cwd\n" +
+			"cp --parents ../peer/a/b/file /\n" +
+			"cat /peer/a/b/file\n" +
+			"test -e /tmp/case/root/cwd/peer && echo escaped || echo contained\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "payload\ncontained\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCPParentsRejectsNoTargetDirectory(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -971,6 +994,28 @@ func TestCPPlainFIFOProducesRegularFile(t *testing.T) {
 	}
 }
 
+func TestCPArchiveFIFOOverwritesExistingDestination(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkfifo /tmp/src.pipe\n" +
+			"printf 'old\\n' > /tmp/dst.pipe\n" +
+			"cp -a /tmp/src.pipe /tmp/dst.pipe\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"test -p /tmp/dst.pipe && echo pipe || echo regular\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\npipe\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestCPPreserveLinksRelinksMissingDestinationWhenUpdateOlderSkipsCanonical(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -1038,6 +1083,47 @@ func TestCPPreserveLinksHonorsNoClobberBeforeRelinking(t *testing.T) {
 		t.Fatalf("dst/a after mutation = %q, want %q", got, want)
 	}
 	if got, want := lines[3], "after-b=keep-b"; got != want {
+		t.Fatalf("dst/b after mutating dst/a = %q, want %q", got, want)
+	}
+}
+
+func TestCPPreserveLinksSkipDoesNotSeedCanonicalDestination(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src /tmp/dst\n" +
+			"printf 'source' > /tmp/src/a\n" +
+			"ln /tmp/src/a /tmp/src/b\n" +
+			"printf 'keep' > /tmp/dst/a\n" +
+			"cd /tmp\n" +
+			"cp -an src/. dst\n" +
+			"printf 'dst-a=%s\\n' \"$(cat /tmp/dst/a)\"\n" +
+			"printf 'dst-b=%s\\n' \"$(cat /tmp/dst/b)\"\n" +
+			"printf '+tail' >> /tmp/dst/a\n" +
+			"printf 'after-a=%s\\n' \"$(cat /tmp/dst/a)\"\n" +
+			"printf 'after-b=%s\\n' \"$(cat /tmp/dst/b)\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("Stdout lines = %q, want 4 lines", result.Stdout)
+	}
+	if got, want := lines[0], "dst-a=keep"; got != want {
+		t.Fatalf("dst/a = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "dst-b=source"; got != want {
+		t.Fatalf("dst/b = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "after-a=keep+tail"; got != want {
+		t.Fatalf("dst/a after mutation = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "after-b=source"; got != want {
 		t.Fatalf("dst/b after mutating dst/a = %q, want %q", got, want)
 	}
 }
