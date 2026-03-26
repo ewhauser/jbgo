@@ -565,11 +565,11 @@ func statMajorMinorValue(dev uint64, modifier byte) string {
 }
 
 func statMajor(dev uint64) uint64 {
-	return (dev >> 8) & 0xfff
+	return ((dev >> 8) & 0xfff) | uint64(uint32(dev>>32)&^uint32(0xfff))
 }
 
 func statMinor(dev uint64) uint64 {
-	return (dev & 0xff) | ((dev >> 12) & 0xfff00)
+	return (dev & 0xff) | uint64(uint32(dev>>12)&^uint32(0xff))
 }
 
 func statAccessTime(info stdfs.FileInfo) (time.Time, bool) {

@@ -64,3 +64,30 @@ func TestStatRelativeDereferenceAndTrailingSlashDoNotRequireRealpath(t *testing.
 		t.Fatalf("stderr(trailing slash) = %q, want empty", got)
 	}
 }
+
+func TestStatMajorMinorPreserveHighLinuxDevBits(t *testing.T) {
+	t.Parallel()
+
+	const (
+		major = uint64(0x12345)
+		minor = uint64(0x2345678)
+	)
+
+	dev := (minor & 0xff) |
+		((major & 0xfff) << 8) |
+		((minor & ^uint64(0xff)) << 12) |
+		((major & ^uint64(0xfff)) << 32)
+
+	if got := statMajor(dev); got != major {
+		t.Fatalf("statMajor(%#x) = %#x, want %#x", dev, got, major)
+	}
+	if got := statMinor(dev); got != minor {
+		t.Fatalf("statMinor(%#x) = %#x, want %#x", dev, got, minor)
+	}
+	if got, want := statMajorMinorValue(dev, 'H'), "74565"; got != want {
+		t.Fatalf("statMajorMinorValue(%#x, 'H') = %q, want %q", dev, got, want)
+	}
+	if got, want := statMajorMinorValue(dev, 'L'), "36984440"; got != want {
+		t.Fatalf("statMajorMinorValue(%#x, 'L') = %q, want %q", dev, got, want)
+	}
+}
