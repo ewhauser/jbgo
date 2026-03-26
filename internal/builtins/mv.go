@@ -586,6 +586,9 @@ func mvShouldSkipExisting(ctx context.Context, inv *Invocation, srcInfo stdfs.Fi
 		if destInfo == nil {
 			return false, nil
 		}
+		if srcInfo.IsDir() || destInfo.IsDir() {
+			return false, nil
+		}
 		return !srcInfo.ModTime().After(destInfo.ModTime()), nil
 	default:
 		return false, nil

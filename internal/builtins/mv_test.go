@@ -160,3 +160,31 @@ func TestMVUpdateModesIsolated(t *testing.T) {
 		t.Fatalf("Stderr = %q, want update=none same-file case to skip quietly", result.Stderr)
 	}
 }
+
+func TestMVUpdateOlderDoesNotSkipDirectoryReplacementIsolated(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir srcdir dstdir\n" +
+			"echo src > srcdir/file\n" +
+			"touch -d '2024-01-01 00:00:00 UTC' srcdir\n" +
+			"touch -d '2024-01-02 00:00:00 UTC' dstdir\n" +
+			"mv -u -T srcdir dstdir\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -e srcdir ] && echo srcdir-exists || echo srcdir-gone\n" +
+			"cat dstdir/file\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\nsrcdir-gone\nsrc\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty stderr", result.Stderr)
+	}
+}
