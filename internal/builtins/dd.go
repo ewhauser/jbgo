@@ -983,6 +983,17 @@ func ddHandleIsNamedPipe(ctx context.Context, inv *Invocation, handle any, path 
 	return info.Mode()&stdfs.ModeNamedPipe != 0
 }
 
+func ddHandleIsRegularFile(ctx context.Context, inv *Invocation, handle any, path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := ddStatHandle(ctx, inv, handle, path)
+	if err != nil || info == nil {
+		return false
+	}
+	return info.Mode().IsRegular()
+}
+
 func ddSeekCurrent(handle any, delta uint64) bool {
 	if delta == 0 {
 		return true
@@ -1114,7 +1125,7 @@ func openDdOutput(ctx context.Context, inv *Invocation, settings *ddSettings) (d
 			if writer, ok := openDdSeekableWriter(inv.Stdout, settings, int64(seekBytes)); ok {
 				return writer, nil
 			}
-			if ddHandleIsNamedPipe(ctx, inv, inv.Stdout, path) {
+			if !ddHandleIsRegularFile(ctx, inv, inv.Stdout, path) {
 				return nil, exitf(inv, 1, "dd: %s: cannot seek: Illegal seek", quoteGNUOperand("standard output"))
 			}
 			writer, err := openDdPathOutput(ctx, inv, settings, path, ddRedirectOffset(inv.Stdout), true)
@@ -1636,6 +1647,11 @@ func (w *ddSeekableWriter) Finalize(context.Context, *Invocation) error {
 }
 
 func (w *ddSeekableWriter) SkipZeros(size int) (ddWriteStats, error) {
+	if len(w.pending) > 0 {
+		if _, err := w.Flush(); err != nil {
+			return ddWriteStats{}, err
+		}
+	}
 	if _, err := w.seeker.Seek(int64(size), io.SeekCurrent); err != nil {
 		return ddWriteStats{}, err
 	}
@@ -1653,6 +1669,11 @@ func (w *ddSeekableWriter) writeChunks(data []byte) (ddWriteStats, error) {
 }
 
 func (w *ddFileWriter) SkipZeros(size int) (ddWriteStats, error) {
+	if len(w.pending) > 0 {
+		if _, err := w.Flush(); err != nil {
+			return ddWriteStats{}, err
+		}
+	}
 	w.cursor += size
 	w.ensureSize()
 	return ddCountWriteStats(size, w.obs), nil
