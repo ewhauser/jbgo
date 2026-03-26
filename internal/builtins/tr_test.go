@@ -166,3 +166,24 @@ func TestTRRangeParsingWarnsOnlyOncePerAmbiguousEscape(t *testing.T) {
 		t.Fatalf("Stderr = %q, want reverse-range diagnostic", result.Stderr)
 	}
 }
+
+func TestTRComplementedClassWithOverlappingRangeRejectsNonSingletonString2(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '' | tr -c '[:upper:]\\000-\\370' '[:lower:]'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := result.ExitCode, 1; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+	}
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
+	}
+	if got, want := result.Stderr, "tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
