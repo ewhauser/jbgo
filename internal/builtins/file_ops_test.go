@@ -488,6 +488,238 @@ func TestMVSupportsNoClobberVerboseAndMovingFileIntoDirectory(t *testing.T) {
 	}
 }
 
+func TestMVNoTargetDirectoryHandlesEmptyAndRejectsInvalidTargets(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p d/sub empty src d2/sub e2\n" +
+			"touch f\n" +
+			"mv -fT d empty\n" +
+			"printf 'status1=%s\\n' \"$?\"\n" +
+			"[ -d empty/sub ] && echo moved-empty\n" +
+			"mv -fT src d2 2>/dev/null\n" +
+			"printf 'status2=%s\\n' \"$?\"\n" +
+			"mv -fT f e2 2>/dev/null\n" +
+			"printf 'status3=%s\\n' \"$?\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status1=0\nmoved-empty\nstatus2=1\nstatus3=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestMVRejectsDirectoryFileMismatches(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p dir/file\n" +
+			": > file\n" +
+			"mv dir file 2>/dev/null\n" +
+			"printf 'status1=%s\\n' \"$?\"\n" +
+			"mv file dir 2>/dev/null\n" +
+			"printf 'status2=%s\\n' \"$?\"\n" +
+			"[ -d dir ] && echo dir-exists\n" +
+			"[ -d dir/file ] && echo dir-file-exists\n" +
+			"[ -f file ] && echo file-exists\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status1=1\nstatus2=1\ndir-exists\ndir-file-exists\nfile-exists\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestMVContinuesAfterSelfSubdirectoryError(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "rm -rf toself file\n" +
+			"mkdir -p toself/a\n" +
+			": > file\n" +
+			"mv toself file toself\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -d toself ] && echo dir-exists\n" +
+			"[ ! -d toself/toself ] && echo no-self-copy\n" +
+			"[ -f toself/file ] && echo file-moved\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\ndir-exists\nno-self-copy\nfile-moved\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "mv: cannot move 'toself' to a subdirectory of itself, 'toself/toself'\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestMVDuplicateDirectoryWarningAfterBlockedMove(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "rm -rf b\n" +
+			"mkdir b\n" +
+			"mv --verbose ./b b b/\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -d b ] && echo dir-still-exists\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\ndir-still-exists\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; !strings.Contains(got, "mv: cannot move './b' to a subdirectory of itself, 'b/b'\n") || !strings.Contains(got, "mv: warning: source directory 'b' specified more than once\n") {
+		t.Fatalf("Stderr = %q, want self-subdir error plus duplicate warning", got)
+	}
+}
+
+func TestMVReportsPermissionDeniedOnce(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p no-write/dir\n" +
+			"chmod ug-w no-write\n" +
+			"mv no-write/dir .\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stderr, "mv: cannot move 'no-write/dir' to './dir': Permission denied\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestMVSymlinkOntoHardlinkToSameFileFails(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "touch f\n" +
+			"ln f h\n" +
+			"ln -s f s\n" +
+			"mv s f\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -L s ] && echo symlink-still-there\n" +
+			"[ -f f ] && echo file-still-there\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nsymlink-still-there\nfile-still-there\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "mv: 's' and 'f' are the same file\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestMVRejectsTrailingSlashMissingFileTargets(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: ": > plain\n" +
+			"mv plain missing/ 2>/dev/null\n" +
+			"printf 'status1=%s\\n' \"$?\"\n" +
+			"[ -f plain ] && echo plain-still-there\n" +
+			": > plain2\n" +
+			"mv -T plain2 missing2/ 2>/dev/null\n" +
+			"printf 'status2=%s\\n' \"$?\"\n" +
+			"[ -f plain2 ] && echo plain2-still-there\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status1=1\nplain-still-there\nstatus2=1\nplain2-still-there\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestMVTargetDirectoryIsValidatedOnceBeforeSources(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: ": > src1\n" +
+			": > src2\n" +
+			"mv -t missing src1 src2\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -f src1 ] && echo src1-still-there\n" +
+			"[ -f src2 ] && echo src2-still-there\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nsrc1-still-there\nsrc2-still-there\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "mv: target directory 'missing': No such file or directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestMVBackupRefusesToDeleteDirectoryCollision(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo src > x\n" +
+			"mkdir d\n" +
+			"echo dst > d/x\n" +
+			"mkdir d/x~\n" +
+			"mv --backup=simple x d/\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -f x ] && echo src-still-there\n" +
+			"[ -f d/x ] && echo dst-still-there\n" +
+			"[ -d d/x~ ] && echo backup-dir-still-there\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nsrc-still-there\ndst-still-there\nbackup-dir-still-there\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "mv: cannot backup 'd/x': Is a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestFindSupportsRelativeRootAndNameFilter(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

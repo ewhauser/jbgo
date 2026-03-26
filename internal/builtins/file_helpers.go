@@ -7,7 +7,6 @@ import (
 	stdfs "io/fs"
 	"os"
 	"path"
-	"strings"
 )
 
 func ensureParentDirExists(ctx context.Context, inv *Invocation, targetAbs string) error {
@@ -71,24 +70,4 @@ func writeFileContents(ctx context.Context, inv *Invocation, targetAbs string, d
 	}
 	recordFileMutation(inv.TraceRecorder(), "write", targetAbs, targetAbs, targetAbs)
 	return nil
-}
-
-func resolveDestination(ctx context.Context, inv *Invocation, sourceAbs, destArg string, multipleSources bool) (destAbs string, destInfo stdfs.FileInfo, destExists bool, err error) {
-	destInfo, destAbs, destExists, err = statMaybe(ctx, inv, destArg)
-	if err != nil {
-		return "", nil, false, err
-	}
-	if multipleSources {
-		if !destExists || !destInfo.IsDir() {
-			return "", nil, false, exitf(inv, 1, "target %q is not a directory", destArg)
-		}
-		return path.Join(destAbs, path.Base(sourceAbs)), destInfo, true, nil
-	}
-	if destExists && destInfo.IsDir() {
-		return path.Join(destAbs, path.Base(sourceAbs)), destInfo, true, nil
-	}
-	if strings.HasSuffix(destArg, "/") {
-		return "", nil, false, exitf(inv, 1, "target %q is not a directory", destArg)
-	}
-	return destAbs, destInfo, destExists, nil
 }
