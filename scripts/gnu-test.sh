@@ -40,7 +40,21 @@ prepare_workdir() {
   mkdir -p "$workdir"
   cp -a "$GNU_SOURCE_DIR"/. "$workdir"/
   relocate_workdir "$workdir"
+  populate_compat_devices "$workdir"
   printf '%s\n' "$workdir"
+}
+
+populate_compat_devices() {
+  local workdir=$1
+  local devdir=$workdir/dev
+  local name
+
+  mkdir -p "$devdir"
+  for name in full null urandom zero; do
+    if [[ -e /dev/$name ]]; then
+      ln -sfn "/dev/$name" "$devdir/$name"
+    fi
+  done
 }
 
 preserve_workdir() {

@@ -137,17 +137,11 @@ func (c *Seq) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 		}
 		if wroteAny {
 			if _, err := writer.WriteString(opts.separator); err != nil {
-				if seqBrokenPipe(err) {
-					return nil
-				}
-				return &ExitError{Code: 1, Err: err}
+				return seqWriteError(inv, err)
 			}
 		}
 		if _, err := writer.WriteString(text); err != nil {
-			if seqBrokenPipe(err) {
-				return nil
-			}
-			return &ExitError{Code: 1, Err: err}
+			return seqWriteError(inv, err)
 		}
 		wroteAny = true
 
@@ -160,17 +154,11 @@ func (c *Seq) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCom
 
 	if wroteAny {
 		if _, err := writer.WriteString(opts.terminator); err != nil {
-			if seqBrokenPipe(err) {
-				return nil
-			}
-			return &ExitError{Code: 1, Err: err}
+			return seqWriteError(inv, err)
 		}
 	}
 	if err := writer.Flush(); err != nil {
-		if seqBrokenPipe(err) {
-			return nil
-		}
-		return &ExitError{Code: 1, Err: err}
+		return seqWriteError(inv, err)
 	}
 	return nil
 }
@@ -743,6 +731,16 @@ func seqFindDirective(format string) (start, end int, err error) {
 
 func seqBrokenPipe(err error) bool {
 	return errors.Is(err, io.ErrClosedPipe) || strings.Contains(strings.ToLower(err.Error()), "broken pipe")
+}
+
+func seqWriteError(inv *Invocation, err error) error {
+	if seqBrokenPipe(err) {
+		return nil
+	}
+	if diag, ok := shellWriteErrorDiagnostic("seq", err); ok {
+		return seqErrorf(inv, "%s", diag)
+	}
+	return &ExitError{Code: 1, Err: err}
 }
 
 func ptrInt(value int) *int {

@@ -3,10 +3,14 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	stdfs "io/fs"
 	"maps"
 	"math"
+	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -45,18 +49,18 @@ const (
 
 type splitNumberSpec struct {
 	mode   splitNumberMode
-	kth    int
-	chunks int
+	kth    uint64
+	chunks uint64
 }
 
 type splitOptions struct {
 	mode             splitMode
-	lines            int
-	bytes            int
-	lineBytes        int
+	lines            uint64
+	bytes            uint64
+	lineBytes        uint64
 	number           splitNumberSpec
 	suffixKind       splitSuffixKind
-	suffixStart      int
+	suffixStart      uint64
 	suffixLen        int
 	suffixAutoGrow   bool
 	additionalSuffix string
@@ -66,10 +70,28 @@ type splitOptions struct {
 	elideEmpty       bool
 }
 
-type splitChunkOutput struct {
-	name string
+type splitInput struct {
 	data []byte
+	abs  string
+	info stdfs.FileInfo
 }
+
+type splitSuffixGenerator struct {
+	alphabet    string
+	autoGrow    bool
+	width       int
+	start       uint64
+	initialized bool
+	carry       string
+	digits      []int
+}
+
+type splitSizeSuffix struct {
+	token string
+	mult  *big.Int
+}
+
+var splitSizeSuffixes = buildSplitSizeSuffixes()
 
 func NewSplit() *Split {
 	return &Split{}
@@ -136,21 +158,12 @@ func (c *Split) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 		return err
 	}
 
-	var data []byte
-	var inputAbs string
-	if inputName == "-" {
-		data, err = readAllStdin(ctx, inv)
-		if err != nil {
-			return err
-		}
-	} else {
-		data, inputAbs, err = readAllFile(ctx, inv, inputName)
-		if err != nil {
-			return err
-		}
+	input, err := readSplitInput(ctx, inv, inputName)
+	if err != nil {
+		return err
 	}
 
-	chunks, stdoutData, err := splitContent(data, &opts)
+	rawChunks, stdoutData, err := splitContent(input.data, &opts)
 	if err != nil {
 		return err
 	}
@@ -161,24 +174,38 @@ func (c *Split) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedC
 		return nil
 	}
 
-	for _, chunk := range chunks {
-		target := gbfs.Resolve(inv.Cwd, prefix+chunk.name+opts.additionalSuffix)
-		if inputAbs != "" && sameSplitOutputPath(ctx, target, inputAbs, inv) {
-			return exitf(inv, 1, "split: %s would overwrite input; aborting", quoteGNUOperand(target))
+	suffixes, err := newSplitSuffixGenerator(inv, &opts)
+	if err != nil {
+		return err
+	}
+	for _, chunk := range rawChunks {
+		if opts.elideEmpty && len(chunk) == 0 {
+			continue
+		}
+
+		name, err := suffixes.Next(inv)
+		if err != nil {
+			return err
+		}
+		displayName := prefix + name + opts.additionalSuffix
+		target := gbfs.Resolve(inv.Cwd, displayName)
+		resolvedTarget, targetInfo := splitResolveOutputTarget(ctx, inv, target)
+		if splitWouldOverwriteInput(ctx, inv, target, resolvedTarget, input.abs, input.info, targetInfo) {
+			return exitf(inv, 1, "split: %s would overwrite input; aborting", quoteGNUOperand(resolvedTarget))
 		}
 		if opts.verbose {
-			if _, err := fmt.Fprintf(inv.Stdout, "creating file '%s'\n", prefix+chunk.name+opts.additionalSuffix); err != nil {
+			if _, err := fmt.Fprintf(inv.Stdout, "creating file '%s'\n", displayName); err != nil {
 				return &ExitError{Code: 1, Err: err}
 			}
 		}
 		if opts.filter != "" {
-			if err := runSplitFilter(ctx, inv, opts.filter, prefix+chunk.name+opts.additionalSuffix, chunk.data); err != nil {
+			if err := runSplitFilter(ctx, inv, opts.filter, displayName, chunk); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := writeFileContents(ctx, inv, target, chunk.data, stdfs.FileMode(0o644)); err != nil {
-			return err
+		if err := writeFileContents(ctx, inv, resolvedTarget, chunk, stdfs.FileMode(0o644)); err != nil {
+			return exitf(inv, 1, "split: %s: %s", displayName, splitWriteErrorText(err))
 		}
 	}
 	return nil
@@ -238,18 +265,18 @@ func parseSplitStrategy(inv *Invocation, matches *ParsedCommand, opts *splitOpti
 	selected := 0
 	if matches.Has("obsolete-lines") {
 		selected++
-		value, err := parseSplitPositiveInt(inv, matches.Value("obsolete-lines"), "number of lines")
+		value, err := parseSplitPositiveCount(matches.Value("obsolete-lines"), true)
 		if err != nil {
-			return err
+			return exitf(inv, 1, "split: invalid number of lines %s", quoteGNUOperand(matches.Value("obsolete-lines")))
 		}
 		opts.mode = splitModeLines
 		opts.lines = value
 	}
 	if matches.Has("lines") {
 		selected++
-		value, err := parseSplitPositiveInt(inv, matches.Value("lines"), "number of lines")
+		value, err := parseSplitPositiveCount(matches.Value("lines"), false)
 		if err != nil {
-			return err
+			return exitf(inv, 1, "split: invalid number of lines %s", quoteGNUOperand(matches.Value("lines")))
 		}
 		opts.mode = splitModeLines
 		opts.lines = value
@@ -257,8 +284,8 @@ func parseSplitStrategy(inv *Invocation, matches *ParsedCommand, opts *splitOpti
 	if matches.Has("bytes") {
 		selected++
 		value, err := parseSplitSize(matches.Value("bytes"))
-		if err != nil || value <= 0 {
-			return exitf(inv, 1, "split: invalid byte count %q", matches.Value("bytes"))
+		if err != nil || value == 0 {
+			return exitf(inv, 1, "split: invalid byte count %s", quoteGNUOperand(matches.Value("bytes")))
 		}
 		opts.mode = splitModeBytes
 		opts.bytes = value
@@ -266,8 +293,8 @@ func parseSplitStrategy(inv *Invocation, matches *ParsedCommand, opts *splitOpti
 	if matches.Has("line-bytes") {
 		selected++
 		value, err := parseSplitSize(matches.Value("line-bytes"))
-		if err != nil || value <= 0 {
-			return exitf(inv, 1, "split: invalid byte count %q", matches.Value("line-bytes"))
+		if err != nil || value == 0 {
+			return exitf(inv, 1, "split: invalid byte count %s", quoteGNUOperand(matches.Value("line-bytes")))
 		}
 		opts.mode = splitModeLineBytes
 		opts.lineBytes = value
@@ -289,9 +316,9 @@ func parseSplitStrategy(inv *Invocation, matches *ParsedCommand, opts *splitOpti
 
 func parseSplitSuffixConfig(inv *Invocation, matches *ParsedCommand, opts *splitOptions) error {
 	if matches.Has("suffix-length") {
-		value, err := strconv.Atoi(matches.Value("suffix-length"))
-		if err != nil || value < 0 {
-			return exitf(inv, 1, "split: invalid suffix length %q", matches.Value("suffix-length"))
+		value, err := parseSplitSuffixLength(matches.Value("suffix-length"))
+		if err != nil {
+			return exitf(inv, 1, "split: invalid suffix length %s", quoteGNUOperand(matches.Value("suffix-length")))
 		}
 		if value > 0 {
 			opts.suffixLen = value
@@ -306,9 +333,9 @@ func parseSplitSuffixConfig(inv *Invocation, matches *ParsedCommand, opts *split
 			opts.suffixKind = splitSuffixNumeric
 			value := matches.Value("numeric-suffixes")
 			if value != "" {
-				start, err := strconv.Atoi(value)
-				if err != nil || start < 0 {
-					return exitf(inv, 1, "split: invalid suffix start %q", value)
+				start, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					return exitf(inv, 1, "split: invalid suffix start %s", quoteGNUOperand(value))
 				}
 				opts.suffixStart = start
 				opts.suffixAutoGrow = false
@@ -317,18 +344,21 @@ func parseSplitSuffixConfig(inv *Invocation, matches *ParsedCommand, opts *split
 			opts.suffixKind = splitSuffixHex
 			value := matches.Value("hex-suffixes")
 			if value != "" {
-				start, err := strconv.ParseInt(value, 16, 64)
-				if err != nil || start < 0 {
-					return exitf(inv, 1, "split: invalid suffix start %q", value)
+				start, err := strconv.ParseUint(value, 16, 64)
+				if err != nil {
+					return exitf(inv, 1, "split: invalid suffix start %s", quoteGNUOperand(value))
 				}
-				opts.suffixStart = int(start)
+				opts.suffixStart = start
 				opts.suffixAutoGrow = false
 			}
 		}
 	}
 
-	if opts.mode == splitModeNumber && opts.number.chunks > 0 && opts.suffixStart < opts.number.chunks {
-		required := splitRequiredSuffixLength(opts.suffixKind, opts.suffixStart+opts.number.chunks-1)
+	if opts.mode != splitModeNumber || opts.number.chunks == 0 {
+		return nil
+	}
+	if opts.suffixStart < opts.number.chunks {
+		required := splitRequiredSuffixLength(opts.suffixKind, splitSaturatingAdd(opts.suffixStart, opts.number.chunks-1))
 		if matches.Has("suffix-length") && opts.suffixLen > 0 && opts.suffixLen < required {
 			return exitf(inv, 1, "split: output file suffixes exhausted")
 		}
@@ -367,95 +397,94 @@ func decodeSplitSeparator(value string) (byte, error) {
 		return 0, nil
 	}
 	if len(value) != 1 {
-		return 0, fmt.Errorf("split: multi-character separator %q", value)
+		return 0, fmt.Errorf("split: multi-character separator %s", quoteGNUOperand(value))
 	}
 	return value[0], nil
 }
 
-func parseSplitPositiveInt(inv *Invocation, value, label string) (int, error) {
-	n, err := strconv.Atoi(value)
-	if err != nil || n <= 0 {
-		return 0, exitf(inv, 1, "split: invalid %s %q", label, value)
+func parseSplitPositiveCount(raw string, clampOverflow bool) (uint64, error) {
+	value := new(big.Int)
+	if _, ok := value.SetString(raw, 10); !ok || value.Sign() <= 0 {
+		return 0, fmt.Errorf("invalid count")
 	}
-	return n, nil
+	return splitBigUint64(value, clampOverflow)
 }
 
-func parseSplitSize(value string) (int, error) {
-	if value == "" {
+func parseSplitSize(raw string) (uint64, error) {
+	if raw == "" {
 		return 0, fmt.Errorf("empty size")
 	}
-	multiplier := 1
-	last := value[len(value)-1]
-	switch last {
-	case 'b':
-		multiplier = 1
-		value = value[:len(value)-1]
-	case 'k', 'K':
-		multiplier = 1024
-		value = value[:len(value)-1]
-	case 'm', 'M':
-		multiplier = 1024 * 1024
-		value = value[:len(value)-1]
-	case 'g', 'G':
-		multiplier = 1024 * 1024 * 1024
-		value = value[:len(value)-1]
+
+	digits := raw
+	multiplier := big.NewInt(1)
+	for _, suffix := range splitSizeSuffixes {
+		if !strings.HasSuffix(raw, suffix.token) {
+			continue
+		}
+		digits = raw[:len(raw)-len(suffix.token)]
+		multiplier = suffix.mult
+		if digits == "" {
+			digits = "1"
+		}
+		break
 	}
-	n, err := strconv.Atoi(value)
-	if err != nil || n <= 0 {
+	value := new(big.Int)
+	if _, ok := value.SetString(digits, 10); !ok || value.Sign() <= 0 {
 		return 0, fmt.Errorf("invalid size")
 	}
-	return n * multiplier, nil
+	value.Mul(value, multiplier)
+	return splitBigUint64(value, true)
 }
 
 func parseSplitNumber(value string) (splitNumberSpec, error) {
 	parts := strings.Split(value, "/")
 	switch len(parts) {
 	case 1:
-		n, err := strconv.Atoi(parts[0])
-		if err != nil || n <= 0 {
-			return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", parts[0])
+		n, err := parseSplitStrictUint(parts[0])
+		if err != nil || n == 0 {
+			return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(parts[0]))
 		}
 		return splitNumberSpec{mode: splitNumberBytes, chunks: n}, nil
 	case 2:
 		switch parts[0] {
 		case "l":
-			n, err := strconv.Atoi(parts[1])
-			if err != nil || n <= 0 {
-				return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", parts[1])
+			n, err := parseSplitStrictUint(parts[1])
+			if err != nil || n == 0 {
+				return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(parts[1]))
 			}
 			return splitNumberSpec{mode: splitNumberLines, chunks: n}, nil
 		case "r":
-			n, err := strconv.Atoi(parts[1])
-			if err != nil || n <= 0 {
-				return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", parts[1])
+			n, err := parseSplitStrictUint(parts[1])
+			if err != nil || n == 0 {
+				return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(parts[1]))
 			}
 			return splitNumberSpec{mode: splitNumberRoundRobin, chunks: n}, nil
 		default:
-			k, err := strconv.Atoi(parts[0])
-			if err != nil || k <= 0 {
-				return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %q", parts[0])
+			k, err := parseSplitStrictUint(parts[0])
+			if err != nil || k == 0 {
+				return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %s", quoteGNUOperand(parts[0]))
 			}
-			n, err := strconv.Atoi(parts[1])
-			if err != nil || n <= 0 {
-				return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", parts[1])
+			n, err := parseSplitStrictUint(parts[1])
+			if err != nil || n == 0 {
+				return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(parts[1]))
 			}
 			if k > n {
-				return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %q", parts[0])
+				return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %s", quoteGNUOperand(parts[0]))
 			}
 			return splitNumberSpec{mode: splitNumberKthBytes, kth: k, chunks: n}, nil
 		}
 	case 3:
 		mode := parts[0]
-		k, err := strconv.Atoi(parts[1])
-		if err != nil || k <= 0 {
-			return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %q", parts[1])
+		k, err := parseSplitStrictUint(parts[1])
+		if err != nil || k == 0 {
+			return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %s", quoteGNUOperand(parts[1]))
 		}
-		n, err := strconv.Atoi(parts[2])
-		if err != nil || n <= 0 {
-			return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", parts[2])
+		n, err := parseSplitStrictUint(parts[2])
+		if err != nil || n == 0 {
+			return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(parts[2]))
 		}
 		if k > n {
-			return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %q", parts[1])
+			return splitNumberSpec{}, fmt.Errorf("invalid chunk number: %s", quoteGNUOperand(parts[1]))
 		}
 		switch mode {
 		case "l":
@@ -463,21 +492,21 @@ func parseSplitNumber(value string) (splitNumberSpec, error) {
 		case "r":
 			return splitNumberSpec{mode: splitNumberKthRoundRobin, kth: k, chunks: n}, nil
 		default:
-			return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", value)
+			return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(value))
 		}
 	default:
-		return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %q", value)
+		return splitNumberSpec{}, fmt.Errorf("invalid number of chunks: %s", quoteGNUOperand(value))
 	}
 }
 
-func splitContent(data []byte, opts *splitOptions) ([]splitChunkOutput, []byte, error) {
+func splitContent(data []byte, opts *splitOptions) ([][]byte, []byte, error) {
 	switch opts.mode {
 	case splitModeBytes:
-		return splitWriteChunks(splitByBytes(data, opts.bytes, false), opts)
+		return splitByBytes(data, opts.bytes), nil, nil
 	case splitModeLines:
-		return splitWriteChunks(splitByRecordCount(splitRecords(data, opts.separator), opts.lines, false), opts)
+		return splitByRecordCount(splitRecords(data, opts.separator), opts.lines), nil, nil
 	case splitModeLineBytes:
-		return splitWriteChunks(splitByLineBytes(splitRecords(data, opts.separator), opts.lineBytes, false), opts)
+		return splitByLineBytes(data, opts.separator, opts.lineBytes), nil, nil
 	case splitModeNumber:
 		return splitNumberContent(data, opts)
 	default:
@@ -485,50 +514,24 @@ func splitContent(data []byte, opts *splitOptions) ([]splitChunkOutput, []byte, 
 	}
 }
 
-func splitNumberContent(data []byte, opts *splitOptions) ([]splitChunkOutput, []byte, error) {
+func splitNumberContent(data []byte, opts *splitOptions) ([][]byte, []byte, error) {
+	records := splitRecords(data, opts.separator)
 	switch opts.number.mode {
 	case splitNumberBytes:
-		return splitWriteChunks(splitByByteChunks(data, opts.number.chunks, opts.elideEmpty), opts)
+		return splitByByteChunks(data, opts.number.chunks), nil, nil
 	case splitNumberKthBytes:
-		chunks := splitByByteChunks(data, opts.number.chunks, false)
-		if opts.number.kth-1 >= len(chunks) {
-			return nil, nil, nil
-		}
-		return nil, chunks[opts.number.kth-1], nil
+		return nil, splitExtractByteChunk(data, opts.number.kth, opts.number.chunks), nil
 	case splitNumberLines:
-		return splitWriteChunks(splitByDistributedLines(splitRecords(data, opts.separator), opts.number.chunks, opts.elideEmpty), opts)
+		return splitByLineChunks(records, len(data), opts.number.chunks), nil, nil
 	case splitNumberKthLines:
-		chunks := splitByDistributedLines(splitRecords(data, opts.separator), opts.number.chunks, false)
-		if opts.number.kth-1 >= len(chunks) {
-			return nil, nil, nil
-		}
-		return nil, chunks[opts.number.kth-1], nil
+		return nil, splitExtractLineChunk(records, len(data), opts.number.kth, opts.number.chunks), nil
 	case splitNumberRoundRobin:
-		return splitWriteChunks(splitRoundRobin(splitRecords(data, opts.separator), opts.number.chunks, opts.elideEmpty), opts)
+		return splitRoundRobin(records, opts.number.chunks), nil, nil
 	case splitNumberKthRoundRobin:
-		chunks := splitRoundRobin(splitRecords(data, opts.separator), opts.number.chunks, false)
-		if opts.number.kth-1 >= len(chunks) {
-			return nil, nil, nil
-		}
-		return nil, chunks[opts.number.kth-1], nil
+		return nil, splitExtractRoundRobinChunk(records, opts.number.kth, opts.number.chunks), nil
 	default:
 		return nil, nil, nil
 	}
-}
-
-func splitWriteChunks(rawChunks [][]byte, opts *splitOptions) ([]splitChunkOutput, []byte, error) {
-	out := make([]splitChunkOutput, 0, len(rawChunks))
-	for i, chunk := range rawChunks {
-		if opts.elideEmpty && len(chunk) == 0 {
-			continue
-		}
-		name, err := splitSuffixName(i, opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		out = append(out, splitChunkOutput{name: name, data: chunk})
-	}
-	return out, nil, nil
 }
 
 func splitRecords(data []byte, sep byte) [][]byte {
@@ -541,172 +544,250 @@ func splitRecords(data []byte, sep byte) [][]byte {
 	return bytes.SplitAfter(data, []byte{sep})
 }
 
-func splitByBytes(data []byte, size int, includeEmpty bool) [][]byte {
-	if len(data) == 0 {
-		if includeEmpty {
-			return [][]byte{{}}
-		}
+func splitByBytes(data []byte, size uint64) [][]byte {
+	if len(data) == 0 || size == 0 {
 		return nil
 	}
-	out := make([][]byte, 0, (len(data)+size-1)/size)
-	for start := 0; start < len(data); start += size {
-		end := min(start+size, len(data))
+	if size >= uint64(len(data)) {
+		return [][]byte{append([]byte(nil), data...)}
+	}
+
+	chunkSize := int(size)
+	out := make([][]byte, 0, (len(data)+chunkSize-1)/chunkSize)
+	for start := 0; start < len(data); start += chunkSize {
+		end := min(start+chunkSize, len(data))
 		out = append(out, append([]byte(nil), data[start:end]...))
 	}
 	return out
 }
 
-func splitByRecordCount(records [][]byte, count int, includeEmpty bool) [][]byte {
-	if len(records) == 0 {
-		if includeEmpty {
-			return [][]byte{{}}
-		}
+func splitByRecordCount(records [][]byte, count uint64) [][]byte {
+	if len(records) == 0 || count == 0 {
 		return nil
 	}
-	var out [][]byte
-	for start := 0; start < len(records); start += count {
-		end := min(start+count, len(records))
+	if count >= uint64(len(records)) {
+		return [][]byte{bytesJoin(records)}
+	}
+
+	step := int(count)
+	out := make([][]byte, 0, (len(records)+step-1)/step)
+	for start := 0; start < len(records); start += step {
+		end := min(start+step, len(records))
 		out = append(out, bytesJoin(records[start:end]))
 	}
 	return out
 }
 
-func splitByLineBytes(records [][]byte, limit int, includeEmpty bool) [][]byte {
-	if len(records) == 0 {
-		if includeEmpty {
-			return [][]byte{{}}
-		}
+func splitByLineBytes(data []byte, sep byte, limit uint64) [][]byte {
+	if len(data) == 0 || limit == 0 {
 		return nil
 	}
+	if limit > uint64(len(data)) {
+		return [][]byte{append([]byte(nil), data...)}
+	}
+
+	maxChunk := int(limit)
 	var out [][]byte
-	current := make([][]byte, 0)
-	currentSize := 0
-	flush := func() {
-		if len(current) == 0 {
+	nOut := 0
+	hold := make([]byte, 0)
+	splitLine := false
+	writeChunk := func(newFile bool, part []byte) {
+		if len(part) == 0 {
 			return
 		}
-		out = append(out, bytesJoin(current))
-		current = nil
-		currentSize = 0
-	}
-	for _, record := range records {
-		if len(record) > limit {
-			flush()
-			out = append(out, append([]byte(nil), record...))
-			continue
+		piece := append([]byte(nil), part...)
+		if newFile || len(out) == 0 {
+			out = append(out, piece)
+			return
 		}
-		if currentSize > 0 && currentSize+len(record) > limit {
-			flush()
-		}
-		current = append(current, append([]byte(nil), record...))
-		currentSize += len(record)
+		out[len(out)-1] = append(out[len(out)-1], piece...)
 	}
-	flush()
+
+	sob := data
+	for len(sob) > 0 {
+		nLeft := len(sob)
+		splitRest := 0
+		hasChunkEnd := false
+		eol := -1
+		if maxChunk-nOut-len(hold) <= nLeft {
+			hasChunkEnd = true
+			splitRest = maxChunk - nOut - len(hold)
+			if splitRest > 0 {
+				eol = bytes.LastIndexByte(sob[:splitRest], sep)
+			}
+		} else {
+			eol = bytes.LastIndexByte(sob, sep)
+		}
+
+		if len(hold) > 0 && (eol >= 0 || nOut == 0) {
+			writeChunk(nOut == 0, hold)
+			nOut += len(hold)
+			hold = hold[:0]
+		}
+
+		if eol >= 0 {
+			splitLine = true
+			nWrite := eol + 1
+			writeChunk(nOut == 0, sob[:nWrite])
+			nOut += nWrite
+			sob = sob[nWrite:]
+			nLeft -= nWrite
+			if hasChunkEnd {
+				splitRest -= nWrite
+			}
+		}
+
+		if len(sob) > 0 && !splitLine {
+			nWrite := len(sob)
+			if hasChunkEnd {
+				nWrite = splitRest
+			}
+			if nWrite > 0 {
+				writeChunk(nOut == 0, sob[:nWrite])
+				nOut += nWrite
+				sob = sob[nWrite:]
+				nLeft -= nWrite
+				if hasChunkEnd {
+					splitRest -= nWrite
+				}
+			}
+		}
+
+		if (hasChunkEnd && splitRest > 0) || (!hasChunkEnd && nLeft > 0) {
+			nBuf := nLeft
+			if hasChunkEnd {
+				nBuf = splitRest
+			}
+			hold = append(hold, sob[:nBuf]...)
+			sob = sob[nBuf:]
+		}
+
+		if hasChunkEnd {
+			nOut = 0
+			splitLine = false
+		}
+	}
+
+	if len(hold) > 0 {
+		writeChunk(nOut == 0, hold)
+	}
 	return out
 }
 
-func splitByByteChunks(data []byte, chunks int, elideEmpty bool) [][]byte {
-	out := make([][]byte, 0, chunks)
-	if chunks <= 0 {
-		return out
+func splitByByteChunks(data []byte, chunks uint64) [][]byte {
+	if chunks == 0 {
+		return nil
 	}
-	base := 0
-	remainder := 0
-	if chunks > 0 {
-		base = len(data) / chunks
-		remainder = len(data) % chunks
-	}
+	count := splitAllocChunkCount(chunks)
+	out := make([][]byte, 0, count)
+	base := uint64(len(data)) / chunks
+	remainder := uint64(len(data)) % chunks
 	offset := 0
 	for i := range chunks {
 		size := base
 		if i < remainder {
 			size++
 		}
-		end := min(offset+size, len(data))
-		chunk := append([]byte(nil), data[offset:end]...)
+		end := offset + int(size)
+		end = min(end, len(data))
+		out = append(out, append([]byte(nil), data[offset:end]...))
 		offset = end
-		if len(chunk) == 0 && elideEmpty {
-			continue
-		}
-		out = append(out, chunk)
 	}
 	return out
 }
 
-func splitByDistributedLines(records [][]byte, chunks int, elideEmpty bool) [][]byte {
-	if chunks <= 0 {
+func splitByLineChunks(records [][]byte, totalBytes int, chunks uint64) [][]byte {
+	if chunks == 0 {
 		return nil
+	}
+	count := splitAllocChunkCount(chunks)
+	out := make([][]byte, count)
+	if len(records) == 0 {
+		return out
+	}
+
+	base := uint64(totalBytes) / chunks
+	remainder := uint64(totalBytes) % chunks
+	chunkIndex := uint64(0)
+	chunkEnd := splitChunkBoundary(base, remainder, chunkIndex)
+	offset := uint64(0)
+	for _, record := range records {
+		out[int(chunkIndex)] = append(out[int(chunkIndex)], record...)
+		offset += uint64(len(record))
+		for chunkIndex < chunks-1 && offset >= chunkEnd {
+			chunkIndex++
+			chunkEnd += splitChunkSize(base, remainder, chunkIndex)
+		}
+	}
+	return out
+}
+
+func splitExtractLineChunk(records [][]byte, totalBytes int, kth, chunks uint64) []byte {
+	if chunks == 0 || kth == 0 || kth > chunks {
+		return []byte{}
 	}
 	if len(records) == 0 {
-		if elideEmpty {
-			return nil
-		}
-		out := make([][]byte, chunks)
-		for i := range out {
-			out[i] = []byte{}
-		}
-		return out
-	}
-	totalBytes := 0
-	for _, record := range records {
-		totalBytes += len(record)
-	}
-	targets := make([]int, chunks)
-	base := totalBytes / chunks
-	remainder := totalBytes % chunks
-	for i := range targets {
-		targets[i] = base
-		if i < remainder {
-			targets[i]++
-		}
+		return []byte{}
 	}
 
-	out := make([][]byte, 0, chunks)
-	current := make([][]byte, 0)
-	currentSize := 0
-	chunkIndex := 0
-	flush := func() {
-		out = append(out, bytesJoin(current))
-		current = nil
-		currentSize = 0
-	}
+	base := uint64(totalBytes) / chunks
+	remainder := uint64(totalBytes) % chunks
+	chunkIndex := uint64(0)
+	chunkEnd := splitChunkBoundary(base, remainder, chunkIndex)
+	offset := uint64(0)
+	var out []byte
 	for _, record := range records {
-		if chunkIndex < chunks-1 && len(current) > 0 && currentSize >= targets[chunkIndex] {
-			flush()
+		if chunkIndex+1 == kth {
+			out = append(out, record...)
+		}
+		offset += uint64(len(record))
+		for chunkIndex < chunks-1 && offset >= chunkEnd {
 			chunkIndex++
+			chunkEnd += splitChunkSize(base, remainder, chunkIndex)
 		}
-		current = append(current, append([]byte(nil), record...))
-		currentSize += len(record)
-	}
-	flush()
-	for len(out) < chunks {
-		if elideEmpty {
-			break
-		}
-		out = append(out, []byte{})
 	}
 	return out
 }
 
-func splitRoundRobin(records [][]byte, chunks int, elideEmpty bool) [][]byte {
-	if chunks <= 0 {
+func splitRoundRobin(records [][]byte, chunks uint64) [][]byte {
+	if chunks == 0 {
 		return nil
 	}
-	out := make([][]byte, chunks)
+	count := splitAllocChunkCount(chunks)
+	out := make([][]byte, count)
 	for i, record := range records {
-		out[i%chunks] = append(out[i%chunks], record...)
+		out[uint64(i)%chunks] = append(out[uint64(i)%chunks], record...)
 	}
-	if !elideEmpty {
-		return out
+	return out
+}
+
+func splitExtractRoundRobinChunk(records [][]byte, kth, chunks uint64) []byte {
+	if chunks == 0 || kth == 0 || kth > chunks {
+		return []byte{}
 	}
-	filtered := make([][]byte, 0, len(out))
-	for _, chunk := range out {
-		if len(chunk) == 0 {
-			continue
+	var out []byte
+	for i, record := range records {
+		if uint64(i)%chunks+1 == kth {
+			out = append(out, record...)
 		}
-		filtered = append(filtered, chunk)
 	}
-	return filtered
+	return out
+}
+
+func splitExtractByteChunk(data []byte, kth, chunks uint64) []byte {
+	if chunks == 0 || kth == 0 || kth > chunks {
+		return []byte{}
+	}
+	fileSize := uint64(len(data))
+	start := (kth-1)*(fileSize/chunks) + min(kth-1, fileSize%chunks)
+	end := fileSize
+	if kth != chunks {
+		end = kth*(fileSize/chunks) + min(kth, fileSize%chunks)
+	}
+	if start >= fileSize || start >= end {
+		return []byte{}
+	}
+	return append([]byte(nil), data[int(start):int(end)]...)
 }
 
 func splitNumberWritesStdout(opts *splitOptions) bool {
@@ -721,72 +802,111 @@ func splitNumberWritesStdout(opts *splitOptions) bool {
 	}
 }
 
-func splitRequiredSuffixLength(kind splitSuffixKind, value int) int {
-	base := 26
+func splitRequiredSuffixLength(kind splitSuffixKind, value uint64) int {
+	base := uint64(26)
 	switch kind {
 	case splitSuffixNumeric:
 		base = 10
 	case splitSuffixHex:
 		base = 16
 	}
-	if value <= 0 {
-		return 1
+	length := 1
+	for value >= base {
+		value /= base
+		length++
 	}
-	return int(math.Floor(math.Log(float64(value))/math.Log(float64(base)))) + 1
+	return length
 }
 
-func splitSuffixName(index int, opts *splitOptions) (string, error) {
-	value := opts.suffixStart + index
-	switch opts.suffixKind {
+func newSplitSuffixGenerator(inv *Invocation, opts *splitOptions) (*splitSuffixGenerator, error) {
+	gen := &splitSuffixGenerator{
+		alphabet:    splitSuffixAlphabet(opts.suffixKind),
+		autoGrow:    opts.suffixAutoGrow,
+		width:       opts.suffixLen,
+		start:       opts.suffixStart,
+		carry:       "",
+		initialized: false,
+	}
+	if gen.width <= 0 {
+		gen.width = 2
+	}
+	if !gen.autoGrow && opts.suffixKind != splitSuffixAlpha {
+		maxDigits := splitRequiredSuffixLength(opts.suffixKind, opts.suffixStart)
+		if maxDigits > gen.width {
+			return nil, exitf(inv, 1, "split: output file suffixes exhausted")
+		}
+	}
+	return gen, nil
+}
+
+func (g *splitSuffixGenerator) Next(inv *Invocation) (string, error) {
+	if !g.initialized {
+		if err := g.init(inv); err != nil {
+			return "", err
+		}
+		g.initialized = true
+		return g.current(), nil
+	}
+	if err := g.increment(inv); err != nil {
+		return "", err
+	}
+	return g.current(), nil
+}
+
+func (g *splitSuffixGenerator) init(inv *Invocation) error {
+	g.digits = make([]int, g.width)
+	if g.start == 0 || g.alphabet == splitSuffixAlphabet(splitSuffixAlpha) {
+		return nil
+	}
+	base := uint64(len(g.alphabet))
+	value := g.start
+	for i := g.width - 1; i >= 0 && value > 0; i-- {
+		g.digits[i] = int(value % base)
+		value /= base
+	}
+	if value != 0 {
+		return exitf(inv, 1, "split: output file suffixes exhausted")
+	}
+	return nil
+}
+
+func (g *splitSuffixGenerator) increment(inv *Invocation) error {
+	base := len(g.alphabet)
+	for i := len(g.digits) - 1; i >= 0; i-- {
+		g.digits[i]++
+		if g.autoGrow && i == 0 && g.digits[i]+1 == base {
+			g.carry += string(g.alphabet[g.digits[i]])
+			g.width++
+			g.digits = make([]int, g.width)
+			return nil
+		}
+		if g.digits[i] < base {
+			return nil
+		}
+		g.digits[i] = 0
+	}
+	return exitf(inv, 1, "split: output file suffixes exhausted")
+}
+
+func (g *splitSuffixGenerator) current() string {
+	var b strings.Builder
+	b.Grow(len(g.carry) + len(g.digits))
+	b.WriteString(g.carry)
+	for _, digit := range g.digits {
+		b.WriteByte(g.alphabet[digit])
+	}
+	return b.String()
+}
+
+func splitSuffixAlphabet(kind splitSuffixKind) string {
+	switch kind {
 	case splitSuffixNumeric:
-		text := strconv.Itoa(value)
-		width := opts.suffixLen
-		if opts.suffixAutoGrow {
-			width = max(width, len(text))
-		} else if len(text) > width {
-			return "", exitf(nil, 1, "split: output file suffixes exhausted")
-		}
-		return fmt.Sprintf("%0*d", width, value), nil
+		return "0123456789"
 	case splitSuffixHex:
-		text := strings.ToLower(strconv.FormatInt(int64(value), 16))
-		width := opts.suffixLen
-		if opts.suffixAutoGrow {
-			width = max(width, len(text))
-		} else if len(text) > width {
-			return "", exitf(nil, 1, "split: output file suffixes exhausted")
-		}
-		return fmt.Sprintf("%0*x", width, value), nil
+		return "0123456789abcdef"
 	default:
-		return splitAlphaSuffix(value, opts.suffixLen, opts.suffixAutoGrow)
+		return "abcdefghijklmnopqrstuvwxyz"
 	}
-}
-
-func splitAlphaSuffix(index, width int, autoGrow bool) (string, error) {
-	if index < 0 {
-		return "", exitf(nil, 1, "split: output file suffixes exhausted")
-	}
-	required := 1
-	limit := 26
-	for index >= limit {
-		required++
-		if limit > math.MaxInt/26 {
-			break
-		}
-		limit *= 26
-	}
-	if !autoGrow && required > width {
-		return "", exitf(nil, 1, "split: output file suffixes exhausted")
-	}
-	if autoGrow {
-		width = max(width, required)
-	}
-	digits := make([]byte, width)
-	value := index
-	for i := width - 1; i >= 0; i-- {
-		digits[i] = byte('a' + (value % 26))
-		value /= 26
-	}
-	return string(digits), nil
 }
 
 func runSplitFilter(ctx context.Context, inv *Invocation, filter, fileName string, data []byte) error {
@@ -810,14 +930,43 @@ func runSplitFilter(ctx context.Context, inv *Invocation, filter, fileName strin
 	return exitForExecutionResult(result)
 }
 
-func sameSplitOutputPath(ctx context.Context, target, inputAbs string, inv *Invocation) bool {
-	if target == inputAbs {
+func readSplitInput(ctx context.Context, inv *Invocation, inputName string) (splitInput, error) {
+	if inputName == "-" {
+		data, err := readAllStdin(ctx, inv)
+		if err != nil {
+			return splitInput{}, err
+		}
+		return splitInput{data: data, info: splitStdinFileInfo(inv)}, nil
+	}
+
+	readName := inputName
+	if resolved, err := canonicalizeReadlink(ctx, inv, inputName, readlinkModeCanonicalizeExisting); err == nil && resolved != "" {
+		readName = resolved
+	}
+	data, abs, err := readAllFile(ctx, inv, readName)
+	if err != nil {
+		return splitInput{}, err
+	}
+	info, _, err := statPath(ctx, inv, readName)
+	if err != nil {
+		return splitInput{}, err
+	}
+	return splitInput{data: data, abs: abs, info: info}, nil
+}
+
+func splitWouldOverwriteInput(ctx context.Context, inv *Invocation, target, resolvedTarget, inputAbs string, inputInfo, targetInfo stdfs.FileInfo) bool {
+	if inputAbs != "" && (target == inputAbs || resolvedTarget == inputAbs) {
 		return true
 	}
-	if inv == nil || inv.FS == nil {
+	if inputInfo != nil {
+		if targetInfo != nil && splitSameFile(inputInfo, targetInfo) {
+			return true
+		}
+	}
+	if inputAbs == "" || inv == nil || inv.FS == nil {
 		return false
 	}
-	targetReal, err := inv.FS.Realpath(ctx, target)
+	targetReal, err := inv.FS.Realpath(ctx, resolvedTarget)
 	if err != nil {
 		return false
 	}
@@ -828,11 +977,25 @@ func sameSplitOutputPath(ctx context.Context, target, inputAbs string, inv *Invo
 	return targetReal == inputReal
 }
 
+func splitWriteErrorText(err error) string {
+	var exitErr *ExitError
+	if errors.As(err, &exitErr) && exitErr.Err != nil {
+		err = exitErr.Err
+	}
+	if err == nil {
+		return "unknown error"
+	}
+	if text := shellWriteErrorText(err); text != "" {
+		return text
+	}
+	return readAllErrorText(err)
+}
+
 func normalizeSplitArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for _, arg := range args {
 		switch {
-		case strings.HasPrefix(arg, "---io-blksize"):
+		case strings.HasPrefix(arg, "---io"):
 			out = append(out, strings.TrimPrefix(arg, "-"))
 		case isObsoleteSplitLinesArg(arg):
 			out = append(out, "--obsolete-lines="+strings.TrimPrefix(arg, "-"))
@@ -877,6 +1040,196 @@ func bytesJoin(parts [][]byte) []byte {
 		out = append(out, part...)
 	}
 	return out
+}
+
+func splitResolveOutputTarget(ctx context.Context, inv *Invocation, target string) (string, stdfs.FileInfo) {
+	resolved := target
+	if next, err := canonicalizeReadlink(ctx, inv, target, readlinkModeCanonicalizeExisting); err == nil && next != "" {
+		resolved = next
+	}
+	info, _, exists, err := statMaybe(ctx, inv, resolved)
+	if err != nil || !exists {
+		return resolved, nil
+	}
+	return resolved, info
+}
+
+type splitUnderlyingReader interface {
+	UnderlyingReader() io.Reader
+}
+
+type splitStatter interface {
+	Stat() (stdfs.FileInfo, error)
+}
+
+func splitResolveReader(reader io.Reader) io.Reader {
+	for reader != nil {
+		underlying, ok := reader.(splitUnderlyingReader)
+		if !ok {
+			return reader
+		}
+		next := underlying.UnderlyingReader()
+		if next == nil || next == reader {
+			return reader
+		}
+		reader = next
+	}
+	return nil
+}
+
+func splitStdinFileInfo(inv *Invocation) stdfs.FileInfo {
+	if inv == nil || inv.Stdin == nil {
+		return nil
+	}
+	reader := splitResolveReader(inv.Stdin)
+	statter, ok := reader.(splitStatter)
+	if !ok {
+		return nil
+	}
+	info, err := statter.Stat()
+	if err != nil {
+		return nil
+	}
+	return info
+}
+
+func splitSameFile(a, b stdfs.FileInfo) bool {
+	if testSameFile(a, b) {
+		return true
+	}
+	nodeA, okA := splitNodeID(a)
+	nodeB, okB := splitNodeID(b)
+	return okA && okB && nodeA == nodeB
+}
+
+func splitNodeID(info stdfs.FileInfo) (uint64, bool) {
+	if info == nil {
+		return 0, false
+	}
+	value := reflect.ValueOf(info.Sys())
+	if !value.IsValid() {
+		return 0, false
+	}
+	if value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return 0, false
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return 0, false
+	}
+	field := value.FieldByName("NodeID")
+	if !field.IsValid() {
+		return 0, false
+	}
+	switch field.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return field.Uint(), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return uint64(field.Int()), true
+	default:
+		return 0, false
+	}
+}
+
+func buildSplitSizeSuffixes() []splitSizeSuffix {
+	letters := []struct {
+		upper    string
+		lower    string
+		exponent int
+	}{
+		{"Y", "y", 8},
+		{"Z", "z", 7},
+		{"E", "e", 6},
+		{"P", "p", 5},
+		{"T", "t", 4},
+		{"G", "g", 3},
+		{"M", "m", 2},
+		{"K", "k", 1},
+	}
+
+	out := make([]splitSizeSuffix, 0, len(letters)*6+2)
+	for _, letter := range letters {
+		out = append(out,
+			splitSizeSuffix{token: letter.upper + "iB", mult: splitBigPow(1024, letter.exponent)},
+			splitSizeSuffix{token: letter.lower + "iB", mult: splitBigPow(1024, letter.exponent)},
+			splitSizeSuffix{token: letter.upper + "B", mult: splitBigPow(1000, letter.exponent)},
+			splitSizeSuffix{token: letter.lower + "B", mult: splitBigPow(1000, letter.exponent)},
+			splitSizeSuffix{token: letter.upper, mult: splitBigPow(1024, letter.exponent)},
+			splitSizeSuffix{token: letter.lower, mult: splitBigPow(1024, letter.exponent)},
+		)
+	}
+	out = append(out,
+		splitSizeSuffix{token: "b", mult: big.NewInt(512)},
+		splitSizeSuffix{token: "B", mult: big.NewInt(1)},
+	)
+	return out
+}
+
+func splitBigPow(base int64, exponent int) *big.Int {
+	result := big.NewInt(1)
+	multiplier := big.NewInt(base)
+	for range exponent {
+		result.Mul(result, multiplier)
+	}
+	return result
+}
+
+func splitBigUint64(value *big.Int, clampOverflow bool) (uint64, error) {
+	if value == nil || value.Sign() <= 0 {
+		return 0, fmt.Errorf("invalid value")
+	}
+	if value.IsUint64() {
+		return value.Uint64(), nil
+	}
+	if clampOverflow {
+		return math.MaxUint64, nil
+	}
+	return 0, fmt.Errorf("invalid value")
+}
+
+func parseSplitStrictUint(raw string) (uint64, error) {
+	if raw == "" {
+		return 0, fmt.Errorf("invalid value")
+	}
+	return strconv.ParseUint(raw, 10, 64)
+}
+
+func parseSplitSuffixLength(raw string) (int, error) {
+	if raw == "" {
+		return 0, fmt.Errorf("invalid suffix length")
+	}
+	value, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || value > uint64(math.MaxInt) {
+		return 0, fmt.Errorf("invalid suffix length")
+	}
+	return int(value), nil
+}
+
+func splitAllocChunkCount(chunks uint64) int {
+	if chunks > uint64(math.MaxInt) {
+		return math.MaxInt
+	}
+	return int(chunks)
+}
+
+func splitChunkSize(base, remainder, index uint64) uint64 {
+	if index < remainder {
+		return base + 1
+	}
+	return base
+}
+
+func splitChunkBoundary(base, remainder, index uint64) uint64 {
+	return splitChunkSize(base, remainder, index)
+}
+
+func splitSaturatingAdd(a, b uint64) uint64 {
+	if math.MaxUint64-a < b {
+		return math.MaxUint64
+	}
+	return a + b
 }
 
 var _ Command = (*Split)(nil)
