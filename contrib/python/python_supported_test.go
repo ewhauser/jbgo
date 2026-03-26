@@ -4,6 +4,7 @@ package python
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -58,6 +59,62 @@ func TestPythonReadsSourceFromStdin(t *testing.T) {
 	}
 	if got, want := result.Stdout, "stdin\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPythonNoArgsStartsREPLOnTTY(t *testing.T) {
+	t.Parallel()
+
+	session := newPythonSession(t)
+	stdout, stderr, err := runPythonCommand(t, session, map[string]string{
+		"TTY": "/dev/tty",
+	}, strings.NewReader("def double(x):\n    return x * 2\ndouble(21)\nexit()\n"))
+	if err != nil {
+		t.Fatalf("Run() error = %v; stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", stderr)
+	}
+	if got, want := stdout, ">>> ... >>> 42\n>>> "; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestPythonNoArgsUsesTerminalFallbackInsideInteractiveShell(t *testing.T) {
+	t.Parallel()
+
+	registry := newPythonRegistry(t)
+	if err := registry.Register(&Python{
+		name: "python",
+		terminalInput: func() io.Reader {
+			return strings.NewReader("print(41 + 1)\nexit()\n")
+		},
+	}); err != nil {
+		t.Fatalf("Register(custom python) error = %v", err)
+	}
+
+	session := newPythonSessionWithRegistry(t, registry)
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	result, err := session.Interact(context.Background(), &gbruntime.InteractiveRequest{
+		Stdin:  strings.NewReader("python\nexit\n"),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("Interact() error = %v; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if result == nil || result.ExitCode != 0 {
+		t.Fatalf("Interact() result = %#v, want exit 0; stdout=%q stderr=%q", result, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	for _, want := range []string{"~$ ", ">>> 42\n>>> "} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
+		}
 	}
 }
 

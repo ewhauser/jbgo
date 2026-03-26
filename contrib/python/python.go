@@ -1,6 +1,7 @@
 package python
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -17,17 +18,24 @@ import (
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
+	"github.com/ewhauser/gbash/internal/commandutil"
 	monty "github.com/ewhauser/gomonty"
 	montyvfs "github.com/ewhauser/gomonty/vfs"
+	"golang.org/x/term"
 )
 
 const (
-	pythonEvalEntry  = ".gbash-python-eval.py"
-	pythonStdinEntry = ".gbash-python-stdin.py"
+	pythonEvalEntry              = ".gbash-python-eval.py"
+	pythonStdinEntry             = ".gbash-python-stdin.py"
+	pythonReplEntry              = ".gbash-python-repl.py"
+	pythonReplDisplayEntry       = ".gbash-python-repl-display.py"
+	pythonReplPrompt             = ">>> "
+	pythonReplContinuationPrompt = "... "
 )
 
 type Python struct {
-	name string
+	name          string
+	terminalInput func() io.Reader
 }
 
 type sourceKind int
@@ -36,12 +44,12 @@ const (
 	sourceStdin sourceKind = iota
 	sourceEval
 	sourceFile
+	sourceRepl
 )
 
 type pythonSource struct {
 	kind      sourceKind
 	code      string
-	scriptArg string
 	entryPath string
 }
 
@@ -55,7 +63,10 @@ func New(name string) *Python {
 	if name == "" {
 		name = "python"
 	}
-	return &Python{name: name}
+	return &Python{
+		name:          name,
+		terminalInput: func() io.Reader { return os.Stdin },
+	}
 }
 
 func Register(registry commands.CommandRegistry) error {
@@ -115,7 +126,14 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 	if err != nil {
 		return err
 	}
+	if source.kind == sourceRepl {
+		return c.runRepl(ctx, inv, source)
+	}
 
+	return c.runSource(ctx, inv, source)
+}
+
+func (c *Python) runSource(ctx context.Context, inv *commands.Invocation, source pythonSource) error {
 	runner, err := monty.New(source.code, monty.CompileOptions{
 		ScriptName: source.entryPath,
 	})
@@ -123,15 +141,9 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 		return pythonExit(inv, err)
 	}
 
-	env := montyvfs.MapEnvironment{}
-	maps.Copy(env, inv.Env)
-
 	_, err = runner.Run(ctx, monty.RunOptions{
 		Print: monty.WriterPrintCallback(inv.Stdout),
-		OS: montyvfs.Handler(&invocationFS{
-			requestContext: func() context.Context { return ctx },
-			inv:            inv,
-		}, env),
+		OS:    pythonOSHandler(ctx, inv),
 	})
 	if err != nil {
 		return pythonExit(inv, err)
@@ -139,9 +151,109 @@ func (c *Python) RunParsed(ctx context.Context, inv *commands.Invocation, matche
 	return nil
 }
 
+func (c *Python) runRepl(ctx context.Context, inv *commands.Invocation, source pythonSource) error {
+	repl, err := monty.NewRepl(monty.ReplOptions{
+		ScriptName: source.entryPath,
+	})
+	if err != nil {
+		return pythonExit(inv, err)
+	}
+
+	displayRunner, err := monty.New("repr(_gbash_repl_value)", monty.CompileOptions{
+		ScriptName: gbfs.Resolve(inv.Cwd, pythonReplDisplayEntry),
+		Inputs:     []string{"_gbash_repl_value"},
+	})
+	if err != nil {
+		return pythonExit(inv, err)
+	}
+
+	stdin := inv.Stdin
+	if stdin == nil {
+		stdin = strings.NewReader("")
+	}
+	reader := bufio.NewReader(stdin)
+	handler := pythonOSHandler(ctx, inv)
+	prompt := pythonReplPrompt
+	usingTerminalInput := false
+	var pending strings.Builder
+
+	for {
+		_, _ = io.WriteString(inv.Stdout, prompt)
+
+		line, readErr := reader.ReadString('\n')
+		if line == "" && errors.Is(readErr, io.EOF) && pending.Len() == 0 && !usingTerminalInput {
+			if terminal := c.terminalReader(inv); terminal != nil {
+				reader = bufio.NewReader(terminal)
+				usingTerminalInput = true
+				line, readErr = reader.ReadString('\n')
+			}
+		}
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return readErr
+		}
+		if pending.Len() == 0 && pythonReplExitCommand(line) {
+			return nil
+		}
+		if line != "" {
+			pending.WriteString(line)
+		}
+		if pending.Len() == 0 {
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			prompt = pythonReplPrompt
+			continue
+		}
+
+		value, err := repl.FeedRun(ctx, pending.String(), monty.FeedOptions{
+			Print: monty.WriterPrintCallback(inv.Stdout),
+			OS:    handler,
+		})
+		if err != nil {
+			if pythonReplNeedsContinuation(err, line) && !errors.Is(readErr, io.EOF) {
+				prompt = pythonReplContinuationPrompt
+				continue
+			}
+			pending.Reset()
+			prompt = pythonReplPrompt
+			if pythonReplExitError(err) {
+				return nil
+			}
+			pythonWriteError(inv.Stderr, err)
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			continue
+		}
+
+		pending.Reset()
+		prompt = pythonReplPrompt
+		if err := pythonWriteReplValue(ctx, inv.Stdout, displayRunner, value); err != nil {
+			return err
+		}
+		if errors.Is(readErr, io.EOF) {
+			return nil
+		}
+	}
+}
+
+func (c *Python) terminalReader(inv *commands.Invocation) io.Reader {
+	if !pythonEnvTTY(inv.Env) || c == nil || c.terminalInput == nil {
+		return nil
+	}
+	terminal := c.terminalInput()
+	if terminal == nil {
+		return nil
+	}
+	if inv != nil && terminal == inv.Stdin {
+		return nil
+	}
+	return terminal
+}
+
 func (c *Python) classifySource(ctx context.Context, inv *commands.Invocation, matches *commands.ParsedCommand) (pythonSource, error) {
 	if matches == nil {
-		return c.prepareStdinSource(ctx, inv)
+		return c.prepareNoArgSource(ctx, inv)
 	}
 
 	args := matches.Args("arg")
@@ -153,7 +265,7 @@ func (c *Python) classifySource(ctx context.Context, inv *commands.Invocation, m
 	}
 	switch len(args) {
 	case 0:
-		return c.prepareStdinSource(ctx, inv)
+		return c.prepareNoArgSource(ctx, inv)
 	case 1:
 		return c.prepareFileSource(ctx, inv, args[0])
 	default:
@@ -161,11 +273,25 @@ func (c *Python) classifySource(ctx context.Context, inv *commands.Invocation, m
 	}
 }
 
+func (c *Python) prepareNoArgSource(ctx context.Context, inv *commands.Invocation) (pythonSource, error) {
+	if pythonInputIsTTY(inv) {
+		return c.prepareReplSource(inv), nil
+	}
+	return c.prepareStdinSource(ctx, inv)
+}
+
 func (c *Python) prepareEvalSource(inv *commands.Invocation, code string) pythonSource {
 	return pythonSource{
 		kind:      sourceEval,
 		code:      code,
 		entryPath: gbfs.Resolve(inv.Cwd, pythonEvalEntry),
+	}
+}
+
+func (c *Python) prepareReplSource(inv *commands.Invocation) pythonSource {
+	return pythonSource{
+		kind:      sourceRepl,
+		entryPath: gbfs.Resolve(inv.Cwd, pythonReplEntry),
 	}
 }
 
@@ -201,7 +327,6 @@ func (c *Python) prepareFileSource(ctx context.Context, inv *commands.Invocation
 	return pythonSource{
 		kind:      sourceFile,
 		code:      string(data),
-		scriptArg: scriptArg,
 		entryPath: abs,
 	}, nil
 }
@@ -209,6 +334,153 @@ func (c *Python) prepareFileSource(ctx context.Context, inv *commands.Invocation
 func pythonExit(inv *commands.Invocation, err error) error {
 	if err == nil {
 		return nil
+	}
+	return commands.Exitf(inv, 1, "%s", pythonErrorMessage(err))
+}
+
+func pythonOSHandler(ctx context.Context, inv *commands.Invocation) monty.OSHandler {
+	env := montyvfs.MapEnvironment{}
+	maps.Copy(env, inv.Env)
+	return montyvfs.Handler(&invocationFS{
+		requestContext: func() context.Context { return ctx },
+		inv:            inv,
+	}, env)
+}
+
+func pythonInputIsTTY(inv *commands.Invocation) bool {
+	if inv == nil {
+		return false
+	}
+	if inv.Stdin != nil {
+		if meta, ok := inv.Stdin.(commandutil.RedirectMetadata); ok {
+			if pythonRecognizedTTYPath(meta.RedirectPath()) {
+				return true
+			}
+		}
+		if fd, ok := inv.Stdin.(interface{ Fd() uintptr }); ok {
+			if descriptor := fd.Fd(); descriptor != 0 {
+				return term.IsTerminal(int(descriptor))
+			}
+		}
+	}
+	return pythonEnvTTY(inv.Env)
+}
+
+func pythonEnvTTY(env map[string]string) bool {
+	if env == nil {
+		return false
+	}
+	ttyValue := strings.TrimSpace(env["TTY"])
+	if ttyValue == "" {
+		return false
+	}
+	if !strings.HasPrefix(ttyValue, "/") {
+		ttyValue = "/dev/" + strings.TrimLeft(ttyValue, "/")
+	}
+	return pythonRecognizedTTYPath(ttyValue)
+}
+
+func pythonRecognizedTTYPath(name string) bool {
+	cleaned := path.Clean(strings.TrimSpace(name))
+	switch {
+	case cleaned == "/dev/tty", cleaned == "/dev/console":
+		return true
+	case path.Dir(cleaned) == "/dev" && strings.HasPrefix(path.Base(cleaned), "tty"):
+		return true
+	case path.Dir(cleaned) == "/dev/pts":
+		base := path.Base(cleaned)
+		return base != "" && base != "." && base != ".."
+	default:
+		return false
+	}
+}
+
+func pythonReplExitCommand(line string) bool {
+	switch strings.TrimSpace(line) {
+	case "exit", "exit()", "quit", "quit()":
+		return true
+	default:
+		return false
+	}
+}
+
+func pythonReplExitError(err error) bool {
+	return strings.HasPrefix(strings.TrimSpace(err.Error()), "SystemExit")
+}
+
+func pythonReplNeedsContinuation(err error, line string) bool {
+	var syntaxErr *monty.SyntaxError
+	if !errors.As(err, &syntaxErr) {
+		return false
+	}
+	message := strings.TrimSpace(err.Error())
+	switch {
+	case strings.Contains(message, "unexpected EOF while parsing"):
+		return true
+	case strings.HasPrefix(message, "SyntaxError: Expected an indented block"):
+		return strings.TrimSpace(line) != ""
+	default:
+		return false
+	}
+}
+
+func pythonWriteReplValue(ctx context.Context, w io.Writer, displayRunner *monty.Runner, value monty.Value) error {
+	if w == nil || string(value.Kind()) == "none" {
+		return nil
+	}
+	repr, err := pythonReplValueString(ctx, displayRunner, value)
+	if err != nil {
+		return err
+	}
+	if repr == "" {
+		return nil
+	}
+	_, err = io.WriteString(w, repr+"\n")
+	return err
+}
+
+func pythonReplValueString(ctx context.Context, displayRunner *monty.Runner, value monty.Value) (string, error) {
+	if displayRunner == nil {
+		return pythonFallbackValueString(value), nil
+	}
+	repr, err := displayRunner.Run(ctx, monty.RunOptions{
+		Inputs: map[string]monty.Value{
+			"_gbash_repl_value": value,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if text, ok := repr.Raw().(string); ok {
+		return text, nil
+	}
+	return repr.String(), nil
+}
+
+func pythonFallbackValueString(value monty.Value) string {
+	switch string(value.Kind()) {
+	case "repr", "cycle":
+		if text, ok := value.Raw().(string); ok {
+			return text
+		}
+	}
+	return value.String()
+}
+
+func pythonWriteError(w io.Writer, err error) {
+	if w == nil {
+		return
+	}
+	message := strings.TrimSpace(pythonErrorMessage(err))
+	if message == "" {
+		return
+	}
+	_, _ = io.WriteString(w, message+"\n")
+}
+
+func pythonErrorMessage(err error) string {
+	if err == nil {
+		return ""
 	}
 	message := strings.TrimSpace(err.Error())
 	type tracebackError interface {
@@ -223,7 +495,7 @@ func pythonExit(inv *commands.Invocation, err error) error {
 	if message == "" {
 		message = "python: execution failed"
 	}
-	return commands.Exitf(inv, 1, "%s", message)
+	return message
 }
 
 func (fsys *invocationFS) Exists(pathValue string) (bool, error) {

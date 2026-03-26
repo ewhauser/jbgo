@@ -26,3 +26,21 @@ func TestPythonReportsUnavailableWithoutNativeBindings(t *testing.T) {
 		t.Fatalf("Stderr = %q, want gomonty unavailable diagnostic", result.Stderr)
 	}
 }
+
+func TestPythonTTYREPLReportsUnavailableWithoutNativeBindings(t *testing.T) {
+	t.Parallel()
+
+	session := newPythonSession(t)
+	stdout, stderr, err := runPythonCommand(t, session, map[string]string{
+		"TTY": "/dev/tty",
+	}, strings.NewReader("exit()\n"))
+	if err == nil {
+		t.Fatal("Run() error = nil, want unavailable diagnostic")
+	}
+	if stdout != "" {
+		t.Fatalf("Stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "monty native bindings are unavailable") {
+		t.Fatalf("Stderr = %q, want gomonty unavailable diagnostic", stderr)
+	}
+}
