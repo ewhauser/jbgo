@@ -166,15 +166,22 @@ func readlinkValue(ctx context.Context, inv *Invocation, name string) (string, e
 }
 
 func canonicalizeReadlink(ctx context.Context, inv *Invocation, name string, mode readlinkCanonicalMode) (string, error) {
-	absolute, pending := splitReadlinkPath(name)
-	current := []string(nil)
-	if !absolute {
-		cwd := inv.FS.Getwd()
+	cwd := ""
+	if !strings.HasPrefix(name, "/") {
+		cwd = inv.FS.Getwd()
 		if physicalCwd, err := inv.FS.Realpath(ctx, "."); err == nil {
 			cwd = physicalCwd
 		} else if mode == readlinkModeCanonicalizeExisting {
 			return "", err
 		}
+	}
+	return canonicalizeReadlinkFromCwd(ctx, inv, name, mode, cwd)
+}
+
+func canonicalizeReadlinkFromCwd(ctx context.Context, inv *Invocation, name string, mode readlinkCanonicalMode, cwd string) (string, error) {
+	absolute, pending := splitReadlinkPath(name)
+	current := []string(nil)
+	if !absolute {
 		current = splitReadlinkSegments(cwd)
 	}
 	trailingSlash := strings.HasSuffix(name, "/")

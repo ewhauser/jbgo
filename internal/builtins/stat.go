@@ -646,15 +646,18 @@ func statUintField(value reflect.Value) uint64 {
 }
 
 func statFollowPath(ctx context.Context, inv *Invocation, name string) (stdfs.FileInfo, string, error) {
-	resolvedName := remapCompatHostPath(inv, name)
-	if hasTrailingSlash(name) && !strings.HasSuffix(resolvedName, "/") {
-		resolvedName += "/"
-	}
-	resolved, err := canonicalizeReadlink(ctx, inv, resolvedName, readlinkModeCanonicalizeExisting)
+	info, abs, err := statPath(ctx, inv, name)
 	if err != nil {
 		return nil, "", err
 	}
-	info, err := inv.FS.Stat(ctx, resolved)
+	if !hasTrailingSlash(name) {
+		return info, abs, nil
+	}
+	resolvedName := remapCompatHostPath(inv, name)
+	if !strings.HasSuffix(resolvedName, "/") {
+		resolvedName += "/"
+	}
+	resolved, err := canonicalizeReadlinkFromCwd(ctx, inv, resolvedName, readlinkModeCanonicalizeExisting, inv.FS.Getwd())
 	if err != nil {
 		return nil, "", err
 	}

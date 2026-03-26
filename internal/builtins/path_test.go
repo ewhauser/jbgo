@@ -2241,9 +2241,48 @@ func TestStatPrintfEscapesWarningsAndDirectiveErrorsMatchGNU(t *testing.T) {
 	})
 }
 
-func TestStatDereferenceTrailingSlashAndDeviceModifiers(t *testing.T) {
+func TestStatDefaultPolicyDeniesSymlinkDereferenceAndTrailingSlash(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
+	if err := session.FileSystem().MkdirAll(context.Background(), "/home/agent/dir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(dir) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "dir", "/home/agent/link"); err != nil {
+		t.Fatalf("Symlink(link) error = %v", err)
+	}
+
+	deref := mustExecSession(t, session, "cd /home/agent\nstat -L --format='%F' link\n")
+	if deref.ExitCode == 0 {
+		t.Fatalf("deref ExitCode = %d, want non-zero", deref.ExitCode)
+	}
+	if got := deref.Stdout; got != "" {
+		t.Fatalf("deref Stdout = %q, want empty", got)
+	}
+	if got := deref.Stderr; !strings.Contains(got, "symlink traversal denied") {
+		t.Fatalf("deref Stderr = %q, want symlink traversal denied", got)
+	}
+
+	slashed := mustExecSession(t, session, "cd /home/agent\nstat --format='%F' link/\n")
+	if slashed.ExitCode == 0 {
+		t.Fatalf("slash ExitCode = %d, want non-zero", slashed.ExitCode)
+	}
+	if got := slashed.Stdout; got != "" {
+		t.Fatalf("slash Stdout = %q, want empty", got)
+	}
+	if got := slashed.Stderr; !strings.Contains(got, "symlink traversal denied") {
+		t.Fatalf("slash Stderr = %q, want symlink traversal denied", got)
+	}
+}
+
+func TestStatDereferenceTrailingSlashAndDeviceModifiers(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
 	writeSessionFile(t, session, "/home/agent/file.txt", []byte("hello"))
 	if err := session.FileSystem().MkdirAll(context.Background(), "/home/agent/dir", 0o755); err != nil {
 		t.Fatalf("MkdirAll(dir) error = %v", err)
