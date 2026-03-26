@@ -34,13 +34,14 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
+	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
 	github.com/ewhauser/gbash/contrib/awk v0.0.30 // indirect
 	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.30 // indirect
 	github.com/ewhauser/gbash/contrib/jq v0.0.30 // indirect
 	github.com/ewhauser/gbash/contrib/python v0.0.30 // indirect
 	github.com/ewhauser/gbash/contrib/yq v0.0.30 // indirect
-	github.com/ewhauser/gomonty v0.0.11 // indirect
+	github.com/ewhauser/gomonty v0.0.13 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect

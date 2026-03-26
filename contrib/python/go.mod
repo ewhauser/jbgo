@@ -4,10 +4,12 @@ go 1.26.0
 
 require (
 	github.com/ewhauser/gbash v0.0.30
-	github.com/ewhauser/gomonty v0.0.11
+	github.com/ewhauser/gomonty v0.0.13
 )
 
 require (
+	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
