@@ -288,6 +288,10 @@ func (fs *CommandFS) Chmod(ctx context.Context, name string, mode stdfs.FileMode
 	return nil
 }
 
+type lchtimesCapable interface {
+	Lchtimes(context.Context, string, time.Time, time.Time) error
+}
+
 // Chtimes updates file timestamps after enforcing write policy.
 func (fs *CommandFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
 	abs, err := fs.prepare(ctx, policy.FileActionWrite, name)
@@ -295,6 +299,22 @@ func (fs *CommandFS) Chtimes(ctx context.Context, name string, atime, mtime time
 		return err
 	}
 	if err := fs.raw().Chtimes(ctx, abs, atime, mtime); err != nil {
+		return wrapCommandError(err)
+	}
+	return nil
+}
+
+// Lchtimes updates file timestamps without following the final symlink.
+func (fs *CommandFS) Lchtimes(ctx context.Context, name string, atime, mtime time.Time) error {
+	abs, err := fs.prepare(ctx, policy.FileActionWrite, name)
+	if err != nil {
+		return err
+	}
+	raw, ok := fs.raw().(lchtimesCapable)
+	if !ok {
+		return fs.Chtimes(ctx, abs, atime, mtime)
+	}
+	if err := raw.Lchtimes(ctx, abs, atime, mtime); err != nil {
 		return wrapCommandError(err)
 	}
 	return nil

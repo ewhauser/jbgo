@@ -348,6 +348,18 @@ func (m *MountableFS) Chtimes(ctx context.Context, name string, atime, mtime tim
 	return fsys.Chtimes(ctx, rel, atime, mtime)
 }
 
+func (m *MountableFS) Lchtimes(ctx context.Context, name string, atime, mtime time.Time) error {
+	abs := m.resolve(name)
+	fsys, rel := m.routedView(abs)
+	raw, ok := fsys.(interface {
+		Lchtimes(context.Context, string, time.Time, time.Time) error
+	})
+	if !ok {
+		return fsys.Chtimes(ctx, rel, atime, mtime)
+	}
+	return raw.Lchtimes(ctx, rel, atime, mtime)
+}
+
 func (m *MountableFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {
 	abs := m.resolve(name)
 	_, _, mounted, synthetic := m.route(abs)
@@ -669,6 +681,16 @@ func (f namespacedFS) Chmod(ctx context.Context, name string, mode stdfs.FileMod
 
 func (f namespacedFS) Chtimes(ctx context.Context, name string, atime, mtime time.Time) error {
 	return namespaceError(f.inner.Chtimes(ctx, name, atime, mtime), f.mountPoint)
+}
+
+func (f namespacedFS) Lchtimes(ctx context.Context, name string, atime, mtime time.Time) error {
+	raw, ok := f.inner.(interface {
+		Lchtimes(context.Context, string, time.Time, time.Time) error
+	})
+	if !ok {
+		return namespaceError(f.inner.Chtimes(ctx, name, atime, mtime), f.mountPoint)
+	}
+	return namespaceError(raw.Lchtimes(ctx, name, atime, mtime), f.mountPoint)
 }
 
 func (f namespacedFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {

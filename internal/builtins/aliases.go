@@ -19,6 +19,7 @@ type OptionArity = pubcmd.OptionArity
 type OptionSpec = pubcmd.OptionSpec
 type ArgSpec = pubcmd.ArgSpec
 type ParsedCommand = pubcmd.ParsedCommand
+type ParsedOptionOccurrence = pubcmd.ParsedOptionOccurrence
 
 type ExecutionRequest = pubcmd.ExecutionRequest
 type ExecutionResult = pubcmd.ExecutionResult

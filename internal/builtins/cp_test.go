@@ -671,3 +671,506 @@ func TestCPUpdateNoneDoesNotSkipDanglingDestinationSymlink(t *testing.T) {
 		t.Fatalf("Stderr = %q, want dangling-symlink error", result.Stderr)
 	}
 }
+
+func TestCPBackupSelfCopyWithSuffix(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo payload > /tmp/file.txt\n" +
+			"cp --force --backup=simple --suffix=.bak /tmp/file.txt /tmp/file.txt\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"cat /tmp/file.txt\n" +
+			"cat /tmp/file.txt.bak\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\npayload\npayload\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPBackupRejectsSourceBackupCollision(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo a > /tmp/a\n" +
+			"echo b > /tmp/a~\n" +
+			"cp --backup=simple /tmp/a~ /tmp/a\n" +
+			"printf 'status=%s\\n' \"$?\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "backing up '/tmp/a' might destroy source;  '/tmp/a~' not copied") {
+		t.Fatalf("Stderr = %q, want backup-collision error", result.Stderr)
+	}
+}
+
+func TestCPSuffixAloneEnablesBackups(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo old > /tmp/dst.txt\n" +
+			"echo new > /tmp/src.txt\n" +
+			"cp -S .bak /tmp/src.txt /tmp/dst.txt\n" +
+			"cat /tmp/dst.txt\n" +
+			"cat /tmp/dst.txt.bak\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "new\nold\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPNoClobberStillWinsOverLaterForce(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo old > /tmp/dst.txt\n" +
+			"echo new > /tmp/src.txt\n" +
+			"echo y | cp -vni /tmp/src.txt /tmp/dst.txt\n" +
+			"printf 'ni=%s\\n' \"$?\"\n" +
+			"cat /tmp/dst.txt\n" +
+			"echo y | cp -vnf /tmp/src.txt /tmp/dst.txt\n" +
+			"printf 'nf=%s\\n' \"$?\"\n" +
+			"cat /tmp/dst.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "'/tmp/src.txt' -> '/tmp/dst.txt'\nni=0\nnew\nnf=0\nnew\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPInteractiveNoContinuesToLaterSources(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/out\n" +
+			"echo old-a > /tmp/out/a\n" +
+			"echo old-b > /tmp/out/b\n" +
+			"echo new-a > /tmp/a\n" +
+			"echo new-b > /tmp/b\n" +
+			"cp -i /tmp/a /tmp/b /tmp/out\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"cat /tmp/out/a\n" +
+			"cat /tmp/out/b\n",
+		Stdin: strings.NewReader("n\ny\n"),
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nold-a\nnew-b\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := strings.Count(result.Stderr, "cp: overwrite "); got != 2 {
+		t.Fatalf("Stderr = %q, want 2 overwrite prompts", result.Stderr)
+	}
+}
+
+func TestCPAttributesOnlyPreservesDataAndCanReplaceWithSymlink(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "cd /tmp\n" +
+			"printf '1' > file1\n" +
+			"printf '2' > file2\n" +
+			"cp --attributes-only file1 file2\n" +
+			"cat file2\n" +
+			"ln -s file1 sym1\n" +
+			"cp -a --attributes-only sym1 file2\n" +
+			"printf 'plain=%s\\n' \"$?\"\n" +
+			"cat file2\n" +
+			"cp -a --remove-destination --attributes-only sym1 file2\n" +
+			"printf 'forced=%s\\n' \"$?\"\n" +
+			"test -L file2 && echo symlink || echo regular\n" +
+			"readlink file2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "2plain=1\n2forced=0\nsymlink\nfile1\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: cannot create symbolic link 'file2': File exists") {
+		t.Fatalf("Stderr = %q, want attributes-only symlink conflict message", result.Stderr)
+	}
+}
+
+func TestCPRecursiveCopyRetainsSourceDirectoryMode(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src/private\n" +
+			"chmod 700 /tmp/src/private\n" +
+			"echo payload > /tmp/src/private/file.txt\n" +
+			"cp -R /tmp/src /tmp/dst\n" +
+			"stat -c '%a' /tmp/dst/private\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "700\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPParentsCreatesIntermediateDirectoriesWithoutPreservingMode(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src/a/b\n" +
+			"chmod 700 /tmp/src/a\n" +
+			"echo payload > /tmp/src/a/b/file.txt\n" +
+			"mkdir /tmp/out\n" +
+			"cd /tmp/src\n" +
+			"cp --parents --no-preserve=mode a/b/file.txt /tmp/out\n" +
+			"cat /tmp/out/a/b/file.txt\n" +
+			"stat -c '%a' /tmp/out/a\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "payload\n755\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPParentsKeepsLeadingDotDotInsideTargetTree(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/case/root/cwd /tmp/case/root/peer/dir /tmp/case/out\n" +
+			"echo payload > /tmp/case/root/peer/dir/file\n" +
+			"cd /tmp/case/root/cwd\n" +
+			"cp --parents ../peer/dir/file /tmp/case/out\n" +
+			"cat /tmp/case/out/peer/dir/file\n" +
+			"test -e /tmp/case/peer && echo escaped || echo contained\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "payload\ncontained\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPParentsRootTargetKeepsIntermediatePathsAbsolute(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/case/root/cwd /tmp/case/root/peer/a/b\n" +
+			"echo payload > /tmp/case/root/peer/a/b/file\n" +
+			"cd /tmp/case/root/cwd\n" +
+			"cp --parents ../peer/a/b/file /\n" +
+			"cat /peer/a/b/file\n" +
+			"test -e /tmp/case/root/cwd/peer && echo escaped || echo contained\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "payload\ncontained\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPParentsRejectsNoTargetDirectory(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src\n" +
+			"echo payload > /tmp/src/file\n" +
+			"cp --parents -T /tmp/src/file /tmp/out\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"test -e /tmp/out && echo exists || echo missing\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nmissing\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: target \"/tmp/out\" is not a directory") {
+		t.Fatalf("Stderr = %q, want target-not-directory error", result.Stderr)
+	}
+}
+
+func TestCPCreatesNewFilesWithSourcePermissions(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '#!/bin/sh\\n' > /tmp/src.sh\n" +
+			"chmod 755 /tmp/src.sh\n" +
+			"cp /tmp/src.sh /tmp/dst.sh\n" +
+			"stat -c '%a' /tmp/src.sh /tmp/dst.sh\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "755\n755\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPPreserveOwnershipCopiesFileOwnership(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'payload\\n' > /tmp/src.txt\n" +
+			"chown 41:42 /tmp/src.txt\n" +
+			"cp -p /tmp/src.txt /tmp/dst.txt\n" +
+			"stat -c '%u:%g' /tmp/dst.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "41:42\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPPlainFIFOProducesRegularFile(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkfifo /tmp/src.pipe\n" +
+			"( printf 'payload\\n' > /tmp/src.pipe ) &\n" +
+			"cp /tmp/src.pipe /tmp/dst.txt\n" +
+			"wait\n" +
+			"cat /tmp/dst.txt\n" +
+			"test -p /tmp/dst.txt && echo pipe || echo regular\n" +
+			"cp -a /tmp/src.pipe /tmp/dst.pipe\n" +
+			"test -p /tmp/dst.pipe && echo preserved-pipe || echo preserved-regular\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "payload\nregular\npreserved-pipe\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPArchiveFIFOOverwritesExistingDestination(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkfifo /tmp/src.pipe\n" +
+			"printf 'old\\n' > /tmp/dst.pipe\n" +
+			"cp -a /tmp/src.pipe /tmp/dst.pipe\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"test -p /tmp/dst.pipe && echo pipe || echo regular\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\npipe\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPPreserveLinksRelinksMissingDestinationWhenUpdateOlderSkipsCanonical(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/s /tmp/t/s\n" +
+			"touch /tmp/s/f\n" +
+			"ln /tmp/s/f /tmp/s/link\n" +
+			"touch -d '2024-01-01 00:00:00 UTC' /tmp/s/f\n" +
+			"touch /tmp/t/s/f\n" +
+			"touch -d '2025-01-01 00:00:00 UTC' /tmp/t/s/f\n" +
+			"cp -au /tmp/s /tmp/t\n" +
+			"stat -c '%d:%i' /tmp/t/s/f /tmp/t/s/link\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout lines = %q, want 2 lines", result.Stdout)
+	}
+	if lines[0] != lines[1] {
+		t.Fatalf("inode lines = %q and %q, want equal", lines[0], lines[1])
+	}
+}
+
+func TestCPPreserveLinksHonorsNoClobberBeforeRelinking(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src /tmp/dst\n" +
+			"printf 'source' > /tmp/src/a\n" +
+			"ln /tmp/src/a /tmp/src/b\n" +
+			"printf 'keep-a' > /tmp/dst/a\n" +
+			"printf 'keep-b' > /tmp/dst/b\n" +
+			"cd /tmp\n" +
+			"cp -an src/. dst\n" +
+			"printf 'before-a=%s\\n' \"$(cat /tmp/dst/a)\"\n" +
+			"printf 'before-b=%s\\n' \"$(cat /tmp/dst/b)\"\n" +
+			"printf '+tail' >> /tmp/dst/a\n" +
+			"printf 'after-a=%s\\n' \"$(cat /tmp/dst/a)\"\n" +
+			"printf 'after-b=%s\\n' \"$(cat /tmp/dst/b)\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("Stdout lines = %q, want 4 lines", result.Stdout)
+	}
+	if got, want := lines[0], "before-a=keep-a"; got != want {
+		t.Fatalf("dst/a = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "before-b=keep-b"; got != want {
+		t.Fatalf("dst/b = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "after-a=keep-a+tail"; got != want {
+		t.Fatalf("dst/a after mutation = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "after-b=keep-b"; got != want {
+		t.Fatalf("dst/b after mutating dst/a = %q, want %q", got, want)
+	}
+}
+
+func TestCPPreserveLinksSkipDoesNotSeedCanonicalDestination(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src /tmp/dst\n" +
+			"printf 'source' > /tmp/src/a\n" +
+			"ln /tmp/src/a /tmp/src/b\n" +
+			"printf 'keep' > /tmp/dst/a\n" +
+			"cd /tmp\n" +
+			"cp -an src/. dst\n" +
+			"printf 'dst-a=%s\\n' \"$(cat /tmp/dst/a)\"\n" +
+			"printf 'dst-b=%s\\n' \"$(cat /tmp/dst/b)\"\n" +
+			"printf '+tail' >> /tmp/dst/a\n" +
+			"printf 'after-a=%s\\n' \"$(cat /tmp/dst/a)\"\n" +
+			"printf 'after-b=%s\\n' \"$(cat /tmp/dst/b)\"\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("Stdout lines = %q, want 4 lines", result.Stdout)
+	}
+	if got, want := lines[0], "dst-a=keep"; got != want {
+		t.Fatalf("dst/a = %q, want %q", got, want)
+	}
+	if got, want := lines[1], "dst-b=source"; got != want {
+		t.Fatalf("dst/b = %q, want %q", got, want)
+	}
+	if got, want := lines[2], "after-a=keep+tail"; got != want {
+		t.Fatalf("dst/a after mutation = %q, want %q", got, want)
+	}
+	if got, want := lines[3], "after-b=source"; got != want {
+		t.Fatalf("dst/b after mutating dst/a = %q, want %q", got, want)
+	}
+}
+
+func TestCPPOSIXLYCORRECTWritesThroughDanglingSymlink(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "echo hi > /tmp/src.txt\n" +
+			"cd /tmp\n" +
+			"ln -s missing dst.txt\n" +
+			"POSIXLY_CORRECT=1 cp /tmp/src.txt dst.txt\n" +
+			"cat /tmp/missing\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "hi\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}

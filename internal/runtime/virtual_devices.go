@@ -223,6 +223,20 @@ func (f *virtualDeviceFS) Chtimes(ctx context.Context, name string, atime, mtime
 	return f.base.Chtimes(ctx, abs, atime, mtime)
 }
 
+func (f *virtualDeviceFS) Lchtimes(ctx context.Context, name string, atime, mtime time.Time) error {
+	abs := f.resolve(name)
+	if err := rejectVirtualDeviceMutation("lchtimes", abs); err != nil {
+		return err
+	}
+	raw, ok := f.base.(interface {
+		Lchtimes(context.Context, string, time.Time, time.Time) error
+	})
+	if !ok {
+		return f.base.Chtimes(ctx, abs, atime, mtime)
+	}
+	return raw.Lchtimes(ctx, abs, atime, mtime)
+}
+
 func (f *virtualDeviceFS) MkdirAll(ctx context.Context, name string, perm stdfs.FileMode) error {
 	abs := f.resolve(name)
 	switch {

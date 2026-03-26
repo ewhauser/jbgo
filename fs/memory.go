@@ -520,6 +520,26 @@ func (m *MemoryFS) Chtimes(_ context.Context, name string, atime, mtime time.Tim
 	return nil
 }
 
+func (m *MemoryFS) Lchtimes(_ context.Context, name string, atime, mtime time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, node, err := m.resolvePathLocked(name, false, false)
+	if err != nil {
+		return &os.PathError{Op: "lchtimes", Path: Resolve(m.cwd, name), Err: err}
+	}
+	now := time.Now().UTC()
+	if atime.IsZero() {
+		atime = now
+	}
+	if mtime.IsZero() {
+		mtime = now
+	}
+	node.atime = atime.UTC()
+	node.modTime = mtime.UTC()
+	return nil
+}
+
 func (m *MemoryFS) MkdirAll(_ context.Context, name string, perm stdfs.FileMode) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
