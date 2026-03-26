@@ -34,8 +34,7 @@ const (
 )
 
 type Python struct {
-	name          string
-	terminalInput func() io.Reader
+	name string
 }
 
 type sourceKind int
@@ -64,8 +63,7 @@ func New(name string) *Python {
 		name = "python"
 	}
 	return &Python{
-		name:          name,
-		terminalInput: func() io.Reader { return os.Stdin },
+		name: name,
 	}
 }
 
@@ -175,6 +173,12 @@ func (c *Python) runRepl(ctx context.Context, inv *commands.Invocation, source p
 	handler := pythonOSHandler(ctx, inv)
 	prompt := pythonReplPrompt
 	usingTerminalInput := false
+	var terminalCloser io.Closer
+	defer func() {
+		if terminalCloser != nil {
+			_ = terminalCloser.Close()
+		}
+	}()
 	var pending strings.Builder
 
 	for {
@@ -182,8 +186,13 @@ func (c *Python) runRepl(ctx context.Context, inv *commands.Invocation, source p
 
 		line, readErr := reader.ReadString('\n')
 		if line == "" && errors.Is(readErr, io.EOF) && pending.Len() == 0 && !usingTerminalInput {
-			if terminal := c.terminalReader(inv); terminal != nil {
+			terminal, closer, ttyPath, err := c.terminalReader(ctx, inv)
+			if err != nil {
+				return commands.Exitf(inv, 1, "%s: failed to open %s: %v", c.Name(), ttyPath, err)
+			}
+			if terminal != nil {
 				reader = bufio.NewReader(terminal)
+				terminalCloser = closer
 				usingTerminalInput = true
 				line, readErr = reader.ReadString('\n')
 			}
@@ -237,18 +246,25 @@ func (c *Python) runRepl(ctx context.Context, inv *commands.Invocation, source p
 	}
 }
 
-func (c *Python) terminalReader(inv *commands.Invocation) io.Reader {
-	if !pythonEnvTTY(inv.Env) || c == nil || c.terminalInput == nil {
-		return nil
+func (c *Python) terminalReader(ctx context.Context, inv *commands.Invocation) (io.Reader, io.Closer, string, error) {
+	if terminal := pythonTTYReader(inv.TTY); terminal != nil {
+		return terminal, nil, "", nil
 	}
-	terminal := c.terminalInput()
-	if terminal == nil {
-		return nil
+	if terminal := pythonTTYReader(inv.Stdin); terminal != nil {
+		return terminal, nil, "", nil
 	}
-	if inv != nil && terminal == inv.Stdin {
-		return nil
+	if inv == nil || inv.FS == nil {
+		return nil, nil, "", nil
 	}
-	return terminal
+	ttyPath, ok := pythonEnvTTYPath(inv.Env)
+	if !ok {
+		return nil, nil, "", nil
+	}
+	terminal, err := inv.FS.Open(ctx, ttyPath)
+	if err != nil {
+		return nil, nil, ttyPath, err
+	}
+	return terminal, terminal, ttyPath, nil
 }
 
 func (c *Python) classifySource(ctx context.Context, inv *commands.Invocation, matches *commands.ParsedCommand) (pythonSource, error) {
@@ -362,22 +378,79 @@ func pythonInputIsTTY(inv *commands.Invocation) bool {
 				return term.IsTerminal(int(descriptor))
 			}
 		}
+		if terminal := pythonTTYReader(inv.TTY); terminal != nil {
+			return true
+		}
+		if terminal := pythonTTYReader(inv.Stdin); terminal != nil {
+			return true
+		}
 	}
 	return pythonEnvTTY(inv.Env)
 }
 
+func pythonTTYReader(reader io.Reader) io.Reader {
+	reader = pythonResolveReader(reader)
+	if reader == nil {
+		return nil
+	}
+	if meta, ok := reader.(commandutil.RedirectMetadata); ok {
+		if pythonRecognizedTTYPath(meta.RedirectPath()) {
+			return reader
+		}
+	}
+	if statter, ok := reader.(interface {
+		Stat() (stdfs.FileInfo, error)
+	}); ok {
+		if info, err := statter.Stat(); err == nil && info.Mode()&stdfs.ModeCharDevice != 0 {
+			return reader
+		}
+	}
+	if fd, ok := reader.(interface{ Fd() uintptr }); ok {
+		if descriptor := fd.Fd(); descriptor != 0 && term.IsTerminal(int(descriptor)) {
+			return reader
+		}
+	}
+	return nil
+}
+
+func pythonResolveReader(reader io.Reader) io.Reader {
+	type underlyingReader interface {
+		UnderlyingReader() io.Reader
+	}
+	for reader != nil {
+		provider, ok := reader.(underlyingReader)
+		if !ok {
+			return reader
+		}
+		next := provider.UnderlyingReader()
+		if next == nil || next == reader {
+			return reader
+		}
+		reader = next
+	}
+	return nil
+}
+
 func pythonEnvTTY(env map[string]string) bool {
+	_, ok := pythonEnvTTYPath(env)
+	return ok
+}
+
+func pythonEnvTTYPath(env map[string]string) (string, bool) {
 	if env == nil {
-		return false
+		return "", false
 	}
 	ttyValue := strings.TrimSpace(env["TTY"])
 	if ttyValue == "" {
-		return false
+		return "", false
 	}
 	if !strings.HasPrefix(ttyValue, "/") {
 		ttyValue = "/dev/" + strings.TrimLeft(ttyValue, "/")
 	}
-	return pythonRecognizedTTYPath(ttyValue)
+	if !pythonRecognizedTTYPath(ttyValue) {
+		return "", false
+	}
+	return ttyValue, true
 }
 
 func pythonRecognizedTTYPath(name string) bool {

@@ -4,11 +4,13 @@ package python
 
 import (
 	"context"
-	"io"
+	stdfs "io/fs"
 	"strings"
 	"testing"
+	"time"
 
 	gbruntime "github.com/ewhauser/gbash"
+	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/trace"
 )
@@ -80,20 +82,42 @@ func TestPythonNoArgsStartsREPLOnTTY(t *testing.T) {
 	}
 }
 
+func TestPythonNoArgsUsesInvocationTTYFallback(t *testing.T) {
+	t.Parallel()
+
+	session := newPythonSession(t)
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	inv := commands.NewInvocation(&commands.InvocationOptions{
+		Env: map[string]string{
+			"HOME": "/home/agent",
+			"PWD":  "/home/agent",
+		},
+		Cwd:        "/home/agent",
+		Stdin:      strings.NewReader(""),
+		TTY:        fakePythonTTYReader{Reader: strings.NewReader("print(41 + 1)\nexit()\n")},
+		Stdout:     &stdout,
+		Stderr:     &stderr,
+		FileSystem: session.FileSystem(),
+	})
+	err := New("python").Run(context.Background(), inv)
+	if err != nil {
+		t.Fatalf("Run() error = %v; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+	if got, want := stdout.String(), ">>> 42\n>>> "; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestPythonNoArgsUsesTerminalFallbackInsideInteractiveShell(t *testing.T) {
 	t.Parallel()
 
-	registry := newPythonRegistry(t)
-	if err := registry.Register(&Python{
-		name: "python",
-		terminalInput: func() io.Reader {
-			return strings.NewReader("print(41 + 1)\nexit()\n")
-		},
-	}); err != nil {
-		t.Fatalf("Register(custom python) error = %v", err)
-	}
-
-	session := newPythonSessionWithRegistry(t, registry)
+	session := newPythonSession(t)
+	writePythonSessionFile(t, session, "/dev/tty", []byte("print(41 + 1)\nexit()\n"))
 	var stdout strings.Builder
 	var stderr strings.Builder
 
@@ -117,6 +141,23 @@ func TestPythonNoArgsUsesTerminalFallbackInsideInteractiveShell(t *testing.T) {
 		}
 	}
 }
+
+type fakePythonTTYReader struct {
+	*strings.Reader
+}
+
+func (r fakePythonTTYReader) Stat() (stdfs.FileInfo, error) {
+	return fakePythonTTYInfo{}, nil
+}
+
+type fakePythonTTYInfo struct{}
+
+func (fakePythonTTYInfo) Name() string         { return "tty" }
+func (fakePythonTTYInfo) Size() int64          { return 0 }
+func (fakePythonTTYInfo) Mode() stdfs.FileMode { return stdfs.ModeCharDevice | 0o600 }
+func (fakePythonTTYInfo) ModTime() time.Time   { return time.Time{} }
+func (fakePythonTTYInfo) IsDir() bool          { return false }
+func (fakePythonTTYInfo) Sys() any             { return nil }
 
 func TestPythonNativePrintCallbackHandlesAliases(t *testing.T) {
 	t.Parallel()

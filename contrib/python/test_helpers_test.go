@@ -3,6 +3,7 @@ package python
 import (
 	"context"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"strings"
@@ -109,9 +110,9 @@ func writePythonSessionFile(tb testing.TB, session *gbruntime.Session, name stri
 func runPythonCommand(tb testing.TB, session *gbruntime.Session, env map[string]string, stdin io.Reader, args ...string) (string, string, error) {
 	tb.Helper()
 
-	clone := map[string]string{}
-	for key, value := range env {
-		clone[key] = value
+	clone := maps.Clone(env)
+	if clone == nil {
+		clone = map[string]string{}
 	}
 	if _, ok := clone["HOME"]; !ok {
 		clone["HOME"] = "/home/agent"

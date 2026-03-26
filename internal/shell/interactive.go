@@ -39,6 +39,9 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 	}
 	ctx = shellstate.WithCompletionState(ctx, exec.CompletionState)
 	exec.Interactive = true
+	if exec.TTY == nil {
+		exec.TTY = exec.Stdin
+	}
 	input := bufio.NewReader(exec.Stdin)
 	exec.Stdin = strings.NewReader("")
 	runnerExec := *exec
