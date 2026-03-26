@@ -856,6 +856,54 @@ func TestCPParentsCreatesIntermediateDirectoriesWithoutPreservingMode(t *testing
 	}
 }
 
+func TestCPParentsKeepsLeadingDotDotInsideTargetTree(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/case/root/cwd /tmp/case/root/peer/dir /tmp/case/out\n" +
+			"echo payload > /tmp/case/root/peer/dir/file\n" +
+			"cd /tmp/case/root/cwd\n" +
+			"cp --parents ../peer/dir/file /tmp/case/out\n" +
+			"cat /tmp/case/out/peer/dir/file\n" +
+			"test -e /tmp/case/peer && echo escaped || echo contained\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "payload\ncontained\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestCPParentsRejectsNoTargetDirectory(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/src\n" +
+			"echo payload > /tmp/src/file\n" +
+			"cp --parents -T /tmp/src/file /tmp/out\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"test -e /tmp/out && echo exists || echo missing\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\nmissing\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "cp: target \"/tmp/out\" is not a directory") {
+		t.Fatalf("Stderr = %q, want target-not-directory error", result.Stderr)
+	}
+}
+
 func TestCPCreatesNewFilesWithSourcePermissions(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})

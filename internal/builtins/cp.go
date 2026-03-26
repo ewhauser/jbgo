@@ -424,6 +424,9 @@ func cpOperands(inv *Invocation, opts *cpOptions, args []string) (sources []stri
 func resolveCPDestination(ctx context.Context, inv *Invocation, opts *cpOptions, sourceArg, destArg string, multipleSources bool) (destAbs, destDisplay string, destInfo stdfs.FileInfo, destExists bool, err error) {
 	destSuffix := cpDestinationSuffix(sourceArg, opts)
 	if opts != nil && opts.noTargetDirectory {
+		if opts.parents {
+			return "", "", nil, false, exitf(inv, 1, "cp: target %q is not a directory", destArg)
+		}
 		info, abs, exists, err := lstatMaybe(ctx, inv, destArg)
 		if err != nil {
 			return "", "", nil, false, err
@@ -1034,12 +1037,17 @@ type cpCreatedParentDir struct {
 	mode stdfs.FileMode
 }
 
+type cpParentHierarchyEntry struct {
+	sourcePrefix string
+	destPrefix   string
+}
+
 func cpEnsureParentHierarchy(ctx context.Context, inv *Invocation, source, destAbs string, opts *cpOptions) ([]cpCreatedParentDir, error) {
 	if opts == nil || !opts.parents {
 		return nil, nil
 	}
-	sourcePrefixes := cpParentSourcePrefixes(source)
-	if len(sourcePrefixes) == 0 {
+	hierarchy := cpParentHierarchy(source)
+	if len(hierarchy) == 0 {
 		return nil, nil
 	}
 	suffix := cpParentsPath(source)
@@ -1048,10 +1056,9 @@ func cpEnsureParentHierarchy(ctx context.Context, inv *Invocation, source, destA
 		return nil, nil
 	}
 
-	currentDest := rootDest
-	created := make([]cpCreatedParentDir, 0, len(sourcePrefixes))
-	for _, prefix := range sourcePrefixes {
-		currentDest = joinChildPath(currentDest, path.Base(prefix))
+	created := make([]cpCreatedParentDir, 0, len(hierarchy))
+	for _, entry := range hierarchy {
+		currentDest := joinChildPath(rootDest, entry.destPrefix)
 		info, _, exists, err := lstatMaybe(ctx, inv, currentDest)
 		if err != nil {
 			return nil, err
@@ -1062,14 +1069,14 @@ func cpEnsureParentHierarchy(ctx context.Context, inv *Invocation, source, destA
 			}
 			continue
 		}
-		sourceDirInfo, _, err := statPath(ctx, inv, prefix)
+		sourceDirInfo, _, err := statPath(ctx, inv, entry.sourcePrefix)
 		if err != nil {
-			return nil, exitf(inv, 1, "cp: cannot stat %q: %s", prefix, cpErrorText(err))
+			return nil, exitf(inv, 1, "cp: cannot stat %q: %s", entry.sourcePrefix, cpErrorText(err))
 		}
 		if err := inv.FS.MkdirAll(ctx, currentDest, cpTemporaryDirMode()); err != nil {
 			return nil, &ExitError{Code: 1, Err: err}
 		}
-		recordFileMutation(inv.TraceRecorder(), "copy", currentDest, prefix, currentDest)
+		recordFileMutation(inv.TraceRecorder(), "copy", currentDest, entry.sourcePrefix, currentDest)
 		created = append(created, cpCreatedParentDir{
 			abs:  currentDest,
 			mode: cpDesiredDirectoryMode(inv, sourceDirInfo, opts),
@@ -1118,6 +1125,27 @@ func cpParentSourcePrefixes(source string) []string {
 		prefixes = append(prefixes, current)
 	}
 	return prefixes
+}
+
+func cpParentHierarchy(source string) []cpParentHierarchyEntry {
+	sourcePrefixes := cpParentSourcePrefixes(source)
+	if len(sourcePrefixes) == 0 {
+		return nil
+	}
+	sanitized := cpParentsPath(source)
+	parts := strings.Split(sanitized, "/")
+	if len(parts) <= 1 {
+		return nil
+	}
+	entries := make([]cpParentHierarchyEntry, 0, len(parts)-1)
+	for i := 0; i < len(parts)-1 && i < len(sourcePrefixes); i++ {
+		destPrefix := path.Join(parts[:i+1]...)
+		entries = append(entries, cpParentHierarchyEntry{
+			sourcePrefix: sourcePrefixes[len(sourcePrefixes)-len(parts)+1+i],
+			destPrefix:   destPrefix,
+		})
+	}
+	return entries
 }
 
 func cpTemporaryDirMode() stdfs.FileMode {
