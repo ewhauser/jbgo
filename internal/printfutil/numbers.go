@@ -120,12 +120,12 @@ func formatSignedShell(arg string, present bool, spec *formatSpec) (string, stri
 		case parsed.value.Cmp(maxInt64Big) > 0:
 			value = math.MaxInt64
 			if diag == "" {
-				diag = gnuOverflowDiagnostic(arg)
+				diag = overflowDiagnostic(arg)
 			}
 		case parsed.value.Cmp(minInt64Big) < 0:
 			value = math.MinInt64
 			if diag == "" {
-				diag = gnuOverflowDiagnostic(arg)
+				diag = overflowDiagnostic(arg)
 			}
 		default:
 			value = parsed.value.Int64()

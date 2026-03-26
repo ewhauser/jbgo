@@ -70,6 +70,22 @@ func TestFormatOverflowDiagnosticsMatchPlatformOracle(t *testing.T) {
 	}
 }
 
+func TestFormatNegativeOverflowDiagnosticsMatchPlatformOracle(t *testing.T) {
+	t.Parallel()
+
+	result := Format("%d\n", []string{"-18446744073709551615"}, Options{})
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; diagnostics=%v", result.ExitCode, result.Diagnostics)
+	}
+	want := "-18446744073709551615: Result too large"
+	if runtime.GOOS == "linux" {
+		want = "-18446744073709551615: Numerical result out of range"
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0] != want {
+		t.Fatalf("Diagnostics = %v, want [%q]", result.Diagnostics, want)
+	}
+}
+
 func TestFormatTimeSentinelsAndExtendedDirectives(t *testing.T) {
 	t.Parallel()
 
