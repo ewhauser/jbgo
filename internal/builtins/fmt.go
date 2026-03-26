@@ -394,13 +394,24 @@ func fmtSplitLines(data string) []string {
 
 func fmtParseInputLine(raw string, opts *fmtOptions) (fmtParsedLine, bool) {
 	trimmed, indentCols := fmtTrimLeadingBlanks(raw)
-	if opts.prefix == "" {
+	if opts.prefix == "" && opts.prefixLeadSpace == 0 {
 		if trimmed == "" {
 			return fmtParsedLine{}, false
 		}
 		return fmtParsedLine{
 			raw:          raw,
 			prefixIndent: 0,
+			indent:       indentCols,
+			body:         trimmed,
+		}, true
+	}
+	if opts.prefix == "" {
+		if indentCols < opts.prefixLeadSpace || trimmed == "" {
+			return fmtParsedLine{}, false
+		}
+		return fmtParsedLine{
+			raw:          raw,
+			prefixIndent: indentCols,
 			indent:       indentCols,
 			body:         trimmed,
 		}, true

@@ -129,12 +129,14 @@ func TestFmtPrefixHandling(t *testing.T) {
 		"printf '%s\\n' '---'\n" +
 		"printf 'ça\\nçb\\n' | fmt -p 'ç'\n" +
 		"printf '%s\\n' '---'\n" +
-		"printf '> a\\n> b\\n>a\\n' | fmt -p '> '\n"
+		"printf '> a\\n> b\\n>a\\n' | fmt -p '> '\n" +
+		"printf '%s\\n' '---'\n" +
+		"printf 'a\\n   b\\n   c\\n' | fmt -p '   '\n"
 	result := mustExecSession(t, session, script)
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := " 1\n  2\n\t3\n\t\t4\n> quoted text\n---\n>\n---\nfo\n---\nça b\n---\n> a b\n>a\n"
+	want := " 1\n  2\n\t3\n\t\t4\n> quoted text\n---\n>\n---\nfo\n---\nça b\n---\n> a b\n>a\n---\na\n   b c\n"
 	if result.Stdout != want {
 		t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
 	}
