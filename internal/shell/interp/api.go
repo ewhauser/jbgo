@@ -802,7 +802,11 @@ func (r *redirectedStdinReader) Seek(offset int64, whence int) (int64, error) {
 		Seek(offset int64, whence int) (int64, error)
 	}
 	if seeker, ok := r.handle.(seeker); ok {
-		return seeker.Seek(offset, whence)
+		position, err := seeker.Seek(offset, whence)
+		if err == nil && position >= 0 {
+			r.offset.Store(position)
+		}
+		return position, err
 	}
 	return 0, errors.New("bad file descriptor")
 }

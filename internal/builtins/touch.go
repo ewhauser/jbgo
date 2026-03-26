@@ -583,9 +583,9 @@ func touchHasExplicitSource(args []string) bool {
 	return false
 }
 
-func touchMatchesExplicitSourceLongOption(name string) bool {
+func touchResolveLongOption(name string) *OptionSpec {
 	if name == "" {
-		return false
+		return nil
 	}
 	spec := NewTouch().Spec()
 	var matched *OptionSpec
@@ -604,7 +604,15 @@ func touchMatchesExplicitSourceLongOption(name string) bool {
 			}
 		}
 	}
-	if matchCount != 1 || matched == nil {
+	if matchCount != 1 {
+		return nil
+	}
+	return matched
+}
+
+func touchMatchesExplicitSourceLongOption(name string) bool {
+	matched := touchResolveLongOption(name)
+	if matched == nil {
 		return false
 	}
 	switch matched.Name {
@@ -627,15 +635,18 @@ func touchLegacyTimestampIndex(args []string) (timestampIndex, endOfOptions int)
 				end = true
 				endOfOptions = i
 				continue
-			case arg == "--time", arg == "--date", arg == "--reference", arg == "--timestamp", arg == "--posix-stamp":
-				i++
-				continue
-			case strings.HasPrefix(arg, "--time="), strings.HasPrefix(arg, "--date="), strings.HasPrefix(arg, "--reference="), strings.HasPrefix(arg, "--timestamp="), strings.HasPrefix(arg, "--posix-stamp="):
-				continue
 			case arg == "-":
 				positionals = append(positionals, i)
 				continue
 			case strings.HasPrefix(arg, "--"):
+				name, hasValue := arg[2:], false
+				if optionName, _, found := strings.Cut(name, "="); found {
+					name = optionName
+					hasValue = true
+				}
+				if opt := touchResolveLongOption(name); opt != nil && opt.Arity == OptionRequiredValue && !hasValue {
+					i++
+				}
 				continue
 			case strings.HasPrefix(arg, "-"):
 				continue
