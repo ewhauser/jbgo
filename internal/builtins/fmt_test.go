@@ -142,6 +142,20 @@ func TestFmtPrefixHandling(t *testing.T) {
 	}
 }
 
+func TestFmtPreservesLeadingTabsWhenReflowing(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	result := mustExecSession(t, session, "printf '\\taa\\n\\tbb c d\\n' | fmt -w 13\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	want := "\taa bb\n\tc d\n"
+	if result.Stdout != want {
+		t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+	}
+}
+
 func TestFmtGNUErrorCases(t *testing.T) {
 	t.Parallel()
 

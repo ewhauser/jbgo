@@ -61,6 +61,7 @@ type fmtOptions struct {
 
 type fmtParsedLine struct {
 	raw          string
+	leader       string
 	prefixIndent int
 	indent       int
 	body         string
@@ -366,7 +367,8 @@ func formatFmtInput(data string, opts *fmtOptions, maxWidth, goalWidth int) stri
 		words[len(words)-1].final = true
 
 		fmtBreakParagraph(words, firstIndent, otherIndent, maxWidth, goalWidth)
-		fmtWriteParagraph(&out, words, current.prefixIndent, opts.prefix, opts.prefixWidth, firstIndent, otherIndent)
+		firstLeader, firstLeaderWidth, otherLeader, otherLeaderWidth := fmtParagraphLeaders(paragraph)
+		fmtWriteParagraph(&out, words, firstLeader, firstLeaderWidth, otherLeader, otherLeaderWidth, firstIndent, otherIndent)
 	}
 
 	return out.String()
@@ -393,13 +395,14 @@ func fmtSplitLines(data string) []string {
 }
 
 func fmtParseInputLine(raw string, opts *fmtOptions) (fmtParsedLine, bool) {
-	trimmed, indentCols := fmtTrimLeadingBlanks(raw)
+	trimmed, indentCols, indentEnd := fmtTrimLeadingBlanks(raw)
 	if opts.prefix == "" && opts.prefixLeadSpace == 0 {
 		if trimmed == "" {
 			return fmtParsedLine{}, false
 		}
 		return fmtParsedLine{
 			raw:          raw,
+			leader:       raw[:indentEnd],
 			prefixIndent: 0,
 			indent:       indentCols,
 			body:         trimmed,
@@ -411,6 +414,7 @@ func fmtParseInputLine(raw string, opts *fmtOptions) (fmtParsedLine, bool) {
 		}
 		return fmtParsedLine{
 			raw:          raw,
+			leader:       raw[:indentEnd],
 			prefixIndent: indentCols,
 			indent:       indentCols,
 			body:         trimmed,
@@ -422,13 +426,14 @@ func fmtParseInputLine(raw string, opts *fmtOptions) (fmtParsedLine, bool) {
 	}
 
 	afterPrefix := trimmed[len(opts.prefix):]
-	body, postPrefixIndent := fmtTrimLeadingBlanks(afterPrefix)
+	body, postPrefixIndent, postPrefixEnd := fmtTrimLeadingBlanks(afterPrefix)
 	if body == "" {
 		return fmtParsedLine{}, false
 	}
 
 	return fmtParsedLine{
 		raw:          raw,
+		leader:       raw[:indentEnd+len(opts.prefix)+postPrefixEnd],
 		prefixIndent: indentCols,
 		indent:       indentCols + opts.prefixWidth + postPrefixIndent,
 		body:         body,
@@ -478,6 +483,18 @@ func fmtParagraphIndentation(paragraph []fmtParsedLine, opts *fmtOptions, tagged
 	default:
 		return firstIndent, firstIndent
 	}
+}
+
+func fmtParagraphLeaders(paragraph []fmtParsedLine) (string, int, string, int) {
+	firstLeader := paragraph[0].leader
+	firstLeaderWidth := paragraph[0].indent
+	otherLeader := firstLeader
+	otherLeaderWidth := firstLeaderWidth
+	if len(paragraph) > 1 {
+		otherLeader = paragraph[1].leader
+		otherLeaderWidth = paragraph[1].indent
+	}
+	return firstLeader, firstLeaderWidth, otherLeader, otherLeaderWidth
 }
 
 func fmtParagraphWords(paragraph []fmtParsedLine, uniform bool) []fmtWord {
@@ -646,19 +663,20 @@ func fmtLineCost(nextBreak, lineLength []int, next, sentinel, lineLen, goalWidth
 	return cost
 }
 
-func fmtWriteParagraph(out *strings.Builder, words []fmtWord, prefixIndent int, prefix string, prefixWidth, firstIndent, otherIndent int) {
+func fmtWriteParagraph(out *strings.Builder, words []fmtWord, firstLeader string, firstLeaderWidth int, otherLeader string, otherLeaderWidth, firstIndent, otherIndent int) {
 	for idx := 0; idx < len(words); {
 		indent := otherIndent
+		leader := otherLeader
+		leaderWidth := otherLeaderWidth
 		if idx == 0 {
 			indent = firstIndent
+			leader = firstLeader
+			leaderWidth = firstLeaderWidth
 		}
 
-		out.WriteString(strings.Repeat(" ", prefixIndent))
-		out.WriteString(prefix)
-
-		currentCol := prefixIndent + prefixWidth
-		if indent > currentCol {
-			out.WriteString(strings.Repeat(" ", indent-currentCol))
+		out.WriteString(leader)
+		if indent > leaderWidth {
+			out.WriteString(strings.Repeat(" ", indent-leaderWidth))
 		}
 
 		end := words[idx].nextBreak
@@ -681,7 +699,7 @@ func fmtWriteRawLine(out *strings.Builder, raw string) {
 	out.WriteByte('\n')
 }
 
-func fmtTrimLeadingBlanks(raw string) (string, int) {
+func fmtTrimLeadingBlanks(raw string) (string, int, int) {
 	cols := 0
 	index := 0
 	for index < len(raw) {
@@ -693,10 +711,10 @@ func fmtTrimLeadingBlanks(raw string) (string, int) {
 			cols = fmtNextTabStop(cols)
 			index++
 		default:
-			return raw[index:], cols
+			return raw[index:], cols, index
 		}
 	}
-	return "", cols
+	return "", cols, index
 }
 
 func fmtStringWidth(value string) int {
