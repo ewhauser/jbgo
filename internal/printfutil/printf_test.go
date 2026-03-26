@@ -340,6 +340,9 @@ func TestFormatGNURejectsInvalidFieldCombinationsBeforeOutput(t *testing.T) {
 		{name: "alternate-decimal", format: "%#d", want: "%#d: invalid conversion specification"},
 		{name: "zero-pad-string", format: "%0s", want: "%0s: invalid conversion specification"},
 		{name: "precision-char", format: "%.9c", want: "%.9c: invalid conversion specification"},
+		{name: "zero-positional-arg", format: "%0$s", want: "%0$s: invalid conversion specification"},
+		{name: "zero-positional-width", format: "%*0$d", want: "%*0$d: invalid conversion specification"},
+		{name: "zero-positional-precision", format: "%.*0$d", want: "%.*0$d: invalid conversion specification"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

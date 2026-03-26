@@ -200,11 +200,15 @@ func parseFormat(format string, dialect Dialect) parsedFormat {
 func parseSpec(format string, start int, dialect Dialect) (*formatSpec, int, string, bool) {
 	spec := &formatSpec{}
 	i := start + 1
+	invalidGNUIndex := false
 
 	if dialect == DialectGNU {
-		if index, next, ok := readGNUIndex(format, i); ok {
+		if index, next, ok, invalid := readGNUIndex(format, i); ok {
 			spec.argIndex = index
 			spec.argIndexed = true
+			i = next
+		} else if invalid {
+			invalidGNUIndex = true
 			i = next
 		}
 	}
@@ -239,9 +243,12 @@ width:
 		spec.widthSet = true
 		i++
 		if dialect == DialectGNU {
-			if index, next, ok := readGNUIndex(format, i); ok {
+			if index, next, ok, invalid := readGNUIndex(format, i); ok {
 				spec.widthArgIndex = index
 				spec.widthIndexed = true
+				i = next
+			} else if invalid {
+				invalidGNUIndex = true
 				i = next
 			}
 		}
@@ -261,9 +268,12 @@ width:
 			spec.precisionFromArg = true
 			i++
 			if dialect == DialectGNU {
-				if index, next, ok := readGNUIndex(format, i); ok {
+				if index, next, ok, invalid := readGNUIndex(format, i); ok {
 					spec.precisionArgIndex = index
 					spec.precisionIndexed = true
+					i = next
+				} else if invalid {
+					invalidGNUIndex = true
 					i = next
 				}
 			}
@@ -288,6 +298,9 @@ width:
 	}
 
 	if i >= len(format) {
+		if dialect == DialectGNU && invalidGNUIndex {
+			return nil, len(format), gnuInvalidConversionSpec(format[start:]), true
+		}
 		if dialect == DialectGNU {
 			return nil, len(format), gnuFormatEndsInPercent(format[start:]), true
 		}
@@ -309,7 +322,7 @@ width:
 	if isSupportedVerb(format[i], dialect) {
 		spec.verb = format[i]
 		if dialect == DialectGNU {
-			if diag := validateGNUSpec(spec, format[start:i+1]); diag != "" {
+			if invalidGNUIndex || validateGNUSpec(spec, format[start:i+1]) != "" {
 				return nil, i + 1, gnuInvalidConversionSpec(format[start : i+1]), true
 			}
 		}
@@ -341,27 +354,31 @@ func readDigits(s string, start int) (int, int, bool) {
 	return value, end, true
 }
 
-func readGNUIndex(s string, start int) (int, int, bool) {
+func readGNUIndex(s string, start int) (int, int, bool, bool) {
 	end := start
 	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
 		end++
 	}
 	if end == start || end >= len(s) || s[end] != '$' {
-		return 0, start, false
+		return 0, start, false, false
 	}
 	value := 0
+	allZero := true
 	for i := start; i < end; i++ {
 		digit := int(s[i] - '0')
+		if digit != 0 {
+			allZero = false
+		}
 		if value > (gnuMaxArgIndex-digit)/10 {
 			value = gnuMaxArgIndex
 			break
 		}
 		value = value*10 + digit
 	}
-	if value <= 0 {
-		value = gnuMaxArgIndex
+	if allZero {
+		return 0, end + 1, false, true
 	}
-	return value, end + 1, true
+	return value, end + 1, true, false
 }
 
 func isSupportedVerb(ch byte, dialect Dialect) bool {
