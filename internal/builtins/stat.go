@@ -666,8 +666,12 @@ func statStdin(inv *Invocation) (stdfs.FileInfo, string, error) {
 	if inv != nil {
 		reader = inv.Stdin
 	}
+	if reader == nil {
+		return nil, "-", errors.New("bad file descriptor")
+	}
 	ttyPath := ""
 	for {
+		var readerBadFDErr error
 		if statter, ok := reader.(interface {
 			Stat() (stdfs.FileInfo, error)
 		}); ok {
@@ -678,6 +682,7 @@ func statStdin(inv *Invocation) (stdfs.FileInfo, string, error) {
 			if !statIsBadFileDescriptor(err) {
 				return nil, "-", err
 			}
+			readerBadFDErr = err
 		}
 		if meta, ok := reader.(interface {
 			RedirectPath() string
@@ -690,11 +695,17 @@ func statStdin(inv *Invocation) (stdfs.FileInfo, string, error) {
 			UnderlyingReader() io.Reader
 		})
 		if !ok {
+			if readerBadFDErr != nil {
+				return nil, "-", readerBadFDErr
+			}
 			break
 		}
 		next := unwrapper.UnderlyingReader()
 		if next == nil || next == reader {
-			break
+			if readerBadFDErr != nil {
+				return nil, "-", readerBadFDErr
+			}
+			return nil, "-", errors.New("bad file descriptor")
 		}
 		reader = next
 	}

@@ -2169,6 +2169,22 @@ func TestStatTreatsPipeBackedStdinAsFifo(t *testing.T) {
 	}
 }
 
+func TestStatFailsWhenStdinIsClosed(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "exec 0<&-\nstat -\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got := result.Stdout; got != "" {
+		t.Fatalf("Stdout = %q, want empty", got)
+	}
+	if got := result.Stderr; !strings.Contains(got, "bad file descriptor") {
+		t.Fatalf("Stderr = %q, want bad file descriptor", got)
+	}
+}
+
 func TestStatPrintfEscapesWarningsAndDirectiveErrorsMatchGNU(t *testing.T) {
 	t.Parallel()
 
