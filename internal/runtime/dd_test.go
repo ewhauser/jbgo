@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func execSessionScriptWithInput(t testing.TB, session *Session, script string, stdin []byte) *ExecutionResult {
@@ -480,6 +481,61 @@ func TestDdGNUCompatRegressions(t *testing.T) {
 		}
 		if result.Stderr != "" {
 			t.Fatalf("Stderr = %q, want empty", result.Stderr)
+		}
+	})
+
+	t.Run("skip past eof on fifo warns", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		result, err := session.Exec(ctx, &ExecutionRequest{
+			Script: "mkfifo /tmp/in.pipe\n" +
+				"printf abc > /tmp/in.pipe &\n" +
+				"dd if=/tmp/in.pipe skip=10 bs=1 count=0 status=none of=/dev/null\n" +
+				"wait\n",
+		})
+		if err != nil {
+			t.Fatalf("Exec() error = %v", err)
+		}
+		if got, want := result.ExitCode, 0; got != want {
+			t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "cannot skip to specified offset") {
+			t.Fatalf("Stderr = %q, want skip warning", result.Stderr)
+		}
+	})
+
+	t.Run("seek on redirected fifo stdout reports illegal seek", func(t *testing.T) {
+		t.Parallel()
+
+		session := newSession(t, &Config{})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		result, err := session.Exec(ctx, &ExecutionRequest{
+			Script: "mkfifo /tmp/out.pipe\n" +
+				"cat /tmp/out.pipe > /tmp/drain.out &\n" +
+				"dd seek=1 bs=1 count=0 status=none > /tmp/out.pipe\n" +
+				"printf 'status=%s\\n' \"$?\"\n" +
+				"wait\n",
+		})
+		if err != nil {
+			t.Fatalf("Exec() error = %v", err)
+		}
+		if got, want := result.ExitCode, 0; got != want {
+			t.Fatalf("ExitCode = %d, want %d; stderr=%q", got, want, result.Stderr)
+		}
+		if got, want := result.Stdout, "status=1\n"; got != want {
+			t.Fatalf("Stdout = %q, want %q", got, want)
+		}
+		if !strings.Contains(result.Stderr, "cannot seek: Illegal seek") {
+			t.Fatalf("Stderr = %q, want illegal seek diagnostic", result.Stderr)
+		}
+		if got := readSessionFile(t, session, "/tmp/drain.out"); len(got) != 0 {
+			t.Fatalf("drain output = %q, want empty", got)
 		}
 	})
 

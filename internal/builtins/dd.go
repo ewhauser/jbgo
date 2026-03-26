@@ -972,6 +972,17 @@ func ddStatHandle(ctx context.Context, inv *Invocation, handle any, path string)
 	return info, err
 }
 
+func ddHandleIsNamedPipe(ctx context.Context, inv *Invocation, handle any, path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := ddStatHandle(ctx, inv, handle, path)
+	if err != nil || info == nil {
+		return false
+	}
+	return info.Mode()&stdfs.ModeNamedPipe != 0
+}
+
 func ddSeekCurrent(handle any, delta uint64) bool {
 	if delta == 0 {
 		return true
@@ -1061,7 +1072,7 @@ func openDdInput(ctx context.Context, inv *Invocation, settings *ddSettings) (*d
 				}
 				return nil, exitf(inv, 1, "dd: error reading %s: %v", quoteGNUOperand(label), err)
 			}
-			if discarded < skipBytes && path == "" {
+			if discarded < skipBytes && (path == "" || ddHandleIsNamedPipe(ctx, inv, reader, path)) {
 				ddWarn(inv, "%s: cannot skip to specified offset", quoteGNUOperand(label))
 			}
 		}
@@ -1102,6 +1113,9 @@ func openDdOutput(ctx context.Context, inv *Invocation, settings *ddSettings) (d
 			}
 			if writer, ok := openDdSeekableWriter(inv.Stdout, settings, int64(seekBytes)); ok {
 				return writer, nil
+			}
+			if ddHandleIsNamedPipe(ctx, inv, inv.Stdout, path) {
+				return nil, exitf(inv, 1, "dd: %s: cannot seek: Illegal seek", quoteGNUOperand("standard output"))
 			}
 			writer, err := openDdPathOutput(ctx, inv, settings, path, ddRedirectOffset(inv.Stdout), true)
 			if err != nil {
