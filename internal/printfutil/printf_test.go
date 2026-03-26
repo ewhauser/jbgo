@@ -281,3 +281,157 @@ func TestFormatGNUWarnsOnExcessArgsWithoutConversions(t *testing.T) {
 		t.Fatalf("Warnings = %v, want excess-args warning", result.Warnings)
 	}
 }
+
+func TestFormatGNUIndexedArguments(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		args   []string
+		want   string
+	}{
+		{name: "reorder", format: "%2$s%1$s\n", args: []string{"1", "2"}, want: "21\n"},
+		{name: "repeat-format", format: "%1$s%1$s\n", args: []string{"1", "2"}, want: "11\n22\n"},
+		{name: "mixed-sequential-and-indexed", format: "%s %s %1$s\n", args: []string{"A", "B"}, want: "A B A\n"},
+		{name: "indexed-width-and-precision", format: "%1$*2$.*3$d\n", args: []string{"1", "3", "2"}, want: " 01\n"},
+		{name: "indexed-main-with-sequential-width", format: "%2$*d\n", args: []string{"4", "1"}, want: "   1\n"},
+		{name: "large-index-clamps-and-repeats-once", format: "empty%2147483648$s\n", args: []string{"foo"}, want: "empty\n"},
+		{name: "indexed-and-sequential-share-cycle", format: "%100$*d %s %s %s\n", args: []string{"4", "1"}, want: "   0 1  \n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := Format(tt.format, tt.args, Options{Dialect: DialectGNU})
+			if result.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0; diagnostics=%v warnings=%v", result.ExitCode, result.Diagnostics, result.Warnings)
+			}
+			if got := result.Output; got != tt.want {
+				t.Fatalf("Output = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatGNURejectsInvalidFieldCombinationsBeforeOutput(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+		want   string
+	}{
+		{name: "alternate-decimal", format: "%#d", want: "%#d: invalid conversion specification"},
+		{name: "zero-pad-string", format: "%0s", want: "%0s: invalid conversion specification"},
+		{name: "precision-char", format: "%.9c", want: "%.9c: invalid conversion specification"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := Format(tt.format, []string{"0"}, Options{Dialect: DialectGNU})
+			if result.ExitCode != 1 {
+				t.Fatalf("ExitCode = %d, want 1; diagnostics=%v", result.ExitCode, result.Diagnostics)
+			}
+			if got := result.Output; got != "" {
+				t.Fatalf("Output = %q, want empty", got)
+			}
+			if len(result.Diagnostics) != 1 || result.Diagnostics[0] != tt.want {
+				t.Fatalf("Diagnostics = %v, want [%q]", result.Diagnostics, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatGNUMatchesNumericDiagnosticsAndCharacterConstantWarnings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		format      string
+		args        []string
+		wantOutput  string
+		wantDiag    string
+		wantWarning string
+	}{
+		{name: "expected-numeric-value", format: "%d", args: []string{"a"}, wantOutput: "0", wantDiag: "'a': expected a numeric value"},
+		{name: "value-not-completely-converted", format: "%d", args: []string{"9z"}, wantOutput: "9", wantDiag: "'9z': value not completely converted"},
+		{name: "quoted-char-warning", format: "%d", args: []string{`"a"`}, wantOutput: "97", wantWarning: `warning: ": character(s) following character constant have been ignored`},
+		{name: "lone-quote", format: "%d", args: []string{`"`}, wantOutput: "0", wantDiag: `'"': expected a numeric value`},
+		{name: "invalid-precision-arg", format: "%.*dx", args: []string{"2147483648", "0"}, wantOutput: "", wantDiag: "invalid precision: '2147483648'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := Format(tt.format, tt.args, Options{Dialect: DialectGNU})
+			if got := result.Output; got != tt.wantOutput {
+				t.Fatalf("Output = %q, want %q", got, tt.wantOutput)
+			}
+			if tt.wantDiag == "" {
+				if len(result.Diagnostics) != 0 {
+					t.Fatalf("Diagnostics = %v, want empty", result.Diagnostics)
+				}
+			} else if len(result.Diagnostics) != 1 || result.Diagnostics[0] != tt.wantDiag {
+				t.Fatalf("Diagnostics = %v, want [%q]", result.Diagnostics, tt.wantDiag)
+			}
+			if tt.wantWarning == "" {
+				if len(result.Warnings) != 0 {
+					t.Fatalf("Warnings = %v, want empty", result.Warnings)
+				}
+			} else if len(result.Warnings) != 1 || result.Warnings[0] != tt.wantWarning {
+				t.Fatalf("Warnings = %v, want [%q]", result.Warnings, tt.wantWarning)
+			}
+		})
+	}
+}
+
+func TestFormatGNUQuotesOverflowOperands(t *testing.T) {
+	t.Parallel()
+
+	result := Format("%d", []string{"999999999999999999999999999999"}, Options{Dialect: DialectGNU})
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; diagnostics=%v", result.ExitCode, result.Diagnostics)
+	}
+	if got, want := result.Output, "9223372036854775807"; got != want {
+		t.Fatalf("Output = %q, want %q", got, want)
+	}
+	wantDiag := "'999999999999999999999999999999': Result too large"
+	if runtime.GOOS == "linux" {
+		wantDiag = "'999999999999999999999999999999': Numerical result out of range"
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0] != wantDiag {
+		t.Fatalf("Diagnostics = %v, want [%q]", result.Diagnostics, wantDiag)
+	}
+}
+
+func TestFormatGNUQuoteRespectsLocaleForNonASCII(t *testing.T) {
+	t.Parallel()
+
+	lookup := func(values map[string]string) func(string) (string, bool) {
+		return func(name string) (string, bool) {
+			value, ok := values[name]
+			return value, ok
+		}
+	}
+
+	cLocale := Format("%q\n%q\n", []string{"áḃç", string([]byte{0xc2, 0x81})}, Options{
+		Dialect:   DialectGNU,
+		LookupEnv: lookup(map[string]string{"LC_ALL": "C"}),
+	})
+	if cLocale.ExitCode != 0 {
+		t.Fatalf("C locale ExitCode = %d, want 0; diagnostics=%v", cLocale.ExitCode, cLocale.Diagnostics)
+	}
+	if got, want := cLocale.Output, "''$'\\303\\241\\341\\270\\203\\303\\247'\n''$'\\302\\201'\n"; got != want {
+		t.Fatalf("C locale Output = %q, want %q", got, want)
+	}
+
+	utf8Locale := Format("%q\n%q\n", []string{"áḃç", string([]byte{0xc2, 0x81})}, Options{
+		Dialect:   DialectGNU,
+		LookupEnv: lookup(map[string]string{"LC_ALL": "fr_FR.UTF-8"}),
+	})
+	if utf8Locale.ExitCode != 0 {
+		t.Fatalf("UTF-8 locale ExitCode = %d, want 0; diagnostics=%v", utf8Locale.ExitCode, utf8Locale.Diagnostics)
+	}
+	if got, want := utf8Locale.Output, "áḃç\n''$'\\302\\201'\n"; got != want {
+		t.Fatalf("UTF-8 locale Output = %q, want %q", got, want)
+	}
+}

@@ -229,3 +229,25 @@ func TestPrintfBuiltinAndBinPrintfSplitTimeConversion(t *testing.T) {
 		t.Fatalf("Stderr = %q, want %q", got, want)
 	}
 }
+
+func TestBinPrintfSupportsGNUIndexedFormats(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "/bin/printf '%2$s%1$s\\n' 1 2\n" +
+			"/bin/printf '%1$*2$.*3$d\\n' 1 3 2\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "21\n 01\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
