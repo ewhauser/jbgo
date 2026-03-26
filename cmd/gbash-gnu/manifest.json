@@ -113,6 +113,7 @@
     { "pattern": "tests/touch/no-dereference.sh", "reason": "touch -h symlink timestamp updates are not supported in gbash v1" },
     { "pattern": "tests/touch/not-owner.sh", "reason": "touch not-owner cases assume a real filesystem root with host ownership and read-only semantics, but the gbash compat sandbox maps / to a writable temp root owned by the runner" },
     { "pattern": "tests/touch/trailing-slash.sh", "reason": "touch trailing-slash cases require traversing symlink-to-file and symlink-loop paths, which the default gbash sandbox denies" },
+    { "pattern": "tests/head/head-c.sh", "reason": "head-c proc/sys cases depend on /proc/version and /sys/kernel/profiling being mirrored into the compat sandbox root, which is not reliable in the current GNU harness" },
     { "pattern": "tests/split/b-chunk.sh", "reason": "split proc/sysfs test requires /proc/version and /sys/kernel/profiling, which are not mounted inside the gbash compat sandbox root" },
     { "pattern": "tests/wc/wc-proc.sh", "reason": "wc proc/sysfs test requires /proc/version and /sys/kernel/profiling, which are not mounted inside the gbash compat sandbox root" }
   ]

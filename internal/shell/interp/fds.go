@@ -244,6 +244,28 @@ func (fd *shellFD) UnderlyingWriter() io.Writer {
 	return fd.writer
 }
 
+func (fd *shellFD) Seek(offset int64, whence int) (int64, error) {
+	if fd == nil || fd.reader == nil {
+		return 0, errors.New("bad file descriptor")
+	}
+	seeker, ok := fd.reader.(interface {
+		Seek(offset int64, whence int) (int64, error)
+	})
+	if !ok {
+		return 0, errors.New("illegal seek")
+	}
+	adjusted := offset
+	if fd.buffered && whence == io.SeekCurrent {
+		adjusted--
+	}
+	position, err := seeker.Seek(adjusted, whence)
+	if err != nil {
+		return position, err
+	}
+	fd.buffered = false
+	return position, nil
+}
+
 func (fd *shellFD) SetReadDeadline(t time.Time) error {
 	if fd == nil || fd.deadline == nil {
 		return nil

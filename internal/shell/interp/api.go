@@ -707,9 +707,21 @@ func stdinReader(r io.Reader, pipeFactory func() (io.ReadCloser, io.WriteCloser,
 	if meta, ok := r.(commandutil.RedirectMetadata); ok {
 		redirectMeta = snapshotRedirectedStdinMetadata(meta)
 	}
+	if r == nil {
+		return nil
+	}
+	if stdin, ok := r.(StdinReader); ok {
+		return wrapRedirectedStdinReader(stdin, stdin, redirectMeta)
+	}
+	if seekable, ok := r.(interface {
+		io.ReadCloser
+		Seek(offset int64, whence int) (int64, error)
+	}); ok {
+		if _, err := seekable.Seek(0, io.SeekCurrent); err == nil {
+			return wrapRedirectedStdinReader(nopDeadlineSeekReader{ReadCloser: seekable, seeker: seekable}, seekable, redirectMeta)
+		}
+	}
 	switch r := r.(type) {
-	case StdinReader:
-		return wrapRedirectedStdinReader(r, r, redirectMeta)
 	case nil:
 		return nil
 	default:
@@ -853,6 +865,19 @@ type nopDeadlineReader struct {
 }
 
 func (nopDeadlineReader) SetReadDeadline(time.Time) error { return nil }
+
+type nopDeadlineSeekReader struct {
+	io.ReadCloser
+	seeker interface {
+		Seek(offset int64, whence int) (int64, error)
+	}
+}
+
+func (r nopDeadlineSeekReader) SetReadDeadline(time.Time) error { return nil }
+
+func (r nopDeadlineSeekReader) Seek(offset int64, whence int) (int64, error) {
+	return r.seeker.Seek(offset, whence)
+}
 
 func normalizePlatform(platform host.Platform) host.Platform {
 	if platform.OS == "" {

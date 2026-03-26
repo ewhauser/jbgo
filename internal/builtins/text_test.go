@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	gbash "github.com/ewhauser/gbash"
 	"github.com/ewhauser/gbash/policy"
 )
 
@@ -188,6 +189,49 @@ func TestHeadSupportsNegativeCountsAndZeroTermination(t *testing.T) {
 	const want = "one\ntwo\n---\none\ntwo\nthre---\nx\x00y\x00"
 	if got := result.Stdout; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestHeadPreservesRedirectedStdinOffset(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	session := newSession(t, &Config{
+		FileSystem: gbash.ReadWriteDirectoryFileSystem(root, gbash.ReadWriteDirectoryOptions{}),
+	})
+
+	result := mustExecSession(t, session, "printf 'a\\nb\\n' > /tmp/in.txt\n(head -n 1 >/dev/null; cat) < /tmp/in.txt\nprintf '%s\\n' '---'\n(head -n -1 >/dev/null; cat) < /tmp/in.txt\nprintf '%s\\n' '---'\nseq 70000 > /tmp/in2.txt\n(head -n-50000 >/dev/null; wc -l) < /tmp/in2.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "b\n---\nb\n---\n50000\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+type headTestErrorWriter struct{}
+
+func (headTestErrorWriter) Write([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
+
+func TestHeadWriteErrorsUseGNUStyleDiagnostic(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+	stderr := &bytes.Buffer{}
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'one\\n' > /tmp/in.txt\nhead /tmp/in.txt\n",
+		Stdout: headTestErrorWriter{},
+		Stderr: stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if got, want := stderr.String(), "head: error writing 'standard output'\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }
 

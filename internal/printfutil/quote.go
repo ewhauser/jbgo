@@ -9,9 +9,9 @@ import (
 	"github.com/ewhauser/gbash/internal/shell/syntax"
 )
 
-func quoteShell(s string, dialect Dialect) string {
-	if dialect == DialectGNU {
-		return quoteShellGNU(s)
+func quoteShell(s string, opts Options) string {
+	if opts.Dialect == DialectGNU {
+		return quoteShellGNU(s, localeUsesUTF8(opts))
 	}
 	return quoteShellBash(s)
 }
@@ -36,7 +36,7 @@ func quoteShellBash(s string) string {
 	return b.String()
 }
 
-func quoteShellGNU(s string) string {
+func quoteShellGNU(s string, utf8Locale bool) string {
 	if s == "" {
 		return "''"
 	}
@@ -75,8 +75,13 @@ func quoteShellGNU(s string) string {
 			enterDollar()
 			mustQuote = true
 			fmt.Fprintf(&b, "\\%03o", s[0])
+		case !utf8Locale && s[0] >= 0x80:
+			enterDollar()
+			mustQuote = true
+			fmt.Fprintf(&b, "\\%03o", s[0])
+			size = 1
 		default:
-			switch state, ch := classifyGNUShellChar(r, quotes); state {
+			switch state, ch := classifyGNUShellChar(r, quotes, utf8Locale); state {
 			case gnuEscapeChar:
 				exitDollar()
 				b.WriteRune(ch)
@@ -216,7 +221,7 @@ func gnuSpecialShellStart(s string) bool {
 	return s[0] == '~' || s[0] == '#'
 }
 
-func classifyGNUShellChar(r rune, quotes byte) (gnuEscapeState, rune) {
+func classifyGNUShellChar(r rune, quotes byte, utf8Locale bool) (gnuEscapeState, rune) {
 	switch r {
 	case '\a':
 		return gnuEscapeDollar, 'a'
@@ -241,8 +246,26 @@ func classifyGNUShellChar(r rune, quotes byte) (gnuEscapeState, rune) {
 	if r < 0x20 || r == 0x7f {
 		return gnuEscapeOctal, r
 	}
+	if utf8Locale && !unicode.IsPrint(r) {
+		return gnuEscapeOctal, r
+	}
 	if strings.ContainsRune("`$&*()|[;\\'\"<>?! ", r) {
 		return gnuEscapeForceQuote, r
 	}
 	return gnuEscapeChar, r
+}
+
+func localeUsesUTF8(opts Options) bool {
+	if opts.LookupEnv == nil {
+		return false
+	}
+	for _, name := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		value, ok := opts.LookupEnv(name)
+		if !ok || value == "" {
+			continue
+		}
+		upper := strings.ToUpper(value)
+		return strings.Contains(upper, "UTF-8") || strings.Contains(upper, "UTF8")
+	}
+	return false
 }

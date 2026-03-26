@@ -223,10 +223,14 @@ func solveTRSets(warn io.Writer, set1Text, set2Text string, complement, truncate
 	set1Solved = trFlattenSequences(set1Seqs)
 	if complement {
 		present := [256]bool{}
+		uniqueCount := 0
 		for _, b := range set1Solved {
-			present[b] = true
+			if !present[b] {
+				present[b] = true
+				uniqueCount++
+			}
 		}
-		comp := make([]byte, 0, 256-len(set1Solved))
+		comp := make([]byte, 0, 256-uniqueCount)
 		for i := 0; i <= 0xff; i++ {
 			if !present[byte(i)] {
 				comp = append(comp, byte(i))

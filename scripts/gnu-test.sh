@@ -41,6 +41,7 @@ prepare_workdir() {
   cp -a "$GNU_SOURCE_DIR"/. "$workdir"/
   relocate_workdir "$workdir"
   populate_compat_devices "$workdir"
+  populate_compat_proc_files "$workdir"
   printf '%s\n' "$workdir"
 }
 
@@ -54,6 +55,28 @@ populate_compat_devices() {
     if [[ -e /dev/$name ]]; then
       ln -sfn "/dev/$name" "$devdir/$name"
     fi
+  done
+}
+
+populate_compat_proc_files() {
+  local workdir=$1
+  local source target
+
+  for source in /proc/version /sys/kernel/profiling; do
+    target=$workdir$source
+    mkdir -p "$(dirname "$target")"
+    if [ -r "$source" ]; then
+      cp -f "$source" "$target"
+      continue
+    fi
+    case "$source" in
+      /proc/version)
+        printf 'Linux version gbash-compat\n' > "$target"
+        ;;
+      /sys/kernel/profiling)
+        printf '0\n' > "$target"
+        ;;
+    esac
   done
 }
 
