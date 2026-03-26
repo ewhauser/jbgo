@@ -21,6 +21,30 @@ func TestFmtHelpAndVersion(t *testing.T) {
 	}
 }
 
+func TestFmtHelpAndVersionShortCircuitParsing(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	result := mustExecSession(t, session, ""+
+		"fmt --help --bad\n"+
+		"printf '%s\\n' '---'\n"+
+		"fmt -72x --help\n"+
+		"printf '%s\\n' '---'\n"+
+		"fmt --version --bad\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+	if got := strings.Count(result.Stdout, "Usage: fmt [-WIDTH] [OPTION]... [FILE]...\n"); got != 2 {
+		t.Fatalf("help count = %d; stdout=%q", got, result.Stdout)
+	}
+	if got := strings.Count(result.Stdout, "fmt (gbash)\n"); got != 1 {
+		t.Fatalf("version count = %d; stdout=%q", got, result.Stdout)
+	}
+}
+
 func TestFmtGNUWidthCases(t *testing.T) {
 	t.Parallel()
 
@@ -103,12 +127,14 @@ func TestFmtPrefixHandling(t *testing.T) {
 		"printf '%s\\n' '---'\n" +
 		"printf 'fo\\n' | fmt -p 'foo'\n" +
 		"printf '%s\\n' '---'\n" +
-		"printf 'ça\\nçb\\n' | fmt -p 'ç'\n"
+		"printf 'ça\\nçb\\n' | fmt -p 'ç'\n" +
+		"printf '%s\\n' '---'\n" +
+		"printf '> a\\n> b\\n>a\\n' | fmt -p '> '\n"
 	result := mustExecSession(t, session, script)
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	want := " 1\n  2\n\t3\n\t\t4\n> quoted text\n---\n>\n---\nfo\n---\nça b\n"
+	want := " 1\n  2\n\t3\n\t\t4\n> quoted text\n---\n>\n---\nfo\n---\nça b\n---\n> a b\n>a\n"
 	if result.Stdout != want {
 		t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
 	}

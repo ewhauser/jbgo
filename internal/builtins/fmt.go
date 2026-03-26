@@ -168,9 +168,17 @@ func parseFmtOptions(inv *Invocation) (fmtOptions, int, int, error) {
 			}
 			switch name {
 			case "help":
+				if hasValue {
+					return fmtOptions{}, 0, 0, commandUsageError(inv, "fmt", "unrecognized option '--%s'", arg[2:])
+				}
 				opts.showHelp = true
+				return opts, 0, 0, nil
 			case "version":
+				if hasValue {
+					return fmtOptions{}, 0, 0, commandUsageError(inv, "fmt", "unrecognized option '--%s'", arg[2:])
+				}
 				opts.showVersion = true
+				return opts, 0, 0, nil
 			case "crown-margin":
 				opts.crown = true
 			case "split-only":
@@ -305,8 +313,7 @@ func fmtNormalizePrefix(raw string) (string, int) {
 	for lead < len(raw) && raw[lead] == ' ' {
 		lead++
 	}
-	trimmed := strings.TrimRight(raw[lead:], " ")
-	return trimmed, lead
+	return raw[lead:], lead
 }
 
 func formatFmtInput(data string, opts *fmtOptions, maxWidth, goalWidth int) string {
