@@ -95,6 +95,37 @@ func TestSetStandardFDsDoesNotCloseOwnedDescriptorWhenRewiringStdout(t *testing.
 	}
 }
 
+func TestShellFDSeekAccountsForBufferedByte(t *testing.T) {
+	t.Parallel()
+
+	base := seekableTestStdin{Reader: bytes.NewReader([]byte("abcdef"))}
+	fd := newShellInputFD(base)
+
+	got, err := fd.PeekByte()
+	if err != nil {
+		t.Fatalf("PeekByte() error = %v", err)
+	}
+	if got != 'a' {
+		t.Fatalf("PeekByte() = %q, want %q", got, 'a')
+	}
+
+	position, err := fd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		t.Fatalf("Seek(current) error = %v", err)
+	}
+	if position != 0 {
+		t.Fatalf("Seek(current) = %d, want 0", position)
+	}
+
+	buf := make([]byte, 2)
+	if n, err := fd.Read(buf); err != nil || n != 2 {
+		t.Fatalf("Read() = (%d, %v), want (2, nil)", n, err)
+	}
+	if got := string(buf); got != "ab" {
+		t.Fatalf("Read() = %q, want %q", got, "ab")
+	}
+}
+
 func TestNestedStdoutRedirectRestoresOuterDescriptor(t *testing.T) {
 	t.Parallel()
 

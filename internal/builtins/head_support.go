@@ -265,6 +265,56 @@ func headClampBigUint64String(value *big.Int) string {
 	return new(big.Int).SetUint64(headClampBigUint64(value)).String()
 }
 
+func headStdoutWriteError(inv *Invocation) error {
+	return exitf(inv, 1, "head: error writing 'standard output'")
+}
+
+func headSeeker(src io.Reader) (interface {
+	Seek(offset int64, whence int) (int64, error)
+}, bool) {
+	if src == nil {
+		return nil, false
+	}
+	seeker, ok := src.(interface {
+		Seek(offset int64, whence int) (int64, error)
+	})
+	if !ok {
+		return nil, false
+	}
+	if _, err := seeker.Seek(0, io.SeekCurrent); err != nil {
+		return nil, false
+	}
+	return seeker, true
+}
+
+func headReadSeeker(src io.Reader) (interface {
+	io.Reader
+	io.Seeker
+}, bool) {
+	if _, ok := headSeeker(src); !ok {
+		return nil, false
+	}
+	seeker, ok := src.(interface {
+		io.Reader
+		io.Seeker
+	})
+	return seeker, ok
+}
+
+func headRewindBufferedReader(inv *Invocation, src io.Reader, reader *bufio.Reader, sourceName string) error {
+	if reader == nil || reader.Buffered() == 0 {
+		return nil
+	}
+	seeker, ok := headSeeker(src)
+	if !ok {
+		return nil
+	}
+	if _, err := seeker.Seek(-int64(reader.Buffered()), io.SeekCurrent); err != nil {
+		return exitf(inv, 1, "head: error reading %s: %s", quoteGNUOperand(sourceName), readAllErrorText(err))
+	}
+	return nil
+}
+
 func headWriteFromReader(inv *Invocation, src io.Reader, sourceName string, opts headOptions) error {
 	switch opts.mode {
 	case headModeFirstBytes:
@@ -293,7 +343,7 @@ func headWriteFirstBytes(inv *Invocation, src io.Reader, sourceName string, coun
 		n, err := src.Read(buf[:limit])
 		if n > 0 {
 			if _, writeErr := inv.Stdout.Write(buf[:n]); writeErr != nil {
-				return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+				return headStdoutWriteError(inv)
 			}
 			remaining -= uint64(n)
 		}
@@ -319,10 +369,13 @@ func headWriteFirstLines(inv *Invocation, src io.Reader, sourceName string, coun
 		chunk, err := reader.ReadSlice(separator)
 		if len(chunk) > 0 {
 			if _, writeErr := inv.Stdout.Write(chunk); writeErr != nil {
-				return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+				return headStdoutWriteError(inv)
 			}
 			if chunk[len(chunk)-1] == separator {
 				remaining--
+				if remaining == 0 {
+					return headRewindBufferedReader(inv, src, reader, sourceName)
+				}
 			}
 		}
 		if err == nil || errors.Is(err, bufio.ErrBufferFull) {
@@ -342,10 +395,7 @@ func headWriteAllButLastBytes(inv *Invocation, src io.Reader, sourceName string,
 	}
 
 	if !opts.presumeInputPipe {
-		if seeker, ok := src.(interface {
-			io.Reader
-			io.Seeker
-		}); ok {
+		if seeker, ok := headReadSeeker(src); ok {
 			return headWriteAllButLastBytesSeekable(inv, seeker, opts.count, sourceName)
 		}
 	}
@@ -367,7 +417,7 @@ func headWriteAllButLastBytes(inv *Invocation, src io.Reader, sourceName string,
 			if uint64(len(pending)) > opts.count {
 				writeCount := int(uint64(len(pending)) - opts.count)
 				if _, writeErr := inv.Stdout.Write(pending[:writeCount]); writeErr != nil {
-					return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+					return headStdoutWriteError(inv)
 				}
 				pending = append(pending[:0], pending[writeCount:]...)
 			}
@@ -389,10 +439,7 @@ func headWriteAllButLastLines(inv *Invocation, src io.Reader, sourceName string,
 
 	separator := headRecordSeparator(opts)
 	if !opts.presumeInputPipe {
-		if seeker, ok := src.(interface {
-			io.Reader
-			io.Seeker
-		}); ok {
+		if seeker, ok := headReadSeeker(src); ok {
 			return headWriteAllButLastLinesSeekable(inv, seeker, opts.count, separator, sourceName)
 		}
 	}
@@ -414,7 +461,7 @@ func headWriteAllButLastLines(inv *Invocation, src io.Reader, sourceName string,
 			current = append(current, chunk...)
 			if len(queue) > 0 && headBufferedRecordCount(queue, current) > opts.count {
 				if _, writeErr := inv.Stdout.Write(queue[0]); writeErr != nil {
-					return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+					return headStdoutWriteError(inv)
 				}
 				queue[0] = nil
 				queue = queue[1:]
@@ -424,7 +471,7 @@ func headWriteAllButLastLines(inv *Invocation, src io.Reader, sourceName string,
 				current = nil
 				for len(queue) > 0 && headBufferedRecordCount(queue, current) > opts.count {
 					if _, writeErr := inv.Stdout.Write(queue[0]); writeErr != nil {
-						return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+						return headStdoutWriteError(inv)
 					}
 					queue[0] = nil
 					queue = queue[1:]
@@ -441,7 +488,7 @@ func headWriteAllButLastLines(inv *Invocation, src io.Reader, sourceName string,
 			}
 			for uint64(len(queue)) > opts.count {
 				if _, writeErr := inv.Stdout.Write(queue[0]); writeErr != nil {
-					return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+					return headStdoutWriteError(inv)
 				}
 				queue[0] = nil
 				queue = queue[1:]
@@ -556,7 +603,7 @@ func headCopyAll(inv *Invocation, src io.Reader, sourceName string) error {
 		n, err := src.Read(buf)
 		if n > 0 {
 			if _, writeErr := inv.Stdout.Write(buf[:n]); writeErr != nil {
-				return exitf(inv, 1, "head: error writing 'standard output': %s", writeErr)
+				return headStdoutWriteError(inv)
 			}
 		}
 		if err == nil {

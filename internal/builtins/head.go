@@ -114,12 +114,12 @@ func (c *Head) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 			if printedSection {
 				if _, err := fmt.Fprintln(inv.Stdout); err != nil {
 					closeFn()
-					return exitf(inv, 1, "head: error writing 'standard output': %s", err)
+					return headStdoutWriteError(inv)
 				}
 			}
 			if _, err := fmt.Fprintf(inv.Stdout, "==> %s <==\n", displayName); err != nil {
 				closeFn()
-				return exitf(inv, 1, "head: error writing 'standard output': %s", err)
+				return headStdoutWriteError(inv)
 			}
 			printedSection = true
 		}
