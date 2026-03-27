@@ -580,7 +580,7 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 	}
 	if opts.recursive || showHeader {
 		header := lsQuoteName(target, opts.quotingMode, opts.hideControlChars)
-		if lsShouldUseColor(inv, opts.hyperlinkMode) {
+		if lsShouldUseHyperlinks(inv, opts.hyperlinkMode) {
 			header = lsHyperlink(header, lsHeaderHyperlinkTarget(ctx, inv, abs, info, opts))
 		}
 		if opts.dired {
@@ -1559,7 +1559,7 @@ func lsDecoratedName(ctx context.Context, inv *Invocation, rawName, abs string, 
 	if err != nil {
 		return "", "", nil, err
 	}
-	if lsShouldUseColor(inv, opts.hyperlinkMode) {
+	if lsShouldUseHyperlinks(inv, opts.hyperlinkMode) {
 		display = lsHyperlink(display+suffix, abs)
 		suffix = ""
 	}
@@ -1741,6 +1741,20 @@ func lsShouldUseColor(inv *Invocation, mode lsColorMode) bool {
 	}
 }
 
+func lsShouldUseHyperlinks(inv *Invocation, mode lsColorMode) bool {
+	switch mode {
+	case lsColorAlways:
+		return true
+	case lsColorNever:
+		return false
+	default:
+		if inv == nil {
+			return false
+		}
+		return lsTerminalWriter(inv.Stdout)
+	}
+}
+
 func lsEnvSupportsColor(inv *Invocation) bool {
 	if inv == nil {
 		return false
@@ -1798,11 +1812,12 @@ func lsColorStyleFromEnv(ctx context.Context, inv *Invocation, abs string, info,
 	}
 	if indicator != "" {
 		if code, ok := parsed.entries[indicator]; ok {
-			if !lsColorCodeIsResetOnly(code) {
-				style.nameCode = code
-				style.nameExplicit = true
+			if lsColorCodeIsResetOnly(code) {
 				return style, nil
 			}
+			style.nameCode = code
+			style.nameExplicit = true
+			return style, nil
 		}
 	}
 	name := path.Base(abs)

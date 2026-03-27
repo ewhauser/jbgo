@@ -667,13 +667,13 @@ func TestLSColorsRespectOrderedCaseSensitiveExtensions(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m") {
+	if !strings.Contains(result.Stdout, "\x1b[01;35mimg1.jpg\x1b[0m") {
 		t.Fatalf("Stdout = %q, want lowercase extension color", result.Stdout)
 	}
-	if !strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35;46mIMG2.JPG\x1b[0m") {
+	if !strings.Contains(result.Stdout, "\x1b[01;35;46mIMG2.JPG\x1b[0m") {
 		t.Fatalf("Stdout = %q, want ordered uppercase extension override", result.Stdout)
 	}
-	if strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35mimg3.JpG\x1b[0m") || strings.Contains(result.Stdout, "\x1b[0m\x1b[01;35;46mimg3.JpG\x1b[0m") {
+	if strings.Contains(result.Stdout, "\x1b[01;35mimg3.JpG\x1b[0m") || strings.Contains(result.Stdout, "\x1b[01;35;46mimg3.JpG\x1b[0m") {
 		t.Fatalf("Stdout = %q, want mixed-case extension left uncolored", result.Stdout)
 	}
 }
@@ -688,7 +688,7 @@ func TestLSColorsUseWritableAndStickyDirectoryClasses(t *testing.T) {
 	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir/other-writable", 0o777); err != nil {
 		t.Fatalf("Chmod(other-writable) error = %v", err)
 	}
-	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir/sticky", 0o1755); err != nil {
+	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir/sticky", stdfs.ModeSticky|0o755); err != nil {
 		t.Fatalf("Chmod(sticky) error = %v", err)
 	}
 	stickyInfo, err := session.FileSystem().Stat(context.Background(), "/tmp/ls-color-dir/sticky")
@@ -701,16 +701,35 @@ func TestLSColorsUseWritableAndStickyDirectoryClasses(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	wants := []string{
-		"\x1b[0m\x1b[01;34mdefault\x1b[0m",
-		"\x1b[0m\x1b[34;42mother-writable\x1b[0m",
+		"\x1b[01;34mdefault\x1b[0m",
+		"\x1b[34;42mother-writable\x1b[0m",
 	}
 	if stickyInfo.Mode()&stdfs.ModeSticky != 0 {
-		wants = append(wants, "\x1b[0m\x1b[37;44msticky\x1b[0m")
+		wants = append(wants, "\x1b[37;44msticky\x1b[0m")
 	}
 	for _, want := range wants {
 		if !strings.Contains(result.Stdout, want) {
 			t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
 		}
+	}
+}
+
+func TestLSColorsResetOnlyIndicatorPreventsFallbackColor(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-color-reset/plain.txt", []byte("plain\n"))
+	writeSessionFile(t, session, "/tmp/ls-color-reset/dir/file", []byte("dir\n"))
+
+	result := mustExecSession(t, session, "LS_COLORS='di=0:fi=31' ls --color=always /tmp/ls-color-reset\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "\x1b[31mplain.txt\x1b[0m") {
+		t.Fatalf("Stdout = %q, want plain file to use fi color", result.Stdout)
+	}
+	if strings.Contains(result.Stdout, "\x1b[31mdir\x1b[0m") {
+		t.Fatalf("Stdout = %q, want reset-only di color to prevent fi fallback", result.Stdout)
 	}
 }
 
