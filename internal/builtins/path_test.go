@@ -214,6 +214,36 @@ func TestTruncateReferenceAndNoCreate(t *testing.T) {
 	}
 }
 
+func TestTruncateCreatesThroughDanglingSymlink(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	if err := session.FileSystem().MkdirAll(context.Background(), "/home/agent", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/home/agent) error = %v", err)
+	}
+	if err := session.FileSystem().Symlink(context.Background(), "target.txt", "/home/agent/link.txt"); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	result := mustExecSession(t, session, "truncate -s 0 /home/agent/link.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	if info, err := session.FileSystem().Stat(context.Background(), "/home/agent/target.txt"); err != nil {
+		t.Fatalf("Stat(target.txt) error = %v", err)
+	} else if info.Size() != 0 {
+		t.Fatalf("Stat(target.txt).Size() = %d, want 0", info.Size())
+	}
+	info, err := session.FileSystem().Lstat(context.Background(), "/home/agent/link.txt")
+	if err != nil {
+		t.Fatalf("Lstat(link.txt) error = %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("Lstat(link.txt).Mode() = %v, want symlink", info.Mode())
+	}
+}
+
 func TestTruncateReportsErrors(t *testing.T) {
 	t.Parallel()
 	t.Run("missing file operand", func(t *testing.T) {
@@ -289,6 +319,21 @@ func TestTruncateReportsErrors(t *testing.T) {
 		}
 		if !strings.Contains(result.Stderr, "cannot open '/home/agent/missing/child.txt' for writing: No such file or directory") {
 			t.Fatalf("Stderr = %q, want missing parent error", result.Stderr)
+		}
+	})
+
+	t.Run("trailing slash on missing path", func(t *testing.T) {
+		t.Parallel()
+		session := newSession(t, &Config{})
+		result := mustExecSession(t, session, "truncate -s 0 /home/agent/missing/\n")
+		if result.ExitCode == 0 {
+			t.Fatalf("ExitCode = 0, want non-zero")
+		}
+		if !strings.Contains(result.Stderr, "cannot open '/home/agent/missing/' for writing: Not a directory") {
+			t.Fatalf("Stderr = %q, want trailing-slash error", result.Stderr)
+		}
+		if _, err := session.FileSystem().Stat(context.Background(), "/home/agent/missing"); !os.IsNotExist(err) {
+			t.Fatalf("Stat(/home/agent/missing) error = %v, want not exist", err)
 		}
 	})
 }
