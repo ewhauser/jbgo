@@ -3,10 +3,10 @@ module github.com/ewhauser/gbash/examples
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.30
-	github.com/ewhauser/gbash/contrib/bashtool v0.0.30
-	github.com/ewhauser/gbash/contrib/extras v0.0.30
-	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.30
+	github.com/ewhauser/gbash v0.0.31
+	github.com/ewhauser/gbash/contrib/bashtool v0.0.31
+	github.com/ewhauser/gbash/contrib/extras v0.0.31
+	github.com/ewhauser/gbash/contrib/sqlite3 v0.0.31
 	github.com/klauspost/compress v1.18.4
 	github.com/ncruces/go-sqlite3 v0.31.1
 	github.com/openai/openai-go v1.12.0
@@ -36,11 +36,11 @@ require (
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
-	github.com/ewhauser/gbash/contrib/awk v0.0.30 // indirect
-	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.30 // indirect
-	github.com/ewhauser/gbash/contrib/jq v0.0.30 // indirect
-	github.com/ewhauser/gbash/contrib/python v0.0.30 // indirect
-	github.com/ewhauser/gbash/contrib/yq v0.0.30 // indirect
+	github.com/ewhauser/gbash/contrib/awk v0.0.31 // indirect
+	github.com/ewhauser/gbash/contrib/htmltomarkdown v0.0.31 // indirect
+	github.com/ewhauser/gbash/contrib/jq v0.0.31 // indirect
+	github.com/ewhauser/gbash/contrib/python v0.0.31 // indirect
+	github.com/ewhauser/gbash/contrib/yq v0.0.31 // indirect
 	github.com/ewhauser/gomonty v0.0.13 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
