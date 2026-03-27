@@ -79,9 +79,10 @@ type sortKey struct {
 }
 
 type sortGeneralNumber struct {
-	kind  int
-	value *big.Float
-	text  string
+	kind    int
+	value   *big.Float
+	text    string
+	nanSign int
 }
 
 type sortInputRun struct {
@@ -91,8 +92,8 @@ type sortInputRun struct {
 
 const (
 	sortNumberInvalid = iota
-	sortNumberFinite
 	sortNumberNaN
+	sortNumberFinite
 )
 
 func NewSort() *Sort {
@@ -1666,8 +1667,40 @@ func sortFoldMonthLatin1Byte(b byte) (byte, bool) {
 
 func sortNormalizeGeneralNumericPrefix(prefix string) string {
 	trimmed := strings.TrimSpace(prefix)
+	sign := ""
+	if trimmed != "" && (trimmed[0] == '+' || trimmed[0] == '-') {
+		sign = trimmed[:1]
+		trimmed = trimmed[1:]
+	}
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "infinity"), strings.HasPrefix(lower, "inf"):
+		return sign + "inf"
+	case strings.HasPrefix(lower, "nan"):
+		return sign + "nan"
+	}
 	if strings.Contains(trimmed, ",") && !strings.Contains(trimmed, ".") {
-		return strings.Replace(trimmed, ",", ".", 1)
+		trimmed = strings.Replace(trimmed, ",", ".", 1)
+	}
+	return sign + trimmed
+}
+
+func sortGeneralNumericPrefixSign(prefix string) int {
+	trimmed := strings.TrimSpace(prefix)
+	switch {
+	case strings.HasPrefix(trimmed, "-"):
+		return -1
+	case strings.HasPrefix(trimmed, "+"):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func sortUnsignedGeneralNumericPrefix(prefix string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(prefix))
+	if trimmed != "" && (trimmed[0] == '+' || trimmed[0] == '-') {
+		return trimmed[1:]
 	}
 	return trimmed
 }
@@ -1973,6 +2006,15 @@ func compareGeneralNumericValues(a, b string) int {
 		}
 		return 1
 	}
+	if valA.kind == sortNumberNaN {
+		if valA.nanSign < valB.nanSign {
+			return -1
+		}
+		if valA.nanSign > valB.nanSign {
+			return 1
+		}
+		return 0
+	}
 	if valA.kind != sortNumberFinite {
 		return 0
 	}
@@ -1984,11 +2026,14 @@ func parseGeneralNumericValue(value string) sortGeneralNumber {
 	if prefix == "" {
 		return sortGeneralNumber{kind: sortNumberInvalid}
 	}
-	lower := strings.ToLower(strings.TrimSpace(prefix))
-	if strings.HasPrefix(lower, "nan") {
-		return sortGeneralNumber{kind: sortNumberNaN}
-	}
 	normalized := sortNormalizeGeneralNumericPrefix(prefix)
+	unsigned := sortUnsignedGeneralNumericPrefix(normalized)
+	if strings.HasPrefix(unsigned, "nan") {
+		return sortGeneralNumber{
+			kind:    sortNumberNaN,
+			nanSign: sortGeneralNumericPrefixSign(normalized),
+		}
+	}
 	number, _, err := big.ParseFloat(normalized, 10, 256, big.ToNearestEven)
 	if err != nil {
 		return sortGeneralNumber{kind: sortNumberInvalid}
@@ -2248,6 +2293,13 @@ func sortKeyLimit(runes []rune, field, offset int, delimiter *string, ignoreLead
 	if field <= 0 {
 		return 0
 	}
+	if delimiter != nil && offset == 0 {
+		ptr := 0
+		for remaining := max(field-1, 0); remaining > 0 && ptr < len(runes); remaining-- {
+			ptr = sortAdvanceField(runes, ptr, delimiter)
+		}
+		return sortFieldEnd(runes, ptr, delimiter)
+	}
 	ptr := 0
 	steps := field - 1
 	if offset == 0 {
@@ -2261,6 +2313,23 @@ func sortKeyLimit(runes []rune, field, offset int, delimiter *string, ignoreLead
 			ptr = sortSkipBlanks(runes, ptr)
 		}
 		ptr = min(ptr+offset, len(runes))
+	}
+	return ptr
+}
+
+func sortFieldEnd(runes []rune, ptr int, delimiter *string) int {
+	if delimiter != nil {
+		delim, _ := utf8.DecodeRuneInString(*delimiter)
+		for ptr < len(runes) && runes[ptr] != delim {
+			ptr++
+		}
+		return ptr
+	}
+	for ptr < len(runes) && sortIsBlankRune(runes[ptr]) {
+		ptr++
+	}
+	for ptr < len(runes) && !sortIsBlankRune(runes[ptr]) {
+		ptr++
 	}
 	return ptr
 }
