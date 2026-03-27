@@ -80,7 +80,10 @@ func newMemoryFIFOFile(fs *MemoryFS, path string, fifo *memoryFIFO, flag int) *m
 	}
 	if file.readable {
 		file.writerEpoch = fifo.writerEpoch
-		file.sawWriter = fifo.writerEpoch > 0 && fifo.writers == 0
+		// Remember any writer that was already attached when the reader opened.
+		// If that writer closes before the reader performs its first Read, the
+		// reader must still observe EOF instead of waiting forever for a new one.
+		file.sawWriter = fifo.writerEpoch > 0
 	}
 	if file.writable {
 		file.readerEpoch = fifo.readerEpoch
@@ -108,6 +111,9 @@ func (f *memoryFIFOFile) Read(p []byte) (int, error) {
 	defer f.fifo.mu.Unlock()
 
 	for len(f.fifo.buf) == 0 {
+		if f.closed.Load() {
+			return 0, stdfs.ErrClosed
+		}
 		if f.fifo.writers == 0 && (f.sawWriter || f.fifo.writerEpoch != f.writerEpoch) {
 			return 0, io.EOF
 		}
@@ -137,6 +143,9 @@ func (f *memoryFIFOFile) Write(p []byte) (int, error) {
 	defer f.fifo.mu.Unlock()
 
 	for f.fifo.readers == 0 {
+		if f.closed.Load() {
+			return 0, stdfs.ErrClosed
+		}
 		if f.sawReader || f.fifo.readerEpoch != f.readerEpoch {
 			return 0, &os.PathError{Op: "write", Path: f.path, Err: io.ErrClosedPipe}
 		}
