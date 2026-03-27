@@ -656,10 +656,7 @@ func (m *core) execHandler(exec *Execution, budget *executionBudget) interp.Exec
 		if !ok {
 			return fmt.Errorf("missing handler context")
 		}
-		virtualWD := hc.VisibleDir
-		if strings.TrimSpace(virtualWD) == "" {
-			virtualWD = hc.Dir
-		}
+		virtualWD := commandVirtualWorkDir(args, hc)
 		currentEnv := envMap(hc.Env)
 		internal := isInternalHelperCommand(args[0])
 		fromBootstrap := hc.Internal
@@ -891,6 +888,27 @@ func envMap(env expand.Environ) map[string]string {
 		out[name] = value
 	}
 	return out
+}
+
+func commandVirtualWorkDir(args []string, hc *interp.HandlerContext) string {
+	if hc == nil {
+		return "/"
+	}
+	if len(args) > 0 {
+		switch path.Base(args[0]) {
+		case "sh", "bash":
+			if strings.TrimSpace(hc.Dir) != "" {
+				return hc.Dir
+			}
+		}
+	}
+	if strings.TrimSpace(hc.VisibleDir) != "" {
+		return hc.VisibleDir
+	}
+	if strings.TrimSpace(hc.Dir) != "" {
+		return hc.Dir
+	}
+	return "/"
 }
 
 func pathError(op, p string, err error) error {

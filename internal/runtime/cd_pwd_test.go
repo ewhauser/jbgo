@@ -154,6 +154,40 @@ func TestPwdReturnsRememberedPathAfterRemovingCurrentDir(t *testing.T) {
 	}
 }
 
+func TestChildShellPwdUsesPhysicalStartupDirWhenPWDUnset(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "" +
+			"tmp=/tmp/cd-startup-symlink\n" +
+			"mkdir -p $tmp/target\n" +
+			"ln -s -f $tmp/target $tmp/symlink\n" +
+			"cd $tmp/symlink\n" +
+			"sh -c 'basename $(pwd)'\n" +
+			"unset PWD\n" +
+			"sh -c 'basename $(pwd)'\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "symlink\ntarget\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestVirtualCDHandlesLogicalAndPhysicalSymlinkModes(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{
