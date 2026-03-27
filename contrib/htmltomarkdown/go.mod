@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
-	github.com/ewhauser/gbash v0.0.31
+	github.com/ewhauser/gbash v0.0.32
 )
 
 require (
