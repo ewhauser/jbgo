@@ -208,16 +208,39 @@ case "\$script_path" in
   *) script_dir=\$(pwd -P) ;;
 esac
 root_dir=\$(CDPATH= cd -- "\$script_dir/.." && pwd -P)
-host_pwd=\${PWD-}
-if [ -n "\$host_pwd" ]; then
-  case "\$host_pwd" in
-    "\$root_dir"|"\$root_dir"/*) : ;;
-    *) host_pwd= ;;
-  esac
-fi
-if [ -z "\$host_pwd" ]; then
-  host_pwd=\$(pwd -P)
-fi
+gnu_resolve_host_pwd() {
+  jbgo_host_pwd=\${PWD-}
+  if [ -n "\$jbgo_host_pwd" ]; then
+    case "\$jbgo_host_pwd" in
+      "\$root_dir"|"\$root_dir"/*)
+        printf '%s\n' "\$jbgo_host_pwd"
+        return 0
+        ;;
+    esac
+  fi
+
+  if [ -e /proc/self/cwd ]; then
+    if [ -x /usr/bin/readlink ]; then
+      jbgo_host_pwd=\$(/usr/bin/readlink /proc/self/cwd 2>/dev/null) || jbgo_host_pwd=
+    elif [ -x /bin/readlink ]; then
+      jbgo_host_pwd=\$(/bin/readlink /proc/self/cwd 2>/dev/null) || jbgo_host_pwd=
+    else
+      jbgo_host_pwd=
+    fi
+    case "\$jbgo_host_pwd" in
+      *' (deleted)') jbgo_host_pwd=\${jbgo_host_pwd% (deleted)} ;;
+    esac
+    case "\$jbgo_host_pwd" in
+      "\$root_dir"|"\$root_dir"/*)
+        printf '%s\n' "\$jbgo_host_pwd"
+        return 0
+        ;;
+    esac
+  fi
+
+  pwd -P
+}
+host_pwd=\$(gnu_resolve_host_pwd)
 sandbox_cwd=/
 case "\$host_pwd" in
   "\$root_dir") ;;
@@ -300,6 +323,30 @@ gnu_export_temp_var() {
 gnu_export_temp_var TMP "\${TMP-}"
 gnu_export_temp_var TEMP "\${TEMP-}"
 gnu_export_temp_var TMPDIR "\${TMPDIR-}"
+EOF
+  if [[ "$command_name" == "readlink" ]]; then
+    cat >> "$path" <<EOF
+jbgo_arg_count=\$#
+while [ "\$jbgo_arg_count" -gt 0 ]; do
+  jbgo_arg=\$1
+  shift
+  case "\$jbgo_arg" in
+    /*)
+      if jbgo_mapped=\$(gnu_sandbox_temp_path "\$jbgo_arg"); then
+        set -- "\$@" "\$jbgo_mapped"
+      else
+        set -- "\$@" "\$jbgo_arg"
+      fi
+      ;;
+    *)
+      set -- "\$@" "\$jbgo_arg"
+      ;;
+  esac
+  jbgo_arg_count=\$((jbgo_arg_count - 1))
+done
+EOF
+  fi
+  cat >> "$path" <<EOF
 GBASH_UMASK=\$(umask)
 jbgo_disabled_builtins=\$(gnu_disabled_builtins)
 EOF
@@ -427,16 +474,39 @@ write_wrapper() {
     printf '%s\n' '  *) script_dir=$(pwd -P) ;;'
     printf '%s\n' 'esac'
     printf '%s\n' 'root_dir=$(CDPATH= cd -- "$script_dir/.." && pwd -P)'
-    printf '%s\n' 'host_pwd=${PWD-}'
-    printf '%s\n' 'if [ -n "$host_pwd" ]; then'
-    printf '%s\n' '  case "$host_pwd" in'
-    printf '%s\n' '    "$root_dir"|"$root_dir"/*) : ;;'
-    printf '%s\n' '    *) host_pwd= ;;'
-    printf '%s\n' '  esac'
-    printf '%s\n' 'fi'
-    printf '%s\n' 'if [ -z "$host_pwd" ]; then'
-    printf '%s\n' '  host_pwd=$(pwd -P)'
-    printf '%s\n' 'fi'
+    printf '%s\n' 'gnu_resolve_host_pwd() {'
+    printf '%s\n' '  jbgo_host_pwd=${PWD-}'
+    printf '%s\n' '  if [ -n "$jbgo_host_pwd" ]; then'
+    printf '%s\n' '    case "$jbgo_host_pwd" in'
+    printf '%s\n' '      "$root_dir"|"$root_dir"/*)'
+    printf '%s\n' '        printf "%s\n" "$jbgo_host_pwd"'
+    printf '%s\n' '        return 0'
+    printf '%s\n' '        ;;'
+    printf '%s\n' '    esac'
+    printf '%s\n' '  fi'
+    printf '\n'
+    printf '%s\n' '  if [ -e /proc/self/cwd ]; then'
+    printf '%s\n' '    if [ -x /usr/bin/readlink ]; then'
+    printf '%s\n' '      jbgo_host_pwd=$(/usr/bin/readlink /proc/self/cwd 2>/dev/null) || jbgo_host_pwd='
+    printf '%s\n' '    elif [ -x /bin/readlink ]; then'
+    printf '%s\n' '      jbgo_host_pwd=$(/bin/readlink /proc/self/cwd 2>/dev/null) || jbgo_host_pwd='
+    printf '%s\n' '    else'
+    printf '%s\n' '      jbgo_host_pwd='
+    printf '%s\n' '    fi'
+    printf '%s\n' '    case "$jbgo_host_pwd" in'
+    printf '%s\n' "      *' (deleted)') jbgo_host_pwd=\${jbgo_host_pwd% (deleted)} ;;"
+    printf '%s\n' '    esac'
+    printf '%s\n' '    case "$jbgo_host_pwd" in'
+    printf '%s\n' '      "$root_dir"|"$root_dir"/*)'
+    printf '%s\n' '        printf "%s\n" "$jbgo_host_pwd"'
+    printf '%s\n' '        return 0'
+    printf '%s\n' '        ;;'
+    printf '%s\n' '    esac'
+    printf '%s\n' '  fi'
+    printf '\n'
+    printf '%s\n' '  pwd -P'
+    printf '%s\n' '}'
+    printf '%s\n' 'host_pwd=$(gnu_resolve_host_pwd)'
     printf '%s\n' 'sandbox_cwd=/'
     printf '%s\n' 'case "$host_pwd" in'
     printf '%s\n' '  "$root_dir") ;;'
@@ -519,6 +589,26 @@ write_wrapper() {
     printf '%s\n' 'gnu_export_temp_var TMP "${TMP-}"'
     printf '%s\n' 'gnu_export_temp_var TEMP "${TEMP-}"'
     printf '%s\n' 'gnu_export_temp_var TMPDIR "${TMPDIR-}"'
+    if [ "$command_name" = "readlink" ]; then
+      printf '%s\n' 'jbgo_arg_count=$#'
+      printf '%s\n' 'while [ "$jbgo_arg_count" -gt 0 ]; do'
+      printf '%s\n' '  jbgo_arg=$1'
+      printf '%s\n' '  shift'
+      printf '%s\n' '  case "$jbgo_arg" in'
+      printf '%s\n' '    /*)'
+      printf '%s\n' '      if jbgo_mapped=$(gnu_sandbox_temp_path "$jbgo_arg"); then'
+      printf '%s\n' '        set -- "$@" "$jbgo_mapped"'
+      printf '%s\n' '      else'
+      printf '%s\n' '        set -- "$@" "$jbgo_arg"'
+      printf '%s\n' '      fi'
+      printf '%s\n' '      ;;'
+      printf '%s\n' '    *)'
+      printf '%s\n' '      set -- "$@" "$jbgo_arg"'
+      printf '%s\n' '      ;;'
+      printf '%s\n' '  esac'
+      printf '%s\n' '  jbgo_arg_count=$((jbgo_arg_count - 1))'
+      printf '%s\n' 'done'
+    fi
     printf '%s\n' 'GBASH_UMASK=$(umask)'
     printf '%s\n' 'jbgo_disabled_builtins=$(gnu_disabled_builtins)'
     if [ -z "$command_name" ]; then

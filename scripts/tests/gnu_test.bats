@@ -60,6 +60,20 @@ teardown() {
 
   run grep -F 'GBASH_DISABLED_BUILTINS=\"\$jbgo_disabled_builtins\" exec \"/bin/$name\" \"\$@\"' "${WORKDIR}/build-aux/gbash-harness/relink.sh"
   [ "$status" -eq 0 ]
+
+  run grep -F '/proc/self/cwd' "${WORKDIR}/src/bash"
+  [ "$status" -eq 0 ]
+
+  run grep -F '/usr/bin/readlink /proc/self/cwd' "${WORKDIR}/build-aux/gbash-harness/relink.sh"
+  [ "$status" -eq 0 ]
+
+  write_wrapper "${WORKDIR}/src" readlink readlink
+
+  run grep -F 'jbgo_arg_count=$#' "${WORKDIR}/src/readlink"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'gnu_sandbox_temp_path "$jbgo_arg"' "${WORKDIR}/src/readlink"
+  [ "$status" -eq 0 ]
 }
 
 @test "gnu launcher inherits translated temp environment variables" {
