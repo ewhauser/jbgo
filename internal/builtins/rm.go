@@ -9,6 +9,9 @@ import (
 	stdfs "io/fs"
 	"path"
 	"strings"
+
+	"github.com/ewhauser/gbash/internal/commandutil"
+	"golang.org/x/term"
 )
 
 type RM struct{}
@@ -219,9 +222,18 @@ func parseRMInteractiveMode(inv *Invocation, value string, hasValue bool) (rmInt
 
 func rmRemovePath(ctx context.Context, inv *Invocation, raw string, opts rmOptions) (rmResult, error) {
 	display := rmDisplayPath(raw)
+	if raw == "" {
+		if opts.force {
+			return rmResult{}, nil
+		}
+		if err := rmWriteCannotRemove(inv, display, "No such file or directory"); err != nil {
+			return rmResult{}, err
+		}
+		return rmResult{hadErr: true}, nil
+	}
 	info, abs, exists, err := lstatMaybe(ctx, inv, raw)
 	if err != nil {
-		if opts.force && errorsIsNotExist(err) {
+		if rmShouldIgnoreLookupError(err, opts) {
 			return rmResult{}, nil
 		}
 		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, false)); err != nil {
@@ -246,12 +258,12 @@ func rmRemovePath(ctx context.Context, inv *Invocation, raw string, opts rmOptio
 	}
 
 	if info.IsDir() {
-		return rmRemoveDirectory(ctx, inv, display, abs, info, opts)
+		return rmRemoveDirectory(ctx, inv, display, rmVerboseDirectoryDisplay(raw, display), abs, info, opts)
 	}
 	return rmRemoveFile(ctx, inv, display, abs, info, opts)
 }
 
-func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
+func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, verboseDisplay, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	if opts.recursive {
 		if rmRefersToCurrentOrParent(display) {
 			if err := rmWriteRefusal(inv, display); err != nil {
@@ -265,11 +277,11 @@ func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string
 			}
 			return rmResult{hadErr: true}, nil
 		}
-		return rmRemoveDirectoryRecursive(ctx, inv, display, abs, info, opts)
+		return rmRemoveDirectoryRecursive(ctx, inv, display, verboseDisplay, abs, info, opts)
 	}
 
 	if opts.dir {
-		return rmRemoveEmptyDirectory(ctx, inv, display, abs, info, opts)
+		return rmRemoveEmptyDirectory(ctx, inv, display, verboseDisplay, abs, info, opts)
 	}
 
 	if err := rmWriteCannotRemove(inv, display, "Is a directory"); err != nil {
@@ -278,9 +290,12 @@ func rmRemoveDirectory(ctx context.Context, inv *Invocation, display, abs string
 	return rmResult{hadErr: true}, nil
 }
 
-func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
+func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, verboseDisplay, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	entries, err := inv.FS.ReadDir(ctx, abs)
 	if err != nil {
+		if rmIsPermissionError(err) {
+			return rmRemoveUnreadableDirectory(ctx, inv, display, verboseDisplay, abs, info, opts, err)
+		}
 		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(err, true)); err != nil {
 			return rmResult{}, err
 		}
@@ -297,7 +312,7 @@ func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, a
 	result := rmResult{}
 	hasUnremovedChild := false
 	for _, entry := range entries {
-		childDisplay := joinChildPath(display, entry.Name())
+		childDisplay := rmJoinChildDisplay(display, entry.Name())
 		childAbs := joinChildPath(abs, entry.Name())
 
 		childInfo, infoErr := entry.Info()
@@ -313,7 +328,7 @@ func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, a
 			}
 		}
 
-		childResult, err := rmRemoveExistingPath(ctx, inv, childDisplay, childAbs, childInfo, opts)
+		childResult, err := rmRemoveExistingPath(ctx, inv, childDisplay, childDisplay, childAbs, childInfo, opts)
 		if err != nil {
 			return rmResult{}, err
 		}
@@ -347,21 +362,21 @@ func rmRemoveDirectoryRecursive(ctx context.Context, inv *Invocation, display, a
 		return result, nil
 	}
 
-	if err := rmWriteVerboseDirectory(inv, display, opts.verbose); err != nil {
+	if err := rmWriteVerboseDirectory(inv, verboseDisplay, opts.verbose); err != nil {
 		return rmResult{}, err
 	}
 	result.removed = true
 	return result, nil
 }
 
-func rmRemoveExistingPath(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
+func rmRemoveExistingPath(ctx context.Context, inv *Invocation, display, verboseDisplay, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	if info.IsDir() {
-		return rmRemoveDirectory(ctx, inv, display, abs, info, opts)
+		return rmRemoveDirectory(ctx, inv, display, verboseDisplay, abs, info, opts)
 	}
 	return rmRemoveFile(ctx, inv, display, abs, info, opts)
 }
 
-func rmRemoveEmptyDirectory(ctx context.Context, inv *Invocation, display, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
+func rmRemoveEmptyDirectory(ctx context.Context, inv *Invocation, display, verboseDisplay, abs string, info stdfs.FileInfo, opts rmOptions) (rmResult, error) {
 	ok, err := rmPromptDirectory(ctx, inv, display, info, opts)
 	if err != nil {
 		return rmResult{}, err
@@ -379,7 +394,32 @@ func rmRemoveEmptyDirectory(ctx context.Context, inv *Invocation, display, abs s
 		}
 		return rmResult{hadErr: true}, nil
 	}
-	if err := rmWriteVerboseDirectory(inv, display, opts.verbose); err != nil {
+	if err := rmWriteVerboseDirectory(inv, verboseDisplay, opts.verbose); err != nil {
+		return rmResult{}, err
+	}
+	return rmResult{removed: true}, nil
+}
+
+func rmRemoveUnreadableDirectory(ctx context.Context, inv *Invocation, display, verboseDisplay, abs string, info stdfs.FileInfo, opts rmOptions, readErr error) (rmResult, error) {
+	ok, err := rmPromptDirectory(ctx, inv, display, info, opts)
+	if err != nil {
+		return rmResult{}, err
+	}
+	if !ok {
+		return rmResult{}, nil
+	}
+
+	if err := inv.FS.Remove(ctx, abs, false); err != nil {
+		if rmShouldIgnoreRemoveError(err, opts) {
+			return rmResult{removed: true}, nil
+		}
+		if err := rmWriteCannotRemove(inv, display, rmRemovalErrorText(readErr, true)); err != nil {
+			return rmResult{}, err
+		}
+		return rmResult{hadErr: true}, nil
+	}
+
+	if err := rmWriteVerboseDirectory(inv, verboseDisplay, opts.verbose); err != nil {
 		return rmResult{}, err
 	}
 	return rmResult{removed: true}, nil
@@ -441,17 +481,24 @@ func rmPromptFile(ctx context.Context, inv *Invocation, display string, info std
 		return true, nil
 	}
 
+	if opts.interactive == rmInteractivePromptProtected && !rmInputIsTTY(inv, opts) {
+		return true, nil
+	}
+	writeProtected := !rmIsOwnerWritable(info.Mode())
 	if opts.interactive == rmInteractiveAlways {
+		if writeProtected {
+			if info.Size() == 0 {
+				return rmPromptYes(ctx, inv, fmt.Sprintf("remove write-protected regular empty file %s", quoteGNUOperand(display)), opts)
+			}
+			return rmPromptYes(ctx, inv, fmt.Sprintf("remove write-protected regular file %s", quoteGNUOperand(display)), opts)
+		}
 		if info.Size() == 0 {
 			return rmPromptYes(ctx, inv, fmt.Sprintf("remove regular empty file %s", quoteGNUOperand(display)), opts)
 		}
 		return rmPromptYes(ctx, inv, fmt.Sprintf("remove file %s", quoteGNUOperand(display)), opts)
 	}
 
-	if opts.interactive == rmInteractivePromptProtected && !rmInputIsTTY(inv, opts) {
-		return true, nil
-	}
-	if rmIsOwnerWritable(info.Mode()) {
+	if !writeProtected {
 		return true, nil
 	}
 	if info.Size() == 0 {
@@ -462,6 +509,10 @@ func rmPromptFile(ctx context.Context, inv *Invocation, display string, info std
 
 func rmShouldIgnoreRemoveError(err error, opts rmOptions) bool {
 	return opts.force && errorsIsNotExist(err)
+}
+
+func rmShouldIgnoreLookupError(err error, opts rmOptions) bool {
+	return opts.force && (errorsIsNotExist(err) || errors.Is(err, stdfs.ErrInvalid))
 }
 
 func rmPromptDirectory(ctx context.Context, inv *Invocation, display string, info stdfs.FileInfo, opts rmOptions) (bool, error) {
@@ -567,8 +618,42 @@ func rmInputIsTTY(inv *Invocation, opts rmOptions) bool {
 	if opts.presumeInputTTY {
 		return true
 	}
-	_, ok := ttyTerminalPath(inv)
-	return ok
+	reader := rmResolveTTYReader(inv)
+	if reader == nil {
+		return false
+	}
+	if meta, ok := reader.(commandutil.RedirectMetadata); ok {
+		if _, ok := ttyRecognizedPath(meta.RedirectPath()); ok {
+			return true
+		}
+	}
+	if fd, ok := reader.(interface{ Fd() uintptr }); ok {
+		descriptor := fd.Fd()
+		return descriptor != 0 && term.IsTerminal(int(descriptor))
+	}
+	return false
+}
+
+func rmResolveTTYReader(inv *Invocation) io.Reader {
+	if inv == nil {
+		return nil
+	}
+	reader := inv.Stdin
+	type underlyingReader interface {
+		UnderlyingReader() io.Reader
+	}
+	for reader != nil {
+		unwrapper, ok := reader.(underlyingReader)
+		if !ok {
+			return reader
+		}
+		next := unwrapper.UnderlyingReader()
+		if next == nil || next == reader {
+			return reader
+		}
+		reader = next
+	}
+	return nil
 }
 
 func rmIsOwnerReadable(mode stdfs.FileMode) bool {
@@ -585,6 +670,10 @@ func rmIsPreserveRootViolation(ctx context.Context, inv *Invocation, abs string,
 	}
 	resolved, err := inv.FS.Realpath(ctx, abs)
 	return err == nil && resolved == "/"
+}
+
+func rmIsPermissionError(err error) bool {
+	return err != nil && (errors.Is(err, stdfs.ErrPermission) || strings.Contains(strings.ToLower(err.Error()), "permission denied"))
 }
 
 func rmWriteCannotRemove(inv *Invocation, name, reason string) error {
@@ -678,6 +767,24 @@ func rmDisplayPath(name string) string {
 		return name
 	}
 	return path.Clean(name)
+}
+
+func rmVerboseDirectoryDisplay(raw, display string) string {
+	if display == "" || display == "/" || len(raw) <= 1 || !strings.HasSuffix(raw, "/") {
+		return display
+	}
+	cleaned := rmCleanTrailingSlashes(raw)
+	if rmRefersToCurrentOrParent(cleaned) {
+		return display
+	}
+	return strings.TrimSuffix(display, "/") + "/"
+}
+
+func rmJoinChildDisplay(parent, child string) string {
+	if len(parent) > 1 && strings.HasSuffix(parent, "/") {
+		parent = strings.TrimSuffix(parent, "/")
+	}
+	return joinChildPath(parent, child)
 }
 
 func rmCleanTrailingSlashes(name string) string {

@@ -103,18 +103,20 @@ func readerLooksLikeTTY(reader io.Reader) bool {
 	if reader == nil {
 		return false
 	}
-	if meta, ok := reader.(commandutil.RedirectMetadata); ok && recognizedTTYPath(meta.RedirectPath()) {
-		return true
+	if meta, ok := reader.(commandutil.RedirectMetadata); ok {
+		redirectPath := strings.TrimSpace(meta.RedirectPath())
+		if redirectPath != "" {
+			return recognizedTTYPath(redirectPath)
+		}
+	}
+	if fd, ok := reader.(interface{ Fd() uintptr }); ok {
+		descriptor := fd.Fd()
+		return descriptor != 0 && term.IsTerminal(int(descriptor))
 	}
 	if statter, ok := reader.(interface {
 		Stat() (stdfs.FileInfo, error)
 	}); ok {
 		if info, err := statter.Stat(); err == nil && info.Mode()&stdfs.ModeCharDevice != 0 {
-			return true
-		}
-	}
-	if fd, ok := reader.(interface{ Fd() uintptr }); ok {
-		if descriptor := fd.Fd(); descriptor != 0 && term.IsTerminal(int(descriptor)) {
 			return true
 		}
 	}
@@ -274,6 +276,13 @@ func (r *executionTTYReader) executionTTYSource() *executionTTY {
 		return nil
 	}
 	return r.source
+}
+
+func (r *executionTTYReader) UnderlyingReader() io.Reader {
+	if r == nil || r.source == nil {
+		return nil
+	}
+	return r.source.reader
 }
 
 var _ gbfs.File = (*executionTTYFile)(nil)
