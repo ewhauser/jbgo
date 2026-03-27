@@ -241,10 +241,16 @@ gnu_resolve_host_pwd() {
   pwd -P
 }
 host_pwd=\$(gnu_resolve_host_pwd)
+host_pwd_physical=\$(pwd -P)
 sandbox_cwd=/
 case "\$host_pwd" in
   "\$root_dir") ;;
   "\$root_dir"/*) sandbox_cwd="/\${host_pwd#"\$root_dir"/}" ;;
+esac
+compat_physical_pwd=\$sandbox_cwd
+case "\$host_pwd_physical" in
+  "\$root_dir") compat_physical_pwd=/ ;;
+  "\$root_dir"/*) compat_physical_pwd="/\${host_pwd_physical#"\$root_dir"/}" ;;
 esac
 gbash_bin=\$root_dir/build-aux/gbash-harness/gbash
 gnu_disabled_builtins() {
@@ -261,8 +267,10 @@ gnu_disabled_builtins() {
 PWD=\$sandbox_cwd
 GBASH_UMASK=\$(umask)
 GBASH_COMPAT_ROOT=\$root_dir
+GBASH_COMPAT_PHYSICAL_PWD=\$compat_physical_pwd
 export GBASH_UMASK
 export GBASH_COMPAT_ROOT
+export GBASH_COMPAT_PHYSICAL_PWD
 export PWD
 gnu_canonicalize_temp_path() {
   jbgo_path=\${1-}
@@ -507,10 +515,16 @@ write_wrapper() {
     printf '%s\n' '  pwd -P'
     printf '%s\n' '}'
     printf '%s\n' 'host_pwd=$(gnu_resolve_host_pwd)'
+    printf '%s\n' 'host_pwd_physical=$(pwd -P)'
     printf '%s\n' 'sandbox_cwd=/'
     printf '%s\n' 'case "$host_pwd" in'
     printf '%s\n' '  "$root_dir") ;;'
     printf '%s\n' '  "$root_dir"/*) sandbox_cwd="/${host_pwd#"$root_dir"/}" ;;'
+    printf '%s\n' 'esac'
+    printf '%s\n' 'compat_physical_pwd=$sandbox_cwd'
+    printf '%s\n' 'case "$host_pwd_physical" in'
+    printf '%s\n' '  "$root_dir") compat_physical_pwd=/ ;;'
+    printf '%s\n' '  "$root_dir"/*) compat_physical_pwd="/${host_pwd_physical#"$root_dir"/}" ;;'
     printf '%s\n' 'esac'
     printf '%s\n' 'gbash_bin=$root_dir/build-aux/gbash-harness/gbash'
     printf '%s\n' 'gnu_disabled_builtins() {'
@@ -527,8 +541,10 @@ write_wrapper() {
     printf '%s\n' 'PWD=$sandbox_cwd'
     printf '%s\n' 'GBASH_UMASK=$(umask)'
     printf '%s\n' 'GBASH_COMPAT_ROOT=$root_dir'
+    printf '%s\n' 'GBASH_COMPAT_PHYSICAL_PWD=$compat_physical_pwd'
     printf '%s\n' 'export GBASH_UMASK'
     printf '%s\n' 'export GBASH_COMPAT_ROOT'
+    printf '%s\n' 'export GBASH_COMPAT_PHYSICAL_PWD'
     printf '%s\n' 'export PWD'
     printf '%s\n' 'gnu_canonicalize_temp_path() {'
     printf '%s\n' '  jbgo_path=${1-}'

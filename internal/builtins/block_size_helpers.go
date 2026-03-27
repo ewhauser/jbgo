@@ -3,11 +3,16 @@ package builtins
 import (
 	"math"
 	"strconv"
+	"strings"
 )
 
 func parseBlockSizeValue(inv *Invocation, commandName, value string) (int64, error) {
 	rawValue := value
-	switch value {
+	value = strings.TrimSpace(value)
+	for strings.HasPrefix(value, "'") {
+		value = strings.TrimPrefix(value, "'")
+	}
+	switch strings.ToLower(value) {
 	case "human-readable", "si":
 		return 1, nil
 	}
@@ -15,16 +20,31 @@ func parseBlockSizeValue(inv *Invocation, commandName, value string) (int64, err
 		return 0, exitf(inv, 1, "%s: invalid --block-size argument %s", commandName, quoteGNUOperand(rawValue))
 	}
 	multiplier := int64(1)
-	switch last := value[len(value)-1]; last {
-	case 'K', 'k':
+	lower := strings.ToLower(value)
+	switch {
+	case strings.HasSuffix(lower, "kib"):
+		multiplier = 1024
+		value = value[:len(value)-3]
+	case strings.HasSuffix(lower, "mib"):
+		multiplier = 1024 * 1024
+		value = value[:len(value)-3]
+	case strings.HasSuffix(lower, "gib"):
+		multiplier = 1024 * 1024 * 1024
+		value = value[:len(value)-3]
+	case strings.HasSuffix(lower, "k"):
 		multiplier = 1024
 		value = value[:len(value)-1]
-	case 'M', 'm':
+	case strings.HasSuffix(lower, "m"):
 		multiplier = 1024 * 1024
 		value = value[:len(value)-1]
-	case 'G', 'g':
+	case strings.HasSuffix(lower, "g"):
 		multiplier = 1024 * 1024 * 1024
 		value = value[:len(value)-1]
+	case strings.HasSuffix(lower, "b"):
+		value = value[:len(value)-1]
+	}
+	if value == "" {
+		value = "1"
 	}
 	n, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || n <= 0 {

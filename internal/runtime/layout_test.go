@@ -385,6 +385,97 @@ func TestPwdHonorsLogicalAndPhysicalModes(t *testing.T) {
 	}
 }
 
+func TestExternalPwdProjectsCompatRootPaths(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:   []string{"/"},
+			WriteRoots:  []string{"/"},
+			SymlinkMode: policy.SymlinkFollow,
+		}),
+	})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Env: map[string]string{
+			"GBASH_COMPAT_ROOT": "/compat",
+		},
+		Script: "" +
+			"mkdir -p a/b\n" +
+			"ln -s a/b c\n" +
+			"cd c\n" +
+			"env -- pwd -L\n" +
+			"env -- pwd --logical -P\n" +
+			"env -- pwd --physical\n" +
+			"env -- pwd\n" +
+			"env -- POSIXLY_CORRECT=1 pwd\n" +
+			"env -- PWD=\"$PWD/.\" pwd -L\n" +
+			"env -- PWD=bogus pwd -L\n" +
+			"env -- PWD=\"/compat/home/agent/a/../c\" pwd -L\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := "" +
+		"/compat/home/agent/c\n" +
+		"/compat/home/agent/a/b\n" +
+		"/compat/home/agent/a/b\n" +
+		"/compat/home/agent/a/b\n" +
+		"/compat/home/agent/c\n" +
+		"/compat/home/agent/a/b\n" +
+		"/compat/home/agent/a/b\n" +
+		"/compat/home/agent/a/b\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestExternalPwdUsesTrustedCompatPhysicalDirUnderSymlinkDeny(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	if _, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "" +
+			"mkdir -p /tmp/pwd-workdir/a/b\n" +
+			"ln -s /tmp/pwd-workdir/a/b /tmp/pwd-workdir/c\n",
+	}); err != nil {
+		t.Fatalf("Exec(setup) error = %v", err)
+	}
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		WorkDir: "/tmp/pwd-workdir/c",
+		Env: map[string]string{
+			"GBASH_COMPAT_ROOT":         "/compat",
+			"GBASH_COMPAT_PHYSICAL_PWD": "/tmp/pwd-workdir/a/b",
+		},
+		Script: "" +
+			"env -- pwd -L\n" +
+			"env -- pwd -P\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec(check) error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := "" +
+		"/compat/tmp/pwd-workdir/c\n" +
+		"/compat/tmp/pwd-workdir/a/b\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestEnsureCommandStubDoesNotCloneExistingLowerStub(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -828,6 +828,7 @@ func (r *Runner) handlerCtx(ctx context.Context, kind handlerKind, pos syntax.Po
 		kind:               kind,
 		Env:                overlay,
 		Dir:                r.Dir,
+		VisibleDir:         r.visibleDir(),
 		ExecFile:           r.currentExecFile(),
 		Internal:           r.currentInternal(),
 		DisableCommandHash: commandHashDisabled(ctx),

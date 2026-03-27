@@ -65,9 +65,9 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	if !req.ReplaceEnv {
 		projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
 	}
-	if !req.ReplaceEnv || hasVisiblePWD {
+	if !req.ReplaceEnv {
 		execEnv["PWD"] = workDir
-	} else {
+	} else if !hasVisiblePWD {
 		delete(execEnv, "PWD")
 	}
 	if !req.ReplaceEnv && !s.bootAt.IsZero() {
@@ -79,7 +79,8 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	if err := s.layout.ensure(ctx, s.fs, execEnv, workDir, s.cfg.Registry.Names()); err != nil {
 		return nil, err
 	}
-	if err := s.fs.Chdir(workDir); err != nil {
+	fsWorkDir := runtimeFilesystemWorkDir(ctx, s.fs, workDir)
+	if err := s.fs.Chdir(fsWorkDir); err != nil {
 		return nil, err
 	}
 	if hasVisiblePWD && !runtimeVisiblePWDMatchesCurrentDir(ctx, s.fs, visiblePWD) {
@@ -298,9 +299,9 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	if !req.ReplaceEnv {
 		projectPlatformEnv(execEnv, hostPlatform(s.cfg.Host))
 	}
-	if !req.ReplaceEnv || hasVisiblePWD {
+	if !req.ReplaceEnv {
 		execEnv["PWD"] = workDir
-	} else {
+	} else if !hasVisiblePWD {
 		delete(execEnv, "PWD")
 	}
 	if _, ok := execEnv["TTY"]; !ok {
@@ -315,7 +316,8 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	if err := initializeSandboxLayout(ctx, s.fs, execEnv, workDir, s.cfg.Registry.Names()); err != nil {
 		return nil, err
 	}
-	if err := s.fs.Chdir(workDir); err != nil {
+	fsWorkDir := runtimeFilesystemWorkDir(ctx, s.fs, workDir)
+	if err := s.fs.Chdir(fsWorkDir); err != nil {
 		return nil, err
 	}
 	if hasVisiblePWD && !runtimeVisiblePWDMatchesCurrentDir(ctx, s.fs, visiblePWD) {
@@ -392,6 +394,17 @@ func resolveWorkDir(defaultDir, workDir string) string {
 		return defaultDir
 	}
 	return gbfs.Resolve(defaultDir, workDir)
+}
+
+func runtimeFilesystemWorkDir(ctx context.Context, fsys gbfs.FileSystem, workDir string) string {
+	if fsys == nil {
+		return workDir
+	}
+	resolved, err := fsys.Realpath(ctx, workDir)
+	if err != nil || strings.TrimSpace(resolved) == "" {
+		return workDir
+	}
+	return resolved
 }
 
 func executionEnv(baseEnv map[string]string, req *ExecutionRequest) map[string]string {

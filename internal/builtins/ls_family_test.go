@@ -637,21 +637,27 @@ func TestLSHardlinkColorCompat(t *testing.T) {
 			"env TERM=xterm LS_COLORS='mh=44;37:*.png=01;35' ls -U1 --color=always file1 file2.png\n"+
 			"echo ---\n"+
 			"chmod a+x file2.png\n"+
-			"env TERM=xterm LS_COLORS='mh=44;37:*.png=01;35:ex=01;32' ls -U1 --color=always file1 file2.png\n",
+			"env TERM=xterm LS_COLORS='mh=44;37:*.png=01;35:ex=01;32' ls -U1 --color=always file1 file2.png\n"+
+			"echo ---\n"+
+			"chmod a-x file2.png\n"+
+			"env TERM=xterm LS_COLORS='mh=00:*.png=01;35' ls -U1 --color=always file1 file2.png\n",
 	)
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 
 	parts := strings.Split(result.Stdout, "---\n")
-	if len(parts) != 2 {
-		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	if len(parts) != 3 {
+		t.Fatalf("Stdout blocks = %q, want 3 blocks", result.Stdout)
 	}
 	if got, want := parts[0], "\x1b[0m\x1b[44;37mfile1\x1b[0m\n\x1b[44;37mfile2.png\x1b[0m\n"; got != want {
 		t.Fatalf("hardlink color output = %q, want %q", got, want)
 	}
 	if got, want := parts[1], "\x1b[0m\x1b[01;32mfile1\x1b[0m\n\x1b[01;32mfile2.png\x1b[0m\n"; got != want {
 		t.Fatalf("executable color output = %q, want %q", got, want)
+	}
+	if got, want := parts[2], "file1\n\x1b[0m\x1b[01;35mfile2.png\x1b[0m\n"; got != want {
+		t.Fatalf("reset-only mh output = %q, want %q", got, want)
 	}
 }
 
@@ -710,6 +716,53 @@ func TestLSColorsUseWritableAndStickyDirectoryClasses(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(result.Stdout, want) {
 			t.Fatalf("Stdout = %q, want %q", result.Stdout, want)
+		}
+	}
+}
+
+func TestLSColorsFallbackToBuiltinDirectoryClasses(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-color-dir-fallback/default/file", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-color-dir-fallback/other-writable/file", []byte("x"))
+	writeSessionFile(t, session, "/tmp/ls-color-dir-fallback/sticky/file", []byte("x"))
+	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir-fallback/other-writable", 0o777); err != nil {
+		t.Fatalf("Chmod(other-writable) error = %v", err)
+	}
+	if err := session.FileSystem().Chmod(context.Background(), "/tmp/ls-color-dir-fallback/sticky", stdfs.ModeSticky|0o755); err != nil {
+		t.Fatalf("Chmod(sticky) error = %v", err)
+	}
+
+	result := mustExecSession(t, session,
+		"env TERM=xterm ls --color=always /tmp/ls-color-dir-fallback\n"+
+			"echo ---\n"+
+			"LS_COLORS='ow=:' ls --color=always /tmp/ls-color-dir-fallback\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	for _, want := range []string{
+		"\x1b[0m\x1b[01;34mdefault\x1b[0m",
+		"\x1b[34;42mother-writable\x1b[0m",
+		"\x1b[37;44msticky\x1b[0m",
+	} {
+		if !strings.Contains(parts[0], want) {
+			t.Fatalf("default color output = %q, want %q", parts[0], want)
+		}
+	}
+	for _, want := range []string{
+		"\x1b[0m\x1b[01;34mdefault\x1b[0m",
+		"\x1b[01;34mother-writable\x1b[0m",
+		"\x1b[37;44msticky\x1b[0m",
+	} {
+		if !strings.Contains(parts[1], want) {
+			t.Fatalf("fallback color output = %q, want %q", parts[1], want)
 		}
 	}
 }
@@ -909,6 +962,51 @@ func TestLSLongFormatMetadataFlags(t *testing.T) {
 	}
 	if !strings.Contains(parts[7], "2.0K") && !strings.Contains(parts[7], "2.1K") {
 		t.Fatalf("--si output = %q, want SI human-readable size", parts[7])
+	}
+}
+
+func TestLSLongFormatBlockSizeCompatEnv(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-block-size-env/file1024", bytes.Repeat([]byte("x"), 1024))
+	writeSessionFile(t, session, "/tmp/ls-block-size-env/file4096", bytes.Repeat([]byte("x"), 4096))
+
+	result := mustExecSession(t, session,
+		"cd /tmp/ls-block-size-env\n"+
+			"TZ=UTC0 BLOCKSIZE=512 ls -og -k file1024 file4096\n"+
+			"echo ---\n"+
+			"TZ=UTC0 BLOCK_SIZE=512 ls -og file1024 file4096\n"+
+			"echo ---\n"+
+			"TZ=UTC0 LS_BLOCK_SIZE=1KiB ls -og file1024 file4096\n"+
+			"echo ---\n"+
+			"TZ=UTC0 ls -s1 --block-size=\\'k file1024\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 4 {
+		t.Fatalf("Stdout blocks = %q, want 4 blocks", result.Stdout)
+	}
+	for _, want := range []string{`\s1024 .* file1024`, `\s4096 .* file4096`} {
+		if !regexp.MustCompile(want).MatchString(parts[0]) {
+			t.Fatalf("BLOCKSIZE output = %q, want %q", parts[0], want)
+		}
+	}
+	for _, want := range []string{`\s2 .* file1024`, `\s8 .* file4096`} {
+		if !regexp.MustCompile(want).MatchString(parts[1]) {
+			t.Fatalf("BLOCK_SIZE output = %q, want %q", parts[1], want)
+		}
+	}
+	for _, want := range []string{`\s1 .* file1024`, `\s4 .* file4096`} {
+		if !regexp.MustCompile(want).MatchString(parts[2]) {
+			t.Fatalf("LS_BLOCK_SIZE output = %q, want %q", parts[2], want)
+		}
+	}
+	if !regexp.MustCompile(`(?m)^1 .*file1024$`).MatchString(strings.TrimSpace(parts[3])) {
+		t.Fatalf("quoted block-size output = %q, want scaled block count", parts[3])
 	}
 }
 
@@ -1242,6 +1340,102 @@ func TestLSInvalidTimeStyleMatchesGNUDiagnostic(t *testing.T) {
 	}
 	if result.Stdout != "" {
 		t.Fatalf("Stdout = %q, want empty", result.Stdout)
+	}
+}
+
+func TestLSTimeOptionAcceptsBirthAndCreation(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-time-word/a", []byte("x"))
+
+	result := mustExecSession(t, session,
+		"ls --time=birth -l /tmp/ls-time-word/a\n"+
+			"echo ---\n"+
+			"ls --time=creation -t /tmp/ls-time-word/a\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+	parts := strings.Split(result.Stdout, "---\n")
+	if len(parts) != 2 {
+		t.Fatalf("Stdout blocks = %q, want 2 blocks", result.Stdout)
+	}
+	if !strings.Contains(parts[0], "/tmp/ls-time-word/a") {
+		t.Fatalf("birth output = %q, want listed file", parts[0])
+	}
+	if strings.TrimSpace(parts[1]) != "/tmp/ls-time-word/a" {
+		t.Fatalf("creation output = %q, want plain listing", parts[1])
+	}
+}
+
+func TestLSTimeOptionUsesAccessTimeForSortingAndDisplay(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-time-mode/a-old.txt", []byte("old"))
+	writeSessionFile(t, session, "/tmp/ls-time-mode/z-new.txt", []byte("new"))
+
+	modTime := time.Date(2025, time.January, 5, 6, 7, 8, 0, time.UTC)
+	oldAccess := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+	newAccess := time.Date(2024, time.January, 3, 4, 5, 6, 0, time.UTC)
+	for _, item := range []struct {
+		path  string
+		atime time.Time
+	}{
+		{path: "/tmp/ls-time-mode/a-old.txt", atime: oldAccess},
+		{path: "/tmp/ls-time-mode/z-new.txt", atime: newAccess},
+	} {
+		if err := session.FileSystem().Chtimes(context.Background(), item.path, item.atime, modTime); err != nil {
+			t.Fatalf("Chtimes(%q) error = %v", item.path, err)
+		}
+	}
+
+	result := mustExecSession(t, session,
+		"TZ=UTC ls -lt --time=atime --time-style=+%Y-%m-%dT%H:%M:%S /tmp/ls-time-mode/a-old.txt /tmp/ls-time-mode/z-new.txt\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Stdout lines = %q, want 2 lines", result.Stdout)
+	}
+	newAccessText := newAccess.In(time.Local).Format("2006-01-02T15:04:05")
+	oldAccessText := oldAccess.In(time.Local).Format("2006-01-02T15:04:05")
+	if !strings.Contains(lines[0], newAccessText) || !strings.Contains(lines[0], "/tmp/ls-time-mode/z-new.txt") {
+		t.Fatalf("first line = %q, want newer atime for z-new.txt", lines[0])
+	}
+	if !strings.Contains(lines[1], oldAccessText) || !strings.Contains(lines[1], "/tmp/ls-time-mode/a-old.txt") {
+		t.Fatalf("second line = %q, want older atime for a-old.txt", lines[1])
+	}
+	if strings.Contains(result.Stdout, modTime.Format("2006-01-02T15:04:05")) {
+		t.Fatalf("Stdout = %q, want access-time timestamps rather than mtime", result.Stdout)
+	}
+}
+
+func TestLSLongColorClearsToEndOfLine(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	writeSessionFile(t, session, "/tmp/ls-clear/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo", []byte("x"))
+
+	result := mustExecSession(t, session,
+		"cd /tmp/ls-clear\n"+
+			"env TERM=xterm COLUMNS=80 LS_COLORS='*.foo=0;31;42' TIME_STYLE=+T ls -og --color=always zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\n",
+	)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.HasSuffix(result.Stdout, "\x1b[0m\x1b[K\n") {
+		t.Fatalf("Stdout = %q, want ANSI clear-to-eol suffix", result.Stdout)
 	}
 }
 

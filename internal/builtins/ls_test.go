@@ -2,9 +2,26 @@ package builtins
 
 import (
 	"context"
+	stdfs "io/fs"
 	"strings"
 	"testing"
+	"time"
 )
+
+type lsTestFileInfo struct {
+	name    string
+	size    int64
+	mode    stdfs.FileMode
+	modTime time.Time
+	sys     any
+}
+
+func (fi lsTestFileInfo) Name() string         { return fi.name }
+func (fi lsTestFileInfo) Size() int64          { return fi.size }
+func (fi lsTestFileInfo) Mode() stdfs.FileMode { return fi.mode }
+func (fi lsTestFileInfo) ModTime() time.Time   { return fi.modTime }
+func (fi lsTestFileInfo) IsDir() bool          { return fi.mode.IsDir() }
+func (fi lsTestFileInfo) Sys() any             { return fi.sys }
 
 func TestParseLSTimeStylePosixPrefixRespectsLCAllPrecedence(t *testing.T) {
 	t.Parallel()
@@ -74,6 +91,97 @@ func TestParseLSTimeStylePosixPrefixRespectsLCAllPrecedence(t *testing.T) {
 				t.Fatalf("parseLSTimeStyle() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseLSTimeModeUsesConfiguredSelection(t *testing.T) {
+	t.Parallel()
+
+	spec := NewLS().Spec()
+	tests := []struct {
+		name string
+		arg  string
+		want lsTimeMode
+	}{
+		{name: "access", arg: "--time=atime", want: lsTimeAccess},
+		{name: "change", arg: "--time=ctime", want: lsTimeChange},
+		{name: "birth", arg: "--time=birth", want: lsTimeBirth},
+		{name: "modification", arg: "--time=mtime", want: lsTimeModification},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			inv := &Invocation{Args: []string{tt.arg}}
+			matches, _, err := ParseCommandSpec(inv, &spec)
+			if err != nil {
+				t.Fatalf("ParseCommandSpec() error = %v", err)
+			}
+
+			got, err := parseLSTimeMode(inv, matches)
+			if err != nil {
+				t.Fatalf("parseLSTimeMode() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("parseLSTimeMode() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLSSelectedTimeUsesConfiguredMode(t *testing.T) {
+	t.Parallel()
+
+	modTime := time.Date(2025, time.January, 5, 6, 7, 8, 0, time.UTC)
+	accessTime := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+	changeTime := time.Date(2024, time.January, 3, 4, 5, 6, 0, time.UTC)
+	birthTime := time.Date(2024, time.January, 4, 5, 6, 7, 0, time.UTC)
+	info := lsTestFileInfo{
+		name:    "file",
+		mode:    0o644,
+		modTime: modTime,
+		sys: struct {
+			Atime         int64
+			AtimeNsec     int64
+			Ctime         int64
+			CtimeNsec     int64
+			Birthtime     int64
+			BirthtimeNsec int64
+		}{
+			Atime:         accessTime.Unix(),
+			AtimeNsec:     int64(accessTime.Nanosecond()),
+			Ctime:         changeTime.Unix(),
+			CtimeNsec:     int64(changeTime.Nanosecond()),
+			Birthtime:     birthTime.Unix(),
+			BirthtimeNsec: int64(birthTime.Nanosecond()),
+		},
+	}
+
+	tests := []struct {
+		name string
+		mode lsTimeMode
+		want time.Time
+	}{
+		{name: "modification", mode: lsTimeModification, want: modTime},
+		{name: "access", mode: lsTimeAccess, want: accessTime},
+		{name: "change", mode: lsTimeChange, want: changeTime},
+		{name: "birth", mode: lsTimeBirth, want: birthTime},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := lsSelectedTime(info, &lsOptions{timeMode: tt.mode}); !got.Equal(tt.want) {
+				t.Fatalf("lsSelectedTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	fallback := lsSelectedTime(lsTestFileInfo{name: "file", mode: 0o644, modTime: modTime}, &lsOptions{timeMode: lsTimeBirth})
+	if !fallback.Equal(modTime) {
+		t.Fatalf("lsSelectedTime() fallback = %v, want %v", fallback, modTime)
 	}
 }
 

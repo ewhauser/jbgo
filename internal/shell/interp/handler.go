@@ -64,6 +64,10 @@ type HandlerContext struct {
 	// Dir is the interpreter's current directory.
 	Dir string
 
+	// VisibleDir is the shell-visible current directory, preserving logical
+	// symlink components after `cd` when applicable.
+	VisibleDir string
+
 	// ExecFile is the file currently executing in the runner's active frame stack.
 	// It is empty for inline code that is not executing from a file-backed context.
 	ExecFile string

@@ -163,7 +163,7 @@ func (c *Dir) renderPathEntry(ctx context.Context, inv *Invocation, target, abs 
 	firstColor := false
 	if opts.longFormat {
 		prefix, _ := lsLongLineParts(info, opts, nil, nil, inv.Now())
-		line := lsRenderColoredValue(prefix, name, suffix, style, &firstColor) + "\n"
+		line := lsAppendClearToEOL(lsRenderColoredValue(prefix, name, suffix, style, &firstColor)+"\n", opts)
 		return line, lsRenderResult{text: line}, nil
 	}
 	if defaultColumns {

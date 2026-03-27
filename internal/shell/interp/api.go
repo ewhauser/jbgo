@@ -79,6 +79,9 @@ type Runner struct {
 	// logicalDir is the shell's internal logical cwd. Unlike the exported PWD
 	// variable, it is not mutated by ordinary shell variable assignments.
 	logicalDir string
+	// startupVisibleDir is a trusted logical cwd supplied by the runtime
+	// boundary for shell startup.
+	startupVisibleDir string
 
 	// tempDir is either $TMPDIR from [Runner.Env] or a deterministic virtual
 	// default.
@@ -545,6 +548,8 @@ type RunnerConfig struct {
 
 	// Dir is the authoritative virtual current directory.
 	Dir string
+	// VisibleDir is the trusted logical cwd to seed $PWD at shell startup.
+	VisibleDir string
 
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -670,6 +675,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.platform = normalizePlatform(cfg.Platform)
 	r.startupHome = cfg.StartupHome
 	r.Dir = cfg.Dir
+	r.startupVisibleDir = cfg.VisibleDir
 	r.timeNow = cfg.Now
 	r.shellStartTime = cfg.ShellStartTime
 	r.callHandler = cfg.CallHandler
@@ -1290,7 +1296,9 @@ func (r *Runner) Reset() {
 		})
 	}
 	pwd := r.Dir
-	if candidate := r.writeEnv.Get("PWD").String(); r.pwdCandidateMatchesDir(candidate) {
+	if candidate := strings.TrimSpace(r.startupVisibleDir); candidate != "" {
+		pwd = candidate
+	} else if candidate := r.writeEnv.Get("PWD").String(); r.pwdCandidateMatchesDir(candidate) {
 		pwd = candidate
 	}
 	r.logicalDir = pwd

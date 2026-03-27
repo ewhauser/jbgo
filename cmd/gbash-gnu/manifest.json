@@ -99,6 +99,7 @@
     { "pattern": "tests/ls/dangle.sh", "reason": "ls command-line symlink-to-directory cases require symlink traversal that the default gbash sandbox denies" },
     { "pattern": "tests/ls/follow-slink.sh", "reason": "ls -L symlink-to-directory cases require symlink traversal that the default gbash sandbox denies" },
     { "pattern": "tests/ls/hyperlink.sh", "reason": "ls --hyperlink on command-line symlinked directories requires symlink traversal that the default gbash sandbox denies" },
+    { "pattern": "tests/ls/acl.sh", "reason": "ls long-format ACL '+' indicators for default ACL directories are not implemented in gbash v1" },
     { "pattern": "tests/ls/removed-directory.sh", "reason": "GNU compat wrappers resolve the sandbox cwd via physical pwd and lose deleted-working-directory state before ls runs" },
     { "pattern": "tests/ls/symlink-slash.sh", "reason": "ls trailing-slash symlink-to-directory cases require symlink traversal that the default gbash sandbox denies" },
     { "pattern": "tests/readlink/can-e.sh", "reason": "GNU compat wrappers start each utility in a fresh process and lose deleted-working-directory state before readlink -e runs" },
