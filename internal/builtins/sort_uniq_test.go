@@ -24,6 +24,24 @@ func TestSortSupportsKeySortingWithCustomDelimiter(t *testing.T) {
 	}
 }
 
+func TestSortDelimitedFieldEndExcludesSeparator(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf 'a c\\na,b\\n' | sort -t, -k1,1\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "a,b\na c\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestSortSupportsNumericReverseUniquePipeline(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
@@ -92,6 +110,24 @@ func TestSortSupportsCompactKeyAndGeneralNumericFlags(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 	if got, want := result.Stdout, "b 2e1\na 1e2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSortGeneralNumericSupportsSignedNaNAndInfinity(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf -- '-nan\\n-inf\\n1\\ninfinity\\n' | sort -g\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "-nan\n-inf\n1\ninfinity\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }

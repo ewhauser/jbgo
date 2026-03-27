@@ -5,10 +5,13 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
-	"math"
+	stdfs "io/fs"
 	"math/big"
+	"os"
+	"path"
 	"regexp"
 	gosort "sort"
 	"strconv"
@@ -57,28 +60,31 @@ type sortOptions struct {
 }
 
 type sortKey struct {
-	startField        int
-	startChar         int
-	hasStartChar      bool
-	endField          int
-	hasEndField       bool
-	endChar           int
-	hasEndChar        bool
-	numeric           bool
-	generalNumeric    bool
-	reverse           bool
-	ignoreCase        bool
-	ignoreNonprinting bool
-	ignoreLeading     bool
-	humanNumeric      bool
-	versionSort       bool
-	dictionaryOrder   bool
-	monthSort         bool
+	startField         int
+	startChar          int
+	hasStartChar       bool
+	endField           int
+	hasEndField        bool
+	endChar            int
+	hasEndChar         bool
+	numeric            bool
+	generalNumeric     bool
+	reverse            bool
+	ignoreCase         bool
+	ignoreNonprinting  bool
+	startIgnoreLeading bool
+	endIgnoreLeading   bool
+	humanNumeric       bool
+	versionSort        bool
+	dictionaryOrder    bool
+	monthSort          bool
 }
 
 type sortGeneralNumber struct {
-	kind  int
-	value float64
+	kind    int
+	value   *big.Float
+	text    string
+	nanSign int
 }
 
 type sortInputRun struct {
@@ -86,16 +92,10 @@ type sortInputRun struct {
 	lines []string
 }
 
-type sortFieldInfo struct {
-	text  string
-	start int
-	end   int
-}
-
 const (
 	sortNumberInvalid = iota
-	sortNumberFinite
 	sortNumberNaN
+	sortNumberFinite
 )
 
 func NewSort() *Sort {
@@ -256,22 +256,19 @@ func (c *Sort) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 	if opts.debug {
 		output = renderSortDebugOutput(lines, &opts)
 	}
+	if exitCode != 0 {
+		return &ExitError{Code: exitCode}
+	}
 	if opts.outputFile != "" {
 		targetAbs := gbfs.Resolve(inv.Cwd, opts.outputFile)
-		if err := writeFileContents(ctx, inv, targetAbs, output, 0o644); err != nil {
+		if err := sortWriteOutputFile(ctx, inv, opts.outputFile, targetAbs, output); err != nil {
 			return err
-		}
-		if exitCode != 0 {
-			return &ExitError{Code: exitCode}
 		}
 		return nil
 	}
 
 	if _, err := inv.Stdout.Write(output); err != nil {
 		return &ExitError{Code: 1, Err: err}
-	}
-	if exitCode != 0 {
-		return &ExitError{Code: exitCode}
 	}
 	return nil
 }
@@ -349,14 +346,14 @@ func parseSortMatches(inv *Invocation, matches *ParsedCommand) (sortOptions, []s
 	opts.tempDirs = append(opts.tempDirs, matches.Values("temporary-directory")...)
 	for _, value := range matches.Values("key") {
 		if err := appendSortKey(&opts.keys, value); err != nil {
-			return sortOptions{}, nil, sortOptionf(inv, "sort: invalid field specification %q", value)
+			return sortOptions{}, nil, sortKeySpecError(inv, value)
 		}
 	}
 	for _, value := range matches.Values("legacy-key") {
 		start, end, _ := strings.Cut(value, "\x00")
 		key, err := parseLegacySortKey(start, end)
 		if err != nil {
-			return sortOptions{}, nil, sortOptionf(inv, "sort: invalid field specification %q", start)
+			return sortOptions{}, nil, sortOptionf(inv, "sort: invalid field specification %s", quoteGNUOperand(start))
 		}
 		opts.keys = append(opts.keys, key)
 	}
@@ -441,58 +438,90 @@ func isLegacySortEndArg(arg string) bool {
 	return len(arg) > 1 && arg[0] == '-' && arg[1] >= '0' && arg[1] <= '9'
 }
 
+type sortBlankType int
+
+const (
+	sortBlankNone sortBlankType = iota
+	sortBlankStart
+	sortBlankEnd
+)
+
+type sortKeyPart struct {
+	field     int
+	char      int
+	hasChar   bool
+	modifiers string
+}
+
 func parseLegacySortKey(start, end string) (sortKey, error) {
-	key, modifiers, err := parseLegacySortPoint(strings.TrimPrefix(start, "+"))
+	startPart, err := parseLegacySortPoint(strings.TrimPrefix(start, "+"))
 	if err != nil {
 		return sortKey{}, err
 	}
+	key := sortKey{
+		startField:   startPart.field + 1,
+		startChar:    startPart.char + 1,
+		hasStartChar: startPart.hasChar,
+	}
+	if !key.hasStartChar {
+		key.startChar = 1
+	}
+	if err := applySortKeyModifiers(&key, startPart.modifiers, sortBlankStart); err != nil {
+		return sortKey{}, err
+	}
 	if end != "" {
-		endKey, extraModifiers, err := parseLegacySortPoint(strings.TrimPrefix(end, "-"))
+		endPart, err := parseLegacySortPoint(strings.TrimPrefix(end, "-"))
 		if err != nil {
 			return sortKey{}, err
 		}
-		key.endField = endKey.startField
 		key.hasEndField = true
-		key.endChar = max(endKey.startChar-1, 0)
-		if endKey.hasStartChar {
+		if endPart.hasChar && endPart.char > 0 {
+			key.endField = endPart.field + 1
+			key.endChar = endPart.char
 			key.hasEndChar = true
+		} else {
+			key.endField = endPart.field
+			key.endChar = 0
+			key.hasEndChar = endPart.hasChar
 		}
-		modifiers += extraModifiers
+		if err := applySortKeyModifiers(&key, endPart.modifiers, sortBlankEnd); err != nil {
+			return sortKey{}, err
+		}
 	}
-	applySortKeyModifiers(&key, modifiers)
 	return key, nil
 }
 
-func parseLegacySortPoint(spec string) (sortKey, string, error) {
-	var key sortKey
+func parseLegacySortPoint(spec string) (sortKeyPart, error) {
 	fieldText, rest := consumeDigits(spec)
 	if fieldText == "" {
-		return sortKey{}, "", fmt.Errorf("missing field")
+		return sortKeyPart{}, fmt.Errorf("missing field")
 	}
 	fieldValue, err := parseSortCount(fieldText)
 	if err != nil {
-		return sortKey{}, "", err
+		return sortKeyPart{}, err
 	}
-	key.startField = fieldValue + 1
+
+	part := sortKeyPart{field: fieldValue}
 	if strings.HasPrefix(rest, ".") {
 		charText, more := consumeDigits(rest[1:])
-		rest = more
 		if charText == "" {
-			key.hasStartChar = true
-			key.startChar = 1
+			part.hasChar = true
+			part.char = 0
 		} else {
 			charValue, err := parseSortCount(charText)
 			if err != nil {
-				return sortKey{}, "", err
+				return sortKeyPart{}, err
 			}
-			key.hasStartChar = true
-			key.startChar = charValue + 1
+			part.hasChar = true
+			part.char = charValue
 		}
+		rest = more
 	}
-	if key.startChar == 0 {
-		key.startChar = 1
+	if rest != "" && !validSortKeyModifiers(rest) {
+		return sortKeyPart{}, fmt.Errorf("invalid modifier")
 	}
-	return key, rest, nil
+	part.modifiers = rest
+	return part, nil
 }
 
 func appendSortKey(keys *[]sortKey, spec string) error {
@@ -506,50 +535,71 @@ func appendSortKey(keys *[]sortKey, spec string) error {
 
 func parseSortKey(spec string) (sortKey, error) {
 	var key sortKey
-	mainSpec := spec
-	modifiers := ""
 
-	if match := sortKeyModifierRe.FindStringSubmatch(mainSpec); match != nil {
-		modifiers = match[1]
-		mainSpec = strings.TrimSuffix(mainSpec, modifiers)
+	if strings.Count(spec, ",") > 1 {
+		return sortKey{}, fmt.Errorf("too many separators")
 	}
-
-	parts := strings.Split(mainSpec, ",")
-	if len(parts) == 0 || parts[0] == "" {
+	startSpec := spec
+	endSpec := ""
+	if before, after, ok := strings.Cut(spec, ","); ok {
+		startSpec = before
+		endSpec = after
+		if endSpec == "" {
+			return sortKey{}, fmt.Errorf("missing end field")
+		}
+	}
+	if startSpec == "" {
 		return sortKey{}, fmt.Errorf("missing start field")
 	}
 
-	startField, startChar, hasStartChar, err := parseSortFieldPart(parts[0], false)
+	startPart, err := parseSortFieldPart(startSpec, false)
 	if err != nil {
 		return sortKey{}, err
 	}
-	key.startField = startField
-	key.startChar = startChar
-	key.hasStartChar = hasStartChar
+	key.startField = startPart.field
+	key.startChar = startPart.char
+	key.hasStartChar = startPart.hasChar
+	if err := applySortKeyModifiers(&key, startPart.modifiers, sortBlankStart); err != nil {
+		return sortKey{}, err
+	}
 
-	if len(parts) > 1 && parts[1] != "" {
-		endPart := parts[1]
-		if match := sortKeyModifierRe.FindStringSubmatch(endPart); match != nil {
-			modifiers += match[1]
-			endPart = strings.TrimSuffix(endPart, match[1])
-		}
-		endField, endChar, hasEndChar, err := parseSortFieldPart(endPart, true)
+	if endSpec != "" {
+		endPart, err := parseSortFieldPart(endSpec, true)
 		if err != nil {
 			return sortKey{}, err
 		}
-		key.endField = endField
 		key.hasEndField = true
-		key.endChar = endChar
-		key.hasEndChar = hasEndChar
+		key.endField = endPart.field
+		key.endChar = endPart.char
+		key.hasEndChar = endPart.hasChar
+		if err := applySortKeyModifiers(&key, endPart.modifiers, sortBlankEnd); err != nil {
+			return sortKey{}, err
+		}
 	}
-
-	applySortKeyModifiers(&key, modifiers)
 	return key, nil
 }
 
-func applySortKeyModifiers(key *sortKey, modifiers string) {
+func validSortKeyModifiers(value string) bool {
+	for _, flag := range value {
+		switch flag {
+		case 'b', 'd', 'f', 'g', 'h', 'i', 'M', 'n', 'r', 'R', 'V':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func applySortKeyModifiers(key *sortKey, modifiers string, blankType sortBlankType) error {
 	for _, flag := range modifiers {
 		switch flag {
+		case 'b':
+			switch blankType {
+			case sortBlankStart:
+				key.startIgnoreLeading = true
+			case sortBlankEnd:
+				key.endIgnoreLeading = true
+			}
 		case 'n':
 			key.numeric = true
 		case 'g':
@@ -560,8 +610,6 @@ func applySortKeyModifiers(key *sortKey, modifiers string) {
 			key.ignoreCase = true
 		case 'i':
 			key.ignoreNonprinting = true
-		case 'b':
-			key.ignoreLeading = true
 		case 'h':
 			key.humanNumeric = true
 		case 'V':
@@ -572,24 +620,42 @@ func applySortKeyModifiers(key *sortKey, modifiers string) {
 			key.monthSort = true
 		case 'R':
 			// Accepted in legacy forms as a no-op for our in-memory implementation.
+		default:
+			return fmt.Errorf("invalid modifier")
 		}
 	}
+	return nil
 }
 
-func parseSortFieldPart(spec string, allowZeroChar bool) (field, char int, hasChar bool, err error) {
-	parts := strings.Split(spec, ".")
-	field, err = strconv.Atoi(parts[0])
-	if err != nil || field < 1 {
-		return 0, 0, false, fmt.Errorf("invalid field")
+func parseSortFieldPart(spec string, allowZeroChar bool) (sortKeyPart, error) {
+	fieldText, rest := consumeDigits(spec)
+	if fieldText == "" {
+		return sortKeyPart{}, fmt.Errorf("invalid field")
 	}
-	if len(parts) > 1 && parts[1] != "" {
-		char, err = strconv.Atoi(parts[1])
-		if err != nil || char < 0 || (!allowZeroChar && char < 1) {
-			return 0, 0, false, fmt.Errorf("invalid character position")
+	fieldValue, err := parseSortCount(fieldText)
+	if err != nil || fieldValue < 1 {
+		return sortKeyPart{}, fmt.Errorf("invalid field")
+	}
+
+	part := sortKeyPart{field: fieldValue}
+	if strings.HasPrefix(rest, ".") {
+		charText, more := consumeDigits(rest[1:])
+		if charText == "" {
+			return sortKeyPart{}, fmt.Errorf("invalid character position")
 		}
-		return field, char, true, nil
+		charValue, err := parseSortCount(charText)
+		if err != nil || charValue < 0 || (!allowZeroChar && charValue < 1) {
+			return sortKeyPart{}, fmt.Errorf("invalid character position")
+		}
+		part.char = charValue
+		part.hasChar = true
+		rest = more
 	}
-	return field, 0, false, nil
+	if rest != "" && !validSortKeyModifiers(rest) {
+		return sortKeyPart{}, fmt.Errorf("invalid field")
+	}
+	part.modifiers = rest
+	return part, nil
 }
 
 func consumeSortKeyNumber(value string) (number int, remainder string, ok bool) {
@@ -604,6 +670,25 @@ func consumeSortKeyNumber(value string) (number int, remainder string, ok bool) 
 	return parsed, rest, true
 }
 
+func sortKeySpecError(inv *Invocation, value string) error {
+	switch {
+	case value == "0":
+		return sortOptionf(inv, "sort: -: invalid field specification %s", quoteGNUOperand(value))
+	case value == "1.0":
+		return sortOptionf(inv, "sort: character offset is zero: invalid field specification %s", quoteGNUOperand(value))
+	case strings.HasSuffix(value, ","):
+		return sortOptionf(inv, "sort: invalid number after ',': invalid count at start of %s", quoteGNUOperand(""))
+	case strings.Contains(value, ",-k"):
+		_, after, _ := strings.Cut(value, ",")
+		return sortOptionf(inv, "sort: invalid number after ',': invalid count at start of %s", quoteGNUOperand(after))
+	case strings.Contains(value, ".,"):
+		idx := strings.Index(value, ".,")
+		return sortOptionf(inv, "sort: invalid number after '.': invalid count at start of %s", quoteGNUOperand(value[idx+1:]))
+	default:
+		return sortOptionf(inv, "sort: invalid field specification %s", quoteGNUOperand(value))
+	}
+}
+
 func validateSortOptions(inv *Invocation, opts *sortOptions) error {
 	if opts.checkOnly && opts.outputFile != "" {
 		if opts.checkQuiet {
@@ -611,11 +696,11 @@ func validateSortOptions(inv *Invocation, opts *sortOptions) error {
 		}
 		return sortOptionf(inv, "sort: options '-co' are incompatible")
 	}
-	if err := validateSortOrderingOptions(inv, sortModeFlagsFromOptions(opts), opts.dictionaryOrder, opts.ignoreNonprinting); err != nil {
+	if err := validateSortOrderingOptions(inv, sortModeFlagsFromOptions(opts), opts.dictionaryOrder, opts.ignoreNonprinting, opts.ignoreCase); err != nil {
 		return err
 	}
 	for _, key := range opts.keys {
-		if err := validateSortOrderingOptions(inv, sortModeFlagsFromKey(key), key.dictionaryOrder, key.ignoreNonprinting); err != nil {
+		if err := validateSortOrderingOptions(inv, sortModeFlagsFromKey(key), key.dictionaryOrder, key.ignoreNonprinting, key.ignoreCase); err != nil {
 			return err
 		}
 	}
@@ -666,7 +751,7 @@ func sortModeFlagsFromKey(key sortKey) sortModeFlags {
 	}
 }
 
-func validateSortOrderingOptions(inv *Invocation, flags sortModeFlags, dictionaryOrder, ignoreNonprinting bool) error {
+func validateSortOrderingOptions(inv *Invocation, flags sortModeFlags, dictionaryOrder, ignoreNonprinting, ignoreCase bool) error {
 	modeCount := 0
 	for _, enabled := range []bool{flags.numeric, flags.generalNumeric, flags.humanNumeric, flags.month} {
 		if enabled {
@@ -674,18 +759,21 @@ func validateSortOrderingOptions(inv *Invocation, flags sortModeFlags, dictionar
 		}
 	}
 	if modeCount > 1 {
-		return sortOptionf(inv, "sort: options '-%s' are incompatible", sortOrderingFlagsString(flags, dictionaryOrder, ignoreNonprinting))
+		return sortOptionf(inv, "sort: options '-%s' are incompatible", sortOrderingFlagsString(flags, dictionaryOrder, ignoreNonprinting, ignoreCase))
 	}
 	if modeCount == 1 && (flags.version || flags.random || dictionaryOrder || ignoreNonprinting) {
-		return sortOptionf(inv, "sort: options '-%s' are incompatible", sortOrderingFlagsString(flags, dictionaryOrder, ignoreNonprinting))
+		return sortOptionf(inv, "sort: options '-%s' are incompatible", sortOrderingFlagsString(flags, dictionaryOrder, ignoreNonprinting, ignoreCase))
 	}
 	return nil
 }
 
-func sortOrderingFlagsString(flags sortModeFlags, dictionaryOrder, ignoreNonprinting bool) string {
+func sortOrderingFlagsString(flags sortModeFlags, dictionaryOrder, ignoreNonprinting, ignoreCase bool) string {
 	var b strings.Builder
 	if dictionaryOrder {
 		b.WriteByte('d')
+	}
+	if ignoreCase {
+		b.WriteByte('f')
 	}
 	if flags.generalNumeric {
 		b.WriteByte('g')
@@ -797,18 +885,28 @@ func sortHasExplicitEmptyOptionalValue(args []string, long string, short rune) b
 }
 
 func parseSortPositiveInt(inv *Invocation, name, value string, minimum int) (int, error) {
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, sortOptionf(inv, "sort: invalid --%s argument %q", name, value)
+	parsedBig, ok := new(big.Int).SetString(value, 10)
+	if !ok {
+		return 0, sortOptionf(inv, "sort: invalid --%s argument %s", name, quoteGNUOperand(value))
 	}
+	if parsedBig.Sign() < 0 {
+		return 0, sortOptionf(inv, "sort: invalid --%s argument %s", name, quoteGNUOperand(value))
+	}
+	if !parsedBig.IsInt64() || parsedBig.Int64() > int64(^uint(0)>>1) {
+		if name == "batch-size" {
+			return 0, sortOptionf(inv, "sort: --batch-size argument %s too large\nsort: maximum --batch-size argument with current rlimit is", quoteGNUOperand(value))
+		}
+		return 0, sortOptionf(inv, "sort: invalid --%s argument %s", name, quoteGNUOperand(value))
+	}
+	parsed := int(parsedBig.Int64())
 	if parsed < minimum {
 		if name == "parallel" && parsed == 0 {
 			return 0, sortOptionf(inv, "sort: number in parallel must be nonzero")
 		}
 		if name == "batch-size" && parsed >= 0 {
-			return 0, sortOptionf(inv, "sort: invalid --batch-size argument %q\nsort: minimum --batch-size argument is '2'", value)
+			return 0, sortOptionf(inv, "sort: invalid --batch-size argument %s\nsort: minimum --batch-size argument is '2'", quoteGNUOperand(value))
 		}
-		return 0, sortOptionf(inv, "sort: invalid --%s argument %q", name, value)
+		return 0, sortOptionf(inv, "sort: invalid --%s argument %s", name, quoteGNUOperand(value))
 	}
 	return parsed, nil
 }
@@ -873,6 +971,9 @@ func collectSortInputs(ctx context.Context, inv *Invocation, opts *sortOptions, 
 	if err != nil {
 		return nil, "", 0, err
 	}
+	if err := sortValidateMergeResources(ctx, inv, opts, len(inputFiles)); err != nil {
+		return nil, "", 0, err
+	}
 
 	stdinData := []byte(nil)
 	stdinRead := false
@@ -904,7 +1005,7 @@ func collectSortInputs(ctx context.Context, inv *Invocation, opts *sortOptions, 
 		default:
 			read, _, err := readAllFile(ctx, inv, file)
 			if err != nil {
-				_, _ = fmt.Fprintf(inv.Stderr, "sort: %s: %s\n", file, readAllErrorText(err))
+				_, _ = fmt.Fprintf(inv.Stderr, "sort: cannot read: %s: %s\n", file, readAllErrorText(err))
 				exitCode = 2
 				continue
 			}
@@ -917,6 +1018,86 @@ func collectSortInputs(ctx context.Context, inv *Invocation, opts *sortOptions, 
 	}
 
 	return runs, checkFile, exitCode, nil
+}
+
+func sortWriteOutputFile(ctx context.Context, inv *Invocation, rawTarget, targetAbs string, output []byte) error {
+	if err := sortValidateOutputTarget(ctx, inv, rawTarget, targetAbs); err != nil {
+		return err
+	}
+	if err := writeFileContents(ctx, inv, targetAbs, output, 0o644); err != nil {
+		return sortOutputOpenError(inv, rawTarget, err)
+	}
+	return nil
+}
+
+func sortValidateOutputTarget(ctx context.Context, inv *Invocation, rawTarget, targetAbs string) error {
+	parent := path.Dir(targetAbs)
+	info, _, exists, err := statMaybe(ctx, inv, parent)
+	if err != nil {
+		return sortOutputOpenError(inv, rawTarget, err)
+	}
+	if !exists {
+		return sortOptionf(inv, "sort: open failed: %s: No such file or directory", rawTarget)
+	}
+	if !info.IsDir() {
+		return sortOptionf(inv, "sort: open failed: %s: Not a directory", rawTarget)
+	}
+	file, err := inv.FS.OpenFile(ctx, targetAbs, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return sortOutputOpenError(inv, rawTarget, err)
+	}
+	return file.Close()
+}
+
+func sortOutputOpenError(inv *Invocation, name string, err error) error {
+	return sortOptionf(inv, "sort: open failed: %s: %s", name, readAllErrorText(err))
+}
+
+func sortValidateMergeResources(ctx context.Context, inv *Invocation, opts *sortOptions, inputCount int) error {
+	if !opts.merge || !opts.batchSizeSet || inputCount <= opts.batchSize {
+		return nil
+	}
+	if len(opts.tempDirs) == 0 {
+		return nil
+	}
+	for _, dir := range opts.tempDirs {
+		if err := sortProbeTempDir(ctx, inv, dir); err == nil {
+			return nil
+		}
+	}
+	return sortOptionf(inv, "sort: cannot create temporary file in %s:", quoteGNUOperand(opts.tempDirs[0]))
+}
+
+func sortProbeTempDir(ctx context.Context, inv *Invocation, rawDir string) error {
+	info, dirAbs, exists, err := statMaybe(ctx, inv, rawDir)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return stdfs.ErrNotExist
+	}
+	if !info.IsDir() {
+		return stdfs.ErrInvalid
+	}
+
+	var nonce [8]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return err
+	}
+	probe := path.Join(dirAbs, fmt.Sprintf(".gbash-sort-%x", nonce[:]))
+	file, err := inv.FS.OpenFile(ctx, probe, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	closeErr := file.Close()
+	removeErr := inv.FS.Remove(ctx, probe, false)
+	if closeErr != nil {
+		return closeErr
+	}
+	if removeErr != nil && !errors.Is(removeErr, stdfs.ErrNotExist) {
+		return removeErr
+	}
+	return nil
 }
 
 func sortInputFiles(ctx context.Context, inv *Invocation, opts *sortOptions, files []string) ([]string, error) {
@@ -1096,7 +1277,7 @@ func sortGroupRandomHash(group []string, salt []byte, opts *sortOptions) []byte 
 
 func sortRandomHashPayload(line string, opts *sortOptions) []byte {
 	if opts.ignoreLeadingBlanks && len(opts.keys) == 0 {
-		line = strings.TrimLeftFunc(line, unicode.IsSpace)
+		line = strings.TrimLeftFunc(line, sortIsBlankRune)
 	}
 	if len(opts.keys) == 0 {
 		return sortCanonicalValueBytes(line, opts)
@@ -1104,7 +1285,7 @@ func sortRandomHashPayload(line string, opts *sortOptions) []byte {
 
 	var payload bytes.Buffer
 	for _, key := range opts.keys {
-		value := extractSortKeyValue(line, key, opts.fieldDelimiter, key.ignoreLeading || opts.ignoreLeadingBlanks)
+		value := extractSortKeyValue(line, key, opts.fieldDelimiter, sortKeyPositions(opts, key))
 		keyOpts := sortKeyComparisonOptions(opts, key)
 		chunk := sortCanonicalValueBytes(value, &keyOpts)
 		payload.WriteString(strconv.Itoa(len(chunk)))
@@ -1113,6 +1294,41 @@ func sortRandomHashPayload(line string, opts *sortOptions) []byte {
 		payload.WriteByte(0)
 	}
 	return payload.Bytes()
+}
+
+func sortKeyUsesDefaultCompare(key sortKey) bool {
+	return !key.ignoreCase &&
+		!key.ignoreNonprinting &&
+		!key.startIgnoreLeading &&
+		!key.endIgnoreLeading &&
+		!key.numeric &&
+		!key.generalNumeric &&
+		!key.humanNumeric &&
+		!key.versionSort &&
+		!key.dictionaryOrder &&
+		!key.monthSort
+}
+
+type sortKeyPositionOptions struct {
+	startIgnoreLeading bool
+	endIgnoreLeading   bool
+}
+
+func sortInheritedKeyPositionOptions(opts *sortOptions, key sortKey) sortKeyPositionOptions {
+	if sortKeyUsesDefaultCompare(key) && !key.reverse {
+		return sortKeyPositionOptions{
+			startIgnoreLeading: opts.ignoreLeadingBlanks,
+			endIgnoreLeading:   opts.ignoreLeadingBlanks,
+		}
+	}
+	return sortKeyPositionOptions{}
+}
+
+func sortKeyPositions(opts *sortOptions, key sortKey) sortKeyPositionOptions {
+	base := sortInheritedKeyPositionOptions(opts, key)
+	base.startIgnoreLeading = base.startIgnoreLeading || key.startIgnoreLeading
+	base.endIgnoreLeading = base.endIgnoreLeading || key.endIgnoreLeading
+	return base
 }
 
 func sortCanonicalValueBytes(value string, opts *sortOptions) []byte {
@@ -1124,7 +1340,7 @@ func sortCanonicalValueBytes(value string, opts *sortOptions) []byte {
 		normalized = toDictionaryOrder(normalized)
 	}
 	if opts.ignoreCase {
-		normalized = strings.ToLower(normalized)
+		normalized = strings.ToUpper(normalized)
 	}
 
 	switch {
@@ -1150,21 +1366,6 @@ func sortCanonicalMonthText(value int) string {
 	return strconv.Itoa(value)
 }
 
-func sortCanonicalFloatText(value float64) string {
-	switch {
-	case math.IsNaN(value):
-		return "nan"
-	case math.IsInf(value, 1):
-		return "+inf"
-	case math.IsInf(value, -1):
-		return "-inf"
-	case value == 0:
-		return "0"
-	default:
-		return strconv.FormatFloat(value, 'g', -1, 64)
-	}
-}
-
 func sortCanonicalGeneralNumberText(value string) string {
 	number := parseGeneralNumericValue(value)
 	switch number.kind {
@@ -1173,7 +1374,7 @@ func sortCanonicalGeneralNumberText(value string) string {
 	case sortNumberNaN:
 		return "nan"
 	default:
-		return sortCanonicalFloatText(number.value)
+		return number.text
 	}
 }
 
@@ -1182,22 +1383,7 @@ func sortCanonicalNumericText(value string) string {
 }
 
 func sortCanonicalVersionText(value string) string {
-	parts := versionChunkRe.FindAllString(value, -1)
-	if len(parts) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for _, part := range parts {
-		if numeric, err := strconv.Atoi(part); err == nil {
-			b.WriteByte('n')
-			b.WriteString(strconv.Itoa(numeric))
-		} else {
-			b.WriteByte('s')
-			b.WriteString(part)
-		}
-		b.WriteByte(0)
-	}
-	return b.String()
+	return value
 }
 
 func compareSortLines(a, b string, opts *sortOptions) int {
@@ -1217,8 +1403,8 @@ func compareNonRandomSortLines(a, b string, opts *sortOptions) int {
 	lineA := a
 	lineB := b
 	if opts.ignoreLeadingBlanks && len(opts.keys) == 0 {
-		lineA = strings.TrimLeftFunc(lineA, unicode.IsSpace)
-		lineB = strings.TrimLeftFunc(lineB, unicode.IsSpace)
+		lineA = strings.TrimLeftFunc(lineA, sortIsBlankRune)
+		lineB = strings.TrimLeftFunc(lineB, sortIsBlankRune)
 	}
 
 	if len(opts.keys) == 0 {
@@ -1229,7 +1415,7 @@ func compareNonRandomSortLines(a, b string, opts *sortOptions) int {
 			}
 			return cmp
 		}
-		if !opts.stable {
+		if !opts.stable && !opts.unique {
 			tiebreaker := strings.Compare(a, b)
 			if opts.reverse {
 				return -tiebreaker
@@ -1240,8 +1426,8 @@ func compareNonRandomSortLines(a, b string, opts *sortOptions) int {
 	}
 
 	for _, key := range opts.keys {
-		valA := extractSortKeyValue(lineA, key, opts.fieldDelimiter, key.ignoreLeading || opts.ignoreLeadingBlanks)
-		valB := extractSortKeyValue(lineB, key, opts.fieldDelimiter, key.ignoreLeading || opts.ignoreLeadingBlanks)
+		valA := extractSortKeyValue(lineA, key, opts.fieldDelimiter, sortKeyPositions(opts, key))
+		valB := extractSortKeyValue(lineB, key, opts.fieldDelimiter, sortKeyPositions(opts, key))
 
 		keyOpts := sortKeyComparisonOptions(opts, key)
 
@@ -1255,7 +1441,7 @@ func compareNonRandomSortLines(a, b string, opts *sortOptions) int {
 		}
 	}
 
-	if !opts.stable {
+	if !opts.stable && !opts.unique {
 		tiebreaker := strings.Compare(a, b)
 		if opts.reverse {
 			return -tiebreaker
@@ -1265,50 +1451,9 @@ func compareNonRandomSortLines(a, b string, opts *sortOptions) int {
 	return 0
 }
 
-func extractSortKeyValue(line string, key sortKey, delimiter *string, ignoreLeading bool) string {
-	start, end, ok := sortKeyRange(line, key, delimiter, ignoreLeading)
-	if !ok {
-		return ""
-	}
+func extractSortKeyValue(line string, key sortKey, delimiter *string, positions sortKeyPositionOptions) string {
+	start, end := sortKeyRange(line, key, delimiter, positions)
 	return sortSliceRunes(line, start, end)
-}
-
-func sortFieldInfos(line string, delimiter *string) []sortFieldInfo {
-	runes := []rune(line)
-	if delimiter == nil {
-		fields := []sortFieldInfo{{start: 0}}
-		previousWhitespace := true
-		for i, r := range runes {
-			if unicode.IsSpace(r) {
-				if !previousWhitespace {
-					fields[len(fields)-1].end = i
-					fields = append(fields, sortFieldInfo{start: i})
-				}
-				previousWhitespace = true
-				continue
-			}
-			previousWhitespace = false
-		}
-		fields[len(fields)-1].end = len(runes)
-		for i := range fields {
-			fields[i].text = string(runes[fields[i].start:fields[i].end])
-		}
-		return fields
-	}
-	delim, _ := utf8.DecodeRuneInString(*delimiter)
-	fields := make([]sortFieldInfo, 0)
-	start := 0
-	for i, r := range runes {
-		if r != delim {
-			continue
-		}
-		fields = append(fields, sortFieldInfo{text: string(runes[start:i]), start: start, end: i})
-		start = i + 1
-	}
-	if start < len(runes) {
-		fields = append(fields, sortFieldInfo{text: string(runes[start:]), start: start, end: len(runes)})
-	}
-	return fields
 }
 
 func uniqueSortedLines(lines []string, opts *sortOptions) []string {
@@ -1329,8 +1474,8 @@ func sortLinesEquivalent(a, b string, opts *sortOptions) bool {
 	lineA := a
 	lineB := b
 	if opts.ignoreLeadingBlanks && len(opts.keys) == 0 {
-		lineA = strings.TrimLeftFunc(lineA, unicode.IsSpace)
-		lineB = strings.TrimLeftFunc(lineB, unicode.IsSpace)
+		lineA = strings.TrimLeftFunc(lineA, sortIsBlankRune)
+		lineB = strings.TrimLeftFunc(lineB, sortIsBlankRune)
 	}
 
 	if len(opts.keys) == 0 {
@@ -1338,8 +1483,8 @@ func sortLinesEquivalent(a, b string, opts *sortOptions) bool {
 	}
 
 	for _, key := range opts.keys {
-		valA := extractSortKeyValue(lineA, key, opts.fieldDelimiter, key.ignoreLeading || opts.ignoreLeadingBlanks)
-		valB := extractSortKeyValue(lineB, key, opts.fieldDelimiter, key.ignoreLeading || opts.ignoreLeadingBlanks)
+		valA := extractSortKeyValue(lineA, key, opts.fieldDelimiter, sortKeyPositions(opts, key))
+		valB := extractSortKeyValue(lineB, key, opts.fieldDelimiter, sortKeyPositions(opts, key))
 		keyOpts := sortKeyComparisonOptions(opts, key)
 		if compareSortValues(valA, valB, &keyOpts) != 0 {
 			return false
@@ -1349,17 +1494,24 @@ func sortLinesEquivalent(a, b string, opts *sortOptions) bool {
 }
 
 func sortKeyComparisonOptions(opts *sortOptions, key sortKey) sortOptions {
-	keyOpts := *opts
+	keyOpts := sortOptions{
+		stable: opts.stable,
+		unique: opts.unique,
+	}
+	if sortKeyUsesDefaultCompare(key) && !key.reverse {
+		keyOpts = *opts
+	}
 	keyOpts.randomSort = false
 	keyOpts.reverse = false
-	keyOpts.numeric = key.numeric || opts.numeric
-	keyOpts.generalNumeric = key.generalNumeric || opts.generalNumeric
-	keyOpts.ignoreCase = key.ignoreCase || opts.ignoreCase
-	keyOpts.ignoreNonprinting = key.ignoreNonprinting || opts.ignoreNonprinting
-	keyOpts.humanNumeric = key.humanNumeric || opts.humanNumeric
-	keyOpts.versionSort = key.versionSort || opts.versionSort
-	keyOpts.dictionaryOrder = key.dictionaryOrder || opts.dictionaryOrder
-	keyOpts.monthSort = key.monthSort || opts.monthSort
+	keyOpts.ignoreLeadingBlanks = false
+	keyOpts.numeric = keyOpts.numeric || key.numeric
+	keyOpts.generalNumeric = keyOpts.generalNumeric || key.generalNumeric
+	keyOpts.ignoreCase = keyOpts.ignoreCase || key.ignoreCase
+	keyOpts.ignoreNonprinting = keyOpts.ignoreNonprinting || key.ignoreNonprinting
+	keyOpts.humanNumeric = keyOpts.humanNumeric || key.humanNumeric
+	keyOpts.versionSort = keyOpts.versionSort || key.versionSort
+	keyOpts.dictionaryOrder = keyOpts.dictionaryOrder || key.dictionaryOrder
+	keyOpts.monthSort = keyOpts.monthSort || key.monthSort
 	return keyOpts
 }
 
@@ -1376,8 +1528,8 @@ func compareSortValues(a, b string, opts *sortOptions) int {
 		valB = toDictionaryOrder(valB)
 	}
 	if opts.ignoreCase {
-		valA = strings.ToLower(valA)
-		valB = strings.ToLower(valB)
+		valA = strings.ToUpper(valA)
+		valB = strings.ToUpper(valB)
 	}
 	if opts.monthSort {
 		return compareFloat(float64(parseMonth(valA)), float64(parseMonth(valB)))
@@ -1407,11 +1559,20 @@ func toDictionaryOrder(value string) string {
 			b.WriteRune(r)
 		case r >= '0' && r <= '9':
 			b.WriteRune(r)
-		case unicode.IsSpace(r):
+		case sortIsBlankRune(r):
 			b.WriteRune(r)
 		}
 	}
 	return b.String()
+}
+
+func sortIsBlankRune(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
+		return true
+	default:
+		return false
+	}
 }
 
 func toPrintableOnly(value string) string {
@@ -1425,74 +1586,448 @@ func toPrintableOnly(value string) string {
 }
 
 func parseMonth(value string) int {
-	trimmed := strings.ToLower(strings.TrimSpace(value))
-	if len(trimmed) > 3 {
-		trimmed = trimmed[:3]
+	trimmed := sortNormalizeMonthText(value)
+	if trimmed == "" {
+		return 0
 	}
-	switch trimmed {
-	case "jan":
+	if numText, ok := strings.CutSuffix(trimmed, "月"); ok {
+		if monthNumber, err := strconv.Atoi(numText); err == nil && monthNumber >= 1 && monthNumber <= 12 {
+			return monthNumber
+		}
+	}
+	switch {
+	case strings.HasPrefix(trimmed, "jan"):
 		return 1
-	case "feb":
+	case strings.HasPrefix(trimmed, "feb"), strings.HasPrefix(trimmed, "fev"):
 		return 2
-	case "mar":
+	case strings.HasPrefix(trimmed, "mar"):
 		return 3
-	case "apr":
+	case strings.HasPrefix(trimmed, "apr"), strings.HasPrefix(trimmed, "avr"):
 		return 4
-	case "may":
+	case strings.HasPrefix(trimmed, "may"), strings.HasPrefix(trimmed, "mai"):
 		return 5
-	case "jun":
+	case strings.HasPrefix(trimmed, "jun"), strings.HasPrefix(trimmed, "juin"):
 		return 6
-	case "jul":
+	case strings.HasPrefix(trimmed, "jul"), strings.HasPrefix(trimmed, "juil"):
 		return 7
-	case "aug":
+	case strings.HasPrefix(trimmed, "aug"), strings.HasPrefix(trimmed, "aou"):
 		return 8
-	case "sep":
+	case strings.HasPrefix(trimmed, "sep"):
 		return 9
-	case "oct":
+	case strings.HasPrefix(trimmed, "oct"):
 		return 10
-	case "nov":
+	case strings.HasPrefix(trimmed, "nov"):
 		return 11
-	case "dec":
+	case strings.HasPrefix(trimmed, "dec"):
 		return 12
 	default:
 		return 0
 	}
 }
 
-var versionChunkRe = regexp.MustCompile(`\d+|\D+`)
+func sortNormalizeMonthText(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
 
-func compareVersions(a, b string) int {
-	partsA := versionChunkRe.FindAllString(a, -1)
-	partsB := versionChunkRe.FindAllString(b, -1)
-	maxLen := max(len(partsB), len(partsA))
-
-	for i := range maxLen {
-		partA := ""
-		partB := ""
-		if i < len(partsA) {
-			partA = partsA[i]
-		}
-		if i < len(partsB) {
-			partB = partsB[i]
-		}
-
-		numA, errA := strconv.Atoi(partA)
-		numB, errB := strconv.Atoi(partB)
-		if errA == nil && errB == nil {
-			if numA < numB {
-				return -1
+	var b strings.Builder
+	for trimmed != "" {
+		r, size := utf8.DecodeRuneInString(trimmed)
+		if r == utf8.RuneError && size == 1 && trimmed[0] >= 0x80 {
+			if mapped, ok := sortFoldMonthLatin1Byte(trimmed[0]); ok {
+				b.WriteByte(mapped)
 			}
-			if numA > numB {
-				return 1
-			}
+			trimmed = trimmed[1:]
 			continue
 		}
+		trimmed = trimmed[size:]
+		if r == '.' {
+			continue
+		}
+		if r == '月' {
+			b.WriteRune(r)
+			continue
+		}
+		r = unicode.ToLower(r)
+		if mapped, ok := sortFoldMonthRune(r); ok {
+			b.WriteByte(mapped)
+			continue
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
 
-		if cmp := strings.Compare(partA, partB); cmp != 0 {
-			return cmp
+	normalized := b.String()
+	if len(normalized) > 4 && !strings.HasSuffix(normalized, "月") {
+		normalized = normalized[:4]
+	}
+	return normalized
+}
+
+func sortFoldMonthRune(r rune) (byte, bool) {
+	switch r {
+	case 'à', 'â', 'ä':
+		return 'a', true
+	case 'ç':
+		return 'c', true
+	case 'è', 'é', 'ê', 'ë':
+		return 'e', true
+	case 'ì', 'í', 'î', 'ï':
+		return 'i', true
+	case 'ò', 'ó', 'ô', 'ö':
+		return 'o', true
+	case 'ù', 'ú', 'û', 'ü':
+		return 'u', true
+	}
+	return 0, false
+}
+
+func sortFoldMonthLatin1Byte(b byte) (byte, bool) {
+	switch b {
+	case 0xc0, 0xc2, 0xc4, 0xe0, 0xe2, 0xe4:
+		return 'a', true
+	case 0xc7, 0xe7:
+		return 'c', true
+	case 0xc8, 0xc9, 0xca, 0xcb, 0xe8, 0xe9, 0xea, 0xeb:
+		return 'e', true
+	case 0xcc, 0xcd, 0xce, 0xcf, 0xec, 0xed, 0xee, 0xef:
+		return 'i', true
+	case 0xd2, 0xd3, 0xd4, 0xd6, 0xf2, 0xf3, 0xf4, 0xf6:
+		return 'o', true
+	case 0xd9, 0xda, 0xdb, 0xdc, 0xf9, 0xfa, 0xfb, 0xfc:
+		return 'u', true
+	}
+	return 0, false
+}
+
+func sortNormalizeGeneralNumericPrefix(prefix string) string {
+	trimmed := strings.TrimSpace(prefix)
+	sign := ""
+	if trimmed != "" && (trimmed[0] == '+' || trimmed[0] == '-') {
+		sign = trimmed[:1]
+		trimmed = trimmed[1:]
+	}
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "infinity"), strings.HasPrefix(lower, "inf"):
+		return sign + "inf"
+	case strings.HasPrefix(lower, "nan"):
+		return sign + "nan"
+	}
+	if strings.Contains(trimmed, ",") && !strings.Contains(trimmed, ".") {
+		trimmed = strings.Replace(trimmed, ",", ".", 1)
+	}
+	return sign + trimmed
+}
+
+func sortGeneralNumericPrefixSign(prefix string) int {
+	trimmed := strings.TrimSpace(prefix)
+	switch {
+	case strings.HasPrefix(trimmed, "-"):
+		return -1
+	case strings.HasPrefix(trimmed, "+"):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func sortUnsignedGeneralNumericPrefix(prefix string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(prefix))
+	if trimmed != "" && (trimmed[0] == '+' || trimmed[0] == '-') {
+		return trimmed[1:]
+	}
+	return trimmed
+}
+
+func sortGeneralNumericPrefix(value string) string {
+	trimmed := strings.TrimLeftFunc(value, unicode.IsSpace)
+	if trimmed == "" {
+		return ""
+	}
+	i := 0
+	if trimmed[i] == '+' || trimmed[i] == '-' {
+		i++
+	}
+	lower := strings.ToLower(trimmed[i:])
+	switch {
+	case strings.HasPrefix(lower, "infinity"):
+		return trimmed[:i+len("infinity")]
+	case strings.HasPrefix(lower, "inf"):
+		return trimmed[:i+len("inf")]
+	case strings.HasPrefix(lower, "nan"):
+		return trimmed[:i+len("nan")]
+	}
+
+	start := i
+	sawDigit := false
+	sawDecimal := false
+	for i < len(trimmed) {
+		switch ch := trimmed[i]; {
+		case ch >= '0' && ch <= '9':
+			sawDigit = true
+			i++
+		case (ch == '.' || ch == ',') && !sawDecimal:
+			sawDecimal = true
+			i++
+		default:
+			goto exponent
+		}
+	}
+
+exponent:
+	if !sawDigit {
+		return ""
+	}
+	if i < len(trimmed) && (trimmed[i] == 'e' || trimmed[i] == 'E') {
+		j := i + 1
+		if j < len(trimmed) && (trimmed[j] == '+' || trimmed[j] == '-') {
+			j++
+		}
+		k := j
+		for k < len(trimmed) && trimmed[k] >= '0' && trimmed[k] <= '9' {
+			k++
+		}
+		if k > j {
+			i = k
+		}
+	}
+	if i == start {
+		return ""
+	}
+	return trimmed[:i]
+}
+
+func sortHumanNumericPrefixAndRemainder(value string) (string, string) {
+	data := []byte(value)
+	i := 0
+	for i < len(data) {
+		width, group := sortHumanBlankWidth(data, i)
+		if width == 0 {
+			break
+		}
+		_ = group
+		i += width
+	}
+	useCommaDecimal := bytes.IndexByte(data[i:], ',') >= 0 && bytes.IndexByte(data[i:], '.') < 0
+	var b strings.Builder
+	if i < len(data) && (data[i] == '+' || data[i] == '-') {
+		b.WriteByte(data[i])
+		i++
+	}
+	sawDigit := false
+	sawDecimal := false
+	for i < len(data) {
+		ch := data[i]
+		switch {
+		case ch >= '0' && ch <= '9':
+			sawDigit = true
+			b.WriteByte(ch)
+			i++
+		case (ch == '.' || ch == ',') && !sawDecimal:
+			sawDecimal = true
+			if useCommaDecimal && ch == ',' {
+				b.WriteByte('.')
+			} else {
+				b.WriteByte(ch)
+			}
+			i++
+		case sortHasHumanBlankAt(data, i) && sawDigit:
+			width, groupSep := sortHumanBlankWidth(data, i)
+			if groupSep {
+				next := i + width
+				if next < len(data) && data[next] >= '0' && data[next] <= '9' {
+					i = next
+					continue
+				}
+				goto done
+			}
+			j := i
+			for j < len(data) {
+				nextWidth, _ := sortHumanBlankWidth(data, j)
+				if nextWidth == 0 {
+					break
+				}
+				j += nextWidth
+			}
+			i = j
+			goto done
+		default:
+			goto done
+		}
+	}
+done:
+	return b.String(), string(data[i:])
+}
+
+func sortHumanBlankWidth(data []byte, i int) (width int, groupSeparator bool) {
+	if i >= len(data) {
+		return 0, false
+	}
+	switch data[i] {
+	case ' ':
+		return 1, true
+	case '\t', '\r', '\n', '\f', '\v':
+		return 1, false
+	case 0xa0:
+		return 1, true
+	}
+	if bytes.HasPrefix(data[i:], []byte{0xc2, 0xa0}) {
+		return 2, true
+	}
+	if bytes.HasPrefix(data[i:], []byte{0xe2, 0x80, 0xaf}) {
+		return 3, true
+	}
+	return 0, false
+}
+
+func sortHasHumanBlankAt(data []byte, i int) bool {
+	width, _ := sortHumanBlankWidth(data, i)
+	return width != 0
+}
+
+func sortVersionPrefixLen(s string) int {
+	if s == "" {
+		return 0
+	}
+	prefixLen := 0
+	for i := 0; ; {
+		if i == len(s) {
+			return prefixLen
+		}
+		i++
+		prefixLen = i
+		for i+1 < len(s) && s[i] == '.' && (sortIsAlpha(s[i+1]) || s[i+1] == '~') {
+			i += 2
+			for i < len(s) && (sortIsAlphaNum(s[i]) || s[i] == '~') {
+				i++
+			}
+		}
+	}
+}
+
+func sortVersionOrder(s string, pos, limit int) int {
+	if pos == limit {
+		return -1
+	}
+	c := s[pos]
+	switch {
+	case c >= '0' && c <= '9':
+		return 0
+	case sortIsAlpha(c):
+		return int(c)
+	case c == '~':
+		return -2
+	default:
+		return int(c) + 256
+	}
+}
+
+func sortVersionRevCompare(a string, aLen int, b string, bLen int) int {
+	aPos := 0
+	bPos := 0
+	for aPos < aLen || bPos < bLen {
+		firstDiff := 0
+		for (aPos < aLen && !sortIsDigit(a[aPos])) || (bPos < bLen && !sortIsDigit(b[bPos])) {
+			aOrd := sortVersionOrder(a, aPos, aLen)
+			bOrd := sortVersionOrder(b, bPos, bLen)
+			if aOrd != bOrd {
+				return aOrd - bOrd
+			}
+			if aPos < aLen {
+				aPos++
+			}
+			if bPos < bLen {
+				bPos++
+			}
+		}
+		for aPos < aLen && a[aPos] == '0' {
+			aPos++
+		}
+		for bPos < bLen && b[bPos] == '0' {
+			bPos++
+		}
+		for aPos < aLen && bPos < bLen && sortIsDigit(a[aPos]) && sortIsDigit(b[bPos]) {
+			if firstDiff == 0 {
+				firstDiff = int(a[aPos]) - int(b[bPos])
+			}
+			aPos++
+			bPos++
+		}
+		if aPos < aLen && sortIsDigit(a[aPos]) {
+			return 1
+		}
+		if bPos < bLen && sortIsDigit(b[bPos]) {
+			return -1
+		}
+		if firstDiff != 0 {
+			return firstDiff
 		}
 	}
 	return 0
+}
+
+func sortFileVersionCompare(a, b string) int {
+	if a == "" || b == "" {
+		switch a {
+		case b:
+			return 0
+		case "":
+			return -1
+		default:
+			return 1
+		}
+	}
+	if a[0] == '.' {
+		if b[0] != '.' {
+			return -1
+		}
+		switch {
+		case a == ".":
+			if b == "." {
+				return 0
+			}
+			return -1
+		case b == ".":
+			return 1
+		case a == "..":
+			if b == ".." {
+				return 0
+			}
+			return -1
+		case b == "..":
+			return 1
+		}
+	} else if b[0] == '.' {
+		return 1
+	}
+
+	aPrefix := sortVersionPrefixLen(a)
+	bPrefix := sortVersionPrefixLen(b)
+	onePassOnly := aPrefix == len(a) && bPrefix == len(b)
+	result := sortVersionRevCompare(a, aPrefix, b, bPrefix)
+	if result != 0 || onePassOnly {
+		return result
+	}
+	return sortVersionRevCompare(a, len(a), b, len(b))
+}
+
+func sortIsDigit(ch byte) bool {
+	return ch >= '0' && ch <= '9'
+}
+
+func sortIsAlpha(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+}
+
+func sortIsAlphaNum(ch byte) bool {
+	return sortIsAlpha(ch) || sortIsDigit(ch)
+}
+
+func compareVersions(a, b string) int {
+	return sortFileVersionCompare(a, b)
 }
 
 func compareNumericValues(a, b string) int {
@@ -1508,21 +2043,43 @@ func compareGeneralNumericValues(a, b string) int {
 		}
 		return 1
 	}
+	if valA.kind == sortNumberNaN {
+		if valA.nanSign < valB.nanSign {
+			return -1
+		}
+		if valA.nanSign > valB.nanSign {
+			return 1
+		}
+		return 0
+	}
 	if valA.kind != sortNumberFinite {
 		return 0
 	}
-	return compareFloat(valA.value, valB.value)
+	return valA.value.Cmp(valB.value)
 }
 
 func parseGeneralNumericValue(value string) sortGeneralNumber {
-	number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	prefix := sortGeneralNumericPrefix(value)
+	if prefix == "" {
+		return sortGeneralNumber{kind: sortNumberInvalid}
+	}
+	normalized := sortNormalizeGeneralNumericPrefix(prefix)
+	unsigned := sortUnsignedGeneralNumericPrefix(normalized)
+	if strings.HasPrefix(unsigned, "nan") {
+		return sortGeneralNumber{
+			kind:    sortNumberNaN,
+			nanSign: sortGeneralNumericPrefixSign(normalized),
+		}
+	}
+	number, _, err := big.ParseFloat(normalized, 10, 256, big.ToNearestEven)
 	if err != nil {
 		return sortGeneralNumber{kind: sortNumberInvalid}
 	}
-	if math.IsNaN(number) {
-		return sortGeneralNumber{kind: sortNumberNaN}
+	return sortGeneralNumber{
+		kind:  sortNumberFinite,
+		value: number,
+		text:  strings.ToLower(number.Text('g', -1)),
 	}
-	return sortGeneralNumber{kind: sortNumberFinite, value: number}
 }
 
 func compareFloat(a, b float64) int {
@@ -1548,14 +2105,13 @@ type sortHumanNumericValue struct {
 }
 
 func parseSortNumericValue(value string) sortNumericValue {
-	number, _ := parseSortNumericValueRemainder(value)
-	return number
+	return parseSortNumericValueRemainder(value)
 }
 
-func parseSortNumericValueRemainder(value string) (sortNumericValue, string) {
+func parseSortNumericValueRemainder(value string) sortNumericValue {
 	trimmed := strings.TrimLeftFunc(value, unicode.IsSpace)
 	if trimmed == "" {
-		return sortNumericValue{sign: 1}, ""
+		return sortNumericValue{sign: 1}
 	}
 
 	sign := 1
@@ -1597,20 +2153,21 @@ func parseSortNumericValueRemainder(value string) (sortNumericValue, string) {
 			consumed++
 		default:
 			if digits.Len() == 0 || !hadDigit {
-				return sortNumericValue{sign: 1}, trimmed[consumed:]
+				return sortNumericValue{sign: 1}
 			}
-			return sortNumericValue{sign: sign, exponent: exponent, digits: digits.String()}, trimmed[consumed:]
+			return sortNumericValue{sign: sign, exponent: exponent, digits: digits.String()}
 		}
 	}
 
 	if digits.Len() == 0 || !hadDigit {
-		return sortNumericValue{sign: 1}, ""
+		return sortNumericValue{sign: 1}
 	}
-	return sortNumericValue{sign: sign, exponent: exponent, digits: digits.String()}, ""
+	return sortNumericValue{sign: sign, exponent: exponent, digits: digits.String()}
 }
 
 func parseSortHumanNumericValue(value string) sortHumanNumericValue {
-	number, remainder := parseSortNumericValueRemainder(value)
+	numberText, remainder := sortHumanNumericPrefixAndRemainder(value)
+	number := parseSortNumericValueRemainder(numberText)
 	unitRank := 0
 	if number.digits != "" && remainder != "" {
 		unitRank = sortHumanUnitRank(remainder[0])
@@ -1746,103 +2303,135 @@ func sortCanonicalParsedNumericText(value sortNumericValue) string {
 	return fmt.Sprintf("%d:%d:%s", value.sign, value.exponent, digits)
 }
 
-type sortKeyPositionKind int
-
-const (
-	sortKeyPositionStart sortKeyPositionKind = iota + 1
-	sortKeyPositionEnd
-	sortKeyPositionTooLow
-	sortKeyPositionTooHigh
-)
-
-type sortKeyPosition struct {
-	kind sortKeyPositionKind
-	pos  int
-}
-
-func sortKeyRange(line string, key sortKey, delimiter *string, ignoreLeading bool) (int, int, bool) {
+func sortKeyRange(line string, key sortKey, delimiter *string, positions sortKeyPositionOptions) (int, int) {
 	runes := []rune(line)
-	fields := sortFieldInfos(line, delimiter)
-
-	start := sortResolveKeyPosition(runes, fields, key.startField, sortKeyStartChar(key), ignoreLeading)
-	switch start.kind {
-	case sortKeyPositionTooHigh:
-		return len(runes), len(runes), true
-	case sortKeyPositionStart:
-	default:
-		return 0, 0, false
-	}
-
+	start := sortKeyBegin(runes, key.startField, keyStartOffset(key), delimiter, positions.startIgnoreLeading)
 	if !key.hasEndField {
-		return start.pos, len(runes), true
+		return start, len(runes)
 	}
 
-	end := sortResolveKeyPosition(runes, fields, key.endField, sortKeyEndChar(key), ignoreLeading)
-	switch end.kind {
-	case sortKeyPositionStart:
-		if end.pos < len(runes) {
-			end.pos++
-		}
-	case sortKeyPositionEnd:
-	case sortKeyPositionTooHigh:
-		end.pos = len(runes)
-	default:
-		return 0, 0, false
-	}
-	if end.pos < start.pos {
-		end.pos = start.pos
-	}
-	return start.pos, end.pos, true
+	end := sortKeyLimit(runes, key.endField, keyEndOffset(key), delimiter, positions.endIgnoreLeading)
+	return start, max(end, start)
 }
 
-func sortResolveKeyPosition(runes []rune, fields []sortFieldInfo, field, char int, ignoreLeading bool) sortKeyPosition {
-	if field < 1 {
-		return sortKeyPosition{kind: sortKeyPositionTooLow}
+func sortKeyBegin(runes []rune, field, offset int, delimiter *string, ignoreLeading bool) int {
+	ptr := 0
+	for remaining := max(field-1, 0); remaining > 0 && ptr < len(runes); remaining-- {
+		ptr = sortAdvanceField(runes, ptr, delimiter)
 	}
-	if field > len(fields) {
-		return sortKeyPosition{kind: sortKeyPositionTooHigh}
-	}
-	if char == 0 {
-		end := fields[field-1].end
-		if end == 0 {
-			return sortKeyPosition{kind: sortKeyPositionTooLow}
-		}
-		return sortKeyPosition{kind: sortKeyPositionEnd, pos: end}
-	}
-
-	pos := fields[field-1].start
 	if ignoreLeading {
-		for pos < len(runes) && unicode.IsSpace(runes[pos]) {
-			pos++
+		ptr = sortSkipBlanks(runes, ptr)
+	}
+	ptr = min(ptr+max(offset, 0), len(runes))
+	return ptr
+}
+
+func sortKeyLimit(runes []rune, field, offset int, delimiter *string, ignoreLeading bool) int {
+	if field <= 0 {
+		return 0
+	}
+	if delimiter != nil && offset == 0 {
+		ptr := 0
+		for remaining := max(field-1, 0); remaining > 0 && ptr < len(runes); remaining-- {
+			ptr = sortAdvanceField(runes, ptr, delimiter)
 		}
+		return sortFieldEnd(runes, ptr, delimiter)
 	}
-	pos += min(char-1, len(runes)-pos)
-	if pos >= len(runes) {
-		return sortKeyPosition{kind: sortKeyPositionTooHigh}
+	ptr := 0
+	steps := field - 1
+	if offset == 0 {
+		steps++
 	}
-	return sortKeyPosition{kind: sortKeyPositionStart, pos: pos}
+	for remaining := max(steps, 0); remaining > 0 && ptr < len(runes); remaining-- {
+		ptr = sortAdvanceField(runes, ptr, delimiter)
+	}
+	if offset != 0 {
+		if ignoreLeading {
+			ptr = sortSkipBlanks(runes, ptr)
+		}
+		ptr = min(ptr+offset, len(runes))
+	}
+	return ptr
 }
 
-func sortKeyStartChar(key sortKey) int {
+func sortFieldEnd(runes []rune, ptr int, delimiter *string) int {
+	if delimiter != nil {
+		delim, _ := utf8.DecodeRuneInString(*delimiter)
+		for ptr < len(runes) && runes[ptr] != delim {
+			ptr++
+		}
+		return ptr
+	}
+	for ptr < len(runes) && sortIsBlankRune(runes[ptr]) {
+		ptr++
+	}
+	for ptr < len(runes) && !sortIsBlankRune(runes[ptr]) {
+		ptr++
+	}
+	return ptr
+}
+
+func sortAdvanceField(runes []rune, ptr int, delimiter *string) int {
+	if delimiter != nil {
+		delim, _ := utf8.DecodeRuneInString(*delimiter)
+		for ptr < len(runes) && runes[ptr] != delim {
+			ptr++
+		}
+		if ptr < len(runes) {
+			ptr++
+		}
+		return ptr
+	}
+	for ptr < len(runes) && sortIsBlankRune(runes[ptr]) {
+		ptr++
+	}
+	for ptr < len(runes) && !sortIsBlankRune(runes[ptr]) {
+		ptr++
+	}
+	return ptr
+}
+
+func sortSkipBlanks(runes []rune, ptr int) int {
+	for ptr < len(runes) && sortIsBlankRune(runes[ptr]) {
+		ptr++
+	}
+	return ptr
+}
+
+func keyStartOffset(key sortKey) int {
 	if key.hasStartChar {
-		return key.startChar
+		return max(key.startChar-1, 0)
 	}
-	return 1
+	return 0
 }
 
-func sortKeyEndChar(key sortKey) int {
+func keyEndOffset(key sortKey) int {
 	if key.hasEndChar {
-		return key.endChar
+		return max(key.endChar, 0)
 	}
 	return 0
 }
 
 func sortSliceRunes(line string, start, end int) string {
-	runes := []rune(line)
-	start = min(max(start, 0), len(runes))
-	end = min(max(end, 0), len(runes))
+	start = max(start, 0)
 	end = max(end, start)
-	return string(runes[start:end])
+	byteStart := sortRuneIndexToByteOffset(line, start)
+	byteEnd := sortRuneIndexToByteOffset(line, end)
+	return line[byteStart:byteEnd]
+}
+
+func sortRuneIndexToByteOffset(line string, target int) int {
+	if target <= 0 {
+		return 0
+	}
+	runeIndex := 0
+	for byteIndex := range line {
+		if runeIndex == target {
+			return byteIndex
+		}
+		runeIndex++
+	}
+	return len(line)
 }
 
 func decodeSortRecords(data []byte, zeroTerminated bool) []string {
@@ -1902,7 +2491,7 @@ func sortDebugKeyUnderline(line string, opts *sortOptions) string {
 	if len(opts.keys) == 0 {
 		start := 0
 		if opts.ignoreLeadingBlanks {
-			for start < len(runes) && unicode.IsSpace(runes[start]) {
+			for start < len(runes) && sortIsBlankRune(runes[start]) {
 				start++
 			}
 		}
@@ -1925,9 +2514,13 @@ func sortDebugKeyUnderline(line string, opts *sortOptions) string {
 		marks[i] = ' '
 	}
 	matched := false
+	noMatchPos := -1
 	for _, key := range opts.keys {
-		start, end, ok := sortDebugKeySpan(keyLine, key, opts.fieldDelimiter, key.ignoreLeading || opts.ignoreLeadingBlanks)
+		start, end, ok := sortDebugKeySpan(keyLine, key, opts.fieldDelimiter, sortKeyPositions(opts, key))
 		if !ok {
+			if noMatchPos == -1 || start < noMatchPos {
+				noMatchPos = start + offset
+			}
 			continue
 		}
 		for i := start + offset; i < end+offset && i < len(marks); i++ {
@@ -1938,6 +2531,9 @@ func sortDebugKeyUnderline(line string, opts *sortOptions) string {
 		}
 	}
 	if !matched {
+		if noMatchPos > 0 {
+			return strings.Repeat(" ", noMatchPos) + "^ no match for key"
+		}
 		return "^ no match for key"
 	}
 	return string(marks)
@@ -1956,16 +2552,16 @@ func sortDebugWorkingLine(line string, opts *sortOptions) (string, int) {
 	}
 	runes := []rune(line)
 	offset := 0
-	for offset < len(runes) && unicode.IsSpace(runes[offset]) {
+	for offset < len(runes) && sortIsBlankRune(runes[offset]) {
 		offset++
 	}
 	return string(runes[offset:]), offset
 }
 
-func sortDebugKeySpan(line string, key sortKey, delimiter *string, ignoreLeading bool) (int, int, bool) {
-	start, end, ok := sortKeyRange(line, key, delimiter, ignoreLeading)
-	if !ok || start == end {
-		return 0, 0, false
+func sortDebugKeySpan(line string, key sortKey, delimiter *string, positions sortKeyPositionOptions) (int, int, bool) {
+	start, end := sortKeyRange(line, key, delimiter, positions)
+	if start == end {
+		return start, end, false
 	}
 	return start, end, true
 }
@@ -1997,7 +2593,7 @@ func sortLeadingBlanksDebugWarning(opts *sortOptions) string {
 		return ""
 	}
 	for i, key := range opts.keys {
-		if key.startField > 1 && !key.ignoreLeading {
+		if key.startField > 1 && !key.startIgnoreLeading {
 			return fmt.Sprintf("sort: leading blanks are significant in key %d; consider also specifying 'b'", i+1)
 		}
 	}
@@ -2016,21 +2612,23 @@ func parseSortCount(value string) (int, error) {
 	if value == "" {
 		return 0, fmt.Errorf("empty count")
 	}
-	parsed, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return 0, err
+	parsed, ok := new(big.Int).SetString(value, 10)
+	if !ok {
+		return 0, fmt.Errorf("invalid count")
 	}
-	if parsed > uint64(^uint(0)>>1) {
+	if parsed.Sign() < 0 {
+		return 0, fmt.Errorf("negative count")
+	}
+	if !parsed.IsInt64() || parsed.Int64() > int64(^uint(0)>>1) {
 		return int(^uint(0) >> 1), nil
 	}
-	return int(parsed), nil
+	return int(parsed.Int64()), nil
 }
 
 func sortOptionf(inv *Invocation, format string, args ...any) error {
 	return exitf(inv, 2, format, args...)
 }
 
-var sortKeyModifierRe = regexp.MustCompile(`([bdfghiMnrRV]+)$`)
 var sortBufferSizeRe = regexp.MustCompile(`^(\d+)([%A-Za-z]?)$`)
 
 const sortRandomSourceMaxBytes = 1024 * 1024

@@ -280,6 +280,84 @@ func TestSortRejectsMultipleOutputFiles(t *testing.T) {
 	}
 }
 
+func TestSortRejectsIncompatibleGlobalModesWhenKeysPresent(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "printf '1\\n2\\n' > /tmp/in.txt\nsort -n -g -k1,1 /tmp/in.txt\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "options '-gn' are incompatible") {
+		t.Fatalf("Stderr = %q, want global-ordering incompatibility", result.Stderr)
+	}
+}
+
+func TestSortMergeBatchSizeValidatesConfiguredTempDirs(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		script     string
+		wantExit   int
+		wantStdout string
+		wantStderr string
+	}{
+		{
+			name: "usable temp dir",
+			script: "printf '1\\n' > /tmp/a\n" +
+				"printf '2\\n' > /tmp/b\n" +
+				"printf '3\\n' > /tmp/c\n" +
+				"sort -m --batch-size=2 -T /tmp /tmp/a /tmp/b /tmp/c\n",
+			wantExit:   0,
+			wantStdout: "1\n2\n3\n",
+		},
+		{
+			name: "later usable temp dir",
+			script: "printf '1\\n' > /tmp/a\n" +
+				"printf '2\\n' > /tmp/b\n" +
+				"printf '3\\n' > /tmp/c\n" +
+				"sort -m --batch-size=2 -T /tmp/missing-merge-dir -T /tmp /tmp/a /tmp/b /tmp/c\n",
+			wantExit:   0,
+			wantStdout: "1\n2\n3\n",
+		},
+		{
+			name: "missing temp dir",
+			script: "printf '1\\n' > /tmp/a\n" +
+				"printf '2\\n' > /tmp/b\n" +
+				"printf '3\\n' > /tmp/c\n" +
+				"sort -m --batch-size=2 -T /tmp/missing-merge-dir /tmp/a /tmp/b /tmp/c\n",
+			wantExit:   2,
+			wantStderr: "cannot create temporary file in '/tmp/missing-merge-dir':",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rt := newRuntime(t, &Config{})
+			result, err := rt.Run(context.Background(), &ExecutionRequest{Script: tc.script})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.ExitCode != tc.wantExit {
+				t.Fatalf("ExitCode = %d, want %d; stderr=%q", result.ExitCode, tc.wantExit, result.Stderr)
+			}
+			if tc.wantStdout != "" && result.Stdout != tc.wantStdout {
+				t.Fatalf("Stdout = %q, want %q", result.Stdout, tc.wantStdout)
+			}
+			if tc.wantStderr != "" && !strings.Contains(result.Stderr, tc.wantStderr) {
+				t.Fatalf("Stderr = %q, want to contain %q", result.Stderr, tc.wantStderr)
+			}
+		})
+	}
+}
+
 func TestSortRejectsZeroParallel(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t, &Config{})
