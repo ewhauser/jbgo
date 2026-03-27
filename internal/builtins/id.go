@@ -14,6 +14,74 @@ const (
 	idDefaultGID      = 1000
 )
 
+var idCompatUsers = []idIdentity{
+	{
+		userName: "root",
+		uid:      0,
+		euid:     0,
+		group: idGroup{
+			id:   0,
+			name: "root",
+		},
+		egid:    0,
+		groups:  []idGroup{{id: 0, name: "root"}},
+		homeDir: "/root",
+		shell:   "/bin/sh",
+	},
+	{
+		userName: "man",
+		uid:      6,
+		euid:     6,
+		group: idGroup{
+			id:   12,
+			name: "man",
+		},
+		egid:    12,
+		groups:  []idGroup{{id: 12, name: "man"}},
+		homeDir: "/var/cache/man",
+		shell:   "/usr/sbin/nologin",
+	},
+	{
+		userName: "postfix",
+		uid:      89,
+		euid:     89,
+		group: idGroup{
+			id:   89,
+			name: "postfix",
+		},
+		egid:    89,
+		groups:  []idGroup{{id: 89, name: "postfix"}},
+		homeDir: "/var/spool/postfix",
+		shell:   "/usr/sbin/nologin",
+	},
+	{
+		userName: "sshd",
+		uid:      74,
+		euid:     74,
+		group: idGroup{
+			id:   74,
+			name: "sshd",
+		},
+		egid:    74,
+		groups:  []idGroup{{id: 74, name: "sshd"}},
+		homeDir: "/run/sshd",
+		shell:   "/usr/sbin/nologin",
+	},
+	{
+		userName: "nobody",
+		uid:      65534,
+		euid:     65534,
+		group: idGroup{
+			id:   65534,
+			name: "nobody",
+		},
+		egid:    65534,
+		groups:  []idGroup{{id: 65534, name: "nobody"}},
+		homeDir: "/nonexistent",
+		shell:   "/usr/sbin/nologin",
+	},
+}
+
 type ID struct{}
 
 func NewID() *ID {
@@ -96,11 +164,16 @@ func (c *ID) RunParsed(_ context.Context, inv *Invocation, matches *ParsedComman
 	var hadError bool
 	targets := opts.users
 	if len(targets) == 0 {
-		targets = []string{""}
+		output := idFormatOutput(&current, opts, delimiter, false)
+		if _, err := fmt.Fprint(inv.Stdout, output, lineEnding); err != nil {
+			return &ExitError{Code: 1, Err: err}
+		}
+		return nil
 	}
 
+	known := idKnownIdentities(&current)
 	for idx, rawUser := range targets {
-		identity, ok := idLookupIdentity(&current, rawUser)
+		identity, ok := idLookupIdentity(known, rawUser)
 		if !ok {
 			hadError = true
 			_, _ = fmt.Fprintf(inv.Stderr, "id: %s: no such user\n", rawUser)
@@ -302,17 +375,88 @@ func idGroupsFromEnv(env map[string]string, primaryID uint32, primaryName string
 	return groups
 }
 
-func idLookupIdentity(current *idIdentity, user string) (idIdentity, bool) {
+func idKnownIdentities(current *idIdentity) []idIdentity {
 	if current == nil {
+		return append([]idIdentity(nil), idCompatUsers...)
+	}
+
+	identities := make([]idIdentity, 0, len(idCompatUsers)+1)
+	identities = append(identities, *current)
+
+	seenNames := map[string]struct{}{current.userName: {}}
+	seenUIDs := map[uint32]struct{}{current.uid: {}}
+	for _, identity := range idCompatUsers {
+		if _, ok := seenNames[identity.userName]; ok {
+			continue
+		}
+		if _, ok := seenUIDs[identity.uid]; ok {
+			continue
+		}
+		identities = append(identities, identity)
+		seenNames[identity.userName] = struct{}{}
+		seenUIDs[identity.uid] = struct{}{}
+	}
+	return identities
+}
+
+func idLookupIdentity(identities []idIdentity, user string) (idIdentity, bool) {
+	if user == "" {
 		return idIdentity{}, false
 	}
-	if user == "" {
-		return *current, true
+
+	if uid, ok := idLookupNumericUID(user, true); ok {
+		for _, identity := range identities {
+			if identity.uid == uid {
+				return identity, true
+			}
+		}
+		return idIdentity{}, false
 	}
-	if user == current.userName || user == strconv.FormatUint(uint64(current.uid), 10) {
-		return *current, true
+
+	for _, identity := range identities {
+		if user == identity.userName {
+			return identity, true
+		}
 	}
+
+	if uid, ok := idLookupNumericUID(user, false); ok {
+		for _, identity := range identities {
+			if identity.uid == uid {
+				return identity, true
+			}
+		}
+	}
+
 	return idIdentity{}, false
+}
+
+func idLookupNumericUID(raw string, requirePlus bool) (uint32, bool) {
+	if raw == "" {
+		return 0, false
+	}
+
+	value := raw
+	if strings.HasPrefix(raw, "+") {
+		value = raw[1:]
+	} else if requirePlus {
+		return 0, false
+	}
+
+	if value == "" {
+		return 0, false
+	}
+
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+
+	uid, err := strconv.ParseUint(value, 10, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(uid), true
 }
 
 func idFormatOutput(identity *idIdentity, opts idOptions, delimiter string, multiUser bool) string {
