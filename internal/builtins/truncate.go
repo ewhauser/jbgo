@@ -471,11 +471,16 @@ func truncateReferenceSize(ctx context.Context, inv *Invocation, raw string) (ui
 }
 
 func (c *Truncate) truncatePath(ctx context.Context, inv *Invocation, raw string, noCreate bool, referenceSize *uint64, mode truncateMode) error {
-	abs := allowPath(inv, raw)
+	targetName := raw
+	abs := allowPath(inv, targetName)
+	requireDir := hasTrailingSlash(raw)
 
 	info, err := inv.FS.Stat(ctx, abs)
 	switch {
 	case err == nil:
+		if requireDir && !info.IsDir() {
+			return truncateOpenError(inv, raw, syscall.ENOTDIR)
+		}
 		if info.Mode()&stdfs.ModeNamedPipe != 0 {
 			return exitf(inv, 1, "truncate: cannot open %s for writing: No such device or address", quoteGNUOperand(raw))
 		}
@@ -483,6 +488,14 @@ func (c *Truncate) truncatePath(ctx context.Context, inv *Invocation, raw string
 		if noCreate {
 			return nil
 		}
+		if requireDir {
+			return truncateOpenError(inv, raw, syscall.ENOTDIR)
+		}
+		targetName, err = truncateResolveCreateTarget(ctx, inv, raw)
+		if err != nil {
+			return truncateOpenError(inv, raw, err)
+		}
+		abs = allowPath(inv, targetName)
 		if ensureErr := truncateEnsureCreatableParent(ctx, inv, abs); ensureErr != nil {
 			return truncateOpenError(inv, raw, ensureErr)
 		}
@@ -540,6 +553,18 @@ func (c *Truncate) truncatePath(ctx context.Context, inv *Invocation, raw string
 		return truncateOpenError(inv, raw, err)
 	}
 	return c.truncateFallback(ctx, inv, raw, abs, info, targetSize)
+}
+
+func truncateResolveCreateTarget(ctx context.Context, inv *Invocation, name string) (string, error) {
+	info, abs, exists, err := lstatMaybe(ctx, inv, name)
+	if err != nil || !exists || info.Mode()&stdfs.ModeSymlink == 0 {
+		return name, err
+	}
+	target, err := inv.FS.Readlink(ctx, abs)
+	if err != nil {
+		return "", err
+	}
+	return resolveSymlinkTargetPath(abs, target), nil
 }
 
 func truncateEnsureCreatableParent(ctx context.Context, inv *Invocation, abs string) error {
@@ -676,6 +701,13 @@ func truncateIsDirectoryError(err error) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "is a directory")
+}
+
+func resolveSymlinkTargetPath(linkAbs, target string) string {
+	if strings.HasPrefix(target, "/") {
+		return path.Clean(target)
+	}
+	return joinChildPath(path.Dir(linkAbs), target)
 }
 
 func isASCIIDigitOrHex(b byte) bool {
