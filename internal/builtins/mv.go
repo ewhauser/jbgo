@@ -55,6 +55,10 @@ type mvOptions struct {
 	promptInput   *rmPromptInput
 }
 
+type mvRunState struct {
+	justCreatedFiles map[string]string
+}
+
 type mvParsedUpdate struct {
 	value            string
 	hasExplicitValue bool
@@ -128,6 +132,9 @@ func (c *MV) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 	multipleSources := len(sources) > 1 || opts.targetDir != ""
 	duplicateDirectoryKeys := mvDuplicateDirectoryKeys(ctx, inv, sources)
 	duplicateDirectoryState := make(map[string]mvDuplicateDirectoryState, len(duplicateDirectoryKeys))
+	state := mvRunState{
+		justCreatedFiles: make(map[string]string),
+	}
 
 	hadErr := false
 	for _, source := range sources {
@@ -138,7 +145,7 @@ func (c *MV) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedComm
 			continue
 		}
 
-		outcome, err := mvMoveOne(ctx, inv, source, destArg, multipleSources, &opts)
+		outcome, err := mvMoveOne(ctx, inv, source, destArg, multipleSources, &opts, &state)
 		if key := duplicateDirectoryKeys[source]; key != "" {
 			switch {
 			case outcome == mvMoveOutcomeBlockedSelf:
@@ -305,7 +312,7 @@ func mvOperands(inv *Invocation, opts *mvOptions, args []string) (sources []stri
 	}
 }
 
-func mvMoveOne(ctx context.Context, inv *Invocation, sourceArg, destArg string, multipleSources bool, opts *mvOptions) (mvMoveOutcome, error) {
+func mvMoveOne(ctx context.Context, inv *Invocation, sourceArg, destArg string, multipleSources bool, opts *mvOptions, state *mvRunState) (mvMoveOutcome, error) {
 	srcLInfo, srcAbs, err := lstatPath(ctx, inv, sourceArg)
 	if err != nil {
 		return mvMoveOutcomeSkipped, exitf(inv, 1, "mv: cannot stat %s: No such file or directory", quoteGNUOperand(sourceArg))
@@ -355,6 +362,11 @@ func mvMoveOne(ctx context.Context, inv *Invocation, sourceArg, destArg string, 
 			return mvMoveOutcomeSkipped, nil
 		}
 	}
+	if !sourceIsDir && opts.backupMode != backupNumbered {
+		if createdDisplay, ok := mvJustCreatedDestination(state, dest.abs); ok {
+			return mvMoveOutcomeSkipped, exitf(inv, 1, "mv: will not overwrite just-created %s with %s", quoteGNUOperand(createdDisplay), quoteGNUOperand(sourceArg))
+		}
+	}
 	if destExists && opts.backupMode == backupNone {
 		if err := mvValidateDestination(ctx, inv, sourceArg, sourceIsDir, dest.abs, dest.display, destLInfo); err != nil {
 			return mvMoveOutcomeSkipped, err
@@ -402,6 +414,7 @@ func mvMoveOne(ctx context.Context, inv *Invocation, sourceArg, destArg string, 
 	if err := inv.FS.Rename(ctx, srcAbs, dest.abs); err != nil {
 		return mvMoveOutcomeSkipped, mvMoveError(inv, sourceArg, dest.display, err)
 	}
+	mvRememberJustCreatedDestination(state, sourceIsDir, dest.abs, dest.display)
 	if opts.verbose {
 		if err := mvWriteVerbose(inv, sourceArg, dest.display, backupDisplay); err != nil {
 			return mvMoveOutcomeSkipped, err
@@ -782,6 +795,24 @@ func mvWriteWarning(inv *Invocation, sourceArg string) error {
 		return &ExitError{Code: 1, Err: err}
 	}
 	return nil
+}
+
+func mvJustCreatedDestination(state *mvRunState, destAbs string) (string, bool) {
+	if state == nil || state.justCreatedFiles == nil {
+		return "", false
+	}
+	display, ok := state.justCreatedFiles[destAbs]
+	if !ok || display == "" {
+		return "", false
+	}
+	return display, true
+}
+
+func mvRememberJustCreatedDestination(state *mvRunState, sourceIsDir bool, destAbs, destDisplay string) {
+	if state == nil || state.justCreatedFiles == nil || sourceIsDir {
+		return
+	}
+	state.justCreatedFiles[destAbs] = destDisplay
 }
 
 func mvDuplicateDirectoryKeys(ctx context.Context, inv *Invocation, sources []string) map[string]string {

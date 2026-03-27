@@ -188,3 +188,105 @@ func TestMVUpdateOlderDoesNotSkipDirectoryReplacementIsolated(t *testing.T) {
 		t.Fatalf("Stderr = %q, want empty stderr", result.Stderr)
 	}
 }
+
+func TestMVDoesNotOverwriteJustCreatedDestinationIsolated(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir a b c\n" +
+			"printf 'a\\n' > a/f\n" +
+			"printf 'b\\n' > b/f\n" +
+			"mv a/f b/f c\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -e a/f ] && echo a-still || echo a-gone\n" +
+			"[ -e b/f ] && echo b-still || echo b-gone\n" +
+			"cat c/f\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=1\na-gone\nb-still\na\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got, want := result.Stderr, "mv: will not overwrite just-created 'c/f' with 'b/f'\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
+func TestMVAllowsNumberedBackupOfJustCreatedDestinationIsolated(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir a b c\n" +
+			"printf 'a\\n' > a/f\n" +
+			"printf 'b\\n' > b/f\n" +
+			"mv --backup=numbered a/f b/f c\n" +
+			"printf 'status=%s\\n' \"$?\"\n" +
+			"[ -e a/f ] && echo a-still || echo a-gone\n" +
+			"[ -e b/f ] && echo b-still || echo b-gone\n" +
+			"cat c/f\n" +
+			"cat c/f.~1~\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status=0\na-gone\nb-gone\nb\na\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty stderr", result.Stderr)
+	}
+}
+
+func TestMVChildproofSequenceIsolated(t *testing.T) {
+	t.Parallel()
+	rt := newRuntime(t, &Config{})
+
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir a b c\n" +
+			"printf 'a\\n' > a/f\n" +
+			"printf 'b\\n' > b/f\n" +
+			"mv a/f b/f c 2>/dev/null\n" +
+			"printf 'status1=%s\\n' \"$?\"\n" +
+			"[ -e a/f ] && echo a1-still || echo a1-gone\n" +
+			"[ -e b/f ] && echo b1-still || echo b1-gone\n" +
+			"cat c/f\n" +
+			"rm -f c/f* b/f\n" +
+			"touch a/f\n" +
+			"ln a/f b/g\n" +
+			"mv a/f b/g c\n" +
+			"printf 'status2=%s\\n' \"$?\"\n" +
+			"[ -e a/f ] && echo a2-still || echo a2-gone\n" +
+			"[ -e b/g ] && echo b2-still || echo b2-gone\n" +
+			"[ -f c/f ] && echo c-f-present\n" +
+			"[ -f c/g ] && echo c-g-present\n" +
+			"touch a/f b/f b/g\n" +
+			"mv a/f b/f b/g c 2>/dev/null\n" +
+			"printf 'status3=%s\\n' \"$?\"\n" +
+			"[ -e a/f ] && echo a3-still || echo a3-gone\n" +
+			"[ -e b/f ] && echo b3-still || echo b3-gone\n" +
+			"[ -e b/g ] && echo b4-still || echo b4-gone\n" +
+			"[ -f c/f ] && echo c-f-still-present\n" +
+			"[ -f c/g ] && echo c-g-still-present\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "status1=1\na1-gone\nb1-still\na\nstatus2=0\na2-gone\nb2-gone\nc-f-present\nc-g-present\nstatus3=1\na3-gone\nb3-still\nb4-gone\nc-f-still-present\nc-g-still-present\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty stderr due to redirected diagnostics", result.Stderr)
+	}
+}
