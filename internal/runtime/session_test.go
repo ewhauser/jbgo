@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func TestSessionPersistsFilesystemAcrossExecs(t *testing.T) {
@@ -52,6 +54,171 @@ func TestSessionDoesNotPersistShellVarsAcrossExecs(t *testing.T) {
 	}
 	if got, want := result.Stdout, "\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSessionExecShellVariantShDisablesBraceExpansion(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		ShellVariant: shellvariant.SH,
+		Script:       "printf '%s\\n' {a,b}\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.Stdout, "{a,b}\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSessionInteractShellVariantShUsesPosixDefaults(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	var stdout strings.Builder
+	result, err := session.Interact(context.Background(), &InteractiveRequest{
+		ShellVariant: shellvariant.SH,
+		Stdin:        strings.NewReader("printf '%s\\n' {a,b}\nexit\n"),
+		Stdout:       &stdout,
+	})
+	if err != nil {
+		t.Fatalf("Interact() error = %v", err)
+	}
+	if result == nil {
+		t.Fatalf("Interact() result = nil")
+	}
+	if !strings.Contains(stdout.String(), "{a,b}\n") {
+		t.Fatalf("Stdout = %q, want literal brace expansion output", stdout.String())
+	}
+}
+
+func TestSessionExecShVariantUsesNonBashParseDiagnostics(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		ShellVariant: shellvariant.SH,
+		Script:       "foo=(bar)\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d", got, want)
+	}
+	if strings.Contains(result.Stderr, "line 1:") {
+		t.Fatalf("Stderr = %q, want non-bash diagnostic format", result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "posix") {
+		t.Fatalf("Stderr = %q, want posix variant hint", result.Stderr)
+	}
+}
+
+func TestSessionExecBatsVariantRejectsTestDecl(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		ShellVariant: shellvariant.Bats,
+		Script:       "@test \"demo\" { echo hi; }\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d", got, want)
+	}
+	if !strings.Contains(result.Stderr, "bats runner not implemented") {
+		t.Fatalf("Stderr = %q, want bats runner error", result.Stderr)
+	}
+}
+
+func TestSessionExecShebangShUsesPosixShellVariant(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: strings.Join([]string{
+			"cat > /tmp/shebang-sh <<'EOF'",
+			"#!/bin/sh",
+			"printf '%s\\n' {a,b}",
+			"EOF",
+			"chmod +x /tmp/shebang-sh",
+			"/tmp/shebang-sh",
+			"",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.Stdout, "{a,b}\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSessionExecTopLevelShebangInfersShellVariant(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "#!/bin/sh\nprintf '%s\\n' {a,b}\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.Stdout, "{a,b}\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestSessionExecNestedShellCommandsSupportMkshAndZsh(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"mksh", "zsh"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			session := newSession(t, &Config{})
+
+			result, err := session.Exec(context.Background(), &ExecutionRequest{
+				Script: name + " -c \"printf '%s\\\\n' {a,b}\"\n",
+			})
+			if err != nil {
+				t.Fatalf("Exec() error = %v", err)
+			}
+			if got, want := result.Stdout, "a\nb\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestSessionExecShebangBatsReturnsRunnerError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: strings.Join([]string{
+			"cat > /tmp/shebang-bats <<'EOF'",
+			"#!/bin/bats",
+			"@test \"demo\" {",
+			"  echo hi",
+			"}",
+			"EOF",
+			"chmod +x /tmp/shebang-bats",
+			"/tmp/shebang-bats",
+			"",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.ExitCode, 126; got != want {
+		t.Fatalf("ExitCode = %d, want %d", got, want)
+	}
+	if !strings.Contains(result.Stderr, "bats runner not implemented") {
+		t.Fatalf("Stderr = %q, want bats runner error", result.Stderr)
 	}
 }
 

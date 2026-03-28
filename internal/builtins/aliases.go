@@ -23,6 +23,7 @@ type ParsedOptionOccurrence = pubcmd.ParsedOptionOccurrence
 
 type ExecutionRequest = pubcmd.ExecutionRequest
 type ExecutionResult = pubcmd.ExecutionResult
+type ShellVariant = pubcmd.ShellVariant
 type InteractiveRequest = pubcmd.InteractiveRequest
 type InteractiveResult = pubcmd.InteractiveResult
 

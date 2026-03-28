@@ -226,6 +226,32 @@ func TestServerSessionLifecycleAndExec(t *testing.T) {
 	}
 }
 
+func TestServerSessionExecShellVariantParam(t *testing.T) {
+	t.Parallel()
+
+	srv := startServer(t, gbserver.Config{
+		Name:       "gbash",
+		Version:    "test",
+		SessionTTL: time.Second,
+	})
+	client := dialClient(t, srv.socket)
+	defer client.Close()
+
+	sessionID := mustCreateSession(t, client)
+	exec := client.call("session.exec", map[string]any{
+		"session_id":    sessionID,
+		"shell_variant": "sh",
+		"script":        "printf '%s\\n' {a,b}\n",
+	})
+	mustOK(t, &exec)
+
+	var payload execResult
+	decodeResult(t, &exec, &payload)
+	if got, want := payload.Stdout, "{a,b}\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
 func TestServerConcurrentSessionsAndBusy(t *testing.T) {
 	t.Parallel()
 	started := make(chan struct{})

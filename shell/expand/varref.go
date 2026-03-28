@@ -2,6 +2,7 @@ package expand
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ewhauser/gbash/shell/syntax"
 )
@@ -77,6 +78,12 @@ func (v Variable) ResolveRef(env Environ, ref *syntax.VarRef) (*syntax.VarRef, V
 
 // ResolveRefState follows nameref variables and reports how resolution ended.
 func (v Variable) ResolveRefState(env Environ, ref *syntax.VarRef) (RefResolution, error) {
+	return v.ResolveRefStateVariant(env, ref, syntax.LangBash)
+}
+
+// ResolveRefStateVariant follows nameref variables and reports how resolution
+// ended using the provided shell language variant for nameref reparsing.
+func (v Variable) ResolveRefStateVariant(env Environ, ref *syntax.VarRef, lang syntax.LangVariant) (RefResolution, error) {
 	resolved := syntax.CloneVarRef(ref)
 	if resolved != nil && emptySubscript(resolved.Index) {
 		return RefResolution{}, BadArraySubscriptError{Name: printNode(resolved)}
@@ -98,7 +105,10 @@ func (v Variable) ResolveRefState(env Environ, ref *syntax.VarRef) (RefResolutio
 			return RefResolution{Ref: original, Var: Variable{Set: true, Kind: String}, Target: raw, Status: RefTargetCircular}, nil
 		}
 		seen[raw] = struct{}{}
-		target, err := syntax.ParseVarRef(raw)
+		if lang == 0 || lang == syntax.LangAuto {
+			lang = syntax.LangBash
+		}
+		target, err := syntax.NewParser(syntax.Variant(lang)).VarRef(strings.NewReader(raw))
 		if err != nil {
 			if raw == "@" || raw == "*" {
 				return RefResolution{Ref: original, Var: Variable{Kind: String}, Target: raw, Status: RefTargetInvalid}, nil
@@ -142,7 +152,14 @@ func (v Variable) ResolveRefState(env Environ, ref *syntax.VarRef) (RefResolutio
 
 func (cfg *Config) resolveVarRef(ref *syntax.VarRef) (*syntax.VarRef, Variable, error) {
 	vr := cfg.Env.Get(ref.Name.Value)
-	return vr.ResolveRef(cfg.Env, ref)
+	result, err := vr.ResolveRefStateVariant(cfg.Env, ref, cfg.langVariant())
+	if err != nil {
+		return nil, Variable{}, err
+	}
+	if result.Status == RefTargetCircular {
+		return result.Ref, result.Var, CircularNameRefError{Name: result.Ref.Name.Value}
+	}
+	return result.Ref, result.Var, nil
 }
 
 func (cfg *Config) varRef(ref *syntax.VarRef) (string, error) {

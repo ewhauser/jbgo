@@ -51,6 +51,10 @@ type Config struct {
 	// need startup-sensitive tilde semantics.
 	StartupHome string
 
+	// LangVariant controls shell-variant-sensitive reparsing and quoting
+	// helpers used during expansion. The zero value behaves like Bash.
+	LangVariant syntax.LangVariant
+
 	// TildeEnv is used for ~ and ~user lookup. If nil, Env is used.
 	TildeEnv Environ
 	// CmdSubst expands a command substitution node, writing its standard
@@ -252,6 +256,7 @@ func (cfg *Config) ResetRuntimeState() {
 	cfg.Env = nil
 	cfg.Runtime = nil
 	cfg.StartupHome = ""
+	cfg.LangVariant = 0
 	cfg.TildeEnv = nil
 	cfg.CmdSubst = nil
 	cfg.ProcSubst = nil

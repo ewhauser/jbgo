@@ -482,7 +482,7 @@ func (cfg *Config) arithmStringValue(root, tokenExpr syntax.ArithmExpr, word *sy
 		}
 	}
 
-	if n, ok, err := parseArithNumber(s, root, tokenExpr); ok || err != nil {
+	if n, ok, err := parseArithNumber(cfg, s, root, tokenExpr); ok || err != nil {
 		if err != nil {
 			err = arithExpandedWordError(err, root, tokenExpr, word, s)
 		}
@@ -559,14 +559,14 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 		if err != nil {
 			var unboundErr UnboundVariableError
 			if errors.As(err, &unboundErr) {
-				if ref, ok := arithmVarRef(expr); ok && ref.Index != nil && ref.Name != nil {
+				if ref, ok := arithmVarRef(cfg, expr); ok && ref.Index != nil && ref.Name != nil {
 					unboundErr.Name = ref.Name.Value
 					return 0, unboundErr
 				}
 			}
 			var unsetErr UnsetParameterError
 			if errors.As(err, &unsetErr) && unsetErr.Message == "unbound variable" {
-				if ref, ok := arithmVarRef(expr); ok && ref.Index != nil && ref.Name != nil {
+				if ref, ok := arithmVarRef(cfg, expr); ok && ref.Index != nil && ref.Name != nil {
 					return 0, UnboundVariableError{Name: ref.Name.Value}
 				}
 			}
@@ -1197,7 +1197,7 @@ func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (in
 	return int(acc), nil
 }
 
-func arithmVarRef(expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
+func arithmVarRef(cfg *Config, expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
 	word, ok := expr.(*syntax.Word)
 	if !ok {
 		return nil, false
@@ -1217,7 +1217,7 @@ func arithmVarRef(expr syntax.ArithmExpr) (*syntax.VarRef, bool) {
 	if containsShellExpansion(word) {
 		return nil, false
 	}
-	ref, err := syntax.ParseVarRef(arithExprSource(word))
+	ref, err := cfg.parseVarRef(arithExprSource(word))
 	if err != nil || ref == nil {
 		return nil, false
 	}
@@ -1243,7 +1243,7 @@ func isEmptyArithExpr(expr syntax.ArithmExpr) bool {
 	return ok && isEmptyArithWord(word)
 }
 
-func arithWordDiagnostic(root, tokenExpr syntax.ArithmExpr, exprText, tokenText, message string) error {
+func arithWordDiagnostic(cfg *Config, root, tokenExpr syntax.ArithmExpr, exprText, tokenText, message string) error {
 	diag := &ArithmDiagnosticError{
 		ExprText:  exprText,
 		TokenText: tokenText,
@@ -1252,7 +1252,7 @@ func arithWordDiagnostic(root, tokenExpr syntax.ArithmExpr, exprText, tokenText,
 	if root == nil {
 		return diag
 	}
-	if _, ok := arithmVarRef(tokenExpr); ok {
+	if _, ok := arithmVarRef(cfg, tokenExpr); ok {
 		return diag
 	}
 	diag.Expr = root
@@ -1370,13 +1370,13 @@ func parseArithNumberPrefix(s string) (int64, int, string, string, bool) {
 	return n, j, "", "", true
 }
 
-func parseArithNumber(s string, root, tokenExpr syntax.ArithmExpr) (int64, bool, error) {
+func parseArithNumber(cfg *Config, s string, root, tokenExpr syntax.ArithmExpr) (int64, bool, error) {
 	n, consumed, msg, token, ok := parseArithNumberPrefix(s)
 	if !ok {
 		return 0, false, nil
 	}
 	if msg != "" {
-		return 0, true, arithWordDiagnostic(root, tokenExpr, s, token, msg)
+		return 0, true, arithWordDiagnostic(cfg, root, tokenExpr, s, token, msg)
 	}
 	rest := s[consumed:]
 	if trimArithSpace(rest) == "" {
@@ -1397,7 +1397,7 @@ func parseArithNumber(s string, root, tokenExpr syntax.ArithmExpr) (int64, bool,
 			}
 		}
 	}
-	return 0, true, arithWordDiagnostic(root, tokenExpr, s, trimmed, message)
+	return 0, true, arithWordDiagnostic(cfg, root, tokenExpr, s, trimmed, message)
 }
 
 func arithmWordValue(root syntax.ArithmExpr, expr *syntax.Word, str string) (int, error) {
@@ -1405,7 +1405,7 @@ func arithmWordValue(root syntax.ArithmExpr, expr *syntax.Word, str string) (int
 	if s == "" || isEmptyArithWord(expr) {
 		return 0, nil
 	}
-	if n, ok, err := parseArithNumber(s, root, expr); ok || err != nil {
+	if n, ok, err := parseArithNumber(nil, s, root, expr); ok || err != nil {
 		return int(n), err
 	}
 	return 0, nil
@@ -1456,7 +1456,7 @@ func arithInvalidRefTail(text string) string {
 }
 
 func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr) (*syntax.VarRef, int, error) {
-	ref, ok := arithmVarRef(expr)
+	ref, ok := arithmVarRef(cfg, expr)
 	if !ok {
 		word, wordOK := expr.(*syntax.Word)
 		if !wordOK {
@@ -1482,7 +1482,7 @@ func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr) (*syntax.VarRef, i
 				return nil, 0, err
 			}
 		}
-		ref, err = syntax.ParseVarRef(text)
+		ref, err = cfg.parseVarRef(text)
 		if err != nil {
 			tail := arithInvalidRefTail(text)
 			if tail == "" {

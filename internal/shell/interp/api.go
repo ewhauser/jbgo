@@ -30,6 +30,7 @@ import (
 	"github.com/ewhauser/gbash/shell/analysis"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 // A Runner interprets shell programs. It can be reused, but it is not safe for
@@ -192,6 +193,8 @@ type Runner struct {
 	ecfgInit bool
 	ectx     context.Context // just so that Runner.Subshell can use it again
 
+	shellVariant     shellvariant.ShellVariant
+	langVariant      syntax.LangVariant
 	legacyBashCompat bool
 	inSubshell       bool
 
@@ -568,6 +571,8 @@ type RunnerConfig struct {
 	CommandString      bool
 	CommandStringValue string
 
+	ShellVariant shellvariant.ShellVariant
+
 	LegacyBashCompat bool
 
 	CallHandler      CallHandlerFunc
@@ -583,6 +588,7 @@ type RunnerConfig struct {
 func newRunnerBase() *Runner {
 	r := &Runner{}
 	r.dirStack = r.dirBootstrap[:0]
+	r.applyShellVariant(shellvariant.Bash)
 	r.opts[optBraceExpand] = true // braceexpand is on by default in bash
 	// turn "on" the default Bash options
 	for i, opt := range &bashOptsTable {
@@ -676,6 +682,7 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 		cfg = &RunnerConfig{}
 	}
 	r := newRunnerBase()
+	r.applyShellVariant(cfg.ShellVariant)
 	r.Env = cfg.Env
 	r.platform = normalizePlatform(cfg.Platform)
 	r.startupHome = cfg.StartupHome
@@ -1212,6 +1219,8 @@ func (r *Runner) Reset() {
 		stdout:             r.origStdout,
 		stderr:             r.origStderr,
 		fds:                cloneFDTable(r.origFDs),
+		shellVariant:       r.shellVariant,
+		langVariant:        r.langVariant,
 		legacyBashCompat:   r.legacyBashCompat,
 		commandString:      r.commandString,
 		commandStringValue: r.commandStringValue,
@@ -1492,6 +1501,8 @@ func (r *Runner) subshell(_ bool) *Runner {
 		interactive:               r.interactive,
 		commandString:             r.commandString,
 		commandStringValue:        r.commandStringValue,
+		shellVariant:              r.shellVariant,
+		langVariant:               r.langVariant,
 		legacyBashCompat:          r.legacyBashCompat,
 		noErrExit:                 r.noErrExit,
 		inSubshell:                true,

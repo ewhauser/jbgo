@@ -128,6 +128,7 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ecfg.ResetRuntimeState()
 	r.ecfg.Env = expandEnv{r}
 	r.ecfg.Runtime = r
+	r.ecfg.LangVariant = r.parserLangVariant()
 	r.ecfg.TildeEnv = tildeExpandEnv{r}
 	r.ecfg.StartupHome = r.startupHome
 	r.updateExpandOpts()
@@ -1242,7 +1243,7 @@ func (r *Runner) aliasResolver(name string) (syntax.AliasSpec, bool) {
 }
 
 func (r *Runner) newParser(opts ...syntax.ParserOption) *syntax.Parser {
-	base := append([]syntax.ParserOption{}, opts...)
+	base := append([]syntax.ParserOption{syntax.Variant(r.parserLangVariant())}, opts...)
 	if r != nil && r.legacyBashCompat {
 		base = append(base, syntax.LegacyBashCompat(true))
 	}
@@ -1475,7 +1476,7 @@ func (r *Runner) renderInlineArrayValue(expr *syntax.ArrayExpr) string {
 				if !first {
 					b.WriteByte(' ')
 				}
-				b.WriteString(bashDeclPlainValue(field))
+				b.WriteString(bashDeclPlainValue(r.parserLangVariant(), field))
 				first = false
 			}
 		case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
@@ -1490,7 +1491,7 @@ func (r *Runner) renderInlineArrayValue(expr *syntax.ArrayExpr) string {
 			} else {
 				b.WriteString("]=")
 			}
-			b.WriteString(bashDeclPlainValue(r.assignmentLiteral(elem.Value)))
+			b.WriteString(bashDeclPlainValue(r.parserLangVariant(), r.assignmentLiteral(elem.Value)))
 			first = false
 		}
 	}

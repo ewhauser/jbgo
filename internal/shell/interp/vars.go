@@ -869,7 +869,7 @@ func (r *Runner) printSetVar(name string, vr expand.Variable) {
 		}
 		r.out(")\n")
 	default:
-		r.outf("%s=%s\n", name, bashDeclPlainValue(vr.String()))
+		r.outf("%s=%s\n", name, bashDeclPlainValue(r.parserLangVariant(), vr.String()))
 	}
 }
 
@@ -1596,7 +1596,7 @@ func (r *Runner) assignArray(prev expand.Variable, as *syntax.Assign, valType st
 	targetName, targetPrev := r.resolvedCompoundArrayTarget(prev, as.Ref)
 	mode := resolveArrayExprMode(targetPrev, as, valType)
 	elems := r.expandCompoundArrayElems(cloneArrayElemsWithSubscriptMode(as.Array.Elems, subscriptModeFromArrayExprMode(mode)))
-	trace := traceExpandedArrayAssign(as.Ref, as.Append, elems)
+	trace := traceExpandedArrayAssign(r.parserLangVariant(), as.Ref, as.Append, elems)
 	vr := compoundArrayBase(targetPrev, mode, as.Append)
 	origEnv := r.writeEnv
 	shadowEnv := &shadowWriteEnviron{

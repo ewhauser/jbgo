@@ -66,16 +66,20 @@ func (r *Runner) tracePrefix() string {
 		return ""
 	}
 	src := vr.String()
-	word, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Document(strings.NewReader(src))
+	word, err := r.parserForVariant().Document(strings.NewReader(src))
 	if err != nil {
-		msg := err.Error()
-		switch {
-		case strings.Contains(msg, "reached EOF without matching `${` with `}`"):
-			fmt.Fprintf(r.traceErrorWriter(), "%s: bad substitution\n", src)
-		case strings.Contains(msg, "reached EOF without matching `$(` with `)`"):
-			fmt.Fprintln(r.traceErrorWriter(), "unexpected EOF while looking for matching `)'")
-		default:
-			fmt.Fprintln(r.traceErrorWriter(), msg)
+		if r.shellVariantName().UsesBashDiagnostics() {
+			msg := err.Error()
+			switch {
+			case strings.Contains(msg, "reached EOF without matching `${` with `}`"):
+				fmt.Fprintf(r.traceErrorWriter(), "%s: bad substitution\n", src)
+			case strings.Contains(msg, "reached EOF without matching `$(` with `)`"):
+				fmt.Fprintln(r.traceErrorWriter(), "unexpected EOF while looking for matching `)'")
+			default:
+				fmt.Fprintln(r.traceErrorWriter(), formatParseError(err, r.shellVariantName()))
+			}
+		} else {
+			fmt.Fprintln(r.traceErrorWriter(), formatParseError(err, r.shellVariantName()))
 		}
 		return ps4ParseFallback(src, err)
 	}
@@ -307,7 +311,7 @@ func (t *tracer) traceArg(arg string) string {
 	if needsTraceControlQuote(arg) || (t.cLocale && needsTraceANSIQuote(arg)) {
 		return traceANSIQuote(arg, t.cLocale)
 	}
-	quoted, err := syntax.Quote(arg, syntax.LangBash)
+	quoted, err := t.activeRunner.quoteForVariant(arg)
 	if err != nil {
 		panic(err)
 	}

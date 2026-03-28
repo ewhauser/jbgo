@@ -17,6 +17,7 @@ import (
 type ExecutionRequest struct {
 	Name            string
 	Interpreter     string
+	ShellVariant    ShellVariant
 	PassthroughArgs []string
 	ScriptPath      string
 	Script          string
@@ -54,6 +55,7 @@ type ExecutionResult struct {
 // InteractiveRequest describes an interactive shell session.
 type InteractiveRequest struct {
 	Name           string
+	ShellVariant   ShellVariant
 	Args           []string
 	StartupOptions []string
 	Env            map[string]string
@@ -76,6 +78,7 @@ func (req *ExecutionRequest) runtimeRequest() *internalruntime.ExecutionRequest 
 	return &internalruntime.ExecutionRequest{
 		Name:            req.Name,
 		Interpreter:     req.Interpreter,
+		ShellVariant:    req.ShellVariant,
 		PassthroughArgs: cloneStrings(req.PassthroughArgs),
 		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
@@ -118,6 +121,7 @@ func (req *InteractiveRequest) runtimeRequest() *internalruntime.InteractiveRequ
 	}
 	return &internalruntime.InteractiveRequest{
 		Name:           req.Name,
+		ShellVariant:   req.ShellVariant,
 		Args:           cloneStrings(req.Args),
 		StartupOptions: cloneStrings(req.StartupOptions),
 		Env:            copyStringMap(req.Env),

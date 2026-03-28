@@ -9,6 +9,7 @@ import (
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 type budgetViolation struct {
@@ -27,11 +28,14 @@ func (e *shellValidationError) Error() string {
 	return e.message
 }
 
-func validateInterpreterSafety(program *syntax.File) error {
+func validateInterpreterSafety(program *syntax.File, variant shellvariant.ShellVariant) error {
 	if invalid := validateSupportedRedirections(program); invalid != nil {
 		return invalid
 	}
-	return validateSupportedFunctionDeclarations(program)
+	if invalid := validateSupportedFunctionDeclarations(program); invalid != nil {
+		return invalid
+	}
+	return validateSupportedVariantCommands(program, variant)
 }
 
 func validateExecutionBudgets(program *syntax.File, pol policy.Policy) error {
@@ -124,6 +128,20 @@ func validateSupportedFunctionDeclarations(program *syntax.File) error {
 		}
 		if fn.Body == nil || !hasSupportedFunctionName(fn) {
 			return &shellValidationError{message: "invalid function declaration"}
+		}
+	}
+	return nil
+}
+
+func validateSupportedVariantCommands(program *syntax.File, variant shellvariant.ShellVariant) error {
+	if program == nil {
+		return nil
+	}
+	for node := range syntax.All(program) {
+		if _, ok := node.(*syntax.TestDecl); ok {
+			return &shellValidationError{
+				message: fmt.Sprintf("%s runner not implemented: @test requires bats-core harness", shellvariant.Normalize(variant)),
+			}
 		}
 	}
 	return nil
