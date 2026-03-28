@@ -2250,6 +2250,74 @@ func (p *Parser) loadReplay(pos Pos, src []byte, readErr error) {
 	p.bsp = uint(w)
 }
 
+func parseErrRecoverableInBackquotes(err ParseError) bool {
+	switch err.Text {
+	case "reached EOF without closing quote `\"`",
+		"reached EOF without closing quote `'`",
+		"reached \"`\" without closing quote `\"`",
+		"reached \"`\" without closing quote `'`",
+		"reached EOF without matching `{` with `}`",
+		"reached \"`\" without matching `{` with `}`":
+		return true
+	default:
+		return false
+	}
+}
+
+func advancePosBytes(pos Pos, src []byte) Pos {
+	for _, b := range src {
+		switch b {
+		case '\n':
+			pos.lineCol += 1 << colBitSize
+			pos.lineCol &^= colBitMask
+			pos.lineCol++
+		default:
+			pos.lineCol++
+		}
+		pos.offs++
+	}
+	return pos
+}
+
+func findClosingBackquote(src []byte) int {
+	for i := 1; i < len(src); i++ {
+		switch src[i] {
+		case '\\':
+			if i+1 < len(src) {
+				i++
+			}
+		case '`':
+			return i
+		}
+	}
+	return -1
+}
+
+func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, tail []byte, readErr error) bool {
+	full := make([]byte, 1+len(tail))
+	full[0] = '`'
+	copy(full[1:], tail)
+	closeIndex := findClosingBackquote(full)
+	if closeIndex < 0 {
+		return false
+	}
+
+	p.postNested(old)
+	if old.quote == dblQuotes {
+		p.openBquoteDquotes--
+	}
+	p.openBquotes--
+
+	p.err = nil
+	cs.Stmts = nil
+	cs.Last = nil
+	cs.Right = advancePosBytes(cs.Left, full[:closeIndex])
+	nextPos := advancePosBytes(cs.Left, full[:closeIndex+1])
+	p.loadReplay(nextPos, full[closeIndex+1:], readErr)
+	p.next()
+	return true
+}
+
 func (p *Parser) setSourceBuffer(pos Pos, src []byte) {
 	p.sourceBs = append(p.sourceBs[:0], src...)
 	p.sourceOffs = int64(pos.Offset())
@@ -2780,9 +2848,17 @@ func (p *Parser) wordPart() WordPart {
 		// The lexer didn't call p.rune for us, so that it could have
 		// the right p.openBquotes to properly handle backslashes.
 		p.rune()
+		backquoteTail, backquoteTailErr := p.currentSourceTail()
 
 		p.next()
 		cs.Stmts, cs.Last = p.stmtList()
+		if p.err != nil {
+			if parseErr, ok := p.err.(ParseError); ok && parseErrRecoverableInBackquotes(parseErr) {
+				if p.recoverBackquoteCmdSubst(cs, old, backquoteTail, backquoteTailErr) {
+					return cs
+				}
+			}
+		}
 		if p.tok == bckQuote && p.lastBquoteEsc < p.openBquotes-1 {
 			// e.g. found ` before the nested backquote \` was closed.
 			p.tok = _EOF
@@ -5340,7 +5416,7 @@ func (p *Parser) testClause(s *Stmt) {
 	old := p.preNested(testExpr)
 	p.next()
 	if tc.X = p.condExprBinary(false); tc.X == nil {
-		if p.tok == _LitWord && p.val == "]]" {
+		if p.isCondClosingTok() {
 			p.posErr(p.pos, "syntax error near %s", bashQuoteString(dblRightBrack.String()))
 		} else if p.tok == rightParen {
 			p.curErrSecondary(
@@ -5363,11 +5439,24 @@ func (p *Parser) testClause(s *Stmt) {
 		}
 	}
 	tc.Right = p.pos
-	if _, ok := p.gotLitWord("]]"); !ok {
+	if _, ok := p.gotCondClosingTok(); !ok {
 		p.matchingErr(tc.Left, dblLeftBrack, dblRightBrack)
 	}
 	p.postNested(old)
 	s.Cmd = tc
+}
+
+func (p *Parser) isCondClosingTok() bool {
+	return p.val == "]]" && (p.tok == _LitWord || p.tok == _Lit)
+}
+
+func (p *Parser) gotCondClosingTok() (Pos, bool) {
+	if !p.isCondClosingTok() {
+		return Pos{}, false
+	}
+	pos := p.pos
+	p.next()
+	return pos, true
 }
 
 func condWordAsVarRef(word *Word) *VarRef {
@@ -6088,7 +6177,7 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 	switch p.tok {
 	case andAnd, orOr:
 	case _LitWord:
-		if p.val == "]]" {
+		if p.isCondClosingTok() {
 			return left
 		}
 		opTok := token(testBinaryOp(p.val))
@@ -6112,6 +6201,9 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 		}
 		p.tok = opTok
 	case _Lit:
+		if p.isCondClosingTok() {
+			return left
+		}
 		if _, ok := left.(*CondWord); ok {
 			p.condBinaryOperatorExpected(p.pos)
 		} else {
@@ -6204,7 +6296,7 @@ func (p *Parser) condExprUnary() CondExpr {
 		u := &CondUnary{OpPos: p.pos, Op: UnTestOperator(p.tok)}
 		p.next()
 		switch {
-		case p.tok == _LitWord && p.val == "]]":
+		case p.isCondClosingTok():
 			p.condUnaryUnexpectedArgument(p.pos)
 			return nil
 		case p.tok == rdrIn || p.tok == rdrOut || p.tok == _LitRedir:
@@ -6225,7 +6317,7 @@ func (p *Parser) condExprUnary() CondExpr {
 		pe := &CondParen{Lparen: p.pos}
 		p.next()
 		if pe.X = p.condExprBinary(false); pe.X == nil {
-			if p.tok == _LitWord && p.val == "]]" {
+			if p.isCondClosingTok() {
 				p.posErr(pe.Lparen, "expected %#q", rightParen)
 			} else {
 				p.followErrExp(pe.Lparen, leftParen)
@@ -6240,8 +6332,8 @@ func (p *Parser) condExprUnary() CondExpr {
 			return nil
 		}
 		return pe
-	case _LitWord:
-		if p.val == "]]" {
+	case _LitWord, _Lit:
+		if p.isCondClosingTok() {
 			return nil
 		}
 		fallthrough
@@ -6268,7 +6360,7 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	switch p.tok {
 	case andAnd, orOr:
 	case _LitWord:
-		if p.val == "]]" {
+		if p.isCondClosingTok() {
 			return left
 		}
 		if p.tok = token(testBinaryOp(p.val)); p.tok == illegalTok {
@@ -6278,6 +6370,9 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	case _EOF, rightParen:
 		return left
 	case _Lit:
+		if p.isCondClosingTok() {
+			return left
+		}
 		p.curErr("test operator words must consist of a single literal")
 	default:
 		p.curErr("not a valid test operator: %#q", p.tok)
@@ -6344,8 +6439,8 @@ func (p *Parser) testExprUnary() TestExpr {
 		}
 		pe.Rparen = p.matched(pe.Lparen, leftParen, rightParen)
 		return pe
-	case _LitWord:
-		if p.val == "]]" {
+	case _LitWord, _Lit:
+		if p.isCondClosingTok() {
 			return nil
 		}
 		fallthrough

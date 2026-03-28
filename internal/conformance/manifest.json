@@ -16,10 +16,6 @@
             "darwin"
           ]
         },
-        "oils/alias.test.sh::alias with word of multiple lines": {
-          "mode": "xfail",
-          "reason": "conformance: gbash ls error message format differs from GNU coreutils ls"
-        },
         "oils/alias.test.sh::Two aliases in pipeline": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -402,14 +398,6 @@
             "darwin"
           ]
         },
-        "oils/command-sub.test.sh::Escaped quote in [[ ]]": {
-          "mode": "xfail",
-          "reason": "conformance: gbash backquote-in-dquote escaping does not yet handle nested [[ ]] correctly"
-        },
-        "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
-          "mode": "xfail",
-          "reason": "conformance: gbash backquote-in-dquote error recovery differs from bash"
-        },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
           "reason": "conformance: Darwin bash oracle lacks /usr/bin/cat inside this harness",
@@ -516,10 +504,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/glob.test.sh::char class glob inside array assignment": {
-          "mode": "xfail",
-          "reason": "conformance: gbash rejects bracket-pattern glob words inside array assignment"
         },
         "oils/glob.test.sh::Glob ordering respects LC_COLLATE (zsh respects this too)": {
           "mode": "xfail",
@@ -727,10 +711,6 @@
           "goos": [
             "darwin"
           ]
-        },
-        "oils/smoke.test.sh::failed command": {
-          "mode": "xfail",
-          "reason": "conformance: gbash ls error message format differs from bash"
         },
         "oils/smoke.test.sh::Here doc with redirect": {
           "mode": "xfail",

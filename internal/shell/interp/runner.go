@@ -75,6 +75,9 @@ func (r *Runner) ExpandReportError(err error) {
 
 func (r *Runner) ExpandCmdSubst(w io.Writer, cs *syntax.CmdSubst) error {
 	ctx := r.ectx
+	if cs.Backquotes && len(cs.Stmts) == 0 {
+		return r.expandDeferredBackquote(ctx, w, cs)
+	}
 	switch len(cs.Stmts) {
 	case 0: // nothing to do
 		return nil
@@ -106,6 +109,75 @@ func (r *Runner) ExpandCmdSubst(w io.Writer, cs *syntax.CmdSubst) error {
 		return r2.exit.err // surface fatal errors immediately
 	}
 	return nil
+}
+
+func (r *Runner) expandDeferredBackquote(ctx context.Context, w io.Writer, cs *syntax.CmdSubst) error {
+	src := r.sourceForNode(cs)
+	if len(src) >= 2 && src[0] == '`' && src[len(src)-1] == '`' {
+		src = src[1 : len(src)-1]
+	}
+
+	r2 := r.subshell(false)
+	if r.expandBaseFDs != nil {
+		r2.shareFDTableSnapshot(r.expandBaseFDs)
+	}
+	r2.opts[optVerbose] = false
+	r2.setStandardFDs(standardFDUpdate{stdout: w, setStdout: true})
+	err := r2.runShellReader(ctx, strings.NewReader(src), "`", nil)
+	r.lastExpandExit = r2.exit
+	r.lastExpandExit.errExitIgnored = false
+	if err == nil {
+		return nil
+	}
+	var parseErr syntax.ParseError
+	if errors.As(err, &parseErr) {
+		msg := nestedBackquoteParseErrorMessage(parseErr)
+		if msg != "" {
+			if !strings.HasSuffix(msg, "\n") {
+				msg += "\n"
+			}
+			_, _ = io.WriteString(r.stderr, msg)
+		}
+		return nil
+	}
+	return err
+}
+
+func nestedBackquoteParseErrorMessage(parseErr syntax.ParseError) string {
+	switch parseErr.Text {
+	case "reached EOF without closing quote `\"`",
+		"reached \"`\" without closing quote `\"`":
+		return "unexpected EOF while looking for matching `\"'"
+	case "reached EOF without closing quote `'`",
+		"reached \"`\" without closing quote `'`":
+		return "unexpected EOF while looking for matching `''"
+	default:
+		return stripNestedBackquoteParsePrefix(parseErr.BashError())
+	}
+}
+
+func stripNestedBackquoteParsePrefix(msg string) string {
+	lines := strings.Split(msg, "\n")
+	for i, line := range lines {
+		lines[i] = stripSingleNestedBackquoteLinePrefix(line)
+	}
+	return strings.TrimSuffix(strings.Join(lines, "\n"), "\n")
+}
+
+func stripSingleNestedBackquoteLinePrefix(line string) string {
+	if !strings.HasPrefix(line, "line ") {
+		return line
+	}
+	colon := strings.Index(line, ": ")
+	if colon <= len("line ") {
+		return line
+	}
+	for _, r := range line[len("line "):colon] {
+		if r < '0' || r > '9' {
+			return line
+		}
+	}
+	return line[colon+2:]
 }
 
 func (r *Runner) ExpandProcSubst(ps *syntax.ProcSubst) (string, error) {

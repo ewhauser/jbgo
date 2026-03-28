@@ -567,7 +567,7 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 	}
 	if !exists {
 		_, _ = fmt.Fprintf(inv.Stderr, "ls: %s: No such file or directory\n", target)
-		return "", 2, lsRenderResult{}, nil
+		return "", 1, lsRenderResult{}, nil
 	}
 
 	if opts.directoryOnly || !info.IsDir() { //nolint:nilaway // info is non-nil when exists is true
@@ -905,7 +905,7 @@ func lsRunTargets(ctx context.Context, inv *Invocation, commandName string, targ
 		}
 		if !exists {
 			_, _ = fmt.Fprintf(inv.Stderr, "%s: %s: No such file or directory\n", commandName, target)
-			exitCode = max(exitCode, 2)
+			exitCode = max(exitCode, 1)
 			continue
 		}
 		if opts.directoryOnly || !info.IsDir() {
