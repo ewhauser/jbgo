@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -42,8 +43,35 @@ func TestGbashEnvMatchesDefaultPathOrder(t *testing.T) {
 	t.Parallel()
 
 	want := "/usr/bin:/bin"
-	if got := gbashEnv("")["PATH"]; got != want {
+	if got := gbashEnv(&SuiteConfig{}, "")["PATH"]; got != want {
 		t.Fatalf("gbashEnv()[PATH] = %q, want %q", got, want)
+	}
+}
+
+func TestSuiteEnvOverridesBaseEnv(t *testing.T) {
+	t.Parallel()
+
+	cfg := &SuiteConfig{
+		Env: map[string]string{
+			"PATH":  "/custom/bin",
+			"EXTRA": "value",
+		},
+	}
+
+	gbash := gbashEnv(cfg, "")
+	if got, want := gbash["PATH"], "/custom/bin"; got != want {
+		t.Fatalf("gbashEnv()[PATH] = %q, want %q", got, want)
+	}
+	if got, want := gbash["EXTRA"], "value"; got != want {
+		t.Fatalf("gbashEnv()[EXTRA] = %q, want %q", got, want)
+	}
+
+	bash := bashEnv(cfg, "/tmp/work", "")
+	if got, want := findEnvValue(bash, "PATH"), "/custom/bin"; got != want {
+		t.Fatalf("bashEnv(PATH) = %q, want %q", got, want)
+	}
+	if got, want := findEnvValue(bash, "EXTRA"), "value"; got != want {
+		t.Fatalf("bashEnv(EXTRA) = %q, want %q", got, want)
 	}
 }
 
@@ -72,6 +100,16 @@ func TestReadOnlyPathsFSRejectsWriteIntents(t *testing.T) {
 	if !errors.Is(err, syscall.EROFS) {
 		t.Fatalf("OpenFile(/zz) error = %v, want EROFS", err)
 	}
+}
+
+func findEnvValue(values []string, key string) string {
+	prefix := key + "="
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			return value[len(prefix):]
+		}
+	}
+	return ""
 }
 
 func TestNormalizeOutputAndBashStderr(t *testing.T) {

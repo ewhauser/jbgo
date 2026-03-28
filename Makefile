@@ -1,4 +1,4 @@
-.PHONY: lint lint-contrib lint-examples lint-all test conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats ensure-diffutils nix-build nix-cache
+.PHONY: lint lint-contrib lint-examples lint-all test conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats ensure-curl ensure-diffutils nix-build nix-cache
 
 GO_CORE_PACKAGES := ./...
 GO_CONTRIB_PACKAGES := ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/jq/... ./contrib/python/... ./contrib/sqlite3/... ./contrib/yq/...
@@ -217,13 +217,18 @@ CONFORMANCE_RUN ?= TestConformance
 
 conformance-test:
 	@BASH_PATH=$$(./scripts/ensure-bash.sh) || exit 1; \
+	CURL_PATH=$$(./scripts/ensure-curl.sh) || exit 1; \
 	BASH_VERSION_LINE=$$($$BASH_PATH --version | sed -n '1p') || exit 1; \
 	GBASH_RUN_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
+	GBASH_CONFORMANCE_CURL="$$CURL_PATH" \
 	GBASH_CONFORMANCE_BASH_VERSION_LINE="$$BASH_VERSION_LINE" \
 	  go test ./internal/conformance -run "$(CONFORMANCE_RUN)" -count=1 -timeout=20m
 
 ensure-bash:
 	@./scripts/ensure-bash.sh
+
+ensure-curl:
+	@./scripts/ensure-curl.sh
 
 ensure-diffutils:
 	@./scripts/ensure-diffutils.sh

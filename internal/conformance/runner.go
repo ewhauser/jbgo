@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	stdfs "io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -53,12 +54,24 @@ func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
 	resolved.SpecDir = packageRelativePath(resolved.SpecDir)
 	resolved.BinDir = packageRelativePath(resolved.BinDir)
 	resolved.ManifestPath = packageRelativePath(resolved.ManifestPath)
+	if len(resolved.ExtraBinaries) > 0 {
+		binaries := make(map[string]string, len(resolved.ExtraBinaries))
+		for name, hostPath := range resolved.ExtraBinaries {
+			binaries[name] = packageRelativePath(hostPath)
+		}
+		resolved.ExtraBinaries = binaries
+	}
 	if len(resolved.FixtureDirs) > 0 {
 		fixtures := make([]string, 0, len(resolved.FixtureDirs))
 		for _, dir := range resolved.FixtureDirs {
 			fixtures = append(fixtures, packageRelativePath(dir))
 		}
 		resolved.FixtureDirs = fixtures
+	}
+	if len(resolved.Env) > 0 {
+		env := make(map[string]string, len(resolved.Env))
+		maps.Copy(env, resolved.Env)
+		resolved.Env = env
 	}
 	return resolved
 }
@@ -166,7 +179,7 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 	if err != nil {
 		return ComparisonResult{}, err
 	}
-	gbashResult, err := runGBash(ctx, bashPath, specPath, gbashWorkspace, script)
+	gbashResult, err := runGBash(ctx, cfg, bashPath, specPath, gbashWorkspace, script)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
@@ -207,6 +220,10 @@ func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, erro
 			return "", err
 		}
 	}
+	if err := installSuiteBinaries(workspace, cfg.ExtraBinaries); err != nil {
+		removeAll(workspace)
+		return "", err
+	}
 
 	if err := os.MkdirAll(filepath.Join(workspace, "tmp"), 0o755); err != nil {
 		removeAll(workspace)
@@ -243,6 +260,36 @@ func installPinnedBash(workspace, bashPath string) error {
 		return nil
 	}
 	return copyFile(bashPath, filepath.Join(workspace, "bin", "bash"))
+}
+
+func installSuiteBinaries(workspace string, binaries map[string]string) error {
+	if len(binaries) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(binaries))
+	for name := range binaries {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		targetName := filepath.Base(strings.TrimSpace(name))
+		if targetName == "" || targetName == "." || targetName == string(filepath.Separator) {
+			return fmt.Errorf("invalid suite binary name %q", name)
+		}
+		hostPath := strings.TrimSpace(binaries[name])
+		if hostPath == "" {
+			return fmt.Errorf("suite binary %q has empty host path", name)
+		}
+
+		target := filepath.Join(workspace, "bin", targetName)
+		if err := copyFile(hostPath, target); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 //nolint:forbidigo // The conformance harness copies vendored helper trees into a host temp workspace.
@@ -316,12 +363,19 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-func runGBash(ctx context.Context, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
-	env := gbashEnv(specPath)
-	opts := []gbruntime.Option{gbruntime.WithFileSystem(virtualWorkspaceFileSystem(specPath, workspace, gbashWorkspaceRoot(specPath)))}
-	if useScopedGlobWorkspace(specPath) {
-		opts = append([]gbruntime.Option{gbruntime.WithBaseEnv(env)}, opts...)
+func runGBash(ctx context.Context, cfg *SuiteConfig, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
+	if cfg == nil {
+		cfg = &SuiteConfig{}
 	}
+	env := gbashEnv(cfg, specPath)
+	opts := make([]gbruntime.Option, 0, 4)
+	if cfg.GBashConfig != nil {
+		opts = append(opts, gbruntime.WithConfig(cfg.GBashConfig))
+	}
+	if useScopedGlobWorkspace(specPath) {
+		opts = append(opts, gbruntime.WithBaseEnv(env))
+	}
+	opts = append(opts, gbruntime.WithFileSystem(virtualWorkspaceFileSystem(specPath, workspace, gbashWorkspaceRoot(specPath))))
 	if cfg := gbashPolicyConfig(specPath); cfg != nil {
 		opts = append(opts, gbruntime.WithPolicy(policy.NewStatic(cfg)))
 	}
@@ -477,10 +531,13 @@ func copyWorkspaceFileToSandbox(ctx context.Context, dst gbfs.FileSystem, hostPa
 
 //nolint:forbidigo // The oracle side of the harness intentionally executes the real host bash binary.
 func runBash(ctx context.Context, cfg *SuiteConfig, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
+	if cfg == nil {
+		cfg = &SuiteConfig{}
+	}
 	args := OracleCommandArgs(cfg.OracleMode, script)
 	cmd := exec.CommandContext(ctx, bashPath, args...)
 	cmd.Dir = workspace
-	cmd.Env = bashEnv(workspace, specPath)
+	cmd.Env = bashEnv(cfg, workspace, specPath)
 
 	var stdout strings.Builder
 	var stderr strings.Builder
@@ -795,7 +852,10 @@ func isNestedShellDiagnostic(line string) bool {
 }
 
 //nolint:forbidigo // The isolated conformance harness mirrors numeric IDs for bash parity.
-func gbashEnv(specPath string) map[string]string {
+func gbashEnv(cfg *SuiteConfig, specPath string) map[string]string {
+	if cfg == nil {
+		cfg = &SuiteConfig{}
+	}
 	locale := conformanceLocale()
 	env := map[string]string{
 		"LANG":                  locale,
@@ -814,6 +874,7 @@ func gbashEnv(specPath string) map[string]string {
 		env["EUID"] = strconv.Itoa(os.Geteuid())
 		env["GID"] = strconv.Itoa(os.Getgid())
 		env["EGID"] = strconv.Itoa(os.Getegid())
+		maps.Copy(env, cfg.Env)
 		return env
 	}
 	env["HOME"] = conformanceVirtualHomeDir
@@ -824,6 +885,7 @@ func gbashEnv(specPath string) map[string]string {
 	if needsRepoRootEnv(specPath) {
 		env["REPO_ROOT"] = gbashWorkspaceRoot(specPath)
 	}
+	maps.Copy(env, cfg.Env)
 	return env
 }
 
@@ -831,22 +893,30 @@ func gbashPathValue() string {
 	return "/usr/bin:/bin"
 }
 
-func bashEnv(workspace, specPath string) []string {
+func bashEnv(cfg *SuiteConfig, workspace, specPath string) []string {
+	if cfg == nil {
+		cfg = &SuiteConfig{}
+	}
 	locale := conformanceLocale()
-	values := []string{
-		"HOME=" + workspace,
-		"PWD=" + workspace,
-		"PATH=" + filepath.Join(workspace, "bin") + ":/usr/bin:/bin",
-		"LANG=" + locale,
-		"LC_ALL=" + locale,
-		"SH=bash",
-		"TZ=UTC",
-		"TMP=" + filepath.Join(workspace, "tmp"),
-		"TMPDIR=" + filepath.Join(workspace, "tmp"),
-		"GBASH_CONFORMANCE_SED=" + conformanceToolPath("sed"),
+	env := map[string]string{
+		"HOME":                  workspace,
+		"PWD":                   workspace,
+		"PATH":                  filepath.Join(workspace, "bin") + ":/usr/bin:/bin",
+		"LANG":                  locale,
+		"LC_ALL":                locale,
+		"SH":                    "bash",
+		"TZ":                    "UTC",
+		"TMP":                   filepath.Join(workspace, "tmp"),
+		"TMPDIR":                filepath.Join(workspace, "tmp"),
+		"GBASH_CONFORMANCE_SED": conformanceToolPath("sed"),
 	}
 	if needsRepoRootEnv(specPath) {
-		values = append(values, "REPO_ROOT="+workspace)
+		env["REPO_ROOT"] = workspace
+	}
+	maps.Copy(env, cfg.Env)
+	values := make([]string, 0, len(env))
+	for key, value := range env {
+		values = append(values, key+"="+value)
 	}
 	slices.Sort(values)
 	return values

@@ -460,7 +460,7 @@ func encodeCurlFormData(input string) string {
 }
 
 func curlURIComponent(value string) string {
-	return strings.ReplaceAll(url.QueryEscape(value), "+", "%20")
+	return url.QueryEscape(value)
 }
 
 func prepareCurlRequestBody(ctx context.Context, inv *Invocation, opts *curlOptions) (body []byte, contentType string, err error) {

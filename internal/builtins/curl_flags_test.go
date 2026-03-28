@@ -194,7 +194,7 @@ func TestCurlSupportsURLEncodedDataAndForgivingHeaders(t *testing.T) {
 	if got, want := req.Method, "POST"; got != want {
 		t.Fatalf("Method = %q, want %q", got, want)
 	}
-	if got := string(req.Body); got != "message=hello%20world" {
+	if got := string(req.Body); got != "message=hello+world" {
 		t.Fatalf("Body = %q, want URL-encoded payload", got)
 	}
 	if got := req.Timeout; got != 500*time.Millisecond {

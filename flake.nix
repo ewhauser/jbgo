@@ -20,6 +20,7 @@
       packages = forAllSystems (pkgs: {
         bash = pkgs.bash;
         bats = pkgs.bats;
+        curl = pkgs.curl;
         diffutils = pkgs.diffutils;
 
         # Full coreutils build tree including test suite (matches Dockerfile)
@@ -71,6 +72,7 @@
           packages = [
             pkgs.bash
             pkgs.bats
+            pkgs.curl
             pkgs.diffutils
           ];
         };

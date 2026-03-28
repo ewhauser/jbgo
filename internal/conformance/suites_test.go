@@ -12,20 +12,34 @@ func TestConformance(t *testing.T) {
 		t.Skip("set GBASH_RUN_CONFORMANCE=1 to run the full vendored conformance corpus")
 	}
 
-	suites := []SuiteConfig{
+	suites := []struct {
+		name  string
+		build func(*testing.T) SuiteConfig
+	}{
 		{
-			Name:         "bash",
-			SpecDir:      "oils",
-			BinDir:       "bin",
-			FixtureDirs:  []string{"fixtures/spec"},
-			ManifestPath: "manifest.json",
-			OracleMode:   OracleBash,
+			name: "bash",
+			build: func(t *testing.T) SuiteConfig {
+				t.Helper()
+				return SuiteConfig{
+					Name:         "bash",
+					SpecDir:      "oils",
+					BinDir:       "bin",
+					FixtureDirs:  []string{"fixtures/spec"},
+					ManifestPath: "manifest.json",
+					OracleMode:   OracleBash,
+				}
+			},
+		},
+		{
+			name:  "curl",
+			build: newCurlSuiteConfig,
 		},
 	}
 
-	for _, cfg := range suites {
-		t.Run(cfg.Name, func(t *testing.T) {
+	for _, suite := range suites {
+		t.Run(suite.name, func(t *testing.T) {
 			t.Parallel()
+			cfg := suite.build(t)
 			RunSuite(t, &cfg)
 		})
 	}

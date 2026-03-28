@@ -245,6 +245,9 @@
           "reason": "conformance: C.UTF-8 pathname collation order still differs from bash for this glob case"
         }
       }
+    },
+    "curl": {
+      "entries": {}
     }
   }
 }

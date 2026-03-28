@@ -1,6 +1,10 @@
 package conformance
 
-import "strings"
+import (
+	"strings"
+
+	gbruntime "github.com/ewhauser/gbash/internal/runtime"
+)
 
 type SpecFile struct {
 	Path     string
@@ -65,13 +69,16 @@ const (
 )
 
 type SuiteConfig struct {
-	Name         string
-	SpecDir      string
-	SpecFiles    []string
-	BinDir       string
-	FixtureDirs  []string
-	ManifestPath string
-	OracleMode   OracleMode
+	Name          string
+	SpecDir       string
+	SpecFiles     []string
+	BinDir        string
+	FixtureDirs   []string
+	ManifestPath  string
+	OracleMode    OracleMode
+	Env           map[string]string
+	ExtraBinaries map[string]string
+	GBashConfig   *gbruntime.Config
 }
 
 type ExecutionResult struct {
