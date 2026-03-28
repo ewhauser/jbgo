@@ -66,9 +66,6 @@ func shellVariantFromScript(exec *Execution) shellvariant.ShellVariant {
 	if variant := nonPosixPathShellVariant(exec.ScriptPath); variant.Resolved() {
 		return variant
 	}
-	if variant := nonPosixPathShellVariant(exec.Name); variant.Resolved() {
-		return variant
-	}
 	return shellvariant.Auto
 }
 
@@ -118,6 +115,8 @@ func defaultScriptInterpreter(exec *Execution) string {
 		return "mksh"
 	case shellvariant.Zsh:
 		return "zsh"
+	case shellvariant.Bats:
+		return "bats"
 	default:
 		return "bash"
 	}

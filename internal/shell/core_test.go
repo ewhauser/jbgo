@@ -462,6 +462,28 @@ func TestCoreRunNestedShellExecPropagatesShellVariant(t *testing.T) {
 	}
 }
 
+func TestCoreRunNameDoesNotAffectShellVariant(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Name:   "demo.zsh",
+		Script: "echo ${(q)foo}\n",
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	var status interp.ExitStatus
+	if !errors.As(err, &status) || status != 2 {
+		t.Fatalf("Run() error = %v, want exit status 2", err)
+	}
+	if got, want := stdout.String(), ""; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(stderr.String(), "tried parsing as bash") {
+		t.Fatalf("stderr = %q, want bash parse diagnostic", stderr.String())
+	}
+}
+
 func TestCoreRunTracePreservesUserLineNumbers(t *testing.T) {
 	t.Parallel()
 

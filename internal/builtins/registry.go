@@ -64,6 +64,7 @@ func DefaultRegistry() *commands.Registry {
 		NewSh(),
 		NewMksh(),
 		NewZsh(),
+		NewBats(),
 		NewComm(),
 		NewColumn(),
 		NewPaste(),

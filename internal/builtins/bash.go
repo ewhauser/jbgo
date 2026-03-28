@@ -35,6 +35,10 @@ func NewZsh() *Bash {
 	return newShellCommand("zsh")
 }
 
+func NewBats() *Bash {
+	return newShellCommand("bats")
+}
+
 func newShellCommand(name string) *Bash {
 	return &Bash{
 		name:         name,

@@ -194,6 +194,58 @@ func TestSessionExecNestedShellCommandsSupportMkshAndZsh(t *testing.T) {
 	}
 }
 
+func TestSessionExecNestedBatsCommandReturnsRunnerError(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Script: "bats -c '@test \"demo\" { echo hi; }'\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d", got, want)
+	}
+	if !strings.Contains(result.Stderr, "bats runner not implemented") {
+		t.Fatalf("Stderr = %q, want bats runner error", result.Stderr)
+	}
+	if strings.Contains(result.Stderr, "command not found") {
+		t.Fatalf("Stderr = %q, want registered bats shell command", result.Stderr)
+	}
+}
+
+func TestSessionExecBatsVariantDispatchesScriptsToBatsRunner(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		ShellVariant: shellvariant.Bats,
+		Script: strings.Join([]string{
+			"cat > /tmp/plain-bats <<'EOF'",
+			"@test \"demo\" {",
+			"  echo hi",
+			"}",
+			"EOF",
+			"chmod +x /tmp/plain-bats",
+			"/tmp/plain-bats",
+			"",
+		}, "\n"),
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if got, want := result.ExitCode, 2; got != want {
+		t.Fatalf("ExitCode = %d, want %d", got, want)
+	}
+	if !strings.Contains(result.Stderr, "bats runner not implemented") {
+		t.Fatalf("Stderr = %q, want bats runner error", result.Stderr)
+	}
+	if strings.Contains(result.Stderr, "@test: command not found") {
+		t.Fatalf("Stderr = %q, want bats dispatch instead of bash fallback", result.Stderr)
+	}
+}
+
 func TestSessionExecShebangBatsReturnsRunnerError(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
