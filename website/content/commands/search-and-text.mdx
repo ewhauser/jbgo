@@ -69,6 +69,18 @@ grep -c "pattern" file.txt                  # count matches
 grep -v "debug" log.txt                     # invert match
 ```
 
+## rg
+
+Search recursively with ripgrep-style defaults.
+
+```bash
+rg "error"                                  # search the current directory recursively
+rg -g "*.go" "TODO" .                       # filter matches with glob rules
+rg --hidden "token" .                       # include hidden files
+rg --files .                                # list searchable files
+rg -n -S "warning" src/                     # line numbers with smart case
+```
+
 ## head
 
 Output the first part of files.

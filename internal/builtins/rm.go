@@ -9,9 +9,6 @@ import (
 	stdfs "io/fs"
 	"path"
 	"strings"
-
-	"github.com/ewhauser/gbash/internal/commandutil"
-	"golang.org/x/term"
 )
 
 type RM struct{}
@@ -618,42 +615,14 @@ func rmInputIsTTY(inv *Invocation, opts rmOptions) bool {
 	if opts.presumeInputTTY {
 		return true
 	}
-	reader := rmResolveTTYReader(inv)
-	if reader == nil {
-		return false
-	}
-	if meta, ok := reader.(commandutil.RedirectMetadata); ok {
-		if _, ok := ttyRecognizedPath(meta.RedirectPath()); ok {
-			return true
-		}
-	}
-	if fd, ok := reader.(interface{ Fd() uintptr }); ok {
-		descriptor := fd.Fd()
-		return descriptor != 0 && term.IsTerminal(int(descriptor))
-	}
-	return false
+	return inputLooksLikeTTY(rmResolveTTYReader(inv))
 }
 
 func rmResolveTTYReader(inv *Invocation) io.Reader {
 	if inv == nil {
 		return nil
 	}
-	reader := inv.Stdin
-	type underlyingReader interface {
-		UnderlyingReader() io.Reader
-	}
-	for reader != nil {
-		unwrapper, ok := reader.(underlyingReader)
-		if !ok {
-			return reader
-		}
-		next := unwrapper.UnderlyingReader()
-		if next == nil || next == reader {
-			return reader
-		}
-		reader = next
-	}
-	return nil
+	return resolveTTYReader(inv.Stdin)
 }
 
 func rmIsOwnerReadable(mode stdfs.FileMode) bool {
