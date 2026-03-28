@@ -45,8 +45,16 @@ func TestParseMalformedBackquoteRecoversOuterScript(t *testing.T) {
 			src:  "echo `echo \"`\necho after\n",
 		},
 		{
+			name: "unclosed quote at eof",
+			src:  "echo `echo \"`",
+		},
+		{
 			name: "escaped quote before closing backquote",
 			src:  "echo `echo \\\\\"`\necho after\n",
+		},
+		{
+			name: "escaped quote before closing backquote at eof",
+			src:  "echo `echo \\\\\"`",
 		},
 	}
 
@@ -56,8 +64,12 @@ func TestParseMalformedBackquoteRecoversOuterScript(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse(%q) error = %v", tc.src, err)
 			}
-			if got := len(file.Stmts); got != 2 {
-				t.Fatalf("len(Stmts) = %d, want 2", got)
+			wantStmts := 2
+			if !strings.HasSuffix(tc.src, "\n") {
+				wantStmts = 1
+			}
+			if got := len(file.Stmts); got != wantStmts {
+				t.Fatalf("len(Stmts) = %d, want %d", got, wantStmts)
 			}
 			call := file.Stmts[0].Cmd.(*CallExpr)
 			if got := len(call.Args); got != 2 {
@@ -73,9 +85,11 @@ func TestParseMalformedBackquoteRecoversOuterScript(t *testing.T) {
 			if tc.name == "unclosed quote" && len(cs.Stmts) != 0 {
 				t.Fatalf("len(CmdSubst.Stmts) = %d, want 0 deferred parse", len(cs.Stmts))
 			}
-			next := file.Stmts[1].Cmd.(*CallExpr)
-			if got := next.Args[1].Lit(); got != "after" {
-				t.Fatalf("second stmt arg = %q, want %q", got, "after")
+			if wantStmts == 2 {
+				next := file.Stmts[1].Cmd.(*CallExpr)
+				if got := next.Args[1].Lit(); got != "after" {
+					t.Fatalf("second stmt arg = %q, want %q", got, "after")
+				}
 			}
 		})
 	}

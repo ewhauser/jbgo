@@ -1186,28 +1186,13 @@ loop:
 				p.eqlOffs = len(p.litBs) - 1
 			}
 		case '[':
-			if p.quote != arrayElems && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && litPrefixLooksLikeName(p.litBs) {
+			if p.quote != arrayElems && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && len(p.litBs) > 1 && p.litBs[0] != '[' {
 				tok = _Lit
 				break loop
 			}
 		}
 	}
 	p.tok, p.val = tok, p.endLit()
-}
-
-func litPrefixLooksLikeName(lit []byte) bool {
-	if len(lit) <= 1 || lit[0] == '[' || lit[len(lit)-1] != '[' {
-		return false
-	}
-	for i, b := range lit[:len(lit)-1] {
-		switch {
-		case asciiLetter(b), b == '_':
-		case i > 0 && asciiDigit(b):
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func (p *Parser) advanceLitDquote(r rune) {

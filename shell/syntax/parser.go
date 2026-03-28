@@ -2293,11 +2293,34 @@ func findClosingBackquote(src []byte) int {
 	return -1
 }
 
-func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, tail []byte, readErr error) bool {
+func (p *Parser) recoverableBackquoteSource(left Pos) ([]byte, error) {
+	if left.Offset() == 0 {
+		return nil, nil
+	}
+	if src := p.sourceFromPos(left); src != "" {
+		return []byte(src), nil
+	}
+	tail, err := p.currentSourceTail()
+	if len(tail) == 0 {
+		return nil, err
+	}
 	full := make([]byte, 1+len(tail))
 	full[0] = '`'
 	copy(full[1:], tail)
-	closeIndex := findClosingBackquote(full)
+	return full, err
+}
+
+func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, src []byte, readErr error) bool {
+	if len(src) == 0 {
+		return false
+	}
+	if src[0] != '`' {
+		full := make([]byte, 1+len(src))
+		full[0] = '`'
+		copy(full[1:], src)
+		src = full
+	}
+	closeIndex := findClosingBackquote(src)
 	if closeIndex < 0 {
 		return false
 	}
@@ -2311,9 +2334,9 @@ func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, tail []by
 	p.err = nil
 	cs.Stmts = nil
 	cs.Last = nil
-	cs.Right = advancePosBytes(cs.Left, full[:closeIndex])
-	nextPos := advancePosBytes(cs.Left, full[:closeIndex+1])
-	p.loadReplay(nextPos, full[closeIndex+1:], readErr)
+	cs.Right = advancePosBytes(cs.Left, src[:closeIndex])
+	nextPos := advancePosBytes(cs.Left, src[:closeIndex+1])
+	p.loadReplay(nextPos, src[closeIndex+1:], readErr)
 	p.next()
 	return true
 }
@@ -2848,13 +2871,13 @@ func (p *Parser) wordPart() WordPart {
 		// The lexer didn't call p.rune for us, so that it could have
 		// the right p.openBquotes to properly handle backslashes.
 		p.rune()
-		backquoteTail, backquoteTailErr := p.currentSourceTail()
 
 		p.next()
 		cs.Stmts, cs.Last = p.stmtList()
 		if p.err != nil {
 			if parseErr, ok := p.err.(ParseError); ok && parseErrRecoverableInBackquotes(parseErr) {
-				if p.recoverBackquoteCmdSubst(cs, old, backquoteTail, backquoteTailErr) {
+				backquoteSrc, backquoteErr := p.recoverableBackquoteSource(cs.Left)
+				if p.recoverBackquoteCmdSubst(cs, old, backquoteSrc, backquoteErr) {
 					return cs
 				}
 			}
