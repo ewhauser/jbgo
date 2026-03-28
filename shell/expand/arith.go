@@ -578,7 +578,7 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 	case *syntax.UnaryArithm:
 		switch expr.Op {
 		case syntax.Inc, syntax.Dec:
-			ref, old, err := cfg.arithmLValue(root, expr.X)
+			ref, old, err := cfg.arithmLValue(root, expr.X, arithLValueReadModifyWrite)
 			if err != nil {
 				return 0, err
 			}
@@ -1150,8 +1150,19 @@ func divByZeroErrorAssgn(b *syntax.BinaryArithm, op string) error {
 	return fmt.Errorf("%s%s=%s: division by 0 (error token is \"%s\")", lhs, op, rhs, rhs)
 }
 
+type arithLValueMode uint8
+
+const (
+	arithLValueReadModifyWrite arithLValueMode = iota
+	arithLValuePlainAssign
+)
+
 func (cfg *Config) assgnArit(root syntax.ArithmExpr, b *syntax.BinaryArithm) (int, error) {
-	ref, val, err := cfg.arithmLValue(root, b.X)
+	mode := arithLValueReadModifyWrite
+	if b.Op == syntax.Assgn {
+		mode = arithLValuePlainAssign
+	}
+	ref, val, err := cfg.arithmLValue(root, b.X, mode)
 	if err != nil {
 		return 0, err
 	}
@@ -1455,7 +1466,7 @@ func arithInvalidRefTail(text string) string {
 	return ""
 }
 
-func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr) (*syntax.VarRef, int, error) {
+func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr, mode arithLValueMode) (*syntax.VarRef, int, error) {
 	ref, ok := arithmVarRef(cfg, expr)
 	if !ok {
 		word, wordOK := expr.(*syntax.Word)
@@ -1509,6 +1520,9 @@ func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr) (*syntax.VarRef, i
 		ref = resolvedRef
 	}
 	if cfg.NoUnset && !vr.IsSet() {
+		if mode == arithLValuePlainAssign {
+			return ref, 0, nil
+		}
 		return ref, 0, UnboundVariableError{Name: ref.Name.Value}
 	}
 	val, err := cfg.varRef(ref)

@@ -370,6 +370,64 @@ func TestArithmWholeAssociativeWritesUseZeroKey(t *testing.T) {
 	}
 }
 
+func TestArithmNounsetPlainAssignmentInitializesUnsetScalar(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{}
+	cfg := &Config{Env: env, NoUnset: true}
+
+	got, err := Arithm(cfg, parseArithmExpr(t, "i=2"))
+	if err != nil {
+		t.Fatalf("Arithm(i=2) error = %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("Arithm(i=2) = %d, want 2", got)
+	}
+	if got := env["i"].Str; got != "2" {
+		t.Fatalf("i = %q, want %q", got, "2")
+	}
+}
+
+func TestArithmNounsetPlainAssignmentInitializesUnsetIndexedElement(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv{}
+	cfg := &Config{Env: env, NoUnset: true}
+
+	got, err := Arithm(cfg, parseArithmExpr(t, "a[3]=2"))
+	if err != nil {
+		t.Fatalf("Arithm(a[3]=2) error = %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("Arithm(a[3]=2) = %d, want 2", got)
+	}
+	if val, ok := env["a"].IndexedGet(3); !ok || val != "2" {
+		t.Fatalf("a[3] = (%q, %v), want (\"2\", true)", val, ok)
+	}
+}
+
+func TestArithmNounsetReadModifyWriteStillFails(t *testing.T) {
+	t.Parallel()
+
+	tests := []string{"i++", "++i", "i+=2"}
+	for _, src := range tests {
+		t.Run(src, func(t *testing.T) {
+			cfg := &Config{Env: testEnv{}, NoUnset: true}
+			_, err := Arithm(cfg, parseArithmExpr(t, src))
+			if err == nil {
+				t.Fatalf("Arithm(%q) error = nil, want unbound variable", src)
+			}
+			var unboundErr UnboundVariableError
+			if !errors.As(err, &unboundErr) {
+				t.Fatalf("Arithm(%q) error = %T, want UnboundVariableError", src, err)
+			}
+			if got, want := unboundErr.Name, "i"; got != want {
+				t.Fatalf("Arithm(%q) unbound variable = %q, want %q", src, got, want)
+			}
+		})
+	}
+}
+
 func TestArithmWithSourcePreservesDivisionByZeroSpacing(t *testing.T) {
 	t.Parallel()
 

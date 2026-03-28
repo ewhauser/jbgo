@@ -25,6 +25,7 @@ type sedCommand struct {
 	pattern     *regexp.Regexp
 	replacement string
 	global      bool
+	print       bool
 }
 
 type sedCommandKind string
@@ -376,6 +377,7 @@ func parseSedCommand(script string, regexExtended bool) (sedCommand, error) {
 		command.kind = sedCommandSubstitute
 		command.replacement = replacement
 		command.global = strings.ContainsRune(flags, 'g')
+		command.print = strings.ContainsRune(flags, 'p')
 		command.pattern, err = compileSedRegexp(pattern, regexExtended, strings.ContainsRune(flags, 'i'))
 		if err != nil {
 			return sedCommand{}, err
@@ -435,7 +437,7 @@ func parseSedSubstitute(script string) (pattern, replacement, flags string, err 
 	flags = strings.TrimSpace(rest)
 	for _, flag := range flags {
 		switch flag {
-		case 'g', 'i':
+		case 'g', 'i', 'p':
 		default:
 			return "", "", "", fmt.Errorf("unsupported substitute flag %q", string(flag))
 		}
@@ -541,7 +543,11 @@ func runSedProgram(program []sedCommand, lines []string, quiet, trailingNewline 
 			case sedCommandQuit:
 				quit = true
 			case sedCommandSubstitute:
-				current = sedReplace(command.pattern, current, command.replacement, command.global)
+				next, matched := sedReplace(command.pattern, current, command.replacement, command.global)
+				current = next
+				if matched && command.print {
+					printed = append(printed, current)
+				}
 			}
 
 			if deleted || quit {
@@ -608,10 +614,10 @@ func sedAddressMatches(address *sedAddress, line string, lineNumber, totalLines 
 	}
 }
 
-func sedReplace(pattern *regexp.Regexp, line, replacement string, global bool) string {
+func sedReplace(pattern *regexp.Regexp, line, replacement string, global bool) (string, bool) {
 	matches := pattern.FindAllStringSubmatchIndex(line, -1)
 	if len(matches) == 0 {
-		return line
+		return line, false
 	}
 	if !global {
 		matches = matches[:1]
@@ -629,7 +635,7 @@ func sedReplace(pattern *regexp.Regexp, line, replacement string, global bool) s
 		cursor = end
 	}
 	out.WriteString(line[cursor:])
-	return out.String()
+	return out.String(), true
 }
 
 func expandSedReplacement(replacement, line string, match []int) string {

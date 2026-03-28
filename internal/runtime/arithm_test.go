@@ -99,6 +99,55 @@ func TestArithmExpansionNounsetIndexedRefUsesBaseName(t *testing.T) {
 	}
 }
 
+func TestArithmCommandNounsetAssignmentInitializesUnsetLocal(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "set -o nounset\nf() { local i; ((i=2)); echo \"$i\"; }\nf\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestArithmForLoopNounsetReverseIndexScan(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "set -o nounset\narr=(a b c)\nfor (( i=${#arr[@]}-1; i>=0; i-- )); do echo \"${arr[i]}\"; done\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "c\nb\na\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestSourceRegressionPreservesNounsetArithmeticAssignmentInFunction(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/tmp/arith-helper.sh", []byte("local i\n((i=2))\nprintf '%s\\n' \"$i\"\n"))
+
+	result := mustExecSession(t, session, "set -o nounset\nf() { source /tmp/arith-helper.sh; }\nf\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestArithmCommandRegressionPreservesParenAmbiguityParseError(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})
