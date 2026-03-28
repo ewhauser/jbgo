@@ -45,17 +45,17 @@ func (c *AWK) Run(ctx context.Context, inv *commands.Invocation) error {
 	}
 	programSource, err := loadAWKProgram(ctx, inv, opts, programText)
 	if err != nil {
-		return err
+		return exitCodef(inv, 2, "awk: %v", err)
 	}
 
 	compiled, err := parser.ParseProgram([]byte(programSource), nil)
 	if err != nil {
-		return exitf(inv, "awk: parse error: %v", err)
+		return exitCodef(inv, 1, "awk: parse error: %v", err)
 	}
 
 	loadedInputs, err := loadAWKInputs(ctx, inv, inputs)
 	if err != nil {
-		return err
+		return exitCodef(inv, 2, "awk: %v", err)
 	}
 	stdin := newLazyAWKStdin(ctx, inv)
 
@@ -265,7 +265,11 @@ func readAllFile(ctx context.Context, inv *commands.Invocation, name string) ([]
 }
 
 func exitf(inv *commands.Invocation, format string, args ...any) error {
-	return commands.Exitf(inv, 2, format, args...)
+	return exitCodef(inv, 2, format, args...)
+}
+
+func exitCodef(inv *commands.Invocation, code int, format string, args ...any) error {
+	return commands.Exitf(inv, code, format, args...)
 }
 
 var _ commands.Command = (*AWK)(nil)

@@ -18,6 +18,7 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
     in {
       packages = forAllSystems (pkgs: {
+        awk = pkgs.gawk;
         bash = pkgs.bash;
         bats = pkgs.bats;
         curl = pkgs.curl;
@@ -71,6 +72,7 @@
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [
+            pkgs.gawk
             pkgs.bash
             pkgs.bats
             pkgs.curl

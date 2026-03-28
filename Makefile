@@ -1,4 +1,4 @@
-.PHONY: lint lint-contrib lint-examples lint-all test conformance-test contrib-conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-bash ensure-bats ensure-curl ensure-diffutils ensure-jq nix-build nix-cache
+.PHONY: lint lint-contrib lint-examples lint-all test conformance-test contrib-conformance-test build build-contrib build-examples build-all fuzz fuzz-run fuzz-shard fuzz-smoke fuzz-full bench-smoke bench-full bench-compare bench-fs gnu-test compat-docker-build compat-docker-run website-dev release release-check release-snapshot fix-modules tag-release bats-test ensure-awk ensure-bash ensure-bats ensure-curl ensure-diffutils ensure-jq nix-build nix-cache
 
 GO_CORE_PACKAGES := ./...
 GO_CONTRIB_PACKAGES := ./contrib/awk/... ./contrib/extras/... ./contrib/htmltomarkdown/... ./contrib/jq/... ./contrib/python/... ./contrib/sqlite3/... ./contrib/yq/...
@@ -227,9 +227,16 @@ conformance-test:
 contrib-conformance-test:
 	@BASH_PATH=$$(./scripts/ensure-bash.sh) || exit 1; \
 	JQ_PATH=$$(./scripts/ensure-jq.sh) || exit 1; \
+	AWK_PATH=$$(./scripts/ensure-awk.sh) || exit 1; \
 	GBASH_RUN_JQ_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
 	GBASH_CONFORMANCE_JQ="$$JQ_PATH" \
-	  go test ./contrib/jq -run '^TestJQConformance$$' -count=1 -timeout=20m
+	  go test ./contrib/jq -run '^TestJQConformance$$' -count=1 -timeout=20m || exit 1; \
+	GBASH_RUN_AWK_CONFORMANCE=1 GBASH_CONFORMANCE_BASH="$$BASH_PATH" \
+	GBASH_CONFORMANCE_AWK="$$AWK_PATH" \
+	  go test ./contrib/awk -run '^TestAWKConformance$$' -count=1 -timeout=20m
+
+ensure-awk:
+	@./scripts/ensure-awk.sh
 
 ensure-bash:
 	@./scripts/ensure-bash.sh

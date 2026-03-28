@@ -1,0 +1,20 @@
+{
+  "suites": {
+    "awk": {
+      "entries": {
+        "conformance/awk.test.sh::system execution denied by sandbox": {
+          "mode": "xfail",
+          "reason": "gbash awk disables system() via NoExec"
+        },
+        "conformance/awk.test.sh::getline from non input file denied by sandbox": {
+          "mode": "xfail",
+          "reason": "gbash awk only allows getline from declared input files"
+        },
+        "conformance/awk.test.sh::output redirection denied by sandbox": {
+          "mode": "xfail",
+          "reason": "gbash awk disables file writes via NoFileWrites"
+        }
+      }
+    }
+  }
+}

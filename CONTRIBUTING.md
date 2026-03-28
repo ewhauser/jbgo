@@ -22,13 +22,13 @@ Run the conformance suite:
 make conformance-test
 ```
 
-Run the package-local jq parity suite:
+Run the package-local jq and awk parity suites:
 
 ```bash
 make contrib-conformance-test
 ```
 
-These commands fetch the pinned bash, curl, and jq oracles from the Nix binary cache automatically (a few seconds on first run; instant on subsequent runs).
+These commands fetch the pinned bash, curl, jq, and awk oracles from the Nix binary cache automatically (a few seconds on first run; instant on subsequent runs).
 
 Nix installation:
 
@@ -37,12 +37,13 @@ Nix installation:
 
 After installing, restart your shell or run `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh`.
 
-To skip Nix entirely, point `GBASH_CONFORMANCE_BASH`, `GBASH_CONFORMANCE_CURL`, and `GBASH_CONFORMANCE_JQ` at the corresponding binaries:
+To skip Nix entirely, point `GBASH_CONFORMANCE_BASH`, `GBASH_CONFORMANCE_CURL`, `GBASH_CONFORMANCE_JQ`, and `GBASH_CONFORMANCE_AWK` at the corresponding binaries:
 
 ```bash
 export GBASH_CONFORMANCE_BASH=/path/to/bash
 export GBASH_CONFORMANCE_CURL=/path/to/curl
 export GBASH_CONFORMANCE_JQ=/path/to/jq
+export GBASH_CONFORMANCE_AWK=/path/to/awk
 make conformance-test
 make contrib-conformance-test
 ```

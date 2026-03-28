@@ -93,6 +93,42 @@ func TestAWKBlocksNonAllowlistedGetlineReads(t *testing.T) {
 	}
 }
 
+func TestAWKBlocksOutputRedirectionWrites(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecAWK(t, "awk 'BEGIN { print \"hello\" > \"out.txt\" }'\n")
+	if result.ExitCode == 0 {
+		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	}
+	if !strings.Contains(result.Stderr, "can't write to file due to NoFileWrites") {
+		t.Fatalf("Stderr = %q, want file-write denial", result.Stderr)
+	}
+}
+
+func TestAWKMissingFileReportsGNUStyleFailure(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecAWK(t, "awk '{ print }' missing.txt\n")
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "missing.txt") {
+		t.Fatalf("Stderr = %q, want missing input path", result.Stderr)
+	}
+}
+
+func TestAWKParseErrorsUseUpstreamExitCode(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecAWK(t, "awk 'BEGIN {'\n")
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if !strings.Contains(result.Stderr, "parse error") {
+		t.Fatalf("Stderr = %q, want parse error", result.Stderr)
+	}
+}
+
 func TestLoadAWKInputsSkipsStdinWhenNamedFilesProvided(t *testing.T) {
 	t.Parallel()
 
