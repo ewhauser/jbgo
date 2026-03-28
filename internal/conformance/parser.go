@@ -46,7 +46,7 @@ func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
 	}
 	matches = filtered
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("no OILS spec files found in %s", specDir)
+		return nil, fmt.Errorf("no spec files found in %s", specDir)
 	}
 	sort.Strings(matches)
 
@@ -172,7 +172,7 @@ func ParseSpecFile(relPath, content string) (SpecFile, error) {
 		return SpecFile{}, err
 	}
 	if len(file.Cases) == 0 {
-		return SpecFile{}, fmt.Errorf("no OILS cases found in %s", relPath)
+		return SpecFile{}, fmt.Errorf("no spec cases found in %s", relPath)
 	}
 	return file, nil
 }

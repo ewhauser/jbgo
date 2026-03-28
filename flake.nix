@@ -22,6 +22,7 @@
         bats = pkgs.bats;
         curl = pkgs.curl;
         diffutils = pkgs.diffutils;
+        jq = pkgs.jq;
 
         # Full coreutils build tree including test suite (matches Dockerfile)
         coreutils-test-suite = pkgs.stdenv.mkDerivation rec {
@@ -74,6 +75,7 @@
             pkgs.bats
             pkgs.curl
             pkgs.diffutils
+            pkgs.jq
           ];
         };
       });

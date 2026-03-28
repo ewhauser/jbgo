@@ -14,7 +14,7 @@ Use `npm exec --yes pnpm@10.10.0 -- install --frozen-lockfile` at the repo root 
 
 ## Conformance Testing
 
-Conformance tests compare gbash output against pinned bash and curl binaries provided by Nix. This ensures consistent results across macOS and Linux regardless of the system tool versions.
+Conformance tests compare gbash output against pinned upstream binaries provided by Nix. This ensures consistent results across macOS and Linux regardless of the system tool versions.
 
 Run the conformance suite:
 
@@ -22,7 +22,13 @@ Run the conformance suite:
 make conformance-test
 ```
 
-This fetches bash and curl from the Nix binary cache automatically (a few seconds on first run; instant on subsequent runs).
+Run the package-local jq parity suite:
+
+```bash
+make contrib-conformance-test
+```
+
+These commands fetch the pinned bash, curl, and jq oracles from the Nix binary cache automatically (a few seconds on first run; instant on subsequent runs).
 
 Nix installation:
 
@@ -31,12 +37,14 @@ Nix installation:
 
 After installing, restart your shell or run `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh`.
 
-To skip Nix entirely, point `GBASH_CONFORMANCE_BASH` and `GBASH_CONFORMANCE_CURL` at any bash and curl binaries:
+To skip Nix entirely, point `GBASH_CONFORMANCE_BASH`, `GBASH_CONFORMANCE_CURL`, and `GBASH_CONFORMANCE_JQ` at the corresponding binaries:
 
 ```bash
 export GBASH_CONFORMANCE_BASH=/path/to/bash
 export GBASH_CONFORMANCE_CURL=/path/to/curl
+export GBASH_CONFORMANCE_JQ=/path/to/jq
 make conformance-test
+make contrib-conformance-test
 ```
 
 ## Fuzzing
