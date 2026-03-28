@@ -56,8 +56,8 @@ var labFixtures = []fixtureSpec{
 	{Source: "handoff.md", Target: labDir + "/handoff.md"},
 }
 
-func newBashRegistry() (commands.CommandRegistry, error) {
-	return extras.FullRegistry(), nil
+func newBashRegistry() commands.CommandRegistry {
+	return extras.FullRegistry()
 }
 
 func newChatBashToolContract(registry commands.CommandRegistry) *bashtool.Tool {
@@ -68,10 +68,8 @@ func newChatBashToolContract(registry commands.CommandRegistry) *bashtool.Tool {
 			"Files, the working directory, and exported environment variables persist across calls within the current chat session",
 			"The seeded dataset lives in /home/agent/lab and reusable artifacts belong in /home/agent/work",
 		},
-		SystemPromptAppend: strings.Join([]string{
-			"This sandbox is persistent across tool calls: files, the current working directory, and exported environment variables carry forward within the current chat session.",
+		SystemPromptAppend: "This sandbox is persistent across tool calls: files, the current working directory, and exported environment variables carry forward within the current chat session. " +
 			"The seeded dataset lives in /home/agent/lab and reusable artifacts belong in /home/agent/work.",
-		}, " "),
 	})
 }
 

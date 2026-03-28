@@ -11,10 +11,7 @@ import (
 func TestSeedLabCreatesFixturesAndExtrasRegistryTools(t *testing.T) {
 	t.Parallel()
 
-	registry, err := newBashRegistry()
-	if err != nil {
-		t.Fatalf("newBashRegistry() error = %v", err)
-	}
+	registry := newBashRegistry()
 	tool, err := newPersistentBashTool(context.Background(), registry)
 	if err != nil {
 		t.Fatalf("newPersistentBashTool() error = %v", err)
@@ -34,10 +31,7 @@ func TestSeedLabCreatesFixturesAndExtrasRegistryTools(t *testing.T) {
 func TestPersistentBashToolCarriesWorkDirAndEnv(t *testing.T) {
 	t.Parallel()
 
-	registry, err := newBashRegistry()
-	if err != nil {
-		t.Fatalf("newBashRegistry() error = %v", err)
-	}
+	registry := newBashRegistry()
 	tool, err := newPersistentBashTool(context.Background(), registry)
 	if err != nil {
 		t.Fatalf("newPersistentBashTool() error = %v", err)
@@ -70,10 +64,7 @@ func TestPersistentBashToolCarriesWorkDirAndEnv(t *testing.T) {
 func TestPersistentBashToolRejectsEmptyRequest(t *testing.T) {
 	t.Parallel()
 
-	registry, err := newBashRegistry()
-	if err != nil {
-		t.Fatalf("newBashRegistry() error = %v", err)
-	}
+	registry := newBashRegistry()
 	tool, err := newPersistentBashTool(context.Background(), registry)
 	if err != nil {
 		t.Fatalf("newPersistentBashTool() error = %v", err)

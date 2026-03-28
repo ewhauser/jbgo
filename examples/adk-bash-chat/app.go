@@ -38,10 +38,7 @@ type chatApp struct {
 }
 
 func newChatApp(ctx context.Context, llm model.LLM, modelName string, backend resolvedBackend) (*chatApp, error) {
-	registry, err := newBashRegistry()
-	if err != nil {
-		return nil, err
-	}
+	registry := newBashRegistry()
 
 	bashToolContract := newChatBashToolContract(registry)
 
