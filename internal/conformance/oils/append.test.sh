@@ -1,6 +1,6 @@
 # spec/append.test.sh: Test +=
 
-## compare_shells: bash
+## compare_shells: bash mksh zsh
 
 #### Append string to string
 s='abc'
@@ -19,6 +19,7 @@ argv.sh "${a[@]}"
 s+=foo
 echo s=$s
 
+# bash and mksh agree that this does NOT respect set -u.
 # I think that's a mistake, but += is a legacy construct, so let's copy it.
 
 set -u
@@ -59,6 +60,10 @@ a+=z
 argv.sh "${a[@]}"
 ## status: 1
 ## stdout-json: ""
+## OK bash/mksh status: 0
+## OK bash/mksh stdout: ['xz', 'y']
+## OK zsh status: 0
+## OK zsh stdout: ['x', 'y', 'z']
 
 #### typeset s+=(my array)
 typeset s='abc'
@@ -74,6 +79,10 @@ abc
 status=0
 ['abc', 'd', 'e', 'f']
 ## END
+## N-I mksh/zsh status: 1
+## N-I mksh/zsh stdout: abc
+## N-I mksh stderr: mksh: <stdin>[4]: syntax error: '(' unexpected
+## N-I zsh stderr: typeset: not valid in this context: s+
 
 #### error: typeset myarray+=s
 typeset a=(x y)
@@ -90,12 +99,18 @@ argv.sh "${a[@]}"
 ['x', 'y']
 ['xs', 'y']
 ## END
+## N-I mksh STDOUT:
+## END
 
 #### error: append used like env prefix
 # This should be an error in other shells but it's not.
 A=a
 A+=a printenv.sh A
 ## status: 2
+## BUG bash/zsh status: 0
+## BUG bash/zsh stdout: aa
+## BUG mksh status: 0
+## BUG mksh stdout: a
 
 #### myarray[1]+=s - Append to element
 # They treat this as implicit index 0.  We disallow this on the LHS, so we will
@@ -105,15 +120,21 @@ a[1]+=z
 argv.sh "${a[@]}"
 ## status: 0
 ## stdout: ['x', 'yz']
+## BUG zsh stdout: ['xz', 'y']
 
 #### myarray[-1]+=s - Append to last element
+# Works in bash, but not mksh.  It seems like bash is doing the right thing.
+# a[-1] is allowed on the LHS.  mksh doesn't have negative indexing?
 a=(1 '2 3')
 a[-1]+=' 4'
 argv.sh "${a[@]}"
 ## stdout: ['1', '2 3 4']
+## BUG mksh stdout: ['1', '2 3', ' 4']
 
 #### Try to append list to element
 # bash - runtime error: cannot assign list to array number
+# mksh - a[-1]+: is not an identifier
+# osh - parse error -- could be better!
 a=(1 '2 3')
 a[-1]+=(4 5)
 argv.sh "${a[@]}"
@@ -125,6 +146,13 @@ argv.sh "${a[@]}"
 ## OK bash STDOUT:
 ['1', '2 3']
 ## END
+
+## OK zsh status: 0
+## OK zsh STDOUT:
+['1', '2 3', '4', '5']
+## END
+
+## N-I mksh status: 1
 
 #### Strings have value semantics, not reference semantics
 s1='abc'
@@ -138,6 +166,7 @@ echo $s1 $s2
 typeset s+=foo
 echo s=$s
 
+# bash and mksh agree that this does NOT respect set -u.
 # I think that's a mistake, but += is a legacy construct, so let's copy it.
 
 set -u
@@ -151,6 +180,8 @@ s=foo
 t=foo
 t=foofoo
 ## END
+## N-I zsh status: 1
+## N-I zsh stdout-json: ""
 
 #### typeset s${dyn}+= 
 
@@ -159,6 +190,7 @@ dyn=x
 typeset s${dyn}+=foo
 echo sx=$sx
 
+# bash and mksh agree that this does NOT respect set -u.
 # I think that's a mistake, but += is a legacy construct, so let's copy it.
 
 set -u
@@ -172,6 +204,8 @@ sx=foo
 tx=foo
 tx=foofoo
 ## END
+## N-I zsh status: 1
+## N-I zsh stdout-json: ""
 
 #### export readonly +=
 
@@ -194,6 +228,8 @@ e=foo
 r=bar
 e=foofoo
 ## END
+## N-I zsh status: 1
+## N-I zsh stdout-json: ""
 
 #### local +=
 
@@ -211,6 +247,8 @@ f
 s=foo
 s=foofoo
 ## END
+## N-I zsh status: 1
+## N-I zsh stdout-json: ""
 
 #### assign builtin appending array: declare d+=(d e)
 
@@ -240,6 +278,10 @@ r e
 l o
 l o c a
 ## END
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
+## N-I zsh status: 1
+## N-I zsh stdout-json: ""
 
 #### export+=array disallowed (strict_array)
 
@@ -255,6 +297,7 @@ e x
 ## END
 
 #### Type mismatching of lhs+=rhs should not cause a crash
+case $SH in mksh|zsh) exit ;; esac
 s=
 a=()
 declare -A d=([lemon]=yellow)
@@ -273,3 +316,7 @@ true
 ## STDOUT:
 ## END
 
+## OK osh status: 1
+
+## N-I mksh/zsh STDOUT:
+## END

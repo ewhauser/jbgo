@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 1
-## compare_shells: bash
+## compare_shells: dash bash-4.4 mksh zsh
 
 # Tests for builtins having to do with variables: export, readonly, unset, etc.
 #
@@ -30,12 +30,28 @@ X
 X
 None
 ## END
+## N-I mksh/dash STDOUT:
+X
+X
+## END
+## N-I mksh status: 1
+## N-I dash status: 2
+## N-I zsh STDOUT:
+X
+X
+X
+X
+## END
 
 #### export -n undefined is ignored
 set -o errexit
 export -n undef
 echo status=$?
 ## stdout: status=0
+## N-I mksh/dash/zsh stdout-json: ""
+## N-I mksh status: 1
+## N-I dash status: 2
+## N-I zsh status: 1
 
 #### export -n foo=bar not allowed
 foo=old
@@ -50,6 +66,14 @@ old
 status=0
 new
 ## END
+## N-I zsh STDOUT:
+status=1
+old
+## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### Export a global variable and unset it
 f() { export GLOBAL=X; }
@@ -176,6 +200,13 @@ printenv.sh a
 ## STDOUT:
 None
 ## END
+## BUG mksh STDOUT:
+1
+## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## OK osh status: 1
+## OK osh stdout-json: ""
 
 #### can't export associative array (strict_array)
 
@@ -187,6 +218,10 @@ printenv.sh a
 ## STDOUT:
 None
 ## END
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
+## OK osh status: 1
+## OK osh stdout-json: ""
 
 #### assign to readonly variable
 # bash doesn't abort unless errexit!
@@ -196,6 +231,7 @@ echo "status=$?"  # nothing happens
 ## status: 1
 ## BUG bash stdout: status=1
 ## BUG bash status: 0
+## OK dash/mksh status: 2
 
 #### Make an existing local variable readonly
 f() {
@@ -213,6 +249,16 @@ local
 status=1
 global
 ## END
+## OK dash STDOUT:
+local
+## END
+## OK dash status: 2
+
+# mksh aborts the function, weird
+## OK mksh STDOUT:
+local
+global
+## END
 
 #### assign to readonly variable - errexit
 set -o errexit
@@ -220,6 +266,7 @@ readonly foo=bar
 foo=eggs
 echo "status=$?"  # nothing happens
 ## status: 1
+## OK dash/mksh status: 2
 
 #### Unset a variable
 foo=bar
@@ -243,11 +290,16 @@ echo status=$?
 ## stdout: status=0
 
 #### Unset readonly variable
+# dash and zsh abort the whole program.   OSH doesn't?
 readonly R=foo
 unset R
 echo status=$?
 ## status: 0
 ## stdout: status=1
+## OK dash status: 2
+## OK dash stdout-json: ""
+## OK zsh status: 1
+## OK zsh stdout-json: ""
 
 #### Unset a function without -f
 f() {
@@ -258,6 +310,11 @@ unset f
 f
 ## stdout: foo
 ## status: 127
+## N-I dash/mksh/zsh status: 0
+## N-I dash/mksh/zsh STDOUT:
+foo
+foo
+## END
 
 #### Unset has dynamic scope
 f() {
@@ -298,6 +355,7 @@ level1() {
 hello=global
 level1
 
+# bash, mksh, yash agree here.
 ## STDOUT:
 level2=yy
 level2=xx
@@ -306,9 +364,18 @@ level1=global
 level2=yy
 level2=global
 ## END
+## OK dash/ash/zsh STDOUT:
+level2=yy
+level2=
+level1=xx
+level1=
+level2=yy
+level2=
+## END
 
 #### unset of local reveals variable in higher scope
 
+# OSH has a RARE behavior here (matching yash and mksh), but at least it's
 # consistent.
 
 x=global
@@ -323,6 +390,10 @@ f
 x=foo
 x=global
 ## END
+## OK dash/bash/zsh/ash STDOUT:
+x=foo
+x=
+## END
 
 #### Unset invalid variable name
 unset %
@@ -330,6 +401,15 @@ echo status=$?
 ## STDOUT:
 status=2
 ## END
+## OK bash/mksh STDOUT:
+status=1
+## END
+## BUG zsh STDOUT:
+status=0
+## END
+# dash does a hard failure!
+## OK dash stdout-json: ""
+## OK dash status: 2
 
 #### Unset nonexistent variable
 unset _nonexistent__
@@ -374,6 +454,12 @@ echo "${a[@]}" len="${#a[@]}"
 status=0
 x z len=2
 ## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## OK zsh STDOUT:
+status=0
+ y z len=3
+## END
 
 #### Unset errors
 unset undef
@@ -391,8 +477,13 @@ status=0
 status=0
 status=0
 ## END
+## N-I dash status: 2
+## N-I dash STDOUT:
+status=0
+## END
 
 #### Unset wrong type
+case $SH in mksh) exit ;; esac
 
 declare undef
 unset -v 'undef[1]'
@@ -405,6 +496,7 @@ unset -v 'a[1]'
 echo array $?
 
 #shopt -s strict_arith || true
+# In OSH, the string 'key' is converted to an integer, which is 0, unless
 # strict_arith is on, when it fails.
 unset -v 'a["key"]'
 echo array $?
@@ -423,8 +515,29 @@ array 1
 assoc 0
 assoc 0
 ## END
+## OK osh STDOUT:
+undef 1
+undef 1
+array 0
+array 0
+assoc 0
+assoc 0
+## END
+## BUG zsh STDOUT:
+undef 0
+undef 1
+array 0
+array 1
+assoc 0
+assoc 0
+## END
+## N-I dash/mksh stdout-json: ""
+## N-I dash status: 2
+
 
 #### unset -v assoc (related to issue #661)
+
+case $SH in dash|mksh|zsh) return ;; esac
 
 declare -A dict=()
 key=1],a[1
@@ -445,8 +558,11 @@ vals=foo
 keys=
 vals=
 ## END
+## N-I dash/mksh/zsh stdout-json: ""
 
 #### unset assoc errors
+
+case $SH in dash|mksh) return ;; esac
 
 declare -A assoc=(['key']=value)
 unset 'assoc["nonexistent"]'
@@ -455,6 +571,8 @@ echo status=$?
 ## STDOUT:
 status=0
 ## END
+## N-I dash/mksh stdout-json: ""
+
 
 #### Unset array member with dynamic parsing
 
@@ -467,6 +585,10 @@ echo "${a[@]}" len="${#a[@]}"
 status=0
 x z len=2
 ## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I zsh status: 1
+## N-I zsh stdout-json: ""
 
 #### Use local twice
 f() {
@@ -476,6 +598,10 @@ f() {
 }
 f
 ## stdout: bar
+## BUG zsh STDOUT:
+foo=bar
+bar
+## END
 
 #### Local without variable is still unset!
 set -o nounset
@@ -486,6 +612,10 @@ f() {
 f
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
+# zsh doesn't support nounset?
+## BUG zsh stdout: []
+## BUG zsh status: 0
 
 #### local after readonly
 f() { 
@@ -498,6 +628,14 @@ echo y=$y
 ## status: 1
 ## stdout-json: ""
 
+## OK dash status: 2
+
+## BUG mksh status: 0
+## BUG mksh STDOUT:
+y=0
+y=
+## END
+
 ## BUG bash status: 0
 ## BUG bash STDOUT:
 y=
@@ -505,6 +643,7 @@ y=
 ## END
 
 #### unset a[-1] (bf.bash regression)
+case $SH in dash|zsh) exit ;; esac
 
 a=(1 2 3)
 unset a[-1]
@@ -523,8 +662,17 @@ last=2
 last=2
 1 42
 ## END
+## BUG mksh STDOUT:
+len=3
+last=
+last=0
+1 2 3 42
+## END
+## N-I dash/zsh stdout-json: ""
+
 
 #### unset a[-1] in sparse array (bf.bash regression)
+case $SH in dash|zsh) exit ;; esac
 
 a=(0 1 2 3 4)
 unset a[1]
@@ -544,4 +692,14 @@ last=3 second=2 third=
 len=2 a=0 2
 last=2 second= third=0
 ## END
+
+## BUG mksh STDOUT:
+len=3 a=0 2 3
+last= second= third=
+---
+len=2 a=0 2
+last= second= third=
+## END
+
+## N-I dash/zsh stdout-json: ""
 

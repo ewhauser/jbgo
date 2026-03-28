@@ -1,9 +1,10 @@
-## compare_shells: bash
+## compare_shells: bash-4.4 mksh
 ## oils_failures_allowed: 1
 
 # note: some of these pass with AT&T ksh
 
 # Extended assignment language, e.g. typeset, declare, arrays, etc.
+# Things that dash doesn't support.
 
 #### local -a
 # nixpkgs setup.sh uses this (issue #26)
@@ -13,12 +14,16 @@ f() {
 }
 f
 ## stdout: ['x', 'y', 'z']
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -a
 # nixpkgs setup.sh uses this (issue #26)
 declare -a array=(x y z)
 argv.sh "${array[@]}"
 ## stdout: ['x', 'y', 'z']
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -f exit code indicates function existence
 func2=x  # var names are NOT found
@@ -37,6 +42,11 @@ echo $?
 1
 0
 ## END
+## N-I mksh STDOUT:
+127
+127
+127
+## END
 
 #### declare -F prints function names
 add () { expr 4 + 4; }
@@ -53,8 +63,11 @@ declare -f add
 declare -f div
 declare -f ek
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 127
 
 #### declare -F with shopt -s extdebug prints more info
+case $SH in mksh) exit ;; esac
 source $REPO_ROOT/spec/testdata/bash-source-2.sh
 
 shopt -s extdebug
@@ -75,8 +88,11 @@ declare -f g
 add 7 main
 g 3 ROOT/spec/testdata/bash-source-2.sh
 ## END
+## N-I mksh STDOUT:
+## END
 
 #### declare -F with shopt -s extdebug and main file
+case $SH in mksh) exit ;; esac
 
 $SH $REPO_ROOT/spec/testdata/extdebug.sh | sed "s;$REPO_ROOT;ROOT;g"
 
@@ -86,6 +102,8 @@ declare -f g
 
 add 5 ROOT/spec/testdata/extdebug.sh
 g 3 ROOT/spec/testdata/bash-source-2.sh
+## END
+## N-I mksh STDOUT:
 ## END
 
 #### declare -p var (exit status)
@@ -104,6 +122,11 @@ echo $?
 1
 1
 0
+## N-I mksh STDOUT:
+127
+127
+127
+## END
 
 #### declare
 test_var1=111
@@ -137,6 +160,32 @@ declare -r test_var2=222
 declare -x test_var3=333
 [local]
 test_var5=555
+## END
+## OK bash STDOUT:
+[declare]
+test_var1=111
+test_var2=222
+test_var3=333
+test_var4=test_var1
+test_var5=555
+[readonly]
+declare -r test_var2="222"
+[export]
+declare -x test_var3="333"
+[local]
+test_var5=555
+## END
+## N-I mksh STDOUT:
+[declare]
+[readonly]
+test_var2
+[export]
+test_var3
+[local]
+typeset test_var1
+typeset -r test_var2
+typeset -x test_var3
+typeset test_var5
 ## END
 #### declare -p
 # BUG: bash doesn't output flags with "local -p", which seems to contradict
@@ -173,10 +222,36 @@ declare -x test_var3=333
 [local]
 declare -- test_var5=555
 ## END
+## BUG bash STDOUT:
+[declare]
+declare -- test_var1="111"
+declare -r test_var2="222"
+declare -x test_var3="333"
+declare -n test_var4="test_var1"
+declare -- test_var5="555"
+[readonly]
+declare -r test_var2="222"
+[export]
+declare -x test_var3="333"
+[local]
+test_var5=555
+## END
+## N-I mksh STDOUT:
+[declare]
+[readonly]
+readonly test_var2=222
+[export]
+export test_var3=333
+[local]
+typeset test_var1=111
+typeset -r test_var2=222
+typeset -x test_var3=333
+typeset test_var5=555
+## END
 #### declare -p doesn't print binary data, but can be loaded into bash
 
 # bash prints binary data!
-exit
+case $SH in bash*|mksh) exit ;; esac
 
 unquoted='foo'
 sq='foo bar'
@@ -212,6 +287,11 @@ foo foo bar
  1f 20 fe ff
 bash=0
 ## END
+
+## N-I bash/mksh STDOUT:
+## END
+
+
 
 #### declare -p var
 # BUG? bash doesn't output anything for 'local/readonly -p var', which seems to
@@ -249,6 +329,21 @@ declare -x test_var3=333
 [local]
 declare -- test_var5=555
 ## END
+## BUG bash STDOUT:
+[declare]
+declare -- test_var1="111"
+declare -r test_var2="222"
+declare -x test_var3="333"
+declare -n test_var4="test_var1"
+declare -- test_var5="555"
+[readonly]
+[export]
+[local]
+## END
+## N-I mksh STDOUT:
+[declare]
+[readonly]
+## END
 #### declare -p arr
 test_arr1=()
 declare -a test_arr2=()
@@ -277,8 +372,11 @@ declare -a test_arr5=([0]="1" [1]="2" [2]="3")
 declare -A test_arr6=([a]="1" [b]="2" [c]="3" )
 declare -a test_arr7=([3]="foo")
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -p foo=bar doesn't make sense
+case $SH in mksh) exit 0 ;; esac
 
 declare -p foo=bar
 echo status=$?
@@ -292,6 +390,7 @@ status=1
 status=1
 declare -- a=b
 ## END
+## N-I mksh stdout-json: ""
 
 #### declare -pnrx
 test_var1=111
@@ -326,6 +425,11 @@ declare -r test_var2="222"
 [declare -px]
 declare -x test_var3="333"
 ## END
+## N-I mksh STDOUT:
+[declare -pn]
+[declare -pr]
+[declare -px]
+## END
 
 #### declare -paA
 declare -a test_var6=()
@@ -351,9 +455,12 @@ declare -a test_var6=()
 [declare -pA]
 declare -A test_var7=()
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -pnrx var
 # Note: Bash ignores other flags (-nrx) when variable names are supplied while
+#   OSH uses other flags to select variables.  Bash's behavior is documented.
 test_var1=111
 readonly test_var2=222
 export test_var3=333
@@ -398,6 +505,11 @@ declare -x test_var3="333"
 declare -n test_var4="test_var1"
 declare -- test_var5="555"
 ## END
+## N-I mksh STDOUT:
+[declare -pn]
+[declare -pr]
+[declare -px]
+## END
 
 #### declare -pg
 test_var1=global
@@ -414,6 +526,8 @@ declare -- test_var1=global
 ## OK bash STDOUT:
 declare -- test_var1="local"
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -pg var
 test_var1=global
@@ -430,6 +544,8 @@ declare -- test_var1=global
 ## N-I bash STDOUT:
 declare -- test_var1="local"
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### ble.sh: eval -- "$(declare -p var arr)"
 # This illustrates an example usage of "eval & declare" for exporting
@@ -454,6 +570,8 @@ arr[1]=a5
 arr[2]=a8
 arr[3]=a10
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -p and value.Undef
 
@@ -472,6 +590,10 @@ declare -- x
 declare -- x
 ## END
 
+## N-I mksh status: 127
+## N-I mksh STDOUT:
+## END
+
 #### eval -- "$(declare -p arr)" (restore arrays w/ unset elements)
 arr=(1 2 3)
 eval -- "$(arr=(); arr[3]= arr[4]=foo; declare -p arr)"
@@ -485,6 +607,8 @@ arr[2]: unset
 arr[3]: set ... []
 arr[4]: set ... [foo]
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### declare -p UNDEF (and typeset) -- prints something to stderr
 
@@ -525,7 +649,24 @@ declare -rx x="42"
 4 total
 ## END
 
+## OK osh STDOUT:
+declare -rx x=42
+declare -rx x=42
+  2 de
+  2 ty
+  4 total
+## END
+
+## N-I mksh STDOUT:
+typeset -x -r x=42
+ 1 de
+ 0 ty
+ 1 total
+## END
+
+
 #### typeset -f 
+# mksh implement typeset but not declare
 typeset  -f myfunc func2
 echo $?
 
@@ -559,6 +700,12 @@ echo $?
 1
 1
 0
+## BUG mksh STDOUT:
+# mksh doesn't respect exit codes
+0
+0
+0
+## END
 
 #### typeset -r makes a string readonly
 typeset -r s1='12'
@@ -581,6 +728,7 @@ echo status=$?
 
 ## status: 1
 ## stdout-json: ""
+## OK mksh status: 2
 ## OK bash status: 0
 ## OK bash STDOUT:
 status=1
@@ -621,6 +769,8 @@ status=1
 status=1
 status=1
 ## END
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### typeset -x makes it exported
 typeset -rx PYTHONPATH=lib/
@@ -644,6 +794,12 @@ None
 3
 ## END
 ## OK bash status: 0
+## BUG mksh STDOUT:
+1
+2
+3
+## END
+## BUG mksh status: 0
 
 #### syntax error in array assignment
 a=x b[0+]=y c=z
@@ -652,6 +808,8 @@ echo $a $b $c
 ## stdout-json: ""
 ## OK bash stdout-json: ""
 ## OK bash status: 1
+## OK mksh stdout-json: ""
+## OK mksh status: 1
 
 #### declare -g (bash-specific; bash-completion uses it)
 f() {
@@ -677,6 +835,10 @@ argv.sh "${ev["ev1"]}"
 ['bar', '']
 ['ev2']
 ## END
+## N-I mksh STDOUT:
+['', '']
+## END
+## N-I mksh status: 1
 
 #### myvar=typeset (another form of dynamic assignment)
 myvar=typeset
@@ -685,6 +847,9 @@ $myvar x=$x
 echo $x
 ## STDOUT:
 a
+## END
+## OK osh STDOUT:
+a b
 ## END
 
 #### dynamic array parsing is not allowed
@@ -696,6 +861,10 @@ argv.sh "$x"
 status=2
 ['']
 ## END
+## OK mksh STDOUT:
+status=0
+['(1 2 3)']
+## END
 # bash allows it
 ## OK bash STDOUT:
 status=0
@@ -704,7 +873,7 @@ status=0
 
 #### dynamic flag in array in assign builtin
 typeset b
-b=(unused1 unused2)
+b=(unused1 unused2)  # this works in mksh
 
 a=(x 'foo=F' 'bar=B')
 typeset -"${a[@]}"
@@ -713,6 +882,7 @@ echo bar=$bar
 printenv.sh foo
 printenv.sh bar
 
+# syntax error in mksh!  But works in bash and zsh.
 #typeset -"${a[@]}" b=(spam eggs)
 #echo "length of b = ${#b[@]}"
 #echo "b[0]=${b[0]}"
@@ -754,6 +924,12 @@ r=r2
 r=r3
 ## END
 
+# mksh doesn't allow you to unset
+## OK mksh status: 2
+## OK mksh STDOUT:
+r=r1
+## END
+
 # bash doesn't allow you to unset
 ## OK bash status: 0
 ## OK bash STDOUT:
@@ -761,6 +937,7 @@ r=r1
 r=r1
 r=r1
 ## END
+
 
 #### function name with /
 ble/foo() { echo hi; }
@@ -770,6 +947,11 @@ echo status=$?
 ble/foo
 status=0
 ## END
+## N-I mksh stdout: status=127
+## N-I zsh stdout-json: ""
+## N-I zsh status: 1
+## N-I ash stdout-json: ""
+## N-I ash status: 2
 
 #### invalid var name
 typeset foo/bar
@@ -792,4 +974,9 @@ foo
 ## STDOUT:
 bar
 declare -f foo
+## END
+## N-I mksh status: 0
+## N-I mksh STDOUT:
+bar
+bar
 ## END

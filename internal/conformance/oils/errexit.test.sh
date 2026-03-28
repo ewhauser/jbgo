@@ -1,5 +1,7 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh ash
 ## oils_failures_allowed: 0
+
+# TODO: upgrade to bash 5.2 and make OSH behave like that!  redirect failures
 
 #### errexit aborts early
 set -o errexit
@@ -148,6 +150,7 @@ done
 
 #### errexit with (( ))
 # from http://mywiki.wooledge.org/BashFAQ/105, this changed between versions.
+# ash says that 'i++' is not found, but it doesn't exit.  I guess this is the 
 # subshell problem?
 set -o errexit
 i=0
@@ -155,6 +158,8 @@ i=0
 echo done
 ## stdout-json: ""
 ## status: 1
+## N-I dash/ash status: 127
+## N-I dash/ash stdout-json: ""
 
 #### errexit with subshell
 set -o errexit
@@ -167,6 +172,7 @@ one
 
 #### set -o errexit while it's being ignored (moot with strict_errexit)
 set -o errexit
+# osh aborts early here
 if { echo 1; false; echo 2; set -o errexit; echo 3; false; echo 4; }; then
   echo 5;
 fi
@@ -260,6 +266,7 @@ one
 ## END
 
 #### errexit double guard
+# OSH bug fix.  ErrExit needs a counter, not a boolean.
 set -o errexit
 if { ! false; false; true; } then
   echo true
@@ -325,6 +332,11 @@ status=1
 status=1
 status=1
 ## END
+## OK dash STDOUT:
+status=2
+status=2
+status=2
+## END
 
 #### simple command that's an alias - redir failure checked
 
@@ -344,9 +356,21 @@ echo status=$?
 status=1
 ## END
 
+## BUG dash STDOUT:
+alias status=2
+status=0
+## END
+
+## BUG ash STDOUT:
+alias status=1
+status=0
+## END
+
 #### bash atoms [[ (( - redir failure checked
 
 # bash 5.2 fixed bash 4.4 bug: this is now checked
+
+case $SH in dash) exit ;; esac
 
 $SH -c '
 set -o errexit
@@ -367,6 +391,15 @@ status=1
 status=1
 ## END
 
+## OK ash STDOUT:
+status=1
+status=2
+## END
+
+## N-I dash STDOUT:
+## END
+
+
 #### brace group - redir failure checked
 
 # bash 5.2 fixed bash 4.4 bug: this is now checked
@@ -384,6 +417,19 @@ echo 'should not get here'
 ## status: 1
 ## STDOUT:
 ## END
+
+## BUG dash status: 0
+## BUG dash STDOUT:
+status=2
+should not get here
+## END
+
+## BUG ash status: 0
+## BUG ash STDOUT:
+status=1
+should not get here
+## END
+
 
 #### while loop - redirect failure checked
 
@@ -404,6 +450,19 @@ echo 'should not get here'
 ## status: 1
 ## STDOUT:
 ## END
+
+## BUG dash status: 0
+## BUG dash STDOUT:
+status=2
+should not get here
+## END
+
+## BUG ash status: 0
+## BUG ash STDOUT:
+status=1
+should not get here
+## END
+
 
 #### set -e enabled in function (regression)
 foo() {
@@ -437,6 +496,7 @@ echo "should be executed"
 should be executed
 should be executed
 ## END
+
 
 #### Command sub exit code is lost
 echo ft $(false) $(true)

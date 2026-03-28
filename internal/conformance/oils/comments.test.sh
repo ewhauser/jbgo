@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh
 
 # NOTE: The test harness isn't good for this test; it strips lines that start
 # with #

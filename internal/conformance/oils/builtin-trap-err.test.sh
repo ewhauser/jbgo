@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 2
-## compare_shells: bash
+## compare_shells: bash mksh ash
 
 # Notes on bash semantics:
 #
@@ -10,6 +10,7 @@
 # are executed after a simple command fails, with a few exceptions. The ERR
 # trap is not inherited by shell functions unless the -o errtrace option to the
 # set builtin is enabled. 
+
 
 #### trap can use original $LINENO
 
@@ -80,6 +81,7 @@ if test -f /nope; then echo file exists; fi
 ## STDOUT:
 ## END
 
+
 #### trap ERR and || conditional
 
 trap 'echo line=$LINENO' ERR
@@ -98,6 +100,7 @@ ok
 
 #### trap ERR and pipeline
 
+# mksh and bash have different line numbers in this case
 #trap 'echo line=$LINENO' ERR
 trap 'echo line=$LINENO' ERR
 
@@ -114,6 +117,12 @@ false | false | false
 line=3
 line=5
 ## END
+
+## BUG mksh/ash STDOUT:
+line=1
+line=1
+## END
+
 
 #### trap ERR pipelines without simple commands
 
@@ -160,6 +169,7 @@ subshell2
 group
 ok
 ## END
+
 
 #### Pipeline group quirk
 
@@ -209,6 +219,7 @@ line=20
 ok
 ## END
 
+
 #### trap ERR doesn't run in subprograms - subshell, command sub, async
 
 trap 'echo line=$LINENO' ERR
@@ -232,6 +243,7 @@ ok
 ## END
 
 #### set -o errtrace: trap ERR runs in subprograms
+case $SH in mksh) exit ;; esac
 
 set -o errtrace
 trap 'echo line=$LINENO' ERR
@@ -250,6 +262,16 @@ line=10
 ok
 ## END
 
+# ash doesn't reject errtrace, but doesn't implement it
+## BUG ash STDOUT:
+subshell
+line=10
+ok
+## END
+
+## N-I mksh STDOUT:
+## END
+
 #### trap ERR doesn't run with &
 
 trap 'echo line=$LINENO' ERR
@@ -262,7 +284,9 @@ false & wait
 async
 ## END
 
+
 #### set -o errtrace: trap ERR with &
+case $SH in mksh) exit ;; esac
 
 set -o errtrace
 trap 'echo line=$LINENO' ERR
@@ -276,6 +300,15 @@ line=8
 async
 ## END
 
+## BUG ash STDOUT:
+async
+## END
+
+## N-I mksh STDOUT:
+## END
+
+
+
 #### trap ERR not active in shell functions in (bash behavior)
 
 trap 'echo line=$LINENO' ERR
@@ -288,6 +321,10 @@ f() {
 f
 
 ## STDOUT:
+## END
+
+## N-I mksh STDOUT:
+line=4
 ## END
 
 #### set -o errtrace - trap ERR runs in shell functions
@@ -324,6 +361,12 @@ err
 ok
 ## END
 
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+err
+err
+## END
+
 #### set -o errtrace - trap ERR runs in shell functions (LINENO)
 
 trap 'echo line=$LINENO' ERR
@@ -358,6 +401,12 @@ line=20
 ok
 ## END
 
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+line=4
+line=10
+## END
+
 #### trap ERR with "atoms": assignment (( [[
 
 trap 'echo line=$LINENO' ERR
@@ -375,6 +424,14 @@ line=5
 line=7
 ok
 ## END
+
+## BUG mksh STDOUT:
+line=3
+line=3
+line=7
+ok
+## END
+
 
 #### trap ERR with for,  case, { }
 
@@ -421,6 +478,48 @@ ok
 
 # doesn't update line for redirect
 
+## BUG bash/mksh STDOUT:
+line=3
+line=3
+ok
+## END
+
+## BUG ash STDOUT:
+line=3
+ok
+## END
+
+#### trap ERR with YSH proc
+
+case $SH in bash|mksh|ash) exit ;; esac
+
+# seems the same
+
+shopt -s ysh:upgrade
+
+proc handler {
+  echo err
+}
+
+if test -f /nope { echo file exists }
+
+trap handler ERR
+
+if test -f /nope { echo file exists }
+
+false || true  # not run for the first part here
+false
+
+## status: 1
+## STDOUT:
+err
+## END
+
+## N-I bash/mksh/ash status: 0
+## N-I bash/mksh/ash STDOUT:
+## END
+
+
 #### trap ERR
 err() {
   echo "err [$@] $?"
@@ -457,8 +556,15 @@ C
 D
 after errexit 99
 ## END
+## N-I dash STDOUT:
+A
+B
+C
+D
+## END
 
 #### trap ERR and pipelines - PIPESTATUS difference
+case $SH in ash) exit ;; esac
 
 err() {
   echo "err [$@] status=$? [${PIPESTATUS[@]}]"
@@ -496,7 +602,20 @@ ok
 
 # we don't set PIPESTATUS unless we get a pipeline
 
+## OK osh STDOUT:
+A
+err [] status=1 []
+B
+err [] status=1 [0 1]
+err [] status=1 [0 1 0]
+ok
+## END
+
+## N-I ash STDOUT:
+## END
+
 #### error in trap ERR (recursive)
+case $SH in dash) exit ;; esac
 
 err() {
   echo err status $?
@@ -523,4 +642,5 @@ err 2
 B
 err status 1
 ## END
-
+## N-I dash STDOUT:
+## END

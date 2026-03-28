@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 1
-## compare_shells: bash
+## compare_shells: bash dash mksh
 
 #### Locals don't leak
 f() {
@@ -106,6 +106,16 @@ status=0
 ## END
 ## status: 0
 
+## OK dash status: 2
+## OK dash STDOUT:
+f
+## END
+
+## BUG mksh STDOUT:
+f
+status=1
+## END
+
 ## BUG bash STDOUT:
 f
 status=2
@@ -128,6 +138,7 @@ status=0
 #### Subshell function
 
 f() ( return 42; )
+# BUG: OSH raises invalid control flow!  I think we should just allow 'return'
 # but maybe not 'break' etc.
 g() ( return 42 )
 # bash warns here but doesn't cause an error
@@ -142,6 +153,7 @@ echo status=$?
 status=42
 status=42
 ## END
+
 
 #### Scope of global variable when sourced in function (Shell Functions aren't Closures)
 set -u
@@ -168,6 +180,7 @@ main
 test_func
 
 ## status: 1
+## OK dash status: 2
 ## STDOUT:
 g = global
 ## END

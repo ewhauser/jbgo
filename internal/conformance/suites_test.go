@@ -15,26 +15,37 @@ func TestConformance(t *testing.T) {
 	suites := []struct {
 		name  string
 		build func(*testing.T) SuiteConfig
-	}{
-		{
-			name: "bash",
+	}{}
+
+	for _, mode := range []OracleMode{
+		OracleBash,
+		OracleDash,
+		OracleMksh,
+		OracleZsh,
+		OracleAsh,
+		OracleYash,
+		OracleOsh,
+		OracleKsh,
+	} {
+		suites = append(suites, struct {
+			name  string
+			build func(*testing.T) SuiteConfig
+		}{
+			name: string(mode),
 			build: func(t *testing.T) SuiteConfig {
 				t.Helper()
-				return SuiteConfig{
-					Name:         "bash",
-					SpecDir:      "oils",
-					BinDir:       "bin",
-					FixtureDirs:  []string{"fixtures/spec"},
-					ManifestPath: "manifest.json",
-					OracleMode:   OracleBash,
-				}
+				return newShellSuiteConfig(mode)
 			},
-		},
-		{
-			name:  "curl",
-			build: newCurlSuiteConfig,
-		},
+		})
 	}
+
+	suites = append(suites, struct {
+		name  string
+		build func(*testing.T) SuiteConfig
+	}{
+		name:  "curl",
+		build: newCurlSuiteConfig,
+	})
 
 	for _, suite := range suites {
 		t.Run(suite.name, func(t *testing.T) {
@@ -42,5 +53,16 @@ func TestConformance(t *testing.T) {
 			cfg := suite.build(t)
 			RunSuite(t, &cfg)
 		})
+	}
+}
+
+func newShellSuiteConfig(mode OracleMode) SuiteConfig {
+	return SuiteConfig{
+		Name:         string(mode),
+		SpecDir:      "oils",
+		BinDir:       "bin",
+		FixtureDirs:  []string{"fixtures/spec"},
+		ManifestPath: "manifest.json",
+		OracleMode:   mode,
 	}
 }

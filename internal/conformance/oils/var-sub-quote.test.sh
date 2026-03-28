@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh
 
 # Tests for the args in:
 #
@@ -28,6 +28,10 @@ argv.sh ${empty:-}
 declare -a A=('' x "" '')
 argv.sh "${A[@]}"
 ## stdout: ['', 'x', '', '']
+## N-I dash stdout-json: ""
+## N-I dash status: 2
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### substitution of IFS character, quoted and unquoted
 IFS=:
@@ -176,6 +180,7 @@ foo="'a b c d'"
 argv.sh "${foo%d'}"
 ## stdout-json: ""
 ## status: 2
+## OK mksh status: 1
 
 #### "${undef-'c d'}" and "${foo%'c d'}" are parsed differently
 
@@ -189,6 +194,8 @@ echo ---
 foo='a b c d'
 argv.sh "${foo%'c d'}" "${foo%'c  d'}"
 
+case $SH in dash) exit ;; esac
+
 argv.sh "${foo//'c d'/zzz}" "${foo//'c  d'/zzz}"
 argv.sh "${foo//'c d'/'zzz'}" "${foo//'c  d'/'zzz'}"
 
@@ -200,8 +207,15 @@ argv.sh "${foo//'c d'/'zzz'}" "${foo//'c  d'/'zzz'}"
 ['a b zzz', 'a b c d']
 ['a b zzz', 'a b c d']
 ## END
+## OK dash STDOUT:
+["'c d'", "'c  d'"]
+['c d', 'c  d']
+---
+['a b ', 'a b c d']
+## END
 
 #### $'' allowed within VarSub arguments
+# Odd behavior of bash/mksh: $'' is recognized but NOT ''!
 x=abc
 echo ${x%$'b'*}
 echo "${x%$'b'*}"  # git-prompt.sh relies on this
@@ -209,7 +223,12 @@ echo "${x%$'b'*}"  # git-prompt.sh relies on this
 a
 a
 ## END
+## N-I dash STDOUT:
+abc
+abc
+## END
 
+#### # operator with single quoted arg (dash/ash and bash/mksh disagree, reported by Crestwave)
 var=a
 echo -${var#'a'}-
 echo -"${var#'a'}"-
@@ -222,7 +241,14 @@ echo -"${var#'a'}"-
 -'a'-
 -'a'-
 ## END
+## OK ash STDOUT:
+--
+-a-
+-'a'-
+--
+## END
 
+#### / operator with single quoted arg (causes syntax error in regex in OSH, reported by Crestwave)
 var="++--''++--''"
 echo no plus or minus "${var//[+-]}"
 echo no plus or minus "${var//['+-']}"
@@ -231,6 +257,13 @@ no plus or minus ''''
 no plus or minus ''''
 ## END
 ## status: 0
+## BUG ash STDOUT:
+no plus or minus ''''
+no plus or minus ++--++--
+## END
+## BUG ash status: 0
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### single quotes work inside character classes
 x='a[[[---]]]b'
@@ -238,6 +271,11 @@ echo "${x//['[]']}"
 ## STDOUT:
 a---b
 ## END
+## BUG ash STDOUT:
+a[[[---]]]b
+## END
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### comparison: :- operator with single quoted arg
 echo ${unset:-'a'}
@@ -246,6 +284,7 @@ echo "${unset:-'a'}"
 a
 'a'
 ## END
+
 
 #### Right Brace as argument (similar to #702)
 
@@ -263,6 +302,12 @@ echo "${var-"}"}"
 }
 }
 '}'
+}
+## END
+## BUG yash STDOUT:
+}
+}
+}
 }
 ## END
 
@@ -295,6 +340,7 @@ e
 f
 ## END
 
+
 #### Var substitution with \n in value
 echo "${var-a\nb}"
 echo "${var:-c\nd}"
@@ -305,4 +351,12 @@ echo "${var:+e\nf}"
 a\nb
 c\nd
 e\nf
+## END
+## BUG dash/mksh STDOUT:
+a
+b
+c
+d
+e
+f
 ## END

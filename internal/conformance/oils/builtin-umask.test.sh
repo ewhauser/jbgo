@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh zsh
 ## oils_failures_allowed: 2
 
 #### usage: too many args
@@ -10,6 +10,8 @@ if test $? -ne 0; then
 fi
 ## STDOUT:
 fail
+## END
+## BUG dash/bash/mksh STDOUT:
 ## END
 
 #### usage: empty input, space input
@@ -31,6 +33,10 @@ esac
 error
 error too
 ## END 
+## BUG dash/mksh STDOUT:
+status=0
+error too
+## END
 
 #### symbolic syntax error: b=rwx
 umask 0124
@@ -103,6 +109,7 @@ error
 #### usage: large octal number
 umask 0022
 
+# osh and other shells treat truncate 0o1234567 as 0o0567
 umask 1234567
 echo status=$?
 
@@ -143,6 +150,12 @@ echo status=$?
 ## STDOUT:
 umask 0022
 status=0
+## END
+## N-I mksh/zsh STDOUT:
+status=1
+## END
+## N-I dash STDOUT:
+status=2
 ## END
 
 #### 'umask 0002' sets the umask
@@ -230,6 +243,7 @@ status5=0
 #### umask with too many arguments (i.e. extra spaces)
 umask 0111
 # spaces are an error in bash
+# dash & mksh only interpret the first one
 umask u=, g+, o-
 if test $? -ne 0; then
   echo ok
@@ -239,6 +253,9 @@ umask | tail -c 4
 ## STDOUT:
 ok
 111
+## END
+## BUG dash/mksh STDOUT:
+711
 ## END
 
 #### umask allow overwriting and duplicates
@@ -293,6 +310,22 @@ ret1 = 0
 ret2 = 0
 246
 ## END
+## BUG dash/mksh STDOUT:
+ret0 = 0
+666
+ret1 = 0
+666
+ret2 = 0
+357
+## END
+## N-I bash/zsh STDOUT:
+ret0 = 1
+124
+ret1 = 1
+246
+ret2 = 1
+246
+## END
 
 #### umask s perm
 umask 0124
@@ -317,6 +350,14 @@ ret1 = 0
 124
 ret2 = 0
 777
+## END
+## N-I bash/zsh STDOUT:
+ret0 = 1
+124
+ret1 = 1
+124
+ret2 = 1
+124
 ## END
 
 #### umask t perm
@@ -343,6 +384,22 @@ ret1 = 0
 ret2 = 0
 777
 ## END
+## N-I bash/zsh/mksh STDOUT:
+ret0 = 1
+124
+ret1 = 1
+124
+ret2 = 1
+124
+## END
+## N-I dash STDOUT:
+ret0 = 2
+124
+ret1 = 2
+124
+ret2 = 2
+124
+## END
 
 #### umask default who
 umask 0124
@@ -359,15 +416,20 @@ umask +
 umask | tail -c 4
 
 umask 0124
+# zsh ALSO treats this as just `umask`
 umask - >/dev/null
 umask | tail -c 4
 ## status: 0
+## BUG zsh status: 1
 ## STDOUT: 
 777
 ret = 0
 222
 124
 124
+## END
+## BUG zsh STDOUT:
+777
 ## END
 
 #### umask bare op
@@ -383,6 +445,7 @@ umask 0124
 umask =+rwx+rx
 umask | tail -c 4
 ## status: 0
+## BUG zsh status: 1
 ## STDOUT: 
 777
 777
@@ -392,6 +455,8 @@ umask | tail -c 4
 124
 124
 124
+## END
+## BUG zsh STDOUT: 
 ## END
 
 #### umask permcopy
@@ -412,6 +477,11 @@ umask | tail -c 4
 666
 444
 ## END
+## N-I bash/zsh STDOUT:
+124
+365
+124
+## END
 
 #### umask permcopy running value
 umask 0124
@@ -425,6 +495,10 @@ umask | tail -c 4
 ## status: 0
 ## STDOUT:
 111
+777
+## END
+## N-I bash/zsh STDOUT:
+124
 777
 ## END
 
@@ -445,5 +519,10 @@ umask | tail -c 4
 024
 002
 444
+## END
+## N-I bash/zsh STDOUT:
+124
+124
+124
 ## END
 

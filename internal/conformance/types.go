@@ -7,9 +7,10 @@ import (
 )
 
 type SpecFile struct {
-	Path     string
-	Metadata map[string]string
-	Cases    []SpecCase
+	Path          string
+	Metadata      map[string]string
+	CompareShells []OracleMode
+	Cases         []SpecCase
 }
 
 type SpecCase struct {
@@ -66,6 +67,13 @@ type OracleMode string
 
 const (
 	OracleBash OracleMode = "bash"
+	OracleDash OracleMode = "dash"
+	OracleMksh OracleMode = "mksh"
+	OracleZsh  OracleMode = "zsh"
+	OracleAsh  OracleMode = "ash"
+	OracleYash OracleMode = "yash"
+	OracleOsh  OracleMode = "osh"
+	OracleKsh  OracleMode = "ksh"
 )
 
 type SuiteConfig struct {
@@ -112,4 +120,51 @@ func normalizeKey(value string) string {
 
 func filepathSlash(value string) string {
 	return strings.ReplaceAll(value, "\\", "/")
+}
+
+func canonicalOracleMode(token string) (OracleMode, bool) {
+	token = strings.TrimSpace(strings.ToLower(token))
+	switch {
+	case token == string(OracleBash), strings.HasPrefix(token, "bash-"):
+		return OracleBash, true
+	case token == string(OracleDash):
+		return OracleDash, true
+	case token == string(OracleMksh):
+		return OracleMksh, true
+	case token == string(OracleZsh), strings.HasPrefix(token, "zsh-"):
+		return OracleZsh, true
+	case token == string(OracleAsh):
+		return OracleAsh, true
+	case token == string(OracleYash):
+		return OracleYash, true
+	case token == string(OracleOsh), token == "disabledosh", strings.HasPrefix(token, "osh-"):
+		return OracleOsh, true
+	case token == string(OracleKsh), strings.HasPrefix(token, "ksh"):
+		return OracleKsh, true
+	default:
+		return "", false
+	}
+}
+
+func oracleBinaryName(mode OracleMode) string {
+	switch mode {
+	case OracleBash:
+		return "bash"
+	case OracleDash:
+		return "dash"
+	case OracleMksh:
+		return "mksh"
+	case OracleZsh:
+		return "zsh"
+	case OracleAsh:
+		return "ash"
+	case OracleYash:
+		return "yash"
+	case OracleOsh:
+		return "osh"
+	case OracleKsh:
+		return "ksh"
+	default:
+		return strings.TrimSpace(string(mode))
+	}
 }

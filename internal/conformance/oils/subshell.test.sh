@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh
 
 #### Subshell exit code
 ( false; )

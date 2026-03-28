@@ -2,17 +2,108 @@
   "suites": {
     "bash": {
       "entries": {
+        "oils/alias.test.sh::Alias that is && || ;": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/alias.test.sh::Alias that is pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
         "oils/alias.test.sh::alias with word of multiple lines": {
           "mode": "xfail",
           "reason": "conformance: gbash ls error message format differs from GNU coreutils ls"
         },
-        "oils/builtin-completion.test.sh::compgen -A user": {
-          "mode": "skip",
-          "reason": "platform-specific: gbash uses sandbox-visible passwd data instead of the host account database"
+        "oils/alias.test.sh::Two aliases in pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/builtin-read.test.sh::read bash bug": {
-          "mode": "skip",
-          "reason": "intentional: gbash keeps the space-preserving result instead of reproducing bash's historical control-character bug"
+        "oils/alias.test.sh::unalias -a": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/array-assign.test.sh::More fragments like a[  a[5  a[5 +  a[5 + 3]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/array-assign.test.sh::Multiple LHS array words": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashArray)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashAssoc)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/array-sparse.test.sh::${a[@]:BigInt}": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/array.test.sh::Tilde expansion within array": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/brace-expansion.test.sh::Tilde expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/brace-expansion.test.sh::Tilde expansion come before var expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/brace-expansion.test.sh::Tilde expansion with brace expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/brace-expansion.test.sh::Two kinds of tilde expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/bugs.test.sh::#2640 Hanging when reading from character devices": {
           "mode": "xfail",
@@ -21,30 +112,86 @@
             "darwin"
           ]
         },
+        "oils/builtin-cd.test.sh::chdir is a synonym for cd - busybox ash": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
         "oils/builtin-cd.test.sh::Survey of getcwd() syscall": {
           "mode": "skip",
           "reason": "platform-specific: test requires strace (Linux-only) and syscall behavior varies by platform"
         },
-        "oils/builtin-meta-assign.test.sh::builtin declare a=(x y) is allowed": {
+        "oils/builtin-completion.test.sh::compgen -A user": {
+          "mode": "skip",
+          "reason": "platform-specific: gbash uses sandbox-visible passwd data instead of the host account database"
+        },
+        "oils/builtin-completion.test.sh::compgen -f -X filter -- $cur": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "darwin"
           ]
         },
-        "oils/builtin-process.test.sh::Changing resource limit is denied": {
-          "mode": "skip",
-          "reason": "gbash does not implement process tables"
+        "oils/builtin-completion.test.sh::compgen -W words -X filter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/builtin-process.test.sh::Exit builtin with invalid arg": {
-          "mode": "skip",
-          "reason": "gbash does not implement process tables"
+        "oils/builtin-completion.test.sh::compgen doesn't respect -X for user-defined functions": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/builtin-process.test.sh::Exit builtin with too many args": {
-          "mode": "skip",
-          "reason": "gbash does not implement process tables"
+        "oils/builtin-getopts.test.sh::More regression for #1523": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-getopts.test.sh::OPTARG is empty (not unset) after parsing a flag doesn't take an arg": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-getopts.test.sh::OPTIND narrowed down": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-meta.test.sh::command -v doesn't find executable dir": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-misc.test.sh::time pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/builtin-process.test.sh::arg that would overflow 64 bits is detected": {
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
+        },
+        "oils/builtin-process.test.sh::Changing resource limit is denied": {
           "mode": "skip",
           "reason": "gbash does not implement process tables"
         },
@@ -60,11 +207,23 @@
           "mode": "skip",
           "reason": "gbash does not implement process tables"
         },
-        "oils/builtin-process.test.sh::time with brace group argument": {
+        "oils/builtin-process.test.sh::exec builtin with here doc": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage still expects a spec/bin helper path our harness does not mirror yet",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-process.test.sh::Exit builtin with invalid arg": {
           "mode": "skip",
           "reason": "gbash does not implement process tables"
         },
-        "oils/builtin-process.test.sh::ulimit -S for soft limit (default), -H for hard limit": {
+        "oils/builtin-process.test.sh::Exit builtin with too many args": {
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
+        },
+        "oils/builtin-process.test.sh::time with brace group argument": {
           "mode": "skip",
           "reason": "gbash does not implement process tables"
         },
@@ -73,6 +232,10 @@
           "reason": "gbash does not implement process tables"
         },
         "oils/builtin-process.test.sh::ulimit -n limits file descriptors": {
+          "mode": "skip",
+          "reason": "gbash does not implement process tables"
+        },
+        "oils/builtin-process.test.sh::ulimit -S for soft limit (default), -H for hard limit": {
           "mode": "skip",
           "reason": "gbash does not implement process tables"
         },
@@ -112,14 +275,85 @@
           "mode": "skip",
           "reason": "gbash does not implement process tables"
         },
-        "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
+        "oils/builtin-read.test.sh::read bash bug": {
+          "mode": "skip",
+          "reason": "intentional: gbash keeps the space-preserving result instead of reproducing bash's historical control-character bug"
+        },
+        "oils/builtin-set.test.sh::set -u with undefined var in interactive shell does NOT exit the interpreter": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "darwin"
           ]
         },
-        "oils/builtin-type-bash.test.sh::type -P builtin -> not a file but file found": {
+        "oils/builtin-set.test.sh::set -u with undefined variable exits the interpreter": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-times.test.sh::times shows two formatted lines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-trap-bash.test.sh::trap DEBUG and pipeline (lastpipe difference)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-trap-bash.test.sh::trap RETURN": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR with redirect": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-trap-err.test.sh::trap ERR with YSH proc": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-trap.test.sh::Remove trap with an unsigned integer": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/builtin-trap.test.sh::trap USR1, sleep, SIGINT: non-interactively": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-trap.test.sh::trap with command.NoOp - check internal invariant": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-trap.test.sh::traps are not active inside subshells $() ()  trap | cat": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
@@ -140,13 +374,26 @@
             "darwin"
           ]
         },
-        "oils/command-sub.test.sh::Escaped quote in [[ ]]": {
+        "oils/builtin-type-bash.test.sh::type -P builtin -> not a file": {
           "mode": "xfail",
-          "reason": "conformance: gbash backquote-in-dquote escaping does not yet handle nested [[ ]] correctly"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
+        "oils/builtin-type-bash.test.sh::type -P builtin -> not a file but file found": {
           "mode": "xfail",
-          "reason": "conformance: gbash backquote-in-dquote error recovery differs from bash"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/builtin-type-bash.test.sh::type -P does not find directories (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
         "oils/command_.test.sh::Command block": {
           "mode": "xfail",
@@ -155,6 +402,14 @@
             "darwin"
           ]
         },
+        "oils/command-sub.test.sh::Escaped quote in [[ ]]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash backquote-in-dquote escaping does not yet handle nested [[ ]] correctly"
+        },
+        "oils/command-sub.test.sh::Syntax errors with double quotes within backticks": {
+          "mode": "xfail",
+          "reason": "conformance: gbash backquote-in-dquote error recovery differs from bash"
+        },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
           "reason": "conformance: Darwin bash oracle lacks /usr/bin/cat inside this harness",
@@ -162,39 +417,191 @@
             "darwin"
           ]
         },
-        "oils/errexit.test.sh::bash atoms [[ (( - redir failure checked": {
+        "oils/errexit-osh.test.sh::command sub with command_sub_errexit only": {
           "mode": "xfail",
-          "reason": "darwin's pinned bash oracle differs from the Linux CI oracle for these redirect-errexit cases",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
           "goos": [
-            "darwin"
+            "darwin",
+            "linux"
           ]
         },
-        "oils/errexit.test.sh::simple command that's an alias - redir failure checked": {
+        "oils/errexit-osh.test.sh::command sub: errexit is NOT inherited and outer shell keeps going": {
           "mode": "xfail",
-          "reason": "darwin's pinned bash oracle differs from the Linux CI oracle for this redirect-errexit alias case",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
           "goos": [
-            "darwin"
+            "darwin",
+            "linux"
           ]
         },
-        "oils/exit-status.test.sh::subshell OverflowError https://github.com/oilshell/oil/issues/996": {
+        "oils/errexit-osh.test.sh::command_sub_errexit and command sub in array": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/errexit-osh.test.sh::command_sub_errexit causes local d=$(date %x) to fail": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/errexit-osh.test.sh::global assignment with command sub: middle command fails": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/errexit-osh.test.sh::if pipeline doesn't fail fatally": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/errexit-osh.test.sh::local: middle command fails and keeps going": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/errexit-osh.test.sh::What's in strict:all?": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/errexit.test.sh::More && ||": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "darwin"
           ]
         },
-        "oils/loop.test.sh::top-level break/continue/return (without strict_control_flow)": {
+        "oils/extglob-files.test.sh::no match": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in case": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "darwin"
           ]
         },
-        "oils/loop.test.sh::while in pipe": {
+        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in conditional word": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/fatal-errors.test.sh::Unrecoverable: divide by zero in redirect word": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/glob.test.sh::char class glob inside array assignment": {
+          "mode": "xfail",
+          "reason": "conformance: gbash rejects bracket-pattern glob words inside array assignment"
+        },
+        "oils/glob.test.sh::Glob ordering respects LC_COLLATE (zsh respects this too)": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
           "goos": [
             "linux"
+          ]
+        },
+        "oils/glob.test.sh::no glob after ~ expansion": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/globignore.test.sh::Ignore globs with char patterns like [!ab]": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/globignore.test.sh::When GLOBIGNORE is set, no_dash_glob isn't respected": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/globstar.test.sh::in zsh, ***/ follows symlinked directories, while **/ does not": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/here-doc.test.sh::Multiple here docs in pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/here-doc.test.sh::Multiple here docs in pipeline on multiple lines": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/loop.test.sh::Tilde expansion within for loop": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/paren-ambiguity.test.sh::(( closed with )) after multiple lines is parse error - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/paren-ambiguity.test.sh::$(( closed with )) after multiple lines is parse error - #2337": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/parse-errors.test.sh::interactive parse error (regression)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
           ]
         },
         "oils/parse-errors.test.sh::Long Token - 65535 bytes": {
@@ -211,7 +618,80 @@
             "darwin"
           ]
         },
+        "oils/pipeline.test.sh::Evaluation of argv[0] in pipeline occurs in child": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::Initial value of PIPESTATUS is empty string": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/pipeline.test.sh::Nested pipelines": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::Pipeline in eval": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/pipeline.test.sh::Redirect in Pipeline": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
         "oils/pipeline.test.sh::shopt -s lastpipe and shopt -s no_last_fork interaction": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/posix.test.sh::Newlines in compound lists": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/redirect-command.test.sh::Brace group redirect": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/redirect-command.test.sh::redirect bash extensions:   [[  ((  for ((": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/redirect-multi.test.sh::ysh behavior when glob doesn't match": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/redirect.test.sh::Redirect echo to stderr, and then redirect all of stdout somewhere.": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
@@ -222,10 +702,26 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
-            "darwin"
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/regex.test.sh::unquoted [a  b] as pattern, [a  b|c]": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
           ]
         },
         "oils/regex.test.sh::Unquoted { is a regex parse error": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/sh-options-bash.test.sh::OSH calling bash with SHELLOPTS does not change braceexpand": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
@@ -236,13 +732,298 @@
           "mode": "xfail",
           "reason": "conformance: gbash ls error message format differs from bash"
         },
-        "oils/glob.test.sh::char class glob inside array assignment": {
+        "oils/smoke.test.sh::Here doc with redirect": {
           "mode": "xfail",
-          "reason": "conformance: gbash rejects bracket-pattern glob words inside array assignment"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
         },
-        "oils/glob.test.sh::Glob unicode char": {
+        "oils/smoke.test.sh::pipeline": {
           "mode": "xfail",
-          "reason": "conformance: C.UTF-8 pathname collation order still differs from bash for this glob case"
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/smoke.test.sh::pipeline with builtin": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/strict-options.test.sh::errexit and top-level control flow": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/strict-options.test.sh::Sourcing a script that returns at the top level": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/strict-options.test.sh::top level control flow": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/tilde.test.sh::~ expansion in readonly assignment": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/tilde.test.sh::No tilde expansion in word that looks like assignment but isn't": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/tilde.test.sh::strict tilde": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::Command Sub Syntax Error": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::dynamic glob - http://landley.net/notes.html#08-05-2020": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::Evaluation order of redirect and ${undef?error}": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::Failed redirect in assignment, vs. export": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::for loop parsing - http://landley.net/notes.html#04-03-2020": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::Parsing $(( ))": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh-posix.test.sh::readonly with temp binding": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh.test.sh::{abc}<<< - http://landley.net/notes-2019.html#09-12-2019": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh.test.sh::Brace Expansion": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh.test.sh::char class / extglob": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh.test.sh::extglob $IFS 1": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/toysh.test.sh::extglob $IFS 2": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/unicode.test.sh::OSH source code doesn't have to be valid Unicode (like other shells)": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/vars-bash.test.sh::$SHELL is set to what is in /etc/passwd": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/vars-special.test.sh::$HOME is NOT set": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/vars-special.test.sh::$PATH is set if unset at startup": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/vars-special.test.sh::Vars set interactively only: $HISTFILE": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/whitespace.test.sh::\\r in arith expression is allowed by some shells, but not most!": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/whitespace.test.sh::whitespace in string to integer conversion": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/word-split.test.sh::Tilde sub is not split, but var sub is": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/ysh-builtin-private.test.sh::builtin cat usage": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/ysh-builtin-private.test.sh::builtin rm -f - still fails when file can't be removed": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/ysh-builtin-private.test.sh::builtin rm always fails on directories (regardless of -f)": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/ysh-builtin-private.test.sh::builtin rm: usage, removing files": {
+          "mode": "xfail",
+          "reason": "conformance: gbash behavior differs from bash",
+          "goos": [
+            "darwin"
+          ]
+        },
+        "oils/ysh-builtin-private.test.sh::builtin sleep behaves like external sleep": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/ysh-builtin-private.test.sh::sleep without prefix is still external": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/zsh-idioms.test.sh::asdf snippet": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/zsh-idioms.test.sh::git-completion snippet": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
+        },
+        "oils/zsh-idioms.test.sh::zsh var sub is rejected at runtime": {
+          "mode": "xfail",
+          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "goos": [
+            "darwin",
+            "linux"
+          ]
         }
       }
     },

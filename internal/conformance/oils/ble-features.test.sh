@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash zsh mksh ash dash yash
 
 #### [bash_unset] local-unset / dynamic-unset for localvar
 unlocal() { unset -v "$1"; }
@@ -26,6 +26,23 @@ f1 'global'
 [global,local,(unset)] v: (unset)
 [global,local,(unlocal)] v: global
 ## END
+
+## OK osh/mksh/yash STDOUT:
+# always-cell-unset
+#   local-unset   = cell-unset
+#   dynamic-unset = cell-unset
+[global,local,(unset)] v: global
+[global,local,(unlocal)] v: global
+## END
+
+## OK-2 zsh/ash/dash STDOUT:
+# always-value-unset
+#   local-unset   = value-unset
+#   dynamic-unset = value-unset
+[global,local,(unset)] v: (unset)
+[global,local,(unlocal)] v: (unset)
+## END
+
 
 #### [bash_unset] local-unset / dynamic-unset for localvar (mutated from tempenv)
 unlocal() { unset -v "$1"; }
@@ -58,6 +75,23 @@ v=tempenv f1 'global,tempenv'
 # [global,tempenv,local,(unset)] v: global
 # [global,tempenv,local,(unlocal)] v: global
 
+## OK osh/mksh/yash STDOUT:
+# always-cell-unset
+#   local-unset   = cell-unset
+#   dynamic-unset = cell-unset
+[global,tempenv,local,(unset)] v: tempenv
+[global,tempenv,local,(unlocal)] v: tempenv
+## END
+
+## OK-2 zsh/ash/dash STDOUT:
+# always-value-unset
+#   local-unset   = value-unset
+#   dynamic-unset = value-unset
+[global,tempenv,local,(unset)] v: (unset)
+[global,tempenv,local,(unlocal)] v: (unset)
+## END
+
+
 #### [bash_unset] local-unset / dynamic-unset for tempenv
 unlocal() { unset -v "$1"; }
 
@@ -81,6 +115,14 @@ v=tempenv f1 'global,tempenv'
 #   dynamic-unset = cell-unset
 [global,tempenv,(unset)] v: global
 [global,tempenv,(unlocal)] v: global
+## END
+
+## OK zsh/ash/dash/mksh STDOUT:
+# always-value-unset, mksh-unset
+#   local-unset   = value-unset
+#   dynamic-unset = value-unset
+[global,tempenv,(unset)] v: (unset)
+[global,tempenv,(unlocal)] v: (unset)
 ## END
 
 #### [bash_unset] function call with tempenv vs tempenv-eval
@@ -130,6 +172,71 @@ v=tempenv eval 'f5 "global,tempenv,(eval)"'
 # [global,tempenv,(eval),local+unset] v: (unset)
 # [global,tempenv,(eval),local+unlocal] v: tempenv
 
+## OK-2 ash STDOUT:
+# always-value-unset x init.unset
+[global] v: global
+[global,local] v: (unset)
+[global,local+unset] v: (unset)
+[global,local+unlocal] v: (unset)
+[global,tempenv] v: tempenv
+[global,tempenv,local] v: tempenv
+[global,tempenv,local+unset] v: (unset)
+[global,tempenv,local+unlocal] v: (unset)
+[global,tempenv,(eval)] v: tempenv
+[global,tempenv,(eval),local] v: (unset)
+[global,tempenv,(eval),local+unset] v: (unset)
+[global,tempenv,(eval),local+unlocal] v: (unset)
+## END
+
+## OK-3 zsh STDOUT:
+# always-value-unset x init.empty
+[global] v: global
+[global,local] v: 
+[global,local+unset] v: (unset)
+[global,local+unlocal] v: (unset)
+[global,tempenv] v: tempenv
+[global,tempenv,local] v: 
+[global,tempenv,local+unset] v: (unset)
+[global,tempenv,local+unlocal] v: (unset)
+[global,tempenv,(eval)] v: tempenv
+[global,tempenv,(eval),local] v: 
+[global,tempenv,(eval),local+unset] v: (unset)
+[global,tempenv,(eval),local+unlocal] v: (unset)
+## END
+
+## OK-4 dash STDOUT:
+# always-value-unset x init.inherit
+[global] v: global
+[global,local] v: global
+[global,local+unset] v: (unset)
+[global,local+unlocal] v: (unset)
+[global,tempenv] v: tempenv
+[global,tempenv,local] v: tempenv
+[global,tempenv,local+unset] v: (unset)
+[global,tempenv,local+unlocal] v: (unset)
+[global,tempenv,(eval)] v: tempenv
+[global,tempenv,(eval),local] v: tempenv
+[global,tempenv,(eval),local+unset] v: (unset)
+[global,tempenv,(eval),local+unlocal] v: (unset)
+## END
+
+## OK osh/yash/mksh STDOUT:
+# always-cell-unset x init.unset
+[global] v: global
+[global,local] v: (unset)
+[global,local+unset] v: global
+[global,local+unlocal] v: global
+[global,tempenv] v: tempenv
+[global,tempenv,local] v: (unset)
+[global,tempenv,local+unset] v: tempenv
+[global,tempenv,local+unlocal] v: tempenv
+[global,tempenv,(eval)] v: tempenv
+[global,tempenv,(eval),local] v: (unset)
+[global,tempenv,(eval),local+unset] v: tempenv
+[global,tempenv,(eval),local+unlocal] v: tempenv
+## END
+
+
 #### [bash_unset] localvar-inherit from tempenv
 f1() {
   local v
@@ -167,20 +274,88 @@ f3 'global'
 [global,local,(func),(local)] v: (unset)
 ## END
 
-#### [compat_array] ${arr} is ${arr[0]}
+## OK osh/mksh/yash STDOUT:
+# init.unset
+[global,(local)] v: (unset)
+[global,tempenv,(local)] v: (unset)
+[xglobal,(local)] v: (unset)
+[global,(func),(local)] v: (unset)
+[global,tempenv,(func),(local)] v: (unset)
+[xglobal,(func),(local)] v: (unset)
+[global,local,(func),(local)] v: (unset)
+## END
 
+## OK-2 ash STDOUT:
+# init.unset x tempenv-in-localctx
+[global,(local)] v: (unset)
+[global,tempenv,(local)] v: tempenv
+[xglobal,(local)] v: (unset)
+[global,(func),(local)] v: (unset)
+[global,tempenv,(func),(local)] v: (unset)
+[xglobal,(func),(local)] v: (unset)
+[global,local,(func),(local)] v: (unset)
+## END
+
+## OK-3 zsh STDOUT:
+# init.empty
+[global,(local)] v: 
+[global,tempenv,(local)] v: 
+[xglobal,(local)] v: 
+[global,(func),(local)] v: 
+[global,tempenv,(func),(local)] v: 
+[xglobal,(func),(local)] v: 
+[global,local,(func),(local)] v: 
+## END
+
+## OK-4 dash STDOUT:
+# init.inherit
+[global,(local)] v: global
+[global,tempenv,(local)] v: tempenv
+[xglobal,(local)] v: global
+[global,(func),(local)] v: global
+[global,tempenv,(func),(local)] v: tempenv
+[xglobal,(func),(local)] v: global
+[global,local,(func),(local)] v: local
+## END
+
+
+#### [compat_array] ${arr} is ${arr[0]}
+case ${SH##*/} in dash|ash) exit 1 ;; esac # dash/ash does not have arrays
+case ${SH##*/} in zsh) setopt KSH_ARRAYS ;; esac
 arr=(foo bar baz)
 argv.sh "$arr" "${arr}"
 ## stdout: ['foo', 'foo']
 
+## N-I dash/ash status: 1
+## N-I dash/ash stdout-json: ""
+
+## OK yash stdout: ['foo', 'bar', 'baz', 'foo', 'bar', 'baz']
+
 #### [compat_array] scalar write to arrays
+case ${SH##*/} in
+(dash|ash) exit 1;; # dash/ash does not have arrays
+(zsh) setopt KSH_ARRAYS;;
+esac
 
 a=(1 0 0)
 : $(( a++ ))
 argv.sh "${a[@]}"
 ## stdout: ['2', '0', '0']
 
+## N-I dash/ash status: 1
+## N-I dash/ash stdout-json: ""
+
+## OK yash STDOUT:
+# yash does not support scalar access. Instead, it replaces the array
+# with a scalar.
+['1']
+## END
+
 #### [compat_array] scalar write to associative arrays
+case ${SH##*/} in
+(dash|ash|yash|mksh) exit 1;; # dash/ash/yash/mksh does not have associative arrays
+(zsh) setopt KSH_ARRAYS;;
+esac
 
 declare -A d=()
 d['0']=1
@@ -190,6 +365,11 @@ d['bar']=world
 argv.sh ${d['0']} ${d['foo']} ${d['bar']}
 ## stdout: ['2', 'hello', 'world']
 
+## N-I dash/ash/yash/mksh status: 1
+## N-I dash/ash/yash/mksh stdout-json: ""
+
+## N-I zsh stdout: ['1', 'hello', 'world']
+
 #### [compat_array] ${alpha@a}
 declare -A alpha=(['1']=2)
 echo type=${alpha@a}
@@ -198,3 +378,6 @@ echo type=${alpha@a}
 type=A
 type=A
 ## END
+## N-I mksh/zsh status: 1
+## N-I dash/ash/yash status: 2
+## N-I dash/ash/yash/mksh/zsh stdout-json: ""

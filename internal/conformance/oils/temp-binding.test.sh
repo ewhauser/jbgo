@@ -1,10 +1,11 @@
-## compare_shells: bash
+## compare_shells: dash bash zsh mksh ash yash
 ## oils_failures_allowed: 0
 
 # forked from spec/ble-idioms
 # the IFS= eval 'local x' bug
 
 #### More eval 'local v='
+case $SH in mksh) exit ;; esac
 
 set -u
 
@@ -33,15 +34,20 @@ y=y
 z=z
 ## END
 
+## N-I mksh STDOUT:
+## END
+
 #### Temp bindings with local
 
 f() {
   local x=x
   tmp='' local tx=tx
 
+  # Hm both y and ty persist in bash/zsh
   eval 'local y=y'
   tmp='' eval 'local ty=ty'
 
+  # Why does this have an effect in OSH?  Oh because 'unset' is a special
   # builtin
   if true; then
     x='X' unset x
@@ -60,6 +66,13 @@ f() {
 }
 
 f
+
+## BUG bash/zsh STDOUT:
+x=x
+tx=tx
+y=y
+ty=ty
+## END
 
 ## STDOUT:
 x=
@@ -104,7 +117,9 @@ shadow
 
 echo ---
 
-set -o posix
+case $SH in
+  bash) set -o posix ;;
+esac
 shadow
 
 # Now shadow
@@ -123,6 +138,19 @@ x=42
 ---
 x=42
 x=42
+## END
+
+## BUG mksh/ash/dash/yash STDOUT:
+x=
+---
+x=
+x=
+---
+x=
+x=
+---
+x=
+x=
 ## END
 
 #### FOO=bar $unset - temp binding, then empty argv from unquoted unset var (#2411)

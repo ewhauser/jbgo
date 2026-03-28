@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 7
-## compare_shells: bash
+## compare_shells: bash mksh
 
 #### pass array by reference
 show_value() {
@@ -33,6 +33,8 @@ show_value() {
 days=([monday]=eggs [tuesday]=bread [sunday]=jam)
 show_value days sunday
 ## stdout: jam
+## BUG mksh stdout: [monday]=eggs
+#  mksh note: it coerces "days" to 0?  Horrible.
 
 #### pass local array by reference, relying on DYNAMIC SCOPING
 show_value() {
@@ -46,6 +48,10 @@ caller() {
 }
 caller
 ## stdout: zo
+# mksh appears not to have local arrays!
+## BUG mksh stdout-json: ""
+## BUG mksh status: 1
+
 
 #### flag -n and +n
 x=foo
@@ -97,6 +103,7 @@ echo 4 y=$y
 4 y=XXXX
 ## END
 
+
 #### flag -n combined ${!ref} -- bash INVERTS
 foo=FOO  # should NOT use this
 
@@ -119,6 +126,13 @@ NOW A NAMEREF
 ref=foo
 !ref=x
 ## END
+## N-I mksh STDOUT:
+ref=x
+!ref=ref
+NOW A NAMEREF
+ref=foo
+!ref=x
+## END
 
 #### named ref with $# doesn't work
 set -- one two three
@@ -131,6 +145,12 @@ echo ref=$ref
 ## STDOUT:
 ref=#
 ref=#
+## END
+
+# mksh does respect it!!  Gah.
+## OK mksh STDOUT:
+ref=#
+ref=3
 ## END
 
 #### named ref with $# and shopt -s strict_nameref
@@ -147,6 +167,12 @@ ref=#
 ref=#
 ref=#
 ## END
+## N-I mksh status: 0
+## N-I mksh STDOUT:
+ref=#
+ref=0
+## END
+
 
 #### named ref with 1 $1 etc.
 set -- one two three
@@ -180,9 +206,15 @@ ref2=$1
 ref3=x
 ref3=foo
 ## END
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+ref=1
+ref=one
+ref2=$1
+## END
 
 #### assign to invalid ref
-ref=1
+ref=1   # mksh makes this READ-ONLY!  Because it's not valid.
 
 echo ref=$ref
 typeset -n ref
@@ -195,11 +227,37 @@ ref=1
 ref=1
 ref=foo
 ## END
+## OK mksh status: 2
+## OK mksh STDOUT:
+ref=1
+ref=
+## END
+
+#### assign to invalid ref with strict_nameref
+case $SH in *bash|*mksh) exit ;; esac
+
+shopt -s strict_nameref
+
+ref=1
+
+echo ref=$ref
+typeset -n ref
+echo ref=$ref
+
+ref=foo
+echo ref=$ref
+## status: 1
+## STDOUT:
+ref=1
+## END
+## N-I bash/mksh status: 0
+## N-I bash/mksh stdout-json: ""
 
 #### name ref on Undef cell
 typeset  -n ref
 
 # This is technically incorrect: an undefined name shouldn't evaluate to empty
+# string.  mksh doesn't allow it.
 echo ref=$ref
 
 echo nounset
@@ -210,6 +268,7 @@ echo ref=$ref
 ref=
 nounset
 ## END
+## OK mksh stdout-json: ""
 
 #### assign to empty nameref and invalid nameref
 typeset -n ref
@@ -231,6 +290,10 @@ ref2=
 ref2=x
 ## END
 
+# mksh gives a good error: empty nameref target
+## OK mksh status: 1
+## OK mksh stdout-json: ""
+
 #### -n attribute before it has a value
 typeset -n ref
 
@@ -245,6 +308,8 @@ echo ref=$ref
 ref=
 ref=XX
 ## END
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### -n attribute on array is hard error, not a warning
 x=X
@@ -259,6 +324,8 @@ echo ref=$ref
 ## STDOUT:
 hi
 ## END
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 ## BUG bash status: 0
 ## BUG bash STDOUT:
 hi
@@ -269,6 +336,7 @@ ref=x
 x=foo
 typeset -n -x ref=x
 
+# hm bash ignores it but mksh doesn't.  maybe disallow it.
 printenv.sh x ref
 echo ---
 export x
@@ -280,6 +348,14 @@ x
 foo
 x
 ## END
+## OK mksh STDOUT:
+None
+None
+---
+foo
+None
+## END
+
 
 #### readonly nameref doesn't prevent assigning through it
 
@@ -322,6 +398,7 @@ echo ref=$ref
 echo x=$x
 
 ## status: 1
+## OK mksh status: 2
 ## STDOUT:
 ref=X
 ref=XX
@@ -372,6 +449,7 @@ echo ref2=$ref1
 ## STDOUT:
 defined
 ## END
+## OK mksh stdout-json: ""
 ## BUG bash status: 0
 ## BUG bash STDOUT:
 defined
@@ -389,6 +467,7 @@ echo mutated $?
 ## STDOUT:
 defined 0
 ## END
+## OK mksh stdout-json: ""
 ## BUG bash status: 0
 ## BUG bash STDOUT:
 defined 0
@@ -418,6 +497,7 @@ f1
 F1=F1
 F1=x
 ## END
+
 
 #### change reference itself
 x=XX
@@ -489,6 +569,8 @@ status=1
 ['ref', 'A B', 'C']
 ['a[@]', 'A B', 'C']
 ## END
+## OK mksh status: 1
+## OK mksh stdout-json: ""
 
 #### mutate through nameref: ref[0]=
 
@@ -511,6 +593,10 @@ echo ${array[@]}
 ## STDOUT:
 status=1
 X Y Z
+## END
+## BUG mksh STDOUT:
+status=0
+foo Y Z
 ## END
 
 #### @ in nameref isn't supported, unlike in ${!ref}
@@ -545,6 +631,8 @@ p
 ## STDOUT:
 ['bar']
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### temporary call assignment through nameref with subscript
 arr=(a b c d)

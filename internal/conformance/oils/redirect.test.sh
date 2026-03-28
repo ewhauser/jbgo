@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 2
-## compare_shells: bash
+## compare_shells: bash dash mksh
 
 #### >& and <& are the same
 
@@ -11,6 +11,7 @@ echo two 1<&2
 one
 two
 ## END
+
 
 #### <&
 # Is there a simpler test case for this?
@@ -33,17 +34,23 @@ status=0
 ## END
 ## stderr-json: ""
 
+
 #### 2&>1 (is it a redirect or is it like a&>1)
 2&>1
 echo status=$?
 ## STDOUT:
 status=127
 ## END
+## OK mksh/dash STDOUT:
+status=0
+## END
+
 
 #### Nonexistent file
 cat <$TMP/nonexistent.txt
 echo status=$?
 ## stdout: status=1
+## OK dash stdout: status=2
 
 #### Descriptor redirect with spaces
 # Hm this seems like a failure of lookahead!  The second thing should look to a
@@ -73,10 +80,14 @@ cat $TMP/file-redir2.txt
 ## stdout: two 1
 
 #### Descriptor redirect with filename
+# bash/mksh treat this like a filename, not a descriptor.
+# dash aborts.
 echo one 1>&$TMP/nonexistent-filename__
 echo "status=$?"
 ## stdout: status=1
 ## BUG bash stdout: status=0
+## OK dash stdout-json: ""
+## OK dash status: 2
 
 #### Redirect echo to stderr, and then redirect all of stdout somewhere.
 { echo foo52 1>&2; echo 012345789; } > $TMP/block-stdout.txt
@@ -90,6 +101,8 @@ echo named-fd-contents >& $myfd
 cat $TMP/named-fd.txt
 ## stdout: named-fd-contents
 ## status: 0
+## N-I dash/mksh stdout-json: ""
+## N-I dash/mksh status: 127
 
 #### Named file descriptor for input
 case $SH in mksh|dash) exit 1 ;; esac
@@ -132,23 +145,36 @@ exec 20> "$TMP/double-digit-fd.txt"
 echo hello20 >&20
 cat "$TMP/double-digit-fd.txt"
 ## stdout: hello20
+## BUG dash stdout-json: ""
+## BUG dash status: 127
 
+#### : 9> fdleak (OSH regression)
 true 9> "$TMP/fd.txt"
 ( echo world >&9 )
 cat "$TMP/fd.txt"
 ## stdout-json: ""
 
+#### : 3>&3 (OSH regression)
+
+# mksh started being flaky on the continuous build and during release.  We
 # don't care!  Related to issue #330.
+case $SH in mksh) exit ;; esac
 
 : 3>&3
 echo hello
 ## stdout: hello
+## BUG mksh stdout-json: ""
+## BUG mksh status: 0
 
 #### : 3>&3-
 : 3>&3-
 echo hello
 ## stdout: hello
+## N-I dash/mksh stdout-json: ""
+## N-I mksh status: 1
+## N-I dash status: 2
 
+#### 3>&- << EOF (OSH regression: fail to restore fds)
 exec 3> "$TMP/fd.txt"
 echo hello 3>&- << EOF
 EOF
@@ -197,10 +223,14 @@ echo s > "$f"
 echo DONE
 ## stdout: result=1
 ## status: 1
+## OK dash stdout: result=2
+## OK dash status: 2
 
 #### Redirect to file descriptor that's not open
 # Notes:
 # - 7/2021: descriptor 7 seems to work on all CI systems.  The process state
+#   isn't clean, but we could probably close it in OSH?
+# - dash doesn't allow file descriptors greater than 9.  (This is a good
 #   thing, because the bash chapter in AOSA book mentions that juggling user
 #   vs.  system file descriptors is a huge pain.)
 # - But somehow running in parallel under spec-runner.sh changes whether
@@ -221,6 +251,7 @@ fi
 echo hi 1>&7
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
 
 #### Open descriptor with exec
 # What is the point of this?  ./configure scripts and debootstrap use it.
@@ -258,6 +289,11 @@ status=1
 XX
 ZZ
 ## END
+## OK dash STDOUT:
+status=2
+XX
+ZZ
+## END
 
 #### &> redirects stdout and stderr
 tmp="$(basename $SH)-$$.txt"  # unique name for shell and test case
@@ -273,8 +309,14 @@ grep STDERR $tmp
 STDOUT
 STDERR
 ## END
+## N-I dash stdout: STDOUT
+## N-I dash stderr: STDERR
+## N-I dash status: 1
 
 #### >&word redirects stdout and stderr when word is not a number or -
+
+# dash, mksh don't implement this bash behaviour.
+case $SH in dash|mksh) exit 1 ;; esac
 
 tmp="$(basename $SH)-$$.txt"  # unique name for shell and test case
 
@@ -288,6 +330,8 @@ grep STDERR $tmp
 STDOUT
 STDERR
 ## END
+## N-I dash/mksh status: 1
+## N-I dash/mksh stdout-json: ""
 
 #### 1>&- to close file descriptor
 exec 5> "$TMP/f.txt"
@@ -311,6 +355,10 @@ cat "$TMP/f.txt"
 hello5
 world6
 ## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### 1>&2- (Bash bug: fail to restore closed fd)
 
@@ -341,6 +389,8 @@ cat "$TMP/f.txt"
 
 ## status: 1
 ## stdout-json: ""
+
+## OK dash status: 2
 
 ## BUG bash status: 0
 ## BUG bash stdout: hello
@@ -374,7 +424,13 @@ echo line1=$line1 line2=$line2
 
 #### &>> appends stdout and stderr
 
+# Fix for flaky tests: dash behaves non-deterministically under load!  It
 # doesn't implement the behavior anyway so I don't care why.
+case $SH in
+  *dash)
+    exit 1
+    ;;
+esac
 
 echo "ok" > $TMP/f.txt
 stdout_stderr.sh &>> $TMP/f.txt
@@ -386,6 +442,8 @@ ok
 ok
 ok
 ## END
+## N-I dash stdout-json: ""
+## N-I dash status: 1
 
 #### exec redirect then various builtins
 exec 5>$TMP/log.txt
@@ -398,9 +456,15 @@ done
 
 #### can't mention big file descriptor
 echo hi 9>&1
+# trivia: 23 is the max descriptor for mksh
 #echo hi 24>&1
 echo hi 99>&1
 echo hi 100>&1
+## OK osh STDOUT:
+hi
+hi
+hi 100
+## END
 ## STDOUT:
 hi
 hi 99
@@ -412,6 +476,7 @@ hi
 hi
 ## END
 
+#### : >/dev/null 2> / (OSH regression: fail to pop fd frame)
 # oil 0.8.pre4 fails to restore fds after redirection failure. In the
 # following case, the fd frame remains after the redirection failure
 # "2> /" so that the effect of redirection ">/dev/null" remains after
@@ -419,16 +484,27 @@ hi
 : >/dev/null 2> /
 echo hello
 ## stdout: hello
+## OK dash stdout-json: ""
+## OK dash status: 2
+## OK mksh stdout-json: ""
+## OK mksh status: 1
+# dash/mksh terminates the execution of script on the redirection.
 
+#### echo foo >&100 (OSH regression: does not fail with invalid fd 100)
 # oil 0.8.pre4 does not fail with non-existent fd 100.
 fd=100
 echo foo53 >&$fd
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
 
 #### echo foo >&N where N is first unused fd
 # 1. prepare default fd for internal uses
 minfd=10
+case ${SH##*/} in
+(mksh) minfd=24 ;;
+(osh) minfd=100 ;;
+esac
 
 # 2. prepare first unused fd
 fd=$minfd
@@ -446,7 +522,11 @@ done
 echo foo54 >&$fd
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
 
+#### exec {fd}>&- (OSH regression: fails to close fd)
+# mksh, dash do not implement {fd} redirections.
+case $SH in mksh|dash) exit 1 ;; esac
 # oil 0.8.pre4 fails to close fd by {fd}&-.
 exec {fd}>file1
 echo foo55 >&$fd
@@ -454,6 +534,8 @@ exec {fd}>&-
 echo bar >&$fd
 cat file1
 ## stdout: foo55
+## N-I mksh/dash stdout-json: ""
+## N-I mksh/dash status: 1
 
 #### noclobber can still write to non-regular files like /dev/null
 set -C  # noclobber
@@ -465,6 +547,10 @@ echo a &>  /dev/null  # trunc, write stdout and stderr
 echo a  >> /dev/null  # append, write stdout
 echo a &>> /dev/null  # append, write stdout and stderr
 echo a  >| /dev/null  # ignore noclobber, trunc, write stdout
+## OK dash STDOUT:
+a
+a
+## END
 ## STDOUT:
 ## END
 
@@ -491,8 +577,10 @@ a1
 ## END
 
 #### Parsing of x={myvar} and related cases
+case $SH in dash) exit ;; esac
 
 echo {myvar}>/dev/stdout
+# Bash chooses fds starting with 10 here, osh with 100, and there can already
 # be some open fds, so compare further fds against this one
 starting_fd=$myvar
 
@@ -524,6 +612,23 @@ x=
 +
 2
 ## END
+## BUG mksh/ash STDOUT:
+{myvar}
+x={myvar}
+0
+x={myvar}
+0
+x= {myvar}
+0
++{myvar}
+0
++{myvar}
+0
++ {myvar}
+0
+## END
+## N-I dash STDOUT:
+## END
 
 #### xtrace not affected by redirects
 set -x
@@ -537,3 +642,14 @@ cat test_osh
 ## STDOUT:
 ## END
 
+## OK osh STDERR:
++ printf aaaa
++ set '+x'
+## END
+
+## OK mksh STDERR:
++ >/dev/null 
++ 2>test_osh 
++ printf aaaa
++ set +x
+## END

@@ -1,11 +1,13 @@
-## compare_shells: bash
+## compare_shells: bash-4.4
 
 # Tests for bash's type flags on cells.  Hopefully we don't have to implement
 # this, but it's good to know the behavior.
 #
+# OSH follows a Python-ish model of types carried with values/objects, not
 # locations.
 #
 # See https://github.com/oilshell/oil/issues/26
+
 
 #### declare -i -l -u errors can be silenced - ignore_flags_not_impl
 
@@ -57,6 +59,11 @@ echo [$j]
 [3]
 [2]
 ## END
+## N-I osh STDOUT:
+[1  2 ]
+[1 2 ]
+[x 2 ]
+## END
 
 #### declare -i with arithmetic inside strings (Nix, issue 864)
 
@@ -75,6 +82,10 @@ echo item=$item
 ## STDOUT:
 s=3
 item=3
+## END
+## N-I osh STDOUT:
+s=1 + 2
+item=array[1+1]
 ## END
 
 #### append in arith context
@@ -102,6 +113,10 @@ argv.sh "${xyz1}" "${xyz2}" "${xyz3[@]}" "${xyz4[@]}"
 ## STDOUT:
 ['1', '(2 3)', '4', '5', '6']
 ## END
+## N-I osh STDOUT:
+['', '']
+## END
+
 
 #### declare array vs. associative array
 # Hm I don't understand why the array only has one element.  I guess because
@@ -114,6 +129,11 @@ argv.sh "${#assoc[@]}" "${!assoc[@]}" "${assoc[@]}"
 ['1', '0', 'd']
 ['2', 'a', 'c', 'b', 'd']
 ## END
+## N-I osh STDOUT:
+['0']
+['0']
+## END
+
 
 #### declare -l -u
 
@@ -132,3 +152,7 @@ foo
 FOO
 ## END
 
+## N-I osh STDOUT:
+FOO
+foo
+## END

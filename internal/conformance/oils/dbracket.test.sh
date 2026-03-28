@@ -1,6 +1,7 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash
+## compare_shells: bash-4.4 mksh
 
+# NOTE: zsh passes about half, and fails about half.  It supports a subset of
 # [[ I guess.
 
 #### [[ glob matching, [[ has no glob expansion
@@ -34,6 +35,7 @@ false
 ## END
 
 #### [[ regex matching
+# mksh doesn't have this syntax of regex matching.  I guess it comes from perl?
 regex='.*\.py'
 [[ foo.py =~ $regex ]] && echo true
 [[ foo.p  =~ $regex ]] || echo false
@@ -41,11 +43,14 @@ regex='.*\.py'
 true
 false
 ## END
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### [[ regex syntax error
 # hm, it doesn't show any error, but it exits 2.
 [[ foo.py =~ * ]] && echo true
 ## status: 2
+## N-I mksh status: 1
 
 #### [[ has no word splitting
 var='one two'
@@ -109,6 +114,8 @@ octal=017   # = 15 (decimal)
 true
 false
 ## END
+## N-I mksh stdout: false
+# mksh doesn't implement this syntax for literals.
 
 #### Hex literals with -eq
 decimal=15
@@ -119,6 +126,7 @@ hex=0x0f    # = 15 (decimal)
 true
 false
 ## END
+## N-I mksh stdout: false
 
 # TODO: Add tests for this
 # https://www.gnu.org/software/bash/manual/bash.html#Bash-Conditional-Expressions
@@ -167,6 +175,7 @@ op='=='
 [[ a $op a ]] && echo true
 [[ a $op b ]] || echo false
 ## status: 2
+## OK mksh status: 1
 
 #### [[ with unquoted empty var (compare with test-builtin.test.sh)
 empty=''
@@ -195,6 +204,7 @@ true
 #### Argument that looks like a real operator
 [[ -f < ]] && echo 'should be parse error'
 ## status: 2
+## OK mksh status: 1
 
 #### User array compared to "$@" (broken unless shopt -s strict_array)
 # Both are coerced to string!  It treats it more like an  UNQUOTED ${a[@]}.
@@ -249,6 +259,7 @@ true
 true
 ## END
 
+#### -eq does dynamic arithmetic parsing (not supported in OSH)
 [[ 1+2 -eq 3 ]] && echo true
 expr='1+2'
 [[ $expr -eq 3 ]] && echo true  # must be dynamically parsed
@@ -270,6 +281,7 @@ echo status=$?
 [[ '(' foo ]]
 echo status=$?
 ## status: 2
+## OK mksh status: 1
 
 #### empty ! is treated as literal
 [[ '!' ]]
@@ -280,6 +292,7 @@ echo status=$?
 [[ -z ]]
 echo status=$?
 ## status: 2
+## OK mksh status: 1
 
 #### [[ -z '>' ]]
 [[ -z '>' ]] || echo false  # -z is operator
@@ -289,6 +302,7 @@ echo status=$?
 [[ -z '>' -- ]]
 echo status=$?
 ## status: 2
+## OK mksh status: 1
 
 #### test whether ']]' is empty
 [[ ']]' ]]
@@ -300,12 +314,14 @@ echo status=$?
 echo status=$?
 ## stdout-json: ""
 ## status: 2
+## OK mksh status: 1
 
 #### [[ && ]] is syntax error
 [[ && ]]
 echo status=$?
 ## stdout-json: ""
 ## status: 2
+## OK mksh status: 1
 
 #### [[ a 3< b ]] doesn't work (bug regression)
 [[ a 3< b ]]
@@ -313,6 +329,14 @@ echo status=$?
 [[ a 3> b ]]
 echo status=$?
 ## status: 2
+
+# Hm these shells use the same redirect trick that OSH used to!
+
+## BUG mksh/zsh status: 0
+## BUG mksh/zsh STDOUT:
+status=0
+status=1
+## END
 
 #### tilde expansion in [[
 HOME=/home/bob
@@ -358,6 +382,7 @@ fnmatch=0
 ## END
 
 #### tilde expansion with =~ (confusing)
+case $SH in mksh) exit ;; esac
 
 HOME=foo
 [[ ~ =~ $HOME ]]
@@ -377,6 +402,13 @@ regex=0
 regex=1
 regex=0
 ## END
+## OK zsh STDOUT:
+regex=0
+regex=0
+regex=1
+regex=1
+## END
+## N-I mksh stdout-json: ""
 
 #### [[ ]] with redirect
 [[ $(stdout_stderr.sh) == STDOUT ]] 2>$TMP/x.txt
@@ -398,6 +430,7 @@ echo bang $?
 caret 0
 bang 0
 ## END
+
 
 #### \(\) in pattern (regression)
 if [[ 'foo()' == *\(\) ]]; then echo match1; fi
@@ -423,6 +456,7 @@ match2
 
 [[ -42 -eq -42 ]]; echo decimal=$?
 
+# note: mksh doesn't do octal conversion
 [[ -0123 -eq -83 ]]; echo octal=$?
 
 [[ -0xff -eq -255 ]]; echo hex=$?
@@ -435,4 +469,11 @@ decimal=0
 octal=0
 hex=0
 baseN=0
+## END
+## BUG mksh STDOUT:
+zero=0
+decimal=0
+octal=1
+hex=2
+baseN=2
 ## END

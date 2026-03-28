@@ -37,6 +37,12 @@ func TestOracleCommandArgs(t *testing.T) {
 	if got, want := OracleCommandArgs(OracleBash, "echo hi"), []string{"--noprofile", "--norc", "-c", "echo hi"}; !equalStrings(got, want) {
 		t.Fatalf("OracleCommandArgs(bash) = %#v, want %#v", got, want)
 	}
+	if got, want := OracleCommandArgs(OracleZsh, "echo hi"), []string{"-f", "-c", "echo hi"}; !equalStrings(got, want) {
+		t.Fatalf("OracleCommandArgs(zsh) = %#v, want %#v", got, want)
+	}
+	if got, want := OracleCommandArgs(OracleDash, "echo hi"), []string{"-c", "echo hi"}; !equalStrings(got, want) {
+		t.Fatalf("OracleCommandArgs(dash) = %#v, want %#v", got, want)
+	}
 }
 
 func TestGbashEnvMatchesDefaultPathOrder(t *testing.T) {
@@ -46,12 +52,16 @@ func TestGbashEnvMatchesDefaultPathOrder(t *testing.T) {
 	if got := gbashEnv(&SuiteConfig{}, "")["PATH"]; got != want {
 		t.Fatalf("gbashEnv()[PATH] = %q, want %q", got, want)
 	}
+	if got, want := gbashEnv(&SuiteConfig{}, "")["SH"], "bash"; got != want {
+		t.Fatalf("gbashEnv()[SH] = %q, want %q", got, want)
+	}
 }
 
 func TestSuiteEnvOverridesBaseEnv(t *testing.T) {
 	t.Parallel()
 
 	cfg := &SuiteConfig{
+		OracleMode: OracleDash,
 		Env: map[string]string{
 			"PATH":  "/custom/bin",
 			"EXTRA": "value",
@@ -65,6 +75,9 @@ func TestSuiteEnvOverridesBaseEnv(t *testing.T) {
 	if got, want := gbash["EXTRA"], "value"; got != want {
 		t.Fatalf("gbashEnv()[EXTRA] = %q, want %q", got, want)
 	}
+	if got, want := gbash["SH"], "dash"; got != want {
+		t.Fatalf("gbashEnv()[SH] = %q, want %q", got, want)
+	}
 
 	bash := bashEnv(cfg, "/tmp/work", "")
 	if got, want := findEnvValue(bash, "PATH"), "/custom/bin"; got != want {
@@ -72,6 +85,9 @@ func TestSuiteEnvOverridesBaseEnv(t *testing.T) {
 	}
 	if got, want := findEnvValue(bash, "EXTRA"), "value"; got != want {
 		t.Fatalf("bashEnv(EXTRA) = %q, want %q", got, want)
+	}
+	if got, want := findEnvValue(bash, "SH"), "dash"; got != want {
+		t.Fatalf("bashEnv(SH) = %q, want %q", got, want)
 	}
 }
 
@@ -438,8 +454,13 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(globWorkspace, "spec", "testdata", "echo.sz")); err != nil {
 		t.Fatalf("Stat(glob spec/testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(globWorkspace, "bin", "bash")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(glob bin/bash) error = %v, want not exist", err)
+	if _, err := os.Stat(filepath.Join(globWorkspace, "testdata", "echo.sz")); err != nil {
+		t.Fatalf("Stat(glob testdata/echo.sz) error = %v", err)
+	}
+	if info, err := os.Stat(filepath.Join(globWorkspace, "bin", "bash")); err != nil {
+		t.Fatalf("Stat(glob bin/bash) error = %v", err)
+	} else if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+		t.Fatalf("Stat(glob bin/bash).Mode().Perm() = %v, want %v", got, want)
 	}
 
 	repoRootWorkspace, err := prepareWorkspace(cfg, "oils/assign-extended.test.sh", bashPath)
@@ -450,11 +471,13 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repoRootWorkspace, "spec", "testdata", "echo.sz")); err != nil {
 		t.Fatalf("Stat(assign-extended spec/testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repoRootWorkspace, "testdata", "echo.sz")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(assign-extended testdata/echo.sz) error = %v, want not exist", err)
+	if _, err := os.Stat(filepath.Join(repoRootWorkspace, "testdata", "echo.sz")); err != nil {
+		t.Fatalf("Stat(assign-extended testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repoRootWorkspace, "bin", "bash")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(assign-extended bin/bash) error = %v, want not exist", err)
+	if info, err := os.Stat(filepath.Join(repoRootWorkspace, "bin", "bash")); err != nil {
+		t.Fatalf("Stat(assign-extended bin/bash) error = %v", err)
+	} else if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+		t.Fatalf("Stat(assign-extended bin/bash).Mode().Perm() = %v, want %v", got, want)
 	}
 
 	trapWorkspace, err := prepareWorkspace(cfg, "oils/builtin-trap.test.sh", bashPath)
@@ -465,11 +488,13 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(trapWorkspace, "spec", "testdata", "echo.sz")); err != nil {
 		t.Fatalf("Stat(builtin-trap spec/testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(trapWorkspace, "testdata", "echo.sz")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(builtin-trap testdata/echo.sz) error = %v, want not exist", err)
+	if _, err := os.Stat(filepath.Join(trapWorkspace, "testdata", "echo.sz")); err != nil {
+		t.Fatalf("Stat(builtin-trap testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(trapWorkspace, "bin", "bash")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(builtin-trap bin/bash) error = %v, want not exist", err)
+	if info, err := os.Stat(filepath.Join(trapWorkspace, "bin", "bash")); err != nil {
+		t.Fatalf("Stat(builtin-trap bin/bash) error = %v", err)
+	} else if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+		t.Fatalf("Stat(builtin-trap bin/bash).Mode().Perm() = %v, want %v", got, want)
 	}
 
 	defaultWorkspace, err := prepareWorkspace(cfg, "oils/serialize.test.sh", bashPath)
@@ -480,11 +505,13 @@ func TestPrepareWorkspaceUsesScopedFixtureBaseDirForGlobSpecs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(defaultWorkspace, "testdata", "echo.sz")); err != nil {
 		t.Fatalf("Stat(default testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(defaultWorkspace, "spec", "testdata", "echo.sz")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(default spec/testdata/echo.sz) error = %v, want not exist", err)
+	if _, err := os.Stat(filepath.Join(defaultWorkspace, "spec", "testdata", "echo.sz")); err != nil {
+		t.Fatalf("Stat(default spec/testdata/echo.sz) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(defaultWorkspace, "bin", "bash")); !os.IsNotExist(err) {
-		t.Fatalf("Stat(default bin/bash) error = %v, want not exist", err)
+	if info, err := os.Stat(filepath.Join(defaultWorkspace, "bin", "bash")); err != nil {
+		t.Fatalf("Stat(default bin/bash) error = %v", err)
+	} else if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+		t.Fatalf("Stat(default bin/bash).Mode().Perm() = %v, want %v", got, want)
 	}
 
 	varOpWorkspace, err := prepareWorkspace(cfg, "oils/var-op-bash.test.sh", bashPath)

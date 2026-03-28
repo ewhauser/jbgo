@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 1
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh
 
 #
 # Tests for pipelines.
@@ -38,6 +38,7 @@ done
 #### Redirect in Pipeline
 echo hi 1>&2 | wc -l
 ## stdout: 0
+## BUG zsh stdout: 1
 
 #### Pipeline comments
 echo abcd |    # input
@@ -50,10 +51,16 @@ echo a | egrep '[0-9]+'
 ## status: 1
 
 #### Initial value of PIPESTATUS is empty string
+case $SH in dash|zsh) exit ;; esac
 
 echo pipestatus ${PIPESTATUS[@]}
 ## STDOUT:
 pipestatus
+## END
+## BUG mksh STDOUT:
+pipestatus 0
+## END
+## N-I dash/zsh STDOUT:
 ## END
 
 #### PIPESTATUS
@@ -63,8 +70,15 @@ return3() {
 { sleep 0.03; exit 1; } | { sleep 0.02; exit 2; } | { sleep 0.01; return3; }
 echo ${PIPESTATUS[@]}
 ## stdout: 1 2 3
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I zsh status: 0
+## N-I zsh STDOUT:
+
+## END
 
 #### PIPESTATUS is set on simple commands
+case $SH in dash|zsh) exit ;; esac
 
 false
 echo pipestatus ${PIPESTATUS[@]}
@@ -80,6 +94,8 @@ pipestatus 1
 pipestatus 55 44
 pipestatus 0
 ## END
+## N-I dash/zsh STDOUT:
+## END
 
 #### PIPESTATUS with shopt -s lastpipe
 shopt -s lastpipe
@@ -89,6 +105,12 @@ return3() {
 { sleep 0.03; exit 1; } | { sleep 0.02; exit 2; } | { sleep 0.01; return3; }
 echo ${PIPESTATUS[@]}
 ## stdout: 1 2 3
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I zsh status: 0
+## N-I zsh STDOUT:
+
+## END
 
 #### |&
 stdout_stderr.sh |& cat
@@ -97,6 +119,10 @@ STDERR
 STDOUT
 ## END
 ## status: 0
+## N-I dash/mksh stdout-json: ""
+## N-I dash status: 2
+## N-I osh stdout-json: ""
+## N-I osh status: 1
 
 #### ! turns non-zero into zero
 ! $SH -c 'exit 42'; echo $?
@@ -158,16 +184,25 @@ echo "cmd=$cmd"
 1
 cmd=
 ## END
+## BUG zsh STDOUT:
+1
+cmd=echo
+## END
 
+#### bash/dash/mksh run the last command is run in its own process
 echo hi | read line
 echo "line=$line"
 ## stdout: line=hi
+## OK bash/dash/mksh stdout: line=
 
+#### shopt -s lastpipe (always on in OSH)
 shopt -s lastpipe
 echo hi | read line
 echo "line=$line"
 ## stdout: line=hi
+## N-I dash/mksh stdout: line=
 
+#### shopt -s lastpipe (always on in OSH)
 shopt -s lastpipe
 i=0
 seq 3 | while read line; do
@@ -175,6 +210,8 @@ seq 3 | while read line; do
 done
 echo i=$i
 ## stdout: i=3
+## N-I dash/mksh stdout: i=0
+
 
 #### SIGPIPE causes pipeline to die (regression for issue #295)
 cat /dev/urandom | sleep 0.1
@@ -185,6 +222,9 @@ echo ${PIPESTATUS[@]}
 ## STDOUT:
 141 0
 ## END
+## N-I zsh stdout:
+## N-I dash status: 2
+## N-I dash stdout-json: ""
 
 #### Nested pipelines
 { sleep 0.1 | seq 3; } | cat
@@ -202,7 +242,10 @@ ls /dev/null | eval 'cat | cat' | wc -l
 1
 ## END
 
+
 #### shopt -s lastpipe and shopt -s no_last_fork interaction
+
+case $SH in dash) exit ;; esac
 
 $SH -c '
 shopt -s lastpipe
@@ -229,3 +272,5 @@ status=1
 status=1
 ## END
 
+## N-I dash STDOUT:
+## END

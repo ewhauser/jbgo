@@ -1,4 +1,7 @@
-## compare_shells: bash
+## compare_shells: bash-4.4 zsh
+
+# Constructs borrowed from ksh.  Hm I didn't realize zsh also implements these!
+# mksh implements most too.
 
 #### C-style for loop
 n=10
@@ -89,7 +92,10 @@ done
 3
 ## END
 
+
 #### Arith lexer mode
+
+# bash is lenient; zsh disagrees
 
 for ((i = '3';  i < '5';  ++i)); do echo $i; done
 for ((i = "3";  i < "5";  ++i)); do echo $i; done
@@ -106,6 +112,10 @@ for ((i = $"3"; i < $"5"; ++i)); do echo $i; done
 3
 4
 ## END
+## OK zsh status: 1
+## OK zsh STDOUT:
+## END
+
 
 #### Integers near 31, 32, 62 bits
 
@@ -140,6 +150,7 @@ done
 4611686018427387905
 ---
 ## END
+
 
 #### Condition that's greater than 32 bits
 

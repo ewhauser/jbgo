@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh zsh
 
 #### If
 if true; then
@@ -38,6 +38,7 @@ else
 fi
 ## stdout: elif
 
+
 #### if break corner case
 
 # This is analogous to the 'while' case in spec/loop
@@ -50,3 +51,5 @@ f
 ## STDOUT:
 hi
 ## END
+## BUG zsh stdout-json: ""
+## BUG zsh status: 1
