@@ -445,14 +445,6 @@
             "linux"
           ]
         },
-        "oils/errexit-osh.test.sh::if pipeline doesn't fail fatally": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/errexit-osh.test.sh::local: middle command fails and keeps going": {
           "mode": "xfail",
           "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
