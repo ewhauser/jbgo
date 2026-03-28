@@ -1,6 +1,10 @@
 package interp
 
 import (
+	"errors"
+	"maps"
+	"slices"
+
 	"github.com/ewhauser/gbash/shell/analysis"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
@@ -16,6 +20,11 @@ type analysisState struct {
 	mute     int
 }
 
+type analysisStatusErr struct {
+	err    error
+	status analysis.Status
+}
+
 type analysisContextSnapshot struct {
 	run         analysis.RunMetadata
 	file        analysis.FileMetadata
@@ -26,6 +35,18 @@ type analysisContextSnapshot struct {
 	controlFlow analysis.ControlFlow
 	chunkSource string
 	chunkBase   uint
+}
+
+func (e analysisStatusErr) Error() string {
+	return e.err.Error()
+}
+
+func (e analysisStatusErr) Unwrap() error {
+	return e.err
+}
+
+func (e analysisStatusErr) analysisStatus() analysis.Status {
+	return e.status
 }
 
 func newAnalysisState(observer analysis.Observer, run analysis.RunMetadata) *analysisState {
@@ -178,11 +199,57 @@ func analysisStatusFromExit(exit exitStatus) analysis.Status {
 	}
 }
 
+// WithAnalysisStatus attaches analysis-only status metadata to an error without
+// changing its runtime semantics. The wrapped error is still returned to the
+// caller and remains visible via errors.As/errors.Is.
+func WithAnalysisStatus(err error, status analysis.Status) error {
+	if err == nil {
+		return nil
+	}
+	return analysisStatusErr{
+		err:    err,
+		status: status,
+	}
+}
+
 func (r *Runner) AnalysisStatus() analysis.Status {
 	if r == nil {
 		return analysis.Status{}
 	}
 	return analysisStatusFromExit(r.exit)
+}
+
+func cloneAnalysisVariable(v expand.Variable) expand.Variable {
+	v.List = slices.Clone(v.List)
+	v.Indices = slices.Clone(v.Indices)
+	v.Map = maps.Clone(v.Map)
+	return v
+}
+
+func (r *Runner) analysisStatusForError(err error) analysis.Status {
+	status := r.AnalysisStatus()
+	if err == nil || status.Code != 0 {
+		return status
+	}
+	var withStatus interface{ analysisStatus() analysis.Status }
+	if errors.As(err, &withStatus) {
+		status = withStatus.analysisStatus()
+		if status.Code != 0 {
+			return status
+		}
+	}
+	var parseErr syntax.ParseError
+	if errors.As(err, &parseErr) {
+		status.Code = 2
+		return status
+	}
+	var exitStatus ExitStatus
+	if errors.As(err, &exitStatus) {
+		status.Code = int(exitStatus)
+		return status
+	}
+	status.Code = 1
+	return status
 }
 
 func (r *Runner) analysisEmit(event analysis.Event) {
@@ -299,7 +366,7 @@ func (r *Runner) analysisVariableRead(name string, ref *syntax.VarRef, vr expand
 	r.analysisEmit(analysis.VariableRead{
 		Name:     name,
 		Ref:      ref,
-		Variable: vr,
+		Variable: cloneAnalysisVariable(vr),
 	})
 }
 
@@ -310,8 +377,8 @@ func (r *Runner) analysisVariableWrite(name string, ref *syntax.VarRef, vr, prev
 	r.analysisEmit(analysis.VariableWrite{
 		Name:     name,
 		Ref:      ref,
-		Variable: vr,
-		Previous: prev,
+		Variable: cloneAnalysisVariable(vr),
+		Previous: cloneAnalysisVariable(prev),
 		Append:   appendValue,
 	})
 }
@@ -323,7 +390,7 @@ func (r *Runner) analysisVariableUnset(name string, ref *syntax.VarRef, prev exp
 	r.analysisEmit(analysis.VariableUnset{
 		Name:     name,
 		Ref:      ref,
-		Previous: prev,
+		Previous: cloneAnalysisVariable(prev),
 	})
 }
 

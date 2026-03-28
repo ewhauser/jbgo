@@ -180,7 +180,11 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 		executionSourceName(exec),
 		effectiveExec.ScriptPath,
 		func(file *syntax.File) (map[*syntax.Stmt]*syntax.Stmt, error) {
-			return compileChunk(file, effectiveExec.Policy, budget, budget.nextLoopNamespace())
+			synthetic, err := compileChunk(file, effectiveExec.Policy, budget, budget.nextLoopNamespace())
+			if code, ok := compilationExitStatus(err); ok {
+				err = interp.WithAnalysisStatus(err, analysis.Status{Code: code})
+			}
+			return synthetic, err
 		},
 	)
 	if code, ok := compilationExitStatus(runErr); ok {

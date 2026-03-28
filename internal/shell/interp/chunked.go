@@ -157,7 +157,7 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 			var transformErr error
 			synthetic, transformErr = transform(file)
 			if transformErr != nil {
-				r.analysisFileFinish(r.AnalysisStatus())
+				r.analysisFileFinish(r.analysisStatusForError(transformErr))
 				r.analysisRestoreFile(prevFile)
 				return finish(transformErr)
 			}
