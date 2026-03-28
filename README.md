@@ -480,6 +480,7 @@ Those command paths are virtual stubs used for shell resolution. Command impleme
 | Example | Description |
 |---|---|
 | [`adk-bash-chat`](./examples/adk-bash-chat/) | Local CLI chatbot using [`adk-go`](https://github.com/google/adk-go) with a persistent `gbash` bash tool session and a seeded ops analytics lab |
+| [`agentfs-backed-fs`](./examples/agentfs-backed-fs/) | Uses the upstream AgentFS Go SDK as a custom persistent `gbash` filesystem backend |
 | [`custom-zstd`](./examples/custom-zstd/) | Demonstrates custom command registration by adding a `zstd` compression/decompression command |
 | [`gbash-eval`](./examples/gbash-eval/) | Standalone LLM evaluator example that ports [`bashkit`](https://github.com/everruns/bashkit)'s `crates/bashkit-eval` design and vendored JSONL datasets onto `gbash` |
 | [`openai-tool-call`](./examples/openai-tool-call/) | Uses the OpenAI Go SDK Responses API with `gbash` as a `bash` function tool |

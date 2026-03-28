@@ -8,6 +8,12 @@ A CLI chatbot built with Google ADK (`adk-go`) and a persistent gbash session. T
 
 [View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/adk-bash-chat)
 
+## agentfs-backed-fs
+
+Uses the upstream AgentFS Go SDK as a custom `gbash` filesystem backend. Demonstrates how to persist sandbox filesystem state in an external SQLite-backed agent filesystem without changing `gbash`'s public embedding API.
+
+[View on GitHub](https://github.com/ewhauser/gbash/tree/main/examples/agentfs-backed-fs)
+
 ## custom-zstd
 
 Demonstrates custom command registration. Shows how to extend the gbash command registry with your own Go functions, using a zstd compression command as the example.
