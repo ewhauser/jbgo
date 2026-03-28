@@ -98,6 +98,10 @@ type Variable struct {
 	Lower    bool // -l: convert to lowercase on assignment
 	Trace    bool // -t: trace attribute on variables/functions
 	Upper    bool // -u: convert to uppercase on assignment
+	// UnsetArithmZero makes arithmetic contexts treat an unset variable as zero
+	// without making normal parameter expansion consider it set. Bash does this
+	// for local/declare/typeset declarations without an assigned value.
+	UnsetArithmZero bool
 
 	// Kind defines which of the value fields below should be used.
 	Kind ValueKind

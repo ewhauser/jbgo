@@ -374,6 +374,10 @@ func trimArithLeftSpace(str string) string {
 	return strings.TrimLeft(str, arithWhitespace)
 }
 
+func unsetArithmZero(vr Variable) bool {
+	return vr.UnsetArithmZero
+}
+
 func arithmLetParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr, error) {
 	src, err := arithmLetSource(cfg, expr)
 	if err != nil {
@@ -457,6 +461,9 @@ func (cfg *Config) arithmStringValue(root, tokenExpr syntax.ArithmExpr, word *sy
 		vr := cfg.Env.Get(s)
 		if !vr.IsSet() {
 			if cfg.NoUnset {
+				if unsetArithmZero(vr) {
+					return 0, nil
+				}
 				return 0, UnboundVariableError{Name: s}
 			}
 			break
@@ -1520,7 +1527,7 @@ func (cfg *Config) arithmLValue(root, expr syntax.ArithmExpr, mode arithLValueMo
 		ref = resolvedRef
 	}
 	if cfg.NoUnset && !vr.IsSet() {
-		if mode == arithLValuePlainAssign {
+		if mode == arithLValuePlainAssign || unsetArithmZero(vr) {
 			return ref, 0, nil
 		}
 		return ref, 0, UnboundVariableError{Name: ref.Name.Value}

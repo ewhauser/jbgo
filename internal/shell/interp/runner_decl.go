@@ -573,6 +573,13 @@ func (d *declCommand) processNamedOperand(ref *syntax.VarRef, as *syntax.Assign,
 			}
 		}
 
+		if !vr.IsSet() {
+			switch vr.Kind {
+			case expand.String, expand.Indexed, expand.Associative:
+				vr.UnsetArithmZero = d.declName == "declare" || d.declName == "local" || d.declName == "typeset"
+			}
+		}
+
 		r.applyVarAttrs(&vr)
 		var nameRefErr error
 		if vr.Kind == expand.NameRef {

@@ -406,6 +406,74 @@ func TestArithmNounsetPlainAssignmentInitializesUnsetIndexedElement(t *testing.T
 	}
 }
 
+func TestArithmNounsetDeclaredUnsetUsesArithmeticZero(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		src       string
+		env       testEnv
+		indexed   bool
+		want      int
+		wantStr   string
+		wantIndex int
+	}{
+		{
+			name:    "scalar post increment",
+			src:     "i++",
+			env:     testEnv{"i": {Kind: String, UnsetArithmZero: true}},
+			want:    0,
+			wantStr: "1",
+		},
+		{
+			name:    "scalar add assign",
+			src:     "i+=2",
+			env:     testEnv{"i": {Kind: String, UnsetArithmZero: true}},
+			want:    2,
+			wantStr: "2",
+		},
+		{
+			name:      "indexed element post increment",
+			src:       "a[0]++",
+			env:       testEnv{"a": {Kind: Indexed, UnsetArithmZero: true}},
+			indexed:   true,
+			want:      0,
+			wantStr:   "1",
+			wantIndex: 0,
+		},
+		{
+			name:    "plain arithmetic read",
+			src:     "i<2",
+			env:     testEnv{"i": {Kind: String, UnsetArithmZero: true}},
+			want:    1,
+			wantStr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{Env: tt.env, NoUnset: true}
+
+			got, err := Arithm(cfg, parseArithmExpr(t, tt.src))
+			if err != nil {
+				t.Fatalf("Arithm(%q) error = %v", tt.src, err)
+			}
+			if got != tt.want {
+				t.Fatalf("Arithm(%q) = %d, want %d", tt.src, got, tt.want)
+			}
+			if tt.indexed {
+				if val, ok := tt.env["a"].IndexedGet(tt.wantIndex); !ok || val != tt.wantStr {
+					t.Fatalf("a[%d] = (%q, %v), want (%q, true)", tt.wantIndex, val, ok, tt.wantStr)
+				}
+				return
+			}
+			if got := tt.env["i"].Str; got != tt.wantStr {
+				t.Fatalf("i = %q, want %q", got, tt.wantStr)
+			}
+		})
+	}
+}
+
 func TestArithmNounsetReadModifyWriteStillFails(t *testing.T) {
 	t.Parallel()
 

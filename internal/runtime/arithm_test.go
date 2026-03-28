@@ -115,6 +115,38 @@ func TestArithmCommandNounsetAssignmentInitializesUnsetLocal(t *testing.T) {
 	}
 }
 
+func TestArithmCommandNounsetDeclaredLocalUsesArithmeticZero(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "set -o nounset\nf() { local i; ((i++)); printf 'inc=%d i=%s\\n' \"$?\" \"$i\"; ((i+=2)); printf 'add=%d i=%s\\n' \"$?\" \"$i\"; }\nf\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "inc=1 i=1\nadd=0 i=3\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestArithmForLoopNounsetDeclaredLocalUsesArithmeticZero(t *testing.T) {
+	t.Parallel()
+	session := newSession(t, &Config{})
+
+	result := mustExecSession(t, session, "set -o nounset\nf() { local i; for ((; i<2; i++)); do printf '[%s]\\n' \"${i-}\"; done; }\nf\n")
+	if got, want := result.ExitCode, 0; got != want {
+		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "[]\n[1]\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
 func TestArithmForLoopNounsetReverseIndexScan(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

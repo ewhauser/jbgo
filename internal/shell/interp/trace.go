@@ -191,6 +191,7 @@ func sameTraceVar(a, b expand.Variable) bool {
 		a.Lower == b.Lower &&
 		a.Trace == b.Trace &&
 		a.Upper == b.Upper &&
+		a.UnsetArithmZero == b.UnsetArithmZero &&
 		a.Kind == b.Kind &&
 		a.Str == b.Str &&
 		slices.Equal(a.List, b.List) &&
