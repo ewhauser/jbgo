@@ -1059,7 +1059,7 @@ func gbashWorkspaceRoot(specPath string) string {
 }
 
 func needsRepoRootEnv(specPath string) bool {
-	return useScopedGlobWorkspace(specPath) || specPath == "oils/builtin-completion.test.sh" || usesRepoRootFixtureTree(specPath)
+	return true
 }
 
 func useScopedGlobWorkspace(specPath string) bool {
