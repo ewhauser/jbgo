@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh zsh ash
 
 #### Remove const suffix
 v=abcd
@@ -15,12 +15,19 @@ a=(1a 2a 3a)
 argv.sh ${a[@]%a}
 ## stdout: ['1', '2', '3']
 ## status: 0
+## N-I dash/mksh/ash stdout-json: ""
+## N-I dash/ash status: 2
+## N-I mksh status: 1
 
 #### Remove const suffix is vectorized on $@ array
 set -- 1a 2a 3a
 argv.sh ${@%a}
 ## stdout: ['1', '2', '3']
 ## status: 0
+## N-I dash/ash stdout: ['1a', '2a', '3']
+## N-I dash/ash status: 0
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### Remove const suffix from undefined
 echo ${undef%suffix}
@@ -50,6 +57,7 @@ echo ${v##*b}
 v=abc
 echo ${v%[[:alpha:]]}
 ## stdout: ab
+## N-I mksh stdout: abc
 
 #### Strip unicode prefix
 
@@ -80,6 +88,32 @@ echo ${v%%?} | show_hex
 
    -  \n
   2d  0a
+## BUG dash/mksh/ash STDOUT:
+ 274   -  \n
+  bc  2d  0a
+
+ 274   -  \n
+  bc  2d  0a
+
+   - 316  \n
+  2d  ce  0a
+
+   - 316  \n
+  2d  ce  0a
+## END
+## BUG-2 zsh STDOUT:
+  \n
+  0a
+
+  \n
+  0a
+
+  \n
+  0a
+
+  \n
+  0a
+## END
 
 #### Bug fix: Test that you can remove everything with glob
 s='--x--'
@@ -105,6 +139,10 @@ argv.sh ${array[@]/#/prefix-}
 ## STDOUT:
 ['prefix-aa', 'prefix-bb', 'prefix-']
 ## END
+## N-I dash/ash status: 2
+## N-I dash/ash stdout-json: ""
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### Append using replacement of %
 array=(aa bb '')
@@ -112,8 +150,13 @@ argv.sh ${array[@]/%/-suffix}
 ## STDOUT:
 ['aa-suffix', 'bb-suffix', '-suffix']
 ## END
+## N-I dash/ash status: 2
+## N-I dash/ash stdout-json: ""
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### strip unquoted and quoted [
+# I guess dash and mksh treat unquoted [ as an invalid glob?
 var='[foo]'
 echo ${var#[}
 echo ${var#"["}
@@ -125,9 +168,18 @@ foo]
 foo]
 foo]
 ## END
+## OK mksh STDOUT:
+[foo]
+foo]
+[foo]
+foo]
+## END
+## BUG zsh stdout-json: ""
+## BUG zsh status: 1
 
 #### strip unquoted and quoted []
 # LooksLikeGlob('[]') is true
+# I guess dash, mksh, and zsh treat unquoted [ as an invalid glob?
 var='[]foo[]'
 echo ${var#[]}
 echo ${var#"[]"}
@@ -137,6 +189,12 @@ echo "${var#"[]"}"
 foo[]
 foo[]
 foo[]
+foo[]
+## END
+## OK mksh/zsh STDOUT:
+[]foo[]
+foo[]
+[]foo[]
 foo[]
 ## END
 
@@ -183,6 +241,14 @@ argv.sh "${var%"${var#?}"}"
 ['a']
 ['a']
 ## END
+## N-I dash STDOUT:
+['\\n']
+['$\\n']
+['$']
+['']
+['a']
+['a']
+## END
 
 #### strip * (bug regression)
 x=abc
@@ -194,6 +260,12 @@ argv.sh "${x%%*}"
 ['abc']
 ['']
 ['abc']
+['']
+## END
+## BUG zsh STDOUT:
+['abc']
+['']
+['ab']
 ['']
 ## END
 
@@ -244,6 +316,16 @@ echo "${x%?abc?}"
 echo "${x%%?abc?}"
 ## STDOUT:
 
+
+
+
+## BUG dash/mksh/ash STDOUT:
+μabcμ
+μabcμ
+μabcμ
+μabcμ
+## END
+
 #### strip none unicode
 x=μabcμ
 argv.sh "${x#}"
@@ -275,6 +357,14 @@ echo 13 "${var#"}"}"
 12 
 13 
 ## END
+## BUG zsh STDOUT:
+1 $foo
+2 
+10 }}
+11 
+12 }'}
+13 
+## END
 
 #### \(\) in pattern (regression)
 x='foo()' 
@@ -290,6 +380,7 @@ echo 4 ${x##*\(\)}
 ## END
 
 #### extglob in pattern
+case $SH in dash|zsh|ash) exit ;; esac
 
 shopt -s extglob
 
@@ -304,3 +395,4 @@ echo 4 ${x##*(foo|bar)'()'}
 3
 4
 ## END
+## N-I dash/zsh/ash stdout-json: ""

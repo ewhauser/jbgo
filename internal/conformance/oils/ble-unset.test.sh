@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash zsh mksh ash dash yash
 ## oils_failures_allowed: 0
 
 # Some tests moved here for spec/ble-features
@@ -17,6 +17,14 @@ f1() {
 }
 v=global
 v=tempenv1 f1 global,tempenv1
+
+## OK bash/zsh STDOUT:
+# localvar-nest yes
+[global,tempenv1,local1] v: local1
+[global,tempenv1,local1,tempenv2,(eval)] v: tempenv2
+[global,tempenv1,local1,tempenv2,(eval),local2] v: local2
+[global,tempenv1,local1] v: local1 (after)
+## END
 
 ## STDOUT:
 # localvar-nest no
@@ -49,6 +57,12 @@ v=tempenv1 f2 global,tempenv1
 # Note that bash-4.3 to bash 5.0 behave differently
 # [global,tempenv1,local1,tempenv2,(eval),local2,(unset)] v: local1
 # [global,tempenv1,local1,tempenv2,(eval),local2,(unlocal)] v: local1
+
+## OK-2 zsh/ash/dash STDOUT:
+# always-value-unset
+[global,tempenv1,local1,tempenv2,(eval),local2,(unset)] v: (unset)
+[global,tempenv1,local1,tempenv2,(eval),local2,(unlocal)] v: (unset)
+## END
 
 ## STDOUT:
 # always-cell-unset (remove all localvar/tempenv)
@@ -89,6 +103,15 @@ v=tempenv1 f3 global,tempenv1
 [global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 4)
 ## END
 
+## OK-2 zsh/ash/dash STDOUT:
+# value-unset
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: local3
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 1)
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 2)
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 3)
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 4)
+## END
+
 ## STDOUT:
 # cell-unset (remove all localvar)
 [global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: local3
@@ -97,6 +120,16 @@ v=tempenv1 f3 global,tempenv1
 [global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 3)
 [global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 4)
 ## END
+
+## OK-3 mksh STDOUT:
+# cell-unset (remove all localvar/tempenv) x tempenv-value-unset
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: local3
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: tempenv1 (unlocal 1)
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 2)
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 3)
+[global,tempenv1/local1,tempenv2/local2,tempenv3/local3] v: (unset) (unlocal 4)
+## END
+
 
 #### [bash_unset] dynamic-unset for nested tempenvs
 unlocal() { unset -v "$1"; }
@@ -128,6 +161,25 @@ v=tempenv1 f4_unlocal global,tempenv1
 ## END
 
 ## STDOUT:
+# value-unset, mksh-unset
+[global,tempenv1,tempenv2,tempenv3] v: tempenv3
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 1)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 2)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 3)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 4)
+## END
+
+## OK-3 osh STDOUT:
+# cell-unset
+[global,tempenv1,tempenv2,tempenv3] v: tempenv3
+[global,tempenv1,tempenv2,tempenv3] v: tempenv1 (unlocal 1)
+[global,tempenv1,tempenv2,tempenv3] v: global (unlocal 2)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 3)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 4)
+## END
+
+## OK-2 yash STDOUT:
+# remove all tempenv3
 [global,tempenv1,tempenv2,tempenv3] v: tempenv3
 [global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 1)
 [global,tempenv1,tempenv2,tempenv3] v: (unset) (unlocal 2)
@@ -163,6 +215,25 @@ v=tempenv1 f4_unset global,tempenv1
 ## END
 
 ## STDOUT:
+# value-unset, mksh-unset, tempenv-value-unset?
+[global,tempenv1,tempenv2,tempenv3] v: tempenv3
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 1)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 2)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 3)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 4)
+## END
+
+## OK-2 osh STDOUT:
+# cell-unset
+[global,tempenv1,tempenv2,tempenv3] v: tempenv3
+[global,tempenv1,tempenv2,tempenv3] v: tempenv1 (unset 1)
+[global,tempenv1,tempenv2,tempenv3] v: global (unset 2)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 3)
+[global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 4)
+## END
+
+## BUG yash STDOUT:
+# value-unset? inconsistent with other test cases
 [global,tempenv1,tempenv2,tempenv3] v: tempenv3
 [global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 1)
 [global,tempenv1,tempenv2,tempenv3] v: (unset) (unset 2)

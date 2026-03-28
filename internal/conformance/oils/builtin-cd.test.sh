@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh zsh ash
 ## oils_failures_allowed: 3
 ## oils_cpp_failures_allowed: 3
 
@@ -9,13 +9,18 @@ echo $PWD
 
 #### cd BAD/..
 
+# Odd divergence in shells: dash and mksh normalize the path and don't check
 # this error.
+# TODO: I would like OSH to behave like bash and zsh, but separating chdir_arg
 # and pwd_arg breaks case 17.
 
 cd nonexistent_ZZ/..
 echo status=$?
 ## STDOUT:
 status=1
+## END
+## BUG dash/ash/mksh STDOUT:
+status=0
 ## END
 
 #### cd with 2 or more args - with strict_arg_parse
@@ -38,21 +43,36 @@ status=0
 failed with multiple args
 ## END
 
+## N-I dash/ash STDOUT:
+status=0
+status=0
+## END
+
 #### cd with 2 or more args is allowed (strict_arg_parse disabled)
 
 mkdir -p foo
 cd foo bar
 
 ## status: 0
+## OK bash/zsh status: 1
+## OK mksh status: 2
 
 #### cd - without OLDPWD
 
-cd - > /dev/null
+cd - > /dev/null  # silence dash output
 echo status=$?
 #pwd
 
 ## STDOUT:
 status=1
+## END
+
+## OK mksh STDOUT:
+status=2
+## END
+
+## BUG dash/ash/zsh STDOUT:
+status=0
 ## END
 
 #### $OLDPWD
@@ -65,6 +85,14 @@ cd -
 old: /
 OLDPWD=/
 /
+## END
+## BUG mksh STDOUT:
+old: /
+/
+## END
+## BUG zsh STDOUT:
+old: /
+OLDPWD=/
 ## END
 
 #### pwd
@@ -175,6 +203,11 @@ status=0
 /tmp/oil-spec-test/pwd
 status=0
 ## END
+## OK mksh STDOUT:
+/tmp/oil-spec-test/pwd
+status=0
+status=1
+## END
 
 #### pwd in symlinked dir on shell initialization
 tmp=$TMP/builtins-pwd-2
@@ -191,6 +224,10 @@ $SH -c 'basename $(pwd)'
 symlink
 target
 ## END
+## OK mksh STDOUT:
+target
+target
+## END
 ## stderr-json: ""
 
 #### Test the current directory after 'cd ..' involving symlinks
@@ -202,6 +239,7 @@ mkdir -p a/b/d
 ln -s -f a/b/c c > /dev/null
 cd c
 cd ..
+# Expecting a c/ (since we are in symlinktest) but osh gives c d (thinks we are
 # in b/)
 ls
 ## STDOUT:
@@ -220,6 +258,7 @@ test $(pwd) = "$HOME" && echo OK
 cd /nonexistent/dir
 echo status=$?
 ## stdout: status=1
+## OK dash/ash/mksh stdout: status=2
 
 #### cd away from dir that was deleted
 dir=$TMP/cd-nonexistent
@@ -234,6 +273,7 @@ cd-nonexistent
 status=0
 ## END
 
+#### cd permits double bare dash
 cd -- /
 echo $PWD
 ## stdout: /
@@ -314,11 +354,17 @@ status=0
 ## END
 
 # doesn't print the dir
+## BUG zsh STDOUT:
+status=0
+/tmp/spam/foo
+## END
+
 
 #### Survey of getcwd() syscall
 
 # This is not that important -- see core/sh_init.py
 # Instead of verifying that stat('.') == stat(PWD), which is two sycalls,
+# OSH just calls getcwd() unconditionally.
 
 # so C++ leak sanitizer  doesn't print to stderr
 export ASAN_OPTIONS='detect_leaks=0'
@@ -331,6 +377,11 @@ wc -l err.txt
 ## STDOUT:
 1 err.txt
 ## END
+## BUG mksh STDOUT:
+2 err.txt
+## END
+
+#### chdir is a synonym for cd - busybox ash
 
 chdir /tmp
 
@@ -341,6 +392,7 @@ fi
 
 pwd
 
+# It's the same with no args, but mksh fails because of $HOME
 #chdir
 #echo status=$?
 
@@ -355,9 +407,12 @@ fail
 #### arguments to pwd
 pwd /
 ## status: 0
+## OK zsh/mksh status: 1
 
 #### pwd errors out on args with strict_arg_parse
 pwd / >/dev/null || echo 'too many args!'
+## N-I bash/dash/ash STDOUT:
+## END
 ## STDOUT:
 too many args!
 ## END

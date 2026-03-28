@@ -1,11 +1,13 @@
 ## oils_failures_allowed: 2
-## compare_shells: bash
+## compare_shells: dash bash mksh
 
 #### Here string
 cat <<< 'hi'
 ## STDOUT:
 hi
 ## END
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### Here string with $
 cat <<< $'one\ntwo\n'
@@ -14,6 +16,8 @@ one
 two
 
 ## END
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### Here redirect with explicit descriptor
 # A space between 0 and <<EOF causes it to pass '0' as an arg to cat.
@@ -23,12 +27,16 @@ EOF
 ## stdout: one
 
 #### Here doc with bad var delimiter
+# Most shells accept this, but OSH is stricter.
 cat <<${a}
 here
 ${a}
 ## stdout: here
+## OK osh stdout-json: ""
+## OK osh status: 2
 
 #### Here doc with bad comsub delimiter
+# bash is OK with this; dash isn't.  Should be a parse error.
 cat <<$(a)
 here
 $(a)
@@ -36,6 +44,7 @@ $(a)
 ## status: 2
 ## BUG bash stdout: here
 ## BUG bash status: 0
+## OK mksh status: 1
 
 #### Here doc and < redirect -- last one wins
 
@@ -69,6 +78,7 @@ arith: 3
 ## END
 
 #### Here doc in middle.  And redirects in the middle.
+# This isn't specified by the POSIX grammar, but it's accepted by both dash and
 # bash!
 echo foo > foo.txt
 echo bar > bar.txt
@@ -128,6 +138,7 @@ cat <<EOF \
 EOF
 | tac
 ## status: 2
+## OK mksh status: 1
 
 #### Here doc with pipe on first line
 cat <<EOF | tac
@@ -175,6 +186,7 @@ X 1
 X 2
 X 3
 ## END
+
 
 #### Here doc in while condition and here doc in body
 while cat <<E1 && cat <<E2; do cat <<E3; break; done
@@ -240,6 +252,8 @@ one
 --
 two
 ## END
+
+
 
 #### Two compound commands with two here docs
 while read line; do echo X $line; done <<EOF; echo ==;  while read line; do echo Y $line; done <<EOF2
@@ -312,6 +326,7 @@ foo
 EOF
 ) == foo ]]; echo $?
 ## stdout: 0
+## N-I dash stdout: 127
 
 #### Here Doc in if condition
 if cat <<EOF; then
@@ -335,6 +350,44 @@ EOF
 ## STDOUT:
 outside
 inside
+## END
+
+#### Multiple here docs in pipeline
+case $SH in *osh) exit ;; esac
+
+# The second instance reads its stdin from the pipe, and fd 5 from a here doc.
+read_from_fd.sh 3 3<<EOF3 | read_from_fd.sh 0 5 5<<EOF5
+fd3
+EOF3
+fd5
+EOF5
+
+echo ok
+
+## STDOUT:
+0: 3: fd3
+5: fd5
+ok
+## END
+
+#### Multiple here docs in pipeline on multiple lines
+case $SH in *osh) exit ;; esac
+
+# SKIPPED: hangs with osh on Debian
+# The second instance reads its stdin from the pipe, and fd 5 from a here doc.
+read_from_fd.sh 3 3<<EOF3 |
+fd3
+EOF3
+read_from_fd.sh 0 5 5<<EOF5
+fd5
+EOF5
+
+echo ok
+
+## STDOUT:
+0: 3: fd3
+5: fd5
+ok
 ## END
 
 #### Here doc and backslash double quote

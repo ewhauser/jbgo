@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh ash
 ## oils_failures_allowed: 0
 
 # TODO:
@@ -21,6 +21,9 @@ fi
 
 ## STDOUT:
 ## END
+## BUG dash/mksh/zsh/ash STDOUT:
+fail
+## END
 
 #### continue 1 extra, break, etc.
 $SH -c '
@@ -36,3 +39,12 @@ fi
 ## STDOUT:
 ## END
 
+## BUG dash/ash/mksh STDOUT:
+status=0
+fail
+## END
+
+## BUG-2 zsh STDOUT:
+status=1
+fail
+## END

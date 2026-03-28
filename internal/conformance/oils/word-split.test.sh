@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash dash mksh ash yash
 ## oils_failures_allowed: 2
 
 # NOTE on bash bug:  After setting IFS to array, it never splits anymore?  Even
@@ -101,6 +101,11 @@ argv.sh $empty
 [' ']
 []
 ## END
+## BUG yash STDOUT:
+[]
+[' ']
+[]
+## END
 
 #### Leading/trailing word elision with non-whitespace IFS
 # This behavior is weird.
@@ -190,6 +195,7 @@ argv.sh $x
 ## END
 
 #### IFS='\'
+# NOTE: OSH fails this because of double backslash escaping issue!
 IFS='\'
 s='a\b'
 argv.sh $s
@@ -198,6 +204,7 @@ argv.sh $s
 ## END
 
 #### IFS='\ '
+# NOTE: OSH fails this because of double backslash escaping issue!
 # When IFS is \, then you're no longer using backslash escaping.
 IFS='\ '
 s='a\b \\ c d\'
@@ -289,12 +296,22 @@ argv.sh "$s"
 s=$*
 argv.sh "$s"
 
+# bash and mksh agree, but this doesn't really make sense to me.
+# In OSH, "$@" is the only real array, so that's why it behaves differently.
+
 ## STDOUT:
 ['x y z']
 ['x y z']
 ['x:y z']
 ['x:y z']
 ## END
+## BUG dash/ash/yash STDOUT:
+['x:y z']
+['x:y z']
+['x:y z']
+['x:y z']
+## END
+
 
 # TODO:
 # - unquoted args of whitespace are not elided (when IFS = null)
@@ -316,12 +333,14 @@ AB="A B"
 X="X"
 Yspaces=" Y "
 
+
 #### IFS='' with $@ and $* (bug #627)
 set -- a 'b c'
 IFS=''
 argv.sh at $@
 argv.sh star $*
 
+# zsh agrees
 ## STDOUT:
 ['at', 'a', 'b c']
 ['star', 'a', 'b c']
@@ -340,6 +359,7 @@ printf '[%s]\n' $*
 ## END
 
 #### IFS='' with ${a[@]} and ${a[*]} (bug #627)
+case $SH in dash | ash) exit 0 ;; esac
 
 myarray=(a 'b c')
 IFS=''
@@ -350,8 +370,10 @@ argv.sh star ${myarray[*]}
 ['at', 'a', 'b c']
 ['star', 'a', 'b c']
 ## END
+## N-I dash/ash stdout-json: ""
 
 #### IFS='' with ${!prefix@} and ${!prefix*} (bug #627)
+case $SH in dash | mksh | ash | yash) exit 0 ;; esac
 
 gLwbmGzS_var1=1
 gLwbmGzS_var2=2
@@ -367,8 +389,10 @@ argv.sh star ${!gLwbmGzS_*}
 ['at', 'gLwbmGzS_var1', 'gLwbmGzS_var2']
 ['star', 'gLwbmGzS_var1gLwbmGzS_var2']
 ## END
+## N-I dash/mksh/ash/yash stdout-json: ""
 
 #### IFS='' with ${!a[@]} and ${!a[*]} (bug #627)
+case $SH in dash | mksh | ash | yash) exit 0 ;; esac
 
 IFS=''
 a=(v1 v2 v3)
@@ -383,11 +407,13 @@ argv.sh star ${!a[*]}
 ['at', '0', '1', '2']
 ['star', '0 1 2']
 ## END
+## N-I dash/mksh/ash/yash stdout-json: ""
 
 #### Bug #628 split on : with : in literal word
 
 # 2025-03: What's the cause of this bug?
 #
+# OSH is very wrong here
 #   ['a', '\\', 'b']
 # Is this a fundamental problem with the IFS state machine?
 # It definitely relates to the use of backslashes.
@@ -452,6 +478,7 @@ noglob
 ['[\\]_']
 ## END
 
+
 #### Empty IFS bug #2141 (from pnut)
 
 res=0
@@ -491,6 +518,9 @@ sum 12 30 # fails with "fatal: Undefined variable '2'" on res=$(($1 + $2))
 
 #### Unicode in IFS
 
+# bash, zsh, and yash support unicode in IFS, but dash/mksh/ash don't.
+
+# for zsh, though we're not testing it here
 setopt SH_WORD_SPLIT
 
 x=çx IFS=ç
@@ -501,9 +531,15 @@ printf "<%s>\n" $x
 <x>
 ## END
 
+## BUG dash/mksh/ash STDOUT:
+<>
+<>
+<x>
+## END
+
 #### 4 x 3 table: (default IFS, IFS='', IFS=zx) x ( $* "$*" $@ "$@" )
 
-setopt SH_WORD_SPLIT
+setopt SH_WORD_SPLIT  # for zsh
 
 set -- 'a b' c ''
 
@@ -544,12 +580,48 @@ argv.sh ' "$@" ' "$@"
 [' "$@" ', 'a b', 'c', '']
 ## END
 
+# zsh disagrees on
 # - $@ with default IFS an
 # - $@ with IFS=zx
 
-#### 4 x 3 table - with for loop
+## BUG zsh STDOUT:
+['  $*  ', 'a', 'b', 'c']
+[' "$*" ', 'a b c ']
+['  $@  ', 'a b', 'c']
+[' "$@" ', 'a b', 'c', '']
 
-setopt SH_WORD_SPLIT
+['  $*  ', 'a b', 'c']
+[' "$*" ', 'a bc']
+['  $@  ', 'a b', 'c']
+[' "$@" ', 'a b', 'c', '']
+
+['  $*  ', 'a b', 'c', '']
+[' "$*" ', 'a bzcz']
+['  $@  ', 'a b', 'c']
+[' "$@" ', 'a b', 'c', '']
+## END
+
+## BUG yash STDOUT:
+['  $*  ', 'a', 'b', 'c', '']
+[' "$*" ', 'a b c ']
+['  $@  ', 'a', 'b', 'c', '']
+[' "$@" ', 'a b', 'c', '']
+
+['  $*  ', 'a b', 'c', '']
+[' "$*" ', 'a bc']
+['  $@  ', 'a b', 'c', '']
+[' "$@" ', 'a b', 'c', '']
+
+['  $*  ', 'a b', 'c', '']
+[' "$*" ', 'a bzcz']
+['  $@  ', 'a b', 'c', '']
+[' "$@" ', 'a b', 'c', '']
+## END
+
+#### 4 x 3 table - with for loop
+case $SH in yash) exit ;; esac  # no echo -n
+
+setopt SH_WORD_SPLIT  # for zsh
 
 set -- 'a b' c ''
 
@@ -590,9 +662,13 @@ echo -n ' "$@" ';  for i in "$@"; do echo -n ' '; echo -n -$i-; done; echo
  "$@"  -a b- -c- --
 ## END
 
-#### IFS=x and '' and $@ - same bug as spec/toysh-posix case #12
+## N-I yash STDOUT:
+## END
 
-setopt SH_WORD_SPLIT
+#### IFS=x and '' and $@ - same bug as spec/toysh-posix case #12
+case $SH in yash) exit ;; esac  # no echo -n
+
+setopt SH_WORD_SPLIT  # for zsh
 
 set -- one '' two
 
@@ -607,6 +683,18 @@ argv.sh ' "$*" ' "$*"
 argv.sh '  $@  '  $@
 argv.sh ' "$@" ' "$@"
 
+
+## OK bash/mksh STDOUT:
+  $*   -one- -- -two-
+ "$*"  -one  two-
+  $@   -one- -- -two-
+ "$@"  -one- -- -two-
+['  $*  ', 'one', '', 'two']
+[' "$*" ', 'onezztwo']
+['  $@  ', 'one', '', 'two']
+[' "$@" ', 'one', '', 'two']
+## END
+
 ## STDOUT:
   $*   -one- -two-
  "$*"  -one  two-
@@ -618,8 +706,11 @@ argv.sh ' "$@" ' "$@"
 [' "$@" ', 'one', '', 'two']
 ## END
 
+## N-I yash STDOUT:
+## END
+
 #### IFS=x and '' and $@ (#2)
-setopt SH_WORD_SPLIT
+setopt SH_WORD_SPLIT  # for zsh
 
 set -- "" "" "" "" ""
 argv.sh =$@=
@@ -646,8 +737,33 @@ argv.sh =$*=
 ['=', '=']
 ## END
 
+## OK bash/mksh STDOUT:
+['=', '=']
+['=', '=']
+
+['=', '=']
+['=', '=']
+
+['=', '', '', '', '=']
+['=', '', '', '', '=']
+## END
+
+# yash-2.49 seems to behave in a strange way, but this behavior seems to have
+# been fixed at least in yash-2.57.
+
+## BUG yash STDOUT:
+['=', '', '', '', '=']
+['=', '', '', '', '=']
+
+['=', '', '', '', '=']
+['=', '', '', '', '=']
+
+['=', '', '', '', '=']
+['=', '', '', '', '=']
+## END
+
 #### IFS=x and '' and $@ (#3)
-setopt SH_WORD_SPLIT
+setopt SH_WORD_SPLIT  # for zsh
 
 IFS=x
 set -- "" "" "" "" ""
@@ -676,6 +792,22 @@ argv.sh $*
 ['', '']
 ['']
 []
+## END
+
+## OK-2 mksh STDOUT:
+['', '', '']
+['']
+[]
+[]
+[]
+## END
+
+## OK-3 zsh/yash STDOUT:
+['', '', '', '', '']
+['', '', '', '', '']
+['', '', '', '', '']
+['', '', '', '', '']
+['', '', '', '', '']
 ## END
 
 #### ""$A"" - empty string on both sides - derived from spec/toysh-posix #15
@@ -730,7 +862,9 @@ for i in ""$A""; do echo =$i=; done
 ==
 ## END
 
+
 #### Regression: "${!v*}"x should not be split
+case $SH in dash|mksh|ash|yash) exit 99;; esac
 IFS=x
 axb=1
 echo "${!axb*}"
@@ -739,6 +873,10 @@ echo "${!axb*}"x
 axb
 axbx
 ## END
+## N-I dash/mksh/ash/yash status: 99
+## N-I dash/mksh/ash/yash STDOUT:
+## END
+
 
 #### Regression: ${!v} should be split
 v=hello
@@ -750,11 +888,12 @@ echo "${#v}"
 5
 ## END
 
+
 #### Regression: "${v:-AxBxC}"x should not be split
 IFS=x
 v=
 echo "${v:-AxBxC}"
-echo "${v:-AxBxC}"x
+echo "${v:-AxBxC}"x  # <-- osh failed this
 echo ${v:-AxBxC}
 echo ${v:-AxBxC}x
 echo ${v:-"AxBxC"}

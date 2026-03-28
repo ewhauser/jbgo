@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 1
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh
 
 #### $SHELL is set to what is in /etc/passwd
 
@@ -25,4 +25,6 @@ $SH -l -c "$prog"
 SHELL is set
 SHELL is set
 SHELL is set
+## END
+## N-I dash/mksh/zsh STDOUT:
 ## END

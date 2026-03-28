@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh
 ## oils_failures_allowed: 0
 
 #### Lazy Evaluation of Alternative
@@ -15,6 +15,11 @@ x
 0
 1
 ## END
+## N-I dash status: 2
+## N-I dash STDOUT:
+x
+0
+## END
 
 #### Default value when empty
 empty=''
@@ -28,16 +33,25 @@ echo ${unset-is unset}
 #### Unquoted with array as default value
 set -- '1 2' '3 4'
 argv.sh X${unset=x"$@"x}X
-argv.sh X${unset=x$@x}X
+argv.sh X${unset=x$@x}X  # If you want OSH to split, write this
+# osh
 ## STDOUT:
 ['Xx1', '2', '3', '4xX']
 ['Xx1', '2', '3', '4xX']
+## END
+## OK osh STDOUT:
+['Xx1 2', '3 4xX']
+['Xx1', '2', '3', '4xX']
+## END
+## OK zsh STDOUT:
+['Xx1 2 3 4xX']
+['Xx1 2 3 4xX']
 ## END
 
 #### Quoted with array as default value
 set -- '1 2' '3 4'
 argv.sh "X${unset=x"$@"x}X"
-argv.sh "X${unset=x$@x}X"
+argv.sh "X${unset=x$@x}X"  # OSH is the same here
 ## STDOUT:
 ['Xx1 2 3 4xX']
 ['Xx1 2 3 4xX']
@@ -50,12 +64,25 @@ argv.sh "X${unset=x$@x}X"
 # ['Xx1 2 3 4xX']
 # ## END
 
+## OK osh STDOUT:
+['Xx1 2', '3 4xX']
+['Xx1 2 3 4xX']
+## END
+
 #### Assign default with array
 set -- '1 2' '3 4'
 argv.sh X${unset=x"$@"x}X
 argv.sh "$unset"
 ## STDOUT:
 ['Xx1', '2', '3', '4xX']
+['x1 2 3 4x']
+## END
+## OK osh STDOUT:
+['Xx1 2', '3 4xX']
+['x1 2 3 4x']
+## END
+## OK zsh STDOUT:
+['Xx1 2 3 4xX']
 ['x1 2 3 4x']
 ## END
 
@@ -104,6 +131,7 @@ v=
 ## END
 
 #### "${array[@]} with set -u (bash is outlier)
+case $SH in dash) exit ;; esac
 
 set -u
 
@@ -124,7 +152,18 @@ empty //
 undefined //
 ## END
 
+# empty array is unset in mksh
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+## END
+
+## N-I dash status: 0
+## N-I dash STDOUT:
+## END
+
+
 #### "${undefined[@]+foo}" and "${undefined[@]:+foo}", with set -u
+case $SH in dash) exit ;; esac
 
 set -u
 
@@ -136,7 +175,12 @@ plus //
 plus colon //
 ## END
 
+## N-I dash STDOUT:
+## END
+
 #### "${a[@]+foo}" and "${a[@]:+foo}" - operators are equivalent on arrays?
+
+case $SH in dash) exit ;; esac
 
 echo '+ ' /"${array[@]+foo}"/
 echo '+:' /"${array[@]:+foo}"/
@@ -161,6 +205,22 @@ echo '+ ' /"${array[@]+foo}"/
 echo '+:' /"${array[@]:+foo}"/
 echo
 
+
+## BUG mksh STDOUT:
++  //
++: //
+
++  //
++: //
+
++  /foo/
++: //
+
++  /foo/
++: /foo/
+
+## END
+
 # Bash 2.0..4.4 has a bug that "${a[@]:-xxx}" produces an empty string.  It
 # seemed to consider a[@] and a[*] are non-empty when there is at least one
 # element even if the element is empty.  This was fixed in Bash 5.0.
@@ -180,7 +240,29 @@ echo
 #
 # ## END
 
+## BUG zsh STDOUT:
++  //
++: //
+
++  /foo/
++: //
+
++  /foo/
++: /foo/
+
++  /foo/
++: /foo/
+
+## END
+
+## N-I dash STDOUT:
+## END
+
+
+
 #### Nix idiom ${!hooksSlice+"${!hooksSlice}"} - was workaround for obsolete bash 4.3 bug
+
+case $SH in dash|mksh|zsh) exit ;; esac
 
 # https://oilshell.zulipchat.com/#narrow/stream/307442-nix/topic/Replacing.20bash.20with.20osh.20in.20Nixpkgs.20stdenv
 
@@ -216,6 +298,9 @@ argv.sh ${!hooksSlice+"${!hooksSlice}"}
 # ['42']
 # ## END
 
+## OK dash/mksh/zsh STDOUT:
+## END
+
 #### ${v-foo} and ${v:-foo} when set -u
 set -u
 v=v
@@ -232,6 +317,8 @@ v=foo
 ## END
 
 #### array and - and +
+case $SH in dash) exit ;; esac
+
 
 empty=()
 a1=('')
@@ -298,6 +385,12 @@ a3=plus
 ['3', '4']
 ['plus']
 ## END
+## N-I dash stdout-json: ""
+## N-I zsh STDOUT:
+empty=
+a1=
+## END
+## N-I zsh status: 1
 
 #### $@ (empty) and - and +
 echo argv=${@-minus}
@@ -307,6 +400,12 @@ echo argv=${@:+plus}
 ## STDOUT:
 argv=minus
 argv=
+argv=minus
+argv=
+## END
+## BUG dash/zsh STDOUT:
+argv=
+argv=plus
 argv=minus
 argv=
 ## END
@@ -324,7 +423,15 @@ argv=minus
 argv=
 ## END
 
+# Zsh treats $@ as an array unlike Bash converting it to a string by joining it
 # with a space.
+
+## OK zsh STDOUT:
+argv=
+argv=plus
+argv=
+argv=plus
+## END
 
 #### $@ ("" "") and - and +
 set -- "" ""
@@ -352,6 +459,12 @@ argv=plus
 argv=
 argv=plus
 ## END
+## BUG mksh STDOUT:
+argv=
+argv=plus
+argv=minus
+argv=
+## END
 
 #### "$*" ("" "") and - and + (IFS=)
 set -- "" ""
@@ -368,6 +481,7 @@ argv=
 ## END
 
 #### assoc array and - and +
+case $SH in dash|mksh) exit ;; esac
 
 declare -A empty=()
 declare -A assoc=(['k']=v)
@@ -394,18 +508,36 @@ assoc=v
 assoc=plus
 ## END
 
+## BUG zsh STDOUT:
+empty=
+empty=plus
+assoc=minus
+assoc=
+---
+empty=minus
+empty=
+assoc=minus
+assoc=
+## END
+
+## N-I dash/mksh STDOUT:
+## END
+
+
 #### Error when empty
 empty=''
 echo ${empty:?'is em'pty}  # test eval of error
 echo should not get here
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
 
 #### Error when unset
 echo ${unset?is empty}
 echo should not get here
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
 
 #### Error when unset
 v=foo
@@ -435,8 +567,15 @@ echo ${#arr[@]}
 0
 1
 ## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I zsh status: 1
+## N-I zsh STDOUT:
+0
+## END
 
 #### assoc array ${arr["k"]=x}
+# note: this also works in zsh
 
 declare -A arr=()
 echo ${#arr[@]}
@@ -446,6 +585,10 @@ echo ${#arr[@]}
 0
 1
 ## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### "\z" as arg
 echo "${undef-\$}"
@@ -462,15 +605,28 @@ $
 `
 \
 ## END
+## BUG yash STDOUT:
+$
+(
+z
+"
+`
+\
+## END
 # Note: this line terminates the quoting by ` not to confuse the text editor.
+
 
 #### "\e" as arg
 echo "${undef-\e}"
 ## STDOUT:
 \e
 ## END
+## BUG zsh/mksh stdout-json: "\u001b\n"
+## BUG yash stdout: e
+
 
 #### op-test for ${a} and ${a[0]}
+case $SH in dash) exit ;; esac
 
 test-hyphen() {
   echo "a   : '${a-no-colon}' '${a:-with-colon}'"
@@ -497,9 +653,25 @@ a   : '' 'with-colon'
 a[0]: '' 'with-colon'
 ## END
 
+# Zsh's ${a} and ${a[@]} implement something different from the other shells'.
+
+## OK zsh STDOUT:
+a   : '' 'with-colon'
+a[0]: 'no-colon' 'with-colon'
+a   : '' 'with-colon'
+a[0]: 'no-colon' 'with-colon'
+a   : ' ' ' '
+a[0]: 'no-colon' 'with-colon'
+a   : '' 'with-colon'
+a[0]: 'no-colon' 'with-colon'
+## END
+
+## N-I dash STDOUT:
 ## END:
 
+
 #### op-test for ${a[@]} and ${a[*]}
+case $SH in dash) exit ;; esac
 
 test-hyphen() {
   echo "a[@]: '${a[@]-no-colon}' '${a[@]:-with-colon}'"
@@ -541,9 +713,25 @@ a[*]: '' 'with-colon'
 # a[*]: '' ''
 # ## END
 
+# Zsh's ${a} and ${a[@]} implement something different from the other shells'.
+
+## OK zsh STDOUT:
+a[@]: '' 'with-colon'
+a[*]: '' 'with-colon'
+a[@]: '' ''
+a[*]: '' 'with-colon'
+a[@]: ' ' ' '
+a[*]: ' ' ' '
+a[@]: ' ' ' '
+a[*]: '' 'with-colon'
+## END
+
+## N-I dash STDOUT:
 ## END:
 
+
 #### op-test for ${!array} with array="a" and array="a[0]"
+case $SH in dash|mksh|zsh) exit ;; esac
 
 test-hyphen() {
   ref='a'
@@ -572,9 +760,12 @@ ref=a   : '' 'with-colon'
 ref=a[0]: '' 'with-colon'
 ## END
 
+## N-I dash/mksh/zsh STDOUT:
 ## END:
 
+
 #### op-test for ${!array} with array="a[@]" or array="a[*]"
+case $SH in dash|mksh|zsh) exit ;; esac
 
 test-hyphen() {
   ref='a[@]'
@@ -614,9 +805,12 @@ ref=a[@]: ' ' ' '
 ref=a[*]: '' ''
 ## END
 
+## N-I dash/mksh/zsh STDOUT:
 ## END:
 
+
 #### op-test for unquoted ${a[*]:-empty} with IFS=
+case $SH in dash) exit ;; esac
 
 IFS=
 a=("" "")
@@ -626,4 +820,9 @@ argv.sh ${a[*]:-empty}
 []
 ## END
 
+## BUG mksh STDOUT:
+['empty']
+## END
+
+## N-I dash STDOUT:
 ## END:

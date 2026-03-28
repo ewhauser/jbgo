@@ -1,15 +1,19 @@
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh 
 ## oils_failures_allowed: 0
 
 #### can continue after unknown option 
 #
 # TODO: this is the posix special builtin logic?
+# dash and mksh make this a fatal error no matter what.
 
 set -o errexit
 set -o STRICT || true # unknown option
 echo hello
 ## stdout: hello
 ## status: 0
+## BUG dash/mksh/zsh stdout-json: ""
+## BUG dash status: 2
+## BUG mksh/zsh status: 1
 
 #### set with both options and argv
 set -o errexit a b c
@@ -85,6 +89,13 @@ before
 line2
 ## END
 
+## BUG dash/mksh/zsh STDOUT:
+before
+OK
+before
+OK
+## END
+
 #### set -u error can break out of nested evals
 $SH -c '
 set -u
@@ -99,6 +110,7 @@ echo before
 eval test_function
 echo after
 '
+# status must be non-zero: bash uses 1, ash/dash exit 2
 if test $? -ne 0; then
   echo OK
 fi
@@ -106,6 +118,10 @@ fi
 ## STDOUT:
 before
 OK
+## END
+## BUG zsh/mksh STDOUT:
+before
+after
 ## END
 
 #### reset option with long flag
@@ -128,8 +144,10 @@ echo "[$unset]"
 echo status=$?
 ## stdout-json: ""
 ## status: 1
+## OK dash status: 2
 
 #### set -o lists options
+# NOTE: osh doesn't use the same format yet.
 set -o | grep -o noexec
 ## STDOUT:
 noexec
@@ -173,6 +191,11 @@ OK
 OK
 ## END
 
+## BUG zsh status: 1
+## BUG zsh STDOUT:
+[ ]
+## END
+
 #### set - - and so forth
 set a b
 echo "$@"
@@ -189,6 +212,7 @@ echo "$@"
 set -- --
 echo "$@"
 
+# note: zsh is different, and yash is totally different
 ## STDOUT:
 a b
 a b
@@ -196,6 +220,22 @@ a b
 -
 --
 ## END
+## N-I yash STDOUT:
+a b
+- a b
+a b
+- -
+--
+## END
+## BUG zsh STDOUT:
+a b
+a b
+a b
+
+--
+## END
+
+#### set - leading single dash is ignored, turns off xtrace verbose (#2364)
 
 show_options() {
   case $- in
@@ -215,6 +255,7 @@ echo "$@"
 show_options
 echo
 
+# dash that's not leading is not special
 set x - y z
 echo "$@"
 
@@ -227,7 +268,19 @@ a b c
 x - y z
 ## END
 
+## BUG zsh STDOUT:
+verbose-on
+xtrace-on
+
+a b c
+verbose-on
+xtrace-on
+
+x - y z
+## END
+
 #### set - stops option processing like set --
+case $SH in zsh) exit ;; esac
 
 show_options() {
   case $- in
@@ -247,7 +300,11 @@ echo argv "$@"
 argv -v
 ## END
 
+## N-I zsh STDOUT:
+## END
+
 #### A single + is an ignored flag; not an argument
+case $SH in zsh) exit ;; esac
 
 show_options() {
   case $- in
@@ -272,6 +329,15 @@ xtrace-on
 plus x y
 ## END
 
+## BUG mksh STDOUT:
+plus
+xtrace-on
+plus -v x y
+## END
+
+## N-I zsh STDOUT:
+## END
+
 #### set - + and + -
 set - +
 echo "$@"
@@ -282,6 +348,16 @@ echo "$@"
 ## STDOUT:
 +
 +
+## END
+
+## BUG mksh STDOUT:
++
+-
+## END
+
+## OK zsh/osh STDOUT:
++
+
 ## END
 
 #### set -a exports variables
@@ -336,6 +412,7 @@ f
 ## STDOUT:
 zzz
 ## END
+## BUG mksh stdout: None
 
 #### set -a exports declare variables
 set -a
@@ -344,3 +421,4 @@ printenv.sh ZZZ
 ## STDOUT:
 zzz
 ## END
+## N-I dash/mksh stdout: None

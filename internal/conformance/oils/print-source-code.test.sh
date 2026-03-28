@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash-4.4 mksh zsh
 ## oils_failures_allowed: 0
 
 #### typeset -f prints function source code

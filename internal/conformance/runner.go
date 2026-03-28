@@ -88,18 +88,34 @@ func packageRelativePath(relPath string) string {
 	return filepath.Join(filepath.Dir(file), relPath)
 }
 
+func requireOraclePath(t *testing.T, mode OracleMode) string {
+	t.Helper()
+
+	if mode == OracleBash {
+		return testutil.RequireNixBash(t)
+	}
+
+	envKey := "GBASH_CONFORMANCE_" + strings.ToUpper(oracleBinaryName(mode))
+	oraclePath := strings.TrimSpace(os.Getenv(envKey)) //nolint:forbidigo // Conformance oracle paths are configured by the host environment.
+	if oraclePath == "" {
+		t.Skipf("set %s to run the %s conformance suite", envKey, mode)
+	}
+	t.Logf("%s oracle: %s", mode, oraclePath)
+	return oraclePath
+}
+
 func RunSuite(t *testing.T, cfg *SuiteConfig) {
 	t.Helper()
 	resolvedCfg := resolvedSuiteConfig(cfg)
 	cfg = &resolvedCfg
 
-	bashPath := testutil.RequireNixBash(t)
+	oraclePath := requireOraclePath(t, cfg.OracleMode)
 
 	manifest, err := LoadManifest(cfg.ManifestPath)
 	if err != nil {
 		t.Fatalf("LoadManifest(%q) error = %v", cfg.ManifestPath, err)
 	}
-	specFiles, err := LoadSpecFiles(cfg.SpecDir, cfg.SpecFiles)
+	specFiles, err := LoadSpecFiles(cfg.SpecDir, cfg.SpecFiles, cfg.OracleMode)
 	if err != nil {
 		t.Fatalf("LoadSpecFiles(%q) error = %v", cfg.SpecDir, err)
 	}
@@ -130,7 +146,7 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 						t.Skipf("manifest skip: %s", caseEntry.Reason)
 					}
 
-					result, err := RunCase(t.Context(), cfg, bashPath, specFile.Path, specCase)
+					result, err := RunCase(t.Context(), cfg, oraclePath, specFile.Path, specCase)
 					if err != nil {
 						t.Fatalf("RunCase() error = %v", err)
 					}
@@ -145,11 +161,11 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 						fileXFailed.Store(true)
 						t.Logf("expected failure: %s", expectedFailureReason(fileEntry, hasFileEntry, caseEntry, hasCaseEntry))
 						t.Logf("gbash:\n%s", formatExecutionResult(result.GBash))
-						t.Logf("bash:\n%s", formatExecutionResult(result.Bash))
+						t.Logf("%s:\n%s", cfg.OracleMode, formatExecutionResult(result.Bash))
 					case CaseOutcomeUnexpectedPass:
 						t.Fatalf("unexpected pass: %s", expectedFailureReason(fileEntry, hasFileEntry, caseEntry, hasCaseEntry))
 					case CaseOutcomeFailure:
-						t.Fatalf("bash mismatch\ngbash:\n%s\n\nbash:\n%s", formatExecutionResult(result.GBash), formatExecutionResult(result.Bash))
+						t.Fatalf("%s mismatch\ngbash:\n%s\n\n%s:\n%s", cfg.OracleMode, formatExecutionResult(result.GBash), cfg.OracleMode, formatExecutionResult(result.Bash))
 					}
 				})
 			}
@@ -157,17 +173,17 @@ func RunSuite(t *testing.T, cfg *SuiteConfig) {
 	}
 }
 
-func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, specCase SpecCase) (ComparisonResult, error) {
+func RunCase(ctx context.Context, cfg *SuiteConfig, oraclePath, specPath string, specCase SpecCase) (ComparisonResult, error) {
 	resolvedCfg := resolvedSuiteConfig(cfg)
 	cfg = &resolvedCfg
 
-	bashWorkspace, err := prepareWorkspace(cfg, specPath, bashPath)
+	oracleWorkspace, err := prepareWorkspace(cfg, specPath, oraclePath)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
-	defer removeAll(bashWorkspace)
+	defer removeAll(oracleWorkspace)
 
-	gbashWorkspace, err := prepareWorkspace(cfg, specPath, bashPath)
+	gbashWorkspace, err := prepareWorkspace(cfg, specPath, oraclePath)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
@@ -175,32 +191,33 @@ func RunCase(ctx context.Context, cfg *SuiteConfig, bashPath, specPath string, s
 
 	script := ensureTrailingNewline(specCase.Script)
 
-	bashResult, err := runBash(ctx, cfg, bashPath, specPath, bashWorkspace, script)
+	oracleResult, err := runOracle(ctx, cfg, oraclePath, specPath, oracleWorkspace, script)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
-	gbashResult, err := runGBash(ctx, cfg, bashPath, specPath, gbashWorkspace, script)
+	gbashResult, err := runGBash(ctx, cfg, oraclePath, specPath, gbashWorkspace, script)
 	if err != nil {
 		return ComparisonResult{}, err
 	}
 	gbashResult = normalizeExecutionResult(gbashResult, gbashWorkspace, gbashWorkspaceRoot(specPath))
+	gbashResult.Stderr = normalizeOracleStderr(cfg.OracleMode, gbashResult.Stderr)
 	gbashResult.Stderr = normalizeGBashStderr(gbashResult.Stderr)
-	bashResult = normalizeExecutionResult(bashResult, bashWorkspace, "/")
-	bashResult.Stderr = normalizeBashStderr(bashResult.Stderr)
+	oracleResult = normalizeExecutionResult(oracleResult, oracleWorkspace, "/")
+	oracleResult.Stderr = normalizeOracleStderr(cfg.OracleMode, oracleResult.Stderr)
 	if specPath == "oils/builtin-trap-err.test.sh" {
 		gbashResult.Stderr = normalizeTrapErrRedirectStderr(gbashResult.Stderr)
-		bashResult.Stderr = normalizeTrapErrRedirectStderr(bashResult.Stderr)
+		oracleResult.Stderr = normalizeTrapErrRedirectStderr(oracleResult.Stderr)
 	}
 	gbashResult = normalizeCaseResult(specPath, specCase, gbashResult)
-	bashResult = normalizeCaseResult(specPath, specCase, bashResult)
+	oracleResult = normalizeCaseResult(specPath, specCase, oracleResult)
 	return ComparisonResult{
 		GBash: gbashResult,
-		Bash:  normalizeOracleResult(cfg.OracleMode, specPath, specCase, bashResult),
+		Bash:  normalizeOracleResult(cfg.OracleMode, specPath, specCase, oracleResult),
 	}, nil
 }
 
 //nolint:forbidigo // The conformance harness builds isolated host temp workspaces per case.
-func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, error) {
+func prepareWorkspace(cfg *SuiteConfig, specPath, oraclePath string) (string, error) {
 	workspace, err := os.MkdirTemp("", "gbash-conformance-*")
 	if err != nil {
 		return "", err
@@ -219,8 +236,21 @@ func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, erro
 			removeAll(workspace)
 			return "", err
 		}
+		if filepath.Base(relDir) == "spec" {
+			testdataSrc := filepath.Join(src, "testdata")
+			if info, err := os.Stat(testdataSrc); err == nil && info.IsDir() {
+				if err := copyTree(testdataSrc, filepath.Join(workspace, "testdata")); err != nil {
+					removeAll(workspace)
+					return "", err
+				}
+			}
+		}
 	}
 	if err := installSuiteBinaries(workspace, cfg.ExtraBinaries); err != nil {
+		removeAll(workspace)
+		return "", err
+	}
+	if err := installOracleBinary(workspace, cfg.OracleMode, oraclePath); err != nil {
 		removeAll(workspace)
 		return "", err
 	}
@@ -237,29 +267,22 @@ func prepareWorkspace(cfg *SuiteConfig, specPath, bashPath string) (string, erro
 		removeAll(workspace)
 		return "", err
 	}
-	if needsPinnedBashWorkspace(specPath) {
-		if err := installPinnedBash(workspace, bashPath); err != nil {
-			removeAll(workspace)
-			return "", err
-		}
-	}
 	return workspace, nil
 }
 
-func needsPinnedBashWorkspace(specPath string) bool {
-	switch specPath {
-	case "oils/var-op-bash.test.sh":
-		return true
-	default:
-		return false
-	}
-}
-
-func installPinnedBash(workspace, bashPath string) error {
-	if strings.TrimSpace(bashPath) == "" {
+func installOracleBinary(workspace string, mode OracleMode, oraclePath string) error {
+	oraclePath = strings.TrimSpace(oraclePath)
+	if oraclePath == "" {
 		return nil
 	}
-	return copyFile(bashPath, filepath.Join(workspace, "bin", "bash"))
+	if mode == "" {
+		mode = OracleBash
+	}
+	target := oracleBinaryName(mode)
+	if target == "" {
+		return fmt.Errorf("unknown oracle mode %q", mode)
+	}
+	return copyFile(oraclePath, filepath.Join(workspace, "bin", target))
 }
 
 func installSuiteBinaries(workspace string, binaries map[string]string) error {
@@ -363,7 +386,7 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-func runGBash(ctx context.Context, cfg *SuiteConfig, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
+func runGBash(ctx context.Context, cfg *SuiteConfig, oraclePath, specPath, workspace, script string) (ExecutionResult, error) {
 	if cfg == nil {
 		cfg = &SuiteConfig{}
 	}
@@ -390,7 +413,7 @@ func runGBash(ctx context.Context, cfg *SuiteConfig, bashPath, specPath, workspa
 	}
 	result, err := session.Exec(ctx, &gbruntime.ExecutionRequest{
 		Script:     script,
-		Name:       gbashExecutionName(specPath, bashPath),
+		Name:       gbashExecutionName(specPath, oraclePath),
 		WorkDir:    gbashWorkspaceRoot(specPath),
 		ReplaceEnv: true,
 		Env:        env,
@@ -529,13 +552,13 @@ func copyWorkspaceFileToSandbox(ctx context.Context, dst gbfs.FileSystem, hostPa
 	return dst.Chtimes(ctx, sandboxPath, info.ModTime(), info.ModTime())
 }
 
-//nolint:forbidigo // The oracle side of the harness intentionally executes the real host bash binary.
-func runBash(ctx context.Context, cfg *SuiteConfig, bashPath, specPath, workspace, script string) (ExecutionResult, error) {
+//nolint:forbidigo // The oracle side of the harness intentionally executes the configured host shell binary.
+func runOracle(ctx context.Context, cfg *SuiteConfig, oraclePath, specPath, workspace, script string) (ExecutionResult, error) {
 	if cfg == nil {
 		cfg = &SuiteConfig{}
 	}
 	args := OracleCommandArgs(cfg.OracleMode, script)
-	cmd := exec.CommandContext(ctx, bashPath, args...)
+	cmd := exec.CommandContext(ctx, oraclePath, args...)
 	cmd.Dir = workspace
 	cmd.Env = bashEnv(cfg, workspace, specPath)
 
@@ -564,15 +587,26 @@ func OracleCommandArgs(mode OracleMode, script string) []string {
 	switch mode {
 	case OracleBash:
 		return []string{"--noprofile", "--norc", "-c", script}
+	case OracleZsh:
+		return []string{"-f", "-c", script}
 	default:
-		return []string{"--noprofile", "--norc", "-c", script}
+		return []string{"-c", script}
 	}
 }
 
 func normalizeExecutionResult(result ExecutionResult, workspace, sandboxRoot string) ExecutionResult {
 	result.Stdout = normalizeOutput(result.Stdout, workspace, sandboxRoot)
-	result.Stderr = normalizeBashStderr(normalizeOutput(result.Stderr, workspace, sandboxRoot))
+	result.Stderr = normalizeOutput(result.Stderr, workspace, sandboxRoot)
 	return result
+}
+
+func normalizeOracleStderr(mode OracleMode, value string) string {
+	switch mode {
+	case OracleBash:
+		return normalizeBashStderr(value)
+	default:
+		return value
+	}
 }
 
 func normalizeCaseResult(specPath string, specCase SpecCase, result ExecutionResult) ExecutionResult {
@@ -857,10 +891,14 @@ func gbashEnv(cfg *SuiteConfig, specPath string) map[string]string {
 		cfg = &SuiteConfig{}
 	}
 	locale := conformanceLocale()
+	shName := oracleBinaryName(cfg.OracleMode)
+	if shName == "" {
+		shName = oracleBinaryName(OracleBash)
+	}
 	env := map[string]string{
 		"LANG":                  locale,
 		"LC_ALL":                locale,
-		"SH":                    "bash",
+		"SH":                    shName,
 		"TZ":                    "UTC",
 		"GBASH_CONFORMANCE_SED": "sed",
 	}
@@ -898,13 +936,17 @@ func bashEnv(cfg *SuiteConfig, workspace, specPath string) []string {
 		cfg = &SuiteConfig{}
 	}
 	locale := conformanceLocale()
+	shName := oracleBinaryName(cfg.OracleMode)
+	if shName == "" {
+		shName = oracleBinaryName(OracleBash)
+	}
 	env := map[string]string{
 		"HOME":                  workspace,
 		"PWD":                   workspace,
 		"PATH":                  filepath.Join(workspace, "bin") + ":/usr/bin:/bin",
 		"LANG":                  locale,
 		"LC_ALL":                locale,
-		"SH":                    "bash",
+		"SH":                    shName,
 		"TZ":                    "UTC",
 		"TMP":                   filepath.Join(workspace, "tmp"),
 		"TMPDIR":                filepath.Join(workspace, "tmp"),
@@ -1076,9 +1118,7 @@ func workspaceCopyDestination(workspace, specPath, relDir string) string {
 	case "bin":
 		return filepath.Join(workspace, "bin")
 	case "spec":
-		if usesRepoRootFixtureTree(specPath) {
-			return filepath.Join(workspace, "spec")
-		}
+		return filepath.Join(workspace, "spec")
 	}
 	if useScopedGlobWorkspace(specPath) {
 		return filepath.Join(workspace, filepath.Base(relDir))

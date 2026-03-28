@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh
 
 # word-eval.test.sh: Test the word evaluation pipeline in order.
 #
@@ -20,6 +20,8 @@ str=s
 array=(a1 a2)
 argv.sh bare 'sq' $str "-${str}-" "${array[@]}" $((1+2)) $(echo c) `echo c`
 ## stdout: ['bare', 'sq', 's', '-s-', 'a1', 'a2', '3', 'c', 'c']
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### Word splitting
 s1='1 2'
@@ -34,6 +36,8 @@ s1='1 2'
 array=(a1 a2)
 argv.sh $s1"${array[@]}"_"$@"
 ## stdout: ['1', '2a1', 'a2_x', 'y', 'z']
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### Word elision
 s1=''

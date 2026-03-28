@@ -2,7 +2,7 @@
 # TODO: can add $BUSYBOX_ASH
 
 ## oils_failures_allowed: 2
-## compare_shells: bash
+## compare_shells: bash mksh zsh
 
 #### Pattern replacement
 v=abcde
@@ -17,7 +17,14 @@ echo -${v/x/y}-
 ## STDOUT:
 --
 status=0
+## BUG mksh STDOUT:
+# patsub disrespects nounset!
+--
+status=0
+--
 ## status: 1
+## OK ash status: 2
+## BUG mksh status: 0
 
 #### Global Pattern replacement with /
 s=xx_xx_xx
@@ -35,12 +42,18 @@ echo ${s/?xx/_yy} ${s/%?xx/_yy}
 ## STDOUT:
 xx_yy_xx xx_xx_yy
 ## END
+## BUG ash STDOUT:
+xx_yy_xx xx_xx_xx
+## END
 
 #### Replace fixed strings
 s=xx_xx
 echo ${s/xx/yy} ${s//xx/yy} ${s/#xx/yy} ${s/%xx/yy}
 ## STDOUT:
 yy_xx yy_yy yy_xx xx_yy
+## END
+## BUG ash STDOUT:
+yy_xx yy_yy xx_xx xx_xx
 ## END
 
 #### Replace is longest match
@@ -53,6 +66,7 @@ echo ${s/<*>/[]}
 s=xx_xx_xx
 echo ${s//[[:alpha:]]/y} ${s//[^[:alpha:]]/-}
 ## stdout: yy_yy_yy xx-xx-xx
+## N-I mksh stdout: xx_xx_xx xx_xx_xx
 
 #### Replace hard glob
 s='aa*bb+cc'
@@ -68,6 +82,10 @@ echo status=$?
 -abcde-
 status=0
 ## END
+## BUG ash STDOUT:
+-abcde -
+status=0
+## END
 
 #### ${v//} is empty search and replacement
 v='a/b/c'
@@ -78,7 +96,12 @@ echo status=$?
 -a/b/c-
 status=0
 ## END
+## BUG ash STDOUT:
+-a/b/c -
+status=0
+## END
 
+#### Confusing unquoted slash matches bash (and ash)
 x='/_/'
 echo ${x////c}
 
@@ -87,6 +110,18 @@ echo ${x//'/'/c}
 ## STDOUT:
 c_c
 c_c
+## END
+## BUG mksh STDOUT:
+/_/
+c_c
+## END
+## BUG zsh STDOUT:
+/c//c_/c/
+/_/
+## END
+## BUG ash STDOUT:
+c_c
+/_/ /c
 ## END
 
 #### Synthesized ${x///} bug (similar to above)
@@ -104,6 +139,19 @@ echo 'quoted:   ' ${x//'/'}
 ambiguous: slash brace } hi
 quoted:    slash brace } hi
 ## END
+## BUG mksh STDOUT:
+ambiguous: slash / brace } hi
+quoted:    slash brace } hi
+## END
+## BUG zsh STDOUT:
+ambiguous: slash / brace } hi
+quoted:    slash / brace } hi
+## END
+## BUG ash STDOUT:
+ambiguous: slash brace } hi
+quoted:    slash / brace } hi
+## END
+
 
 #### ${v/a} is the same as ${v/a/}  -- no replacement string
 v='aabb'
@@ -124,6 +172,7 @@ v='[\f]'
 x='\f'
 echo ${v/"$x"/_}
 
+# mksh and zsh differ on this case, but this is consistent with the fact that
 # \f as a glob means 'f', not '\f'.  TODO: Warn that it's a bad glob?
 # The canonical form is 'f'.
 echo ${v/$x/_}
@@ -133,6 +182,12 @@ echo ${v/\\f/_}
 ## STDOUT:
 [_]
 [\_]
+[\_]
+[_]
+## END
+## BUG mksh/zsh STDOUT:
+[_]
+[_]
 [\_]
 [_]
 ## END
@@ -149,6 +204,9 @@ echo ${v/$x/_}
 
 #### Substitute glob characters in pattern, quoted and unquoted
 
+# INFINITE LOOP in ash!
+case $SH in ash) exit ;; esac
+
 g='*'
 v='a*b'
 echo ${v//"$g"/-}
@@ -156,6 +214,10 @@ echo ${v//$g/-}
 ## STDOUT:
 a-b
 -
+## END
+## BUG zsh STDOUT:
+a-b
+a-b
 ## END
 
 #### Substitute one unicode character (UTF-8)
@@ -173,6 +235,11 @@ echo ${s/%_?_/foo}  # right
 foo and foo
 foo and _μ_
 _μ_ and foo
+## END
+## BUG mksh STDOUT:
+_μ_ and _μ_
+_μ_ and _μ_
+_μ_ and _μ_
 ## END
 
 #### When LC_ALL=C, pattern ? doesn't match multibyte character
@@ -257,9 +324,13 @@ echo $program
 ## STDOUT:
 ++--.,<>[]
 ## END
+## BUG mksh STDOUT:
+helloworld
+## END
 
 #### patsub with [^]]
 
+# This is a PARSING divergence.  In OSH we match [], rather than using POSIX
 # rules!
 
 pat='[^]]'
@@ -277,6 +348,12 @@ echo ${x//$pat}
 echo status=$?
 ## stdout-json: ""
 ## status: 1
+## OK bash/mksh/zsh/ash STDOUT:
+fooz
+status=0
+## END
+## OK bash/mksh/zsh/ash status: 0
+
 
 #### Pattern is empty $foo$bar -- regression for infinite loop
 
@@ -288,7 +365,14 @@ echo ${x//$foo$bar/bar}
 -foo-
 ## END
 
+# feels like memory unsafety in ZSH
+## BUG zsh STDOUT:
+bar-barfbarobarobar-
+## END
+
 #### Chromium from http://www.oilshell.org/blog/2016/11/07.html
+
+case $SH in zsh) exit ;; esac
 
 HOST_PATH=/foo/bar/baz
 echo ${HOST_PATH////\\/}
@@ -300,6 +384,15 @@ echo ${HOST_PATH//'/'/\\/}
 \/foo\/bar\/baz
 \/foo\/bar\/baz
 ## END
+
+# zsh has crazy bugs
+## BUG zsh stdout-json: ""
+
+## BUG mksh STDOUT:
+/foo/bar/baz
+\/foo\/bar\/baz
+## END
+
 
 #### ${x//~homedir/}
 
@@ -316,4 +409,5 @@ echo ${path/~/z}
 z/git/oilshell
 z/git/oilshell
 ## END
+
 

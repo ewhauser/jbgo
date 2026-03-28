@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash-4.4 mksh zsh
 ## oils_failures_allowed: 0
 
 #### Eval
@@ -11,6 +11,8 @@ eval -- echo hi
 ## STDOUT:
 hi
 ## END
+## BUG dash status: 127
+## BUG dash stdout-json: ""
 
 #### eval usage
 eval -
@@ -20,6 +22,18 @@ echo $?
 ## STDOUT:
 127
 2
+## END
+## OK dash STDOUT:
+127
+127
+## END
+## OK-2 mksh status: 1
+## OK-2 mksh STDOUT:
+127
+## END
+## OK-3 zsh STDOUT:
+0
+127
 ## END
 
 #### eval string with 'break continue return error'
@@ -56,6 +70,67 @@ end func
 1
 ## END
 
+## BUG mksh STDOUT:
+--- break
+1
+2
+end func
+--- continue
+1
+2
+end func
+--- return
+1
+--- false
+1
+## END
+
+#### eval YSH block with 'break continue return error'
+case $SH in dash|bash*|mksh|zsh) exit ;; esac
+
+shopt -s ysh:all
+
+proc proc_that_evals(; ; ;b) {
+  for i in 1 2; do
+    echo $i
+    call io->eval(b)
+  done
+  echo 'end func'
+}
+
+var cases = [
+  ['break', ^(break)],
+  ['continue', ^(continue)],
+  ['return', ^(return)],
+  ['false', ^(false)],
+]
+
+for test_case in (cases) {
+  var code_str, block = test_case
+  echo "--- $code_str"
+  proc_that_evals (; ; block)
+}
+echo status=$?
+
+## status: 1
+## STDOUT:
+--- break
+1
+end func
+--- continue
+1
+2
+end func
+--- return
+1
+--- false
+1
+## END
+
+## N-I dash/bash/mksh/zsh status: 0
+## N-I dash/bash/mksh/zsh STDOUT:
+## END
+
 #### exit within eval (regression)
 eval 'exit 42'
 echo 'should not get here'
@@ -73,7 +148,7 @@ echo 'should not get here'
 #### Source
 lib=$TMP/spec-test-lib.sh
 echo 'LIBVAR=libvar' > $lib
-. $lib
+. $lib  # dash doesn't have source
 echo $LIBVAR
 ## stdout: libvar
 
@@ -83,21 +158,29 @@ source -- $TMP/foo.sh
 ## STDOUT:
 foo
 ## END
+## N-I dash stdout-json: ""
+## N-I dash status: 127
 
 #### Source nonexistent
 source /nonexistent/path
 echo status=$?
 ## stdout: status=1
+## OK dash/zsh stdout: status=127
 
 #### Source with no arguments
 source
 echo status=$?
 ## stdout: status=2
+## OK mksh/zsh stdout: status=1
+## N-I dash stdout: status=127
 
 #### Source with arguments
-. $REPO_ROOT/spec/testdata/show-argv.sh foo bar
+. $REPO_ROOT/spec/testdata/show-argv.sh foo bar  # dash doesn't have source
 ## STDOUT:
 show-argv: foo bar
+## END
+## N-I dash STDOUT:
+show-argv:
 ## END
 
 #### Source from a function, mutating argv and defining a local var
@@ -116,8 +199,16 @@ to func
 foo=foo_val
 foo=
 ## END
+## N-I dash STDOUT:
+source-argv: args to func
+source-argv: to func
+func
+foo=foo_val
+foo=
+## END
 
 #### Source with syntax error
+# TODO: We should probably use dash behavior of a fatal error.
 # Although set-o errexit handles this.  We don't want to break the invariant
 # that a builtin like 'source' behaves like an external program.  An external
 # program can't halt the shell!
@@ -125,11 +216,20 @@ echo 'echo >' > $TMP/syntax-error.sh
 . $TMP/syntax-error.sh
 echo status=$?
 ## stdout: status=2
+## OK bash/mksh stdout: status=1
+## OK zsh stdout: status=126
+## OK dash stdout-json: ""
+## OK dash status: 2
 
 #### Eval with syntax error
 eval 'echo >'
 echo status=$?
 ## stdout: status=2
+## OK bash/zsh stdout: status=1
+## OK dash stdout-json: ""
+## OK dash status: 2
+## OK mksh stdout-json: ""
+## OK mksh status: 1
 
 #### Eval in does tilde expansion
 
@@ -145,6 +245,14 @@ test "$x" = "$y" || echo FALSE
 FALSE
 FALSE
 TRUE
+## END
+## BUG dash status: 127
+## BUG dash STDOUT:
+FALSE
+## END
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+FALSE
 ## END
 
 #### Eval in bash does tilde expansion in array
@@ -168,6 +276,17 @@ FALSE
 FALSE
 TRUE
 ## END
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+FALSE
+## END
+## BUG zsh status: 1
+## BUG zsh STDOUT:
+FALSE
+FALSE
+## END
 
 #### source works for files in current directory (bash only)
 cd $TMP
@@ -178,8 +297,16 @@ echo status=$?
 current dir
 status=0
 ## END
+## N-I zsh STDOUT:
+status=127
+## END
 
 # This is a special builtin so failure is fatal.
+
+## N-I dash stdout-json: ""
+## N-I dash status: 2
+## N-I mksh stdout-json: ""
+## N-I mksh status: 1
 
 #### source looks in PATH for files
 mkdir -p dir
@@ -230,6 +357,7 @@ mkdir -p dir
 . ./dir/
 echo status=$?
 ## stdout: status=1
+## OK dash/zsh/mksh stdout: status=0
 
 #### sourcing along PATH should ignore directories
 
@@ -255,3 +383,8 @@ hi
 status=0
 ## END
 
+## OK mksh STDOUT:
+hi
+status=0
+status=0
+## END

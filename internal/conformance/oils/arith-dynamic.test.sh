@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh
 ## oils_failures_allowed: 3
 
 # Various tests for dynamic parsing of arithmetic substitutions.
@@ -9,6 +9,18 @@ echo $(( "1+2" * 3 ))
 ## STDOUT:
 7
 7
+## END
+
+## N-I dash status: 2
+## N-I dash STDOUT:
+## END
+
+## N-I mksh status: 1
+## N-I mksh STDOUT:
+## END
+
+## N-I zsh status: 1
+## N-I zsh STDOUT:
 ## END
 
 #### Single quotes
@@ -22,12 +34,41 @@ status=1
 status=1
 ## END
 
+## N-I dash status: 2
+## N-I dash STDOUT:
+## END
+
+## BUG mksh status: 1
+## BUG mksh STDOUT:
+199
+status=0
+## END
+
+## N-I zsh status: 1
+## N-I zsh STDOUT:
+## END
+
 #### Substitutions
 x='1 + 2'
 echo $(( $x * 3 ))
 echo $(( "$x" * 3 ))
 ## STDOUT:
 7
+7
+## END
+
+## N-I dash status: 2
+## N-I dash STDOUT:
+7
+## END
+
+## N-I mksh status: 1
+## N-I mksh STDOUT:
+7
+## END
+
+## N-I zsh status: 1
+## N-I zsh STDOUT:
 7
 ## END
 
@@ -47,3 +88,8 @@ status=0
 status=0
 ## END
 
+## N-I dash status: 2
+## N-I dash STDOUT:
+7
+status=0
+## END

@@ -1,6 +1,8 @@
 ## oils_failures_allowed: 1
-## compare_shells: bash
+## compare_shells: bash mksh
 
+
+# Extended globs are an OPTION in bash, but not mksh (because the feature
 # originated in ksh).
 #
 # However all extended globs are syntax errors if shopt -s extglob isn't set.
@@ -123,6 +125,10 @@ argv.sh eg6/@(no|matches)  # no matches
 ['eg6/@(no|matches)']
 []
 ## END
+## BUG mksh STDOUT:
+['eg6/@(no|matches)']
+['eg6/@(no|matches)']
+## END
 
 #### Glob other punctuation chars (lexer mode)
 shopt -s extglob
@@ -131,6 +137,7 @@ cd eg5
 touch __{aa,'<>','{}','#','&&'}
 argv.sh @(__aa|'__<>'|__{}|__#|__&&|)
 
+# mksh sorts them differently
 ## STDOUT:
 ['__#', '__&&', '__<>', '__aa', '__{}']
 ## END
@@ -143,6 +150,7 @@ touch '_[:]' '_*' '_?'
 argv.sh @('_[:]'|'_*'|'_?')
 argv.sh @(nested|'_?'|@('_[:]'|'_*'))
 
+# mksh sorts them differently
 ## STDOUT:
 ['_*', '_?', '_[:]']
 ['_*', '_?', '_[:]']
@@ -165,6 +173,7 @@ argv.sh @('foo'|'__|'|bar)
 
 #### Extended glob as argument to ${undef:-} (dynamic globbing)
 
+# This case popped into my mind after inspecting osh/word_eval.py for calls to
 # _EvalWordToParts()
 
 shopt -s extglob
@@ -183,8 +192,18 @@ echo ${undef:-@(foo|bar).py}
 bar.py foo.py spam.py
 bar.py foo.py
 ## END
+## OK mksh STDOUT:
+bar.py foo.py spam.py
+@(foo|bar).py
+## END
+## OK osh status: 1
+## OK osh STDOUT:
+bar.py foo.py spam.py
+## END
 
 #### Extended glob in assignment builtin
+
+# Another invocation of _EvalWordToParts() that OSH should handle
 
 shopt -s extglob
 mkdir -p eg9
@@ -194,6 +213,12 @@ typeset -@(*.py) myvar
 echo status=$?
 ## STDOUT:
 status=2
+## END
+## OK mksh STDOUT:
+status=1
+## END
+## OK osh status: 1
+## OK osh STDOUT:
 ## END
 
 #### Extended glob in same word as array
@@ -220,6 +245,12 @@ argv.sh at extglob "$@"*@(.py|cc)
 ['star', 'extglob', 'a b c.cc', 'a b c.py']
 ['at', 'extglob', 'a b', 'cee.cc', 'cee.py']
 ## END
+## N-I osh STDOUT:
+['a b', 'c']
+['star', 'glob', 'a b c.py']
+['star', 'extglob', 'a b c.cc', 'a b c.py']
+## END
+## N-I osh status: 1
 
 #### Extended glob with word splitting
 shopt -s extglob
@@ -229,10 +260,14 @@ cd 3
 x='a b'
 touch bar.{cc,h}
 
+# OSH may disallow splitting when there's an extended glob
 argv.sh $x*.@(cc|h)
 
 ## STDOUT:
 ['a', 'bar.cc', 'bar.h']
+## END
+## N-I osh STDOUT:
+['a b*.@(cc|h)']
 ## END
 
 #### In Array Literal and for loop
@@ -259,7 +294,15 @@ zzz bar.py foo.py
 shopt -s extglob
 echo @(__nope__)
 
+# OSH has glob quoting here
 echo @(__nope__*|__nope__?|'*'|'?'|'[:alpha:]'|'|')
+
+if test $SH != osh; then
+  exit
+fi
+
+# OSH has this alias for @()
+echo ,(osh|style)
 
 ## STDOUT:
 @(__nope__)
@@ -271,14 +314,19 @@ shopt -s extglob
 mkdir -p opts
 cd opts
 
-touch -- foo bar -flag
+touch -- foo bar -dash
 echo @(*)
 
 echo @(*)
+
 
 ## STDOUT:
--flag bar foo
--flag bar foo
+-dash bar foo
+-dash bar foo
+## END
+## N-I bash/mksh STDOUT:
+-dash bar foo
+-dash bar foo
 ## END
 
 #### noglob
@@ -312,6 +360,12 @@ echo status=$?
 
 ## STDOUT:
 status=1
+foo
+status=0
+## END
+## N-I mksh STDOUT:
+@(*)
+status=0
 foo
 status=0
 ## END

@@ -30,6 +30,9 @@ func TestParseSpecFileParsesMetadataAndCases(t *testing.T) {
 	if got := specFile.Metadata["compare_shells"]; got != "bash" {
 		t.Fatalf("compare_shells = %q, want bash", got)
 	}
+	if len(specFile.CompareShells) != 1 || specFile.CompareShells[0] != OracleBash {
+		t.Fatalf("CompareShells = %#v, want [bash]", specFile.CompareShells)
+	}
 	if len(specFile.Cases) != 2 {
 		t.Fatalf("len(Cases) = %d, want 2", len(specFile.Cases))
 	}
@@ -79,6 +82,44 @@ func TestParseSpecFileCapturesAnnotatedOracleOverrides(t *testing.T) {
 	}
 }
 
+func TestParseSpecFileCanonicalizesMultiShellOverrides(t *testing.T) {
+	t.Parallel()
+
+	specFile, err := ParseSpecFile("oils/override.test.sh", ""+
+		"## compare_shells: bash-4.4 dash mksh zsh-5.9\n"+
+		"#### pipeline\n"+
+		"echo hi\n"+
+		"## OK-2 dash/mksh STDOUT:\n"+
+		"portable\n"+
+		"## END\n"+
+		"## BUG zsh-5.9 status: 1\n")
+	if err != nil {
+		t.Fatalf("ParseSpecFile() error = %v", err)
+	}
+
+	if got, want := specFile.CompareShells, []OracleMode{OracleBash, OracleDash, OracleMksh, OracleZsh}; !equalOracleModes(got, want) {
+		t.Fatalf("CompareShells = %#v, want %#v", got, want)
+	}
+
+	for _, mode := range []OracleMode{OracleDash, OracleMksh} {
+		override, ok := specFile.Cases[0].OracleOverrides[mode]
+		if !ok {
+			t.Fatalf("missing override for %s", mode)
+		}
+		if override.Kind != OracleOverrideOK {
+			t.Fatalf("%s kind = %q, want OK", mode, override.Kind)
+		}
+		if override.Stdout == nil || *override.Stdout != "portable\n" {
+			t.Fatalf("%s stdout = %#v, want portable\\n", mode, override.Stdout)
+		}
+	}
+
+	zsh := specFile.Cases[0].OracleOverrides[OracleZsh]
+	if zsh.Status == nil || *zsh.Status != 1 {
+		t.Fatalf("zsh status = %#v, want 1", zsh.Status)
+	}
+}
+
 func TestParseSpecFileIgnoresUnreachableLinesAfterExit(t *testing.T) {
 	t.Parallel()
 
@@ -112,7 +153,7 @@ func TestLoadSpecFilesFiltersNamedSpecs(t *testing.T) {
 		}
 	}
 
-	specFiles, err := LoadSpecFiles(specDir, []string{"two.test.sh"})
+	specFiles, err := LoadSpecFiles(specDir, []string{"two.test.sh"}, OracleBash)
 	if err != nil {
 		t.Fatalf("LoadSpecFiles() error = %v", err)
 	}
@@ -124,15 +165,14 @@ func TestLoadSpecFilesFiltersNamedSpecs(t *testing.T) {
 	}
 }
 
-func TestLoadSpecFilesSkipsExcludedSpecs(t *testing.T) {
+func TestLoadSpecFilesFiltersByCompareShells(t *testing.T) {
 	t.Parallel()
 
 	specDir := t.TempDir()
 	files := map[string]string{
-		"one.test.sh":                 "#### case\ntrue\n",
-		"zsh-idioms.test.sh":          "#### case\nfalse\n",
-		"toysh-posix.test.sh":         "#### case\nfalse\n",
-		"ysh-builtin-private.test.sh": "#### case\nfalse\n",
+		"bash.test.sh": "## compare_shells: bash-4.4\n#### case\ntrue\n",
+		"dash.test.sh": "## compare_shells: dash mksh\n#### case\ntrue\n",
+		"any.test.sh":  "#### case\ntrue\n",
 	}
 	for name, contents := range files {
 		path := filepath.Join(specDir, name)
@@ -141,14 +181,29 @@ func TestLoadSpecFilesSkipsExcludedSpecs(t *testing.T) {
 		}
 	}
 
-	specFiles, err := LoadSpecFiles(specDir, nil)
+	specFiles, err := LoadSpecFiles(specDir, nil, OracleDash)
 	if err != nil {
 		t.Fatalf("LoadSpecFiles() error = %v", err)
 	}
-	if len(specFiles) != 1 {
-		t.Fatalf("len(specFiles) = %d, want 1", len(specFiles))
+	if len(specFiles) != 2 {
+		t.Fatalf("len(specFiles) = %d, want 2", len(specFiles))
 	}
-	if got, want := specFiles[0].Path, filepath.ToSlash(filepath.Join(filepath.Base(specDir), "one.test.sh")); got != want {
+	if got, want := specFiles[0].Path, filepath.ToSlash(filepath.Join(filepath.Base(specDir), "any.test.sh")); got != want {
 		t.Fatalf("specFiles[0].Path = %q, want %q", got, want)
 	}
+	if got, want := specFiles[1].Path, filepath.ToSlash(filepath.Join(filepath.Base(specDir), "dash.test.sh")); got != want {
+		t.Fatalf("specFiles[1].Path = %q, want %q", got, want)
+	}
+}
+
+func equalOracleModes(got, want []OracleMode) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

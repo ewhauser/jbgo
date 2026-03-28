@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash
+## compare_shells: dash bash-4.4 mksh zsh
 
 #### Env value doesn't persist
 FOO=foo printenv.sh FOO
@@ -21,6 +21,11 @@ FOO="foo" BAR="[$FOO][$BAZ]" BAZ=baz printenv.sh FOO BAR BAZ
 foo
 [foo][]
 baz
+## BUG mksh STDOUT:
+foo
+[][]
+baz
+## END
 
 #### Env value with two quotes
 FOO='foo'"adjacent" printenv.sh FOO
@@ -49,6 +54,7 @@ g() {
 }
 f() {
   # NOTE: G1 doesn't pick up binding f, but G2 picks up a.
+  # I don't quite understand why this is, but bash and OSH agree!
   G1=[$f] G2=[$a] g
   echo '--- f() ---'
   printenv.sh F G1 G2 A P
@@ -70,6 +76,39 @@ None
 None
 None
 ## END
+## OK mksh STDOUT:
+# G1 and G2 somehow persist.  I think that is a bug.  They should be local to
+# the G call.
+f [] [A]
+--- g() ---
+f
+[]
+[A]
+None
+p
+--- f() ---
+f
+[]
+[A]
+None
+None
+## END
+## BUG dash STDOUT:
+# dash sets even less stuff.  Doesn't appear correct.
+f [] [A]
+--- g() ---
+None
+None
+None
+None
+p
+--- f() ---
+None
+None
+None
+None
+None
+## END
 
 #### Escaped = in command name
 # foo=bar is in the 'spec/bin' dir.
@@ -78,12 +117,16 @@ foo\=bar
 
 #### Env binding not allowed before compound command
 # bash gives exit code 2 for syntax error, because of 'do'.
+# dash gives 0 because there is stuff after for?  Should really give an error.
+# mksh gives acceptable error of 1.
 FOO=bar for i in a b; do printenv.sh $FOO; done
 ## status: 2
+## OK mksh/zsh status: 1
 
 #### Trying to run keyword 'for'
 FOO=bar for
 ## status: 127
+## OK zsh status: 1
 
 #### Empty env binding
 EMPTY= printenv.sh EMPTY
@@ -123,6 +166,9 @@ v2=
 #### assignments / array assignments not interpreted after 'echo'
 a=1 echo b[0]=2 c=3
 ## stdout: b[0]=2 c=3
+# zsh interprets [0] as some kind of glob
+## OK zsh stdout-json: ""
+## OK zsh status: 1
 
 #### dynamic local variables (and splitting)
 f() {
@@ -135,6 +181,13 @@ f() {
   echo a=\'$a\'
 }
 f 'x=y a=b'
+## OK dash/bash/mksh STDOUT:
+x='y a=b'
+a=''
+x='y'
+a='b'
+## END
+# osh and zsh don't do word splitting
 ## STDOUT:
 x='y a=b'
 a=''
@@ -157,6 +210,8 @@ f() {
 }
 f
 ## status: 1
+## OK dash status: 2
+## BUG zsh status: 0
 
 #### 'local -a x' does not set variable
 set -o nounset
@@ -166,6 +221,8 @@ f() {
 }
 f
 ## status: 1
+## OK dash status: 2
+## BUG zsh status: 0
 
 #### 'local x' and then array assignment
 f() {
@@ -176,6 +233,9 @@ f() {
 f
 ## status: 0
 ## stdout: foo
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## BUG zsh stdout: o
 
 #### 'declare -A' and then dict assignment
 declare -A foo
@@ -184,6 +244,10 @@ foo["$key"]=value
 echo ${foo["bar"]}
 ## status: 0
 ## stdout: value
+## N-I dash status: 2
+## N-I dash stdout-json: ""
+## N-I mksh status: 1
+## N-I mksh stdout-json: ""
 
 #### declare in an if statement
 # bug caught by my feature detection snippet in bash-completion
@@ -199,6 +263,7 @@ echo $spam
 bar
 eggs
 ## END
+
 
 #### Modify a temporary binding
 # (regression for bug found by Michael Greenberg)
@@ -240,12 +305,34 @@ x=local
 x=mutated-temp
 x=global
 ## END
+## OK dash/zsh STDOUT:
+x=temp-binding
+x=mutated-temp
+x=local
+x=
+x=global
+## END
 ## BUG bash STDOUT:
 x=temp-binding
 x=mutated-temp
 x=local
 x=global
 x=global
+## END
+## BUG mksh STDOUT:
+x=temp-binding
+x=mutated-temp
+x=local
+x=mutated-temp
+x=mutated-temp
+## END
+## BUG yash STDOUT:
+# yash has no locals
+x=temp-binding
+x=mutated-temp
+x=mutated-temp
+x=
+x=
 ## END
 
 #### Test above without 'local' (which is not POSIX)
@@ -264,6 +351,18 @@ x=global
 x=temp-binding f
 echo "x=$x"
 
+## OK dash/zsh STDOUT:
+x=temp-binding
+x=mutated-temp
+x=
+x=global
+## END
+## BUG mksh/yash STDOUT:
+x=temp-binding
+x=mutated-temp
+x=
+x=
+## END
 ## STDOUT:
 x=temp-binding
 x=mutated-temp
@@ -282,6 +381,12 @@ f() {
 }
 x=global
 f
+## OK dash/bash/zsh STDOUT:
+x=global
+x=local
+- operator = default
+:- operator = default
+## END
 ## STDOUT:
 x=global
 x=local
@@ -300,6 +405,12 @@ f() {
 }
 x=global
 x=temp-binding f
+## OK dash/zsh STDOUT:
+x=temp-binding
+x=local
+- operator = default
+:- operator = default
+## END
 ## STDOUT:
 x=temp-binding
 x=local
@@ -323,6 +434,10 @@ argv.sh "$ex" "$glo" "$ro"
 ## STDOUT:
 ['a b c', 'a b c', 'a b c']
 ## END
+## BUG dash STDOUT:
+['a', 'a b c', 'a']
+## END
+
 
 #### aliased assignment doesn't split
 shopt -s expand_aliases || true
@@ -332,10 +447,15 @@ alias r=readonly
 e ex=$words
 r ro=$words
 argv.sh "$ex" "$ro"
+## BUG dash STDOUT:
+['a', 'a']
+## END
 ## STDOUT:
 ['a b c', 'a b c']
 ## END
 
+
+#### assignment using dynamic keyword (splits in most shells, not in zsh/osh)
 words='a b c'
 e=export
 r=readonly
@@ -343,9 +463,15 @@ $e ex=$words
 $r ro=$words
 argv.sh "$ex" "$ro"
 
+# zsh and OSH are smart
 ## STDOUT:
 ['a b c', 'a b c']
 ## END
+
+## OK dash/bash/mksh STDOUT:
+['a', 'a']
+## END
+
 
 #### assignment using dynamic var names doesn't split
 words='a b c'
@@ -371,6 +497,10 @@ argv.sh "$ex2" "$ro2"
 ['a b c', 'a b c']
 ['a b c', 'a b c']
 ## END
+## OK dash/bash/mksh STDOUT:
+['a', 'a']
+['a b c', 'a b c']
+## END
 
 #### assign and glob
 cd $TMP
@@ -387,6 +517,10 @@ unset foo
 ['*']
 ['*']
 ## END
+## BUG dash STDOUT:
+['*']
+['b']
+## END
 
 #### declare and glob
 cd $TMP
@@ -396,6 +530,9 @@ argv.sh "$foo"
 unset foo
 ## STDOUT:
 ['*']
+## END
+## N-I dash STDOUT:
+['']
 ## END
 
 #### readonly $x where x='b c'
@@ -409,11 +546,13 @@ echo status=$?
 c=new
 echo status=$?
 
+# in OSH and zsh, this is an invalid variable name
 ## status: 1
 ## stdout-json: ""
 
 # most shells make two variable read-only
 
+## OK dash/mksh status: 2
 ## OK bash status: 0
 ## OK bash STDOUT:
 status=1
@@ -426,6 +565,7 @@ readonly a=(1 2) no_value c=(3 4)
 no_value=x
 ## status: 1
 ## stdout-json: ""
+## OK dash status: 2
 
 #### export a=1 no_value c=2
 no_value=foo
@@ -448,6 +588,10 @@ f
 global
 ['loc', '', 'loc']
 ## END
+## BUG dash STDOUT:
+global
+['loc', 'global', 'loc']
+## END
 
 #### redirect after assignment builtin (eval redirects after evaluating arguments)
 
@@ -462,6 +606,7 @@ done
 ## STDERR:
 STDERR
 ## END
+## BUG zsh stderr-json: ""
 
 #### redirect after command sub (like case above but without assignment builtin)
 echo stdout=$(stdout_stderr.sh) 2>/dev/null
@@ -484,17 +629,27 @@ STDERR
 ## END
 
 #### redirect after declare -p
+case $SH in *dash) exit 99 ;; esac  # stderr unpredictable
 
 foo=bar
 typeset -p foo 1>&2
 
+# zsh and mksh agree on exact output, which we don't really care about
 ## STDERR:
 typeset foo=bar
 ## END
 ## OK bash STDERR:
 declare -- foo="bar"
 ## END
+## OK osh STDERR:
+declare -- foo=bar
+## END
+## N-I dash status: 99
+## N-I dash stderr-json: ""
 ## stdout-json: ""
+
+#### declare -a arr does not remove existing arrays (OSH regression)
+case $SH in dash) exit 99 ;; esac # dash does not support arrays
 
 declare -a arr
 arr=(foo bar baz)
@@ -503,6 +658,11 @@ echo arr:${#arr[@]}
 ## STDOUT:
 arr:3
 ## END
+## N-I dash status: 99
+## N-I dash stdout-json: ""
+
+#### declare -A dict does not remove existing arrays (OSH regression)
+case $SH in dash|mksh) exit 99 ;; esac # dash/mksh does not support associative arrays
 
 declare -A dict
 dict['foo']=hello
@@ -513,8 +673,13 @@ echo dict:${#dict[@]}
 ## STDOUT:
 dict:3
 ## END
+## N-I dash/mksh status: 99
+## N-I dash/mksh stdout-json: ""
 
 #### "readonly -a arr" and "readonly -A dict" should not not remove existing arrays
+# mksh's readonly does not support the -a option.
+# dash/mksh does not support associative arrays.
+case $SH in dash|mksh) exit 99 ;; esac
 
 declare -a arr
 arr=(foo bar baz)
@@ -531,6 +696,11 @@ echo dict:${#dict[@]}
 arr:3
 dict:3
 ## END
+## N-I dash/mksh status: 99
+## N-I dash/mksh stdout-json: ""
+
+#### "declare -a arr" and "readonly -a a" creates an empty array (OSH)
+case $SH in dash|mksh) exit 99 ;; esac # dash/mksh does not support associative arrays
 
 declare -a arr1
 readonly -a arr2
@@ -550,8 +720,36 @@ declare -r arr2
 declare -A dict1
 declare -r dict2
 ## END
+## OK zsh STDOUT:
+typeset -a arr1
+arr1=(  )
+typeset -a arr2
+arr2=(  )
+typeset -ar arr2
+typeset -A dict1
+dict1=( )
+typeset -a dict2
+dict2=( )
+typeset -Ar dict2
+## END
+## N-I dash/mksh status: 99
+## N-I dash/mksh stdout-json: ""
+
+#### "var d = {}; declare -p d" does not print anything (OSH)
+case $SH in bash|dash|mksh|zsh) exit 99 ;; esac
+
+# We pretend that the variable does not exist when the variable is not
+# representable with the "declare -p" format.
+
+var d = {}
+declare -p d
+## STDOUT:
+## END
+## status: 1
+## N-I bash/dash/mksh/zsh status: 99
 
 #### readonly array should not be modified by a+=(1)
+case $SH in dash) exit 99 ;; esac # dash/mksh does not support associative arrays
 
 a=(1 2 3)
 readonly -a a
@@ -564,3 +762,7 @@ argv.sh "${a[@]}"
 ['1', '2', '3']
 ['1', '2', '3']
 ## END
+## OK mksh status: 1
+## OK mksh stdout-json: ""
+## N-I dash status: 99
+## N-I dash stdout-json: ""

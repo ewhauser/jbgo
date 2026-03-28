@@ -6,22 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-var excludedSpecFiles = map[string]struct{}{
-	"errexit-osh.test.sh":         {},
-	"posix.test.sh":               {},
-	"toysh-posix.test.sh":         {},
-	"toysh.test.sh":               {},
-	"ysh-builtin-private.test.sh": {},
-	"zsh-idioms.test.sh":          {},
-}
-
 //nolint:forbidigo // Conformance specs are vendored host files read directly by the test harness.
-func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
+func LoadSpecFiles(specDir string, specNames []string, mode OracleMode) ([]SpecFile, error) {
 	matches := make([]string, 0, len(specNames))
 	if len(specNames) == 0 {
 		var err error
@@ -38,13 +30,6 @@ func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
 			matches = append(matches, filepath.Join(specDir, filepath.Base(specName)))
 		}
 	}
-	filtered := matches[:0]
-	for _, match := range matches {
-		if isBashSpecFile(match) {
-			filtered = append(filtered, match)
-		}
-	}
-	matches = filtered
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("no spec files found in %s", specDir)
 	}
@@ -61,14 +46,22 @@ func LoadSpecFiles(specDir string, specNames []string) ([]SpecFile, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", relPath, err)
 		}
+		if !supportsOracleMode(specFile, mode) {
+			continue
+		}
 		files = append(files, specFile)
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no OILS spec files found in %s for suite %s", specDir, mode)
 	}
 	return files, nil
 }
 
-func isBashSpecFile(path string) bool {
-	_, excluded := excludedSpecFiles[filepath.Base(path)]
-	return !excluded
+func supportsOracleMode(specFile SpecFile, mode OracleMode) bool {
+	if mode == "" || len(specFile.CompareShells) == 0 {
+		return true
+	}
+	return slices.Contains(specFile.CompareShells, mode)
 }
 
 func ParseSpecFile(relPath, content string) (SpecFile, error) {
@@ -174,6 +167,7 @@ func ParseSpecFile(relPath, content string) (SpecFile, error) {
 	if len(file.Cases) == 0 {
 		return SpecFile{}, fmt.Errorf("no spec cases found in %s", relPath)
 	}
+	file.CompareShells = parseCompareShells(file.Metadata["compare_shells"])
 	return file, nil
 }
 
@@ -195,10 +189,10 @@ func parseMetadataLine(line string) (key, value string, ok bool) {
 }
 
 type directiveBlockCapture struct {
-	oracle OracleMode
-	kind   OracleOverrideKind
-	field  string
-	lines  []string
+	oracles []OracleMode
+	kind    OracleOverrideKind
+	field   string
+	lines   []string
 }
 
 func (b *directiveBlockCapture) finish(specCase *SpecCase) {
@@ -209,7 +203,7 @@ func (b *directiveBlockCapture) finish(specCase *SpecCase) {
 	if len(b.lines) > 0 {
 		value += "\n"
 	}
-	if b.oracle == "" {
+	if len(b.oracles) == 0 {
 		switch b.field {
 		case "stdout":
 			specCase.Expectation.Stdout = &value
@@ -218,30 +212,33 @@ func (b *directiveBlockCapture) finish(specCase *SpecCase) {
 		}
 		return
 	}
-	override := specCase.OracleOverrides[b.oracle]
-	if override.Kind == "" {
-		override.Kind = b.kind
+	for _, oracle := range b.oracles {
+		override := specCase.OracleOverrides[oracle]
+		if override.Kind == "" {
+			override.Kind = b.kind
+		}
+		switch b.field {
+		case "stdout":
+			override.Stdout = &value
+		case "stderr":
+			override.Stderr = &value
+		}
+		specCase.OracleOverrides[oracle] = override
 	}
-	switch b.field {
-	case "stdout":
-		override.Stdout = &value
-	case "stderr":
-		override.Stderr = &value
-	}
-	specCase.OracleOverrides[b.oracle] = override
 }
 
 func parseOracleMode(value string) (OracleMode, bool) {
-	switch strings.TrimSpace(value) {
-	case string(OracleBash):
-		return OracleBash, true
-	default:
-		return "", false
-	}
+	return canonicalOracleMode(value)
 }
 
 func parseOracleOverrideKind(value string) (OracleOverrideKind, bool) {
-	switch strings.TrimSpace(value) {
+	value = strings.TrimSpace(value)
+	if head, tail, ok := strings.Cut(value, "-"); ok {
+		if _, err := strconv.Atoi(tail); err == nil {
+			value = head
+		}
+	}
+	switch value {
 	case string(OracleOverrideBug):
 		return OracleOverrideBug, true
 	case string(OracleOverrideOK):
@@ -271,7 +268,7 @@ func parseDirectiveBlockHeader(line string) *directiveBlockCapture {
 	if !ok {
 		return nil
 	}
-	return &directiveBlockCapture{oracle: oracle, kind: kind, field: field}
+	return &directiveBlockCapture{oracles: oracle, kind: kind, field: field}
 }
 
 func applyDirectiveInline(specCase *SpecCase, line string) bool {
@@ -279,7 +276,7 @@ func applyDirectiveInline(specCase *SpecCase, line string) bool {
 	parts := strings.Fields(body)
 	switch {
 	case len(parts) >= 3:
-		kind, oracle, fieldToken, ok := parseOracleDirectivePrefix(parts)
+		kind, oracles, fieldToken, ok := parseOracleDirectivePrefix(parts)
 		if !ok {
 			return false
 		}
@@ -291,7 +288,12 @@ func applyDirectiveInline(specCase *SpecCase, line string) bool {
 			return false
 		}
 		value := strings.TrimSpace(strings.Join(parts[3:], " "))
-		return applyOracleDirectiveValue(specCase, oracle, kind, field, jsonEncoded, value)
+		for _, oracle := range oracles {
+			if !applyOracleDirectiveValue(specCase, oracle, kind, field, jsonEncoded, value) {
+				return false
+			}
+		}
+		return true
 	case len(parts) >= 1:
 		field, jsonEncoded, ok := parseDirectiveField(parts[0])
 		if !ok {
@@ -307,19 +309,19 @@ func applyDirectiveInline(specCase *SpecCase, line string) bool {
 	}
 }
 
-func parseOracleDirectivePrefix(parts []string) (OracleOverrideKind, OracleMode, string, bool) {
+func parseOracleDirectivePrefix(parts []string) (OracleOverrideKind, []OracleMode, string, bool) {
 	if len(parts) < 3 {
-		return "", "", "", false
+		return "", nil, "", false
 	}
 	kind, ok := parseOracleOverrideKind(parts[0])
 	if !ok {
-		return "", "", "", false
+		return "", nil, "", false
 	}
-	oracle, ok := parseOracleMode(parts[1])
+	oracles, ok := parseOracleModes(parts[1])
 	if !ok {
-		return "", "", "", false
+		return "", nil, "", false
 	}
-	return kind, oracle, parts[2], true
+	return kind, oracles, parts[2], true
 }
 
 func parseDirectiveField(token string) (field string, jsonEncoded, ok bool) {
@@ -408,4 +410,39 @@ func parseDirectiveStringValue(value string, jsonEncoded bool) (string, bool) {
 		return "", false
 	}
 	return out, true
+}
+
+func parseCompareShells(value string) []OracleMode {
+	seen := make(map[OracleMode]struct{})
+	out := make([]OracleMode, 0, len(strings.Fields(value)))
+	for token := range strings.FieldsSeq(value) {
+		mode, ok := parseOracleMode(token)
+		if !ok {
+			continue
+		}
+		if _, exists := seen[mode]; exists {
+			continue
+		}
+		seen[mode] = struct{}{}
+		out = append(out, mode)
+	}
+	return out
+}
+
+func parseOracleModes(value string) ([]OracleMode, bool) {
+	tokens := strings.Split(strings.TrimSpace(value), "/")
+	seen := make(map[OracleMode]struct{}, len(tokens))
+	out := make([]OracleMode, 0, len(tokens))
+	for _, token := range tokens {
+		mode, ok := parseOracleMode(token)
+		if !ok {
+			return nil, false
+		}
+		if _, exists := seen[mode]; exists {
+			continue
+		}
+		seen[mode] = struct{}{}
+		out = append(out, mode)
+	}
+	return out, len(out) > 0
 }

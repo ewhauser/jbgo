@@ -1,7 +1,9 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash
+## compare_shells: bash dash mksh zsh
 
 # Notes:
+# - ash is just like dash, so don't bother testing
+# - zsh fails several cases
 
 #### >$file touches a file
 rm -f myfile
@@ -17,6 +19,11 @@ status=1
 status=0
 ## END
 
+## BUG zsh STDOUT:
+status=1
+## END
+
+# regression for OSH
 ## stderr-json: ""
 
 #### $(< $file) yields the contents of the file
@@ -27,6 +34,10 @@ argv.sh "$foo"
 
 ## STDOUT:
 ['2\n3']
+## END
+
+## N-I dash/ash/yash STDOUT:
+['']
 ## END
 
 #### `< $file` behaves like $(< file)
@@ -41,11 +52,15 @@ echo "[$x]"
 [7
 8]
 ## END
+## N-I dash/ash/yash STDOUT:
+[]
+## END
 
 #### $(< file; end) is not a special case
 
 seq 5 6 > myfile
 
+# zsh prints the file each time!
 # other shells do nothing?
 
 foo=$(echo begin; < myfile)
@@ -69,6 +84,22 @@ end
 ---
 ## END
 
+## BUG zsh STDOUT:
+begin
+5
+6
+---
+5
+6
+end
+---
+5
+6
+5
+6
+---
+## END
+
 #### < file in pipeline and subshell doesn't work
 echo FOO > file2
 
@@ -77,6 +108,11 @@ echo FOO > file2
 ( < file2 )
 echo end
 ## STDOUT:
+end
+## END
+## BUG zsh STDOUT:
+foo
+FOO
 end
 ## END
 
@@ -112,9 +148,13 @@ tac $TMP/out.txt
 bar
 foo
 ## END
+## BUG zsh STDOUT:
+## END
 
 #### Redirect in assignment
+# dash captures stderr to a file here, which seems correct.  Bash doesn't and
 # just lets it go to actual stderr.
+# For now we agree with dash/mksh, since it involves fewer special cases in the
 # code.
 
 FOO=$(echo foo 1>&2) 2>$TMP/no-command.txt
@@ -130,6 +170,7 @@ FOO=
 FILE=
 FOO=
 ## END
+
 
 #### Redirect in function body
 fun() { echo hi; } 1>&2
@@ -157,6 +198,8 @@ file 1
 __
 file 2
 ## END
+## N-I dash stdout-json: ""
+## N-I dash status: 2
 
 #### Redirect in function body AND function call
 fun() { echo hi; } 1>&2
@@ -168,6 +211,8 @@ hi
 ## END
 
 #### redirect bash extensions:   [[  ((  for ((
+
+case $SH in dash|mksh) exit ;; esac
 
 rm -f dbracket dparen for-expr
 
@@ -186,6 +231,9 @@ wc -l dbracket dparen for-expr
 0 dparen
 1 for-expr
 1 total
+## END
+
+## N-I dash/mksh STDOUT:
 ## END
 
 #### redirect if
@@ -248,6 +296,13 @@ do
 done
 cat $TMP/redirect2.txt
 ## status: 2
+## OK mksh status: 1
+## BUG zsh status: 0
+## BUG zsh STDOUT:
+1
+2
+3
+## END
 
 #### Brace group redirect
 # Suffix works, but prefix does NOT work.

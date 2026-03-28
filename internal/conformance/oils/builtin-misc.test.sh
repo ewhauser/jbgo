@@ -1,5 +1,5 @@
 ## oils_failures_allowed: 0
-## compare_shells: bash
+## compare_shells: dash bash mksh zsh
 
 #### history builtin usage
 history
@@ -20,6 +20,27 @@ status=2
 status=2
 status=2
 ## END
+## OK bash STDOUT:
+status=0
+status=0
+status=2
+status=1
+status=1
+## END
+## BUG zsh/mksh STDOUT:
+status=1
+status=1
+status=1
+status=1
+status=1
+## END
+## N-I dash STDOUT:
+status=127
+status=127
+status=127
+status=127
+status=127
+## END
 
 #### Print shell strings with weird chars: set and printf %q and ${x@Q}
 
@@ -28,14 +49,20 @@ status=2
 # let's test the easier \x01, which doesn't give bash problems.
 foo=$(printf 'a\nb\001c'\''d')
 
+# dash:
 #   only supports 'set'; prints it on multiple lines with binary data
 #   switches to "'" for single quotes, not \'
+# zsh:
 #   print binary data all the time, except for printf %q
 #   does print $'' strings
+# mksh:
 #   prints binary data for @Q
 #   prints $'' strings
 
 # All are very inconsistent.
+
+case $SH in dash|mksh|zsh) return ;; esac
+
 
 set | grep -A1 foo
 
@@ -52,9 +79,14 @@ pf  $'a\nb\001c\'d'
 @Q  $'a\nb\001c\'d'
 ## END
 
+## OK dash/mksh/zsh STDOUT:
+## END
+
 #### Print shell strings with normal chars: set and printf %q and ${x@Q}
 
 # There are variations on whether quotes are printed
+
+case $SH in dash|zsh) return ;; esac
 
 foo=spam
 
@@ -69,10 +101,29 @@ echo '@Q ' ${foo@Q}
 
 ## STDOUT:
 foo=spam
+declare -- foo=spam
+pf  spam
+@Q  spam
+## END
+
+## OK bash STDOUT:
+foo=spam
 declare -- foo="spam"
 pf  spam
 @Q  'spam'
 ## END
+
+## OK mksh STDOUT:
+foo=spam
+typeset foo=spam
+pf  spam
+@Q  spam
+## END
+
+## N-I dash/zsh STDOUT:
+## END
+
+
 
 #### time pipeline
 time_err=$TMP/time-pipeline.err
@@ -102,8 +153,10 @@ echo "$@"
 set -- 1
 shift 2
 ## status: 1
+## OK dash status: 2
 
 #### Invalid shift argument
 shift ZZZ
 ## status: 2
 ## OK bash status: 1
+## BUG mksh/zsh status: 0

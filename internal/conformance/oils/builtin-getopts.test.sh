@@ -1,4 +1,4 @@
-## compare_shells: bash
+## compare_shells: dash bash mksh ash
 ## oils_failures_allowed: 3
 
 #### getopts empty
@@ -52,6 +52,11 @@ name=a
 OPTARG=
 ## END
 
+## BUG bash/mksh status: 1
+## BUG bash/mksh STDOUT:
+name=a
+## END
+
 #### Basic getopts invocation
 set -- -h -c foo x y z
 FLAG_h=0
@@ -76,6 +81,7 @@ status=2 opt= OPTARG=foo OPTIND=3
 ## OK bash STDOUT:
 status=1 opt= OPTARG=foo OPTIND=3
 ## END
+## OK mksh stdout: status=1 opt= OPTARG= OPTIND=1
 
 #### getopts with invalid flag
 set -- -h -x
@@ -179,6 +185,13 @@ OPTIND=1
 OPTIND=4
 OPTIND=1
 ## END
+## BUG mksh STDOUT:
+OPTIND=1
+-
+-
+OPTIND=4
+OPTIND=4
+## END
 
 #### OPTIND after multiple getopts with different spec
 # Wow this is poorly specified!  A fundamental design problem with the global
@@ -209,6 +222,24 @@ OPTIND=2
 OPTIND=5
 OPTIND=2
 ## END
+## BUG ash/dash STDOUT:
+.
+OPTIND=2
+-
+-
+-
+OPTIND=5
+_
+OPTIND=2
+## END
+## BUG mksh STDOUT:
+.
+OPTIND=2
+-
+-
+OPTIND=5
+OPTIND=5
+## END
 
 #### OPTIND narrowed down
 FLAG_a=
@@ -223,6 +254,7 @@ while getopts "ab:" opt; do
     b) FLAG_b="$OPTARG" ;;
   esac
 done
+# Bash doesn't reset OPTIND!  It skips over c!  mksh at least warns about this!
 # You have to reset OPTIND yourself.
 
 set -- -c -d -e E
@@ -239,6 +271,11 @@ echo a=$FLAG_a b=$FLAG_b c=$FLAG_c d=$FLAG_d e=$FLAG_e
 ## STDOUT:
 a=1 b= c=1 d=1 e=E
 ## END
+
+## BUG bash/mksh STDOUT:
+a=1 b= c= d=1 e=E
+## END
+
 
 #### Getopts parses the function's arguments
 FLAG_h=0
@@ -277,6 +314,10 @@ echo OPTIND=$OPTIND opt=$opt OPTARG=$OPTARG
 OPTIND=1 opt=a OPTARG=
 OPTIND=2 opt=b OPTARG=
 ## END
+## OK dash/mksh/ash STDOUT:
+OPTIND=2 opt=a OPTARG=
+OPTIND=2 opt=b OPTARG=
+## END
 
 #### flag and arg: -c10
 getopts "c:" opt -c10
@@ -286,6 +327,10 @@ echo OPTIND=$OPTIND opt=$opt OPTARG=$OPTARG
 ## STDOUT:
 OPTIND=2 opt=c OPTARG=10
 OPTIND=2 opt=? OPTARG=
+## END
+## BUG dash STDOUT:
+OPTIND=2 opt=c OPTARG=10
+OPTIND=2 opt=? OPTARG=10
 ## END
 
 #### More Smooshing 1
@@ -297,6 +342,11 @@ getopts "ab:c:" opt -ab hi -c hello
 echo OPTIND=$OPTIND opt=$opt OPTARG=$OPTARG
 ## STDOUT:
 OPTIND=1 opt=a OPTARG=
+OPTIND=3 opt=b OPTARG=hi
+OPTIND=5 opt=c OPTARG=hello
+## END
+## OK dash/mksh/ash STDOUT:
+OPTIND=2 opt=a OPTARG=
 OPTIND=3 opt=b OPTARG=hi
 OPTIND=5 opt=c OPTARG=hello
 ## END
@@ -313,6 +363,11 @@ OPTIND=1 opt=a OPTARG=
 OPTIND=1 opt=b OPTARG=
 OPTIND=2 opt=c OPTARG=10
 ## END
+## OK dash/mksh/ash STDOUT:
+OPTIND=2 opt=a OPTARG=
+OPTIND=2 opt=b OPTARG=
+OPTIND=2 opt=c OPTARG=10
+## END
 
 #### OPTIND should be >= 1 (regression)
 OPTIND=-1
@@ -326,6 +381,9 @@ echo status=$?
 status=1
 status=1
 ## END
+## OK dash status: 2
+## OK dash stdout-json: ""
+
 
 #### getopts bug #1523
 
