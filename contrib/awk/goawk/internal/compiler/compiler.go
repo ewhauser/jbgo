@@ -21,6 +21,7 @@ type Program struct {
 	Nums      []float64
 	Strs      []string
 	Regexes   []*regexp.Regexp
+	RegexStrs []string
 
 	// For disassembly
 	scalarNames     []string
@@ -1089,6 +1090,7 @@ func (c *compiler) regexIndex(r string) int {
 	re := regexp.MustCompile(AddRegexFlags(r))
 	re.Longest() // other awks use leftmost-longest matching
 	c.program.Regexes = append(c.program.Regexes, re)
+	c.program.RegexStrs = append(c.program.RegexStrs, r)
 	c.indexes.regexes[r] = index
 	return index
 }

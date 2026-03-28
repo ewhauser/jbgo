@@ -75,6 +75,10 @@ type interp struct {
 	scanners      map[string]*bufio.Scanner
 	stdin         io.Reader
 	fileOpener    func(string) (io.ReadCloser, error)
+	fileWriter    func(string, bool) (io.WriteCloser, error)
+	shellRunner   func(string, io.Reader, io.Writer, io.Writer) (int, error)
+	pipeReader    func(string, io.Reader, io.Writer) (io.ReadCloser, func() (int, error), error)
+	pipeWriter    func(string, io.Writer, io.Writer) (io.WriteCloser, func() (int, error), error)
 	filenameIndex int
 	hadFiles      bool
 	input         io.Reader
@@ -100,6 +104,7 @@ type interp struct {
 	nativeFuncs   []nativeFunc
 	scalarIndexes map[string]int
 	arrayIndexes  map[string]int
+	scalarNames   []string
 
 	// File, line, and field handling
 	filename        value
@@ -136,6 +141,9 @@ type interp struct {
 
 	savedFieldSep      string
 	savedFieldSepRegex *regexp.Regexp
+	fieldPattern       string
+	fieldPatternRegex  *regexp.Regexp
+	fieldWidths        []int
 
 	// Parsed program, compiled functions and constants
 	program   *parser.Program
@@ -143,6 +151,7 @@ type interp struct {
 	nums      []float64
 	strs      []string
 	regexes   []*regexp.Regexp
+	regexStrs []string
 
 	// Context support (for Interpreter.ExecuteContext)
 	checkCtx bool
@@ -263,9 +272,19 @@ type Config struct {
 	// NoFileReads.
 	FileOpener func(name string) (io.ReadCloser, error)
 
+	// Optional hook for opening regular output files used by ">" and ">>".
+	// If nil, goawk falls back to os.OpenFile subject to NoFileWrites.
+	FileWriter func(name string, appendMode bool) (io.WriteCloser, error)
+
 	// Exec args used to run system shell. Typically, this will
 	// be {"/bin/sh", "-c"}
 	ShellCommand []string
+
+	// Optional hooks for sandbox-owned shell execution. When nil, goawk falls
+	// back to running the configured ShellCommand via exec.Cmd.
+	ShellRunner func(code string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+	PipeReader  func(code string, stdin io.Reader, stderr io.Writer) (io.ReadCloser, func() (int, error), error)
+	PipeWriter  func(code string, stdout, stderr io.Writer) (io.WriteCloser, func() (int, error), error)
 
 	// List of name-value pairs to be assigned to the ENVIRON special
 	// array, for example []string{"USER", "bob", "HOME", "/home/bob"}.
@@ -393,6 +412,7 @@ func newInterp(program *parser.Program) *interp {
 		nums:      program.Compiled.Nums,
 		strs:      program.Compiled.Strs,
 		regexes:   program.Compiled.Regexes,
+		regexStrs: program.Compiled.RegexStrs,
 	}
 
 	// Allocate memory for variables and virtual machine stack
@@ -406,6 +426,10 @@ func newInterp(program *parser.Program) *interp {
 		}
 	})
 	p.globals = make([]value, len(p.scalarIndexes))
+	p.scalarNames = make([]string, len(p.scalarIndexes))
+	for name, index := range p.scalarIndexes {
+		p.scalarNames[index] = name
+	}
 	p.stack = make([]value, initialStackSize)
 	p.arrays = make([]map[string]value, len(p.arrayIndexes), len(p.arrayIndexes)+initialStackSize)
 	for i := 0; i < len(p.arrayIndexes); i++ {
@@ -521,6 +545,8 @@ func (p *interp) setExecuteConfig(config *Config) error {
 			}
 		}
 	}
+	p.setGlobalByName("ARGIND", num(0))
+	p.setArrayByName("PROCINFO", "version", numStr("5.3.2"))
 
 	// Set up system shell command
 	if len(config.ShellCommand) != 0 {
@@ -535,6 +561,10 @@ func (p *interp) setExecuteConfig(config *Config) error {
 	p.noFileReads = config.NoFileReads
 	p.stdin = config.Stdin
 	p.fileOpener = config.FileOpener
+	p.fileWriter = config.FileWriter
+	p.shellRunner = config.ShellRunner
+	p.pipeReader = config.PipeReader
+	p.pipeWriter = config.PipeWriter
 	if p.stdin == nil {
 		p.stdin = os.Stdin
 	}
@@ -787,13 +817,7 @@ func (p *interp) setVarByName(name, value string) error {
 	if index > 0 {
 		return p.setSpecial(index, numStr(value))
 	}
-	index, ok := p.scalarIndexes[name]
-	if ok {
-		p.globals[index] = numStr(value)
-		return nil
-	}
-	// Ignore variables that aren't defined in program
-	return nil
+	return p.setGlobalByName(name, numStr(value))
 }
 
 // Set special variable by index to given value
@@ -840,11 +864,10 @@ func (p *interp) setSpecial(index int, v value) error {
 	case ast.V_FS:
 		p.fieldSep = p.toString(v)
 		if utf8.RuneCountInString(p.fieldSep) > 1 { // compare to interp.ensureFields
-			re, err := regexp.Compile(compiler.AddRegexFlags(p.fieldSep))
+			re, err := p.compileRegex(p.fieldSep)
 			if err != nil {
-				return newError("invalid regex %q: %s", p.fieldSep, err)
+				return err
 			}
-			re.Longest() // other awks use leftmost-longest matching
 			p.fieldSepRegex = re
 		}
 	case ast.V_OFMT:
@@ -864,11 +887,10 @@ func (p *interp) setSpecial(index int, v value) error {
 			p.recordSepRegex = regexp.MustCompile(sep)
 			p.recordSepRegex.Longest() // other awks use leftmost-longest matching
 		default:
-			re, err := regexp.Compile(compiler.AddRegexFlags(p.recordSep))
+			re, err := p.compileRegex(p.recordSep)
 			if err != nil {
-				return newError("invalid regex %q: %s", p.recordSep, err)
+				return err
 			}
-			re.Longest() // other awks use leftmost-longest matching
 			p.recordSepRegex = re
 		}
 	case ast.V_RT:
@@ -897,6 +919,88 @@ func (p *interp) setSpecial(index int, v value) error {
 		}
 	default:
 		panic(fmt.Sprintf("unexpected special variable index: %d", index))
+	}
+	return nil
+}
+
+func (p *interp) setGlobal(index int, v value) error {
+	p.globals[index] = v
+	return p.updateGlobalSideEffects(p.scalarNames[index], v)
+}
+
+func (p *interp) setGlobalByName(name string, v value) error {
+	index, ok := p.scalarIndexes[name]
+	if !ok {
+		return nil
+	}
+	return p.setGlobal(index, v)
+}
+
+func (p *interp) setArrayByName(name, key string, v value) {
+	index, ok := p.arrayIndexes[name]
+	if !ok {
+		return
+	}
+	p.arrays[index][key] = v
+}
+
+func (p *interp) globalString(name string) string {
+	index, ok := p.scalarIndexes[name]
+	if !ok {
+		return ""
+	}
+	return p.toString(p.globals[index])
+}
+
+func (p *interp) globalBool(name string) bool {
+	index, ok := p.scalarIndexes[name]
+	if !ok {
+		return false
+	}
+	return p.globals[index].boolean()
+}
+
+func (p *interp) updateGlobalSideEffects(name string, v value) error {
+	switch name {
+	case "FIELDWIDTHS":
+		fieldWidths, err := parseFieldWidthsSpec(p.toString(v))
+		if err != nil {
+			return err
+		}
+		p.fieldWidths = fieldWidths
+	case "FPAT":
+		p.fieldPattern = p.toString(v)
+		p.fieldPatternRegex = nil
+		if p.fieldPattern != "" {
+			re, err := p.compileRegex(p.fieldPattern)
+			if err != nil {
+				return err
+			}
+			p.fieldPatternRegex = re
+		}
+	case "IGNORECASE":
+		p.regexCache = make(map[string]*regexp.Regexp, 10)
+		if utf8.RuneCountInString(p.fieldSep) > 1 {
+			re, err := p.compileRegex(p.fieldSep)
+			if err != nil {
+				return err
+			}
+			p.fieldSepRegex = re
+		}
+		if len(p.recordSep) > 1 || utf8.RuneCountInString(p.recordSep) > 1 {
+			re, err := p.compileRegex(p.recordSep)
+			if err != nil {
+				return err
+			}
+			p.recordSepRegex = re
+		}
+		if p.fieldPattern != "" {
+			re, err := p.compileRegex(p.fieldPattern)
+			if err != nil {
+				return err
+			}
+			p.fieldPatternRegex = re
+		}
 	}
 	return nil
 }
@@ -1022,17 +1126,25 @@ func (p *interp) toString(v value) string {
 
 // Compile regex string (or fetch from regex cache)
 func (p *interp) compileRegex(regex string) (*regexp.Regexp, error) {
-	if re, ok := p.regexCache[regex]; ok {
+	cacheKey := regex
+	if p.globalBool("IGNORECASE") {
+		cacheKey = "(?i)" + regex
+	}
+	if re, ok := p.regexCache[cacheKey]; ok {
 		return re, nil
 	}
-	re, err := regexp.Compile(compiler.AddRegexFlags(regex))
+	pattern := compiler.AddRegexFlags(regex)
+	if p.globalBool("IGNORECASE") {
+		pattern = "(?i)" + pattern
+	}
+	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, newError("invalid regex %q: %s", regex, err)
 	}
 	re.Longest() // other awks use leftmost-longest matching
 	// Dumb, non-LRU cache: just cache the first N regexes
 	if len(p.regexCache) < maxCachedRegexes {
-		p.regexCache[regex] = re
+		p.regexCache[cacheKey] = re
 	}
 	return re, nil
 }
@@ -1043,6 +1155,23 @@ func getDefaultShellCommand() []string {
 		executable = "sh"
 	}
 	return []string{executable, "-c"}
+}
+
+func parseFieldWidthsSpec(spec string) ([]int, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return nil, nil
+	}
+	fields := strings.Fields(spec)
+	widths := make([]int, 0, len(fields))
+	for _, field := range fields {
+		width, err := strconv.Atoi(field)
+		if err != nil || width <= 0 {
+			return nil, newError("invalid FIELDWIDTHS %q", spec)
+		}
+		widths = append(widths, width)
+	}
+	return widths, nil
 }
 
 func inputModeString(mode IOMode, csvConfig CSVInputConfig) string {

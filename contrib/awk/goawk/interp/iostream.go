@@ -29,6 +29,8 @@ func firstError(errs ...error) error {
 	return nil
 }
 
+type waitFunc func() (int, error)
+
 // Close the cmd and convert the error result into the result returned from goawk builtin functions.
 // A nil error is returned if that error describes a non-zero exit status or an unhandled signal.
 // Any other type of error returns -1 and err.
@@ -37,7 +39,7 @@ func firstError(errs ...error) error {
 // 1. Returns the exit status of the child process and nil error on normal process exit.
 // 2. Returns 256 + signal on unhandled signal exit.
 // 3. Returns 512 + signal on unhandled signal exit which caused a core dump.
-func waitExitCode(cmd *exec.Cmd) (int, error) {
+func waitExitCodeCmd(cmd *exec.Cmd) (int, error) {
 	err := cmd.Wait()
 	if err == nil {
 		return 0, nil
@@ -109,12 +111,16 @@ func (s *outFileStream) ExitCode() int {
 type outCmdStream struct {
 	*bufio.Writer
 	closer   io.Closer
-	cmd      *exec.Cmd
+	wait     waitFunc
 	exitCode int
 	closed   bool
 }
 
-func newOutCmdStream(cmd *exec.Cmd) (outputStream, error) {
+func newOutCmdStream(w io.WriteCloser, wait waitFunc) outputStream {
+	return &outCmdStream{bufio.NewWriterSize(w, outputBufSize), w, wait, notClosedExitCode, false}
+}
+
+func newOutExecCmdStream(cmd *exec.Cmd) (outputStream, error) {
 	w, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, newError("error connecting to stdin pipe: %v", err)
@@ -124,8 +130,9 @@ func newOutCmdStream(cmd *exec.Cmd) (outputStream, error) {
 		_ = w.Close()
 		return nil, err
 	}
-	out := &outCmdStream{bufio.NewWriterSize(w, outputBufSize), w, cmd, notClosedExitCode, false}
-	return out, nil
+	return newOutCmdStream(w, func() (int, error) {
+		return waitExitCodeCmd(cmd)
+	}), nil
 }
 
 func (s *outCmdStream) Close() error {
@@ -135,8 +142,12 @@ func (s *outCmdStream) Close() error {
 	s.closed = true
 	flushErr := s.Writer.Flush()
 	closeErr := s.closer.Close()
-	var waitErr error
-	s.exitCode, waitErr = waitExitCode(s.cmd)
+	waitErr := error(nil)
+	if s.wait != nil {
+		s.exitCode, waitErr = s.wait()
+	} else {
+		s.exitCode = 0
+	}
 	return firstError(waitErr, flushErr, closeErr)
 }
 
@@ -190,12 +201,16 @@ func (s *inFileStream) ExitCode() int {
 
 type inCmdStream struct {
 	io.ReadCloser
-	cmd      *exec.Cmd
+	wait     waitFunc
 	exitCode int
 	closed   bool
 }
 
-func newInCmdStream(cmd *exec.Cmd) (inputStream, error) {
+func newInCmdStream(r io.ReadCloser, wait waitFunc) inputStream {
+	return &inCmdStream{r, wait, notClosedExitCode, false}
+}
+
+func newInExecCmdStream(cmd *exec.Cmd) (inputStream, error) {
 	r, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, newError("error connecting to stdout pipe: %v", err)
@@ -205,7 +220,9 @@ func newInCmdStream(cmd *exec.Cmd) (inputStream, error) {
 		_ = r.Close()
 		return nil, err
 	}
-	return &inCmdStream{r, cmd, notClosedExitCode, false}, nil
+	return newInCmdStream(r, func() (int, error) {
+		return waitExitCodeCmd(cmd)
+	}), nil
 }
 
 func (s *inCmdStream) Close() error {
@@ -214,8 +231,12 @@ func (s *inCmdStream) Close() error {
 	}
 	s.closed = true
 	closeErr := s.ReadCloser.Close()
-	var waitErr error
-	s.exitCode, waitErr = waitExitCode(s.cmd)
+	waitErr := error(nil)
+	if s.wait != nil {
+		s.exitCode, waitErr = s.wait()
+	} else {
+		s.exitCode = 0
+	}
 	return firstError(waitErr, closeErr)
 }
 

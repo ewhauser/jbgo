@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ewhauser/gbash/commands"
 	gbfs "github.com/ewhauser/gbash/fs"
@@ -25,15 +25,15 @@ func TestAWKSupportsProgramFilesFieldSeparatorsAndVars(t *testing.T) {
 	}
 }
 
-func TestAWKDisablesExec(t *testing.T) {
+func TestAWKExecutesSystemInSandbox(t *testing.T) {
 	t.Parallel()
 
-	result := mustExecAWK(t, "awk 'BEGIN { system(\"echo nope\") }'\n")
-	if result.ExitCode == 0 {
-		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	result := mustExecAWK(t, "awk 'BEGIN { rc = system(\"echo system-ok\"); print \"rc=\" rc }'\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "NoExec") && !strings.Contains(result.Stderr, "can't") {
-		t.Fatalf("Stderr = %q, want sandbox execution denial", result.Stderr)
+	if got, want := result.Stdout, "system-ok\nrc=0\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
@@ -68,6 +68,21 @@ func TestAWKSupportsCSVJoinAcrossFiles(t *testing.T) {
 	}
 }
 
+func TestAWKSupportsCSVModeFlag(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args:  []string{"-k", "{ print $2 }"},
+		Stdin: "a,b\nc,d\n",
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "b\nd\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestAWKResetsFilenameAndFNRPerInputFile(t *testing.T) {
 	t.Parallel()
 
@@ -81,28 +96,265 @@ func TestAWKResetsFilenameAndFNRPerInputFile(t *testing.T) {
 	}
 }
 
-func TestAWKBlocksNonAllowlistedGetlineReads(t *testing.T) {
+func TestAWKReadsArbitrarySandboxFilesWithGetline(t *testing.T) {
 	t.Parallel()
 
-	result := mustExecAWK(t, "printf 'a\\n' > /data/one.txt\nawk 'BEGIN { getline line < \"/etc/passwd\"; print line }' /data/one.txt\n")
-	if result.ExitCode == 0 {
-		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	result := mustExecAWK(t, "printf 'extra\\n' > /data/extra.txt\nawk 'BEGIN { getline line < \"/data/extra.txt\"; close(\"/data/extra.txt\"); print line }'\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "can't read from file due to NoFileReads") {
-		t.Fatalf("Stderr = %q, want file-read denial", result.Stderr)
+	if got, want := result.Stdout, "extra\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
 }
 
-func TestAWKBlocksOutputRedirectionWrites(t *testing.T) {
+func TestAWKWritesRedirectedOutputToSandboxFiles(t *testing.T) {
 	t.Parallel()
 
-	result := mustExecAWK(t, "awk 'BEGIN { print \"hello\" > \"out.txt\" }'\n")
-	if result.ExitCode == 0 {
-		t.Fatalf("ExitCode = %d, want non-zero", result.ExitCode)
+	result := mustExecAWK(t, "awk 'BEGIN { print \"hello\" > \"/data/out.txt\"; close(\"/data/out.txt\") }'\ncat /data/out.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
-	if !strings.Contains(result.Stderr, "can't write to file due to NoFileWrites") {
-		t.Fatalf("Stderr = %q, want file-write denial", result.Stderr)
+	if got, want := result.Stdout, "hello\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
+}
+
+func TestAWKSupportsPipeGetlineAndPipeOutput(t *testing.T) {
+	t.Parallel()
+
+	script := "" +
+		"printf 'left\\nright\\n' > /data/in.txt\n" +
+		"awk 'BEGIN { \"echo pipe-read\" | getline line; close(\"echo pipe-read\"); print line } { print $0 | \"cat > /data/piped.txt\"; close(\"cat > /data/piped.txt\") }' /data/in.txt\n" +
+		"cat /data/piped.txt\n"
+	result := mustExecAWK(t, script)
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "pipe-read\nright\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKGNUVarARGIND(t *testing.T) {
+	t.Parallel()
+
+	result := mustExecAWK(t, "printf 'a\\n' > /data/one.txt\nprintf 'b\\n' > /data/two.txt\nawk '{ print ARGIND \":\" FILENAME \":\" $0 }' /data/one.txt /data/two.txt\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	want := "1:/data/one.txt:a\n2:/data/two.txt:b\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKGNUVarPROCINFOVersion(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args: []string{`BEGIN { print PROCINFO["version"] }`},
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "5.3.2\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKGNUVarIGNORECASE(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args:  []string{`BEGIN { IGNORECASE = 1 } /foo/ { print $0 }`},
+		Stdin: "Foo\nbar\n",
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "Foo\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKGNUVarFIELDWIDTHS(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args:  []string{`BEGIN { FIELDWIDTHS = "3 3" } { print $1 "-" $2 "-" $3 }`},
+		Stdin: "abc123xyz\n",
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "abc-123-\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKGNUVarFPAT(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args:  []string{`BEGIN { FPAT = "[[:alpha:]]+|[0-9]+" } { print NF ":" $1 ":" $2 ":" $3 ":" $4 }`},
+		Stdin: "a=1 b=22\n",
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "4:a:1:b:22\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKSupportsGNUTimeFunctions(t *testing.T) {
+	t.Parallel()
+
+	fixedNow := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args: []string{`BEGIN { print systime(); print strftime("%Y-%m-%d %H:%M:%S", 0, 1); print mktime("1970 01 02 00 00 00") }`},
+		Env:  map[string]string{"TZ": "UTC"},
+		Now:  fixedNow,
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	want := "1704164645\n1970-01-01 00:00:00\n86400\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKSupportsGNUStringAndBitwiseFunctions(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args: []string{`BEGIN {
+			print gensub("([0-9]+)", "<\\1>", "g", "item42 batch7")
+			print strtonum("0x10"), strtonum("010"), strtonum("1.5")
+			print and(6, 3), or(6, 3), xor(6, 3), compl(0), lshift(3, 2), rshift(8, 2)
+		}`},
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	want := "item<42> batch<7>\n16 8 1.5\n2 7 5 9007199254740991 12 2\n"
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKSupportsOrderedProgramSources(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args: []string{
+			`--source=BEGIN { print "source" }`,
+			`--file=/main.awk`,
+			`--include=/include.awk`,
+		},
+		Files: map[string]string{
+			"/main.awk":    `BEGIN { print "file" }`,
+			"/include.awk": `BEGIN { print "include" }`,
+		},
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "source\nfile\ninclude\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKExecOptionDisablesArgVarAssignments(t *testing.T) {
+	t.Parallel()
+
+	result := runAWKCommand(t, &awkCommandOptions{
+		Args: []string{"-E", "/prog.awk", "name=value", "/input.txt"},
+		Files: map[string]string{
+			"/prog.awk":  `BEGIN { print ARGV[1], ARGV[2] }`,
+			"/input.txt": "x\n",
+		},
+	})
+	if result.Err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+	}
+	if got, want := result.Stdout, "name=value /input.txt\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("help", func(t *testing.T) {
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"--help"}})
+		if result.Err != nil {
+			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+		}
+		if !strings.Contains(result.Stdout, "Usage: awk") {
+			t.Fatalf("Stdout = %q, want GNU help text", result.Stdout)
+		}
+	})
+
+	t.Run("version", func(t *testing.T) {
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"-W", "version"}})
+		if result.Err != nil {
+			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+		}
+		if !strings.HasPrefix(result.Stdout, "GNU Awk 5.3.2") {
+			t.Fatalf("Stdout = %q, want GNU version text", result.Stdout)
+		}
+	})
+
+	t.Run("copyright", func(t *testing.T) {
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"-C"}})
+		if result.Err != nil {
+			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+		}
+		if !strings.Contains(result.Stdout, "Free Software Foundation") {
+			t.Fatalf("Stdout = %q, want copyright text", result.Stdout)
+		}
+	})
+
+	t.Run("long assign", func(t *testing.T) {
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{
+			Args: []string{"--assign=prefix=hi", `BEGIN { print prefix }`},
+		})
+		if result.Err != nil {
+			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
+		}
+		if got, want := result.Stdout, "hi\n"; got != want {
+			t.Fatalf("Stdout = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("unsupported load", func(t *testing.T) {
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"-l", "json"}})
+		if result.ExitCode != 2 {
+			t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "not supported") {
+			t.Fatalf("Stderr = %q, want unsupported diagnostic", result.Stderr)
+		}
+	})
+
+	t.Run("unsupported debug", func(t *testing.T) {
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"--debug"}})
+		if result.ExitCode != 2 {
+			t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
+		}
+		if !strings.Contains(result.Stderr, "not supported") {
+			t.Fatalf("Stderr = %q, want unsupported diagnostic", result.Stderr)
+		}
+	})
 }
 
 func TestAWKMissingFileReportsGNUStyleFailure(t *testing.T) {
@@ -126,42 +378,6 @@ func TestAWKParseErrorsUseUpstreamExitCode(t *testing.T) {
 	}
 	if !strings.Contains(result.Stderr, "parse error") {
 		t.Fatalf("Stderr = %q, want parse error", result.Stderr)
-	}
-}
-
-func TestLoadAWKInputsSkipsStdinWhenNamedFilesProvided(t *testing.T) {
-	t.Parallel()
-
-	mem := gbfs.NewMemory()
-	file, err := mem.OpenFile(context.Background(), "/data/one.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile() error = %v", err)
-	}
-	if _, err := file.Write([]byte("a\n")); err != nil {
-		_ = file.Close()
-		t.Fatalf("Write() error = %v", err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-
-	stdin := &unexpectedStdinReader{}
-	inv := commands.NewInvocation(&commands.InvocationOptions{
-		Cwd:        "/",
-		Stdin:      stdin,
-		FileSystem: mem,
-		Policy:     policy.NewStatic(&policy.Config{}),
-	})
-
-	inputs, err := loadAWKInputs(context.Background(), inv, []string{"/data/one.txt"})
-	if err != nil {
-		t.Fatalf("loadAWKInputs() error = %v", err)
-	}
-	if stdin.reads != 0 {
-		t.Fatalf("stdin reads = %d, want 0", stdin.reads)
-	}
-	if got := string(inputs.Files["/data/one.txt"]); got != "a\n" {
-		t.Fatalf("file contents = %q, want %q", got, "a\n")
 	}
 }
 

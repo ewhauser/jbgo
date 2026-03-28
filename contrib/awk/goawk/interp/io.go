@@ -135,7 +135,15 @@ func (p *interp) getOutputStream(redirect lexer.Token, destValue value) (io.Writ
 		} else {
 			flags |= os.O_APPEND
 		}
-		f, err := os.OpenFile(name, flags, 0644)
+		var (
+			f   io.WriteCloser
+			err error
+		)
+		if p.fileWriter != nil {
+			f, err = p.fileWriter(name, redirect == lexer.APPEND)
+		} else {
+			f, err = os.OpenFile(name, flags, 0644)
+		}
 		if err != nil {
 			return nil, newError("output redirection error: %s", err)
 		}
@@ -148,11 +156,8 @@ func (p *interp) getOutputStream(redirect lexer.Token, destValue value) (io.Writ
 		if p.noExec {
 			return nil, newError("can't write to pipe due to NoExec")
 		}
-		cmd := p.execShell(name)
-		cmd.Stdout = p.output
-		cmd.Stderr = p.errorOutput
 		p.flushOutputAndError() // ensure synchronization
-		out, err := newOutCmdStream(cmd)
+		out, err := p.newPipeWriterStream(name)
 		if err != nil {
 			p.printErrorf("%s\n", err)
 			out = newOutNullStream()
@@ -181,6 +186,49 @@ func (p *interp) execShell(code string) *exec.Cmd {
 	// Ensure stdout/stderr pipes being held open don't keep process running.
 	cmd.WaitDelay = 250 * time.Millisecond
 	return cmd
+}
+
+func (p *interp) newPipeWriterStream(code string) (outputStream, error) {
+	if p.pipeWriter != nil {
+		w, wait, err := p.pipeWriter(code, p.output, p.errorOutput)
+		if err != nil {
+			return nil, err
+		}
+		return newOutCmdStream(w, wait), nil
+	}
+	cmd := p.execShell(code)
+	cmd.Stdout = p.output
+	cmd.Stderr = p.errorOutput
+	return newOutExecCmdStream(cmd)
+}
+
+func (p *interp) newPipeReaderStream(code string) (inputStream, error) {
+	if p.pipeReader != nil {
+		r, wait, err := p.pipeReader(code, p.stdin, p.errorOutput)
+		if err != nil {
+			return nil, err
+		}
+		return newInCmdStream(r, wait), nil
+	}
+	cmd := p.execShell(code)
+	cmd.Stdin = p.stdin
+	cmd.Stderr = p.errorOutput
+	return newInExecCmdStream(cmd)
+}
+
+func (p *interp) runShell(code string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if p.shellRunner != nil {
+		return p.shellRunner(code, stdin, stdout, stderr)
+	}
+	cmd := p.execShell(code)
+	cmd.Stdin = stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Start()
+	if err != nil {
+		return -1, err
+	}
+	return waitExitCodeCmd(cmd)
 }
 
 // Get input Scanner to use for "getline" based on file name
@@ -232,11 +280,8 @@ func (p *interp) getInputScannerPipe(name string) (*bufio.Scanner, error) {
 	if p.noExec {
 		return nil, newError("can't read from pipe due to NoExec")
 	}
-	cmd := p.execShell(name)
-	cmd.Stdin = p.stdin
-	cmd.Stderr = p.errorOutput
 	p.flushOutputAndError() // ensure synchronization
-	in, err := newInCmdStream(cmd)
+	in, err := p.newPipeReaderStream(name)
 	if err != nil {
 		p.printErrorf("%s\n", err)
 		return bufio.NewScanner(strings.NewReader("")), nil
@@ -626,10 +671,11 @@ func nextRune(b []byte) rune {
 }
 
 // Setup for a new input file with given name (empty string if stdin)
-func (p *interp) setFile(filename string) {
+func (p *interp) setFile(filename string, argIndex int) {
 	p.filename = numStr(filename)
 	p.fileLineNum = 0
 	p.hadFiles = true
+	_ = p.setGlobalByName("ARGIND", num(float64(argIndex)))
 }
 
 // Setup for a new input line (but don't parse it into fields till we
@@ -665,6 +711,27 @@ func (p *interp) splitOnFieldSepRegex(fields []string, line string) []string {
 	return fields
 }
 
+func splitByFieldWidths(line string, widths []int) []string {
+	fields := make([]string, 0, len(widths))
+	offset := 0
+	for _, width := range widths {
+		if width <= 0 {
+			continue
+		}
+		if offset >= len(line) {
+			fields = append(fields, "")
+			continue
+		}
+		end := offset + width
+		if end > len(line) {
+			end = len(line)
+		}
+		fields = append(fields, line[offset:end])
+		offset = end
+	}
+	return fields
+}
+
 // Ensure that the current line is parsed into fields, splitting it
 // into fields if it hasn't been already
 func (p *interp) ensureFields() {
@@ -690,6 +757,10 @@ func (p *interp) ensureFields() {
 				p.fields = nil
 			}
 		}
+	case p.inputMode == DefaultMode && len(p.fieldWidths) > 0:
+		p.fields = splitByFieldWidths(p.line, p.fieldWidths)
+	case p.inputMode == DefaultMode && p.fieldPatternRegex != nil:
+		p.fields = p.fieldPatternRegex.FindAllString(p.line, -1)
 	case p.savedFieldSep == " ":
 		// FS space (default) means split fields on any whitespace
 		p.fields = strings.Fields(p.line)
@@ -738,7 +809,7 @@ func (p *interp) nextLine() (string, error) {
 				// Moved past number of ARGV args and haven't seen
 				// any files yet, use stdin
 				p.input = p.stdin
-				p.setFile("-")
+				p.setFile("-", 0)
 			} else {
 				if p.filenameIndex >= p.argc {
 					// Done with ARGV args, all done with input
@@ -778,7 +849,7 @@ func (p *interp) nextLine() (string, error) {
 				} else if filename == "-" {
 					// ARGV arg is "-" meaning stdin
 					p.input = p.stdin
-					p.setFile("-")
+					p.setFile("-", p.filenameIndex-1)
 				} else {
 					// A regular file name, open it
 					input, err := p.openInputFile(filename)
@@ -786,7 +857,7 @@ func (p *interp) nextLine() (string, error) {
 						return "", err
 					}
 					p.input = input
-					p.setFile(filename)
+					p.setFile(filename, p.filenameIndex-1)
 				}
 			}
 			if p.inputBuffer == nil { // reuse buffer from last input file

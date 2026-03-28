@@ -152,7 +152,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 		case compiler.AssignGlobal:
 			index := code[ip]
 			ip++
-			p.globals[index] = p.pop()
+			err := p.setGlobal(int(index), p.pop())
+			if err != nil {
+				return err
+			}
 
 		case compiler.AssignLocal:
 			index := code[ip]
@@ -212,7 +215,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			amount := code[ip]
 			index := code[ip+1]
 			ip += 2
-			p.globals[index] = num(p.globals[index].num() + float64(amount))
+			err := p.setGlobal(int(index), num(p.globals[index].num()+float64(amount)))
+			if err != nil {
+				return err
+			}
 
 		case compiler.IncrLocal:
 			amount := code[ip]
@@ -269,7 +275,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			if err != nil {
 				return err
 			}
-			p.globals[index] = v
+			err = p.setGlobal(int(index), v)
+			if err != nil {
+				return err
+			}
 
 		case compiler.AugAssignLocal:
 			operation := compiler.AugOp(code[ip])
@@ -324,6 +333,13 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			index := code[ip]
 			ip++
 			re := p.regexes[index]
+			if p.globalBool("IGNORECASE") && int(index) < len(p.regexStrs) {
+				var err error
+				re, err = p.compileRegex(p.regexStrs[index])
+				if err != nil {
+					return err
+				}
+			}
 			p.push(boolean(re.MatchString(p.line)))
 
 		case compiler.IndexMulti:
@@ -615,7 +631,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 			for index := range array {
 				switch resolver.Scope(varScope) {
 				case resolver.Global:
-					p.globals[varIndex] = str(index)
+					err := p.setGlobal(int(varIndex), str(index))
+					if err != nil {
+						return err
+					}
 				case resolver.Local:
 					p.frame[varIndex] = str(index)
 				default: // resolver.Special
@@ -852,7 +871,10 @@ func (p *interp) execute(code []compiler.Opcode) error {
 				return err
 			}
 			if ret == 1 {
-				p.globals[index] = numStr(line)
+				err := p.setGlobal(int(index), numStr(line))
+				if err != nil {
+					return err
+				}
 			}
 			p.push(num(ret))
 
@@ -1112,19 +1134,8 @@ func (p *interp) callBuiltin(builtinOp compiler.BuiltinOp) error {
 			return newError("can't call system() due to NoExec")
 		}
 		cmdline := p.toString(p.peekTop())
-		cmd := p.execShell(cmdline)
-		cmd.Stdin = p.stdin
-		cmd.Stdout = p.output
-		cmd.Stderr = p.errorOutput
 		_ = p.flushAll() // ensure synchronization
-		err := cmd.Start()
-		if err != nil {
-			// Could not start the shell so skip waiting on it.
-			p.printErrorf("%v\n", err)
-			p.replaceTop(num(-1.0))
-			return nil
-		}
-		exitCode, err := waitExitCode(cmd)
+		exitCode, err := p.runShell(cmdline, p.stdin, p.output, p.errorOutput)
 		if err != nil {
 			if p.checkCtx && p.ctx.Err() != nil {
 				return p.ctx.Err()
