@@ -505,9 +505,12 @@ func FuzzWhoCommand(f *testing.F) {
 	rt := newFuzzRuntime(f)
 
 	seeds := [][]byte{
-		[]byte(""),
-		[]byte("short"),
-		append(make([]byte, 384), []byte("user-process")...),
+		{0},
+		append([]byte{1}, []byte("short")...),
+		append(append([]byte{2}, make([]byte, 384)...), []byte("user-process")...),
+		{3},
+		{4},
+		{5},
 	}
 	for _, seed := range seeds {
 		f.Add(seed)
@@ -515,21 +518,35 @@ func FuzzWhoCommand(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, rawData []byte) {
 		session := newFuzzSession(t, rt)
-		data := clampFuzzData(rawData)
+		variant := byte(0)
+		data := rawData
+		if len(rawData) > 0 {
+			variant = rawData[0]
+			data = rawData[1:]
+		}
+		data = clampFuzzData(data)
 		utmpPath := "/tmp/who.utmp"
 
 		writeSessionFile(t, session, utmpPath, data)
 		writeSessionFile(t, session, "/var/run/utmp", data)
 		writeSessionFile(t, session, "/dev/pts/0", []byte("tty\n"))
 
-		script := fmt.Appendf(nil,
-			"who %s >/tmp/who-default.out || true\nwho -q %s >/tmp/who-count.out || true\nwho -uT %s >/tmp/who-users.out || true\nwho --lookup -a %s >/tmp/who-all.out || true\nwho -m %s </dev/pts/0 >/tmp/who-m.out || true\nwho am i </dev/pts/0 >/tmp/who-am-i.out || true\n",
-			shellQuote(utmpPath),
-			shellQuote(utmpPath),
-			shellQuote(utmpPath),
-			shellQuote(utmpPath),
-			shellQuote(utmpPath),
-		)
+		quoted := shellQuote(utmpPath)
+		var script []byte
+		switch variant % 6 {
+		case 0:
+			script = fmt.Appendf(nil, "who %s >/tmp/who-default.out || true\n", quoted)
+		case 1:
+			script = fmt.Appendf(nil, "who -q %s >/tmp/who-count.out || true\n", quoted)
+		case 2:
+			script = fmt.Appendf(nil, "who -uT %s >/tmp/who-users.out || true\n", quoted)
+		case 3:
+			script = fmt.Appendf(nil, "who --lookup -a %s >/tmp/who-all.out || true\n", quoted)
+		case 4:
+			script = fmt.Appendf(nil, "who -m %s </dev/pts/0 >/tmp/who-m.out || true\n", quoted)
+		default:
+			script = []byte("who am i </dev/pts/0 >/tmp/who-am-i.out || true\n")
+		}
 
 		result, err := runFuzzSessionScript(t, session, script)
 		assertSecureFuzzOutcome(t, script, result, err)
