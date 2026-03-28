@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // arithExprSource returns the source text representation of an arithmetic expression.

@@ -6,7 +6,7 @@ import (
 	"io"
 	"iter"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // InteractiveParser is the shell-owned frontend helper for interactive parsing.

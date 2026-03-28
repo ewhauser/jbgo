@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ewhauser/gbash/internal/shell/pattern"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/internal/pattern"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 type testEnv map[string]Variable

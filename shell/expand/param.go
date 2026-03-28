@@ -14,8 +14,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ewhauser/gbash/internal/shell/pattern"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/internal/pattern"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func nodeLit(node syntax.Node) string {

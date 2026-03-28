@@ -27,8 +27,9 @@ import (
 
 	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/commandutil"
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // A Runner interprets shell programs. It can be reused, but it is not safe for
@@ -267,6 +268,7 @@ type Runner struct {
 	opts runnerOpts
 
 	startupHome string
+	analysis    *analysisState
 
 	origDir     string
 	origParams  []string
@@ -537,6 +539,9 @@ const (
 type RunnerConfig struct {
 	Env expand.Environ
 
+	AnalysisObserver analysis.Observer
+	AnalysisRun      analysis.RunMetadata
+
 	Platform host.Platform
 
 	PID  int
@@ -676,6 +681,11 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.startupHome = cfg.StartupHome
 	r.Dir = cfg.Dir
 	r.startupVisibleDir = cfg.VisibleDir
+	r.analysis = newAnalysisState(cfg.AnalysisObserver, cfg.AnalysisRun)
+	if r.analysis != nil {
+		r.analysis.pushMute()
+		defer r.analysis.popMute()
+	}
 	r.timeNow = cfg.Now
 	r.shellStartTime = cfg.ShellStartTime
 	r.callHandler = cfg.CallHandler
@@ -1164,8 +1174,13 @@ func (r *Runner) Reset() {
 			r.execHandler = closedExecHandler()
 		}
 	}
+	if r.analysis != nil {
+		r.analysis.pushMute()
+		defer r.analysis.popMute()
+	}
 	funcs := r.funcs
 	funcsShared := r.funcsShared
+	analysisState := r.analysis
 	// reset the internal state
 	*r = Runner{
 		Env:              r.Env,
@@ -1214,6 +1229,7 @@ func (r *Runner) Reset() {
 		startTime:      r.origStart,
 		shellStartTime: r.origShellStart,
 		random:         r.origRandom,
+		analysis:       analysisState,
 
 		funcs:     funcs,
 		printfEnv: newPrintfEnvCache(),
@@ -1341,6 +1357,7 @@ func (r *Runner) Reset() {
 	r.syncStandardFDs()
 
 	r.didReset = true
+	r.resetAnalysisState()
 }
 
 // ExitStatus is a non-zero status code resulting from running a shell node.
@@ -1498,6 +1515,7 @@ func (r *Runner) subshell(_ bool) *Runner {
 		origShellStart:            r.origShellStart,
 		startTime:                 r.startTime,
 		shellStartTime:            r.shellStartTime,
+		analysis:                  r.cloneAnalysisState(),
 		timeNow:                   r.timeNow,
 		random:                    random,
 		origRandom:                random,

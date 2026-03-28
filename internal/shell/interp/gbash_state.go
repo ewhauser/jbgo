@@ -6,9 +6,10 @@ import (
 	"io"
 	"maps"
 
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func (r *Runner) setStdIO(in io.Reader, out, err io.Writer) error {
@@ -20,6 +21,10 @@ func (r *Runner) setStdIO(in io.Reader, out, err io.Writer) error {
 
 // setParams mirrors the shell's "set" builtin for startup args.
 func (r *Runner) setParams(args ...string) error {
+	before := r.analysisOptions()
+	defer func() {
+		r.analysisOptionChanges(analysis.OptionNamespaceSet, before, r.analysisOptions())
+	}()
 	fp := flagParser{remaining: args}
 	for fp.more() {
 		flag := fp.flag()
@@ -113,26 +118,14 @@ func (r *Runner) SetShellVar(name string, vr expand.Variable) error {
 	if !r.didReset {
 		r.Reset()
 	}
-	if r.opts[optAllExport] {
-		vr.Exported = true
-	}
-	if err := r.writeEnv.Set(name, vr); err != nil {
-		return err
-	}
-	r.afterSetVar(name, vr)
-	return nil
+	return r.setVarObserved(name, vr, nil)
 }
 
 func (r *Runner) UnsetShellVar(name string) error {
 	if !r.didReset {
 		r.Reset()
 	}
-	vr := expand.Variable{}
-	if err := r.writeEnv.Set(name, vr); err != nil {
-		return err
-	}
-	r.afterSetVar(name, vr)
-	return nil
+	return r.setVarObserved(name, expand.Variable{}, nil)
 }
 
 func (r *Runner) ShellEnv() map[string]string {

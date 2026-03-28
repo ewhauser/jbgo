@@ -3,7 +3,7 @@ package expand
 import (
 	"fmt"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func defaultAssociativeSubscript(key string) *syntax.Subscript {

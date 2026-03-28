@@ -14,6 +14,7 @@ import (
 	internalruntime "github.com/ewhauser/gbash/internal/runtime"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/analysis"
 )
 
 // Runtime executes bash-like scripts inside the configured sandbox.
@@ -116,6 +117,11 @@ type Config struct {
 	// Logger receives top-level execution lifecycle events. Logging is off by
 	// default.
 	Logger LogCallback
+
+	// AnalysisObserver receives read-only shell semantic events from the
+	// interpreter. The observer is installed at runtime construction time and
+	// applies to both non-interactive and interactive shell execution.
+	AnalysisObserver analysis.Observer
 }
 
 // FileSystemConfig describes how gbash provisions a session filesystem.
@@ -255,16 +261,17 @@ func (cfg *Config) runtimeConfig() *internalruntime.Config {
 		return &internalruntime.Config{}
 	}
 	return &internalruntime.Config{
-		FileSystem:     cfg.FileSystem.runtimeConfig(),
-		Registry:       cfg.Registry,
-		Policy:         cfg.Policy,
-		LimitOverrides: cfg.LimitOverrides,
-		BaseEnv:        copyStringMap(cfg.BaseEnv),
-		Host:           cfg.Host,
-		Network:        cfg.networkConfig(),
-		NetworkClient:  cfg.NetworkClient,
-		Tracing:        cfg.Tracing,
-		Logger:         cfg.Logger,
+		FileSystem:       cfg.FileSystem.runtimeConfig(),
+		Registry:         cfg.Registry,
+		Policy:           cfg.Policy,
+		LimitOverrides:   cfg.LimitOverrides,
+		BaseEnv:          copyStringMap(cfg.BaseEnv),
+		Host:             cfg.Host,
+		Network:          cfg.networkConfig(),
+		NetworkClient:    cfg.NetworkClient,
+		Tracing:          cfg.Tracing,
+		Logger:           cfg.Logger,
+		AnalysisObserver: cfg.AnalysisObserver,
 	}
 }
 

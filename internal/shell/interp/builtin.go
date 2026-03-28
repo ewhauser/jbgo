@@ -22,9 +22,10 @@ import (
 
 	"github.com/ewhauser/gbash/internal/completionutil"
 	"github.com/ewhauser/gbash/internal/printfutil"
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // TODO: given the categories below, perhaps this should be more like:
@@ -863,6 +864,13 @@ func (r *Runner) evalBuiltin(ctx context.Context, args []string) (exit exitStatu
 		}
 	}
 	src := strings.Join(args, " ")
+	r.analysisScopeEnter(analysis.Scope{
+		Kind:     analysis.ScopeEval,
+		Name:     "eval",
+		File:     r.currentCallFile(),
+		CallLine: r.currentStmtLine,
+	})
+	defer r.analysisScopeExit(r.AnalysisStatus())
 	r.evalDepth++
 	defer func() {
 		r.evalDepth--
@@ -1088,6 +1096,10 @@ func (r *Runner) getoptsBuiltin(args []string) (exit exitStatus) {
 }
 
 func (r *Runner) shoptBuiltin(args []string) (exit exitStatus) {
+	before := r.analysisOptions()
+	defer func() {
+		r.analysisOptionChanges(analysis.OptionNamespaceShopt, before, r.analysisOptions())
+	}()
 	mode := ""
 	posixOpts := false
 	printReusable := false
@@ -2241,6 +2253,13 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, name string,
 	sourceArg := args[0]
 	sourceName := sourceArg
 	sourcePath := sourceArg
+	r.analysisScopeEnter(analysis.Scope{
+		Kind:     analysis.ScopeSource,
+		Name:     sourceArg,
+		File:     sourceArg,
+		CallLine: uint(r.sourceCallLine(pos)),
+	})
+	defer r.analysisScopeExit(r.AnalysisStatus())
 	preSourceStatus := r.lastExit.code
 	preSourceTrapGen := r.traps.generation
 	sourcepathOpt, _ := r.bashOptByName("sourcepath")

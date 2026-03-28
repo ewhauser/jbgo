@@ -1,7 +1,7 @@
 # gbash
 
 Status: Draft v0.1
-Last updated: 2026-03-23
+Last updated: 2026-03-27
 
 ## 1. Purpose
 
@@ -9,7 +9,7 @@ Last updated: 2026-03-23
 
 It preserves the product idea behind Vercel's `just-bash` while making different implementation choices:
 
-- shell parsing and evaluation are owned in-tree under `internal/shell`
+- shell semantics are owned in-tree, with public parser/AST and expansion packages under `shell/`
 - filesystem access is virtualized by default
 - commands are implemented in Go and resolved through an explicit registry
 - unknown commands never fall through to the host OS
@@ -42,7 +42,7 @@ The runtime is optimized for LLM and agent workloads:
 ## 3. Goals
 
 1. Port the `just-bash` concept to a Go-native runtime named `gbash`.
-2. Keep parsing, ASTs, expansion semantics, control flow, and interpreter behavior inside the project-owned `internal/shell` tree.
+2. Keep shell semantics, control flow, and interpreter behavior inside the project-owned shell core while exposing only the small public packages we intentionally support.
 3. Support only sandbox mode.
 4. Use explicit Go command implementations instead of host subprocesses.
 5. Default to an in-memory or otherwise virtualized filesystem.
@@ -71,7 +71,11 @@ There is no runtime mode where command execution falls back to `exec.Command`, `
 
 We do not reimplement parsing, quoting, command substitution, loops, or shell AST traversal from scratch during execution. Those responsibilities stay inside the in-tree shell packages under `internal/shell`.
 
-The parser, expansion, pattern, and interpreter packages live in-tree as `internal/shell/syntax`, `internal/shell/expand`, `internal/shell/pattern`, and `internal/shell/interp`, and `internal/runtime` only calls the concrete `internal/shell` entrypoints.
+The supported public shell semantics packages are `shell/syntax`, `shell/syntax/typedjson`, `shell/expand`, and `shell/analysis`. The interpreter remains internal as `internal/shell/interp`, and `internal/runtime` only calls the concrete `internal/shell` entrypoints.
+
+`shell/syntax` and `shell/expand` are supported for external consumers that need the parser, AST, typed JSON encoding, expansion rules, or expansion-visible value types. `shell/analysis` is the supported read-only analysis hook surface for external analysis and static-tooling consumers. It delivers immutable semantic events for run/file boundaries, statements, commands, scope changes, variable reads and writes, unsets, and selected option changes.
+
+`shell/analysis` is intentionally read-only. It does not expose interpreter mutation primitives, completion backends, host execution internals, or other unrelated runtime concerns. Helper packages such as `shell/internal/pattern`, the interpreter, and shell file utilities remain internal implementation detail rather than supported public API.
 
 The shell core also owns Bash-style stack introspection state. `BASH_SOURCE`, `BASH_LINENO`, `BASH_EXECUTION_STRING`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the in-tree interpreter rather than synthesized in a shell prelude.
 
@@ -113,8 +117,8 @@ Every major subsystem should have a narrow interface. Callers should be able to 
 
 The runtime is composed of five layers:
 
-1. in-tree `syntax` parser layer under `internal/shell`
-2. project-owned shell core and runner orchestration
+1. public `shell/syntax` parser/AST and `shell/expand` semantics packages
+2. project-owned shell core and internal interpreter orchestration
 3. sandboxed project-owned filesystem abstraction
 4. Go command registry
 5. policy and trace layers
@@ -127,6 +131,7 @@ Execution flow:
    - configured host adapter for platform identity, process metadata, and pipes
    - command registry
    - policy
+   - optional read-only `shell/analysis` observer
    - optional trace recorder and logging callbacks
    - bounded stdout/stderr capture
 3. Configure `interp.Runner` with project handlers for:
@@ -267,8 +272,11 @@ host/                  public host adapter boundary for platform/process behavio
 cli/                   reusable CLI frontend shared by shipped binaries
 cmd/gbash/             CLI entrypoint for local execution
 server/                public JSON-RPC server surface shared by wrapper binaries
+shell/analysis/        public read-only shell semantic observer API
+shell/expand/          public shell expansion semantics
+shell/syntax/          public shell parser/AST surface plus typedjson
 internal/runtime/      internal runtime implementation and execution orchestration
-internal/shell/       project-owned shell core plus parser/expand/interpreter packages
+internal/shell/        project-owned shell core and internal interpreter integration
 fs/                   project-owned filesystem interfaces and virtual backends
 network/              sandboxed HTTP client, allowlist matching, redirect checks
 commands/             command registry, invocation context, core Go commands
@@ -285,8 +293,11 @@ Package responsibilities:
 - `host/`: public adapter contract for host-derived defaults, logical platform semantics, per-execution process metadata, and pipe provisioning
 - `cli/`: reusable CLI frontend that parses shell flags, renders help/version output, handles interactive mode, and provisions runtimes for thin wrapper binaries
 - `server/`: public shared server implementation that owns JSON-RPC framing and session registries for both shipped CLIs and external hosts, plus Unix-socket listener helpers
+- `shell/analysis/`: supported public read-only semantic observer surface for external analysis and static tooling; no mutation primitives or host execution details are exposed here
+- `shell/expand/`: supported public shell expansion semantics, public environment/value interfaces, and expansion error types
+- `shell/syntax/`: supported public shell parser, AST, and typed JSON tree encoding under `shell/syntax/typedjson`
 - `internal/runtime/`: internal runtime/session creation, run configuration, result collection, output capture
-- `internal/shell/`: concrete shell core entrypoints plus the in-tree `syntax`, `expand`, `pattern`, and `interp` packages; no product policy lives here
+- `internal/shell/`: concrete shell core entrypoints plus the internal interpreter integration; no product policy lives here
 - `fs/`: POSIX-like path normalization, memory filesystem, host-backed lower layers, overlay, and snapshot backends
 - `network/`: runtime-owned HTTP sandbox with origin- and path-boundary-aware allowlists, method controls, redirect revalidation, and response-size limits
 - `commands/`: registry and Go-native command implementations such as `clear`, `compadjust`, `complete`, `compgen`, `compopt`, `echo`, `egrep`, `fgrep`, `grep`, `history`, `ls`, `mkfifo`, `pwd`, `strings`, and `xan`
@@ -323,15 +334,16 @@ type Runtime struct {
 type Option func(*Config) error
 
 type Config struct {
-    FileSystem    FileSystemConfig
-    Registry      commands.CommandRegistry
-    Policy        Policy
-    BaseEnv       map[string]string
-    Host          host.Adapter
-    Network       *network.Config
-    NetworkClient network.Client
-    Tracing       TraceConfig
-    Logger        LogCallback
+    FileSystem       FileSystemConfig
+    Registry         commands.CommandRegistry
+    Policy           Policy
+    BaseEnv          map[string]string
+    Host             host.Adapter
+    Network          *network.Config
+    NetworkClient    network.Client
+    Tracing          TraceConfig
+    Logger           LogCallback
+    AnalysisObserver analysis.Observer
 }
 
 func New(options ...Option) (*Runtime, error)
@@ -568,12 +580,15 @@ That runner construction path carries:
 
 - explicit environment and virtual directory
 - stdio, startup options, positional parameters, and interactive mode
+- the configured read-only `shell/analysis` observer, if any
 - call and exec handlers
 - file, stat, readdir, realpath, and process-substitution handlers
 
 Per-run metadata such as the top-level script path for file-backed `$0`/`main` stack frames and synthetic pipeline metadata for `lastpipe` is applied through one shell-owned run-preparation path.
 
 The runtime never inherits the host process environment by default, and the command execution path never falls through to host subprocess execution.
+
+The supported analysis integration point is `shell/analysis` plus `gbash.WithAnalysisObserver` / `gbash.Config.AnalysisObserver`. The observer surface is runtime-level only, read-only, and durable by design. Interpreter internals, `internal/shell/interp`, and unrelated helpers such as `internal/shell/fileutil` remain internal.
 
 Implementation detail for the current runtime:
 

@@ -3,7 +3,7 @@ package interp
 import (
 	"strconv"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const internalBootstrapSource = "<gbash-prelude>"

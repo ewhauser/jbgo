@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/host"
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const loopIterHelperCommand = "__jb_loop_iter"
@@ -1064,12 +1064,53 @@ func (r *Runner) envGet(name string) string {
 	return r.lookupVar(name).String()
 }
 
-func (r *Runner) delVar(name string) {
-	if err := r.writeEnv.Set(name, expand.Variable{}); err != nil {
+type varMutation struct {
+	ref         *syntax.VarRef
+	previous    expand.Variable
+	hasPrevious bool
+	appendValue bool
+}
+
+func (r *Runner) setVarObserved(name string, vr expand.Variable, mutation *varMutation) error {
+	if vr.IsSet() && r.opts[optAllExport] {
+		vr.Exported = true
+	}
+	prev := expand.Variable{}
+	if mutation != nil && mutation.hasPrevious {
+		prev = mutation.previous
+	} else if name != "" {
+		prev = r.lookupVar(name)
+	}
+	if err := r.writeEnv.Set(name, vr); err != nil {
 		r.errf("%s: %v\n", name, err)
 		r.exit.code = 1
-		return
+		return err
 	}
+	if vr.IsSet() {
+		r.afterSetVar(name, vr)
+		r.analysisVariableWrite(name, mutationRef(mutation), vr, prev, mutationAppend(mutation))
+		return nil
+	}
+	r.analysisVariableUnset(name, mutationRef(mutation), prev)
+	return nil
+}
+
+func mutationRef(mutation *varMutation) *syntax.VarRef {
+	if mutation == nil {
+		return nil
+	}
+	return mutation.ref
+}
+
+func mutationAppend(mutation *varMutation) bool {
+	if mutation == nil {
+		return false
+	}
+	return mutation.appendValue
+}
+
+func (r *Runner) delVar(name string) {
+	_ = r.setVarObserved(name, expand.Variable{}, nil)
 }
 
 func (r *Runner) setVarString(name, value string) {
@@ -1078,13 +1119,11 @@ func (r *Runner) setVarString(name, value string) {
 
 func (r *Runner) setOPTIND(value string) {
 	vr := expand.Variable{Set: true, Kind: expand.String, Str: value}
-	if prev := r.lookupVar("OPTIND"); prev.Exported || r.opts[optAllExport] {
+	prev := r.lookupVar("OPTIND")
+	if prev.Exported || r.opts[optAllExport] {
 		vr.Exported = true
 	}
-	if err := r.writeEnv.Set("OPTIND", vr); err != nil {
-		r.errf("OPTIND: %v\n", err)
-		r.exit.code = 1
-	}
+	_ = r.setVarObserved("OPTIND", vr, &varMutation{previous: prev, hasPrevious: true})
 }
 
 func (r *Runner) setExportedVarString(name, value string) {
@@ -1103,15 +1142,7 @@ func (r *Runner) setSpecialUnderscoreFromFields(fields []string) {
 }
 
 func (r *Runner) setVar(name string, vr expand.Variable) {
-	if r.opts[optAllExport] {
-		vr.Exported = true
-	}
-	if err := r.writeEnv.Set(name, vr); err != nil {
-		r.errf("%s: %v\n", name, err)
-		r.exit.code = 1
-		return
-	}
-	r.afterSetVar(name, vr)
+	_ = r.setVarObserved(name, vr, nil)
 }
 
 func (r *Runner) afterSetVar(name string, vr expand.Variable) {

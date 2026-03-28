@@ -8,7 +8,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // ChunkTransformer can mutate a parsed chunk before execution and optionally
@@ -39,6 +40,7 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 	chunkStartLine := uint(1)
 	totalOffset := uint(0)
 	totalLine := uint(1)
+	chunkIndex := 0
 
 	var restoreFrame func()
 	framePushed := false
@@ -141,12 +143,22 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 			}
 			continue
 		}
+		prevFile := r.analysisFileStart(analysis.FileMetadata{
+			Name:         name,
+			TopLevelPath: topLevelScriptPath,
+			ChunkIndex:   chunkIndex,
+			ChunkLine:    chunkStartLine,
+			ChunkOffset:  chunkStartOffset,
+		})
+		chunkIndex++
 
 		synthetic := map[*syntax.Stmt]*syntax.Stmt(nil)
 		if transform != nil {
 			var transformErr error
 			synthetic, transformErr = transform(file)
 			if transformErr != nil {
+				r.analysisFileFinish(r.AnalysisStatus())
+				r.analysisRestoreFile(prevFile)
 				return finish(transformErr)
 			}
 		}
@@ -161,6 +173,8 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 		r.currentChunkSource = pending.String()
 		r.currentChunkSourceBase = chunkStartOffset
 		err = r.run(ctx, file, false, false)
+		r.analysisFileFinish(r.AnalysisStatus())
+		r.analysisRestoreFile(prevFile)
 		r.topLevelScriptPath = prevTopLevel
 		r.syntheticPipelineStmts = prevSynthetic
 		r.currentChunkSource = prevChunkSource

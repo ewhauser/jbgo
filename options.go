@@ -8,6 +8,7 @@ import (
 	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/analysis"
 )
 
 // WithConfig overlays non-zero fields from cfg onto the runtime configuration.
@@ -54,6 +55,9 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.Logger != nil {
 			target.Logger = cfg.Logger
+		}
+		if cfg.AnalysisObserver != nil {
+			target.AnalysisObserver = cfg.AnalysisObserver
 		}
 		return nil
 	}
@@ -235,6 +239,14 @@ func WithTracing(cfg TraceConfig) Option {
 func WithLogger(callback LogCallback) Option {
 	return func(target *Config) error {
 		target.Logger = callback
+		return nil
+	}
+}
+
+// WithAnalysisObserver installs a read-only shell semantic observer.
+func WithAnalysisObserver(observer analysis.Observer) Option {
+	return func(target *Config) error {
+		target.AnalysisObserver = observer
 		return nil
 	}
 }

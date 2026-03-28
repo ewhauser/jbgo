@@ -4,8 +4,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func compileChunk(program *syntax.File, pol policy.Policy, budget *executionBudget, loopNamespace string) (map[*syntax.Stmt]*syntax.Stmt, error) {

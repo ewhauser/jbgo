@@ -10,7 +10,7 @@ import (
 	"reflect"
 
 	gbfs "github.com/ewhauser/gbash/fs"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // access is similar to checking permission bits from [fs.FileInfo], but it uses

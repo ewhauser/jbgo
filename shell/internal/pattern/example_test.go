@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/ewhauser/gbash/internal/shell/pattern"
+	"github.com/ewhauser/gbash/shell/internal/pattern"
 )
 
 func ExampleRegexp() {

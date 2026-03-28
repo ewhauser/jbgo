@@ -12,14 +12,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	if r.stop(ctx) {
 		return
 	}
+	prevCmd := r.analysisCommandEnter(cm)
+	defer func() {
+		r.analysisCommandExit(prevCmd, r.AnalysisStatus())
+	}()
 
 	tracingEnabled := r.opts[optXTrace]
 	trace := r.tracer()
@@ -63,6 +68,11 @@ func (r *Runner) cmdBlock(ctx context.Context, cm *syntax.Block) {
 }
 
 func (r *Runner) cmdSubshell(ctx context.Context, cm *syntax.Subshell) {
+	r.analysisScopeEnter(analysis.Scope{
+		Kind: analysis.ScopeSubshell,
+		File: r.currentCallFile(),
+	})
+	defer r.analysisScopeExit(r.AnalysisStatus())
 	r2 := r.subshell(false)
 	r2.stmts(ctx, cm.Stmts)
 	r2.exit.exiting = false // subshells don't exit the parent shell
@@ -247,6 +257,11 @@ func (r *Runner) cmdBinary(ctx context.Context, cm *syntax.BinaryCmd) {
 			r.stmt(ctx, cm.Y)
 		}
 	case syntax.Pipe, syntax.PipeAll:
+		r.analysisScopeEnter(analysis.Scope{
+			Kind: analysis.ScopePipeline,
+			File: r.currentCallFile(),
+		})
+		defer r.analysisScopeExit(r.AnalysisStatus())
 		restorePipelineDebug := func() {}
 		if r.pipelineDebugActive() {
 			suppressPipelineDebug := r.pipelineDebugTrapSuppressed(cm)

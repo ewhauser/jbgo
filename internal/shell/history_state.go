@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
+	"github.com/ewhauser/gbash/shell/expand"
 )
 
 const shellHistoryEnvVar = "BASH_HISTORY"

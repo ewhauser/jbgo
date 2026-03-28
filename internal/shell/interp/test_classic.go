@@ -6,7 +6,7 @@ package interp
 import (
 	"fmt"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const illegalTok = 0

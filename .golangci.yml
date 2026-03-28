@@ -380,7 +380,7 @@ linters:
         linters:
           - forbidigo
           - depguard
-      - path: ^internal/shell/(expand|fileutil|internal|interp|pattern|shell|syntax)/
+      - path: ^(internal/shell/(expand|fileutil|internal|interp|pattern|shell|syntax)|internal/shellpattern|shell/(expand|internal/pattern|syntax))/
         linters:
           - containedctx
           - contextcheck

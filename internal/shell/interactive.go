@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/shell/interp"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const (
@@ -53,14 +53,27 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 	if err != nil {
 		return nil, err
 	}
-
+	runner.AnalysisRunStart()
 	exitCode := 0
+	analysisFinished := false
+	finishAnalysis := func(err error) {
+		if analysisFinished {
+			return
+		}
+		status := runnerAnalysisStatus(runner, err)
+		if exitCode != 0 && status.Code == 0 {
+			status.Code = exitCode
+		}
+		runner.AnalysisRunFinish(status)
+		analysisFinished = true
+	}
 	var pending strings.Builder
 
 	_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 	for {
 		line, readErr := input.ReadString('\n')
 		if readErr != nil && readErr != io.EOF {
+			finishAnalysis(readErr)
 			return &InteractiveResult{ExitCode: exitCode}, readErr
 		}
 		if line == "" && readErr == io.EOF {
@@ -121,9 +134,11 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 		exitCode = ExitCode(runErr)
 		pending.Reset()
 		if runner.Exited() {
+			finishAnalysis(runErr)
 			return &InteractiveResult{ExitCode: exitCode}, normalizeInteractiveRunError(runErr)
 		}
 		if err := normalizeInteractiveRunError(runErr); err != nil {
+			finishAnalysis(err)
 			return &InteractiveResult{ExitCode: exitCode}, err
 		}
 		if readErr == io.EOF {
@@ -131,6 +146,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 		}
 		_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 	}
+	finishAnalysis(nil)
 	return &InteractiveResult{ExitCode: exitCode}, nil
 }
 

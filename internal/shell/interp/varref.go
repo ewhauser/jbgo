@@ -7,8 +7,8 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func validateNameRefTarget(src string) error {
@@ -357,7 +357,14 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 		if ref.Index != nil || vr.Kind != expand.String || appendValue {
 			return fmt.Errorf("`%s': not a valid identifier", result.Target)
 		}
-		r.setVar(origName, vr)
+		if err := r.setVarObserved(origName, vr, &varMutation{
+			ref:         ref,
+			previous:    prev,
+			hasPrevious: true,
+			appendValue: appendValue,
+		}); err != nil {
+			return err
+		}
 		return nil
 	case expand.RefTargetEmpty:
 		if ref.Index == nil && vr.Kind == expand.String && !appendValue {
@@ -368,7 +375,13 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 			next.List = nil
 			next.Indices = nil
 			next.Map = nil
-			r.setVar(origName, next)
+			if err := r.setVarObserved(origName, next, &varMutation{
+				ref:         ref,
+				previous:    prev,
+				hasPrevious: true,
+			}); err != nil {
+				return err
+			}
 			return nil
 		}
 		if ref.Index == nil {
@@ -381,7 +394,14 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 			vr.Lower = next.Lower
 			vr.Trace = next.Trace
 			vr.Upper = next.Upper
-			r.setVar(origName, vr)
+			if err := r.setVarObserved(origName, vr, &varMutation{
+				ref:         ref,
+				previous:    prev,
+				hasPrevious: true,
+				appendValue: appendValue,
+			}); err != nil {
+				return err
+			}
 			return nil
 		}
 		return fmt.Errorf("`%s': not a valid identifier", printVarRef(ref))
@@ -410,7 +430,14 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 		index = arrayDefaultIndex(prev.Kind)
 	}
 	if index == nil {
-		r.setVar(name, vr)
+		if err := r.setVarObserved(name, vr, &varMutation{
+			ref:         ref,
+			previous:    prev,
+			hasPrevious: true,
+			appendValue: appendValue,
+		}); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -436,7 +463,14 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 			} else {
 				prev.Map[key] = valStr
 			}
-			r.setVar(name, prev)
+			if err := r.setVarObserved(name, prev, &varMutation{
+				ref:         ref,
+				previous:    result.Var,
+				hasPrevious: true,
+				appendValue: appendValue,
+			}); err != nil {
+				return err
+			}
 			return nil
 		}
 		return fmt.Errorf("bad array subscript")
@@ -455,7 +489,14 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 		} else {
 			prev.Map[key] = valStr
 		}
-		r.setVar(name, prev)
+		if err := r.setVarObserved(name, prev, &varMutation{
+			ref:         ref,
+			previous:    result.Var,
+			hasPrevious: true,
+			appendValue: appendValue,
+		}); err != nil {
+			return err
+		}
 		return nil
 	case resolvedSubscriptMode(index) == syntax.SubscriptIndexed:
 		key, err := r.strictIndexedSubscript(index)
@@ -488,11 +529,25 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 				next.List = []string{prev.Str}
 			}
 			next = next.IndexedSet(key, valStr, appendValue)
-			r.setVar(name, next)
+			if err := r.setVarObserved(name, next, &varMutation{
+				ref:         ref,
+				previous:    current,
+				hasPrevious: true,
+				appendValue: appendValue,
+			}); err != nil {
+				return err
+			}
 			return nil
 		case expand.Indexed:
 			prev = prev.IndexedSet(key, valStr, appendValue)
-			r.setVar(name, prev)
+			if err := r.setVarObserved(name, prev, &varMutation{
+				ref:         ref,
+				previous:    current,
+				hasPrevious: true,
+				appendValue: appendValue,
+			}); err != nil {
+				return err
+			}
 			return nil
 		default:
 			prev.Kind = expand.Indexed
@@ -501,7 +556,14 @@ func (r *Runner) setVarByRef(prev expand.Variable, ref *syntax.VarRef, vr expand
 			prev.Map = nil
 			prev.Indices = nil
 			prev = prev.IndexedSet(key, valStr, appendValue)
-			r.setVar(name, prev)
+			if err := r.setVarObserved(name, prev, &varMutation{
+				ref:         ref,
+				previous:    current,
+				hasPrevious: true,
+				appendValue: appendValue,
+			}); err != nil {
+				return err
+			}
 			return nil
 		}
 	default:
@@ -522,11 +584,18 @@ func (r *Runner) unsetVarByRef(ref *syntax.VarRef, strictType bool) error {
 			if (envHasTempScope(ownerEnv) && (!ownerVar.Local || (ownerEnv != r.writeEnv && envAllowsDynamicUnset(r.writeEnv)))) ||
 				(ownerVar.Local && ownerEnv != r.writeEnv && envAllowsDynamicUnset(r.writeEnv)) {
 				if deleteCurrentScopeVar(ownerEnv, ref.Name.Value) {
+					r.analysisVariableUnset(ref.Name.Value, ref, prev)
 					return nil
 				}
 			}
 		}
-		r.delVar(ref.Name.Value)
+		if err := r.setVarObserved(ref.Name.Value, expand.Variable{}, &varMutation{
+			ref:         ref,
+			previous:    prev,
+			hasPrevious: true,
+		}); err != nil {
+			return err
+		}
 		return nil
 	}
 	name := ref.Name.Value
@@ -541,16 +610,34 @@ func (r *Runner) unsetVarByRef(ref *syntax.VarRef, strictType bool) error {
 			index = resolved
 		}
 		prev = prev.IndexedUnset(index)
-		r.setVar(name, prev)
+		if err := r.setVarObserved(name, prev, &varMutation{
+			ref:         ref,
+			previous:    r.lookupVar(name),
+			hasPrevious: true,
+		}); err != nil {
+			return err
+		}
 	case expand.Associative:
 		key := r.associativeArrayKey(ref.Index)
 		prev.Map = maps.Clone(prev.Map)
 		delete(prev.Map, key)
 		prev.Set = len(prev.Map) > 0
-		r.setVar(name, prev)
+		if err := r.setVarObserved(name, prev, &varMutation{
+			ref:         ref,
+			previous:    r.lookupVar(name),
+			hasPrevious: true,
+		}); err != nil {
+			return err
+		}
 	case expand.Unknown, expand.String:
 		if r.arithm(ref.Index.Expr) == 0 {
-			r.delVar(name)
+			if err := r.setVarObserved(name, expand.Variable{}, &varMutation{
+				ref:         ref,
+				previous:    prev,
+				hasPrevious: true,
+			}); err != nil {
+				return err
+			}
 			return nil
 		}
 		if strictType {

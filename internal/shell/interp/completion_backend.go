@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/completionutil"
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/pattern"
+	shellpattern "github.com/ewhauser/gbash/internal/shellpattern"
+	"github.com/ewhauser/gbash/shell/expand"
 )
 
 type runnerCompletionBackend struct {
@@ -258,11 +258,11 @@ func (b *runnerCompletionBackend) UserNames(prefix string) ([]string, error) {
 }
 
 func (b *runnerCompletionBackend) MatchFilterPattern(filter, candidate string) (bool, error) {
-	mode := pattern.EntireString
+	mode := shellpattern.EntireString
 	if b.runner != nil && b.runner.opts[optExtGlob] {
-		mode |= pattern.ExtendedOperators
+		mode |= shellpattern.ExtendedOperators
 	}
-	matcher, err := pattern.ExtendedPatternMatcher(filter, mode)
+	matcher, err := shellpattern.ExtendedPatternMatcher(filter, mode)
 	if err != nil {
 		return false, err
 	}

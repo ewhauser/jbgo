@@ -20,9 +20,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/pattern"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	shellpattern "github.com/ewhauser/gbash/internal/shellpattern"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const (
@@ -710,7 +711,9 @@ var _ expand.WriteEnviron = expandEnv{}
 var _ expand.Environ = tildeExpandEnv{}
 
 func (e expandEnv) Get(name string) expand.Variable {
-	return e.r.lookupVar(name)
+	vr := e.r.lookupVar(name)
+	e.r.analysisVariableRead(name, nil, vr)
+	return vr
 }
 
 func (e expandEnv) Set(name string, vr expand.Variable) error {
@@ -914,6 +917,10 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	if r.stop(ctx) {
 		return
 	}
+	prevStmt := r.analysisStatementEnter(st)
+	defer func() {
+		r.analysisStatementExit(prevStmt, r.AnalysisStatus())
+	}()
 	line := st.Pos().Line()
 	if r.stmtDepth == 0 {
 		r.commandAborted = false
@@ -1516,11 +1523,11 @@ func validFunctionName(name string) bool {
 }
 
 func (r *Runner) patternMatch(pat, name string) bool {
-	mode := pattern.EntireString | pattern.ExtendedOperators
+	mode := shellpattern.EntireString | shellpattern.ExtendedOperators
 	if r.opts[optNoCaseMatch] {
-		mode |= pattern.NoGlobCase
+		mode |= shellpattern.NoGlobCase
 	}
-	ok, err := pattern.Match(pat, name, mode)
+	ok, err := shellpattern.Match(pat, name, mode)
 	_ = err // TODO: report these errors
 	return ok
 }
@@ -2094,6 +2101,13 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		allowDebug := r.opts[optFuncTrace] || r.opts[optExtDebug] || info.trace
 		allowReturn := r.opts[optFuncTrace] || info.trace
 		allowErr := r.opts[optErrTrace]
+		r.analysisScopeEnter(analysis.Scope{
+			Kind:     analysis.ScopeFunction,
+			Name:     name,
+			File:     source,
+			CallLine: uint(r.functionCallLine(pos)),
+		})
+		defer r.analysisScopeExit(r.AnalysisStatus())
 		// stack them to support nested func calls
 		oldParams := r.Params
 		r.Params = args[1:]

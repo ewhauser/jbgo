@@ -22,9 +22,9 @@ import (
 
 	gbfs "github.com/ewhauser/gbash/fs"
 	gbruntime "github.com/ewhauser/gbash/internal/runtime"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/testutil"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 var bashLinePrefixPattern = regexp.MustCompile(`(?m)^(?:[^:\n]+/)?\w+:(?:[^:\n]+:)* line \d+: `)

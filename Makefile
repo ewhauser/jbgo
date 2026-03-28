@@ -153,8 +153,8 @@ FUZZ_FULL_SHARD_4 := \
 
 FUZZ_FULL_SHARD_5 := \
 	FuzzFoldCommand \
-	./internal/shell/syntax:FuzzParseAdversarial \
-	./internal/shell/syntax:FuzzParseAttackMutations
+	./shell/syntax:FuzzParseAdversarial \
+	./shell/syntax:FuzzParseAttackMutations
 
 FUZZ_FULL_TARGETS := \
 	$(FUZZ_FULL_SHARD_1) \

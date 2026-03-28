@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func TestInteractiveParserSeqRendersCompleteInput(t *testing.T) {

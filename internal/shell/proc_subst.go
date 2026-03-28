@@ -16,8 +16,8 @@ import (
 
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/internal/shell/interp"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const procSubstProbeName = ".gbash-procsub-probe"

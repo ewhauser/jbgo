@@ -4,6 +4,7 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/analysis"
 )
 
 // Option configures a runtime before initialization.
@@ -44,6 +45,9 @@ func WithConfig(cfg *Config) Option {
 		}
 		if cfg.Logger != nil {
 			target.Logger = cfg.Logger
+		}
+		if cfg.AnalysisObserver != nil {
+			target.AnalysisObserver = cfg.AnalysisObserver
 		}
 		return nil
 	}
@@ -101,6 +105,13 @@ func WithTracing(cfg TraceConfig) Option {
 func WithLogger(callback LogCallback) Option {
 	return func(target *Config) error {
 		target.Logger = callback
+		return nil
+	}
+}
+
+func WithAnalysisObserver(observer analysis.Observer) Option {
+	return func(target *Config) error {
+		target.AnalysisObserver = observer
 		return nil
 	}
 }

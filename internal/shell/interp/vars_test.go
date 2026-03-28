@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ewhauser/gbash/internal/shell/expand"
+	"github.com/ewhauser/gbash/shell/expand"
 )
 
 type testEachEntry struct {

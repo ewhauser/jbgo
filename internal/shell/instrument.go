@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 const loopIterCommandName = "__jb_loop_iter"

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 func runPipelineTrapScript(t *testing.T, src string) (string, string, error) {

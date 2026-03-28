@@ -14,19 +14,21 @@ import (
 	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/analysis"
 )
 
 type Config struct {
-	FileSystem     FileSystemConfig
-	Registry       commands.CommandRegistry
-	Policy         policy.Policy
-	LimitOverrides policy.Limits
-	BaseEnv        map[string]string
-	Host           host.Adapter
-	Network        *network.Config
-	NetworkClient  network.Client
-	Tracing        TraceConfig
-	Logger         LogCallback
+	FileSystem       FileSystemConfig
+	Registry         commands.CommandRegistry
+	Policy           policy.Policy
+	LimitOverrides   policy.Limits
+	BaseEnv          map[string]string
+	Host             host.Adapter
+	Network          *network.Config
+	NetworkClient    network.Client
+	Tracing          TraceConfig
+	Logger           LogCallback
+	AnalysisObserver analysis.Observer
 }
 
 type Runtime struct {

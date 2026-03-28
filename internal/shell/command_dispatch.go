@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/commands"
-	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/trace"
 )
 

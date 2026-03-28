@@ -15,8 +15,8 @@ import (
 	"github.com/ewhauser/gbash/commands"
 	"github.com/ewhauser/gbash/internal/builtins"
 	"github.com/ewhauser/gbash/internal/commandutil"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	gbserver "github.com/ewhauser/gbash/server"
+	"github.com/ewhauser/gbash/shell/syntax"
 	"golang.org/x/term"
 )
 

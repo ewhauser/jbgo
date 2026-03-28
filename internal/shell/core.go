@@ -21,12 +21,13 @@ import (
 	gbfs "github.com/ewhauser/gbash/fs"
 	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/commandutil"
-	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
 	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
+	"github.com/ewhauser/gbash/shell/analysis"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 	"github.com/ewhauser/gbash/trace"
 )
 
@@ -60,6 +61,7 @@ type Execution struct {
 	Registry          commands.CommandRegistry
 	Policy            policy.Policy
 	Trace             trace.Recorder
+	AnalysisObserver  analysis.Observer
 	Now               func() time.Time
 	SetTime           func(time.Time) error
 	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
@@ -113,11 +115,21 @@ func Interact(ctx context.Context, exec *Execution) (*InteractiveResult, error) 
 }
 
 func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, runErr error) {
+	var runner *interp.Runner
+	analysisFinished := false
+	finishAnalysis := func(status analysis.Status) {
+		if runner == nil || analysisFinished {
+			return
+		}
+		runner.AnalysisRunFinish(status)
+		analysisFinished = true
+	}
 	if exec == nil {
 		exec = &Execution{}
 	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			finishAnalysis(analysis.Status{Code: 2, Exiting: true})
 			if exec.Stderr != nil {
 				_, _ = fmt.Fprintln(exec.Stderr, sanitizeRunnerPanic(recovered))
 			}
@@ -151,10 +163,12 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	cleanupProcSubst := withProcSubstScope(&effectiveExec)
 	defer cleanupProcSubst()
 
-	runner, err := m.newRunner(&effectiveExec, budget)
+	var err error
+	runner, err = m.newRunner(&effectiveExec, budget)
 	if err != nil {
 		return nil, err
 	}
+	runner.AnalysisRunStart()
 	if family, ok := shellstate.SignalFamilyFromContext(ctx); ok {
 		if owner, ok := family.Owner.(*interp.Runner); ok {
 			runner.InheritSignalFamily(owner, family.StablePID, family.ParentBASHPID)
@@ -170,9 +184,13 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 		},
 	)
 	if code, ok := compilationExitStatus(runErr); ok {
+		status := runnerAnalysisStatus(runner, runErr)
+		status.Code = code
+		finishAnalysis(status)
 		writeCompilationError(exec.Stderr, runErr)
 		return &RunResult{FinalEnv: runner.ShellEnv()}, interp.ExitStatus(code)
 	}
+	finishAnalysis(runnerAnalysisStatus(runner, runErr))
 	return &RunResult{
 		FinalEnv:    runner.ShellEnv(),
 		ShellExited: runner.Exited(),
@@ -221,6 +239,12 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.RunnerConfig {
 	cfg := &interp.RunnerConfig{
 		Env:              executionEnviron(exec, m.runnerEnv(exec)),
+		AnalysisObserver: analysisObserver(exec),
+		AnalysisRun: analysis.RunMetadata{
+			Name:        analysisRunName(exec),
+			ScriptPath:  analysisRunScriptPath(exec),
+			Interactive: exec != nil && exec.Interactive,
+		},
 		CallHandler:      m.callHandler(exec, budget),
 		ExecHandler:      m.execHandler(exec, budget),
 		OpenHandler:      m.openHandler(exec),
@@ -253,7 +277,42 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	if exec.ScriptPath == "" && exec.Script != "" {
 		cfg.CommandStringValue = exec.Script
 	}
+	cfg.AnalysisRun.CommandString = cfg.CommandString
 	return cfg
+}
+
+func analysisObserver(exec *Execution) analysis.Observer {
+	if exec == nil {
+		return nil
+	}
+	return exec.AnalysisObserver
+}
+
+func analysisRunName(exec *Execution) string {
+	return executionSourceName(exec)
+}
+
+func analysisRunScriptPath(exec *Execution) string {
+	if exec == nil {
+		return ""
+	}
+	return exec.ScriptPath
+}
+
+func runnerAnalysisStatus(runner *interp.Runner, err error) analysis.Status {
+	if runner == nil {
+		return analysis.Status{}
+	}
+	status := runner.AnalysisStatus()
+	if code, ok := compilationExitStatus(err); ok {
+		status.Code = code
+		return status
+	}
+	if err != nil && status.Code == 0 {
+		status.Code = ExitCode(err)
+		status.Fatal = !IsExitStatus(err)
+	}
+	return status
 }
 
 func executionEnviron(exec *Execution, env map[string]string) expand.Environ {

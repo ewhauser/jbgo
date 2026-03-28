@@ -14,8 +14,8 @@ import (
 
 	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/internal/completionutil"
-	"github.com/ewhauser/gbash/internal/shell/expand"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 // LookupHandlerContext returns the [HandlerContext] value stored in ctx,

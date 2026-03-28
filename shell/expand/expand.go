@@ -21,8 +21,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/ewhauser/gbash/internal/shell/pattern"
-	"github.com/ewhauser/gbash/internal/shell/syntax"
+	"github.com/ewhauser/gbash/shell/internal/pattern"
+	"github.com/ewhauser/gbash/shell/syntax"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )

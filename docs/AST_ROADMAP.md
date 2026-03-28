@@ -2,7 +2,7 @@
 
 ## Summary
 
-The current shell AST is not missing many top-level Bash constructs. `internal/shell/syntax/nodes.go` already models most compound commands we care about: simple calls, `if`, `while`, `for`, `case`, blocks, subshells, functions, arithmetic commands, `[[ ]]`, declaration clauses, `let`, `time`, process substitution, arrays, and `coproc`.
+The current shell AST is not missing many top-level Bash constructs. `shell/syntax/nodes.go` already models most compound commands we care about: simple calls, `if`, `while`, `for`, `case`, blocks, subshells, functions, arithmetic commands, `[[ ]]`, declaration clauses, `let`, `time`, process substitution, arrays, and `coproc`.
 
 The bigger issue is lower in the tree:
 

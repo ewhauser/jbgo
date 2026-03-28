@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/internal/completionutil"
-	"github.com/ewhauser/gbash/internal/shell/expand"
 	"github.com/ewhauser/gbash/internal/shell/interp"
-	"github.com/ewhauser/gbash/internal/shell/pattern"
+	shellpattern "github.com/ewhauser/gbash/internal/shellpattern"
+	"github.com/ewhauser/gbash/shell/expand"
 )
 
 type staticCompletionBackend struct {
@@ -214,7 +214,7 @@ func (b *staticCompletionBackend) UserNames(prefix string) ([]string, error) {
 }
 
 func (b *staticCompletionBackend) MatchFilterPattern(filter, candidate string) (bool, error) {
-	matcher, err := pattern.ExtendedPatternMatcher(filter, pattern.EntireString)
+	matcher, err := shellpattern.ExtendedPatternMatcher(filter, shellpattern.EntireString)
 	if err != nil {
 		return false, err
 	}
