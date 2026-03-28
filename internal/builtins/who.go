@@ -324,10 +324,14 @@ func whoWriteHeading(inv *Invocation, opts whoOptions) error {
 	return whoWriteLine(inv, opts, "NAME", ' ', "LINE", "TIME", "IDLE", "PID", "COMMENT", "EXIT")
 }
 
+func whoNeedsDeviceMetadata(opts whoOptions) bool {
+	return opts.includeMesg || (!opts.shortOutput && opts.includeIdle)
+}
+
 func whoWriteUser(ctx context.Context, inv *Invocation, opts whoOptions, record *whoRecord) error {
 	mesg := '?'
 	idle := "  ?"
-	if record.line != "" {
+	if record.line != "" && whoNeedsDeviceMetadata(opts) {
 		info, _, err := statPath(ctx, inv, path.Join("/dev", record.line))
 		if err == nil {
 			if info.Mode().Perm()&0o020 == 0 {
