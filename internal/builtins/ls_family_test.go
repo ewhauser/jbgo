@@ -253,11 +253,12 @@ func TestLSReturnsMissingPathExitCode(t *testing.T) {
 	session := newSession(t, &Config{})
 
 	result := mustExecSession(t, session, "ls /tmp/missing\n")
-	if result.ExitCode != 1 {
-		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
 	}
-	if !strings.Contains(result.Stderr, "ls: /tmp/missing: No such file or directory") {
-		t.Fatalf("Stderr = %q, want missing-path error", result.Stderr)
+	const wantStderr = "ls: cannot access '/tmp/missing': No such file or directory\n"
+	if got := result.Stderr; got != wantStderr {
+		t.Fatalf("Stderr = %q, want %q", got, wantStderr)
 	}
 }
 
@@ -276,10 +277,10 @@ func TestAliasExpandedLSMissingPathMatchesBashExitStatus(t *testing.T) {
 	if got, want := result.ExitCode, 0; got != want {
 		t.Fatalf("ExitCode = %d, want %d; stdout=%q stderr=%q", got, want, result.Stdout, result.Stderr)
 	}
-	if got, want := result.Stdout, "status=1\n"; got != want {
+	if got, want := result.Stdout, "status=2\n"; got != want {
 		t.Fatalf("Stdout = %q, want %q", got, want)
 	}
-	const wantStderr = "ls: 1\n  2\n  3: No such file or directory\n"
+	const wantStderr = "ls: cannot access '1'$'\\n''  2'$'\\n''  3': No such file or directory\n"
 	if got := result.Stderr; got != wantStderr {
 		t.Fatalf("Stderr = %q, want %q", got, wantStderr)
 	}

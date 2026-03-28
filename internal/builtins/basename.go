@@ -110,6 +110,56 @@ func quoteGNUOperand(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
+func quoteGNUErrorOperand(value string) string {
+	if !strings.ContainsAny(value, "\a\b\f\n\r\t\v") {
+		return quoteGNUOperand(value)
+	}
+
+	var out strings.Builder
+	start := 0
+	for i := 0; i < len(value); i++ {
+		escaped, ok := quoteGNUControlEscape(value[i])
+		if !ok {
+			continue
+		}
+		if start < i {
+			out.WriteString(quoteGNUOperand(value[start:i]))
+		}
+		out.WriteString("$'")
+		out.WriteString(escaped)
+		out.WriteByte('\'')
+		start = i + 1
+	}
+	if start < len(value) {
+		out.WriteString(quoteGNUOperand(value[start:]))
+	}
+	if out.Len() == 0 {
+		return quoteGNUOperand(value)
+	}
+	return out.String()
+}
+
+func quoteGNUControlEscape(b byte) (string, bool) {
+	switch b {
+	case '\a':
+		return `\a`, true
+	case '\b':
+		return `\b`, true
+	case '\f':
+		return `\f`, true
+	case '\n':
+		return `\n`, true
+	case '\r':
+		return `\r`, true
+	case '\t':
+		return `\t`, true
+	case '\v':
+		return `\v`, true
+	default:
+		return "", false
+	}
+}
+
 const basenameHelpText = `Usage: basename NAME [SUFFIX]
   or:  basename OPTION... NAME...
 Print NAME with any leading directory components removed.
