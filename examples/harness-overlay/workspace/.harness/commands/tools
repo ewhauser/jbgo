@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  --describe)
+    echo "list discovered tools"
+    exit 0
+    ;;
+esac
+
+source "${HARNESS_CWD:-${PWD}}/.harness/lib/runtime.sh"
+
+harness_refresh_sources
+
+declare -A tool_map=()
+local_path=""
+for src in "${_GBASH_HARNESS_SOURCES[@]}"; do
+  [[ -d "${src}/tools" ]] || continue
+  for local_path in "${src}/tools"/*; do
+    [[ -x "${local_path}" ]] || continue
+    tool_map["$(basename "${local_path}")"]="${local_path}"
+  done
+done
+
+for name in $(printf '%s\n' "${!tool_map[@]}" | sort); do
+  path="${tool_map[$name]}"
+  desc="$("${path}" --describe 2>/dev/null)" || desc="(no description)"
+  printf '  %-20s %s  [%s]\n' "${name}" "${desc}" "${path}"
+done

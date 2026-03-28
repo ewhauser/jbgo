@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# 10-messages — read canonical session files, produce OpenAI messages array.
+# For Anthropic/ChatGPT, delegate to the vendored provider-specific hook.
+set -euo pipefail
+
+payload="$(cat)"
+msg_dir="${HARNESS_SESSION}/messages"
+
+case "${HARNESS_PROVIDER:-}" in
+  anthropic|chatgpt)
+    vendor_hook="${HARNESS_ROOT}/plugins/${HARNESS_PROVIDER}/hooks.d/assemble/10-messages"
+    if [[ -x "${vendor_hook}" ]]; then
+      printf '%s' "${payload}" | "${vendor_hook}"
+      exit 0
+    fi
+    ;;
+esac
+
+[[ -d "${msg_dir}" ]] || {
+  echo "${payload}"
+  exit 0
+}
+
+messages="[]"
+
+add_msg() {
+  messages="$(echo "${messages}" | jq --argjson m "$1" '. + [$m]')"
+}
+
+while IFS= read -r f; do
+  [[ -n "${f}" ]] || continue
+
+  frontmatter="$(awk '/^---$/{n++; next} n==1{print} n>=2{exit}' "${f}")"
+  body="$(awk '/^---$/{n++; next} n>=2{print}' "${f}")"
+
+  _role="$(echo "${frontmatter}" | grep -m1 '^role:' | cut -d: -f2- || true)"
+  _role="${_role# }"
+  _call_id="$(echo "${frontmatter}" | grep -m1 '^call_id:' | cut -d: -f2- || true)"
+  _call_id="${_call_id# }"
+  _error="$(echo "${frontmatter}" | grep -m1 '^error:' | cut -d: -f2- || true)"
+  _error="${_error# }"
+  [[ -z "${_error}" ]] && _error="false"
+
+  case "${_role}" in
+    user)
+      add_msg "$(jq -n --arg c "${body}" '{role: "user", content: $c}')"
+      ;;
+    assistant)
+      text_content=""
+      tool_calls="[]"
+      in_tool_block=false
+      tool_id=""
+      tool_name=""
+      tool_body=""
+
+      while IFS= read -r line; do
+        if [[ "${line}" =~ ^\`\`\`tool_call\ id=([^ ]+)\ name=([^ ]+) ]]; then
+          in_tool_block=true
+          tool_id="${BASH_REMATCH[1]}"
+          tool_name="${BASH_REMATCH[2]}"
+          tool_body=""
+          continue
+        fi
+
+        if ${in_tool_block} && [[ "${line}" == '```' ]]; then
+          in_tool_block=false
+          tool_calls="$(echo "${tool_calls}" | jq \
+            --arg id "${tool_id}" --arg name "${tool_name}" --arg args "${tool_body}" \
+            '. + [{id: $id, type: "function", function: {name: $name, arguments: $args}}]')"
+          continue
+        fi
+
+        if ${in_tool_block}; then
+          tool_body+="${line}"
+        else
+          text_content+="${line}"$'\n'
+        fi
+      done <<< "${body}"
+      text_content="${text_content%$'\n'}"
+
+      tc_count="$(echo "${tool_calls}" | jq 'length')"
+      if (( tc_count > 0 )); then
+        if [[ -n "${text_content}" ]]; then
+          add_msg "$(jq -n --arg c "${text_content}" --argjson tc "${tool_calls}" \
+            '{role: "assistant", content: $c, tool_calls: $tc}')"
+        else
+          add_msg "$(jq -n --argjson tc "${tool_calls}" \
+            '{role: "assistant", tool_calls: $tc}')"
+        fi
+      else
+        add_msg "$(jq -n --arg c "${text_content}" '{role: "assistant", content: $c}')"
+      fi
+      ;;
+    tool_result)
+      add_msg "$(jq -n --arg id "${_call_id}" --arg c "${body}" \
+        '{role: "tool", tool_call_id: $id, content: $c}')"
+      ;;
+  esac
+done < <(find "${msg_dir}" -maxdepth 1 -type f -name '*.md' | sort)
+
+echo "${payload}" | jq --argjson msgs "${messages}" '. + {messages: $msgs}'

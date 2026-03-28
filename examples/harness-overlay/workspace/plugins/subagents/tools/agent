@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# agent — tool plugin: spawn a subagent to handle a task autonomously.
+set -euo pipefail
+
+case "${1:-}" in
+  --schema)
+    cat <<'JSON'
+{
+  "name": "agent",
+  "description": "Spawn a subagent to handle a complex or independent task. The subagent runs a full agent loop with its own session, then returns its final output. Use for tasks that benefit from focused, isolated execution.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "The task for the subagent to perform. Be specific — include context, expected output, and constraints."
+      },
+      "model": {
+        "type": "string",
+        "description": "Model override (optional, defaults to the provider's default model)"
+      },
+      "provider": {
+        "type": "string",
+        "description": "Provider override (optional, defaults to parent's provider)"
+      }
+    },
+    "required": ["prompt"]
+  }
+}
+JSON
+    ;;
+  --describe)
+    echo "Spawn a subagent to handle a task"
+    ;;
+  --exec)
+    input="$(cat)"
+    prompt="$(echo "${input}" | jq -r '.prompt')"
+    model="$(echo "${input}" | jq -r '.model // empty')"
+    provider="$(echo "${input}" | jq -r '.provider // empty')"
+
+    # Build env overrides
+    env_args=()
+    [[ -n "${model}" ]]    && env_args+=(HARNESS_MODEL="${model}")
+    [[ -n "${provider}" ]] && env_args+=(HARNESS_PROVIDER="${provider}")
+
+    # Run subagent — stdout is the final output, stderr has session info/logs
+    workdir="${HARNESS_CWD:-${PWD}}"
+    result="$(cd "${workdir}" && env "${env_args[@]+"${env_args[@]}"}" "${HARNESS_ROOT}/bin/harness" run "${prompt}" 2>/dev/null)" || true
+
+    if [[ -z "${result}" ]]; then
+      echo "subagent completed with no output"
+    else
+      echo "${result}"
+    fi
+    ;;
+  *)
+    echo "usage: agent --schema | --describe | --exec" >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  --describe)
+    echo "manage sessions (list, show, dir)"
+    exit 0
+    ;;
+esac
+
+subcmd="${1:-list}"
+shift || true
+
+case "${subcmd}" in
+  list)
+    ls -1t "${HARNESS_SESSIONS}" 2>/dev/null || echo "(no sessions)"
+    ;;
+  show)
+    id="${1:?usage: session show <id>}"
+    dir="${HARNESS_SESSIONS}/${id}"
+    [[ -d "${dir}" ]] || {
+      echo "harness: session '${id}' not found" >&2
+      exit 1
+    }
+    cat "${dir}/session.md"
+    echo "---"
+    echo "messages: $(ls -1 "${dir}/messages/" | wc -l)"
+    ls -1 "${dir}/messages/"
+    ;;
+  dir)
+    id="${1:-}"
+    if [[ -n "${id}" ]]; then
+      echo "${HARNESS_SESSIONS}/${id}"
+    else
+      echo "${HARNESS_SESSIONS}"
+    fi
+    ;;
+  *)
+    echo "harness: unknown session command: ${subcmd}" >&2
+    exit 1
+    ;;
+esac

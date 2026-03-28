@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  --describe)
+    echo "list discovered hooks"
+    exit 0
+    ;;
+esac
+
+source "${HARNESS_CWD:-${PWD}}/.harness/lib/runtime.sh"
+
+stage="${1:-}"
+harness_refresh_sources
+
+for src in "${_GBASH_HARNESS_SOURCES[@]}"; do
+  hook_root="${src}/hooks.d"
+  [[ -d "${hook_root}" ]] || continue
+
+  if [[ -n "${stage}" ]]; then
+    [[ -d "${hook_root}/${stage}" ]] || continue
+    for path in "${hook_root}/${stage}"/*; do
+      [[ -x "${path}" ]] && printf '  %s/%s  [%s]\n' "${stage}" "$(basename "${path}")" "${path}"
+    done
+    continue
+  fi
+
+  for stage_dir in "${hook_root}"/*/; do
+    [[ -d "${stage_dir}" ]] || continue
+    stage_name="$(basename "${stage_dir}")"
+    for path in "${stage_dir}"*; do
+      [[ -x "${path}" ]] && printf '  %s/%s  [%s]\n' "${stage_name}" "$(basename "${path}")" "${path}"
+    done
+  done
+done

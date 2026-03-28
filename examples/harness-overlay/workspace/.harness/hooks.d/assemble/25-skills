@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# 25-skills — discover skills and inject catalog into the system prompt.
+#
+# Walks CWD upward (like source discovery) collecting skills from:
+#   <dir>/.harness/skills/    (harness-native)
+#   <dir>/.agents/skills/     (cross-client convention)
+#
+# Each skill is a directory containing a SKILL.md with YAML frontmatter.
+# Only name + description are loaded here (tier 1: catalog).
+set -euo pipefail
+
+payload="$(cat)"
+
+# Collect skill directories: CWD upward, global first (lowest priority)
+skill_dirs=()
+walk_dirs=()
+cur="${HARNESS_CWD:-${PWD}}"
+while true; do
+  walk_dirs+=("${cur}")
+  [[ "${cur}" == "/" ]] && break
+  cur="$(dirname "${cur}")"
+done
+
+# Ensure ~ is included
+home_found=0
+for d in "${walk_dirs[@]}"; do
+  [[ "${d}" == "${HOME}" ]] && home_found=1
+done
+(( home_found )) || walk_dirs+=("${HOME}")
+
+# Reverse to process global first
+reversed_walk_dirs=()
+for d in "${walk_dirs[@]}"; do
+  reversed_walk_dirs=("${d}" "${reversed_walk_dirs[@]}")
+done
+
+for d in "${reversed_walk_dirs[@]}"; do
+  [[ -d "${d}/.harness/skills" ]] && skill_dirs+=("${d}/.harness/skills")
+  [[ -d "${d}/.agents/skills" ]] && skill_dirs+=("${d}/.agents/skills")
+done
+
+# Discover skills: name → {description, path}, last wins (most-local)
+declare -A skill_names=()
+declare -A skill_descs=()
+declare -A skill_paths=()
+for sdir in "${skill_dirs[@]}"; do
+  for candidate in "${sdir}"/*/; do
+    [[ -d "${candidate}" ]] || continue
+    skillmd="${candidate}SKILL.md"
+    [[ -f "${skillmd}" ]] || continue
+
+    # Extract YAML frontmatter (between first and second ---)
+    frontmatter="$(awk '/^---$/{n++; next} n==1{print} n>=2{exit}' "${skillmd}")"
+    [[ -z "${frontmatter}" ]] && continue
+
+    name="$(echo "${frontmatter}" | grep -m1 '^name:' | sed 's/^name:[[:space:]]*//')"
+    desc="$(echo "${frontmatter}" | grep -m1 '^description:' | sed 's/^description:[[:space:]]*//')"
+    [[ -z "${name}" || -z "${desc}" ]] && continue
+
+    skill_names["${name}"]=1
+    skill_descs["${name}"]="${desc}"
+    skill_paths["${name}"]="$(cd "$(dirname "${skillmd}")" && pwd)/SKILL.md"
+  done
+done
+
+# No skills? Pass through unchanged.
+if [[ ${#skill_names[@]} -eq 0 ]]; then
+  echo "${payload}"
+  exit 0
+fi
+
+# Build catalog block
+catalog="<available-skills>"
+for name in $(printf '%s\n' "${!skill_names[@]}" | sort); do
+  catalog+=$'\n'"  <skill name=\"${name}\" path=\"${skill_paths[${name}]}\">"
+  catalog+=$'\n'"    ${skill_descs[${name}]}"
+  catalog+=$'\n'"  </skill>"
+done
+catalog+=$'\n'"</available-skills>"
+
+instructions="The following skills provide specialized instructions for specific tasks.
+When a task matches a skill's description, call the skill tool with the skill's name to load its full instructions."
+
+block="${instructions}"$'\n\n'"${catalog}"
+
+# Append to existing system prompt
+echo "${payload}" | jq --arg skills "${block}" '.system = (.system + "\n\n" + $skills)'

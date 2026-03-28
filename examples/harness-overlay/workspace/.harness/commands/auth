@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  --describe)
+    echo "manage provider credentials"
+    exit 0
+    ;;
+esac
+
+cat <<'EOF' >&2
+harness auth is not supported inside this gbash example.
+
+Use exported API-key environment variables before launching the example instead:
+  OPENAI_API_KEY
+  ANTHROPIC_API_KEY
+  GROQ_API_KEY
+  DEEPSEEK_API_KEY
+  OPENROUTER_API_KEY
+  ZAI_AUTH_TOKEN
+EOF
+exit 1

@@ -6,7 +6,7 @@ SQLITE_FS_SCRIPT ?= pwd
 AGENTFS_FS_DB ?= /tmp/gbash-agentfs.db
 AGENTFS_FS_SCRIPT ?= pwd
 
-.PHONY: run run-agentfs-backed-fs run-custom-zstd run-oauth-network-extension run-otel run-sqlite-backed-fs run-sqlite-backed-fs-repl run-transactional-workspaces run-vertex-bash-chat
+.PHONY: run run-agentfs-backed-fs run-custom-zstd run-harness-overlay run-oauth-network-extension run-otel run-sqlite-backed-fs run-sqlite-backed-fs-repl run-transactional-workspaces run-vertex-bash-chat
 run: run-vertex-bash-chat
 
 run-agentfs-backed-fs:
@@ -15,6 +15,10 @@ run-agentfs-backed-fs:
 
 run-custom-zstd:
 	go run ./custom-zstd < ./custom-zstd/demo.sh
+
+run-harness-overlay:
+	@echo "Running harness-overlay demo"
+	@go run ./harness-overlay
 
 run-oauth-network-extension:
 	@echo "Running oauth-network-extension demo"

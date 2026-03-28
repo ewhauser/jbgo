@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  --schema)
+    cat <<'JSON'
+{
+  "name": "bash",
+  "description": "Execute a bash command in the working directory. Returns combined stdout and stderr. Use for running scripts, installing packages, file operations, or any shell command.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "The bash command to execute"
+      }
+    },
+    "required": ["command"]
+  }
+}
+JSON
+    ;;
+  --describe)
+    echo "Execute bash commands"
+    ;;
+  --exec)
+    input="$(cat)"
+    command="$(echo "${input}" | jq -r '.command')"
+    if [[ "${command}" == "null" ]]; then
+      command=""
+    fi
+    session_dir="${HARNESS_SESSION:?HARNESS_SESSION is required}"
+    state_dir="${session_dir}/.gbash-bash"
+    pwd_file="${state_dir}/pwd"
+    env_file="${state_dir}/env.bash"
+    mkdir -p "${state_dir}"
+
+    set +e
+    result="$(
+      USER_COMMAND="${command}" \
+      STATE_DIR="${state_dir}" \
+      PWD_FILE="${pwd_file}" \
+      ENV_FILE="${env_file}" \
+      timeout "${HARNESS_TOOL_TIMEOUT:-120}" bash -lc '
+        set +e
+
+        if [[ -f "${ENV_FILE}" ]]; then
+          source "${ENV_FILE}"
+        fi
+
+        if [[ -f "${PWD_FILE}" ]]; then
+          saved_pwd="$(cat "${PWD_FILE}")"
+          if [[ -n "${saved_pwd}" ]]; then
+            cd "${saved_pwd}" 2>/dev/null || true
+          fi
+        fi
+
+        persist_state() {
+          mkdir -p "${STATE_DIR}"
+          pwd > "${PWD_FILE}"
+          (
+            unset ENV_FILE PWD_FILE STATE_DIR USER_COMMAND
+            export -p
+          ) > "${ENV_FILE}"
+        }
+
+        trap persist_state EXIT TERM INT
+        eval "${USER_COMMAND}"
+        exit $?
+      ' 2>&1
+    )"
+    status=$?
+    set -e
+
+    printf '%s' "${result}"
+    exit "${status}"
+    ;;
+  *)
+    echo "usage: bash --schema | --describe | --exec" >&2
+    exit 1
+    ;;
+esac
