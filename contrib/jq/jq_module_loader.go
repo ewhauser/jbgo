@@ -11,9 +11,10 @@ import (
 )
 
 type sandboxJQModuleLoader struct {
-	ctx   context.Context
-	inv   *commands.Invocation
-	paths []string
+	inv      *commands.Invocation
+	paths    []string
+	readFile func(name string) ([]byte, error)
+	stat     func(name string) error
 }
 
 func newSandboxJQModuleLoader(ctx context.Context, inv *commands.Invocation, paths []string) gojq.ModuleLoader {
@@ -26,9 +27,15 @@ func newSandboxJQModuleLoader(ctx context.Context, inv *commands.Invocation, pat
 		resolved = append(resolved, resolveSandboxJQPath(inv, inv.Cwd, value))
 	}
 	return &sandboxJQModuleLoader{
-		ctx:   ctx,
 		inv:   inv,
 		paths: resolved,
+		readFile: func(name string) ([]byte, error) {
+			return readJQFile(ctx, inv, name)
+		},
+		stat: func(name string) error {
+			_, err := inv.FS.StatQuiet(ctx, name)
+			return err
+		},
 	}
 }
 
@@ -41,7 +48,7 @@ func (l *sandboxJQModuleLoader) LoadModuleWithMeta(name string, meta map[string]
 	if err != nil {
 		return nil, err
 	}
-	data, err := readJQFile(l.ctx, l.inv, modulePath)
+	data, err := l.readFile(modulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +88,7 @@ func (l *sandboxJQModuleLoader) LoadJSONWithMeta(name string, meta map[string]an
 	if err != nil {
 		return nil, err
 	}
-	data, err := readJQFile(l.ctx, l.inv, modulePath)
+	data, err := l.readFile(modulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +111,7 @@ func (l *sandboxJQModuleLoader) lookupModule(name, ext string, meta map[string]a
 			path.Join(base, name+ext),
 			path.Join(base, name, path.Base(name)+ext),
 		} {
-			if _, err := l.inv.FS.StatQuiet(l.ctx, candidate); err == nil {
+			if err := l.stat(candidate); err == nil {
 				return candidate, nil
 			}
 		}

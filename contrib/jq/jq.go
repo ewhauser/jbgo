@@ -583,26 +583,6 @@ func readJQFile(ctx context.Context, inv *commands.Invocation, name string) ([]b
 	}
 }
 
-func openJQRead(ctx context.Context, inv *commands.Invocation, name string) (stdfs.File, error) {
-	abs := name
-	if inv != nil && inv.FS != nil {
-		abs = inv.FS.Resolve(name)
-	}
-
-	file, err := inv.FS.Open(ctx, abs)
-	if err == nil {
-		return file, nil
-	}
-
-	var pathErr *stdfs.PathError
-	switch {
-	case errors.Is(err, stdfs.ErrNotExist), errors.As(err, &pathErr) && errors.Is(pathErr.Err, stdfs.ErrNotExist):
-		return nil, exitf(inv, 2, "jq: %s: No such file or directory", name)
-	default:
-		return nil, exitf(inv, 2, "jq: %s: %v", name, err)
-	}
-}
-
 func decodeJQJSON(data []byte) ([]any, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return nil, nil

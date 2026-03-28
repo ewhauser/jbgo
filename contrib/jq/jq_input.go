@@ -104,7 +104,7 @@ func buildJQInputValues(inv *commands.Invocation, opts *jqOptions, sources *jqSo
 	case opts.rawInput:
 		values = collectRawJQInputValues(sources)
 	case opts.seq:
-		values, err = collectSeqJQInputValues(inv, opts, sources)
+		values = collectSeqJQInputValues(inv, opts, sources)
 	case opts.stream:
 		values, err = collectStreamJQInputValues(inv, opts, sources)
 	default:
@@ -179,19 +179,16 @@ func collectStreamJQInputValues(inv *commands.Invocation, opts *jqOptions, sourc
 	return values, nil
 }
 
-func collectSeqJQInputValues(inv *commands.Invocation, opts *jqOptions, sources *jqSources) ([]jqInputValue, error) {
+func collectSeqJQInputValues(inv *commands.Invocation, opts *jqOptions, sources *jqSources) []jqInputValue {
 	if sources == nil {
-		return nil, nil
+		return nil
 	}
 	values := make([]jqInputValue, 0)
 	for i, data := range sources.data {
-		decoded, err := parseJQSeqSource(inv, sources.names[i], data, opts)
-		if err != nil {
-			return nil, err
-		}
+		decoded := parseJQSeqSource(inv, sources.names[i], data, opts)
 		values = append(values, decoded...)
 	}
-	return values, nil
+	return values
 }
 
 func lastJQSourceName(sources *jqSources) string {
@@ -229,7 +226,7 @@ func parseJQStreamSource(inv *commands.Invocation, name string, data []byte, emi
 
 const jqSeqRecordSeparator = byte(0x1e)
 
-func parseJQSeqSource(inv *commands.Invocation, name string, data []byte, opts *jqOptions) ([]jqInputValue, error) {
+func parseJQSeqSource(inv *commands.Invocation, name string, data []byte, opts *jqOptions) []jqInputValue {
 	values := make([]jqInputValue, 0)
 	for offset := 0; offset < len(data); {
 		if data[offset] != jqSeqRecordSeparator {
@@ -276,7 +273,7 @@ func parseJQSeqSource(inv *commands.Invocation, name string, data []byte, opts *
 		}
 		values = append(values, jqInputValue{name: name, value: value})
 	}
-	return values, nil
+	return values
 }
 
 func writeJQSeqWarning(inv *commands.Invocation, data []byte) {

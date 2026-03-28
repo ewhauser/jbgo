@@ -32,11 +32,12 @@ type jqFormatter struct {
 
 func newJQFormatter(inv *commands.Invocation, opts *jqOptions) *jqFormatter {
 	indent := 2
-	if opts.compact {
+	switch {
+	case opts.compact:
 		indent = -1
-	} else if opts.tab {
+	case opts.tab:
 		indent = 1
-	} else if opts.indent != nil {
+	case opts.indent != nil:
 		indent = *opts.indent
 	}
 
@@ -330,7 +331,7 @@ func (e *jqEncoder) writeEscapedByte(b byte) {
 func (e *jqEncoder) writeUnicodeEscape(r rune) {
 	if r < 0x10000 {
 		e.buf.WriteString(`\u`)
-		e.buf.WriteString(fmt.Sprintf("%04x", r))
+		_, _ = fmt.Fprintf(e.buf, "%04x", r)
 		return
 	}
 	hi, lo := utf16.EncodeRune(r)
@@ -338,7 +339,7 @@ func (e *jqEncoder) writeUnicodeEscape(r rune) {
 	e.writeUnicodeEscape(lo)
 }
 
-func (e *jqEncoder) write(data []byte, color []byte) {
+func (e *jqEncoder) write(data, color []byte) {
 	if color != nil {
 		e.setColor(color)
 	}
