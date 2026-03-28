@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +17,11 @@ import (
 	gbfs "github.com/ewhauser/gbash/fs"
 )
 
+var agentFSTestMu sync.Mutex
+
 func TestAgentFSFileLifecycle(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	writeFSFile(t, fsys, "/data/file.txt", "alpha\n")
@@ -65,6 +70,8 @@ func TestAgentFSFileLifecycle(t *testing.T) {
 }
 
 func TestAgentFSReadDirAndRename(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	writeFSFile(t, fsys, "/dir/b.txt", "b\n")
@@ -94,6 +101,8 @@ func TestAgentFSReadDirAndRename(t *testing.T) {
 }
 
 func TestAgentFSRemoveRecursiveKeepsExternalHardLink(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	writeFSFile(t, fsys, "/tree/file.txt", "shared\n")
@@ -117,6 +126,8 @@ func TestAgentFSRemoveRecursiveKeepsExternalHardLink(t *testing.T) {
 }
 
 func TestAgentFSSymlinkIntrospectionAndTraversal(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	writeFSFile(t, fsys, "/safe/target.txt", "hello\n")
@@ -154,6 +165,8 @@ func TestAgentFSSymlinkIntrospectionAndTraversal(t *testing.T) {
 }
 
 func TestAgentFSSymlinkLoopFails(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	if err := fsys.Symlink(context.Background(), "b", "/a"); err != nil {
@@ -173,6 +186,8 @@ func TestAgentFSSymlinkLoopFails(t *testing.T) {
 }
 
 func TestAgentFSHardLinksShareContentAndRejectDirectories(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	writeFSFile(t, fsys, "/docs/original.txt", "draft\n")
@@ -204,6 +219,8 @@ func TestAgentFSHardLinksShareContentAndRejectDirectories(t *testing.T) {
 }
 
 func TestAgentFSMetadataAndCwd(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	if err := fsys.MkdirAll(context.Background(), "/workspace", 0o755); err != nil {
@@ -242,6 +259,8 @@ func TestAgentFSMetadataAndCwd(t *testing.T) {
 }
 
 func TestAgentFSFIFOWriterWaitsForReader(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	if err := fsys.MkdirAll(context.Background(), "/tmp", 0o755); err != nil {
@@ -300,6 +319,8 @@ func TestAgentFSFIFOWriterWaitsForReader(t *testing.T) {
 }
 
 func TestAgentFSFIFOWriteFailsAfterReaderDisconnect(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	fsys := newTestAgentFS(t)
 
 	if err := fsys.MkdirAll(context.Background(), "/tmp", 0o755); err != nil {
@@ -333,6 +354,8 @@ func TestAgentFSFIFOWriteFailsAfterReaderDisconnect(t *testing.T) {
 }
 
 func TestAgentFSBackedRuntimePersistsAcrossRuns(t *testing.T) {
+	t.Parallel()
+	lockAgentFSTests(t)
 	dbPath := filepath.Join(t.TempDir(), "sandbox.db")
 
 	first := newAgentFSRuntime(t, dbPath)
@@ -425,4 +448,11 @@ func readFSFile(t *testing.T, fsys gbfs.FileSystem, name string) string {
 		t.Fatalf("ReadAll(%q) error = %v", name, err)
 	}
 	return string(data)
+}
+
+func lockAgentFSTests(t *testing.T) {
+	t.Helper()
+
+	agentFSTestMu.Lock()
+	t.Cleanup(agentFSTestMu.Unlock)
 }
