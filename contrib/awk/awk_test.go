@@ -71,7 +71,7 @@ func TestAWKSupportsCSVJoinAcrossFiles(t *testing.T) {
 func TestAWKSupportsCSVModeFlag(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args:  []string{"-k", "{ print $2 }"},
 		Stdin: "a,b\nc,d\n",
 	})
@@ -152,7 +152,7 @@ func TestAWKGNUVarARGIND(t *testing.T) {
 func TestAWKGNUVarPROCINFOVersion(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args: []string{`BEGIN { print PROCINFO["version"] }`},
 	})
 	if result.Err != nil {
@@ -166,7 +166,7 @@ func TestAWKGNUVarPROCINFOVersion(t *testing.T) {
 func TestAWKGNUVarIGNORECASE(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args:  []string{`BEGIN { IGNORECASE = 1 } /foo/ { print $0 }`},
 		Stdin: "Foo\nbar\n",
 	})
@@ -181,7 +181,7 @@ func TestAWKGNUVarIGNORECASE(t *testing.T) {
 func TestAWKGNUVarFIELDWIDTHS(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args:  []string{`BEGIN { FIELDWIDTHS = "3 3" } { print $1 "-" $2 "-" $3 }`},
 		Stdin: "abc123xyz\n",
 	})
@@ -196,7 +196,7 @@ func TestAWKGNUVarFIELDWIDTHS(t *testing.T) {
 func TestAWKGNUVarFPAT(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args:  []string{`BEGIN { FPAT = "[[:alpha:]]+|[0-9]+" } { print NF ":" $1 ":" $2 ":" $3 ":" $4 }`},
 		Stdin: "a=1 b=22\n",
 	})
@@ -212,7 +212,7 @@ func TestAWKSupportsGNUTimeFunctions(t *testing.T) {
 	t.Parallel()
 
 	fixedNow := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args: []string{`BEGIN { print systime(); print strftime("%Y-%m-%d %H:%M:%S", 0, 1); print mktime("1970 01 02 00 00 00") }`},
 		Env:  map[string]string{"TZ": "UTC"},
 		Now:  fixedNow,
@@ -229,7 +229,7 @@ func TestAWKSupportsGNUTimeFunctions(t *testing.T) {
 func TestAWKSupportsGNUStringAndBitwiseFunctions(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args: []string{`BEGIN {
 			print gensub("([0-9]+)", "<\\1>", "g", "item42 batch7")
 			print strtonum("0x10"), strtonum("010"), strtonum("1.5")
@@ -248,7 +248,7 @@ func TestAWKSupportsGNUStringAndBitwiseFunctions(t *testing.T) {
 func TestAWKSupportsOrderedProgramSources(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args: []string{
 			`--source=BEGIN { print "source" }`,
 			`--file=/main.awk`,
@@ -270,7 +270,7 @@ func TestAWKSupportsOrderedProgramSources(t *testing.T) {
 func TestAWKExecOptionDisablesArgVarAssignments(t *testing.T) {
 	t.Parallel()
 
-	result := runAWKCommand(t, awkCommandOptions{
+	result := runAWKCommand(t, &awkCommandOptions{
 		Args: []string{"-E", "/prog.awk", "name=value", "/input.txt"},
 		Files: map[string]string{
 			"/prog.awk":  `BEGIN { print ARGV[1], ARGV[2] }`,
@@ -289,7 +289,8 @@ func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
 	t.Parallel()
 
 	t.Run("help", func(t *testing.T) {
-		result := runAWKCommand(t, awkCommandOptions{Args: []string{"--help"}})
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"--help"}})
 		if result.Err != nil {
 			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
 		}
@@ -299,7 +300,8 @@ func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
 	})
 
 	t.Run("version", func(t *testing.T) {
-		result := runAWKCommand(t, awkCommandOptions{Args: []string{"-W", "version"}})
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"-W", "version"}})
 		if result.Err != nil {
 			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
 		}
@@ -309,7 +311,8 @@ func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
 	})
 
 	t.Run("copyright", func(t *testing.T) {
-		result := runAWKCommand(t, awkCommandOptions{Args: []string{"-C"}})
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"-C"}})
 		if result.Err != nil {
 			t.Fatalf("Run() error = %v; stderr=%q", result.Err, result.Stderr)
 		}
@@ -319,7 +322,8 @@ func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
 	})
 
 	t.Run("long assign", func(t *testing.T) {
-		result := runAWKCommand(t, awkCommandOptions{
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{
 			Args: []string{"--assign=prefix=hi", `BEGIN { print prefix }`},
 		})
 		if result.Err != nil {
@@ -331,7 +335,8 @@ func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
 	})
 
 	t.Run("unsupported load", func(t *testing.T) {
-		result := runAWKCommand(t, awkCommandOptions{Args: []string{"-l", "json"}})
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"-l", "json"}})
 		if result.ExitCode != 2 {
 			t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
 		}
@@ -341,7 +346,8 @@ func TestAWKSupportsGNUInfoAndLongOptions(t *testing.T) {
 	})
 
 	t.Run("unsupported debug", func(t *testing.T) {
-		result := runAWKCommand(t, awkCommandOptions{Args: []string{"--debug"}})
+		t.Parallel()
+		result := runAWKCommand(t, &awkCommandOptions{Args: []string{"--debug"}})
 		if result.ExitCode != 2 {
 			t.Fatalf("ExitCode = %d, want 2; stderr=%q", result.ExitCode, result.Stderr)
 		}

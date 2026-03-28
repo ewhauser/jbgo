@@ -67,7 +67,7 @@ func (c *AWK) Run(ctx context.Context, inv *commands.Invocation) error {
 		_, _ = io.WriteString(inv.Stdout, gawkCopyrightText)
 		return nil
 	}
-	programSource, err := loadAWKProgram(ctx, inv, opts, programText)
+	programSource, err := loadAWKProgram(ctx, inv, &opts, programText)
 	if err != nil {
 		return exitCodef(inv, 2, "awk: %v", err)
 	}
@@ -89,7 +89,7 @@ func (c *AWK) Run(ctx context.Context, inv *commands.Invocation) error {
 		Argv0:       "awk",
 		Args:        inputs,
 		NoArgVars:   opts.noArgVars,
-		Vars:        buildAWKVars(opts),
+		Vars:        buildAWKVars(&opts),
 		Environ:     awkEnviron(inv.Env),
 		InputMode:   opts.inputMode,
 		FileOpener:  newAWKFileOpener(ctx, inv, stdin),
@@ -297,7 +297,10 @@ parseLoop:
 	return opts, programText, args, nil
 }
 
-func loadAWKProgram(ctx context.Context, inv *commands.Invocation, opts awkOptions, programText string) (string, error) {
+func loadAWKProgram(ctx context.Context, inv *commands.Invocation, opts *awkOptions, programText string) (string, error) {
+	if opts == nil {
+		return programText, nil
+	}
 	if len(opts.programParts) == 0 {
 		return programText, nil
 	}
@@ -316,7 +319,10 @@ func loadAWKProgram(ctx context.Context, inv *commands.Invocation, opts awkOptio
 	return strings.Join(parts, "\n"), nil
 }
 
-func buildAWKVars(opts awkOptions) []string {
+func buildAWKVars(opts *awkOptions) []string {
+	if opts == nil {
+		return nil
+	}
 	var vars []string
 	if opts.fieldSeparator != "" {
 		vars = append(vars, "FS", opts.fieldSeparator)

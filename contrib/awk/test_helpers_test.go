@@ -59,8 +59,11 @@ type awkCommandResult struct {
 	Err      error
 }
 
-func runAWKCommand(tb testing.TB, opts awkCommandOptions) awkCommandResult {
+func runAWKCommand(tb testing.TB, opts *awkCommandOptions) awkCommandResult {
 	tb.Helper()
+	if opts == nil {
+		opts = &awkCommandOptions{}
+	}
 
 	mem := gbfs.NewMemory()
 	for name, contents := range opts.Files {
