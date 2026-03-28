@@ -478,8 +478,8 @@ func indirectPositionalParam(name string) bool {
 	return true
 }
 
-func looseIndirectVarRef(name string) (*syntax.VarRef, error) {
-	if ref, err := syntax.ParseVarRef(name); err == nil {
+func looseIndirectVarRef(cfg *Config, name string) (*syntax.VarRef, error) {
+	if ref, err := cfg.parseVarRef(name); err == nil {
 		if err := validateIndirectVarRef(name, ref); err != nil {
 			return nil, err
 		}
@@ -579,8 +579,8 @@ func parseIndirectSubscriptWord(content string) (*syntax.Word, bool) {
 	return &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: content}}}, true
 }
 
-func indirectParamExp(name string) (*syntax.ParamExp, error) {
-	ref, err := looseIndirectVarRef(name)
+func indirectParamExp(cfg *Config, name string) (*syntax.ParamExp, error) {
+	ref, err := looseIndirectVarRef(cfg, name)
 	if err == nil {
 		return &syntax.ParamExp{
 			Param: ref.Name,
@@ -596,7 +596,7 @@ func indirectParamExp(name string) (*syntax.ParamExp, error) {
 }
 
 func (cfg *Config) indirectValue(name string) (string, error) {
-	target, err := indirectParamExp(name)
+	target, err := indirectParamExp(cfg, name)
 	if err != nil {
 		return "", err
 	}
@@ -832,7 +832,7 @@ func (cfg *Config) resolveIndirectTargetState(state paramExpState) (paramExpStat
 		return state, nil, InvalidVariableNameError{Ref: name}
 	}
 
-	target, err := indirectParamExp(name)
+	target, err := indirectParamExp(cfg, name)
 	if err != nil {
 		return state, nil, err
 	}
@@ -1257,7 +1257,7 @@ func (cfg *Config) indirectParamArrayFields(state paramExpState, ql quoteLevel) 
 	if state.orig.Kind == NameRef || state.str == "" {
 		return nil, false, false, nil
 	}
-	target, err := indirectParamExp(state.str)
+	target, err := indirectParamExp(cfg, state.str)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -2530,7 +2530,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 					}
 					if ql == quoteDouble || ql == quoteHeredoc {
 						if !arrayExpansionIsAt(pe) && !arrayExpansionIsStar(pe) {
-							str, err = syntax.Quote(str, syntax.LangBash)
+							str, err = cfg.quoteForVariant(str)
 							if err != nil {
 								return "", err
 							}

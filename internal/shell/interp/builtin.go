@@ -310,7 +310,7 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	case "builtin":
 		return r.builtinBuiltin(ctx, pos, args)
 	case "declare", "local", "export", "readonly", "typeset", "nameref":
-		r.cmd(ctx, declClauseFromFields(name, args))
+		r.cmd(ctx, declClauseFromFields(name, args, r.parserLangVariant()))
 		return r.exit
 	case "type":
 		return r.typeBuiltin(ctx, args)
@@ -883,7 +883,7 @@ func (r *Runner) evalBuiltin(ctx context.Context, args []string) (exit exitStatu
 		default:
 			var parseErr syntax.ParseError
 			if errors.As(err, &parseErr) {
-				r.errf("%s\n", trimTrapParseError(parseErr))
+				r.errf("%s\n", trimTrapParseError(parseErr, r.shellVariantName()))
 				exit.code = 2
 				return exit
 			}
@@ -2329,7 +2329,7 @@ func (r *Runner) sourceBuiltin(ctx context.Context, pos syntax.Pos, name string,
 		default:
 			var parseErr syntax.ParseError
 			if errors.As(runErr, &parseErr) {
-				r.errf("%s\n", parseErr.BashError())
+				r.errf("%s\n", formatParseError(runErr, r.shellVariantName()))
 				exit.code = 2
 				return exit
 			}

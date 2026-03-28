@@ -28,45 +28,49 @@ import (
 	"github.com/ewhauser/gbash/shell/analysis"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 	"github.com/ewhauser/gbash/trace"
 )
 
 type Execution struct {
-	Name              string
-	Interpreter       string
-	PassthroughArgs   []string
-	ScriptPath        string
-	Script            string
-	Command           []string
-	CommandPath       string
-	CommandName       string
-	Args              []string
-	StartupOptions    []string
-	StartupHome       string
-	Interactive       bool
-	Env               map[string]string
-	Dir               string
-	VisiblePWD        string
-	HasVisiblePWD     bool
-	HostPlatform      host.Platform
-	HostProcessMeta   host.ExecutionMeta
-	NewPipe           func() (io.ReadCloser, io.WriteCloser, error)
-	BuiltinCommandDir string
-	CompletionState   *shellstate.CompletionState
-	Stdin             io.Reader
-	Stdout            io.Writer
-	Stderr            io.Writer
-	FS                gbfs.FileSystem
-	Network           network.Client
-	Registry          commands.CommandRegistry
-	Policy            policy.Policy
-	Trace             trace.Recorder
-	AnalysisObserver  analysis.Observer
-	Now               func() time.Time
-	SetTime           func(time.Time) error
-	Exec              func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
-	Interact          func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
-	procSubst         *procSubstManager
+	Name               string
+	Interpreter        string
+	ShellVariant       shellvariant.ShellVariant
+	PassthroughArgs    []string
+	ScriptPath         string
+	Script             string
+	Command            []string
+	CommandPath        string
+	CommandName        string
+	Args               []string
+	StartupOptions     []string
+	StartupHome        string
+	Interactive        bool
+	Env                map[string]string
+	Dir                string
+	VisiblePWD         string
+	HasVisiblePWD      bool
+	HostPlatform       host.Platform
+	HostProcessMeta    host.ExecutionMeta
+	NewPipe            func() (io.ReadCloser, io.WriteCloser, error)
+	BuiltinCommandDir  string
+	CompletionState    *shellstate.CompletionState
+	Stdin              io.Reader
+	Stdout             io.Writer
+	Stderr             io.Writer
+	FS                 gbfs.FileSystem
+	Network            network.Client
+	Registry           commands.CommandRegistry
+	Policy             policy.Policy
+	Trace              trace.Recorder
+	AnalysisObserver   analysis.Observer
+	Now                func() time.Time
+	SetTime            func(time.Time) error
+	Exec               func(context.Context, *commands.ExecutionRequest) (*commands.ExecutionResult, error)
+	Interact           func(context.Context, *commands.InteractiveRequest) (*commands.InteractiveResult, error)
+	activeShellVariant shellvariant.ShellVariant
+	activeLangVariant  syntax.LangVariant
+	procSubst          *procSubstManager
 }
 
 type RunResult struct {
@@ -160,6 +164,9 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	budget := newExecutionBudget(exec.Policy)
 
 	effectiveExec := *exec
+	if err := resolveExecutionVariant(&effectiveExec); err != nil {
+		return nil, err
+	}
 	cleanupProcSubst := withProcSubstScope(&effectiveExec)
 	defer cleanupProcSubst()
 
@@ -180,7 +187,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 		executionSourceName(exec),
 		effectiveExec.ScriptPath,
 		func(file *syntax.File) (map[*syntax.Stmt]*syntax.Stmt, error) {
-			synthetic, err := compileChunk(file, effectiveExec.Policy, budget, budget.nextLoopNamespace())
+			synthetic, err := compileChunk(file, effectiveExec.Policy, budget, budget.nextLoopNamespace(), executionShellVariant(&effectiveExec))
 			if code, ok := compilationExitStatus(err); ok {
 				err = interp.WithAnalysisStatus(err, analysis.Status{Code: code})
 			}
@@ -191,7 +198,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 		status := runnerAnalysisStatus(runner, runErr)
 		status.Code = code
 		finishAnalysis(status)
-		writeCompilationError(exec.Stderr, runErr)
+		writeCompilationError(exec.Stderr, executionShellVariant(&effectiveExec), runErr)
 		return &RunResult{FinalEnv: runner.ShellEnv()}, interp.ExitStatus(code)
 	}
 	finishAnalysis(runnerAnalysisStatus(runner, runErr))
@@ -205,6 +212,11 @@ func (m *core) RunCommand(ctx context.Context, exec *Execution) (*RunResult, err
 	if exec == nil {
 		exec = &Execution{}
 	}
+	effectiveExec := *exec
+	if err := resolveExecutionVariant(&effectiveExec); err != nil {
+		return nil, err
+	}
+	exec = &effectiveExec
 	if exec.Dir == "" {
 		exec.Dir = "/"
 	}
@@ -276,7 +288,8 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	cfg.PID = exec.HostProcessMeta.PID
 	cfg.PPID = exec.HostProcessMeta.PPID
 	cfg.NewPipe = exec.NewPipe
-	cfg.LegacyBashCompat = exec.Interpreter == "bash" || exec.Interpreter == "sh"
+	cfg.ShellVariant = executionShellVariant(exec)
+	cfg.LegacyBashCompat = path.Base(strings.TrimSpace(exec.Interpreter)) == "bash"
 	cfg.CommandString = executionUsesCommandString(exec)
 	if exec.ScriptPath == "" && exec.Script != "" {
 		cfg.CommandStringValue = exec.Script
@@ -395,12 +408,13 @@ func executionUsesCommandString(exec *Execution) bool {
 	if exec == nil {
 		return false
 	}
+	interpreter := path.Base(strings.TrimSpace(exec.Interpreter))
 	args := exec.PassthroughArgs
-	if len(args) > 0 && path.Base(strings.TrimSpace(args[0])) == exec.Interpreter {
+	if len(args) > 0 && path.Base(strings.TrimSpace(args[0])) == interpreter {
 		args = args[1:]
 	}
-	switch exec.Interpreter {
-	case "bash", "sh":
+	switch interpreter {
+	case "bash", "sh", "mksh", "zsh":
 		return hasBashCommandStringPassthroughArg(args)
 	default:
 		return false
@@ -841,6 +855,7 @@ func normalizeSubexecRequest(req *commands.ExecutionRequest, currentEnv map[stri
 	out := &commands.ExecutionRequest{
 		Name:            req.Name,
 		Interpreter:     req.Interpreter,
+		ShellVariant:    req.ShellVariant,
 		PassthroughArgs: append([]string(nil), req.PassthroughArgs...),
 		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
@@ -873,6 +888,7 @@ func normalizeInteractiveRequest(req *commands.InteractiveRequest, currentEnv ma
 	}
 	out := &commands.InteractiveRequest{
 		Name:           req.Name,
+		ShellVariant:   req.ShellVariant,
 		Args:           append([]string(nil), req.Args...),
 		StartupOptions: append([]string(nil), req.StartupOptions...),
 		Env:            mergeEnv(currentEnv, req.Env),
@@ -957,12 +973,9 @@ func commandVirtualWorkDir(args []string, hc *interp.HandlerContext) string {
 	if hc == nil {
 		return "/"
 	}
-	if len(args) > 0 {
-		switch path.Base(args[0]) {
-		case "sh", "bash":
-			if strings.TrimSpace(hc.Dir) != "" {
-				return hc.Dir
-			}
+	if len(args) > 0 && shellvariant.FromInterpreter(args[0]).Resolved() {
+		if strings.TrimSpace(hc.Dir) != "" {
+			return hc.Dir
 		}
 	}
 	if strings.TrimSpace(hc.VisibleDir) != "" {
@@ -1299,6 +1312,7 @@ func commandPathHasExt(file string) bool {
 type shebangResolution struct {
 	resolved    *resolvedCommand
 	interpreter string
+	batsRunner  bool
 }
 
 func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invokedPath string) (_ shebangResolution, ok bool, err error) {
@@ -1317,6 +1331,12 @@ func resolveShebangCommand(ctx context.Context, exec *Execution, fullPath, invok
 	interpreterPath, shebangInterpreter, argv, ok := parseShebangInterpreter(line)
 	if !ok {
 		return shebangResolution{}, true, nil
+	}
+	if shellvariant.FromInterpreter(shebangInterpreter) == shellvariant.Bats {
+		return shebangResolution{
+			interpreter: interpreterPath,
+			batsRunner:  true,
+		}, true, nil
 	}
 	cmd, ok := lookupRegistryCommand(exec, shebangInterpreter)
 	if !ok {
@@ -1350,6 +1370,9 @@ func resolveCommandFile(ctx context.Context, exec *Execution, fullPath string, m
 		if shebang.resolved != nil {
 			shebang.resolved.source = "shebang"
 			return shebang.resolved, true, nil
+		}
+		if shebang.batsRunner {
+			return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: bats runner not implemented", fullPath)
 		}
 		if shebang.interpreter != "" {
 			return nil, false, shellFailureToWriter(ctx, handlerState(ctx, exec).Stderr, 126, "%s: %s: bad interpreter: No such file or directory", fullPath, shebang.interpreter)
@@ -1419,16 +1442,6 @@ func isExecutableCommandFile(exec *Execution, mode stdfs.FileMode) bool {
 		return true
 	}
 	return mode&0o111 != 0
-}
-
-func defaultScriptInterpreter(exec *Execution) string {
-	if exec != nil {
-		switch path.Base(strings.TrimSpace(exec.Interpreter)) {
-		case "bash", "sh":
-			return path.Base(strings.TrimSpace(exec.Interpreter))
-		}
-	}
-	return "bash"
 }
 
 func parseVirtualCommandStub(line string) (string, bool) {

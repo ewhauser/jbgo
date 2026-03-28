@@ -15,15 +15,35 @@ import (
 )
 
 type Bash struct {
-	name string
+	name         string
+	shellVariant ShellVariant
 }
 
 func NewBash() *Bash {
-	return &Bash{name: "bash"}
+	return newShellCommand("bash")
 }
 
 func NewSh() *Bash {
-	return &Bash{name: "sh"}
+	return newShellCommand("sh")
+}
+
+func NewMksh() *Bash {
+	return newShellCommand("mksh")
+}
+
+func NewZsh() *Bash {
+	return newShellCommand("zsh")
+}
+
+func NewBats() *Bash {
+	return newShellCommand("bats")
+}
+
+func newShellCommand(name string) *Bash {
+	return &Bash{
+		name:         name,
+		shellVariant: defaultShellVariantForName(name),
+	}
 }
 
 func (c *Bash) Name() string {
@@ -82,6 +102,7 @@ func (c *Bash) RunParsed(ctx context.Context, inv *Invocation, matches *ParsedCo
 		}
 		result, err := inv.Interact(ctx, &InteractiveRequest{
 			Name:           parsed.ExecutionName,
+			ShellVariant:   c.shellVariant,
 			Args:           append([]string(nil), parsed.Args...),
 			StartupOptions: append([]string(nil), parsed.StartupOptions...),
 			Env:            inv.Env,

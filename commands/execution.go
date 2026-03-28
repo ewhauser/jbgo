@@ -12,6 +12,7 @@ import (
 type ExecutionRequest struct {
 	Name            string
 	Interpreter     string
+	ShellVariant    ShellVariant
 	PassthroughArgs []string
 	ScriptPath      string
 	Script          string
@@ -61,6 +62,7 @@ type ExecutionResult struct {
 // [Invocation.Interact].
 type InteractiveRequest struct {
 	Name           string
+	ShellVariant   ShellVariant
 	Args           []string
 	StartupOptions []string
 	Env            map[string]string

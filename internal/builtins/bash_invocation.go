@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 type BashSourceMode int
@@ -98,6 +100,7 @@ func (inv *BashInvocation) BuildExecutionRequest(env map[string]string, cwd stri
 	req := &ExecutionRequest{
 		Name:            inv.ExecutionName,
 		Interpreter:     inv.Name,
+		ShellVariant:    inv.DefaultShellVariant(),
 		PassthroughArgs: append([]string(nil), inv.RawArgs...),
 		ScriptPath:      inv.ScriptPath,
 		Script:          script,
@@ -112,6 +115,20 @@ func (inv *BashInvocation) BuildExecutionRequest(env map[string]string, cwd stri
 		req.PassthroughArgs = []string{"-s"}
 	}
 	return req
+}
+
+func (inv *BashInvocation) DefaultShellVariant() ShellVariant {
+	if inv == nil {
+		return shellvariant.Bash
+	}
+	return defaultShellVariantForName(inv.Name)
+}
+
+func defaultShellVariantForName(name string) ShellVariant {
+	if variant := shellvariant.FromInterpreter(name); variant.Resolved() {
+		return variant
+	}
+	return shellvariant.Bash
 }
 
 func RenderBashInvocationUsage(w io.Writer, cfg BashInvocationConfig) error {

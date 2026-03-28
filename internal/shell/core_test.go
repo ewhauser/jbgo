@@ -15,6 +15,7 @@ import (
 	"github.com/ewhauser/gbash/internal/shellstate"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/shell/expand"
+	"github.com/ewhauser/gbash/shellvariant"
 	"github.com/ewhauser/gbash/trace"
 )
 
@@ -262,6 +263,7 @@ func newCoreTestExec(registry commands.CommandRegistry, fsys gbfs.FileSystem) fu
 		execReq := &Execution{
 			Name:            req.Name,
 			Interpreter:     req.Interpreter,
+			ShellVariant:    req.ShellVariant,
 			PassthroughArgs: append([]string(nil), req.PassthroughArgs...),
 			ScriptPath:      req.ScriptPath,
 			Script:          req.Script,
@@ -395,6 +397,90 @@ func TestExecutionUsesCommandStringSkipsLongOptionsWithValues(t *testing.T) {
 				t.Fatalf("executionUsesCommandString() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCoreRunExplicitShellVariantOverridesInterpreter(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	result, err := Run(context.Background(), &Execution{
+		Interpreter:  "bash",
+		ShellVariant: shellvariant.SH,
+		Script:       "printf '%s\\n' {a,b}\n",
+		Stdout:       &stdout,
+		Stderr:       io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := stdout.String(), "{a,b}\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+}
+
+func TestCoreRunNestedShellExecPropagatesShellVariant(t *testing.T) {
+	t.Parallel()
+
+	registry := builtins.DefaultRegistry()
+	var stdout strings.Builder
+	var captured *commands.ExecutionRequest
+
+	result, err := Run(context.Background(), &Execution{
+		Script:   "mksh -c 'echo hi'\n",
+		Registry: registry,
+		Stdout:   &stdout,
+		Stderr:   io.Discard,
+		Exec: func(_ context.Context, req *commands.ExecutionRequest) (*commands.ExecutionResult, error) {
+			captured = req
+			return &commands.ExecutionResult{
+				ExitCode: 0,
+				Stdout:   "hi\n",
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := stdout.String(), "hi\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if result.ShellExited {
+		t.Fatalf("ShellExited = true, want false")
+	}
+	if captured == nil {
+		t.Fatal("nested shell request = nil")
+	}
+	if got, want := captured.Interpreter, "mksh"; got != want {
+		t.Fatalf("Interpreter = %q, want %q", got, want)
+	}
+	if got, want := captured.ShellVariant, commands.ShellVariantMksh; got != want {
+		t.Fatalf("ShellVariant = %q, want %q", got, want)
+	}
+}
+
+func TestCoreRunNameDoesNotAffectShellVariant(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr strings.Builder
+	_, err := Run(context.Background(), &Execution{
+		Name:   "demo.zsh",
+		Script: "echo ${(q)foo}\n",
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	var status interp.ExitStatus
+	if !errors.As(err, &status) || status != 2 {
+		t.Fatalf("Run() error = %v, want exit status 2", err)
+	}
+	if got, want := stdout.String(), ""; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(stderr.String(), "tried parsing as bash") {
+		t.Fatalf("stderr = %q, want bash parse diagnostic", stderr.String())
 	}
 }
 

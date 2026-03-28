@@ -2,14 +2,14 @@ package shell
 
 import (
 	"errors"
-	"io"
 
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
-func compileChunk(program *syntax.File, pol policy.Policy, budget *executionBudget, loopNamespace string) (map[*syntax.Stmt]*syntax.Stmt, error) {
-	if invalid := validateInterpreterSafety(program); invalid != nil {
+func compileChunk(program *syntax.File, pol policy.Policy, budget *executionBudget, loopNamespace string, variant shellvariant.ShellVariant) (map[*syntax.Stmt]*syntax.Stmt, error) {
+	if invalid := validateInterpreterSafety(program, variant); invalid != nil {
 		return nil, invalid
 	}
 	if violation := validateExecutionBudgets(program, pol); violation != nil {
@@ -34,22 +34,13 @@ func compilationExitStatus(err error) (int, bool) {
 	if errors.As(err, &parseErr) {
 		return 2, true
 	}
+	var langErr syntax.LangError
+	if errors.As(err, &langErr) {
+		return 2, true
+	}
 	var invalid *shellValidationError
 	if errors.As(err, &invalid) {
 		return 2, true
 	}
 	return 0, false
-}
-
-func writeCompilationError(stderr io.Writer, err error) {
-	if stderr == nil || err == nil {
-		return
-	}
-	var parseErr syntax.ParseError
-	if errors.As(err, &parseErr) {
-		_, _ = io.WriteString(stderr, parseErr.BashError())
-	} else {
-		_, _ = io.WriteString(stderr, err.Error())
-	}
-	_, _ = io.WriteString(stderr, "\n")
 }

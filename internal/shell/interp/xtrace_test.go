@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func runInterpNode(t *testing.T, src string) (string, string, error) {
@@ -115,6 +116,21 @@ echo "$s"
 	const wantStderr = "+ echo $'a\\003b\\004c'\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestXTracePS4UsesShellVariantParser(t *testing.T) {
+	t.Parallel()
+
+	_, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir:          "/tmp",
+		ShellVariant: shellvariant.SH,
+	}, "PS4='${foo[1]} '\nset -x\n:\n")
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if !strings.Contains(stderr, "posix") {
+		t.Fatalf("stderr = %q, want posix diagnostic", stderr)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func TestDeclOperands(t *testing.T) {
@@ -73,6 +74,21 @@ printf 'scalar-array=%s|%s|%s|%s\n' "${#direct_scalar[@]}" "${direct_scalar[0]}"
 	}
 	if stderr != "declare: `': not a valid identifier\n" {
 		t.Fatalf("stderr = %q, want %q", stderr, "declare: `': not a valid identifier\n")
+	}
+}
+
+func TestDeclareDynamicOperandsUseShellVariantParser(t *testing.T) {
+	t.Parallel()
+
+	_, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+		Dir:          "/tmp",
+		ShellVariant: shellvariant.SH,
+	}, "declare foo[1]=bar\n")
+	if err == nil {
+		t.Fatal("runInterpScriptConfig() error = nil, want invalid identifier")
+	}
+	if !strings.Contains(stderr, "declare: `foo[1]=bar': not a valid identifier\n") {
+		t.Fatalf("stderr = %q, want invalid identifier diagnostic", stderr)
 	}
 }
 

@@ -165,7 +165,7 @@ func (r *Runner) cmdCall(ctx context.Context, cm *syntax.CallExpr, tracingEnable
 			if as.Array != nil {
 				trace.expr(as)
 			} else if as.Value != nil {
-				val, err := syntax.Quote(vr.String(), syntax.LangBash)
+				val, err := r.quoteForVariant(vr.String())
 				if err != nil { // should never happen
 					panic(err)
 				}
@@ -551,7 +551,7 @@ func (r *Runner) cmdLet(cm *syntax.LetClause, tracingEnabled bool, trace *tracer
 
 		switch expr := expr.(type) {
 		case *syntax.Word:
-			qs, err := syntax.Quote(r.literal(expr), syntax.LangBash)
+			qs, err := r.quoteForVariant(r.literal(expr))
 			if err != nil {
 				return
 			}
@@ -686,9 +686,12 @@ func (r *Runner) declVariantActive(name string) bool {
 	return r.canDispatchBuiltin(name)
 }
 
-func parseCallWords(src string) ([]*syntax.Word, error) {
+func parseCallWords(lang syntax.LangVariant, src string) ([]*syntax.Word, error) {
 	var words []*syntax.Word
-	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	p := syntax.NewParser(syntax.Variant(lang))
 	err := p.Words(strings.NewReader(src), func(word *syntax.Word) bool {
 		words = append(words, word)
 		return true
@@ -708,7 +711,7 @@ func (r *Runner) declOperandCommandFields(operand syntax.DeclOperand) ([]string,
 	if src == "" {
 		return nil, true
 	}
-	words, err := parseCallWords(src)
+	words, err := parseCallWords(r.parserLangVariant(), src)
 	if err != nil {
 		// Declaration-only operand forms such as compound assignments do not
 		// reliably round-trip through generic call-word parsing. Preserve the
@@ -741,8 +744,8 @@ func (r *Runner) declClauseCommandFields(cm *syntax.DeclClause) ([]string, bool)
 	return fields, true
 }
 
-func declClauseFromCallWords(variant string, variantWord *syntax.Word, operands []*syntax.Word) *syntax.DeclClause {
-	decl := declClauseFromFields(variant, nil)
+func declClauseFromCallWords(variant string, lang syntax.LangVariant, variantWord *syntax.Word, operands []*syntax.Word) *syntax.DeclClause {
+	decl := declClauseFromFields(variant, nil, lang)
 	if variantWord != nil {
 		decl.Variant.ValuePos = variantWord.Pos()
 		decl.Variant.ValueEnd = variantWord.End()
@@ -751,12 +754,12 @@ func declClauseFromCallWords(variant string, variantWord *syntax.Word, operands 
 		if arg == nil {
 			continue
 		}
-		decl.Operands = append(decl.Operands, declOperandFromCallWord(arg))
+		decl.Operands = append(decl.Operands, declOperandFromCallWord(lang, arg))
 	}
 	return decl
 }
 
-func declOperandFromCallWord(word *syntax.Word) syntax.DeclOperand {
+func declOperandFromCallWord(lang syntax.LangVariant, word *syntax.Word) syntax.DeclOperand {
 	if word == nil {
 		return nil
 	}
@@ -764,7 +767,10 @@ func declOperandFromCallWord(word *syntax.Word) syntax.DeclOperand {
 	if lit == "" {
 		return &syntax.DeclDynamicWord{Word: word}
 	}
-	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	p := syntax.NewParser(syntax.Variant(lang))
 	op, err := p.DeclOperand(strings.NewReader(lit))
 	if err != nil || op == nil {
 		return &syntax.DeclDynamicWord{Word: word}
@@ -825,7 +831,7 @@ func (r *Runner) resolveCallExprArgs(args []*syntax.Word) ([]string, *syntax.Dec
 		leading = append(leading, expanded[0])
 		variant, matched, needMore := expandedDeclVariant(leading, r.declVariantActive)
 		if matched {
-			return nil, declClauseFromCallWords(variant, arg, args[i+1:])
+			return nil, declClauseFromCallWords(variant, r.parserLangVariant(), arg, args[i+1:])
 		}
 		if !needMore {
 			canDetectDecl = false

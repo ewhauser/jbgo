@@ -38,7 +38,7 @@ func newRunnerCompletionBackend(ctx context.Context, runner *Runner, registryNam
 }
 
 func (b *runnerCompletionBackend) ValidateWordlistSyntax(wordlist string) error {
-	_, err := completionutil.ParseWordlistDocument(wordlist)
+	_, err := completionutil.ParseWordlistDocumentVariant(wordlist, b.runner.parserLangVariant())
 	return err
 }
 
@@ -46,7 +46,7 @@ func (b *runnerCompletionBackend) ExpandWordlist(wordlist string) ([]string, err
 	if b.runner == nil || wordlist == "" {
 		return nil, nil
 	}
-	word, err := completionutil.ParseWordlistDocument(wordlist)
+	word, err := completionutil.ParseWordlistDocumentVariant(wordlist, b.runner.parserLangVariant())
 	if err != nil {
 		fmt.Fprintln(b.runner.stderr, completionutil.WordlistErrorText(wordlist, err))
 		return nil, err

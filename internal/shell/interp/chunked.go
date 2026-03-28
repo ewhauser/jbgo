@@ -82,7 +82,7 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 			if exitResult.handler.exiting || exitResult.handler.fatalExit {
 				var parseErr syntax.ParseError
 				if errors.As(err, &parseErr) {
-					io.WriteString(r.stderr, parseErr.BashError())
+					io.WriteString(r.stderr, formatParseError(err, r.shellVariantName()))
 					io.WriteString(r.stderr, "\n")
 					return r.currentRunError()
 				}
@@ -124,7 +124,7 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 			err = decorateCommandStringParseError(err, r, name)
 			err = shiftChunkError(err, chunkStartOffset, chunkStartLine)
 			if recoverable, ok := recoverableParseError(err); ok {
-				_, _ = io.WriteString(r.stderr, recoverable.BashError())
+				_, _ = io.WriteString(r.stderr, formatParseError(recoverable, r.shellVariantName()))
 				_, _ = io.WriteString(r.stderr, "\n")
 				r.exit.code = 1
 				pending.Reset()

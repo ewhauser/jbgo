@@ -87,6 +87,10 @@ The shell core may also apply small AST normalizations when the in-tree parser o
 
 Process substitution is supported as a sandbox-native shell feature. The shell core must provision runtime-owned opaque pipe paths under the sandbox namespace and must not rely on host FIFOs, host-visible `TMPDIR` paths, or host path semantics to implement `<(...)` and `>(...)`.
 
+Shell selection is also owned by the shell core. `ExecutionRequest.ShellVariant`, `InteractiveRequest.ShellVariant`, nested `Invocation.Exec` / `Invocation.Interact` requests, and server `session.exec.shell_variant` all feed one resolved shell variant for parse, expand, and interpret behavior. Resolution precedence is: explicit `ShellVariant` when it is not `auto`, then `Interpreter` basename when it names a supported shell, then the top-level script shebang, then default `bash`. `Interpreter` remains the presentation and argv0 field; it does not by itself define parser behavior once a concrete `ShellVariant` is present.
+
+Supported resolved variants are `bash`, `sh`, `mksh`, `zsh`, and `bats`. `sh` maps to POSIX parsing and starts with POSIX mode on plus brace expansion off. `mksh` and `zsh` select their corresponding syntax variants but otherwise reuse the current non-POSIX runtime defaults unless we intentionally diverge later. `bats` is dialect plumbing only in this phase: it selects Bats parsing, but `@test` execution and `#!/bin/bats` dispatch must fail explicitly with a clear bats-runner-not-implemented error rather than silently falling back to Bash semantics.
+
 The shell builtin `printf` remains a Bash compatibility boundary: numeric conversions must accept quoted character constants such as `"'A"` and `"\"B"`, `%q` and `${var@Q}` must emit Bash-compatible shell-escaped strings, `%b` and bare format-string escapes must honor Bash's escape decoding rules, `%(... )T` must consult only exported `TZ`, and write failures must still surface shell status `1` after any partial output or diagnostics.
 
 The registry-backed `/bin/printf` command is a GNU/coreutils compatibility boundary instead. It must follow GNU operand parsing and diagnostics, use GNU `%q` shell quoting and escape handling, reject Bash-only `%(... )T`, and not implement the shell builtin's `-v` assignment mode. `--help` and `--version` remain outside this compatibility scope for now.
@@ -225,6 +229,13 @@ Recommended v1 result shape for `session.exec`:
 - timing metadata such as `started_at`, `finished_at`, and `duration_ms`
 - the updated session summary
 
+Recommended v1 `session.exec` params include:
+
+- `session_id`
+- `script`
+- optional `shell_variant` with values `auto`, `bash`, `sh`, `mksh`, `zsh`, or `bats`
+- optional argv/env/working-directory fields matching `ExecutionRequest`
+
 Recommended v1 non-goals:
 
 - interactive shell streaming over the protocol
@@ -357,23 +368,35 @@ type Session struct {
     cfg Config
 }
 
+type ShellVariant string
+
+const (
+    ShellVariantAuto ShellVariant = "auto"
+    ShellVariantBash ShellVariant = "bash"
+    ShellVariantSH   ShellVariant = "sh"
+    ShellVariantMksh ShellVariant = "mksh"
+    ShellVariantZsh  ShellVariant = "zsh"
+    ShellVariantBats ShellVariant = "bats"
+)
+
 type ExecutionRequest struct {
-    Name          string
-    ScriptPath    string
-    Script        string
-    Command       []string
-    Interpreter   string
+    Name            string
+    ScriptPath      string
+    Script          string
+    Command         []string
+    Interpreter     string
+    ShellVariant    ShellVariant
     PassthroughArgs []string
-    Args          []string
+    Args            []string
     StartupOptions []string
-    Env           map[string]string
-    WorkDir       string
-    Timeout       time.Duration
-    ReplaceEnv bool
-    Interactive bool
-    Stdin       io.Reader
-    Stdout      io.Writer
-    Stderr      io.Writer
+    Env             map[string]string
+    WorkDir         string
+    Timeout         time.Duration
+    ReplaceEnv      bool
+    Interactive     bool
+    Stdin           io.Reader
+    Stdout          io.Writer
+    Stderr          io.Writer
 }
 
 type ExecutionResult struct {

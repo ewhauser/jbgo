@@ -152,6 +152,7 @@ func (s *Session) exec(ctx context.Context, req *ExecutionRequest) (*ExecutionRe
 	execReq := &shell.Execution{
 		Name:             baseLogEvent.Name,
 		Interpreter:      req.Interpreter,
+		ShellVariant:     req.ShellVariant,
 		PassthroughArgs:  cloneStrings(req.PassthroughArgs),
 		ScriptPath:       req.ScriptPath,
 		Script:           script,
@@ -283,6 +284,9 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	if req == nil {
 		req = &InteractiveRequest{}
 	}
+	if normalized := req.ShellVariant.Normalize(); !normalized.Valid() {
+		return nil, fmt.Errorf("invalid shell variant %q", req.ShellVariant)
+	}
 	processMeta, err := s.cfg.Host.ExecutionMeta(ctx)
 	if err != nil {
 		return nil, err
@@ -340,6 +344,7 @@ func (s *Session) interact(ctx context.Context, req *InteractiveRequest) (*Inter
 	ctx = forceExecutionTTY(ctx, terminalStdin, writerOrDiscard(req.Stdout))
 	result, err := shell.Interact(ctx, &shell.Execution{
 		Name:             defaultName(req.Name),
+		ShellVariant:     req.ShellVariant,
 		Args:             req.Args,
 		StartupOptions:   req.StartupOptions,
 		Interactive:      true,
@@ -433,6 +438,9 @@ func withHostExecutionMeta(ctx context.Context, meta host.ExecutionMeta) context
 func validateExecutionRequest(req *ExecutionRequest) error {
 	if req == nil {
 		return nil
+	}
+	if normalized := req.ShellVariant.Normalize(); !normalized.Valid() {
+		return fmt.Errorf("invalid shell variant %q", req.ShellVariant)
 	}
 	if req.Script != "" && len(req.Command) > 0 {
 		return errors.New("execution request cannot set both Script and Command")

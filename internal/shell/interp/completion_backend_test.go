@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ewhauser/gbash/internal/completionutil"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func TestCompletionBackendRunCommandHookMatchesDirectFunctionOrder(t *testing.T) {
@@ -98,5 +99,26 @@ func TestCompletionBackendRunFunctionPropagatesExpansionErrors(t *testing.T) {
 	want := completionutil.HookResult{Status: 1}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RunFunction() = %#v, want %#v (stderr=%q)", got, want, stderr.String())
+	}
+}
+
+func TestCompletionBackendValidateWordlistSyntaxUsesShellVariant(t *testing.T) {
+	t.Parallel()
+
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:          "/tmp",
+		ShellVariant: shellvariant.SH,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+
+	backend := newRunnerCompletionBackend(context.Background(), runner, nil)
+	err = backend.ValidateWordlistSyntax("${foo[1]}")
+	if err == nil {
+		t.Fatal("ValidateWordlistSyntax() error = nil, want posix parse error")
+	}
+	if !strings.Contains(err.Error(), "posix") {
+		t.Fatalf("ValidateWordlistSyntax() error = %v, want posix diagnostic", err)
 	}
 }

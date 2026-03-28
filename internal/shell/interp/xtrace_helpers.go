@@ -19,16 +19,19 @@ func printSyntaxNode(node syntax.Node) string {
 	return buf.String()
 }
 
-func quoteTraceValue(value string) string {
-	quoted, err := syntax.Quote(value, syntax.LangBash)
+func quoteTraceValue(lang syntax.LangVariant, value string) string {
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	quoted, err := syntax.Quote(value, lang)
 	if err != nil {
 		panic(err)
 	}
 	return quoted
 }
 
-func quoteTraceArrayValue(value string) string {
-	quoted := quoteTraceValue(value)
+func quoteTraceArrayValue(lang syntax.LangVariant, value string) string {
+	quoted := quoteTraceValue(lang, value)
 	if quoted == value {
 		return "'" + value + "'"
 	}
@@ -48,10 +51,10 @@ func (r *Runner) traceAssignString(ref *syntax.VarRef, vr expand.Variable, appen
 	if appendValue {
 		op = "+="
 	}
-	return printVarRef(ref) + op + quoteTraceValue(vr.String())
+	return printVarRef(ref) + op + quoteTraceValue(r.parserLangVariant(), vr.String())
 }
 
-func traceExpandedArrayAssign(ref *syntax.VarRef, appendAssign bool, elems []expandedArrayElem) string {
+func traceExpandedArrayAssign(lang syntax.LangVariant, ref *syntax.VarRef, appendAssign bool, elems []expandedArrayElem) string {
 	var b strings.Builder
 	b.WriteString(printVarRef(ref))
 	if appendAssign {
@@ -66,7 +69,7 @@ func traceExpandedArrayAssign(ref *syntax.VarRef, appendAssign bool, elems []exp
 				if !first {
 					b.WriteByte(' ')
 				}
-				b.WriteString(quoteTraceArrayValue(field))
+				b.WriteString(quoteTraceArrayValue(lang, field))
 				first = false
 			}
 		case syntax.ArrayElemKeyed, syntax.ArrayElemKeyedAppend:
@@ -81,7 +84,7 @@ func traceExpandedArrayAssign(ref *syntax.VarRef, appendAssign bool, elems []exp
 					b.WriteByte('=')
 				}
 			}
-			b.WriteString(quoteTraceArrayValue(elem.value))
+			b.WriteString(quoteTraceArrayValue(lang, elem.value))
 			first = false
 		}
 	}

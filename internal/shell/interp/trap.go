@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func (r *Runner) trapActions() map[trapID]trapAction {
@@ -137,8 +138,8 @@ func (r *Runner) validateTrapCommand(command string) error {
 	return nil
 }
 
-func trimTrapParseError(err syntax.ParseError) string {
-	lines := strings.Split(err.BashError(), "\n")
+func trimTrapParseError(err syntax.ParseError, variant shellvariant.ShellVariant) string {
+	lines := strings.Split(formatParseError(err, variant), "\n")
 	for i, line := range lines {
 		if line == "" {
 			continue
@@ -395,7 +396,7 @@ func (r *Runner) runTrap(ctx context.Context, id trapID, line uint, status uint8
 				if parseErr.SourceLine == "" && parseErr.WantsSourceLine() {
 					parseErr.SourceLine = action.command
 				}
-				r.errf("%s\n", trimTrapParseError(parseErr))
+				r.errf("%s\n", trimTrapParseError(parseErr, r.shellVariantName()))
 				handler.code = 2
 				handler.err = parseErr
 				break

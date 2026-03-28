@@ -12,6 +12,7 @@ import (
 type ExecutionRequest struct {
 	Name            string
 	Interpreter     string
+	ShellVariant    commands.ShellVariant
 	PassthroughArgs []string
 	ScriptPath      string
 	Script          string
@@ -49,6 +50,7 @@ type ExecutionResult struct {
 
 type InteractiveRequest struct {
 	Name           string
+	ShellVariant   commands.ShellVariant
 	Args           []string
 	StartupOptions []string
 	Env            map[string]string
@@ -70,6 +72,7 @@ func executionRequestFromCommand(req *commands.ExecutionRequest) *ExecutionReque
 	return &ExecutionRequest{
 		Name:            req.Name,
 		Interpreter:     req.Interpreter,
+		ShellVariant:    req.ShellVariant,
 		PassthroughArgs: cloneStrings(req.PassthroughArgs),
 		ScriptPath:      req.ScriptPath,
 		Script:          req.Script,
@@ -116,6 +119,7 @@ func interactiveRequestFromCommand(req *commands.InteractiveRequest) *Interactiv
 	}
 	return &InteractiveRequest{
 		Name:           req.Name,
+		ShellVariant:   req.ShellVariant,
 		Args:           cloneStrings(req.Args),
 		StartupOptions: cloneStrings(req.StartupOptions),
 		Env:            copyStringMap(req.Env),

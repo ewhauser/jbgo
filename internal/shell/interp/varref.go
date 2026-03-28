@@ -11,11 +11,14 @@ import (
 	"github.com/ewhauser/gbash/shell/syntax"
 )
 
-func validateNameRefTarget(src string) error {
+func validateNameRefTarget(lang syntax.LangVariant, src string) error {
 	if src == "" {
 		return nil
 	}
-	ref, err := syntax.ParseVarRef(src)
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	ref, err := syntax.NewParser(syntax.Variant(lang)).VarRef(strings.NewReader(src))
 	if err != nil || ref == nil || !syntax.ValidName(ref.Name.Value) {
 		return fmt.Errorf("`%s': invalid variable name for name reference", src)
 	}
@@ -131,12 +134,15 @@ func trailingOperandExpectedToken(raw string) string {
 	return ""
 }
 
-func parseStrictIndexedSubscript(raw string) (syntax.ArithmExpr, error) {
+func parseStrictIndexedSubscript(lang syntax.LangVariant, raw string) (syntax.ArithmExpr, error) {
 	if i := strings.IndexByte(raw, '#'); i >= 0 {
 		token := strings.TrimRight(raw[i:], " \t\r\n")
 		return nil, fmt.Errorf("%s: arithmetic syntax error: invalid arithmetic operator (error token is %q)", strings.TrimSpace(raw), token)
 	}
-	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	p := syntax.NewParser(syntax.Variant(lang))
 	expr, err := p.Arithmetic(strings.NewReader(raw))
 	if err == nil {
 		return expr, nil
@@ -162,7 +168,7 @@ func (r *Runner) strictIndexedSubscript(index *syntax.Subscript) (int, error) {
 		// re-parsing when command substitutions are present because
 		// the original Expr already has alias-expanded content that
 		// would be lost by re-parsing without an alias resolver.
-		parsed, err := parseStrictIndexedSubscript(raw)
+		parsed, err := parseStrictIndexedSubscript(r.parserLangVariant(), raw)
 		if err != nil {
 			return 0, strictIndexedSubscriptError{err: err}
 		}
@@ -185,7 +191,7 @@ func (r *Runner) strictVarRef(src string) (*syntax.VarRef, error) {
 }
 
 func (r *Runner) strictVarRefWithContext(src string, context syntax.VarRefContext) (*syntax.VarRef, error) {
-	ref, err := syntax.ParseVarRef(src)
+	ref, err := r.parseVarRef(src)
 	if ref != nil {
 		ref.Context = context
 	}

@@ -45,6 +45,9 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 	}
 	exec.Stdin = strings.NewReader("")
 	runnerExec := *exec
+	if err := resolveExecutionVariant(&runnerExec); err != nil {
+		return nil, err
+	}
 	cleanupProcSubst := withProcSubstScope(&runnerExec)
 	defer cleanupProcSubst()
 
@@ -93,7 +96,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 			err = attachParseErrorSourceLine(err, rawScript)
 			if code, ok := compilationExitStatus(err); ok {
 				exitCode = code
-				writeCompilationError(exec.Stderr, err)
+				writeCompilationError(exec.Stderr, executionShellVariant(&runnerExec), err)
 			} else {
 				exitCode = 1
 				_, _ = fmt.Fprintln(exec.Stderr, err)
@@ -113,11 +116,11 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 			_, _ = io.WriteString(exec.Stdout, interactivePrompt(interactiveEnv(exec, runner)))
 			continue
 		}
-		pipelineSubshells, err := compileChunk(program, exec.Policy, budget, budget.nextLoopNamespace())
+		pipelineSubshells, err := compileChunk(program, exec.Policy, budget, budget.nextLoopNamespace(), executionShellVariant(&runnerExec))
 		if err != nil {
 			if code, ok := compilationExitStatus(err); ok {
 				exitCode = code
-				writeCompilationError(exec.Stderr, err)
+				writeCompilationError(exec.Stderr, executionShellVariant(&runnerExec), err)
 			} else {
 				exitCode = 1
 				_, _ = fmt.Fprintln(exec.Stderr, err)

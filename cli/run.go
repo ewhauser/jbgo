@@ -185,6 +185,7 @@ func runBashInvocation(ctx context.Context, rt *gbash.Runtime, parsed *builtins.
 	req := &gbash.ExecutionRequest{
 		Name:            parsed.ExecutionName,
 		Interpreter:     parsed.Name,
+		ShellVariant:    parsed.DefaultShellVariant(),
 		PassthroughArgs: append([]string(nil), parsed.RawArgs...),
 		ScriptPath:      parsed.ScriptPath,
 		Script:          script,
@@ -248,6 +249,7 @@ func runBashInvocationJSON(ctx context.Context, name string, rt *gbash.Runtime, 
 	req := &gbash.ExecutionRequest{
 		Name:            parsed.ExecutionName,
 		Interpreter:     parsed.Name,
+		ShellVariant:    parsed.DefaultShellVariant(),
 		PassthroughArgs: append([]string(nil), parsed.RawArgs...),
 		ScriptPath:      parsed.ScriptPath,
 		Script:          script,

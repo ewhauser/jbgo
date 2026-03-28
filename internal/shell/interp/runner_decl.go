@@ -173,14 +173,14 @@ func (d *declCommand) processDynamicWordOperand(operand *syntax.DeclDynamicWord)
 		return true
 	})
 	for _, field := range fields {
-		parsed, err := parseDeclOperandField(d.clause.Variant.Value, field)
+		parsed, err := parseDeclOperandField(d.runner.parserLangVariant(), d.clause.Variant.Value, field)
 		splitFields := []string{field}
 		if strings.ContainsAny(field, "[]") && (err != nil || parsed == nil) {
-			splitFields = splitDeclDynamicField(field)
+			splitFields = splitDeclDynamicField(d.runner.parserLangVariant(), field)
 		}
 		for i, splitField := range splitFields {
 			if i > 0 || len(splitFields) > 1 {
-				parsed, err = parseDeclOperandField(d.clause.Variant.Value, splitField)
+				parsed, err = parseDeclOperandField(d.runner.parserLangVariant(), d.clause.Variant.Value, splitField)
 			}
 			if err != nil {
 				d.onlyFlagOperands = false
@@ -576,7 +576,7 @@ func (d *declCommand) processNamedOperand(ref *syntax.VarRef, as *syntax.Assign,
 		r.applyVarAttrs(&vr)
 		var nameRefErr error
 		if vr.Kind == expand.NameRef {
-			nameRefErr = validateNameRefTarget(vr.Str)
+			nameRefErr = validateNameRefTarget(d.runner.parserLangVariant(), vr.Str)
 		}
 		if !isAssign {
 			r.setVar(name, vr)
@@ -778,7 +778,7 @@ func (d *declCommand) printPlainVar(name string, vr expand.Variable) {
 			d.runner.outf("%s\n", name)
 			return
 		}
-		d.runner.outf("%s=%s\n", name, bashDeclPlainValue(vr.Str))
+		d.runner.outf("%s=%s\n", name, bashDeclPlainValue(d.runner.parserLangVariant(), vr.Str))
 	}
 }
 
@@ -957,9 +957,9 @@ func (r *Runner) mergeDeclOperands(variant string, operands []syntax.DeclOperand
 				break
 			}
 			candidateSrc := mergedSrc + nextSrc
-			reparsed, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).DeclOperand(strings.NewReader(candidateSrc))
+			reparsed, err := r.parserForVariant().DeclOperand(strings.NewReader(candidateSrc))
 			if err != nil || reparsed == nil {
-				reparsed, err = parseDeclOperandField(variant, candidateSrc)
+				reparsed, err = parseDeclOperandField(r.parserLangVariant(), variant, candidateSrc)
 				if err != nil || reparsed == nil {
 					break
 				}
@@ -1018,11 +1018,14 @@ func bashDeclPrintValue(value string) string {
 	return bashDeclDoubleQuote(value)
 }
 
-func bashDeclPlainValue(value string) string {
+func bashDeclPlainValue(lang syntax.LangVariant, value string) string {
 	if needsTraceANSIQuote(value) {
 		return traceANSIQuote(value, true)
 	}
-	quoted, err := syntax.Quote(value, syntax.LangBash)
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	quoted, err := syntax.Quote(value, lang)
 	if err != nil {
 		return bashDeclDoubleQuote(value)
 	}
@@ -1044,12 +1047,12 @@ func declOperandString(operand syntax.DeclOperand) string {
 	return buf.String()
 }
 
-func declClauseFromFields(name string, fields []string) *syntax.DeclClause {
+func declClauseFromFields(name string, fields []string, lang syntax.LangVariant) *syntax.DeclClause {
 	decl := &syntax.DeclClause{
 		Variant: &syntax.Lit{Value: name},
 	}
 	for _, field := range fields {
-		if operand, err := parseDeclOperandField(name, field); err == nil {
+		if operand, err := parseDeclOperandField(lang, name, field); err == nil {
 			switch operand.(type) {
 			case *syntax.DeclFlag, *syntax.DeclName, *syntax.DeclAssign:
 				decl.Operands = append(decl.Operands, operand)
@@ -1067,7 +1070,7 @@ func declClauseFromFields(name string, fields []string) *syntax.DeclClause {
 	return decl
 }
 
-func parseDeclOperandField(variant, field string) (syntax.DeclOperand, error) {
+func parseDeclOperandField(lang syntax.LangVariant, variant, field string) (syntax.DeclOperand, error) {
 	if variant == "export" || variant == "local" {
 		if eqIndex := strings.IndexByte(field, '='); eqIndex > 0 {
 			name := field[:eqIndex]
@@ -1081,12 +1084,18 @@ func parseDeclOperandField(variant, field string) (syntax.DeclOperand, error) {
 			}
 		}
 	}
-	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	p := syntax.NewParser(syntax.Variant(lang))
 	return p.DeclOperandField(strings.NewReader(field))
 }
 
-func splitDeclDynamicField(field string) []string {
-	p := syntax.NewParser(syntax.Variant(syntax.LangBash))
+func splitDeclDynamicField(lang syntax.LangVariant, field string) []string {
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	p := syntax.NewParser(syntax.Variant(lang))
 	var words []string
 	err := p.Words(strings.NewReader(field), func(word *syntax.Word) bool {
 		var buf bytes.Buffer

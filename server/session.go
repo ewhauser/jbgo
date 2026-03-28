@@ -60,15 +60,16 @@ type sessionIDParams struct {
 }
 
 type sessionExecParams struct {
-	SessionID      string            `json:"session_id"`
-	Name           string            `json:"name"`
-	Script         string            `json:"script"`
-	Args           []string          `json:"args"`
-	StartupOptions []string          `json:"startup_options"`
-	Env            map[string]string `json:"env"`
-	WorkDir        string            `json:"work_dir"`
-	ReplaceEnv     bool              `json:"replace_env"`
-	TimeoutMs      int64             `json:"timeout_ms"`
+	SessionID      string             `json:"session_id"`
+	Name           string             `json:"name"`
+	Script         string             `json:"script"`
+	ShellVariant   gbash.ShellVariant `json:"shell_variant"`
+	Args           []string           `json:"args"`
+	StartupOptions []string           `json:"startup_options"`
+	Env            map[string]string  `json:"env"`
+	WorkDir        string             `json:"work_dir"`
+	ReplaceEnv     bool               `json:"replace_env"`
+	TimeoutMs      int64              `json:"timeout_ms"`
 }
 
 type sessionExecResult struct {
@@ -248,6 +249,7 @@ func (s *serverSession) exec(ctx context.Context, params *sessionExecParams) (*s
 	result, err := s.shell.Exec(ctx, &gbash.ExecutionRequest{
 		Name:           params.Name,
 		Script:         params.Script,
+		ShellVariant:   params.ShellVariant,
 		Args:           append([]string(nil), params.Args...),
 		StartupOptions: append([]string(nil), params.StartupOptions...),
 		Env:            copyStringMap(params.Env),

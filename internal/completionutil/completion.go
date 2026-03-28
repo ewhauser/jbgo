@@ -931,10 +931,17 @@ func SplitCompletionPath(prefix string) (dirPart, base, searchDir string) {
 }
 
 func ParseWordlistDocument(src string) (*syntax.Word, error) {
+	return ParseWordlistDocumentVariant(src, syntax.LangBash)
+}
+
+func ParseWordlistDocumentVariant(src string, lang syntax.LangVariant) (*syntax.Word, error) {
 	if src == "" {
 		return nil, nil
 	}
-	parser := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	if lang == 0 || lang == syntax.LangAuto {
+		lang = syntax.LangBash
+	}
+	parser := syntax.NewParser(syntax.Variant(lang))
 	return parser.Document(strings.NewReader(src))
 }
 

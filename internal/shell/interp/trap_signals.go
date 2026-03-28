@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/ewhauser/gbash/shell/syntax"
 )
 
 type trapID int
@@ -190,7 +192,7 @@ func trapQuotedCommand(command string) string {
 	if trapCanUseSingleQuotes(command) {
 		return "'" + command + "'"
 	}
-	return bashDeclPlainValue(command)
+	return bashDeclPlainValue(syntax.LangBash, command)
 }
 
 func trapCanUseSingleQuotes(command string) bool {

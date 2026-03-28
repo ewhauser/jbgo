@@ -10,6 +10,7 @@ import (
 
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
+	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func runInterpScript(t *testing.T, src string) (string, string, error) {
@@ -31,6 +32,7 @@ func runInterpScriptConfig(t *testing.T, cfg *RunnerConfig, src string) (string,
 		Dir:              cfg.Dir,
 		Params:           cfg.Params,
 		Interactive:      cfg.Interactive,
+		ShellVariant:     cfg.ShellVariant,
 		LegacyBashCompat: cfg.LegacyBashCompat,
 		Stdout:           &stdout,
 		Stderr:           &stderr,
@@ -103,6 +105,24 @@ func TestForLoopInvalidIdentifierMatchesBash(t *testing.T) {
 			t.Fatalf("stderr = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestStrictVarRefUsesShellVariantParser(t *testing.T) {
+	t.Parallel()
+
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:          "/tmp",
+		ShellVariant: shellvariant.SH,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+
+	if _, err := runner.strictVarRef("foo[1]"); err == nil {
+		t.Fatal("strictVarRef() error = nil, want posix array parse error")
+	} else if !strings.Contains(err.Error(), "not a valid variable reference") {
+		t.Fatalf("strictVarRef() error = %v, want strict variable-reference failure", err)
+	}
 }
 
 func TestRecoverableNestedArrayLiteralParseError(t *testing.T) {
