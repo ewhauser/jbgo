@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	stdfs "io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -69,9 +70,7 @@ func resolvedSuiteConfig(cfg *SuiteConfig) SuiteConfig {
 	}
 	if len(resolved.Env) > 0 {
 		env := make(map[string]string, len(resolved.Env))
-		for key, value := range resolved.Env {
-			env[key] = value
-		}
+		maps.Copy(env, resolved.Env)
 		resolved.Env = env
 	}
 	return resolved
@@ -286,9 +285,6 @@ func installSuiteBinaries(workspace string, binaries map[string]string) error {
 
 		target := filepath.Join(workspace, "bin", targetName)
 		if err := copyFile(hostPath, target); err != nil {
-			return err
-		}
-		if err := os.Chmod(target, 0o755); err != nil {
 			return err
 		}
 	}
@@ -878,9 +874,7 @@ func gbashEnv(cfg *SuiteConfig, specPath string) map[string]string {
 		env["EUID"] = strconv.Itoa(os.Geteuid())
 		env["GID"] = strconv.Itoa(os.Getgid())
 		env["EGID"] = strconv.Itoa(os.Getegid())
-		for key, value := range cfg.Env {
-			env[key] = value
-		}
+		maps.Copy(env, cfg.Env)
 		return env
 	}
 	env["HOME"] = conformanceVirtualHomeDir
@@ -891,9 +885,7 @@ func gbashEnv(cfg *SuiteConfig, specPath string) map[string]string {
 	if needsRepoRootEnv(specPath) {
 		env["REPO_ROOT"] = gbashWorkspaceRoot(specPath)
 	}
-	for key, value := range cfg.Env {
-		env[key] = value
-	}
+	maps.Copy(env, cfg.Env)
 	return env
 }
 
@@ -921,9 +913,7 @@ func bashEnv(cfg *SuiteConfig, workspace, specPath string) []string {
 	if needsRepoRootEnv(specPath) {
 		env["REPO_ROOT"] = workspace
 	}
-	for key, value := range cfg.Env {
-		env[key] = value
-	}
+	maps.Copy(env, cfg.Env)
 	values := make([]string, 0, len(env))
 	for key, value := range env {
 		values = append(values, key+"="+value)

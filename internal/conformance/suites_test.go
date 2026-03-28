@@ -37,7 +37,6 @@ func TestConformance(t *testing.T) {
 	}
 
 	for _, suite := range suites {
-		suite := suite
 		t.Run(suite.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := suite.build(t)
