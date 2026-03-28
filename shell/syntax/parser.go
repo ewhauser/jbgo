@@ -2209,24 +2209,29 @@ func (p *Parser) currentSourceTail() ([]byte, error) {
 	if idx := int(p.bsp); idx >= 0 && idx <= len(p.bs) {
 		tail = append(tail, p.bs[idx:]...)
 	}
+	rest, err := p.unreadSourceTail()
+	tail = append(tail, rest...)
+	return tail, err
+}
+
+func (p *Parser) unreadSourceTail() ([]byte, error) {
 	switch p.readErr {
 	case nil:
 	case io.EOF:
-		return tail, nil
+		return nil, nil
 	default:
-		return tail, p.readErr
+		return nil, p.readErr
 	}
 	if p.readEOF || p.src == nil {
-		return tail, nil
+		return nil, nil
 	}
 	var buf bytes.Buffer
 	_, err := buf.ReadFrom(p.src)
 	rest := buf.Bytes()
-	tail = append(tail, rest...)
 	if err != nil && err != io.EOF {
-		return tail, err
+		return rest, err
 	}
-	return tail, nil
+	return rest, nil
 }
 
 func (p *Parser) loadReplay(pos Pos, src []byte, readErr error) {
@@ -2310,7 +2315,11 @@ func hasContinuedScriptAfterRecoveredBackquote(src []byte) bool {
 
 func (p *Parser) recoverableBackquoteSource(left Pos) ([]byte, error) {
 	if src := p.sourceFromPos(left); src != "" {
-		return []byte(src), nil
+		rest, err := p.unreadSourceTail()
+		full := make([]byte, 0, len(src)+len(rest))
+		full = append(full, src...)
+		full = append(full, rest...)
+		return full, err
 	}
 	tail, err := p.currentSourceTail()
 	if len(tail) == 0 {

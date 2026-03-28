@@ -154,3 +154,23 @@ func TestParseMalformedBackquoteRecoversAtScriptStartWhenScriptContinues(t *test
 		t.Fatalf("second stmt arg = %q, want %q", got, "after")
 	}
 }
+
+func TestParseMalformedBackquoteRecoveryKeepsUnreadTail(t *testing.T) {
+	t.Parallel()
+
+	fillerLine := "# filler filler filler filler filler filler filler filler filler filler\n"
+	filler := strings.Repeat(fillerLine, bufSize/len(fillerLine)+4)
+	src := "echo `echo \"`\n" + filler + "echo after\n"
+
+	file, err := NewParser(Variant(LangBash)).Parse(strings.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Parse(%q) error = %v", src, err)
+	}
+	if got := len(file.Stmts); got != 2 {
+		t.Fatalf("len(Stmts) = %d, want 2", got)
+	}
+	next := file.Stmts[1].Cmd.(*CallExpr)
+	if got := next.Args[1].Lit(); got != "after" {
+		t.Fatalf("second stmt arg = %q, want %q", got, "after")
+	}
+}
