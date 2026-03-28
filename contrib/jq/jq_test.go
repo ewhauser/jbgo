@@ -80,6 +80,46 @@ func TestJQSupportsNullInput(t *testing.T) {
 	}
 }
 
+func TestJQNullInputDoesNotConsumeShellLoopInput(t *testing.T) {
+	t.Parallel()
+
+	rt := newJQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+		Script: `while IFS= read -r line; do
+  x=$(jq -nc --arg c "$line" '{role: $c}')
+  y=$(printf '[]' | jq -c --argjson m "$x" '. + [$m]')
+  printf 'line=%s y=%s\n' "$line" "$y"
+done < <(printf '%s\n' alpha beta)` + "\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "line=alpha y=[{\"role\":\"alpha\"}]\nline=beta y=[{\"role\":\"beta\"}]\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
+func TestJQNullInputStillSupportsDeferredInputBuiltin(t *testing.T) {
+	t.Parallel()
+
+	rt := newJQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+		Script: `printf '%s\n' 1 2 | jq -nc '[input, input]'` + "\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "[1,2]\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+}
+
 func TestJQSupportsStdinMarkerWithFiles(t *testing.T) {
 	t.Parallel()
 
