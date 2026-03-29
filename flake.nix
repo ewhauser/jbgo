@@ -27,6 +27,7 @@
           curl = pkgs.curl;
           diffutils = pkgs.diffutils;
           jq = pkgs.jq;
+          ripgrep = pkgs.ripgrep;
           yq = pkgs.buildGoModule {
             pname = "yq";
             version = yqVersion;
@@ -95,6 +96,7 @@
             pkgs.curl
             pkgs.diffutils
             pkgs.jq
+            pkgs.ripgrep
             self.packages.${pkgs.system}.yq
           ];
         };
