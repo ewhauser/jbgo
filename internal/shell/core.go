@@ -1161,11 +1161,6 @@ func lookupCachedCommand(ctx context.Context, exec *Execution, dir, name, cached
 func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, commandName string) (_ *resolvedCommand, ok bool, err error) {
 	fullPath := gbfs.Resolve(dir, name)
 	resolvedName := path.Base(fullPath)
-	if builtinDir := builtinCommandDir(exec); builtinDir != "" && path.Dir(fullPath) == builtinDir {
-		if interp.IsBuiltin(resolvedName) && !shellvariantprofile.Resolve(executionShellVariant(exec)).SupportsBuiltin(resolvedName) {
-			return nil, false, nil
-		}
-	}
 	if exec == nil || exec.FS == nil {
 		if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
 			if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {

@@ -27,12 +27,62 @@ func TestSessionExecNonBashVariantsLeaveBashNamespaceUnset(t *testing.T) {
 			session := newSession(t, &Config{})
 			result, err := session.Exec(context.Background(), &ExecutionRequest{
 				ShellVariant: variant,
-				Script:       script,
+				Env: map[string]string{
+					"BASH_VERSION":          "host",
+					"BASHPID":               "123",
+					"BASHOPTS":              "host",
+					"BASH_EXECUTION_STRING": "host",
+					"BASH_REMATCH":          "host",
+					"BASH_SOURCE":           "host",
+					"BASH_LINENO":           "host",
+					"FUNCNAME":              "host",
+				},
+				Script: script,
 			})
 			if err != nil {
 				t.Fatalf("Exec() error = %v", err)
 			}
 			if got, want := result.Stdout, "base:::::\nstack:::\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+			if got := result.Stderr; got != "" {
+				t.Fatalf("Stderr = %q, want empty", got)
+			}
+		})
+	}
+}
+
+func TestSessionExecUnsupportedBuiltinNamesDoNotHideRealPathCommands(t *testing.T) {
+	t.Parallel()
+
+	script := strings.Join([]string{
+		"mkdir -p /tmp/bin",
+		"cat > /tmp/bin/shopt <<'EOF'",
+		"#!/bin/sh",
+		"printf 'external:%s\\n' \"$0\"",
+		"EOF",
+		"chmod +x /tmp/bin/shopt",
+		"PATH=/tmp/bin:/usr/bin:/bin",
+		`type shopt >/dev/null 2>&1; printf 'type=%d\n' "$?"`,
+		"command -v shopt",
+		"shopt",
+		"/tmp/bin/shopt",
+		"",
+	}, "\n")
+
+	for _, variant := range []shellvariant.ShellVariant{shellvariant.SH, shellvariant.Mksh, shellvariant.Zsh} {
+		t.Run(string(variant), func(t *testing.T) {
+			t.Parallel()
+
+			session := newSession(t, &Config{})
+			result, err := session.Exec(context.Background(), &ExecutionRequest{
+				ShellVariant: variant,
+				Script:       script,
+			})
+			if err != nil {
+				t.Fatalf("Exec() error = %v", err)
+			}
+			if got, want := result.Stdout, "type=0\n/tmp/bin/shopt\nexternal:/tmp/bin/shopt\nexternal:/tmp/bin/shopt\n"; got != want {
 				t.Fatalf("Stdout = %q, want %q", got, want)
 			}
 			if got := result.Stderr; got != "" {

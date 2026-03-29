@@ -61,11 +61,15 @@ func (p Profile) SupportsBuiltin(name string) bool {
 	}
 }
 
-func (p Profile) ExposesBashSpecialVar(name string) bool {
+func IsBashSpecialVar(name string) bool {
 	switch name {
 	case "BASH_VERSION", "BASHOPTS", "BASH_EXECUTION_STRING", "BASH_SOURCE", "BASH_LINENO", "BASH_REMATCH", "BASHPID", "FUNCNAME":
-		return p.ExposesBashNamespace
+		return true
 	default:
 		return false
 	}
+}
+
+func (p Profile) ExposesBashSpecialVar(name string) bool {
+	return p.ExposesBashNamespace && IsBashSpecialVar(name)
 }

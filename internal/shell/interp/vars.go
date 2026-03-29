@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/host"
+	"github.com/ewhauser/gbash/internal/shellvariantprofile"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
 )
@@ -1052,6 +1053,9 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	if vr.Kind != expand.Unknown {
 		vr.Set = true
 		return vr
+	}
+	if shellvariantprofile.IsBashSpecialVar(name) && !profile.ExposesBashSpecialVar(name) {
+		return expand.Variable{}
 	}
 	if vr := r.writeEnv.Get(name); vr.Declared() {
 		return vr
