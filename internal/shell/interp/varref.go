@@ -15,10 +15,7 @@ func validateNameRefTarget(lang syntax.LangVariant, src string) error {
 	if src == "" {
 		return nil
 	}
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	ref, err := syntax.NewParser(syntax.Variant(lang)).VarRef(strings.NewReader(src))
+	ref, err := syntax.NewParser(syntax.Variant(normalizeLangVariant(lang))).VarRef(strings.NewReader(src))
 	if err != nil || ref == nil || !syntax.ValidName(ref.Name.Value) {
 		return fmt.Errorf("`%s': invalid variable name for name reference", src)
 	}
@@ -139,10 +136,7 @@ func parseStrictIndexedSubscript(lang syntax.LangVariant, raw string) (syntax.Ar
 		token := strings.TrimRight(raw[i:], " \t\r\n")
 		return nil, fmt.Errorf("%s: arithmetic syntax error: invalid arithmetic operator (error token is %q)", strings.TrimSpace(raw), token)
 	}
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	p := syntax.NewParser(syntax.Variant(lang))
+	p := syntax.NewParser(syntax.Variant(normalizeLangVariant(lang)))
 	expr, err := p.Arithmetic(strings.NewReader(raw))
 	if err == nil {
 		return expr, nil

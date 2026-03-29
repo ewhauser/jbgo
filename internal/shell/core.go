@@ -23,6 +23,7 @@ import (
 	"github.com/ewhauser/gbash/internal/commandutil"
 	"github.com/ewhauser/gbash/internal/shell/interp"
 	"github.com/ewhauser/gbash/internal/shellstate"
+	"github.com/ewhauser/gbash/internal/shellvariantprofile"
 	"github.com/ewhauser/gbash/network"
 	"github.com/ewhauser/gbash/policy"
 	"github.com/ewhauser/gbash/shell/analysis"
@@ -288,8 +289,9 @@ func (m *core) runnerConfig(exec *Execution, budget *executionBudget) *interp.Ru
 	cfg.PID = exec.HostProcessMeta.PID
 	cfg.PPID = exec.HostProcessMeta.PPID
 	cfg.NewPipe = exec.NewPipe
-	cfg.ShellVariant = executionShellVariant(exec)
-	cfg.LegacyBashCompat = path.Base(strings.TrimSpace(exec.Interpreter)) == "bash"
+	profile := shellvariantprofile.Resolve(executionShellVariant(exec))
+	cfg.ShellVariant = profile.Variant
+	cfg.LegacyBashCompat = profile.LegacyBashCompat
 	cfg.Arg0 = executionArg0(exec)
 	cfg.CommandString = executionUsesCommandString(exec)
 	if exec.ScriptPath == "" && exec.Script != "" {
@@ -577,7 +579,18 @@ func (m *core) statHandler(exec *Execution) interp.StatHandlerFunc {
 		}
 		recordFile(exec.Trace, string(action), abs)
 		if followSymlinks {
-			return exec.FS.Stat(ctx, abs)
+			info, err := exec.FS.Stat(ctx, abs)
+			if err != nil {
+				return nil, err
+			}
+			hidden, hideErr := isUnsupportedVirtualBuiltinStub(ctx, exec, abs)
+			if hideErr != nil {
+				return nil, hideErr
+			}
+			if hidden {
+				return nil, stdfs.ErrNotExist
+			}
+			return info, nil
 		}
 		return exec.FS.Lstat(ctx, abs)
 	}
@@ -1075,6 +1088,9 @@ func lookupRegistryCommand(exec *Execution, name string) (commands.Command, bool
 	if exec == nil || exec.Registry == nil {
 		return nil, false
 	}
+	if interp.IsBuiltin(name) && !shellvariantprofile.Resolve(executionShellVariant(exec)).SupportsBuiltin(name) {
+		return nil, false
+	}
 	return exec.Registry.Lookup(name)
 }
 
@@ -1145,6 +1161,11 @@ func lookupCachedCommand(ctx context.Context, exec *Execution, dir, name, cached
 func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, commandName string) (_ *resolvedCommand, ok bool, err error) {
 	fullPath := gbfs.Resolve(dir, name)
 	resolvedName := path.Base(fullPath)
+	if builtinDir := builtinCommandDir(exec); builtinDir != "" && path.Dir(fullPath) == builtinDir {
+		if interp.IsBuiltin(resolvedName) && !shellvariantprofile.Resolve(executionShellVariant(exec)).SupportsBuiltin(resolvedName) {
+			return nil, false, nil
+		}
+	}
 	if exec == nil || exec.FS == nil {
 		if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
 			if cmd, ok := lookupRegistryCommand(exec, resolvedName); ok {
@@ -1182,6 +1203,14 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 		return nil, false, nil //nolint:nilerr // stat error means the file doesn't exist as a command
 	}
 	if info.IsDir() {
+		return nil, false, nil
+	}
+	if hidden, hideErr := isUnsupportedVirtualBuiltinStub(ctx, exec, fullPath); hideErr != nil {
+		return nil, false, hideErr
+	} else if hidden {
+		if explicitPath {
+			return nil, false, classifyExplicitPathError(ctx, exec, fullPath, stdfs.ErrNotExist)
+		}
 		return nil, false, nil
 	}
 	if dir := builtinCommandDir(exec); dir != "" && path.Dir(fullPath) == dir {
@@ -1432,6 +1461,28 @@ func resolveVirtualCommandStub(ctx context.Context, exec *Execution, fullPath st
 		command: cmd,
 		name:    name,
 	}, true, nil
+}
+
+func isUnsupportedVirtualBuiltinStub(ctx context.Context, exec *Execution, fullPath string) (bool, error) {
+	if exec == nil || exec.FS == nil {
+		return false, nil
+	}
+	name := path.Base(fullPath)
+	if !interp.IsBuiltin(name) || shellvariantprofile.Resolve(executionShellVariant(exec)).SupportsBuiltin(name) {
+		return false, nil
+	}
+	file, err := exec.FS.Open(ctx, fullPath)
+	if err != nil {
+		return false, nil
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	stubName, ok, err := readVirtualCommandStub(ctx, file)
+	if err != nil || !ok {
+		return false, err
+	}
+	return stubName == name, nil
 }
 
 func readVirtualCommandStub(ctx context.Context, r io.Reader) (string, bool, error) {

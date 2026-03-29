@@ -117,8 +117,15 @@ func (r *Runner) isBuiltinDisabled(name string) bool {
 	return r.disabledBuiltins[name]
 }
 
-func (r *Runner) isBuiltinActive(name string) bool {
+func (r *Runner) builtinVariantSupported(name string) bool {
 	if !IsBuiltin(name) {
+		return false
+	}
+	return r.shellProfile().SupportsBuiltin(name)
+}
+
+func (r *Runner) isBuiltinActive(name string) bool {
+	if !r.builtinVariantSupported(name) {
 		return false
 	}
 	return !r.isBuiltinDisabled(name)
@@ -808,7 +815,7 @@ done:
 
 	exit := exitStatus{}
 	for _, name := range args {
-		if !IsBuiltin(name) {
+		if !r.builtinVariantSupported(name) {
 			r.errf("enable: %s: not a shell builtin\n", name)
 			exit.code = 1
 			continue
@@ -837,6 +844,9 @@ done:
 
 func (r *Runner) enablePrintBuiltins(disable, listAll, specialOnly bool) exitStatus {
 	for _, name := range runtimeBuiltinNames {
+		if !r.builtinVariantSupported(name) {
+			continue
+		}
 		if specialOnly && !IsPOSIXSpecialBuiltin(name) {
 			continue
 		}

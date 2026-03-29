@@ -910,6 +910,9 @@ func (r *Runner) printSetVarVisible(name string, vr expand.Variable) bool {
 func (r *Runner) setBuiltinSpecialVar(name string) (expand.Variable, bool) {
 	switch name {
 	case "BASH_LINENO":
+		if !r.shellProfile().ExposesBashSpecialVar(name) {
+			return expand.Variable{}, false
+		}
 		vr := r.lookupVar(name)
 		if vr.IsSet() {
 			return vr, true
@@ -924,6 +927,7 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	if name == "" {
 		panic("variable name must not be empty")
 	}
+	profile := r.shellProfile()
 	switch name {
 	case "HOSTNAME", "OSTYPE":
 		if r.writeEnv != nil {
@@ -977,7 +981,9 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	case "$":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.pid)
 	case "BASHPID":
-		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.bashPID)
+		if profile.ExposesBashSpecialVar(name) {
+			vr.Kind, vr.Str = expand.String, strconv.Itoa(r.bashPID)
+		}
 	case "PPID":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.ppid)
 		vr.ReadOnly = true
@@ -1013,25 +1019,35 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		vr.Kind, vr.Str = expand.String, r.shellOptsValue()
 		vr.ReadOnly = true
 	case "BASHOPTS":
-		vr.Kind, vr.Str = expand.String, r.bashOptsValue()
-		vr.ReadOnly = true
+		if profile.ExposesBashSpecialVar(name) {
+			vr.Kind, vr.Str = expand.String, r.bashOptsValue()
+			vr.ReadOnly = true
+		}
 	case "DIRSTACK":
 		vr.Kind, vr.List = expand.Indexed, r.dirStack
 	case "BASH_SOURCE":
-		if stack := r.bashSourceStack(); len(stack) > 0 {
-			vr.Kind, vr.List = expand.Indexed, stack
+		if profile.ExposesBashSpecialVar(name) {
+			if stack := r.bashSourceStack(); len(stack) > 0 {
+				vr.Kind, vr.List = expand.Indexed, stack
+			}
 		}
 	case "BASH_LINENO":
-		if stack := r.bashLineNoStack(); len(stack) > 0 {
-			vr.Kind, vr.List = expand.Indexed, stack
+		if profile.ExposesBashSpecialVar(name) {
+			if stack := r.bashLineNoStack(); len(stack) > 0 {
+				vr.Kind, vr.List = expand.Indexed, stack
+			}
 		}
 	case "FUNCNAME":
-		if stack := r.funcNameStack(); len(stack) > 0 {
-			vr.Kind, vr.List = expand.Indexed, stack
+		if profile.ExposesBashSpecialVar(name) {
+			if stack := r.funcNameStack(); len(stack) > 0 {
+				vr.Kind, vr.List = expand.Indexed, stack
+			}
 		}
 	case "BASH_VERSION":
-		vr.Kind, vr.Str = expand.String, "5.2.0(1)-gbash"
-		vr.ReadOnly = true
+		if profile.ExposesBashSpecialVar(name) {
+			vr.Kind, vr.Str = expand.String, "5.2.0(1)-gbash"
+			vr.ReadOnly = true
+		}
 	}
 	if vr.Kind != expand.Unknown {
 		vr.Set = true

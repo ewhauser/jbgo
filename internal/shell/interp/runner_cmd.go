@@ -688,10 +688,7 @@ func (r *Runner) declVariantActive(name string) bool {
 
 func parseCallWords(lang syntax.LangVariant, src string) ([]*syntax.Word, error) {
 	var words []*syntax.Word
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	p := syntax.NewParser(syntax.Variant(lang))
+	p := syntax.NewParser(syntax.Variant(normalizeLangVariant(lang)))
 	err := p.Words(strings.NewReader(src), func(word *syntax.Word) bool {
 		words = append(words, word)
 		return true
@@ -767,10 +764,7 @@ func declOperandFromCallWord(lang syntax.LangVariant, word *syntax.Word) syntax.
 	if lit == "" {
 		return &syntax.DeclDynamicWord{Word: word}
 	}
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	p := syntax.NewParser(syntax.Variant(lang))
+	p := syntax.NewParser(syntax.Variant(normalizeLangVariant(lang)))
 	op, err := p.DeclOperand(strings.NewReader(lit))
 	if err != nil || op == nil {
 		return &syntax.DeclDynamicWord{Word: word}

@@ -422,6 +422,59 @@ func TestCoreRunExplicitShellVariantOverridesInterpreter(t *testing.T) {
 	}
 }
 
+func TestRunnerConfigUsesResolvedShellVariantProfile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		exec        *Execution
+		wantVariant shellvariant.ShellVariant
+		wantLegacy  bool
+	}{
+		{
+			name:        "default bash variant",
+			exec:        &Execution{},
+			wantVariant: shellvariant.Bash,
+			wantLegacy:  false,
+		},
+		{
+			name: "explicit shell variant overrides interpreter",
+			exec: &Execution{
+				Interpreter:  "bash",
+				ShellVariant: shellvariant.SH,
+			},
+			wantVariant: shellvariant.SH,
+			wantLegacy:  false,
+		},
+		{
+			name: "shebang inferred zsh variant",
+			exec: &Execution{
+				Script: "#!/bin/zsh\necho hi\n",
+			},
+			wantVariant: shellvariant.Zsh,
+			wantLegacy:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			exec := *tc.exec
+			if err := resolveExecutionVariant(&exec); err != nil {
+				t.Fatalf("resolveExecutionVariant() error = %v", err)
+			}
+			cfg := newShellCore().runnerConfig(&exec, nil)
+			if got := cfg.ShellVariant; got != tc.wantVariant {
+				t.Fatalf("ShellVariant = %q, want %q", got, tc.wantVariant)
+			}
+			if got := cfg.LegacyBashCompat; got != tc.wantLegacy {
+				t.Fatalf("LegacyBashCompat = %v, want %v", got, tc.wantLegacy)
+			}
+		})
+	}
+}
+
 func TestCoreRunNestedShellExecPropagatesShellVariant(t *testing.T) {
 	t.Parallel()
 

@@ -5,36 +5,41 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ewhauser/gbash/internal/shellvariantprofile"
 	"github.com/ewhauser/gbash/shell/syntax"
 	"github.com/ewhauser/gbash/shellvariant"
 )
 
 func normalizeShellVariant(variant shellvariant.ShellVariant) shellvariant.ShellVariant {
-	switch normalized := shellvariant.Normalize(variant); {
-	case normalized.Resolved():
-		return normalized
-	default:
-		return shellvariant.Bash
+	return shellvariantprofile.Resolve(variant).Variant
+}
+
+func normalizeLangVariant(lang syntax.LangVariant) syntax.LangVariant {
+	if lang == 0 || lang == syntax.LangAuto {
+		return syntax.LangBash
 	}
+	return lang
 }
 
 func (r *Runner) applyShellVariant(variant shellvariant.ShellVariant) {
 	if r == nil {
 		return
 	}
-	r.shellVariant = normalizeShellVariant(variant)
-	r.langVariant = r.shellVariant.SyntaxLang()
-	if r.shellVariant == shellvariant.SH {
-		r.opts[optPosix] = true
-		r.opts[optBraceExpand] = false
-	}
+	profile := shellvariantprofile.Resolve(variant)
+	r.shellVariant = profile.Variant
+	r.langVariant = profile.SyntaxLang
+	r.opts[optPosix] = profile.DefaultPosixMode
+	r.opts[optBraceExpand] = profile.DefaultBraceExpand
 }
 
 func (r *Runner) parserLangVariant() syntax.LangVariant {
-	if r == nil || r.langVariant == 0 || r.langVariant == syntax.LangAuto {
+	if r == nil {
 		return syntax.LangBash
 	}
-	return r.langVariant
+	if r.langVariant != 0 && r.langVariant != syntax.LangAuto {
+		return r.langVariant
+	}
+	return r.shellProfile().SyntaxLang
 }
 
 func (r *Runner) shellVariantName() shellvariant.ShellVariant {
@@ -42,6 +47,13 @@ func (r *Runner) shellVariantName() shellvariant.ShellVariant {
 		return shellvariant.Bash
 	}
 	return normalizeShellVariant(r.shellVariant)
+}
+
+func (r *Runner) shellProfile() shellvariantprofile.Profile {
+	if r == nil {
+		return shellvariantprofile.Resolve(shellvariant.Bash)
+	}
+	return shellvariantprofile.Resolve(r.shellVariant)
 }
 
 func (r *Runner) quoteForVariant(value string) (string, error) {
@@ -62,7 +74,7 @@ func formatParseError(err error, variant shellvariant.ShellVariant) string {
 	if err == nil || !errors.As(err, &parseErr) {
 		return fmt.Sprint(err)
 	}
-	if shellvariant.Normalize(variant).UsesBashDiagnostics() {
+	if shellvariantprofile.Resolve(variant).UsesBashDiagnostics {
 		return parseErr.BashError()
 	}
 	return parseErr.Error()

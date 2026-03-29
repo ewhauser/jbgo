@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/ewhauser/gbash/internal/shellvariantprofile"
 	"github.com/ewhauser/gbash/shell/syntax"
 	"github.com/ewhauser/gbash/shellvariant"
 )
@@ -16,7 +17,7 @@ func formatParseError(err error, variant shellvariant.ShellVariant) string {
 		}
 		return err.Error()
 	}
-	if shellvariant.Normalize(variant).UsesBashDiagnostics() {
+	if shellvariantprofile.Resolve(variant).UsesBashDiagnostics {
 		return parseErr.BashError()
 	}
 	return parseErr.Error()

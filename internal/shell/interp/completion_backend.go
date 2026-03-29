@@ -139,6 +139,9 @@ func (b *runnerCompletionBackend) SetoptNames(prefix string) []string {
 }
 
 func (b *runnerCompletionBackend) ShoptNames(prefix string) []string {
+	if b.runner == nil || !b.runner.builtinVariantSupported("shopt") {
+		return nil
+	}
 	names := make([]string, 0, len(bashOptsTable))
 	for _, opt := range bashOptsTable {
 		if prefix == "" || strings.HasPrefix(opt.name, prefix) {

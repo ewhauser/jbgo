@@ -264,7 +264,7 @@ flagLoop:
 			if !action.active() {
 				continue
 			}
-			r.outf("trap -- %s %s\n", trapQuotedCommand(action.printable()), trapPrintName(id))
+			r.outf("trap -- %s %s\n", trapQuotedCommand(r.parserLangVariant(), action.printable()), trapPrintName(id))
 		}
 		return exit
 	}
@@ -645,7 +645,7 @@ func (r *Runner) writeTrapList(w io.Writer) error {
 		if !action.active() {
 			continue
 		}
-		if _, err := fmt.Fprintf(w, "trap -- %s %s\n", trapQuotedCommand(action.printable()), trapPrintName(id)); err != nil {
+		if _, err := fmt.Fprintf(w, "trap -- %s %s\n", trapQuotedCommand(r.parserLangVariant(), action.printable()), trapPrintName(id)); err != nil {
 			return err
 		}
 	}

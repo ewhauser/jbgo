@@ -299,7 +299,7 @@ done:
 
 	exitCode := 0
 	for i, arg := range args {
-		topic, ok := lookupHelpTopic(arg)
+		topic, ok := lookupHelpTopicForContext(ctx, arg)
 		if !ok {
 			exitCode = 1
 			_, _ = fmt.Fprintf(inv.Stderr, "help: no help topics match `%s'.  Try `help help' or `man -k %s' or `info %s'.\n", arg, arg, arg)
@@ -346,25 +346,23 @@ func bashHelpListBodyForContext(ctx context.Context) string {
 	if !ok {
 		return bashHelpListBody
 	}
-	disabled := make(map[string]struct{})
-	for _, name := range completionutil.BuiltinNames("") {
-		if hc.IsBuiltinDisabled(name) {
-			disabled[name] = struct{}{}
-		}
+	active := make(map[string]struct{})
+	for _, name := range hc.EnabledBuiltinNames("") {
+		active[name] = struct{}{}
 	}
-	if len(disabled) == 0 {
+	if len(active) == len(completionutil.BuiltinNames("")) {
 		return bashHelpListBody
 	}
 	lines := strings.Split(bashHelpListBody, "\n")
 	for i, line := range lines {
 		left, sep, right, ok := splitHelpListColumns(line)
 		if !ok {
-			lines[i], _ = markDisabledHelpField(line, disabled)
+			lines[i], _ = markInactiveHelpField(line, active)
 			continue
 		}
 		var leftChanged, rightChanged bool
-		left, leftChanged = markDisabledHelpField(left, disabled)
-		right, rightChanged = markDisabledHelpField(right, disabled)
+		left, leftChanged = markInactiveHelpField(left, active)
+		right, rightChanged = markInactiveHelpField(right, active)
 		if leftChanged && sep != "" {
 			sep = sep[:len(sep)-1]
 		}
@@ -396,16 +394,28 @@ func splitHelpListColumns(line string) (left, sep, right string, ok bool) {
 	return "", "", "", false
 }
 
-func markDisabledHelpField(field string, disabled map[string]struct{}) (string, bool) {
+func markInactiveHelpField(field string, active map[string]struct{}) (string, bool) {
 	trimmed := strings.TrimLeft(field, " ")
 	if trimmed == "" {
 		return field, false
 	}
 	name := strings.Fields(trimmed)[0]
-	if _, ok := disabled[name]; !ok {
+	if !completionutil.IsBuiltinName(name) {
+		return field, false
+	}
+	if _, ok := active[name]; ok {
 		return field, false
 	}
 	return "*" + trimmed, true
+}
+
+func lookupHelpTopicForContext(ctx context.Context, name string) (helpTopic, bool) {
+	if completionutil.IsBuiltinName(name) {
+		if hc, ok := interp.LookupHandlerContext(ctx); ok && !hc.IsBuiltin(name) && !hc.IsBuiltinDisabled(name) {
+			return helpTopic{}, false
+		}
+	}
+	return lookupHelpTopic(name)
 }
 
 func lookupHelpTopic(name string) (helpTopic, bool) {
