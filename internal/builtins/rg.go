@@ -532,10 +532,6 @@ func (c *RG) walkRecursive(ctx context.Context, inv *Invocation, opts *rgOptions
 	}
 	for _, entry := range entries {
 		childName := entry.Name()
-		if !opts.hidden && strings.HasPrefix(childName, ".") {
-			continue
-		}
-
 		childAbs := path.Join(currentAbs, childName)
 		childLogicalAbs := path.Join(currentLogicalAbs, childName)
 		childDisplay := rgJoinDisplay(currentDisplay, childName)
@@ -564,36 +560,41 @@ func (c *RG) walkRecursive(ctx context.Context, inv *Invocation, opts *rgOptions
 			childResolvedAbs = resolvedAbs
 		}
 
+		globDecision, err := rgEvaluateGlobs(opts.globs, childDisplay)
+		if err != nil {
+			return exitf(inv, 2, "rg: invalid glob: %v", err)
+		}
+		if globDecision.matchedExclude {
+			continue
+		}
+
+		hiddenPath := !opts.hidden && strings.HasPrefix(childName, ".")
+		ignoreRules := opts.manualIgnore
 		if !opts.noIgnore {
-			ignored, err := rgShouldIgnorePath(append(currentRules, opts.manualIgnore...), childLogicalAbs, childIsDir)
+			ignoreRules = append(append([]rgIgnoreRule(nil), currentRules...), opts.manualIgnore...)
+		}
+		ignored := false
+		if len(ignoreRules) > 0 {
+			ignored, err = rgShouldIgnorePath(ignoreRules, childLogicalAbs, childIsDir)
 			if err != nil {
 				return exitf(inv, 2, "rg: invalid ignore pattern: %v", err)
-			}
-			if ignored {
-				continue
-			}
-		} else {
-			ignored, err := rgShouldIgnorePath(opts.manualIgnore, childLogicalAbs, childIsDir)
-			if err != nil {
-				return exitf(inv, 2, "rg: invalid ignore pattern: %v", err)
-			}
-			if ignored {
-				continue
 			}
 		}
 
 		if childIsDir {
+			if (hiddenPath || ignored) && !globDecision.explicitInclude {
+				continue
+			}
 			if err := c.walkRecursive(ctx, inv, opts, state, childResolvedAbs, childLogicalAbs, childDisplay, false, visitedDirs, currentRules, gitRoot, records); err != nil {
 				return err
 			}
 			continue
 		}
 
-		allowed, err := rgGlobAllows(opts.globs, childDisplay)
-		if err != nil {
-			return exitf(inv, 2, "rg: invalid glob: %v", err)
+		if (hiddenPath || ignored) && !globDecision.explicitInclude {
+			continue
 		}
-		if !allowed {
+		if !globDecision.allowed {
 			continue
 		}
 

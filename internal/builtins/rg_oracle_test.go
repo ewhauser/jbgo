@@ -54,6 +54,50 @@ func TestRGMatchesRipgrep(t *testing.T) {
 			},
 		},
 		{
+			name: "hidden-include-glob-file",
+			setup: func(t *testing.T, workDir string) {
+				writeHostFile(t, workDir, ".hidden.txt", "hit\n")
+				writeHostFile(t, workDir, "visible.txt", "miss\n")
+			},
+			buildArgs: func(string) ([]string, []string) {
+				return []string{"-g", ".hidden.txt", "hit", "."}, []string{"-g", ".hidden.txt", "hit", "."}
+			},
+		},
+		{
+			name: "hidden-include-glob-dir",
+			setup: func(t *testing.T, workDir string) {
+				writeHostFile(t, workDir, ".hidden/inside.txt", "hit\n")
+				writeHostFile(t, workDir, "visible.txt", "miss\n")
+			},
+			buildArgs: func(string) ([]string, []string) {
+				return []string{"-g", ".hidden", "-g", ".hidden/**", "hit", "."}, []string{"-g", ".hidden", "-g", ".hidden/**", "hit", "."}
+			},
+		},
+		{
+			name: "include-glob-overrides-ignore",
+			setup: func(t *testing.T, workDir string) {
+				writeHostFile(t, workDir, ".git/HEAD", "ref: refs/heads/main\n")
+				writeHostFile(t, workDir, ".gitignore", "ignored/\n")
+				writeHostFile(t, workDir, "ignored/inside.txt", "hit\n")
+				writeHostFile(t, workDir, "visible.txt", "miss\n")
+			},
+			buildArgs: func(string) ([]string, []string) {
+				return []string{"-g", "ignored", "-g", "ignored/**", "hit", "."}, []string{"-g", "ignored", "-g", "ignored/**", "hit", "."}
+			},
+		},
+		{
+			name:       "exclude-dir-glob",
+			sortStdout: true,
+			setup: func(t *testing.T, workDir string) {
+				writeHostFile(t, workDir, "node_modules/skip.txt", "hit\n")
+				writeHostFile(t, workDir, "keep/keep.txt", "hit\n")
+				writeHostFile(t, workDir, "root.txt", "hit\n")
+			},
+			buildArgs: func(string) ([]string, []string) {
+				return []string{"-g", "!node_modules", "hit", "."}, []string{"-g", "!node_modules", "hit", "."}
+			},
+		},
+		{
 			name:       "hidden-and-ignore",
 			sortStdout: true,
 			setup: func(t *testing.T, workDir string) {

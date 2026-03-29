@@ -233,6 +233,55 @@ func TestRGSupportsGlobsAndFilesMode(t *testing.T) {
 	}
 }
 
+func TestRGGlobsOverrideHiddenAndIgnoreAndPruneExcludedDirs(t *testing.T) {
+	t.Parallel()
+
+	rt := newRuntime(t, &Config{})
+	result, err := rt.Run(context.Background(), &ExecutionRequest{
+		Script: "mkdir -p /tmp/work/.git /tmp/work/.hidden /tmp/work/ignored /tmp/work/keep /tmp/work/node_modules\n" +
+			"printf 'ref: refs/heads/main\\n' > /tmp/work/.git/HEAD\n" +
+			"printf 'ignored/\\n' > /tmp/work/.gitignore\n" +
+			"printf 'hit\\n' > /tmp/work/.hidden.txt\n" +
+			"printf 'hit\\n' > /tmp/work/.hidden/inside.txt\n" +
+			"printf 'hit\\n' > /tmp/work/ignored/inside.txt\n" +
+			"printf 'hit\\n' > /tmp/work/keep/keep.txt\n" +
+			"printf 'hit\\n' > /tmp/work/node_modules/skip.txt\n" +
+			"printf 'hit\\n' > /tmp/work/root.txt\n" +
+			"cd /tmp/work\n" +
+			"rg -g '.hidden.txt' hit . | sort\n" +
+			"printf '%s\\n' '---'\n" +
+			"rg -g '.hidden' -g '.hidden/**' hit . | sort\n" +
+			"printf '%s\\n' '---'\n" +
+			"rg -g 'ignored' -g 'ignored/**' hit . | sort\n" +
+			"printf '%s\\n' '---'\n" +
+			"rg -g '!node_modules' hit . | sort\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	want := strings.Join([]string{
+		"./.hidden.txt:hit",
+		"---",
+		"./.hidden/inside.txt:hit",
+		"---",
+		"./ignored/inside.txt:hit",
+		"---",
+		"./keep/keep.txt:hit",
+		"./root.txt:hit",
+		"",
+	}, "\n")
+	if got := result.Stdout; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
 func TestRGLoadsGitIgnoreRulesFromRepoAncestorsAndSubdirs(t *testing.T) {
 	t.Parallel()
 

@@ -14,6 +14,13 @@ type rgGlobRule struct {
 	caseInsensitive bool
 }
 
+type rgGlobDecision struct {
+	allowed         bool
+	explicitInclude bool
+	matchedExclude  bool
+	hasInclude      bool
+}
+
 type rgIgnoreRule struct {
 	baseDir  string
 	pattern  string
@@ -35,9 +42,9 @@ func rgParseGlobRule(raw string, caseInsensitive bool) rgGlobRule {
 	return rule
 }
 
-func rgGlobAllows(rules []rgGlobRule, displayPath string) (bool, error) {
+func rgEvaluateGlobs(rules []rgGlobRule, displayPath string) (rgGlobDecision, error) {
 	if len(rules) == 0 {
-		return true, nil
+		return rgGlobDecision{allowed: true}, nil
 	}
 
 	candidate := strings.TrimPrefix(displayPath, "./")
@@ -49,20 +56,25 @@ func rgGlobAllows(rules []rgGlobRule, displayPath string) (bool, error) {
 		}
 	}
 
-	allowed := !hasInclude
+	decision := rgGlobDecision{
+		allowed:    !hasInclude,
+		hasInclude: hasInclude,
+	}
 	for _, rule := range rules {
 		if rule.pattern == "" {
 			continue
 		}
 		matched, err := rgMatchPathPattern(rule.pattern, candidate, !strings.Contains(strings.TrimPrefix(rule.pattern, "/"), "/"), rule.caseInsensitive)
 		if err != nil {
-			return false, err
+			return rgGlobDecision{}, err
 		}
 		if matched {
-			allowed = rule.include
+			decision.allowed = rule.include
+			decision.explicitInclude = rule.include
+			decision.matchedExclude = !rule.include
 		}
 	}
-	return allowed, nil
+	return decision, nil
 }
 
 func rgParseIgnoreRules(data, baseDir string) []rgIgnoreRule {
