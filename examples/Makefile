@@ -17,8 +17,9 @@ run-custom-zstd:
 	go run ./custom-zstd < ./custom-zstd/demo.sh
 
 run-harness-overlay:
-	@echo "Running harness-overlay demo"
-	@go run ./harness-overlay
+	@workspace="$$(./harness-overlay/update-harness.sh)"; \
+	echo "Running harness-overlay demo using $$workspace"; \
+	HARNESS_OVERLAY_WORKSPACE="$$workspace" go run ./harness-overlay
 
 run-oauth-network-extension:
 	@echo "Running oauth-network-extension demo"

@@ -52,7 +52,13 @@ type cliOptions struct {
 }
 
 func main() {
-	exitCode, err := runWithWorkspace(context.Background(), mustWorkspaceDir(), os.Stdin, os.Stdout, os.Stderr, os.Args[1:])
+	workspaceDir, err := resolveWorkspaceDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	exitCode, err := runWithWorkspace(context.Background(), workspaceDir, os.Stdin, os.Stdout, os.Stderr, os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -182,11 +188,31 @@ func forwardedBaseEnv() map[string]string {
 }
 
 func mustWorkspaceDir() string {
+	return filepath.Join(mustExampleDir(), "workspace")
+}
+
+func mustExampleDir() string {
 	_, file, _, ok := goruntime.Caller(0)
 	if !ok {
-		panic("resolve workspace dir: runtime.Caller failed")
+		panic("resolve example dir: runtime.Caller failed")
 	}
-	return filepath.Join(filepath.Dir(file), "workspace")
+	return filepath.Dir(file)
+}
+
+func resolveWorkspaceDir() (string, error) {
+	if workspaceDir := os.Getenv("HARNESS_OVERLAY_WORKSPACE"); workspaceDir != "" {
+		if _, err := os.Stat(filepath.Join(workspaceDir, "bin", "harness")); err != nil {
+			return "", fmt.Errorf("HARNESS_OVERLAY_WORKSPACE=%q is not a prepared harness workspace: %w", workspaceDir, err)
+		}
+		return workspaceDir, nil
+	}
+
+	workspaceDir := mustWorkspaceDir()
+	if _, err := os.Stat(filepath.Join(workspaceDir, "bin", "harness")); err == nil {
+		return workspaceDir, nil
+	}
+
+	return "", fmt.Errorf("harness workspace is not prepared; run `make -C examples run-harness-overlay` or set HARNESS_OVERLAY_WORKSPACE")
 }
 
 func stdinIsTTY(stdin io.Reader) bool {

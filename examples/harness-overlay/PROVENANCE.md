@@ -1,12 +1,12 @@
 # Provenance
 
-`examples/harness-overlay` vendors the upstream [`harness`](https://github.com/wedow/harness) shell runtime so it can be executed inside a persistent `gbash` sandbox.
+`examples/harness-overlay` pins the upstream [`harness`](https://github.com/wedow/harness) shell runtime and prepares it into a gitignored cache so it can be executed inside a persistent `gbash` sandbox.
 
 - Upstream repository: `https://github.com/wedow/harness`
 - Pinned upstream commit: `474799144f418258abd27ecf073679b2270aa780`
 - Upstream license: MIT
 
-Copied upstream artifacts in this example:
+Upstream artifacts staged into the prepared cache workspace by `update-harness.sh`:
 
 - `workspace/bin/harness`
 - `workspace/plugins/auth`
@@ -18,13 +18,12 @@ Copied upstream artifacts in this example:
 - `workspace/plugins/subagents`
 - `workspace/LICENSE.harness`
 
-Documented gbash-specific additions in this example:
+Committed gbash-specific overlay files in this example:
 
+- `workspace/.harness/`
 - `workspace/AGENTS.md`
-- `workspace/.harness/tools/bash`
-- `workspace/.harness/sessions/.gitkeep`
 - `main.go`
 - `main_test.go`
 - `update-harness.sh`
 
-The vendored upstream files stay mechanically copied under `workspace/`. gbash-specific behavior lives in the local `.harness/` override layer so upstream refreshes remain straightforward.
+The repository does not track the upstream runtime snapshot. `update-harness.sh` clones the pinned upstream ref into `.cache/`, stages the listed runtime files there, and then overlays the committed `workspace/.harness/` and `workspace/AGENTS.md` customization layer.

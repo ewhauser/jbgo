@@ -3,20 +3,28 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ewhauser/gbash"
 )
 
+var (
+	preparedWorkspaceOnce sync.Once
+	preparedWorkspaceBase string
+	preparedWorkspaceErr  error
+)
+
 func TestRunScriptHarnessHelp(t *testing.T) {
 	t.Parallel()
 
-	workspaceDir := copyTreeToTemp(t, mustWorkspaceDir())
+	workspaceDir := preparedWorkspaceForTests(t)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -46,7 +54,7 @@ func TestRunScriptHarnessHelp(t *testing.T) {
 func TestPersistentHarnessBashTool(t *testing.T) {
 	t.Parallel()
 
-	workspaceDir := copyTreeToTemp(t, mustWorkspaceDir())
+	workspaceDir := preparedWorkspaceForTests(t)
 
 	rt, err := newRuntime(context.Background(), workspaceDir)
 	if err != nil {
@@ -96,7 +104,7 @@ jq -cn --arg command 'printf "%s %s\n" "$PWD" "$FOO"' '{command: $command}' \
 func TestOfflineHarnessLoopWithMockProvider(t *testing.T) {
 	t.Parallel()
 
-	workspaceDir := copyTreeToTemp(t, mustWorkspaceDir())
+	workspaceDir := preparedWorkspaceForTests(t)
 	writeMockProvider(t, workspaceDir)
 
 	var stdout bytes.Buffer
@@ -115,34 +123,21 @@ func TestOfflineHarnessLoopWithMockProvider(t *testing.T) {
 	}
 }
 
-func TestUpdateHarnessScriptReproducesVendoredTree(t *testing.T) {
+func TestUpdateHarnessScriptStagesPreparedWorkspace(t *testing.T) {
 	t.Parallel()
 
 	exampleDir := copyTreeToTemp(t, filepath.Dir(mustWorkspaceDir()))
 	upstreamDir := filepath.Join(t.TempDir(), "upstream")
-	if err := os.MkdirAll(filepath.Join(upstreamDir, "bin"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(bin) error = %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(upstreamDir, "plugins"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(plugins) error = %v", err)
-	}
-
-	sourceWorkspace := mustWorkspaceDir()
-	for _, path := range []string{
-		"bin",
-		"plugins",
-	} {
-		if err := copyTree(filepath.Join(sourceWorkspace, path), filepath.Join(upstreamDir, path)); err != nil {
-			t.Fatalf("copyTree(%s) error = %v", path, err)
-		}
-	}
-	licenseData, err := os.ReadFile(filepath.Join(sourceWorkspace, "LICENSE.harness"))
-	if err != nil {
-		t.Fatalf("ReadFile(LICENSE.harness) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(upstreamDir, "LICENSE"), licenseData, 0o644); err != nil {
-		t.Fatalf("WriteFile(LICENSE) error = %v", err)
-	}
+	writeFile(t, filepath.Join(upstreamDir, "bin", "harness"), "#!/usr/bin/env bash\necho harness\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "bin", "hs"), "#!/usr/bin/env bash\necho hs\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "auth", "commands", "login"), "auth-login\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "core", "tools", "bash"), "core-bash\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "openai", "providers", "openai"), "openai-provider\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "anthropic", "providers", "anthropic"), "anthropic-provider\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "chatgpt", "providers", "chatgpt"), "chatgpt-provider\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "skills", "tools", "skills"), "skills-tool\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "plugins", "subagents", "tools", "subagents"), "subagents-tool\n", 0o755)
+	writeFile(t, filepath.Join(upstreamDir, "LICENSE"), "upstream license\n", 0o644)
 
 	runGitCommand(t, upstreamDir, "init")
 	runGitCommand(t, upstreamDir, "config", "user.name", "Test User")
@@ -151,40 +146,42 @@ func TestUpdateHarnessScriptReproducesVendoredTree(t *testing.T) {
 	runGitCommand(t, upstreamDir, "commit", "-m", "initial")
 	ref := strings.TrimSpace(runGitCommand(t, upstreamDir, "rev-parse", "HEAD"))
 
-	targetFile := filepath.Join(exampleDir, "workspace", "bin", "harness")
-	if err := os.Remove(targetFile); err != nil {
-		t.Fatalf("Remove(%q) error = %v", targetFile, err)
-	}
-
-	cmd := osexec.CommandContext(t.Context(), filepath.Join(exampleDir, "update-harness.sh"), "--ref", ref)
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	cmd := osexec.CommandContext(
+		t.Context(),
+		filepath.Join(exampleDir, "update-harness.sh"),
+		"--ref", ref,
+		"--cache-dir", cacheDir,
+	)
 	cmd.Dir = exampleDir
 	cmd.Env = append(os.Environ(), "HARNESS_UPSTREAM_REPO="+upstreamDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("update-harness.sh error = %v\n%s", err, output)
 	}
-
-	upstreamCommitData, err := os.ReadFile(filepath.Join(exampleDir, "UPSTREAM_COMMIT"))
-	if err != nil {
-		t.Fatalf("ReadFile(UPSTREAM_COMMIT) error = %v", err)
-	}
-	if got := strings.TrimSpace(string(upstreamCommitData)); got != ref {
-		t.Fatalf("UPSTREAM_COMMIT = %q, want %q", got, ref)
+	workspaceDir := strings.TrimSpace(string(output))
+	if workspaceDir == "" {
+		t.Fatal("update-harness.sh returned an empty workspace path")
 	}
 
 	for _, relative := range []string{
-		"workspace/bin/harness",
-		"workspace/plugins/core/tools/bash",
-		"workspace/plugins/openai/providers/openai",
-		"workspace/LICENSE.harness",
+		"bin/harness",
+		"bin/hs",
+		"plugins/core/tools/bash",
+		"plugins/openai/providers/openai",
+		"plugins/anthropic/providers/anthropic",
+		"plugins/chatgpt/providers/chatgpt",
+		"plugins/skills/tools/skills",
+		"plugins/subagents/tools/subagents",
+		"LICENSE.harness",
 	} {
-		got, err := os.ReadFile(filepath.Join(exampleDir, relative))
+		got, err := os.ReadFile(filepath.Join(workspaceDir, relative))
 		if err != nil {
 			t.Fatalf("ReadFile(%q) error = %v", relative, err)
 		}
 
-		wantPath := filepath.Join(upstreamDir, strings.TrimPrefix(relative, "workspace/"))
-		if relative == "workspace/LICENSE.harness" {
+		wantPath := filepath.Join(upstreamDir, relative)
+		if relative == "LICENSE.harness" {
 			wantPath = filepath.Join(upstreamDir, "LICENSE")
 		}
 		want, err := os.ReadFile(wantPath)
@@ -195,6 +192,66 @@ func TestUpdateHarnessScriptReproducesVendoredTree(t *testing.T) {
 			t.Fatalf("%s did not match refreshed upstream contents", relative)
 		}
 	}
+
+	if info, err := os.Stat(filepath.Join(workspaceDir, "bin", "harness")); err != nil {
+		t.Fatalf("Stat(bin/harness) error = %v", err)
+	} else if info.Mode().Perm() != 0o755 {
+		t.Fatalf("bin/harness mode = %v, want 0755", info.Mode().Perm())
+	}
+
+	for _, relative := range []string{
+		".harness/tools/bash",
+		".harness/hooks.d/assemble/10-messages",
+		"AGENTS.md",
+	} {
+		got, err := os.ReadFile(filepath.Join(workspaceDir, relative))
+		if err != nil {
+			t.Fatalf("ReadFile(%q) error = %v", relative, err)
+		}
+		want, err := os.ReadFile(filepath.Join(exampleDir, "workspace", relative))
+		if err != nil {
+			t.Fatalf("ReadFile(%q) error = %v", relative, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("%s did not match committed overlay contents", relative)
+		}
+	}
+}
+
+func preparedWorkspaceForTests(t *testing.T) string {
+	t.Helper()
+
+	preparedWorkspaceOnce.Do(func() {
+		cacheDir, err := os.MkdirTemp("", "harness-overlay-cache-")
+		if err != nil {
+			preparedWorkspaceErr = fmt.Errorf("create cache dir: %w", err)
+			return
+		}
+
+		cmd := osexec.CommandContext(
+			context.Background(),
+			filepath.Join(mustExampleDir(), "update-harness.sh"),
+			"--cache-dir", cacheDir,
+		)
+		cmd.Dir = mustExampleDir()
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			preparedWorkspaceErr = fmt.Errorf("prepare workspace: %w\n%s", err, output)
+			return
+		}
+
+		preparedWorkspaceBase = strings.TrimSpace(string(output))
+		if preparedWorkspaceBase == "" {
+			preparedWorkspaceErr = fmt.Errorf("prepare workspace returned an empty path")
+			return
+		}
+	})
+
+	if preparedWorkspaceErr != nil {
+		t.Fatalf("preparedWorkspaceForTests() error = %v", preparedWorkspaceErr)
+	}
+
+	return copyTreeToTemp(t, preparedWorkspaceBase)
 }
 
 func copyTreeToTemp(t *testing.T, src string) string {
@@ -375,6 +432,17 @@ jq -n --arg output "${final_output}" '{
 	providerPath := filepath.Join(mockDir, "providers", "mock")
 	if err := os.WriteFile(providerPath, []byte(providerScript), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", providerPath, err)
+	}
+}
+
+func writeFile(t *testing.T, path, contents string, perm os.FileMode) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(contents), perm); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
 }
 
