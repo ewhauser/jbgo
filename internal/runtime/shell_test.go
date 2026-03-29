@@ -187,6 +187,60 @@ func TestPipelineRegressionLastpipeDoesNotUnwrapUserSubshellTail(t *testing.T) {
 	}
 }
 
+func TestPipelineRegressionNestedShellCommandsInheritHereDocFDs(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	writeSessionFile(t, session, "/bin/read_from_fd.sh", []byte("#!/bin/bash\n\nfor fd in \"$@\"; do\n  printf '%s: ' \"$fd\"\n  if ! eval \"cat <&$fd\"; then\n    printf 'FATAL: Error reading from fd %s\\n' \"$fd\" >&2\n    exit 1\n  fi\ndone\n"))
+	if err := session.FileSystem().Chmod(context.Background(), "/bin/read_from_fd.sh", 0o755); err != nil {
+		t.Fatalf("Chmod(read_from_fd.sh) error = %v", err)
+	}
+
+	result := mustExecSession(t, session, ""+
+		"read_from_fd.sh 3 3<<EOF3 | read_from_fd.sh 0 5 5<<EOF5\n"+
+		"fd3\n"+
+		"EOF3\n"+
+		"fd5\n"+
+		"EOF5\n"+
+		"echo ok\n")
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "0: 3: fd3\n5: fd5\nok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
+	}
+	if got := result.Stderr; got != "" {
+		t.Fatalf("Stderr = %q, want empty", got)
+	}
+}
+
+func TestErrTrapRegressionCommandStringLeadingBlankUsesSpecLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, &Config{})
+	if err := session.FileSystem().MkdirAll(context.Background(), "/dir", 0o755); err != nil {
+		t.Fatalf("MkdirAll(/dir) error = %v", err)
+	}
+
+	result, err := session.Exec(context.Background(), &ExecutionRequest{
+		Interpreter:     "bash",
+		PassthroughArgs: []string{"-c"},
+		Script:          "\ntrap 'echo line=$LINENO' ERR\n\nfalse\n\n{ false \n  true\n} > /dir\necho ok\n",
+	})
+	if err != nil {
+		t.Fatalf("Exec() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+	if got, want := result.Stdout, "line=3\nline=7\nok\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q; stderr=%q", got, want, result.Stderr)
+	}
+	if got, want := result.Stderr, "/dir: Is a directory\n"; got != want {
+		t.Fatalf("Stderr = %q, want %q", got, want)
+	}
+}
+
 func TestRedirectRegressionForLoopCommandSubstitutionKeepsRedirectedStdout(t *testing.T) {
 	t.Parallel()
 	session := newSession(t, &Config{})

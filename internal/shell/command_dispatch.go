@@ -31,8 +31,10 @@ type commandExecuteRequest struct {
 	SyncEnv       func(context.Context, map[string]string, map[string]string) error
 }
 
-func (m *core) newRunner(exec *Execution, budget *executionBudget) (*interp.Runner, error) {
-	return interp.NewRunner(m.runnerConfig(exec, budget))
+func (m *core) newRunner(ctx context.Context, exec *Execution, budget *executionBudget) (*interp.Runner, error) {
+	cfg := m.runnerConfig(exec, budget)
+	interp.InheritNestedShellState(ctx, cfg)
+	return interp.NewRunner(cfg)
 }
 
 func (m *core) executeCommand(ctx context.Context, exec *Execution, req *commandExecuteRequest) (map[string]string, error) {

@@ -646,7 +646,7 @@ func (r *Runner) completionBuiltin(ctx context.Context, name string, args []stri
 
 func (r *Runner) loopControlBuiltin(name string, args []string) (exit exitStatus) {
 	if r.loopDepth == 0 {
-		return r.builtinFailf(0, "%s: only meaningful in a `for', `while', or `until' loop\n", name)
+		return r.builtinFailf(0, "%s", r.controlFlowBuiltinErrorf("%s: only meaningful in a `for', `while', or `until' loop\n", name))
 	}
 	enclosing := &r.breakEnclosing
 	if name == "continue" {
@@ -941,7 +941,7 @@ func (r *Runner) execBuiltin(ctx context.Context, pos syntax.Pos, args []string)
 
 func (r *Runner) returnBuiltin(args []string) (exit exitStatus) {
 	if !r.inFunc && !r.inSource {
-		return r.builtinFailf(2, "return: can only `return' from a function or sourced script\n")
+		return r.builtinFailf(2, "%s", r.controlFlowBuiltinErrorf("return: can only `return' from a function or sourced script\n"))
 	}
 	switch len(args) {
 	case 0:
@@ -1067,9 +1067,7 @@ func (r *Runner) getoptsBuiltin(args []string) (exit exitStatus) {
 
 	r.delVar("OPTARG")
 	if result.kind == getoptsResultOption {
-		if result.optarg != "" {
-			r.setVarString("OPTARG", result.optarg)
-		}
+		r.setVarString("OPTARG", result.optarg)
 	} else if !diagnostics && !result.done() && result.optarg != "" {
 		r.setVarString("OPTARG", result.optarg)
 	}
@@ -1100,6 +1098,16 @@ func (r *Runner) getoptsDiagPrefix() string {
 		return path.Clean(file) + ": "
 	}
 	return ""
+}
+
+func (r *Runner) controlFlowBuiltinErrorf(format string, args ...any) string {
+	msg := fmt.Sprintf(format, args...)
+	file := r.currentCallFile()
+	line := r.currentVisibleLine(0)
+	if file == "" || file == "stdin" || line == 0 || strings.HasSuffix(file, " trap") {
+		return msg
+	}
+	return fmt.Sprintf("%s: line %d: %s", path.Clean(file), line, msg)
 }
 
 func (r *Runner) shoptBuiltin(args []string) (exit exitStatus) {

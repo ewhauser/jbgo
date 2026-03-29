@@ -17,6 +17,12 @@ type readDeadliner interface {
 	SetReadDeadline(time.Time) error
 }
 
+type shellFDReadState struct {
+	mu         sync.Mutex
+	buffered   bool
+	bufferByte byte
+}
+
 // shellFD models one shell-visible file descriptor.
 //
 // Multiple descriptor numbers may point at the same shellFD so duplicated
@@ -28,8 +34,7 @@ type shellFD struct {
 	deadline readDeadliner
 	owned    bool
 
-	buffered   bool
-	bufferByte byte
+	readState  *shellFDReadState
 	closed     bool
 	writeErr   error
 	writeErrMu sync.Mutex
@@ -105,7 +110,11 @@ func newShellInputFDWithOwnership(reader io.Reader, owned bool) *shellFD {
 	if reader == nil {
 		return &shellFD{}
 	}
-	fd := &shellFD{reader: reader, owned: owned}
+	fd := &shellFD{
+		reader:    reader,
+		owned:     owned,
+		readState: &shellFDReadState{},
+	}
 	if closer, ok := reader.(io.Closer); ok {
 		fd.closer = closer
 	}
@@ -123,6 +132,7 @@ func newShellReadWriteFD(file io.ReadWriteCloser, readable, writable bool) *shel
 	fd := &shellFD{closer: file, owned: true}
 	if readable {
 		fd.reader = file
+		fd.readState = &shellFDReadState{}
 	}
 	if writable {
 		fd.writer = file
@@ -140,14 +150,18 @@ func (fd *shellFD) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if fd.buffered {
-		p[0] = fd.bufferByte
-		fd.buffered = false
-		if len(p) == 1 {
-			return 1, nil
+	if fd.readState != nil {
+		fd.readState.mu.Lock()
+		defer fd.readState.mu.Unlock()
+		if fd.readState.buffered {
+			p[0] = fd.readState.bufferByte
+			fd.readState.buffered = false
+			if len(p) == 1 {
+				return 1, nil
+			}
+			n, err := fd.reader.Read(p[1:])
+			return n + 1, err
 		}
-		n, err := fd.reader.Read(p[1:])
-		return n + 1, err
 	}
 	return fd.reader.Read(p)
 }
@@ -183,20 +197,42 @@ func (fd *shellFD) PeekByte() (byte, error) {
 	if fd == nil || fd.reader == nil {
 		return 0, io.EOF
 	}
-	if fd.buffered {
-		return fd.bufferByte, nil
+	if fd.readState != nil {
+		fd.readState.mu.Lock()
+		defer fd.readState.mu.Unlock()
+		if fd.readState.buffered {
+			return fd.readState.bufferByte, nil
+		}
+		var buf [1]byte
+		n, err := fd.reader.Read(buf[:])
+		if n > 0 {
+			fd.readState.bufferByte = buf[0]
+			fd.readState.buffered = true
+			return buf[0], nil
+		}
+		if err == nil {
+			err = io.EOF
+		}
+		return 0, err
 	}
 	var buf [1]byte
 	n, err := fd.reader.Read(buf[:])
 	if n > 0 {
-		fd.bufferByte = buf[0]
-		fd.buffered = true
 		return buf[0], nil
 	}
 	if err == nil {
 		err = io.EOF
 	}
 	return 0, err
+}
+
+func (fd *shellFD) hasBufferedByte() bool {
+	if fd == nil || fd.readState == nil {
+		return false
+	}
+	fd.readState.mu.Lock()
+	defer fd.readState.mu.Unlock()
+	return fd.readState.buffered
 }
 
 func (fd *shellFD) UnderlyingReader() io.Reader {
@@ -221,17 +257,22 @@ func (fd *shellFD) Seek(offset int64, whence int) (int64, error) {
 		Seek(offset int64, whence int) (int64, error)
 	}
 	seek := func(target seeker) (int64, error) {
-		adjusted := offset
-		if fd.buffered && whence == io.SeekCurrent {
-			// PeekByte has already advanced the underlying descriptor by one byte.
-			adjusted--
+		if fd.readState != nil {
+			fd.readState.mu.Lock()
+			defer fd.readState.mu.Unlock()
+			adjusted := offset
+			if fd.readState.buffered && whence == io.SeekCurrent {
+				// PeekByte has already advanced the underlying descriptor by one byte.
+				adjusted--
+			}
+			position, err := target.Seek(adjusted, whence)
+			if err != nil {
+				return position, err
+			}
+			fd.readState.buffered = false
+			return position, nil
 		}
-		position, err := target.Seek(adjusted, whence)
-		if err != nil {
-			return position, err
-		}
-		fd.buffered = false
-		return position, nil
+		return target.Seek(offset, whence)
 	}
 	if seeker, ok := fd.reader.(seeker); ok {
 		return seek(seeker)
@@ -270,6 +311,38 @@ func cloneFDTable(src map[int]*shellFD) map[int]*shellFD {
 	dst := make(map[int]*shellFD, len(src))
 	for n, fd := range src {
 		dst[n] = fd
+	}
+	return dst
+}
+
+func forkFDTableForExec(src map[int]*shellFD) map[int]*shellFD {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[int]*shellFD, len(src))
+	clones := make(map[*shellFD]*shellFD, len(src))
+	for n, fd := range src {
+		if fd == nil {
+			dst[n] = nil
+			continue
+		}
+		if clone, ok := clones[fd]; ok {
+			dst[n] = clone
+			continue
+		}
+		clone := &shellFD{
+			reader:     fd.reader,
+			writer:     fd.writer,
+			closer:     fd.closer,
+			deadline:   fd.deadline,
+			owned:      false,
+			readState:  fd.readState,
+			closed:     false,
+			writeErr:   nil,
+			writeErrMu: sync.Mutex{},
+		}
+		clones[fd] = clone
+		dst[n] = clone
 	}
 	return dst
 }

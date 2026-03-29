@@ -136,6 +136,53 @@ func TestPIPESTATUSStartsEmpty(t *testing.T) {
 	}
 }
 
+func TestPIPESTATUSStaysEmptyAfterLeadingCompoundStatement(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runSpecialVarScript(t, nil, ""+
+		"case bash in\n"+
+		"  dash|zsh) exit ;;\n"+
+		"esac\n"+
+		"echo pipestatus ${PIPESTATUS[@]}\n")
+	if err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", err, stderr)
+	}
+	if got, want := stdout, "pipestatus\n"; got != want {
+		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
+	}
+	if got := stderr; got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestPIPESTATUSResetsAfterCompoundStatementWithoutInnerCommand(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runSpecialVarScript(t, nil, ""+
+		"false | true\n"+
+		"case bash in\n"+
+		"  dash|zsh) exit ;;\n"+
+		"esac\n"+
+		"echo case ${PIPESTATUS[@]}\n"+
+		"false | true\n"+
+		"for x in; do\n"+
+		"  :\n"+
+		"done\n"+
+		"echo for ${PIPESTATUS[@]}\n"+
+		"false | true\n"+
+		"f() { :; }\n"+
+		"echo func ${PIPESTATUS[@]}\n")
+	if err != nil {
+		t.Fatalf("Run() error = %v; stderr=%q", err, stderr)
+	}
+	if got, want := stdout, "case 0\nfor 0\nfunc 0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q; stderr=%q", got, want, stderr)
+	}
+	if got := stderr; got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestPIPESTATUSResetsAfterRedirectionOnlyStatement(t *testing.T) {
 	t.Parallel()
 

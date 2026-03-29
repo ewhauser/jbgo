@@ -59,7 +59,7 @@ echo status=$?
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "return: can only `return' from a function or sourced script\n"
+	const wantStderr = "varref-test.sh: line 2: return: can only `return' from a function or sourced script\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}

@@ -190,7 +190,7 @@ func (r *Runner) runChunked(ctx context.Context, reader io.Reader, name, topLeve
 				return finish(err)
 			}
 		}
-		if r.Exited() || readErr == io.EOF {
+		if r.exit.returning || r.Exited() || readErr == io.EOF {
 			break
 		}
 	}

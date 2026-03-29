@@ -1117,6 +1117,10 @@ func (r *Runner) setVarString(name, value string) {
 }
 
 func (r *Runner) setOPTIND(value string) {
+	if r.writeEnv == nil {
+		r.optState.reset()
+		return
+	}
 	vr := expand.Variable{Set: true, Kind: expand.String, Str: value}
 	prev := r.lookupVar("OPTIND")
 	if prev.Exported || r.opts[optAllExport] {

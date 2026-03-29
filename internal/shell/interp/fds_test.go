@@ -97,7 +97,7 @@ func TestShellFDSeekUsesLogicalCurrentOffsetAfterPeek(t *testing.T) {
 	if got, want := position, int64(1); got != want {
 		t.Fatalf("Seek() position = %d, want %d", got, want)
 	}
-	if fd.buffered {
+	if fd.hasBufferedByte() {
 		t.Fatalf("buffered = true, want false")
 	}
 
@@ -125,6 +125,41 @@ func TestSetStandardFDsDoesNotCloseOwnedDescriptorWhenRewiringStdout(t *testing.
 
 	if got := closer.closes; got != 0 {
 		t.Fatalf("closes = %d, want 0", got)
+	}
+}
+
+func TestForkFDTableForExecSharesBufferedReadState(t *testing.T) {
+	t.Parallel()
+
+	parent := newShellInputFD(bytes.NewReader([]byte("ab")))
+
+	peeked, err := parent.PeekByte()
+	if err != nil {
+		t.Fatalf("PeekByte() error = %v", err)
+	}
+	if got, want := peeked, byte('a'); got != want {
+		t.Fatalf("PeekByte() = %q, want %q", got, want)
+	}
+
+	forked := forkFDTableForExec(map[int]*shellFD{3: parent})[3]
+
+	got, err := forked.ReadByte()
+	if err != nil {
+		t.Fatalf("forked.ReadByte() error = %v", err)
+	}
+	if want := byte('a'); got != want {
+		t.Fatalf("forked.ReadByte() = %q, want %q", got, want)
+	}
+	if parent.hasBufferedByte() {
+		t.Fatalf("parent still has buffered byte after forked read")
+	}
+
+	got, err = parent.ReadByte()
+	if err != nil {
+		t.Fatalf("parent.ReadByte() error = %v", err)
+	}
+	if want := byte('b'); got != want {
+		t.Fatalf("parent.ReadByte() = %q, want %q", got, want)
 	}
 }
 

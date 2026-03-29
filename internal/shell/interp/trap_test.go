@@ -492,7 +492,7 @@ func TestErrTrapCompoundWrappersOnlyTrapInnerFailures(t *testing.T) {
 	}
 }
 
-func TestErrTrapRedirectFailureUsesPreviousStmtLine(t *testing.T) {
+func TestErrTrapRedirectFailureUsesRedirectLine(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -509,7 +509,7 @@ func TestErrTrapRedirectFailureUsesPreviousStmtLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
 	}
-	const wantStdout = "line=2\nline=2\nok\n"
+	const wantStdout = "line=2\nline=5\nok\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
@@ -718,7 +718,7 @@ func TestSourceReturnTrapRunsWithoutFunctrace(t *testing.T) {
 
 	dir := t.TempDir()
 	helperPath := filepath.Join(dir, "return-helper.sh")
-	if err := os.WriteFile(helperPath, []byte("echo return-helper.sh\nreturn 42\n"), 0o644); err != nil {
+	if err := os.WriteFile(helperPath, []byte("echo return-helper.sh\nreturn 42\necho should not see\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", helperPath, err)
 	}
 

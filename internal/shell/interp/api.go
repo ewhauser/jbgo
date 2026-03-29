@@ -246,6 +246,7 @@ type Runner struct {
 	lastExpandExit  exitStatus // used to surface exit statuses while expanding fields
 	lastStmtLine    uint
 	currentStmtLine uint
+	redirectErrLine uint
 	stmtDepth       int
 	skipStmtLine    uint
 	commandAborted  bool
@@ -564,12 +565,13 @@ type RunnerConfig struct {
 	// VisibleDir is the trusted logical cwd to seed $PWD at shell startup.
 	VisibleDir string
 
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-	Params []string
-	Arg0   string
-	Now    func() time.Time
+	Stdin        io.Reader
+	Stdout       io.Writer
+	Stderr       io.Writer
+	inheritedFDs map[int]*shellFD
+	Params       []string
+	Arg0         string
+	Now          func() time.Time
 	// ShellStartTime is the shell-visible wall clock used for printf %T -2.
 	ShellStartTime time.Time
 
@@ -715,6 +717,9 @@ func NewRunner(cfg *RunnerConfig) (*Runner, error) {
 	r.commandString = cfg.CommandString
 	r.commandStringValue = cfg.CommandStringValue
 	r.Arg0 = cfg.Arg0
+	if cfg.inheritedFDs != nil {
+		r.fds = cloneFDTable(cfg.inheritedFDs)
+	}
 	if err := r.setStdIO(cfg.Stdin, cfg.Stdout, cfg.Stderr); err != nil {
 		return nil, err
 	}
@@ -1177,7 +1182,8 @@ func (r *Runner) Reset() {
 		r.origStdin = r.stdin
 		r.origStdout = r.stdout
 		r.origStderr = r.stderr
-		r.origFDs = cloneFDTable(initialFDTable(r.stdin, r.stdout, r.stderr))
+		r.ensureFDTable()
+		r.origFDs = cloneFDTable(r.fds)
 		r.origStart = time.Now()
 		if r.shellStartTime.IsZero() {
 			r.shellStartTime = r.now()

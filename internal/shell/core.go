@@ -171,7 +171,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	defer cleanupProcSubst()
 
 	var err error
-	runner, err = m.newRunner(&effectiveExec, budget)
+	runner, err = m.newRunner(ctx, &effectiveExec, budget)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func (m *core) Run(ctx context.Context, exec *Execution) (result *RunResult, run
 	}
 	runErr = runner.RunReaderWithMetadata(
 		ctx,
-		strings.NewReader(exec.Script),
+		strings.NewReader(executionRuntimeScript(&effectiveExec)),
 		executionSourceName(exec),
 		effectiveExec.ScriptPath,
 		func(file *syntax.File) (map[*syntax.Stmt]*syntax.Stmt, error) {
@@ -416,6 +416,17 @@ func executionArg0(exec *Execution) string {
 		return exec.Name
 	}
 	return "/bin/sh"
+}
+
+func executionRuntimeScript(exec *Execution) string {
+	if exec == nil {
+		return ""
+	}
+	script := exec.Script
+	if executionUsesCommandString(exec) && strings.HasPrefix(script, "\n") {
+		return script[1:]
+	}
+	return script
 }
 
 func executionUsesCommandString(exec *Execution) bool {

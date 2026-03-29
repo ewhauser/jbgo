@@ -52,7 +52,7 @@ func (m *core) Interact(ctx context.Context, exec *Execution) (*InteractiveResul
 	defer cleanupProcSubst()
 
 	budget := newExecutionBudget(exec.Policy)
-	runner, err := m.newRunner(&runnerExec, budget)
+	runner, err := m.newRunner(ctx, &runnerExec, budget)
 	if err != nil {
 		return nil, err
 	}

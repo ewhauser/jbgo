@@ -51,11 +51,14 @@ echo OPTARG=$OPTARG
 name=a
 OPTARG=
 ## END
+## status: 0
+## stderr-json: ""
 
 ## BUG bash/mksh status: 1
 ## BUG bash/mksh STDOUT:
 name=a
 ## END
+## BUG bash/mksh stderr-json: ""
 
 #### Basic getopts invocation
 set -- -h -c foo x y z

@@ -1,12 +1,14 @@
 package interp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -162,6 +164,38 @@ func TestSourceSyntaxErrorReturnsStatusTwo(t *testing.T) {
 	wantStderr := fmt.Sprintf("%s: line 1: syntax error near unexpected token `newline'\n%s: line 1: `echo >'\n", scriptPath, scriptPath)
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	}
+}
+
+func TestTopLevelControlFlowDiagnosticsIncludeFileAndLine(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "top-level-control-flow.sh")
+	script := "break\ncontinue\nreturn\n"
+
+	var stdout, stderr bytes.Buffer
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:    filepath.Dir(scriptPath),
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+
+	err = runner.runShellReader(context.Background(), strings.NewReader(script), scriptPath, nil)
+	if status, ok := err.(ExitStatus); !ok || status != 2 {
+		t.Fatalf("runShellReader() error = %v, want exit status 2", err)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	wantStderr := "" +
+		fmt.Sprintf("%s: line 1: break: only meaningful in a `for', `while', or `until' loop\n", scriptPath) +
+		fmt.Sprintf("%s: line 2: continue: only meaningful in a `for', `while', or `until' loop\n", scriptPath) +
+		fmt.Sprintf("%s: line 3: return: can only `return' from a function or sourced script\n", scriptPath)
+	if got := stderr.String(); got != wantStderr {
+		t.Fatalf("stderr = %q, want %q", got, wantStderr)
 	}
 }
 

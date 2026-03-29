@@ -25,6 +25,18 @@ func LookupHandlerContext(ctx context.Context) (*HandlerContext, bool) {
 	return hc, ok
 }
 
+func InheritNestedShellState(ctx context.Context, cfg *RunnerConfig) {
+	if cfg == nil {
+		return
+	}
+	hc, ok := LookupHandlerContext(ctx)
+	if !ok || hc == nil || hc.runner == nil {
+		return
+	}
+	hc.runner.ensureFDTable()
+	cfg.inheritedFDs = forkFDTableForExec(hc.runner.fds)
+}
+
 func mustHandlerCtx(ctx context.Context) *HandlerContext {
 	hc, ok := LookupHandlerContext(ctx)
 	if !ok {
