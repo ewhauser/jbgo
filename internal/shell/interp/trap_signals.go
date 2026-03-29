@@ -185,14 +185,14 @@ func ListSignals() []SignalInfo {
 	return out
 }
 
-func trapQuotedCommand(command string) string {
+func trapQuotedCommand(lang syntax.LangVariant, command string) string {
 	if command == "" {
 		return "''"
 	}
 	if trapCanUseSingleQuotes(command) {
 		return "'" + command + "'"
 	}
-	return bashDeclPlainValue(syntax.LangBash, command)
+	return bashDeclPlainValue(normalizeLangVariant(lang), command)
 }
 
 func trapCanUseSingleQuotes(command string) bool {

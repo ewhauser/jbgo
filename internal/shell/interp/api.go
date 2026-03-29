@@ -1330,7 +1330,7 @@ func (r *Runner) Reset() {
 		ReadOnly: true,
 		Str:      strconv.Itoa(r.euid),
 	})
-	if r.commandStringValue != "" {
+	if r.commandStringValue != "" && r.shellProfile().ExposesBashSpecialVar("BASH_EXECUTION_STRING") {
 		r.setVar("BASH_EXECUTION_STRING", expand.Variable{
 			Set:  true,
 			Kind: expand.String,
@@ -1371,10 +1371,12 @@ func (r *Runner) Reset() {
 
 	// Similarly, when a parent shell exports BASHOPTS, apply the
 	// inherited shopt options so the child mirrors the parent's state.
-	if bashOpts := r.writeEnv.Get("BASHOPTS"); bashOpts.IsSet() && bashOpts.Exported {
-		for _, optName := range strings.Split(bashOpts.String(), ":") {
-			if opt, _ := r.bashOptByName(optName); opt != nil {
-				*opt = true
+	if r.shellProfile().ExposesBashSpecialVar("BASHOPTS") {
+		if bashOpts := r.writeEnv.Get("BASHOPTS"); bashOpts.IsSet() && bashOpts.Exported {
+			for _, optName := range strings.Split(bashOpts.String(), ":") {
+				if opt, _ := r.bashOptByName(optName); opt != nil {
+					*opt = true
+				}
 			}
 		}
 	}

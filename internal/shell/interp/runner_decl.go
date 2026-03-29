@@ -804,6 +804,9 @@ func (d *declCommand) listedVars(currentOnly bool) map[string]expand.Variable {
 }
 
 func (d *declCommand) matchesVarFilter(name string, vr expand.Variable) bool {
+	if d.runner.hiddenBashSpecialVar(name) {
+		return false
+	}
 	if !vr.Declared() {
 		return false
 	}
@@ -1029,10 +1032,7 @@ func bashDeclPlainValue(lang syntax.LangVariant, value string) string {
 	if needsTraceANSIQuote(value) {
 		return traceANSIQuote(value, true)
 	}
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	quoted, err := syntax.Quote(value, lang)
+	quoted, err := syntax.Quote(value, normalizeLangVariant(lang))
 	if err != nil {
 		return bashDeclDoubleQuote(value)
 	}
@@ -1091,18 +1091,12 @@ func parseDeclOperandField(lang syntax.LangVariant, variant, field string) (synt
 			}
 		}
 	}
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	p := syntax.NewParser(syntax.Variant(lang))
+	p := syntax.NewParser(syntax.Variant(normalizeLangVariant(lang)))
 	return p.DeclOperandField(strings.NewReader(field))
 }
 
 func splitDeclDynamicField(lang syntax.LangVariant, field string) []string {
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	p := syntax.NewParser(syntax.Variant(lang))
+	p := syntax.NewParser(syntax.Variant(normalizeLangVariant(lang)))
 	var words []string
 	err := p.Words(strings.NewReader(field), func(word *syntax.Word) bool {
 		var buf bytes.Buffer

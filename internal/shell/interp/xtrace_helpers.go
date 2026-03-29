@@ -20,10 +20,7 @@ func printSyntaxNode(node syntax.Node) string {
 }
 
 func quoteTraceValue(lang syntax.LangVariant, value string) string {
-	if lang == 0 || lang == syntax.LangAuto {
-		lang = syntax.LangBash
-	}
-	quoted, err := syntax.Quote(value, lang)
+	quoted, err := syntax.Quote(value, normalizeLangVariant(lang))
 	if err != nil {
 		panic(err)
 	}

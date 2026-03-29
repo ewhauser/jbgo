@@ -892,14 +892,16 @@ func (r *Runner) handlerCtx(ctx context.Context, kind handlerKind, pos syntax.Po
 			})
 		}
 		// Same for BASHOPTS: propagate current shopt state to children.
-		if bashOpts := r.writeEnv.Get("BASHOPTS"); bashOpts.Exported {
-			overlay.Set("BASHOPTS", expand.Variable{
-				Set:      true,
-				Kind:     expand.String,
-				Str:      r.bashOptsValue(),
-				Exported: true,
-				ReadOnly: true,
-			})
+		if r.shellProfile().ExposesBashSpecialVar("BASHOPTS") {
+			if bashOpts := r.writeEnv.Get("BASHOPTS"); bashOpts.Exported {
+				overlay.Set("BASHOPTS", expand.Variable{
+					Set:      true,
+					Kind:     expand.String,
+					Str:      r.bashOptsValue(),
+					Exported: true,
+					ReadOnly: true,
+				})
+			}
 		}
 	}
 	hc := HandlerContext{

@@ -423,6 +423,10 @@ func bashQuoteString(s string) string {
 }
 
 func (r *Runner) clearBASH_REMATCH() {
+	if !r.shellProfile().ExposesBashSpecialVar("BASH_REMATCH") {
+		r.delVar("BASH_REMATCH")
+		return
+	}
 	r.setVar("BASH_REMATCH", expand.Variable{
 		Set:  true,
 		Kind: expand.Indexed,
@@ -470,6 +474,9 @@ func (r *Runner) regexMatch(subject, expr string) bool {
 	if m == nil {
 		r.clearBASH_REMATCH()
 		return false
+	}
+	if !r.shellProfile().ExposesBashSpecialVar("BASH_REMATCH") {
+		return true
 	}
 	vr := expand.Variable{
 		Set:  true,

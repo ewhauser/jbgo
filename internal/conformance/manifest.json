@@ -557,16 +557,7 @@
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/regex.test.sh::unquoted [a  b] as pattern, [a  b|c]": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
+            "darwin"
           ]
         },
         "oils/regex.test.sh::Unquoted { is a regex parse error": {

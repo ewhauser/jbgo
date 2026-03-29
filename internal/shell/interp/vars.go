@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ewhauser/gbash/host"
+	"github.com/ewhauser/gbash/internal/shellvariantprofile"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
 )
@@ -904,12 +905,18 @@ func (r *Runner) printSetVars() {
 }
 
 func (r *Runner) printSetVarVisible(name string, vr expand.Variable) bool {
+	if r.hiddenBashSpecialVar(name) {
+		return false
+	}
 	return vr.Declared() && vr.IsSet()
 }
 
 func (r *Runner) setBuiltinSpecialVar(name string) (expand.Variable, bool) {
 	switch name {
 	case "BASH_LINENO":
+		if !r.shellProfile().ExposesBashSpecialVar(name) {
+			return expand.Variable{}, false
+		}
 		vr := r.lookupVar(name)
 		if vr.IsSet() {
 			return vr, true
@@ -924,6 +931,7 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	if name == "" {
 		panic("variable name must not be empty")
 	}
+	profile := r.shellProfile()
 	switch name {
 	case "HOSTNAME", "OSTYPE":
 		if r.writeEnv != nil {
@@ -977,7 +985,9 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 	case "$":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.pid)
 	case "BASHPID":
-		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.bashPID)
+		if profile.ExposesBashSpecialVar(name) {
+			vr.Kind, vr.Str = expand.String, strconv.Itoa(r.bashPID)
+		}
 	case "PPID":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(r.ppid)
 		vr.ReadOnly = true
@@ -1013,29 +1023,42 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		vr.Kind, vr.Str = expand.String, r.shellOptsValue()
 		vr.ReadOnly = true
 	case "BASHOPTS":
-		vr.Kind, vr.Str = expand.String, r.bashOptsValue()
-		vr.ReadOnly = true
+		if profile.ExposesBashSpecialVar(name) {
+			vr.Kind, vr.Str = expand.String, r.bashOptsValue()
+			vr.ReadOnly = true
+		}
 	case "DIRSTACK":
 		vr.Kind, vr.List = expand.Indexed, r.dirStack
 	case "BASH_SOURCE":
-		if stack := r.bashSourceStack(); len(stack) > 0 {
-			vr.Kind, vr.List = expand.Indexed, stack
+		if profile.ExposesBashSpecialVar(name) {
+			if stack := r.bashSourceStack(); len(stack) > 0 {
+				vr.Kind, vr.List = expand.Indexed, stack
+			}
 		}
 	case "BASH_LINENO":
-		if stack := r.bashLineNoStack(); len(stack) > 0 {
-			vr.Kind, vr.List = expand.Indexed, stack
+		if profile.ExposesBashSpecialVar(name) {
+			if stack := r.bashLineNoStack(); len(stack) > 0 {
+				vr.Kind, vr.List = expand.Indexed, stack
+			}
 		}
 	case "FUNCNAME":
-		if stack := r.funcNameStack(); len(stack) > 0 {
-			vr.Kind, vr.List = expand.Indexed, stack
+		if profile.ExposesBashSpecialVar(name) {
+			if stack := r.funcNameStack(); len(stack) > 0 {
+				vr.Kind, vr.List = expand.Indexed, stack
+			}
 		}
 	case "BASH_VERSION":
-		vr.Kind, vr.Str = expand.String, "5.2.0(1)-gbash"
-		vr.ReadOnly = true
+		if profile.ExposesBashSpecialVar(name) {
+			vr.Kind, vr.Str = expand.String, "5.2.0(1)-gbash"
+			vr.ReadOnly = true
+		}
 	}
 	if vr.Kind != expand.Unknown {
 		vr.Set = true
 		return vr
+	}
+	if r.hiddenBashSpecialVar(name) {
+		return expand.Variable{}
 	}
 	if vr := r.writeEnv.Get(name); vr.Declared() {
 		return vr
@@ -1061,6 +1084,10 @@ func positionalParamIndex(name string) (int, bool) {
 
 func (r *Runner) envGet(name string) string {
 	return r.lookupVar(name).String()
+}
+
+func (r *Runner) hiddenBashSpecialVar(name string) bool {
+	return shellvariantprofile.IsBashSpecialVar(name) && !r.shellProfile().ExposesBashSpecialVar(name)
 }
 
 type varMutation struct {

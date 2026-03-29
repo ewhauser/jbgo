@@ -213,8 +213,8 @@ echo after
 		if got, want := stdout, "status=1\nafter\n"; got != want {
 			t.Fatalf("stdout = %q, want %q", got, want)
 		}
-		if stderr != "" {
-			t.Fatalf("stderr = %q, want empty", stderr)
+		if got, want := stderr, "shift: 3: shift count out of range\n"; got != want {
+			t.Fatalf("stderr = %q, want %q", got, want)
 		}
 	})
 }

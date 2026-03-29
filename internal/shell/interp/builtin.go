@@ -117,8 +117,15 @@ func (r *Runner) isBuiltinDisabled(name string) bool {
 	return r.disabledBuiltins[name]
 }
 
-func (r *Runner) isBuiltinActive(name string) bool {
+func (r *Runner) builtinVariantSupported(name string) bool {
 	if !IsBuiltin(name) {
+		return false
+	}
+	return r.shellProfile().SupportsBuiltin(name)
+}
+
+func (r *Runner) isBuiltinActive(name string) bool {
+	if !r.builtinVariantSupported(name) {
 		return false
 	}
 	return !r.isBuiltinDisabled(name)
@@ -420,8 +427,8 @@ func (r *Runner) shiftBuiltin(args []string) (exit exitStatus) {
 		return exit
 	}
 	if n < 0 || n > len(r.Params) {
-		if r.legacyBashCompat && r.posixMode() {
-			return r.builtinFailf(1, "shift: %s: shift count out of range\n", label)
+		if r.posixMode() {
+			r.errf("shift: %s: shift count out of range\n", label)
 		}
 		exit.code = 1
 		return exit
@@ -452,6 +459,9 @@ unsetOpts:
 
 	for _, arg := range args {
 		declaredVar := r.lookupVar(arg).Declared()
+		if !declaredVar && r.hiddenBashSpecialVar(arg) {
+			declaredVar = r.writeEnv.Get(arg).Declared()
+		}
 		if vars {
 			if ref, err := r.strictVarRef(arg); err == nil {
 				if ref.Index == nil && !declaredVar {
@@ -808,7 +818,7 @@ done:
 
 	exit := exitStatus{}
 	for _, name := range args {
-		if !IsBuiltin(name) {
+		if !r.builtinVariantSupported(name) {
 			r.errf("enable: %s: not a shell builtin\n", name)
 			exit.code = 1
 			continue
@@ -837,6 +847,9 @@ done:
 
 func (r *Runner) enablePrintBuiltins(disable, listAll, specialOnly bool) exitStatus {
 	for _, name := range runtimeBuiltinNames {
+		if !r.builtinVariantSupported(name) {
+			continue
+		}
 		if specialOnly && !IsPOSIXSpecialBuiltin(name) {
 			continue
 		}
