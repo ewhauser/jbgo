@@ -120,6 +120,48 @@ func TestJQNullInputStillSupportsDeferredInputBuiltin(t *testing.T) {
 	}
 }
 
+func TestJQNullInputIgnoresUnusedMissingFiles(t *testing.T) {
+	t.Parallel()
+
+	rt := newJQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+		Script: `jq -n '.' missing.json` + "\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "null\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("Stderr = %q, want empty", result.Stderr)
+	}
+}
+
+func TestJQNullInputTryCatchKeepsMissingFilesFatal(t *testing.T) {
+	t.Parallel()
+
+	rt := newJQRuntime(t)
+	result, err := rt.Run(context.Background(), &gbruntime.ExecutionRequest{
+		Script: `jq -n 'try input catch "ok"' missing.json` + "\n",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 2 {
+		t.Fatalf("ExitCode = %d, want 2; stdout=%q stderr=%q", result.ExitCode, result.Stdout, result.Stderr)
+	}
+	if got, want := result.Stdout, "\"ok\"\n"; got != want {
+		t.Fatalf("Stdout = %q, want %q", got, want)
+	}
+	if !strings.Contains(result.Stderr, "jq: missing.json: No such file or directory") {
+		t.Fatalf("Stderr = %q, want missing-file diagnostic", result.Stderr)
+	}
+}
+
 func TestJQSupportsStdinMarkerWithFiles(t *testing.T) {
 	t.Parallel()
 
