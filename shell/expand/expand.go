@@ -2161,7 +2161,7 @@ func (cfg *Config) quotedElemFields(pe *syntax.ParamExp) ([]string, bool, error)
 		}
 		switch indirectModeFor(pe, state) {
 		case indirectResolve:
-			resolved, target, err := cfg.resolveIndirectTargetState(state)
+			resolved, target, err := cfg.resolveIndirectTargetState(pe, state)
 			if err != nil {
 				return nil, false, err
 			}

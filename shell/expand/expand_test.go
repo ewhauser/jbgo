@@ -1422,6 +1422,22 @@ func TestFieldsQuotedIndirectAllElementsTargets(t *testing.T) {
 func TestFieldsIndirectUnsetArrayNounset(t *testing.T) {
 	t.Parallel()
 
+	t.Run("ScalarDefaultOpSilentUnderNounset", func(t *testing.T) {
+		word := parseCommandWord(t, "${!name:-fallback}")
+		got, err := Fields(&Config{
+			NoUnset: true,
+			Env: testEnv{
+				"name": {Set: true, Kind: String, Str: "FOO"},
+			},
+		}, word)
+		if err != nil {
+			t.Fatalf("did not want error for ${!name:-fallback} with unset FOO, got %v", err)
+		}
+		if !reflect.DeepEqual(got, []string{"fallback"}) {
+			t.Fatalf("wanted [\"fallback\"], got %q", got)
+		}
+	})
+
 	// Indirect ref to undefined array[@] is treated as empty (no error) even
 	// under nounset, matching bash behavior.
 	t.Run("AtSubscriptSilentUnderNounset", func(t *testing.T) {

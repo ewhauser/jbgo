@@ -1020,6 +1020,67 @@ test_hyphen
 	}
 }
 
+func TestIndirectDefaultUnderNounsetMatchesBash(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+ae=FOO
+if [[ -n "$ae" && -n "${!ae:-}" ]]; then
+  echo yes
+fi
+echo done
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stdout != "done\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "done\n")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestIndirectErrorOpUnderNounsetUsesOuterName(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+ae=FOO
+x=$(echo "${!ae:?boom}")
+echo "status=$?"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if stdout != "status=127\n" {
+		t.Fatalf("stdout = %q, want %q", stdout, "status=127\n")
+	}
+	if stderr != "!ae: boom\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "!ae: boom\n")
+	}
+}
+
+func TestIndirectErrorOpUnderNounsetTopLevelStillExits127(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+ae=FOO
+echo "${!ae:?boom}"
+`)
+	if status, ok := err.(ExitStatus); !ok || status != 127 {
+		t.Fatalf("Run error = %v, want exit status 127", err)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "!ae: boom\n" {
+		t.Fatalf("stderr = %q, want %q", stderr, "!ae: boom\n")
+	}
+}
+
 func TestBashVarOpTransformsMatchCompatibilityCases(t *testing.T) {
 	t.Parallel()
 

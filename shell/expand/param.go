@@ -714,6 +714,19 @@ func overridingUnset(pe *syntax.ParamExp) bool {
 	return false
 }
 
+func indirectOuterOpHandlesUnset(pe *syntax.ParamExp) bool {
+	if pe == nil || pe.Exp == nil {
+		return false
+	}
+	switch pe.Exp.Op {
+	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull,
+		syntax.DefaultUnset, syntax.DefaultUnsetOrNull,
+		syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+		return true
+	}
+	return false
+}
+
 type paramExpState struct {
 	name             string
 	orig             Variable
@@ -805,7 +818,7 @@ func simpleIndirectTarget(pe *syntax.ParamExp) bool {
 		pe.Exp == nil
 }
 
-func (cfg *Config) resolveIndirectTargetState(state paramExpState) (paramExpState, *syntax.ParamExp, error) {
+func (cfg *Config) resolveIndirectTargetState(pe *syntax.ParamExp, state paramExpState) (paramExpState, *syntax.ParamExp, error) {
 	name := state.str
 	if state.indexAllElements {
 		switch len(state.elems) {
@@ -842,13 +855,18 @@ func (cfg *Config) resolveIndirectTargetState(state paramExpState) (paramExpStat
 	targetState, err := cfg.paramExpState(target)
 	if err != nil {
 		var unsetErr UnsetParameterError
-		if errors.As(err, &unsetErr) && (subscriptLit(target.Index) == "@" || subscriptLit(target.Index) == "*") {
-			// Return empty indexed state so outer operators (:-/- etc.) can
-			// handle the unset case. Callers emit the nounset error for [*]
-			// when no overriding operator is present.
-			targetState.vr = Variable{Kind: Indexed}
-			targetState.indexAllElements = true
-			return targetState, target, nil
+		if errors.As(err, &unsetErr) {
+			if subscriptLit(target.Index) == "@" || subscriptLit(target.Index) == "*" {
+				// Return empty indexed state so outer operators (:-/- etc.) can
+				// handle the unset case. Callers emit the nounset error for [*]
+				// when no overriding operator is present.
+				targetState.vr = Variable{Kind: Indexed}
+				targetState.indexAllElements = true
+				return targetState, target, nil
+			}
+			if indirectOuterOpHandlesUnset(pe) {
+				return targetState, target, nil
+			}
 		}
 	}
 	return targetState, target, err
@@ -1760,7 +1778,7 @@ func (cfg *Config) paramExpWordField(pe *syntax.ParamExp, ql quoteLevel) ([]fiel
 		}
 	}
 	if indirectModeFor(pe, indirectState) == indirectResolve {
-		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
+		resolved, target, err := cfg.resolveIndirectTargetState(pe, indirectState)
 		if err != nil {
 			var unsetErr UnsetParameterError
 			if errors.As(err, &unsetErr) {
@@ -1918,7 +1936,7 @@ func (cfg *Config) paramExpFields(pe *syntax.ParamExp, ql quoteLevel) ([][]field
 	}
 	indMode := indirectModeFor(pe, indirectState)
 	if indMode == indirectResolve {
-		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
+		resolved, target, err := cfg.resolveIndirectTargetState(pe, indirectState)
 		if err != nil {
 			var unsetErr UnsetParameterError
 			if errors.As(err, &unsetErr) {
@@ -2263,7 +2281,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp, ql quoteLevel) (string, error) 
 	}
 	indMode := indirectModeFor(pe, indirectState)
 	if indMode == indirectResolve {
-		resolved, target, err := cfg.resolveIndirectTargetState(indirectState)
+		resolved, target, err := cfg.resolveIndirectTargetState(pe, indirectState)
 		if err != nil {
 			var unsetErr UnsetParameterError
 			if errors.As(err, &unsetErr) {
