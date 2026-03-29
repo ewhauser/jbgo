@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,8 +12,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/ewhauser/gbash"
 )
 
 var (
@@ -51,56 +50,6 @@ func TestRunScriptHarnessHelp(t *testing.T) {
 	}
 }
 
-func TestPersistentHarnessBashTool(t *testing.T) {
-	t.Parallel()
-
-	workspaceDir := preparedWorkspaceForTests(t)
-
-	rt, err := newRuntime(context.Background(), workspaceDir)
-	if err != nil {
-		t.Fatalf("newRuntime() error = %v", err)
-	}
-
-	session, err := rt.NewSession(context.Background())
-	if err != nil {
-		t.Fatalf("NewSession() error = %v", err)
-	}
-
-	first, err := session.Exec(context.Background(), &gbash.ExecutionRequest{
-		Name:    exampleName,
-		WorkDir: gbash.DefaultWorkspaceMountPoint,
-		Script: `
-mkdir -p /tmp/harness-session
-jq -cn --arg command 'cd /tmp && export FOO=bar' '{command: $command}' \
-  | HARNESS_SESSION=/tmp/harness-session ./.harness/tools/bash --exec
-`,
-	})
-	if err != nil {
-		t.Fatalf("first Exec() error = %v", err)
-	}
-	if first.ExitCode != 0 {
-		t.Fatalf("first exit = %d, want 0; stdout=%q stderr=%q", first.ExitCode, first.Stdout, first.Stderr)
-	}
-
-	second, err := session.Exec(context.Background(), &gbash.ExecutionRequest{
-		Name:    exampleName,
-		WorkDir: gbash.DefaultWorkspaceMountPoint,
-		Script: `
-jq -cn --arg command 'printf "%s %s\n" "$PWD" "$FOO"' '{command: $command}' \
-  | HARNESS_SESSION=/tmp/harness-session ./.harness/tools/bash --exec
-`,
-	})
-	if err != nil {
-		t.Fatalf("second Exec() error = %v", err)
-	}
-	if second.ExitCode != 0 {
-		t.Fatalf("second exit = %d, want 0; stdout=%q stderr=%q", second.ExitCode, second.Stdout, second.Stderr)
-	}
-	if got, want := strings.TrimSpace(second.Stdout), "/tmp bar"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-}
-
 func TestOfflineHarnessLoopWithMockProvider(t *testing.T) {
 	t.Parallel()
 
@@ -118,7 +67,7 @@ func TestOfflineHarnessLoopWithMockProvider(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
 	}
-	if got, want := strings.TrimSpace(stdout.String()), "/tmp bar"; got != want {
+	if got, want := strings.TrimSpace(stdout.String()), "stored"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 }
@@ -126,7 +75,7 @@ func TestOfflineHarnessLoopWithMockProvider(t *testing.T) {
 func TestUpdateHarnessScriptStagesPreparedWorkspace(t *testing.T) {
 	t.Parallel()
 
-	exampleDir := copyTreeToTemp(t, filepath.Dir(mustWorkspaceDir()))
+	exampleDir := copyTreeToTemp(t, mustExampleDir())
 	upstreamDir := filepath.Join(t.TempDir(), "upstream")
 	writeFile(t, filepath.Join(upstreamDir, "bin", "harness"), "#!/usr/bin/env bash\necho harness\n", 0o755)
 	writeFile(t, filepath.Join(upstreamDir, "bin", "hs"), "#!/usr/bin/env bash\necho hs\n", 0o755)
@@ -200,20 +149,11 @@ func TestUpdateHarnessScriptStagesPreparedWorkspace(t *testing.T) {
 	}
 
 	for _, relative := range []string{
-		".harness/tools/bash",
-		".harness/hooks.d/assemble/10-messages",
+		".harness",
 		"AGENTS.md",
 	} {
-		got, err := os.ReadFile(filepath.Join(workspaceDir, relative))
-		if err != nil {
-			t.Fatalf("ReadFile(%q) error = %v", relative, err)
-		}
-		want, err := os.ReadFile(filepath.Join(exampleDir, "workspace", relative))
-		if err != nil {
-			t.Fatalf("ReadFile(%q) error = %v", relative, err)
-		}
-		if !bytes.Equal(got, want) {
-			t.Fatalf("%s did not match committed overlay contents", relative)
+		if _, err := os.Stat(filepath.Join(workspaceDir, relative)); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("Stat(%q) error = %v, want fs.ErrNotExist", relative, err)
 		}
 	}
 }
@@ -361,10 +301,10 @@ case "${1:-}" in
 esac
 
 payload="$(cat)"
-tool_count="$(echo "${payload}" | jq '[.messages[] | select(.role == "tool")] | length')"
+tool_count="$(echo "${payload}" | jq '[(.messages // [])[].role | select(. == "tool")] | length')"
 
 if [[ "${tool_count}" == "0" ]]; then
-  jq -n --arg args '{"command":"cd /tmp && export FOO=bar"}' '{
+  jq -n --arg args '{"command":"printf stored > /tmp/gbash-harness-test"}' '{
     model: "mock-model",
     choices: [{
       finish_reason: "tool_calls",
@@ -389,7 +329,7 @@ if [[ "${tool_count}" == "0" ]]; then
 fi
 
 if [[ "${tool_count}" == "1" ]]; then
-  jq -n --arg args '{"command":"printf \"%s %s\\n\" \"$PWD\" \"$FOO\""}' '{
+  jq -n --arg args '{"command":"cat /tmp/gbash-harness-test"}' '{
     model: "mock-model",
     choices: [{
       finish_reason: "tool_calls",
@@ -413,7 +353,7 @@ if [[ "${tool_count}" == "1" ]]; then
   exit 0
 fi
 
-final_output="$(echo "${payload}" | jq -r '[.messages[] | select(.role == "tool") | .content][1]')"
+final_output="$(echo "${payload}" | jq -r '[((.messages // [])[] | select(.role == "tool") | .content)][1] // empty')"
 jq -n --arg output "${final_output}" '{
   model: "mock-model",
   choices: [{

@@ -2,7 +2,7 @@
 
 This example pins [`wedow/harness`](https://github.com/wedow/harness) in [`UPSTREAM_COMMIT`](./UPSTREAM_COMMIT), clones that ref into a gitignored cache, stages a runnable workspace there, and then starts a persistent `gbash` shell around it.
 
-The repository only keeps the local overlay under `workspace/`. Upstream Harness runtime files are prepared under `.cache/` by [`update-harness.sh`](./update-harness.sh), while gbash-specific behavior stays in `workspace/.harness/`.
+The repository does not check in any Harness runtime files or local Harness overlays. [`update-harness.sh`](./update-harness.sh) stages the pinned upstream runtime into `.cache/`, and the example runs that unmodified upstream workspace inside a persistent `gbash` session.
 
 The pinned upstream revision is recorded in [`UPSTREAM_COMMIT`](./UPSTREAM_COMMIT) and [`PROVENANCE.md`](./PROVENANCE.md).
 
@@ -36,5 +36,5 @@ Inside the interactive shell, run harness directly:
 
 - `update-harness.sh` clones the pinned upstream ref into `examples/harness-overlay/.cache/` and stages a runnable workspace there before the example starts.
 - The prepared workspace is mounted read-only at `/home/agent/project` with an in-memory writable overlay, so harness state lives only for the lifetime of the example process.
-- `workspace/.harness/tools/bash` overrides harness's bundled `bash` tool so tool calls run inside a persistent `gbash` session and keep files, `PWD`, and exported environment across harness turns.
+- The example runs upstream Harness as-is. Files written by tool calls persist for the lifetime of the outer `gbash` session because the sandbox filesystem overlay persists, but Harness keeps its normal upstream per-tool shell process semantics.
 - API-key providers and the bundled compatible variants are supported in v1. Local private OpenAI-compatible endpoints and the ChatGPT OAuth login flow are intentionally out of scope for this example.

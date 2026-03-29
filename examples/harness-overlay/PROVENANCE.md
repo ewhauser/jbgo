@@ -18,12 +18,4 @@ Upstream artifacts staged into the prepared cache workspace by `update-harness.s
 - `workspace/plugins/subagents`
 - `workspace/LICENSE.harness`
 
-Committed gbash-specific overlay files in this example:
-
-- `workspace/.harness/`
-- `workspace/AGENTS.md`
-- `main.go`
-- `main_test.go`
-- `update-harness.sh`
-
-The repository does not track the upstream runtime snapshot. `update-harness.sh` clones the pinned upstream ref into `.cache/`, stages the listed runtime files there, and then overlays the committed `workspace/.harness/` and `workspace/AGENTS.md` customization layer.
+The repository does not track the upstream runtime snapshot or any Harness-derived overlay files. `update-harness.sh` clones the pinned upstream ref into `.cache/` and stages only the listed runtime files there.

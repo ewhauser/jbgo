@@ -40,7 +40,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-overlay_dir="${script_dir}/workspace"
 
 if [[ -z "${ref}" ]]; then
   ref="$(tr -d '\n' < "${script_dir}/UPSTREAM_COMMIT")"
@@ -84,7 +83,6 @@ for plugin in auth core openai anthropic chatgpt skills subagents; do
   cp -R "${clone_dir}/plugins/${plugin}" "${tmp_workspace}/plugins/${plugin}"
 done
 cp "${clone_dir}/LICENSE" "${tmp_workspace}/LICENSE.harness"
-cp -R "${overlay_dir}/." "${tmp_workspace}/"
 
 rm -rf "${workspace_dir}"
 mkdir -p "$(dirname "${workspace_dir}")"

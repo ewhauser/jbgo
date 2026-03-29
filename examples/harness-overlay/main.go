@@ -187,10 +187,6 @@ func forwardedBaseEnv() map[string]string {
 	return env
 }
 
-func mustWorkspaceDir() string {
-	return filepath.Join(mustExampleDir(), "workspace")
-}
-
 func mustExampleDir() string {
 	_, file, _, ok := goruntime.Caller(0)
 	if !ok {
@@ -204,11 +200,6 @@ func resolveWorkspaceDir() (string, error) {
 		if _, err := os.Stat(filepath.Join(workspaceDir, "bin", "harness")); err != nil {
 			return "", fmt.Errorf("HARNESS_OVERLAY_WORKSPACE=%q is not a prepared harness workspace: %w", workspaceDir, err)
 		}
-		return workspaceDir, nil
-	}
-
-	workspaceDir := mustWorkspaceDir()
-	if _, err := os.Stat(filepath.Join(workspaceDir, "bin", "harness")); err == nil {
 		return workspaceDir, nil
 	}
 

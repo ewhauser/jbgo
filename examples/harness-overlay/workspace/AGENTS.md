@@ -1,1 +1,0 @@
-This harness workspace runs inside a persistent gbash sandbox. Its local `bash` tool keeps files, `PWD`, and exported environment variables across tool calls for the lifetime of the current example process.
