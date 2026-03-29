@@ -536,6 +536,16 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			src:  "for x in a=(); do\n",
 			want: "stdin: line 1: syntax error near unexpected token `('\nstdin: line 1: `for x in a=(); do'",
 		},
+		{
+			name: "command substitution missing then",
+			src:  "echo $(if true)\n",
+			want: "stdin: line 1: syntax error near unexpected token `)'\nstdin: line 1: `echo $(if true)'",
+		},
+		{
+			name: "for loop unexpected in",
+			src:  "for i; in one two three; do echo $i; done\n",
+			want: "stdin: line 1: syntax error near unexpected token `in'\nstdin: line 1: `for i; in one two three; do echo $i; done'",
+		},
 	}
 
 	for _, tc := range tests {

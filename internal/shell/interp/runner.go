@@ -1446,6 +1446,80 @@ func (r *Runner) runSpecialCallAssigns(assigns []*syntax.Assign) []restoreVar {
 	return r.runCallAssignsWithExport(assigns, true)
 }
 
+func (r *Runner) runTempCallAssigns(assigns []*syntax.Assign) []restoreVar {
+	var restores []restoreVar
+	for _, as := range assigns {
+		name := as.Ref.Name.Value
+		prev := r.lookupVar(name)
+		if as.Ref.Index != nil {
+			r.errf("`%s': not a valid identifier\n", printVarRef(as.Ref))
+			r.exit.code = 1
+			return restores
+		}
+		if as.Array != nil {
+			vr := expand.Variable{
+				Set:      true,
+				Exported: true,
+				Kind:     expand.String,
+				Str:      r.renderInlineArrayValue(as.Array),
+			}
+			resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
+			if err != nil {
+				r.errf("%v\n", err)
+				r.exit.code = 1
+				return restores
+			}
+			restore := r.callAssignRestoreVar(resolvedRef.Name.Value, resolvedPrev)
+			if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
+				if strings.HasSuffix(err.Error(), ": readonly variable") {
+					r.errf("%v\n", err)
+					if len(restores) > 0 {
+						r.exit.code = 1
+						return restores
+					}
+					continue
+				}
+				r.errf("%v\n", err)
+				r.exit.code = 1
+				return restores
+			}
+			restores = append(restores, restore)
+			continue
+		}
+
+		vr, _, ok := r.assignVal(prev, as, "")
+		if !ok || r.exit.fatalExit || r.exit.exiting {
+			return restores
+		}
+		vr.Exported = true
+		resolvedRef, resolvedPrev, err := prev.ResolveRef(r.writeEnv, as.Ref)
+		if err != nil {
+			r.errf("%v\n", err)
+			r.exit.code = 1
+			return restores
+		}
+		restore := r.callAssignRestoreVar(resolvedRef.Name.Value, resolvedPrev)
+		if err := r.setVarByRef(prev, as.Ref, vr, as.Append, attrUpdate{}); err != nil {
+			if strings.HasSuffix(err.Error(), ": readonly variable") {
+				r.errf("%v\n", err)
+				if len(restores) > 0 {
+					r.exit.code = 1
+					return restores
+				}
+				continue
+			}
+			r.errf("%v\n", err)
+			r.exit.code = 1
+			return restores
+		}
+		restores = append(restores, restore)
+		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+			return restores
+		}
+	}
+	return restores
+}
+
 func (r *Runner) callAssignRestoreVar(name string, vr expand.Variable) restoreVar {
 	restore := restoreVar{name: name, vr: vr}
 	if restore.name == "SECONDS" {

@@ -216,7 +216,7 @@ func (r *Runner) cmdCall(ctx context.Context, cm *syntax.CallExpr, tracingEnable
 		restoreEnv = r.writeEnv
 		r.writeEnv = assignOverlay
 	} else {
-		restores = r.runCallAssigns(cm.Assigns)
+		restores = r.runTempCallAssigns(cm.Assigns)
 		if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
 			r.restoreCallAssigns(restores)
 			return

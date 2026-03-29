@@ -145,14 +145,6 @@
             "darwin"
           ]
         },
-        "oils/builtin-getopts.test.sh::More regression for #1523": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/builtin-getopts.test.sh::OPTARG is empty (not unset) after parsing a flag doesn't take an arg": {
           "mode": "xfail",
           "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
@@ -557,22 +549,6 @@
             "darwin"
           ]
         },
-        "oils/paren-ambiguity.test.sh::(( closed with )) after multiple lines is parse error - #2337": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/paren-ambiguity.test.sh::$(( closed with )) after multiple lines is parse error - #2337": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/parse-errors.test.sh::interactive parse error (regression)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -797,30 +773,6 @@
           ]
         },
         "oils/toysh-posix.test.sh::Failed redirect in assignment, vs. export": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/toysh-posix.test.sh::for loop parsing - http://landley.net/notes.html#04-03-2020": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/toysh-posix.test.sh::Parsing $(( ))": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/toysh-posix.test.sh::readonly with temp binding": {
           "mode": "xfail",
           "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
           "goos": [

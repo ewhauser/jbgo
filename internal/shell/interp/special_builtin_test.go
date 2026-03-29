@@ -356,3 +356,23 @@ func TestInteractivePosixReadonlyAssignmentDoesNotExitShell(t *testing.T) {
 		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }
+
+func TestReadonlyTempAssignmentDoesNotAbortCommand(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+readonly x=1
+x=2 echo hi
+echo status=$?
+echo x=$x
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := stdout, "hi\nstatus=0\nx=1\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr, "x: readonly variable\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}

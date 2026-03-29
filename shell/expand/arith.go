@@ -552,13 +552,17 @@ func arithm(cfg *Config, root, expr syntax.ArithmExpr, depth int) (int, error) {
 					}
 				}
 				tokenText := src
+				message := "arithmetic syntax error: invalid arithmetic operator"
 				if errors.As(err, &parseErr) {
 					tokenText = arithParseErrorToken(src, parseErr.Pos)
+					if arithRuntimeIsExpressionError(tokenText) {
+						message = "arithmetic syntax error in expression"
+					}
 				}
 				return 0, &ArithmDiagnosticError{
 					Expr:      root,
 					TokenText: tokenText,
-					Message:   "arithmetic syntax error: invalid arithmetic operator",
+					Message:   message,
 				}
 			}
 		}
@@ -836,6 +840,17 @@ func arithRuntimeErrorToken(source string, parseErr syntax.ParseError) string {
 }
 
 func arithRuntimeIsExpressionError(tokenText string) bool {
+	if tokenText == "" {
+		return false
+	}
+	switch tokenText[0] {
+	case 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+		'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+		'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+		'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+		'_', '\'', '"':
+		return true
+	}
 	i := 0
 	for i < len(tokenText) && tokenText[i] >= '0' && tokenText[i] <= '9' {
 		i++
@@ -874,7 +889,7 @@ func arithRuntimeParseError(src string, parseErr syntax.ParseError) error {
 	tokenText := arithRuntimeErrorToken(src, parseErr)
 	message := "arithmetic syntax error: invalid arithmetic operator"
 	if arithRuntimeIsExpressionError(tokenText) {
-		message = "syntax error in expression"
+		message = "arithmetic syntax error in expression"
 	}
 	return &ArithmDiagnosticError{
 		ExprText:  src,

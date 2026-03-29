@@ -614,6 +614,25 @@ func TestArithmWithSourceUsesExpandedStringForIndexedStringDiagnostics(t *testin
 	}
 }
 
+func TestArithmWithSourceUsesExpressionErrorForExpandedBareWord(t *testing.T) {
+	t.Parallel()
+
+	exp := parseArithmExpansion(t, "$((echo hello))")
+	cfg := &Config{Env: testEnv{}}
+
+	got, err := ArithmWithSource(cfg, exp.X, exp.Source, exp.Left.Offset()+3, exp.Right.Offset())
+	if err == nil {
+		t.Fatal("ArithmWithSource() error = nil, want bare-word diagnostic")
+	}
+	if got != 0 {
+		t.Fatalf("ArithmWithSource() = %d, want 0", got)
+	}
+	const want = `echo hello: arithmetic syntax error in expression (error token is "hello")`
+	if err.Error() != want {
+		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
+	}
+}
+
 func TestArithmWithSourcePreservesParenAmbiguityRuntimeParseError(t *testing.T) {
 	t.Parallel()
 
@@ -627,7 +646,7 @@ func TestArithmWithSourcePreservesParenAmbiguityRuntimeParseError(t *testing.T) 
 	if got != 0 {
 		t.Fatalf("ArithmWithSource() = %d, want 0", got)
 	}
-	const want = "echo 1\necho 2\n(( x ))\n: 0\necho 3\n: syntax error in expression (error token is \"1\necho 2\n(( x ))\n: 0\necho 3\n\")"
+	const want = "echo 1\necho 2\n(( x ))\n: 0\necho 3\n: arithmetic syntax error in expression (error token is \"1\necho 2\n(( x ))\n: 0\necho 3\n\")"
 	if err.Error() != want {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}

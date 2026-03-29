@@ -1,6 +1,11 @@
 package interp
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestGetoptsConsumesSmooshedArguments(t *testing.T) {
 	t.Parallel()
@@ -114,7 +119,9 @@ printf 'normal-missing status=%s opt=%s OPTARG=%s\n' "$?" "$opt" "$OPTARG"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "illegal option -- Z\noption requires an argument -- a\n"
+	const wantStderr = "" +
+		"varref-test.sh: illegal option -- Z\n" +
+		"varref-test.sh: option requires an argument -- a\n"
 	if stderr != wantStderr {
 		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
 	}
@@ -200,6 +207,37 @@ echo OPTIND=$OPTIND
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestGetoptsPrefixesDiagnosticsWithScriptName(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	runner, err := NewRunner(&RunnerConfig{
+		Dir:    "/tmp",
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner error = %v", err)
+	}
+	err = runner.runShellReader(context.Background(), strings.NewReader(`
+set -- -Z -a
+getopts 'a:' opt
+getopts 'a:' opt
+`), "/tmp/getopts-prefix.sh", nil)
+	if err != nil {
+		t.Fatalf("runShellReader() error = %v", err)
+	}
+	if got, want := stdout.String(), ""; got != want {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	const wantStderr = "" +
+		"/tmp/getopts-prefix.sh: illegal option -- Z\n" +
+		"/tmp/getopts-prefix.sh: option requires an argument -- a\n"
+	if got := stderr.String(); got != wantStderr {
+		t.Fatalf("stderr = %q, want %q", got, wantStderr)
 	}
 }
 

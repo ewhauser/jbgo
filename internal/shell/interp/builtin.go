@@ -1083,16 +1083,23 @@ func (r *Runner) getoptsBuiltin(args []string) (exit exitStatus) {
 	switch result.kind {
 	case getoptsResultUnknown:
 		if diagnostics {
-			r.errf("illegal option -- %s\n", result.optarg)
+			r.errf("%sillegal option -- %s\n", r.getoptsDiagPrefix(), result.optarg)
 		}
 	case getoptsResultMissingArg:
 		if diagnostics {
-			r.errf("option requires an argument -- %s\n", result.optarg)
+			r.errf("%soption requires an argument -- %s\n", r.getoptsDiagPrefix(), result.optarg)
 		}
 	}
 
 	exit.oneIf(result.done())
 	return exit
+}
+
+func (r *Runner) getoptsDiagPrefix() string {
+	if file := r.currentCallFile(); file != "" && file != "stdin" {
+		return path.Clean(file) + ": "
+	}
+	return ""
 }
 
 func (r *Runner) shoptBuiltin(args []string) (exit exitStatus) {

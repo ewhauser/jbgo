@@ -1613,6 +1613,14 @@ func (e ParseError) bashCompat() ParseError {
 		e.bashText = "syntax error near unexpected token `('"
 	case e.Text == "word list can only contain words" && bashCompatArrayLiteralToken(sourceLine):
 		e.bashText = "syntax error near unexpected token `('"
+	case bashCompatUnexpectedFollowError(e.Text):
+		if token, ok := bashCompatUnexpectedTokenAtPos(e); ok {
+			if token == "newline" {
+				e.bashText = "syntax error near unexpected token `newline'"
+			} else {
+				e.bashText = fmt.Sprintf("syntax error near unexpected token %s", bashQuoteString(token))
+			}
+		}
 	case bashCompatFuncOpenError(e.Text):
 		if token, ok := bashCompatFuncOpenToken(sourceLine); ok {
 			if token == "newline" {
@@ -1688,11 +1696,94 @@ func bashCompatFuncOpenToken(sourceLine string) (string, bool) {
 func bashCompatOperatorToken(rest string) string {
 	if len(rest) >= 2 {
 		switch rest[:2] {
-		case "&&", "||", ";;", "<<", ">>", "<&", ">&", "<>":
+		case "&&", "||", ";;", "<<", ">>", "<&", ">&", "<>", "((", "))", "|&":
 			return rest[:2]
 		}
 	}
 	return rest[:1]
+}
+
+func bashCompatUnexpectedFollowError(text string) bool {
+	switch text {
+	case "`if <cond>` must be followed by `then`",
+		"`elif <cond>` must be followed by `then`",
+		"`while <cond>` must be followed by `do`",
+		"`until <cond>` must be followed by `do`",
+		"`for foo [in words]` must be followed by `do`",
+		"`select foo [in words]` must be followed by `do`",
+		"`for foo` must be followed by `in`, `do`, `;`, or a newline",
+		"`select foo` must be followed by `in`, `do`, `;`, or a newline":
+		return true
+	default:
+		return false
+	}
+}
+
+func bashCompatLeadingToken(rest string) (string, bool) {
+	rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
+	if rest == "" {
+		return "newline", true
+	}
+	switch rest[0] {
+	case '&', '|', ';', '<', '>', '(', ')':
+		return bashCompatOperatorToken(rest), true
+	}
+	for i, r := range rest {
+		if unicode.IsSpace(r) || strings.ContainsRune("&|;<>()", r) {
+			if i == 0 {
+				return "newline", true
+			}
+			return rest[:i], true
+		}
+	}
+	return rest, true
+}
+
+func bashCompatTrailingToken(sourceLine string) (string, bool) {
+	sourceLine = strings.TrimRightFunc(sourceLine, unicode.IsSpace)
+	if sourceLine == "" {
+		return "newline", true
+	}
+	if strings.ContainsRune("&|;<>()", rune(sourceLine[len(sourceLine)-1])) {
+		start := len(sourceLine) - 1
+		if start > 0 {
+			if token := bashCompatOperatorToken(sourceLine[start-1:]); len(token) > 1 {
+				start--
+			}
+		}
+		return bashCompatLeadingToken(sourceLine[start:])
+	}
+	start := len(sourceLine) - 1
+	for start >= 0 && !unicode.IsSpace(rune(sourceLine[start])) && !strings.ContainsRune("&|;<>()", rune(sourceLine[start])) {
+		start--
+	}
+	return bashCompatLeadingToken(sourceLine[start+1:])
+}
+
+func bashCompatUnexpectedTokenAtPos(e ParseError) (string, bool) {
+	if e.SourceLine == "" {
+		return "", false
+	}
+	switch e.Text {
+	case "`if <cond>` must be followed by `then`",
+		"`elif <cond>` must be followed by `then`",
+		"`while <cond>` must be followed by `do`",
+		"`until <cond>` must be followed by `do`":
+		return bashCompatTrailingToken(e.SourceLine)
+	case "`for foo [in words]` must be followed by `do`",
+		"`select foo [in words]` must be followed by `do`":
+		if semi := strings.IndexRune(e.SourceLine, ';'); semi >= 0 {
+			return bashCompatLeadingToken(e.SourceLine[semi+1:])
+		}
+		return bashCompatTrailingToken(e.SourceLine)
+	case "`for foo` must be followed by `in`, `do`, `;`, or a newline",
+		"`select foo` must be followed by `in`, `do`, `;`, or a newline":
+		fields := strings.Fields(e.SourceLine)
+		if len(fields) >= 2 {
+			return bashCompatLeadingToken(strings.TrimPrefix(e.SourceLine, fields[0]+" "+fields[1]))
+		}
+	}
+	return "", false
 }
 
 // BashError returns the error message formatted like bash does.
