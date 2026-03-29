@@ -18,6 +18,8 @@ coverage.html
 bin/
 !internal/conformance/bin/
 !internal/conformance/bin/**
+!examples/harness-overlay/workspace/bin/
+!examples/harness-overlay/workspace/bin/**
 dist/
 .cache
 .gocache
