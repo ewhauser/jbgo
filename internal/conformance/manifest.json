@@ -332,14 +332,6 @@
             "darwin"
           ]
         },
-        "oils/dbracket.test.sh::[[ regex syntax error": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/divergence.test.sh::builtin cat crashes a subshell (#2530)": {
           "mode": "xfail",
           "reason": "conformance: Darwin bash oracle lacks /usr/bin/cat inside this harness",
@@ -477,13 +469,6 @@
             "linux"
           ]
         },
-        "oils/loop.test.sh::Tilde expansion within for loop": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/parse-errors.test.sh::interactive parse error (regression)": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -580,22 +565,6 @@
         "oils/regex.test.sh::Operator chars ; & but not |": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/regex.test.sh::Parse error with 2 words": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/regex.test.sh::unquoted [a  b] as pattern, [a  b|c]": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
           "goos": [
             "darwin",
             "linux"
