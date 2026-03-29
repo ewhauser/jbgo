@@ -58,14 +58,6 @@
             "darwin"
           ]
         },
-        "oils/array-sparse.test.sh::${a[@]:BigInt}": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/array.test.sh::Tilde expansion within array": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -842,35 +834,11 @@
             "darwin"
           ]
         },
-        "oils/vars-special.test.sh::$PATH is set if unset at startup": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/vars-special.test.sh::Vars set interactively only: $HISTFILE": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
             "darwin"
-          ]
-        },
-        "oils/whitespace.test.sh::\\r in arith expression is allowed by some shells, but not most!": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
-        "oils/whitespace.test.sh::whitespace in string to integer conversion": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
           ]
         },
         "oils/word-split.test.sh::Tilde sub is not split, but var sub is": {

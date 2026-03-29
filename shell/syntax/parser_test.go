@@ -487,6 +487,11 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			want: "stdin: line 1: syntax error: unexpected end of file from `if' command on line 1",
 		},
 		{
+			name: "incomplete case",
+			src:  "case $SH in\n",
+			want: "stdin: line 1: syntax error: unexpected end of file from `case' command on line 1",
+		},
+		{
 			name: "incomplete backticks",
 			src:  "`x\n",
 			want: "stdin: line 1: unexpected EOF while looking for matching ``'",

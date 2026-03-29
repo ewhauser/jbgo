@@ -356,7 +356,6 @@ func TestInteractivePosixReadonlyAssignmentDoesNotExitShell(t *testing.T) {
 		t.Fatalf("stderr = %q, want %q", got, want)
 	}
 }
-
 func TestReadonlyTempAssignmentDoesNotAbortCommand(t *testing.T) {
 	t.Parallel()
 

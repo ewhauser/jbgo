@@ -387,7 +387,7 @@ func arithmLetParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr, err
 		return nil, &ArithmDiagnosticError{
 			ExprText:  src,
 			TokenText: src,
-			Message:   "syntax error: operand expected",
+			Message:   "arithmetic syntax error: operand expected",
 		}
 	}
 	p := syntax.NewParser()
@@ -975,7 +975,7 @@ func arithmRuntimeParse(cfg *Config, expr syntax.ArithmExpr) (syntax.ArithmExpr,
 		return nil, false, &ArithmDiagnosticError{
 			Expr:         expr,
 			Token:        expr,
-			Message:      "syntax error: operand expected",
+			Message:      "arithmetic syntax error: operand expected",
 			Replacements: replacements,
 		}
 	}

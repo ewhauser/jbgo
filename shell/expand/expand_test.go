@@ -231,7 +231,7 @@ func TestAssignmentLiteralExpandsTildesInParamDefaults(t *testing.T) {
 	}
 }
 
-func TestFieldsExpandTildeInAssignmentLikeArgs(t *testing.T) {
+func TestFieldsDoNotExpandAssignmentLikeArgs(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
@@ -244,8 +244,8 @@ func TestFieldsExpandTildeInAssignmentLikeArgs(t *testing.T) {
 		src  string
 		want []string
 	}{
-		{src: `x=~`, want: []string{"x=/home/bob"}},
-		{src: `x=~:${undef-~:~}`, want: []string{"x=/home/bob:/home/bob:/home/bob"}},
+		{src: `x=~`, want: []string{"x=~"}},
+		{src: `x=~:${undef-~:~}`, want: []string{"x=~:~:~"}},
 		{src: `x=${undef}~`, want: []string{"x=~"}},
 	}
 	for _, tc := range tests {

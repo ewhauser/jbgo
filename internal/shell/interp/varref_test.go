@@ -1415,7 +1415,7 @@ func TestCommandStringArithmeticErrorsUseShellNamePrefix(t *testing.T) {
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout = %q, want empty", got)
 	}
-	const wantStderr = "dummy0: \r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")\n"
+	const wantStderr = "dummy0: \r42\r + 1 : arithmetic syntax error: operand expected (error token is \"\r42\r + 1 \")\n"
 	if got := stderr.String(); got != wantStderr {
 		t.Fatalf("stderr = %q, want %q", got, wantStderr)
 	}
@@ -1680,7 +1680,7 @@ xx=~ show
 	}
 }
 
-func TestAssignmentLikeArgTildeUsesLiveHome(t *testing.T) {
+func TestAssignmentLikeArgTildeStaysLiteral(t *testing.T) {
 	t.Parallel()
 
 	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
@@ -1694,7 +1694,7 @@ echo x=~
 	if err != nil {
 		t.Fatalf("Run error = %v", err)
 	}
-	const wantStdout = "x=/home/bob\n"
+	const wantStdout = "x=~\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
