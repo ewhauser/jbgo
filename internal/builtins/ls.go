@@ -566,7 +566,7 @@ func (c *LS) listPath(ctx context.Context, inv *Invocation, target string, opts 
 		return "", 0, lsRenderResult{}, err
 	}
 	if !exists {
-		_, _ = fmt.Fprintf(inv.Stderr, "ls: %s: No such file or directory\n", target)
+		_, _ = fmt.Fprintf(inv.Stderr, "ls: cannot access %s: No such file or directory\n", quoteGNUErrorOperand(target))
 		return "", 2, lsRenderResult{}, nil
 	}
 
@@ -904,7 +904,7 @@ func lsRunTargets(ctx context.Context, inv *Invocation, commandName string, targ
 			continue
 		}
 		if !exists {
-			_, _ = fmt.Fprintf(inv.Stderr, "%s: %s: No such file or directory\n", commandName, target)
+			_, _ = fmt.Fprintf(inv.Stderr, "%s: cannot access %s: No such file or directory\n", commandName, quoteGNUErrorOperand(target))
 			exitCode = max(exitCode, 2)
 			continue
 		}

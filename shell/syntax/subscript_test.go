@@ -194,6 +194,37 @@ func TestParseArrayMemberCompoundAssignment(t *testing.T) {
 	}
 }
 
+func TestParseCompoundArraySequentialGlobWordWithCharClasses(t *testing.T) {
+	t.Parallel()
+
+	file, err := NewParser(Variant(LangBash)).Parse(strings.NewReader("g=(pkg0[0-3]/section0[0-2]/file0[0-3][0-9].txt)\n"), "")
+	if err != nil {
+		t.Fatalf("Parse error = %v", err)
+	}
+	call := file.Stmts[0].Cmd.(*CallExpr)
+	if got := len(call.Assigns); got != 1 {
+		t.Fatalf("len(Assigns) = %d, want 1", got)
+	}
+	as := call.Assigns[0]
+	if as.Array == nil || len(as.Array.Elems) != 1 {
+		t.Fatalf("array elems = %#v, want 1 sequential element", as.Array)
+	}
+	elem := as.Array.Elems[0]
+	if elem.Kind != ArrayElemSequential {
+		t.Fatalf("elem.Kind = %v, want %v", elem.Kind, ArrayElemSequential)
+	}
+	if elem.Index != nil {
+		t.Fatalf("elem.Index = %#v, want nil", elem.Index)
+	}
+	if elem.Value == nil {
+		t.Fatal("elem.Value = nil, want word")
+	}
+	const want = "pkg0[0-3]/section0[0-2]/file0[0-3][0-9].txt"
+	if got := elem.Value.Lit(); got != want {
+		t.Fatalf("elem.Value.Lit() = %q, want %q", got, want)
+	}
+}
+
 func TestTryAssignCandidateRecordsPendingArrayWordAtEOF(t *testing.T) {
 	t.Parallel()
 

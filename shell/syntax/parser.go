@@ -2209,24 +2209,29 @@ func (p *Parser) currentSourceTail() ([]byte, error) {
 	if idx := int(p.bsp); idx >= 0 && idx <= len(p.bs) {
 		tail = append(tail, p.bs[idx:]...)
 	}
+	rest, err := p.unreadSourceTail()
+	tail = append(tail, rest...)
+	return tail, err
+}
+
+func (p *Parser) unreadSourceTail() ([]byte, error) {
 	switch p.readErr {
 	case nil:
 	case io.EOF:
-		return tail, nil
+		return nil, nil
 	default:
-		return tail, p.readErr
+		return nil, p.readErr
 	}
 	if p.readEOF || p.src == nil {
-		return tail, nil
+		return nil, nil
 	}
 	var buf bytes.Buffer
 	_, err := buf.ReadFrom(p.src)
 	rest := buf.Bytes()
-	tail = append(tail, rest...)
 	if err != nil && err != io.EOF {
-		return tail, err
+		return rest, err
 	}
-	return tail, nil
+	return rest, nil
 }
 
 func (p *Parser) loadReplay(pos Pos, src []byte, readErr error) {
@@ -2248,6 +2253,116 @@ func (p *Parser) loadReplay(pos Pos, src []byte, readErr error) {
 	p.r = r
 	p.w = w
 	p.bsp = uint(w)
+}
+
+func parseErrRecoverableInBackquotes(err ParseError) bool {
+	switch err.Text {
+	case "reached EOF without closing quote `\"`",
+		"reached EOF without closing quote `'`",
+		"reached \"`\" without closing quote `\"`",
+		"reached \"`\" without closing quote `'`",
+		"reached EOF without matching `{` with `}`",
+		"reached \"`\" without matching `{` with `}`":
+		return true
+	default:
+		return false
+	}
+}
+
+func advancePosBytes(pos Pos, src []byte) Pos {
+	for _, b := range src {
+		switch b {
+		case '\n':
+			pos.lineCol += 1 << colBitSize
+			pos.lineCol &^= colBitMask
+			pos.lineCol++
+		default:
+			pos.lineCol++
+		}
+		pos.offs++
+	}
+	return pos
+}
+
+func findClosingBackquote(src []byte) int {
+	for i := 1; i < len(src); i++ {
+		switch src[i] {
+		case '\\':
+			if i+1 < len(src) {
+				i++
+			}
+		case '`':
+			return i
+		}
+	}
+	return -1
+}
+
+func hasContinuedScriptAfterRecoveredBackquote(src []byte) bool {
+	src = bytes.TrimLeft(src, " \t\r")
+	if len(src) == 0 {
+		return false
+	}
+	switch src[0] {
+	case '\n', ';', '&', '|':
+		// Only recover a leading malformed backquote when there is later script
+		// for bash to keep parsing after the recovered command substitution.
+		return len(bytes.TrimSpace(src[1:])) > 0
+	default:
+		return false
+	}
+}
+
+func (p *Parser) recoverableBackquoteSource(left Pos) ([]byte, error) {
+	if src := p.sourceFromPos(left); src != "" {
+		rest, err := p.unreadSourceTail()
+		full := make([]byte, 0, len(src)+len(rest))
+		full = append(full, src...)
+		full = append(full, rest...)
+		return full, err
+	}
+	tail, err := p.currentSourceTail()
+	if len(tail) == 0 {
+		return nil, err
+	}
+	full := make([]byte, 1+len(tail))
+	full[0] = '`'
+	copy(full[1:], tail)
+	return full, err
+}
+
+func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, src []byte, readErr error) bool {
+	if len(src) == 0 {
+		return false
+	}
+	if src[0] != '`' {
+		full := make([]byte, 1+len(src))
+		full[0] = '`'
+		copy(full[1:], src)
+		src = full
+	}
+	closeIndex := findClosingBackquote(src)
+	if closeIndex < 0 {
+		return false
+	}
+	if cs.Left.Offset() == 0 && !hasContinuedScriptAfterRecoveredBackquote(src[closeIndex+1:]) {
+		return false
+	}
+
+	p.postNested(old)
+	if old.quote == dblQuotes {
+		p.openBquoteDquotes--
+	}
+	p.openBquotes--
+
+	p.err = nil
+	cs.Stmts = nil
+	cs.Last = nil
+	cs.Right = advancePosBytes(cs.Left, src[:closeIndex])
+	nextPos := advancePosBytes(cs.Left, src[:closeIndex+1])
+	p.loadReplay(nextPos, src[closeIndex+1:], readErr)
+	p.next()
+	return true
 }
 
 func (p *Parser) setSourceBuffer(pos Pos, src []byte) {
@@ -2783,6 +2898,14 @@ func (p *Parser) wordPart() WordPart {
 
 		p.next()
 		cs.Stmts, cs.Last = p.stmtList()
+		if p.err != nil {
+			if parseErr, ok := p.err.(ParseError); ok && parseErrRecoverableInBackquotes(parseErr) {
+				backquoteSrc, backquoteErr := p.recoverableBackquoteSource(cs.Left)
+				if p.recoverBackquoteCmdSubst(cs, old, backquoteSrc, backquoteErr) {
+					return cs
+				}
+			}
+		}
 		if p.tok == bckQuote && p.lastBquoteEsc < p.openBquotes-1 {
 			// e.g. found ` before the nested backquote \` was closed.
 			p.tok = _EOF
@@ -5340,7 +5463,7 @@ func (p *Parser) testClause(s *Stmt) {
 	old := p.preNested(testExpr)
 	p.next()
 	if tc.X = p.condExprBinary(false); tc.X == nil {
-		if p.tok == _LitWord && p.val == "]]" {
+		if p.isCondClosingTok() {
 			p.posErr(p.pos, "syntax error near %s", bashQuoteString(dblRightBrack.String()))
 		} else if p.tok == rightParen {
 			p.curErrSecondary(
@@ -5363,11 +5486,27 @@ func (p *Parser) testClause(s *Stmt) {
 		}
 	}
 	tc.Right = p.pos
-	if _, ok := p.gotLitWord("]]"); !ok {
+	if _, ok := p.gotCondClosingTok(); !ok {
 		p.matchingErr(tc.Left, dblLeftBrack, dblRightBrack)
 	}
 	p.postNested(old)
 	s.Cmd = tc
+}
+
+func (p *Parser) isCondClosingTok() bool {
+	if p.val != "]]" {
+		return false
+	}
+	return p.tok == _LitWord || (p.tok == _Lit && p.r == '`')
+}
+
+func (p *Parser) gotCondClosingTok() (Pos, bool) {
+	if !p.isCondClosingTok() {
+		return Pos{}, false
+	}
+	pos := p.pos
+	p.next()
+	return pos, true
 }
 
 func condWordAsVarRef(word *Word) *VarRef {
@@ -6088,7 +6227,7 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 	switch p.tok {
 	case andAnd, orOr:
 	case _LitWord:
-		if p.val == "]]" {
+		if p.isCondClosingTok() {
 			return left
 		}
 		opTok := token(testBinaryOp(p.val))
@@ -6112,6 +6251,9 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 		}
 		p.tok = opTok
 	case _Lit:
+		if p.isCondClosingTok() {
+			return left
+		}
 		if _, ok := left.(*CondWord); ok {
 			p.condBinaryOperatorExpected(p.pos)
 		} else {
@@ -6204,7 +6346,7 @@ func (p *Parser) condExprUnary() CondExpr {
 		u := &CondUnary{OpPos: p.pos, Op: UnTestOperator(p.tok)}
 		p.next()
 		switch {
-		case p.tok == _LitWord && p.val == "]]":
+		case p.isCondClosingTok():
 			p.condUnaryUnexpectedArgument(p.pos)
 			return nil
 		case p.tok == rdrIn || p.tok == rdrOut || p.tok == _LitRedir:
@@ -6225,7 +6367,7 @@ func (p *Parser) condExprUnary() CondExpr {
 		pe := &CondParen{Lparen: p.pos}
 		p.next()
 		if pe.X = p.condExprBinary(false); pe.X == nil {
-			if p.tok == _LitWord && p.val == "]]" {
+			if p.isCondClosingTok() {
 				p.posErr(pe.Lparen, "expected %#q", rightParen)
 			} else {
 				p.followErrExp(pe.Lparen, leftParen)
@@ -6240,8 +6382,8 @@ func (p *Parser) condExprUnary() CondExpr {
 			return nil
 		}
 		return pe
-	case _LitWord:
-		if p.val == "]]" {
+	case _LitWord, _Lit:
+		if p.isCondClosingTok() {
 			return nil
 		}
 		fallthrough
@@ -6268,7 +6410,7 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	switch p.tok {
 	case andAnd, orOr:
 	case _LitWord:
-		if p.val == "]]" {
+		if p.isCondClosingTok() {
 			return left
 		}
 		if p.tok = token(testBinaryOp(p.val)); p.tok == illegalTok {
@@ -6278,6 +6420,9 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	case _EOF, rightParen:
 		return left
 	case _Lit:
+		if p.isCondClosingTok() {
+			return left
+		}
 		p.curErr("test operator words must consist of a single literal")
 	default:
 		p.curErr("not a valid test operator: %#q", p.tok)
@@ -6344,8 +6489,8 @@ func (p *Parser) testExprUnary() TestExpr {
 		}
 		pe.Rparen = p.matched(pe.Lparen, leftParen, rightParen)
 		return pe
-	case _LitWord:
-		if p.val == "]]" {
+	case _LitWord, _Lit:
+		if p.isCondClosingTok() {
 			return nil
 		}
 		fallthrough

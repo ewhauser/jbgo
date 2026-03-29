@@ -38,7 +38,7 @@ var bashCannotOpenNoSuchFilePattern = regexp.MustCompile(`(?m)^([-.[:alnum:]_]+)
 // the in-process gbash interpreter under CI, so normalize just the numeric PGID.
 var bashTerminalProcessGroupPattern = regexp.MustCompile(`cannot set terminal process group \(\d+\)`)
 var procFDPathPattern = regexp.MustCompile(`/proc/\d+/fd`)
-var procFDLsMissingPattern = regexp.MustCompile(`(?m)^ls: /proc/PID/fd(?:[^\n]*)?: No such file or directory\n?`)
+var procFDLsMissingPattern = regexp.MustCompile(`(?m)^ls: (?:cannot access )?'?/proc/PID/fd(?:[^\n']*)?'?: No such file or directory\n?`)
 var (
 	conformanceLocaleOnce sync.Once
 	conformanceLocaleName string
