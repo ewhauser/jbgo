@@ -1645,6 +1645,8 @@ func bashCompatUnexpectedEOFCommand(e ParseError) (string, bool) {
 	case e.Incomplete &&
 		(e.Text == "`while` must be followed by a statement list" || e.Text == "`while <cond>` must be followed by `do`"):
 		return "while", true
+	case e.Incomplete && e.Text == "`case` statement must end with `esac`":
+		return "case", true
 	case e.Incomplete &&
 		(e.Text == "`{` statement must end with `}`" || e.Text == "reached EOF without matching `{` with `}`"):
 		return "{", true

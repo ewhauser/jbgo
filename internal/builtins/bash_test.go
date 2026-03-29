@@ -12,7 +12,7 @@ func TestNormalizeNestedShellArithStderr(t *testing.T) {
 	if !ok {
 		t.Fatal("normalizeNestedShellArithStderr() ok = false, want true")
 	}
-	const want = "1 +\r\n2: syntax error: operand expected (error token is \"\r\n2\")\n"
+	const want = "1 +\r\n2: arithmetic syntax error: operand expected (error token is \"\r\n2\")\n"
 	if got != want {
 		t.Fatalf("normalizeNestedShellArithStderr() = %q, want %q", got, want)
 	}
@@ -28,7 +28,7 @@ func TestNormalizeNestedShellArithStderrPreservesOtherLines(t *testing.T) {
 	if !ok {
 		t.Fatal("normalizeNestedShellArithStderr() ok = false, want true")
 	}
-	const want = "before\n1 +\r\n2: syntax error: operand expected (error token is \"\r\n2\")\nafter\n"
+	const want = "before\n1 +\r\n2: arithmetic syntax error: operand expected (error token is \"\r\n2\")\nafter\n"
 	if got != want {
 		t.Fatalf("normalizeNestedShellArithStderr() = %q, want %q", got, want)
 	}
@@ -44,7 +44,7 @@ func TestNormalizeNestedShellArithStderrDropsBareContinuationLine(t *testing.T) 
 	if !ok {
 		t.Fatal("normalizeNestedShellArithStderr() ok = false, want true")
 	}
-	const want = "1 +\r\n2: syntax error: operand expected (error token is \"\r\n2\")\n"
+	const want = "1 +\r\n2: arithmetic syntax error: operand expected (error token is \"\r\n2\")\n"
 	if got != want {
 		t.Fatalf("normalizeNestedShellArithStderr() = %q, want %q", got, want)
 	}
@@ -60,7 +60,7 @@ func TestNormalizeNestedShellArithStderrMatchesFailingExpression(t *testing.T) {
 	if !ok {
 		t.Fatal("normalizeNestedShellArithStderr() ok = false, want true")
 	}
-	const want = "3 +\r\n4: syntax error: operand expected (error token is \"\r\n4\")\n"
+	const want = "3 +\r\n4: arithmetic syntax error: operand expected (error token is \"\r\n4\")\n"
 	if got != want {
 		t.Fatalf("normalizeNestedShellArithStderr() = %q, want %q", got, want)
 	}
@@ -71,12 +71,12 @@ func TestPrefixNestedShellDiagnosticPreservesOperandSpacing(t *testing.T) {
 
 	result := &ExecutionResult{
 		ExitCode: 2,
-		Stderr:   "dummy0: \r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")\n",
+		Stderr:   "dummy0: \r42\r + 1 : arithmetic syntax error: operand expected (error token is \"\r42\r + 1 \")\n",
 	}
 
 	prefixNestedShellDiagnostic(result, "dummy0")
 
-	const want = "dummy0: line 1: \r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")\n"
+	const want = "dummy0: line 1: \r42\r + 1 : arithmetic syntax error: operand expected (error token is \"\r42\r + 1 \")\n"
 	if got := result.Stderr; got != want {
 		t.Fatalf("result.Stderr = %q, want %q", got, want)
 	}

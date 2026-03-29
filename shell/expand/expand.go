@@ -1630,11 +1630,13 @@ func DupFields(cfg *Config, word *syntax.Word) ([]string, error) {
 	return strs, nil
 }
 
-// FieldsSeq expands a number of words as if they were arguments in a shell
-// command. This includes brace expansion, tilde expansion, parameter expansion,
-// command substitution, arithmetic expansion, quote removal, and globbing.
+// FieldsSeq expands a number of words as if they were ordinary arguments in a
+// shell command. This includes brace expansion, tilde expansion, parameter
+// expansion, command substitution, arithmetic expansion, quote removal, and
+// globbing. Assignment-like tilde expansion is intentionally disabled here, so
+// words like x=~ stay literal unless they are parsed in an assignment context.
 func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
-	return fieldsSeq(cfg, true, words...)
+	return fieldsSeq(cfg, false, words...)
 }
 
 func fieldsSeq(cfg *Config, allowAssignLike bool, words ...*syntax.Word) iter.Seq2[string, error] {

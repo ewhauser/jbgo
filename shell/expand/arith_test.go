@@ -704,7 +704,7 @@ func TestArithmWithSourceRejectsCarriageReturnStringToInteger(t *testing.T) {
 	if got != 0 {
 		t.Fatalf("ArithmWithSource() = %d, want 0", got)
 	}
-	const want = "\r42\r + 1 : syntax error: operand expected (error token is \"\r42\r + 1 \")"
+	const want = "\r42\r + 1 : arithmetic syntax error: operand expected (error token is \"\r42\r + 1 \")"
 	if err.Error() != want {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}
@@ -742,7 +742,7 @@ func TestArithmWithSourceRejectsVerticalTabStringToInteger(t *testing.T) {
 	if got != 0 {
 		t.Fatalf("ArithmWithSource() = %d, want 0", got)
 	}
-	const want = "\v42\v + 1 : syntax error: operand expected (error token is \"\v42\v + 1 \")"
+	const want = "\v42\v + 1 : arithmetic syntax error: operand expected (error token is \"\v42\v + 1 \")"
 	if err.Error() != want {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}
@@ -763,7 +763,7 @@ func TestArithmWithSourceRejectsFormFeedStringToInteger(t *testing.T) {
 	if got != 0 {
 		t.Fatalf("ArithmWithSource() = %d, want 0", got)
 	}
-	const want = "\f42\f + 1 : syntax error: operand expected (error token is \"\f42\f + 1 \")"
+	const want = "\f42\f + 1 : arithmetic syntax error: operand expected (error token is \"\f42\f + 1 \")"
 	if err.Error() != want {
 		t.Fatalf("ArithmWithSource() error = %q, want %q", err.Error(), want)
 	}

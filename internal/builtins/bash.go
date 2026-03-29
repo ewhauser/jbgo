@@ -247,7 +247,7 @@ func normalizeNestedShellArithStderr(script, stderr string) (string, bool) {
 			if exprText == "" {
 				return "", false
 			}
-			replacement = fmt.Sprintf("%s: syntax error: operand expected (error token is %s)\n", exprText, bashQuoteArithToken(tokenText))
+			replacement = fmt.Sprintf("%s: arithmetic syntax error: operand expected (error token is %s)\n", exprText, bashQuoteArithToken(tokenText))
 		}
 		search = exprEnd + len("))")
 	}

@@ -1518,7 +1518,6 @@ func (r *Runner) runTempCallAssigns(assigns []*syntax.Assign) []restoreVar {
 	}
 	return restores
 }
-
 func (r *Runner) callAssignRestoreVar(name string, vr expand.Variable) restoreVar {
 	restore := restoreVar{name: name, vr: vr}
 	if restore.name == "SECONDS" {
