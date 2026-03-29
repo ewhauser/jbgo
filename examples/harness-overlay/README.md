@@ -4,7 +4,7 @@ This example vendors a pinned copy of [`wedow/harness`](https://github.com/wedow
 
 The vendored harness runtime files stay mechanically copied under `workspace/`. gbash-specific behavior lives in `workspace/.harness/`, so upgrading the upstream harness snapshot does not require editing vendored upstream files in place.
 
-The pinned upstream revision is recorded in [`UPSTREAM_COMMIT`](./UPSTREAM_COMMIT) and [`PROVENANCE.md`](./PROVENANCE.md). gbash-specific compatibility gaps found while building the example are tracked in [`GBASH_BUGS.md`](./GBASH_BUGS.md).
+The pinned upstream revision is recorded in [`UPSTREAM_COMMIT`](./UPSTREAM_COMMIT) and [`PROVENANCE.md`](./PROVENANCE.md).
 
 ## Run
 
