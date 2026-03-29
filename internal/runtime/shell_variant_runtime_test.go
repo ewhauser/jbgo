@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ewhauser/gbash/shellvariant"
 )
@@ -83,6 +84,78 @@ func TestSessionExecUnsupportedBuiltinNamesDoNotHideRealPathCommands(t *testing.
 				t.Fatalf("Exec() error = %v", err)
 			}
 			if got, want := result.Stdout, "type=0\n/tmp/bin/shopt\nexternal:/tmp/bin/shopt\nexternal:/tmp/bin/shopt\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+			if got := result.Stderr; got != "" {
+				t.Fatalf("Stderr = %q, want empty", got)
+			}
+		})
+	}
+}
+
+func TestSessionExecNonBashVariantsHideBashNamespaceFromSetAndDeclare(t *testing.T) {
+	t.Parallel()
+
+	script := strings.Join([]string{
+		`declare -p BASH_VERSION >/dev/null 2>&1; printf 'declare=%d\n' "$?"`,
+		`case "$(set)" in *"BASH_VERSION="*) echo listed ;; *) echo hidden ;; esac`,
+		"unset BASH_VERSION",
+		`declare -p BASH_VERSION >/dev/null 2>&1; printf 'declare_after=%d\n' "$?"`,
+		`case "$(set)" in *"BASH_VERSION="*) echo listed_after ;; *) echo hidden_after ;; esac`,
+		"",
+	}, "\n")
+
+	for _, variant := range []shellvariant.ShellVariant{shellvariant.SH, shellvariant.Mksh, shellvariant.Zsh} {
+		t.Run(string(variant), func(t *testing.T) {
+			t.Parallel()
+
+			session := newSession(t, &Config{})
+			result, err := session.Exec(context.Background(), &ExecutionRequest{
+				ShellVariant: variant,
+				Env: map[string]string{
+					"BASH_VERSION": "host",
+				},
+				Script: script,
+			})
+			if err != nil {
+				t.Fatalf("Exec() error = %v", err)
+			}
+			if got, want := result.Stdout, "declare=1\nhidden\ndeclare_after=1\nhidden_after\n"; got != want {
+				t.Fatalf("Stdout = %q, want %q", got, want)
+			}
+			if got := result.Stderr; got != "" {
+				t.Fatalf("Stderr = %q, want empty", got)
+			}
+		})
+	}
+}
+
+func TestSessionExecUnsupportedBuiltinLookupDoesNotBlockOnNamedPipes(t *testing.T) {
+	t.Parallel()
+
+	script := strings.Join([]string{
+		"mkdir -p /tmp/bin",
+		"mkfifo /tmp/bin/shopt",
+		"PATH=/tmp/bin:/usr/bin:/bin",
+		`type shopt >/dev/null 2>&1; printf 'type=%d\n' "$?"`,
+		`command -v shopt >/dev/null 2>&1; printf 'command=%d\n' "$?"`,
+		"",
+	}, "\n")
+
+	for _, variant := range []shellvariant.ShellVariant{shellvariant.SH, shellvariant.Mksh, shellvariant.Zsh} {
+		t.Run(string(variant), func(t *testing.T) {
+			t.Parallel()
+
+			session := newSession(t, &Config{})
+			result, err := session.Exec(context.Background(), &ExecutionRequest{
+				ShellVariant: variant,
+				Script:       script,
+				Timeout:      2 * time.Second,
+			})
+			if err != nil {
+				t.Fatalf("Exec() error = %v", err)
+			}
+			if got, want := result.Stdout, "type=1\ncommand=1\n"; got != want {
 				t.Fatalf("Stdout = %q, want %q", got, want)
 			}
 			if got := result.Stderr; got != "" {

@@ -459,6 +459,9 @@ unsetOpts:
 
 	for _, arg := range args {
 		declaredVar := r.lookupVar(arg).Declared()
+		if !declaredVar && r.hiddenBashSpecialVar(arg) {
+			declaredVar = r.writeEnv.Get(arg).Declared()
+		}
 		if vars {
 			if ref, err := r.strictVarRef(arg); err == nil {
 				if ref.Index == nil && !declaredVar {

@@ -804,6 +804,9 @@ func (d *declCommand) listedVars(currentOnly bool) map[string]expand.Variable {
 }
 
 func (d *declCommand) matchesVarFilter(name string, vr expand.Variable) bool {
+	if d.runner.hiddenBashSpecialVar(name) {
+		return false
+	}
 	if !vr.Declared() {
 		return false
 	}

@@ -583,7 +583,7 @@ func (m *core) statHandler(exec *Execution) interp.StatHandlerFunc {
 			if err != nil {
 				return nil, err
 			}
-			hidden, hideErr := isUnsupportedVirtualBuiltinStub(ctx, exec, abs)
+			hidden, hideErr := isUnsupportedVirtualBuiltinStub(ctx, exec, abs, info.Mode())
 			if hideErr != nil {
 				return nil, hideErr
 			}
@@ -1200,7 +1200,7 @@ func lookupCommandPath(ctx context.Context, exec *Execution, dir, name, source, 
 	if info.IsDir() {
 		return nil, false, nil
 	}
-	if hidden, hideErr := isUnsupportedVirtualBuiltinStub(ctx, exec, fullPath); hideErr != nil {
+	if hidden, hideErr := isUnsupportedVirtualBuiltinStub(ctx, exec, fullPath, info.Mode()); hideErr != nil {
 		return nil, false, hideErr
 	} else if hidden {
 		if explicitPath {
@@ -1458,8 +1458,11 @@ func resolveVirtualCommandStub(ctx context.Context, exec *Execution, fullPath st
 	}, true, nil
 }
 
-func isUnsupportedVirtualBuiltinStub(ctx context.Context, exec *Execution, fullPath string) (bool, error) {
+func isUnsupportedVirtualBuiltinStub(ctx context.Context, exec *Execution, fullPath string, mode stdfs.FileMode) (bool, error) {
 	if exec == nil || exec.FS == nil {
+		return false, nil
+	}
+	if !mode.IsRegular() {
 		return false, nil
 	}
 	name := path.Base(fullPath)

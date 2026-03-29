@@ -905,6 +905,9 @@ func (r *Runner) printSetVars() {
 }
 
 func (r *Runner) printSetVarVisible(name string, vr expand.Variable) bool {
+	if r.hiddenBashSpecialVar(name) {
+		return false
+	}
 	return vr.Declared() && vr.IsSet()
 }
 
@@ -1054,7 +1057,7 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		vr.Set = true
 		return vr
 	}
-	if shellvariantprofile.IsBashSpecialVar(name) && !profile.ExposesBashSpecialVar(name) {
+	if r.hiddenBashSpecialVar(name) {
 		return expand.Variable{}
 	}
 	if vr := r.writeEnv.Get(name); vr.Declared() {
@@ -1081,6 +1084,10 @@ func positionalParamIndex(name string) (int, bool) {
 
 func (r *Runner) envGet(name string) string {
 	return r.lookupVar(name).String()
+}
+
+func (r *Runner) hiddenBashSpecialVar(name string) bool {
+	return shellvariantprofile.IsBashSpecialVar(name) && !r.shellProfile().ExposesBashSpecialVar(name)
 }
 
 type varMutation struct {
