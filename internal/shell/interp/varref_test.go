@@ -1092,6 +1092,30 @@ x=$(echo ${undef@Q}); echo "stat: $?"
 	}
 }
 
+func TestDeclaredEmptyArraysStayEmptyUnderNounset(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+set -u
+declare -A assoc
+declare -a indexed
+assoc_keys=("${!assoc[@]}")
+assoc_vals=("${assoc[@]}")
+indexed_vals=("${indexed[@]}")
+printf 'assoc=%s,%s,%s\n' "${#assoc[@]}" "${#assoc_keys[@]}" "${#assoc_vals[@]}"
+printf 'indexed=%s,%s\n' "${#indexed[@]}" "${#indexed_vals[@]}"
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	if got, want := stdout, "assoc=0,0,0\nindexed=0,0\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func TestTopLevelNounsetStillExits127(t *testing.T) {
 	t.Parallel()
 

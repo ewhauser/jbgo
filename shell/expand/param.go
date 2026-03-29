@@ -874,6 +874,23 @@ func arrayExpansionNull(pe *syntax.ParamExp, fields, elems []string) bool {
 	return null
 }
 
+func nounsetAllowsDeclaredEmptyArray(pe *syntax.ParamExp, vr Variable) bool {
+	if pe == nil || vr.IsSet() || !vr.Declared() {
+		return false
+	}
+	switch vr.Kind {
+	case Indexed, Associative:
+	default:
+		return false
+	}
+	switch subscriptLit(pe.Index) {
+	case "@", "*":
+		return true
+	default:
+		return false
+	}
+}
+
 func (cfg *Config) joinArrayElemsForString(pe *syntax.ParamExp, elems []string) string {
 	if arrayExpansionIsStar(pe) {
 		return cfg.ifsJoin(elems)
@@ -1433,7 +1450,7 @@ func (cfg *Config) paramExpState(pe *syntax.ParamExp) (paramExpState, error) {
 	} else {
 		index = nil
 	}
-	if cfg.NoUnset && !pe.Excl && !state.vr.IsSet() && !overridingUnset(pe) {
+	if cfg.NoUnset && !pe.Excl && !state.vr.IsSet() && !overridingUnset(pe) && !nounsetAllowsDeclaredEmptyArray(pe, state.vr) {
 		return state, UnsetParameterError{
 			Node:    pe,
 			Message: "unbound variable",
