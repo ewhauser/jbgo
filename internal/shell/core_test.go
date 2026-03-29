@@ -365,6 +365,14 @@ func TestExecutionUsesCommandStringSkipsLongOptionsWithValues(t *testing.T) {
 		want bool
 	}{
 		{
+			name: "plain inline script is not command string",
+			exec: &Execution{
+				Script: "echo hi\n",
+				Name:   "inline.sh",
+			},
+			want: false,
+		},
+		{
 			name: "rcfile before command string",
 			exec: &Execution{
 				Interpreter:     "bash",
@@ -397,6 +405,22 @@ func TestExecutionUsesCommandStringSkipsLongOptionsWithValues(t *testing.T) {
 				t.Fatalf("executionUsesCommandString() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExecutionRuntimeScriptStripsLeadingBlankOnlyForCommandString(t *testing.T) {
+	t.Parallel()
+
+	script := "\nfalse\n"
+	if got := executionRuntimeScript(&Execution{Script: script, Name: "inline.sh"}); got != script {
+		t.Fatalf("executionRuntimeScript(plain) = %q, want %q", got, script)
+	}
+	if got := executionRuntimeScript(&Execution{
+		Interpreter:     "bash",
+		PassthroughArgs: []string{"-c"},
+		Script:          script,
+	}); got != "false\n" {
+		t.Fatalf("executionRuntimeScript(command string) = %q, want %q", got, "false\n")
 	}
 }
 

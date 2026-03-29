@@ -433,9 +433,6 @@ func executionUsesCommandString(exec *Execution) bool {
 	if exec == nil {
 		return false
 	}
-	if strings.TrimSpace(exec.ScriptPath) == "" && strings.TrimSpace(exec.Script) != "" && len(exec.Command) == 0 {
-		return true
-	}
 	interpreter := path.Base(strings.TrimSpace(exec.Interpreter))
 	args := exec.PassthroughArgs
 	if len(args) > 0 && path.Base(strings.TrimSpace(args[0])) == interpreter {

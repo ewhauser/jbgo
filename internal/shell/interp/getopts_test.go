@@ -221,16 +221,13 @@ echo OPTIND=$OPTIND
 		"OPTIND=2\n" +
 		"+\n" +
 		"+\n" +
-		"+\n" +
 		"OPTIND=5\n" +
-		"_\n" +
 		"OPTIND=2\n"
 	if stdout != wantStdout {
 		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	const wantStderr = "varref-test.sh: option requires an argument -- f\n"
-	if stderr != wantStderr {
-		t.Fatalf("stderr = %q, want %q", stderr, wantStderr)
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
 

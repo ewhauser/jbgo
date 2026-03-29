@@ -223,7 +223,9 @@ func TestErrTrapRegressionCommandStringLeadingBlankUsesSpecLineNumbers(t *testin
 	}
 
 	result, err := session.Exec(context.Background(), &ExecutionRequest{
-		Script: "\ntrap 'echo line=$LINENO' ERR\n\nfalse\n\n{ false \n  true\n} > /dir\necho ok\n",
+		Interpreter:     "bash",
+		PassthroughArgs: []string{"-c"},
+		Script:          "\ntrap 'echo line=$LINENO' ERR\n\nfalse\n\n{ false \n  true\n} > /dir\necho ok\n",
 	})
 	if err != nil {
 		t.Fatalf("Exec() error = %v", err)

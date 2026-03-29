@@ -42,7 +42,6 @@ func (r *Runner) setParams(args ...string) error {
 			}
 			if args := fp.args(); len(args) > 0 {
 				r.Params = args
-				r.setOPTIND("1")
 				if r.inSource {
 					r.sourceSetParams = true
 				}
@@ -85,7 +84,6 @@ func (r *Runner) setParams(args ...string) error {
 		// If "--" wasn't given and there were zero arguments,
 		// we don't want to override the current parameters.
 		r.Params = args
-		r.setOPTIND("1")
 
 		// Record whether a sourced script sets the parameters.
 		if r.inSource {
