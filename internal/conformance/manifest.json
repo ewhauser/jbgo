@@ -44,49 +44,7 @@
             "darwin"
           ]
         },
-        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashArray)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/array-literal.test.sh::Tilde expansions in RHS of [k]=v (BashAssoc)": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/array.test.sh::Tilde expansion within array": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/brace-expansion.test.sh::Tilde expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/brace-expansion.test.sh::Tilde expansion come before var expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/brace-expansion.test.sh::Tilde expansion with brace expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/brace-expansion.test.sh::Two kinds of tilde expansion": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [
@@ -488,13 +446,6 @@
             "linux"
           ]
         },
-        "oils/glob.test.sh::no glob after ~ expansion": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
         "oils/globignore.test.sh::Ignore globs with char patterns like [!ab]": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
@@ -532,13 +483,6 @@
           "goos": [
             "darwin",
             "linux"
-          ]
-        },
-        "oils/loop.test.sh::Tilde expansion within for loop": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
           ]
         },
         "oils/parse-errors.test.sh::interactive parse error (regression)": {
@@ -835,13 +779,6 @@
           ]
         },
         "oils/vars-special.test.sh::Vars set interactively only: $HISTFILE": {
-          "mode": "xfail",
-          "reason": "conformance: gbash behavior differs from bash",
-          "goos": [
-            "darwin"
-          ]
-        },
-        "oils/word-split.test.sh::Tilde sub is not split, but var sub is": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
           "goos": [

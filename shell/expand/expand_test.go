@@ -1989,7 +1989,8 @@ func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
-		StartupHome: "/startup",
+		StartupHome:                  "/startup",
+		PreferStartupHomeForArgTilde: true,
 		Env: testEnv{
 			"a":         {Set: true, Kind: String, Str: "A"},
 			"HOME":      {Set: true, Kind: String, Str: "/home/bob"},
@@ -2014,12 +2015,12 @@ func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 		{
 			name: "TildeExpandsAfterBraceSplit",
 			src:  `{foo~,~}/bar`,
-			want: []string{"foo~/bar", "/home/bob/bar"},
+			want: []string{"foo~/bar", "/startup/bar"},
 		},
 		{
 			name: "NamedUserTildeExpandsAfterBraceSplit",
 			src:  `~{/src,root}`,
-			want: []string{"/home/bob/src", "/root"},
+			want: []string{"/startup/src", "/root"},
 		},
 		{
 			name: "QuotedBraceElementsStillQuoteAfterReparse",

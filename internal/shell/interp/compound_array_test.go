@@ -3,6 +3,7 @@ package interp
 import (
 	"testing"
 
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/shell/expand"
 )
 
@@ -171,29 +172,52 @@ printf 'after\n'
 	}
 }
 
-func TestCompoundArrayKeyedValuesUseLiveHomeForAssignmentTildes(t *testing.T) {
+func TestCompoundArrayKeyedValuesUseStartupHomeForAssignmentTildes(t *testing.T) {
 	t.Parallel()
 
-	stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
-		Dir:         "/tmp",
-		StartupHome: "/startup",
-		Env: expand.ListEnviron(
-			"HOME=/home/user",
-		),
-	}, `
+	tests := []struct {
+		name     string
+		platform host.Platform
+		want     string
+	}{
+		{
+			name:     "DarwinPlatform",
+			platform: host.Platform{OS: host.OSDarwin},
+			want:     "/startup\n/startup:/startup:/startup\n/startup\n/startup:/startup:/startup\n",
+		},
+		{
+			name:     "LinuxPlatform",
+			platform: host.Platform{OS: host.OSLinux},
+			want:     "/home/live\n/home/live:/home/live:/home/live\n/home/live\n/home/live:/home/live:/home/live\n",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+				Dir:         "/tmp",
+				Platform:    tc.platform,
+				StartupHome: "/startup",
+				Env: expand.ListEnviron(
+					"HOME=/home/user",
+				),
+			}, `
+HOME=/home/live
 a=([2]=~ [4]=~:~:~)
 printf '%s\n%s\n' "${a[2]}" "${a[4]}"
 declare -A assoc=([home]=~ [hello]=~:~:~)
 printf '%s\n%s\n' "${assoc[home]}" "${assoc[hello]}"
 `)
-	if err != nil {
-		t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
-	}
-	const want = "/home/user\n/home/user:/home/user:/home/user\n/home/user\n/home/user:/home/user:/home/user\n"
-	if stdout != want {
-		t.Fatalf("stdout = %q, want %q", stdout, want)
-	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty", stderr)
+			if err != nil {
+				t.Fatalf("Run error = %v, stdout=%q stderr=%q", err, stdout, stderr)
+			}
+			if stdout != tc.want {
+				t.Fatalf("stdout = %q, want %q", stdout, tc.want)
+			}
+			if stderr != "" {
+				t.Fatalf("stderr = %q, want empty", stderr)
+			}
+		})
 	}
 }

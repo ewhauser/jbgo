@@ -1200,6 +1200,7 @@ func (r *Runner) Reset() {
 	*r = Runner{
 		Env:              r.Env,
 		tempDir:          r.tempDir,
+		platform:         r.platform,
 		callHandler:      r.callHandler,
 		execHandler:      r.execHandler,
 		openHandler:      r.openHandler,

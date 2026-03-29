@@ -1518,7 +1518,11 @@ func (r *Runner) expandCompoundArrayElems(elems []*syntax.ArrayElem) []expandedA
 			}
 		default:
 			if elem.Value != nil {
-				item.value = r.assignmentLiteral(elem.Value)
+				cfg := r.ecfg
+				cfg.PreferStartupHomeForAssignmentTilde = r.platform.OS == host.OSDarwin
+				str, err := expand.AssignmentLiteral(&cfg, elem.Value)
+				r.expandErr(err)
+				item.value = str
 			}
 		}
 		expanded = append(expanded, item)
