@@ -464,6 +464,16 @@ func (r *Runner) cmdFor(ctx context.Context, cm *syntax.ForClause, trace *tracer
 			trace.refreshPrefixContext()
 		}
 	case *syntax.CStyleLoop:
+		runLoopArith := func(expr syntax.ArithmExpr) (int, bool) {
+			prevExit := r.exit
+			r.exit = exitStatus{}
+			value := r.arithmEval(expr, true, false, r.sourceForNode(expr), expr.Pos().Offset(), expr.End().Offset())
+			if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+				return 0, false
+			}
+			r.exit = prevExit
+			return value, true
+		}
 		if y.Init != nil {
 			if r.runDebugTrap(ctx, cm.Pos().Line()) {
 				return
@@ -477,21 +487,26 @@ func (r *Runner) cmdFor(ctx context.Context, cm *syntax.ForClause, trace *tracer
 			if r.runDebugTrap(ctx, cm.Pos().Line()) {
 				return
 			}
-			if y.Cond != nil && r.arithmEval(y.Cond, true, false, r.sourceForNode(y.Cond), y.Cond.Pos().Offset(), y.Cond.End().Offset()) == 0 {
-				return
-			}
-			if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
-				return
+			if y.Cond != nil {
+				value, ok := runLoopArith(y.Cond)
+				if !ok {
+					return
+				}
+				if value == 0 {
+					return
+				}
 			}
 			if r.loopStmtsBroken(ctx, cm.Do) {
+				return
+			}
+			if r.exit.returning || r.stmtAborted() {
 				return
 			}
 			if y.Post != nil {
 				if r.runDebugTrap(ctx, cm.Pos().Line()) {
 					return
 				}
-				r.arithmEval(y.Post, true, false, r.sourceForNode(y.Post), y.Post.Pos().Offset(), y.Post.End().Offset())
-				if !r.exit.ok() || r.exit.fatalExit || r.exit.exiting {
+				if _, ok := runLoopArith(y.Post); !ok {
 					return
 				}
 			}

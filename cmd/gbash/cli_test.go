@@ -851,6 +851,66 @@ func TestRunCLISupportsScriptFileArgs(t *testing.T) {
 	}
 }
 
+func TestRunCLIReverseLoopHelperLookupFeedsExternalPipeline(t *testing.T) {
+	t.Parallel()
+
+	tmp := t.TempDir()
+	providerPath := filepath.Join(tmp, "provider.sh")
+	if err := os.WriteFile(providerPath, []byte("#!/usr/bin/env bash\ncat\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", providerPath, err)
+	}
+
+	scriptPath := filepath.Join(tmp, "hook.sh")
+	script := `set -euo pipefail
+payload="$(cat)"
+SOURCES_VAR='.:./missing'
+_find_bin() {
+  local name="$1"
+  IFS=':' read -ra sources <<< "${SOURCES_VAR}"
+  local i
+  for (( i=${#sources[@]}-1; i>=0; i-- )); do
+    local candidate="${sources[$i]}/$name.sh"
+    [[ -x "$candidate" ]] && { echo "$candidate"; return; }
+  done
+}
+provider_bin="$(_find_bin provider)"
+if response="$(echo "${payload}" | "${provider_bin}" 2>err.txt)"; then
+  printf 'ok:%s\n' "$response"
+else
+  printf 'fail:%d\n' "$?"
+fi
+printf 'after\n'
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", scriptPath, err)
+	}
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	exitCode, err := runCLI(context.Background(), []string{"--readwrite-root", tmp, "--cwd", "/", "hook.sh"}, strings.NewReader("payload-data"), &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("runCLI() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0; stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "ok:payload-data\nafter\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+
+	errOutput, err := os.ReadFile(filepath.Join(tmp, "err.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(err.txt) error = %v", err)
+	}
+	if got := string(errOutput); got != "" {
+		t.Fatalf("err.txt = %q, want empty", got)
+	}
+}
+
 func TestRunCLIDashSReadsScriptFromStdinAndUsesArgs(t *testing.T) {
 	t.Parallel()
 	var stdout strings.Builder
