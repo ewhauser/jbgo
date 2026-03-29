@@ -47,6 +47,11 @@ type Config struct {
 	// allocating a fresh closure set per Config instance.
 	Runtime RuntimeCallbacks
 
+	// PlatformOS is the logical OS semantics this config should follow for
+	// platform-sensitive expansion behavior. When empty, expansion falls back
+	// to the current build host's runtime.GOOS.
+	PlatformOS string
+
 	// StartupHome carries the shell's trusted startup home for callers that
 	// need startup-sensitive tilde semantics.
 	StartupHome string
@@ -57,6 +62,10 @@ type Config struct {
 
 	// TildeEnv is used for ~ and ~user lookup. If nil, Env is used.
 	TildeEnv Environ
+	// PreferStartupHomeForArgTilde makes ordinary argv tilde expansion
+	// (e.g. `echo ~`) prefer StartupHome over the live HOME variable for the
+	// current user.
+	PreferStartupHomeForArgTilde bool
 	// PreferStartupHomeForAssignmentTilde makes assignment-like tilde
 	// expansion (e.g. `~:~/src`) prefer StartupHome over the live HOME
 	// variable for the current user.
@@ -259,9 +268,11 @@ func prepareConfig(cfg *Config) *Config {
 func (cfg *Config) ResetRuntimeState() {
 	cfg.Env = nil
 	cfg.Runtime = nil
+	cfg.PlatformOS = ""
 	cfg.StartupHome = ""
 	cfg.LangVariant = 0
 	cfg.TildeEnv = nil
+	cfg.PreferStartupHomeForArgTilde = false
 	cfg.PreferStartupHomeForAssignmentTilde = false
 	cfg.CmdSubst = nil
 	cfg.ProcSubst = nil
@@ -1641,7 +1652,7 @@ func DupFields(cfg *Config, word *syntax.Word) ([]string, error) {
 // globbing. Assignment-like tilde expansion is intentionally disabled here, so
 // words like x=~ stay literal unless they are parsed in an assignment context.
 func FieldsSeq(cfg *Config, words ...*syntax.Word) iter.Seq2[string, error] {
-	return fieldsSeq(cfg, false, runtime.GOOS == "darwin", words...)
+	return fieldsSeq(cfg, false, cfg != nil && cfg.PreferStartupHomeForArgTilde, words...)
 }
 
 func fieldsSeq(cfg *Config, allowAssignLike, preferStartupHome bool, words ...*syntax.Word) iter.Seq2[string, error] {
@@ -2496,7 +2507,7 @@ func (cfg *Config) expandUserWithHome(field string, moreFields bool, startupHome
 			return prefix, rest, true
 		}
 
-		if runtime.GOOS == "windows" {
+		if cfg.platformOS() == "windows" {
 			if vr := cfg.TildeEnv.Get("USERPROFILE"); vr.IsSet() {
 				prefix, rest := joinTildeHome(vr.String(), rest)
 				return prefix, rest, true
@@ -2517,6 +2528,13 @@ func joinTildeHome(home, rest string) (string, string) {
 		rest = strings.TrimPrefix(rest, "/")
 	}
 	return home, rest
+}
+
+func (cfg *Config) platformOS() string {
+	if cfg.PlatformOS != "" {
+		return cfg.PlatformOS
+	}
+	return runtime.GOOS
 }
 
 func findAllIndex(pat, name string, n int) [][]int {

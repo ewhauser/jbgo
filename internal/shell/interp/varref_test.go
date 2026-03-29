@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ewhauser/gbash/host"
 	"github.com/ewhauser/gbash/shell/expand"
 	"github.com/ewhauser/gbash/shell/syntax"
 	"github.com/ewhauser/gbash/shellvariant"
@@ -27,6 +28,7 @@ func runInterpScriptConfig(t *testing.T, cfg *RunnerConfig, src string) (string,
 		cfg = &RunnerConfig{Dir: "/tmp"}
 	}
 	cfg = &RunnerConfig{
+		Platform:         cfg.Platform,
 		StartupHome:      cfg.StartupHome,
 		Env:              cfg.Env,
 		Dir:              cfg.Dir,
@@ -1700,6 +1702,51 @@ echo x=~
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestArgvTildeUsesConfiguredPlatform(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		platform host.Platform
+		want     string
+	}{
+		{
+			name:     "DarwinPlatform",
+			platform: host.Platform{OS: host.OSDarwin},
+			want:     "/startup/src\n",
+		},
+		{
+			name:     "LinuxPlatform",
+			platform: host.Platform{OS: host.OSLinux},
+			want:     "/home/live/src\n",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, err := runInterpScriptConfig(t, &RunnerConfig{
+				Platform:    tc.platform,
+				StartupHome: "/startup",
+				Env:         expand.ListEnviron("HOME=/home/original"),
+				Dir:         "/tmp",
+			}, `
+HOME=/home/live
+echo ~/src
+`)
+			if err != nil {
+				t.Fatalf("Run error = %v", err)
+			}
+			if stdout != tc.want {
+				t.Fatalf("stdout = %q, want %q", stdout, tc.want)
+			}
+			if stderr != "" {
+				t.Fatalf("stderr = %q, want empty", stderr)
+			}
+		})
 	}
 }
 

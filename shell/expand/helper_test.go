@@ -3,7 +3,6 @@ package expand
 import (
 	"fmt"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -96,16 +95,14 @@ func TestFieldsPreferStartupHomeForLeadingTilde(t *testing.T) {
 
 	word := parseCommandWord(t, `~/src`)
 	got, err := Fields(&Config{
-		StartupHome: "/startup",
-		Env:         testFuncEnviron(strEnviron("HOME=/live")),
+		StartupHome:                  "/startup",
+		PreferStartupHomeForArgTilde: true,
+		Env:                          testFuncEnviron(strEnviron("HOME=/live")),
 	}, word)
 	if err != nil {
 		t.Fatalf("Fields() error = %v", err)
 	}
-	want := []string{"/live/src"}
-	if runtime.GOOS == "darwin" {
-		want = []string{"/startup/src"}
-	}
+	want := []string{"/startup/src"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Fields() = %#v, want %#v", got, want)
 	}

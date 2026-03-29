@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -1989,14 +1988,9 @@ func TestFieldsDoubleQuotedScalarWord(t *testing.T) {
 func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 	t.Parallel()
 
-	tildeAfterBraceWant := []string{"foo~/bar", "/home/bob/bar"}
-	namedUserTildeWant := []string{"/home/bob/src", "/root"}
-	if runtime.GOOS == "darwin" {
-		tildeAfterBraceWant = []string{"foo~/bar", "/startup/bar"}
-		namedUserTildeWant = []string{"/startup/src", "/root"}
-	}
 	cfg := &Config{
-		StartupHome: "/startup",
+		StartupHome:                  "/startup",
+		PreferStartupHomeForArgTilde: true,
 		Env: testEnv{
 			"a":         {Set: true, Kind: String, Str: "A"},
 			"HOME":      {Set: true, Kind: String, Str: "/home/bob"},
@@ -2021,12 +2015,12 @@ func TestFieldsReparseBraceExpandedWords(t *testing.T) {
 		{
 			name: "TildeExpandsAfterBraceSplit",
 			src:  `{foo~,~}/bar`,
-			want: tildeAfterBraceWant,
+			want: []string{"foo~/bar", "/startup/bar"},
 		},
 		{
 			name: "NamedUserTildeExpandsAfterBraceSplit",
 			src:  `~{/src,root}`,
-			want: namedUserTildeWant,
+			want: []string{"/startup/src", "/root"},
 		},
 		{
 			name: "QuotedBraceElementsStillQuoteAfterReparse",

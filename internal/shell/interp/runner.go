@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ewhauser/gbash/host"
 	shellpattern "github.com/ewhauser/gbash/internal/shellpattern"
 	"github.com/ewhauser/gbash/shell/analysis"
 	"github.com/ewhauser/gbash/shell/expand"
@@ -200,9 +201,11 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 	r.ecfg.ResetRuntimeState()
 	r.ecfg.Env = expandEnv{r}
 	r.ecfg.Runtime = r
+	r.ecfg.PlatformOS = r.platform.OS.String()
 	r.ecfg.LangVariant = r.parserLangVariant()
 	r.ecfg.TildeEnv = tildeExpandEnv{r}
 	r.ecfg.StartupHome = r.startupHome
+	r.ecfg.PreferStartupHomeForArgTilde = r.platform.OS == host.OSDarwin
 	r.updateExpandOpts()
 	r.ecfgInit = true
 }
