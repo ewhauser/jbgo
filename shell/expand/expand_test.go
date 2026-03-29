@@ -1478,6 +1478,76 @@ func TestFieldsIndirectUnsetArrayNounset(t *testing.T) {
 	})
 }
 
+func TestDeclaredEmptyArrayNounset(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		vr   Variable
+	}{
+		{
+			name: "Indexed",
+			vr:   Variable{Kind: Indexed},
+		},
+		{
+			name: "Associative",
+			vr:   Variable{Kind: Associative},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("Length", func(t *testing.T) {
+				word := parseCommandWord(t, `"${#arr[@]}"`)
+				got, err := Fields(&Config{
+					NoUnset: true,
+					Env: testEnv{
+						"arr": tc.vr,
+					},
+				}, word)
+				if err != nil {
+					t.Fatalf("did not want error for declared empty array length under nounset, got %v", err)
+				}
+				if !reflect.DeepEqual(got, []string{"0"}) {
+					t.Fatalf("wanted [\"0\"], got %q", got)
+				}
+			})
+
+			t.Run("Values", func(t *testing.T) {
+				word := parseCommandWord(t, `"${arr[@]}"`)
+				got, err := Fields(&Config{
+					NoUnset: true,
+					Env: testEnv{
+						"arr": tc.vr,
+					},
+				}, word)
+				if err != nil {
+					t.Fatalf("did not want error for declared empty array values under nounset, got %v", err)
+				}
+				if len(got) != 0 {
+					t.Fatalf("wanted [], got %q", got)
+				}
+			})
+
+			t.Run("Keys", func(t *testing.T) {
+				word := parseCommandWord(t, `"${!arr[@]}"`)
+				got, err := Fields(&Config{
+					NoUnset: true,
+					Env: testEnv{
+						"arr": tc.vr,
+					},
+				}, word)
+				if err != nil {
+					t.Fatalf("did not want error for declared empty array keys under nounset, got %v", err)
+				}
+				if len(got) != 0 {
+					t.Fatalf("wanted [], got %q", got)
+				}
+			})
+		})
+	}
+}
+
 func TestFieldsUnquotedIndirectAllElementsTargets(t *testing.T) {
 	t.Parallel()
 
