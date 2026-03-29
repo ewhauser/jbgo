@@ -727,7 +727,7 @@ func indirectOuterOpHandlesUnset(pe *syntax.ParamExp) bool {
 	return false
 }
 
-func (cfg *Config) validateIndirectTargetSubscript(target *syntax.ParamExp) error {
+func (cfg *Config) validateIndirectTargetSubscript(target *syntax.ParamExp, state paramExpState) error {
 	if target == nil || target.Index == nil || target.Index.AllElements() {
 		return nil
 	}
@@ -737,8 +737,22 @@ func (cfg *Config) validateIndirectTargetSubscript(target *syntax.ParamExp) erro
 		}
 		return nil
 	}
-	if _, err := Arithm(cfg, target.Index.Expr); err != nil {
+	index, err := Arithm(cfg, target.Index.Expr)
+	if err != nil {
 		return normalizeIndexedSubscriptError(target.Index, err)
+	}
+	if index < 0 {
+		switch state.vr.Kind {
+		case Indexed:
+			if !state.vr.IsSet() {
+				return BadArraySubscriptError{Name: target.Param.Value}
+			}
+			if _, ok := state.vr.IndexedResolve(index); !ok {
+				return BadArraySubscriptError{Name: target.Param.Value}
+			}
+		default:
+			return BadArraySubscriptError{Name: target.Param.Value}
+		}
 	}
 	return nil
 }
@@ -881,7 +895,7 @@ func (cfg *Config) resolveIndirectTargetState(pe *syntax.ParamExp, state paramEx
 				return targetState, target, nil
 			}
 			if indirectOuterOpHandlesUnset(pe) {
-				if err := cfg.validateIndirectTargetSubscript(target); err != nil {
+				if err := cfg.validateIndirectTargetSubscript(target, targetState); err != nil {
 					return targetState, target, err
 				}
 				return targetState, target, nil
