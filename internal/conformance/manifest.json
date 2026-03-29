@@ -58,14 +58,6 @@
             "darwin"
           ]
         },
-        "oils/array-sparse.test.sh::${a[@]:BigInt}": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
-        },
         "oils/array.test.sh::Tilde expansion within array": {
           "mode": "xfail",
           "reason": "conformance: gbash behavior differs from bash",
