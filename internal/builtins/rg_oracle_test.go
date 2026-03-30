@@ -173,7 +173,8 @@ func TestRGMatchesRipgrep(t *testing.T) {
 			},
 		},
 		{
-			name: "files-mode",
+			name:       "files-mode",
+			sortStdout: true,
 			setup: func(t *testing.T, workDir string) {
 				writeHostFile(t, workDir, "visible.txt", "hit\n")
 				writeHostFile(t, workDir, "bin.dat", "xx\x00hit\n")
