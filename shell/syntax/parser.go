@@ -5555,9 +5555,10 @@ func (p *Parser) ifClauseHead(pos Pos, listStart, condLabel string) ([]*Stmt, []
 		if p.recoverError() {
 			thenPos := recoveredPos
 			if len(cond) > 1 {
-				split := p.ifMissingThenSplit(cond)
-				then, thenLast := cond[split:], condLast
-				return cond[:split], nil, thenPos, then, thenLast
+				if split := p.ifMissingThenSplit(cond); split >= 0 {
+					then, thenLast := cond[split:], condLast
+					return cond[:split], nil, thenPos, then, thenLast
+				}
 			}
 			return cond, condLast, thenPos, []*Stmt{{Position: recoveredPos}}, nil
 		}
@@ -5573,13 +5574,12 @@ func (p *Parser) ifMissingThenSplit(stmts []*Stmt) int {
 	if len(stmts) < 2 {
 		return -1
 	}
-	split := 1
 	for i := 1; i < len(stmts); i++ {
 		if strings.ContainsRune(p.sourceBetween(stmts[i-1].End(), stmts[i].Pos()), '\n') {
 			return i
 		}
 	}
-	return split
+	return -1
 }
 
 func (p *Parser) ifClause(s *Stmt) {

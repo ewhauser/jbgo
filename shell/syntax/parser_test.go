@@ -4214,6 +4214,12 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 			wantElseThen: []string{"qux"},
 			wantPrinted:  "elif baz; then",
 		},
+		{
+			name:     "single line keeps condition together",
+			src:      "if foo; bar; fi\n",
+			wantCond: []string{"foo", "bar"},
+			wantThen: []string{""},
+		},
 	}
 
 	for _, tc := range tests {
@@ -4233,6 +4239,9 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 			qt.Assert(t, qt.IsTrue(root.ThenPos.IsRecovered()))
 			qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Cond), tc.wantCond))
 			qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Then), tc.wantThen))
+			if len(tc.wantThen) == 1 && tc.wantThen[0] == "" {
+				qt.Check(t, qt.IsTrue(root.Then[0].Pos().IsRecovered()))
+			}
 
 			if len(tc.wantElseCond) == 0 && len(tc.wantElseThen) == 0 {
 				qt.Check(t, qt.IsNil(root.Else))
@@ -4251,7 +4260,7 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 			var printed strings.Builder
 			err = NewPrinter().Print(&printed, f)
 			qt.Assert(t, qt.IsNil(err))
-			if !strings.Contains(printed.String(), tc.wantPrinted) {
+			if tc.wantPrinted != "" && !strings.Contains(printed.String(), tc.wantPrinted) {
 				t.Fatalf("printed form %q does not contain %q", printed.String(), tc.wantPrinted)
 			}
 		})
