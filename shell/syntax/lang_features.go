@@ -64,7 +64,6 @@ const (
 	FeatureParameterExpansionWidthPrefix
 	FeatureParameterExpansionIndirectPrefix
 	FeatureParameterExpansionIsSetPrefix
-	FeatureParameterExpansionGlobSubstPrefix
 	FeatureParameterExpansionSearchReplace
 	FeatureParameterExpansionSlice
 	FeatureParameterExpansionCaseOperator
@@ -84,6 +83,7 @@ const (
 	FeatureLoopCStyleFor
 	FeatureCaseKornForm
 	FeatureConditionalRegexTest
+	FeatureParameterExpansionGlobSubstPrefix
 )
 
 func (id FeatureID) String() string {
