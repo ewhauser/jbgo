@@ -525,10 +525,9 @@
         },
         "oils/posix.test.sh::Newlines in compound lists": {
           "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
+          "reason": "conformance: Darwin oracle still differs from gbash on missing-file wc stderr wording",
           "goos": [
-            "darwin",
-            "linux"
+            "darwin"
           ]
         },
         "oils/redirect-command.test.sh::Brace group redirect": {
