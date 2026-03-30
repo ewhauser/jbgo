@@ -2532,14 +2532,8 @@ func (p *Parser) currentRuneSource() string {
 }
 
 func (p *Parser) bufferedSourceTail() string {
-	var b strings.Builder
-	if src := p.currentRuneSource(); src != "" {
-		b.WriteString(src)
-	}
-	if idx := int(p.bsp); idx >= 0 && idx <= len(p.bs) {
-		b.Write(p.bs[idx:])
-	}
-	return b.String()
+	tail, _ := p.currentSourceTail()
+	return string(tail)
 }
 
 func (p *Parser) sourceFromPos(pos Pos) string {
@@ -4275,7 +4269,10 @@ func (p *Parser) paramExp() *ParamExp {
 		Short:  p.tok == dollar,
 	}
 	if !pe.Short && p.r == '(' {
-		subtype, detail := p.paramExpFlagsFeatureMetadata()
+		subtype, detail := FeatureSubtypeParameterExpansionFlag, ""
+		if !p.lang.in(LangZsh) {
+			subtype, detail = p.paramExpFlagsFeatureMetadata()
+		}
 		p.checkLangSpanDetailed(pe.Pos(), posAddCol(p.nextPos(), 1), LangZsh, FeatureParameterExpansionFlags, subtype, detail)
 		// For now, for simplicity, we parse flags as just a literal.
 		// In the future, parsing as a word is better for cases like
@@ -4352,7 +4349,10 @@ func (p *Parser) paramExp() *ParamExp {
 	// Index expressions like ${foo[1]}. Note that expansion suffixes can be combined,
 	// like ${foo[@]//replace/with}.
 	if p.r == '[' {
-		subtype, detail := p.paramExpIndexFeatureMetadata()
+		subtype, detail := FeatureSubtypeUnknown, ""
+		if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			subtype, detail = p.paramExpIndexFeatureMetadata()
+		}
 		p.checkLangDetailed(p.nextPos(), langBashLike|LangMirBSDKorn|LangZsh, FeatureArraySyntax, subtype, detail)
 		if pe.Param != nil && !ValidName(pe.Param.Value) {
 			p.posErr(p.nextPos(), "cannot index a special parameter name")
@@ -4515,10 +4515,91 @@ func (p *Parser) paramExpFlagsFeatureMetadata() (FeatureSubtype, string) {
 	if end := strings.IndexByte(flags, ')'); end >= 0 {
 		flags = flags[:end]
 	}
-	if strings.ContainsRune(flags, '~') {
+	if paramExpFlagsContainTildeFlag(flags) {
 		return FeatureSubtypeParameterExpansionTildeFlag, flags
 	}
 	return FeatureSubtypeParameterExpansionFlag, flags
+}
+
+type paramExpFlagDelims struct {
+	open  byte
+	close byte
+}
+
+func paramExpFlagDelimiters(b byte) paramExpFlagDelims {
+	switch b {
+	case '(':
+		return paramExpFlagDelims{open: '(', close: ')'}
+	case '{':
+		return paramExpFlagDelims{open: '{', close: '}'}
+	case '[':
+		return paramExpFlagDelims{open: '[', close: ']'}
+	case '<':
+		return paramExpFlagDelims{open: '<', close: '>'}
+	default:
+		return paramExpFlagDelims{open: b, close: b}
+	}
+}
+
+func paramExpConsumeFlagArg(flags string, i int) (paramExpFlagDelims, int, bool) {
+	if i >= len(flags) {
+		return paramExpFlagDelims{}, len(flags), false
+	}
+	delims := paramExpFlagDelimiters(flags[i])
+	next, ok := paramExpConsumeFlagArgWithDelims(flags, i+1, delims)
+	return delims, next, ok
+}
+
+func paramExpConsumeFlagArgWithDelims(flags string, i int, delims paramExpFlagDelims) (int, bool) {
+	for i < len(flags) {
+		switch flags[i] {
+		case '\\':
+			if i+1 < len(flags) {
+				i += 2
+				continue
+			}
+		case delims.close:
+			return i + 1, true
+		}
+		i++
+	}
+	return len(flags), false
+}
+
+func paramExpFlagsContainTildeFlag(flags string) bool {
+	for i := 0; i < len(flags); {
+		switch flags[i] {
+		case '~':
+			return true
+		case 'q':
+			i++
+			if i < len(flags) && (flags[i] == '-' || flags[i] == '+') {
+				i++
+			}
+		case 'g', 'j', 's', 'Z', 'I', '_':
+			_, next, ok := paramExpConsumeFlagArg(flags, i+1)
+			if !ok {
+				return false
+			}
+			i = next
+		case 'l', 'r':
+			delims, next, ok := paramExpConsumeFlagArg(flags, i+1)
+			if !ok {
+				return false
+			}
+			i = next
+			for optional := 0; optional < 2 && i < len(flags) && flags[i] == delims.open; optional++ {
+				next, ok = paramExpConsumeFlagArgWithDelims(flags, i+1, delims)
+				if !ok {
+					return false
+				}
+				i = next
+			}
+		default:
+			i++
+		}
+	}
+	return false
 }
 
 func (p *Parser) paramExpIndexFeatureMetadata() (FeatureSubtype, string) {

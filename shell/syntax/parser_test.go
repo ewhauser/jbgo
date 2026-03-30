@@ -95,6 +95,7 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 		name          string
 		lang          LangVariant
 		src           string
+		reader        func(string) io.Reader
 		wantID        FeatureID
 		wantIDString  string
 		wantCategory  FeatureCategory
@@ -127,6 +128,19 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 			wantErrorText: "1:6: parameter expansion flags are a zsh feature; tried parsing as bash",
 		},
 		{
+			name:          "parameter expansion flags chunked at lparen",
+			lang:          LangBash,
+			src:           "echo ${(f)foo}",
+			reader:        func(src string) io.Reader { return newChunkReader(src, 8) },
+			wantID:        FeatureParameterExpansionFlags,
+			wantIDString:  "parameter_expansion_flags",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantSubtype:   FeatureSubtypeParameterExpansionFlag,
+			wantDetail:    "f",
+			wantFeature:   "parameter expansion flags",
+			wantErrorText: "1:6: parameter expansion flags are a zsh feature; tried parsing as bash",
+		},
+		{
 			name:          "parameter expansion tilde flag",
 			lang:          LangBash,
 			src:           "echo ${(~)foo}",
@@ -135,6 +149,32 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 			wantCategory:  FeatureCategoryParameterExpansion,
 			wantSubtype:   FeatureSubtypeParameterExpansionTildeFlag,
 			wantDetail:    "~",
+			wantFeature:   "parameter expansion flags",
+			wantErrorText: "1:6: parameter expansion flags are a zsh feature; tried parsing as bash",
+		},
+		{
+			name:          "parameter expansion tilde flag chunked at lparen",
+			lang:          LangBash,
+			src:           "echo ${(~)foo}",
+			reader:        func(src string) io.Reader { return newChunkReader(src, 8) },
+			wantID:        FeatureParameterExpansionFlags,
+			wantIDString:  "parameter_expansion_flags",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantSubtype:   FeatureSubtypeParameterExpansionTildeFlag,
+			wantDetail:    "~",
+			wantFeature:   "parameter expansion flags",
+			wantErrorText: "1:6: parameter expansion flags are a zsh feature; tried parsing as bash",
+		},
+		{
+			name:          "parameter expansion separator payload does not imply tilde flag",
+			lang:          LangBash,
+			src:           "echo ${(s.~.)foo}",
+			reader:        func(src string) io.Reader { return newChunkReader(src, 8) },
+			wantID:        FeatureParameterExpansionFlags,
+			wantIDString:  "parameter_expansion_flags",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantSubtype:   FeatureSubtypeParameterExpansionFlag,
+			wantDetail:    "s.~.",
 			wantFeature:   "parameter expansion flags",
 			wantErrorText: "1:6: parameter expansion flags are a zsh feature; tried parsing as bash",
 		},
@@ -174,6 +214,19 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 			name:          "quoted index parameter expansion",
 			lang:          LangPOSIX,
 			src:           `echo ${foo["bar"]}`,
+			wantID:        FeatureArraySyntax,
+			wantIDString:  "array_syntax",
+			wantCategory:  FeatureCategoryArray,
+			wantSubtype:   FeatureSubtypeParameterExpansionQuotedIndex,
+			wantDetail:    "\"",
+			wantFeature:   "arrays",
+			wantErrorText: "1:11: arrays are a bash/mksh/zsh feature; tried parsing as posix",
+		},
+		{
+			name:          "quoted index parameter expansion chunked at lbrack",
+			lang:          LangPOSIX,
+			src:           `echo ${foo["bar"]}`,
+			reader:        func(src string) io.Reader { return newChunkReader(src, 11) },
 			wantID:        FeatureArraySyntax,
 			wantIDString:  "array_syntax",
 			wantCategory:  FeatureCategoryArray,
@@ -258,7 +311,11 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := NewParser(Variant(tt.lang)).Parse(strings.NewReader(tt.src), "")
+			reader := io.Reader(strings.NewReader(tt.src))
+			if tt.reader != nil {
+				reader = tt.reader(tt.src)
+			}
+			_, err := NewParser(Variant(tt.lang)).Parse(reader, "")
 			if err == nil {
 				t.Fatalf("Parse(%q) error = nil, want LangError", tt.src)
 			}
@@ -3781,8 +3838,17 @@ type strictStringReader struct {
 	gaveEOF bool
 }
 
+type chunkReader struct {
+	*strings.Reader
+	maxChunk int
+}
+
 func newStrictReader(s string) *strictStringReader {
 	return &strictStringReader{Reader: strings.NewReader(s)}
+}
+
+func newChunkReader(s string, maxChunk int) *chunkReader {
+	return &chunkReader{Reader: strings.NewReader(s), maxChunk: maxChunk}
 }
 
 func (r *strictStringReader) Read(p []byte) (int, error) {
@@ -3794,6 +3860,13 @@ func (r *strictStringReader) Read(p []byte) (int, error) {
 		r.gaveEOF = true
 	}
 	return n, err
+}
+
+func (r *chunkReader) Read(p []byte) (int, error) {
+	if r.maxChunk > 0 && len(p) > r.maxChunk {
+		p = p[:r.maxChunk]
+	}
+	return r.Reader.Read(p)
 }
 
 func TestParseStmtsSeq(t *testing.T) {
