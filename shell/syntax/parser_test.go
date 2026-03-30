@@ -4205,6 +4205,44 @@ func TestParseAliasExpansionPreservesWordProvenance(t *testing.T) {
 	}
 }
 
+func TestParseAliasExpansionPreservesCallExprSeparators(t *testing.T) {
+	t.Parallel()
+
+	parser := NewParser(ExpandAliases(func(name string) (AliasSpec, bool) {
+		switch name {
+		case "hi":
+			return AliasSpec{Value: "echo hello "}, true
+		case "punct":
+			return AliasSpec{Value: "world"}, true
+		default:
+			return AliasSpec{}, false
+		}
+	}))
+
+	file, err := parser.Parse(strings.NewReader("hi punct\n"), "")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	call := file.Stmts[0].Cmd.(*CallExpr)
+	sep := call.ArgSeparator(1)
+	if !sep.IsValid() {
+		t.Fatal("ArgSeparator(1).IsValid() = false, want true")
+	}
+	if got, want := sep.SpaceCount(), 2; got != want {
+		t.Fatalf("ArgSeparator(1).SpaceCount() = %d, want %d", got, want)
+	}
+	if got := sep.TabCount(); got != 0 {
+		t.Fatalf("ArgSeparator(1).TabCount() = %d, want 0", got)
+	}
+	if got := sep.HasNewline(); got {
+		t.Fatal("ArgSeparator(1).HasNewline() = true, want false")
+	}
+	if got := sep.HasMultipleSpacesOnSameLine(); !got {
+		t.Fatal("ArgSeparator(1).HasMultipleSpacesOnSameLine() = false, want true")
+	}
+}
+
 func TestParseWords(t *testing.T) {
 	t.Parallel()
 	p := NewParser()

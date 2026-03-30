@@ -313,6 +313,125 @@ func TestPublicPatternGroupRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPublicCallExprSeparatorMetadata(t *testing.T) {
+	t.Parallel()
+
+	src := "A=1  B=2   echo foo  bar\tbaz \\\n qux\n"
+	file := parseFile(t, src)
+	call := file.Stmts[0].Cmd.(*syntax.CallExpr)
+
+	tests := []struct {
+		name         string
+		sep          syntax.CallExprSeparator
+		wantValid    bool
+		wantSpaces   int
+		wantTabs     int
+		wantNewline  bool
+		wantMultiple bool
+	}{
+		{
+			name:         "assign assign",
+			sep:          call.OperandSeparator(0),
+			wantValid:    true,
+			wantSpaces:   2,
+			wantTabs:     0,
+			wantNewline:  false,
+			wantMultiple: true,
+		},
+		{
+			name:         "assign arg",
+			sep:          call.OperandSeparator(1),
+			wantValid:    true,
+			wantSpaces:   3,
+			wantTabs:     0,
+			wantNewline:  false,
+			wantMultiple: true,
+		},
+		{
+			name:         "arg arg spaces",
+			sep:          call.ArgSeparator(1),
+			wantValid:    true,
+			wantSpaces:   2,
+			wantTabs:     0,
+			wantNewline:  false,
+			wantMultiple: true,
+		},
+		{
+			name:         "arg arg tabs",
+			sep:          call.ArgSeparator(2),
+			wantValid:    true,
+			wantSpaces:   0,
+			wantTabs:     1,
+			wantNewline:  false,
+			wantMultiple: false,
+		},
+		{
+			name:         "arg arg newline",
+			sep:          call.ArgSeparator(3),
+			wantValid:    true,
+			wantSpaces:   2,
+			wantTabs:     0,
+			wantNewline:  true,
+			wantMultiple: false,
+		},
+	}
+
+	for _, tc := range tests {
+		if got := tc.sep.IsValid(); got != tc.wantValid {
+			t.Fatalf("%s IsValid() = %v, want %v", tc.name, got, tc.wantValid)
+		}
+		if got := tc.sep.SpaceCount(); got != tc.wantSpaces {
+			t.Fatalf("%s SpaceCount() = %d, want %d", tc.name, got, tc.wantSpaces)
+		}
+		if got := tc.sep.TabCount(); got != tc.wantTabs {
+			t.Fatalf("%s TabCount() = %d, want %d", tc.name, got, tc.wantTabs)
+		}
+		if got := tc.sep.HasNewline(); got != tc.wantNewline {
+			t.Fatalf("%s HasNewline() = %v, want %v", tc.name, got, tc.wantNewline)
+		}
+		if got := tc.sep.HasMultipleSpacesOnSameLine(); got != tc.wantMultiple {
+			t.Fatalf("%s HasMultipleSpacesOnSameLine() = %v, want %v", tc.name, got, tc.wantMultiple)
+		}
+	}
+}
+
+func TestPublicCallExprSeparatorSkippedAcrossRedirects(t *testing.T) {
+	t.Parallel()
+
+	file := parseFile(t, "echo >/tmp/out foo\n")
+	call := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if got := call.ArgSeparator(0); got.IsValid() {
+		t.Fatalf("ArgSeparator(0).IsValid() = true, want false")
+	}
+}
+
+func TestPublicCallExprSeparatorParseOnly(t *testing.T) {
+	t.Parallel()
+
+	parsed := parseFile(t, "echo foo  bar\n").Stmts[0].Cmd.(*syntax.CallExpr)
+	if got := parsed.ArgSeparator(0); !got.IsValid() {
+		t.Fatal("parsed ArgSeparator(0).IsValid() = false, want true")
+	}
+
+	decoded := encodeDecodeFile(t, parseFile(t, "echo foo  bar\n")).Stmts[0].Cmd.(*syntax.CallExpr)
+	if got := decoded.ArgSeparator(0); got.IsValid() {
+		t.Fatalf("decoded ArgSeparator(0).IsValid() = true, want false")
+	}
+
+	synthetic := &syntax.CallExpr{
+		Args: []*syntax.Word{
+			{Parts: []syntax.WordPart{&syntax.Lit{Value: "echo"}}},
+			{Parts: []syntax.WordPart{&syntax.Lit{Value: "foo"}}},
+		},
+	}
+	if got := synthetic.ArgSeparator(0); got.IsValid() {
+		t.Fatalf("synthetic ArgSeparator(0).IsValid() = true, want false")
+	}
+	if got := synthetic.OperandSeparator(0); got.IsValid() {
+		t.Fatalf("synthetic OperandSeparator(0).IsValid() = true, want false")
+	}
+}
+
 func TestPublicSyntheticQuoteFidelity(t *testing.T) {
 	t.Parallel()
 

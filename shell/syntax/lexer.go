@@ -210,6 +210,7 @@ readAgain:
 }
 
 func (p *Parser) nextKeepSpaces() {
+	p.tokSeparator = CallExprSeparator{}
 	r := p.r
 	if p.quote != hdocBody && p.quote != hdocBodyTabs {
 		// Heredocs handle escaped newlines in a special way, but others do not.
@@ -259,6 +260,7 @@ func (p *Parser) nextKeepSpaces() {
 	}
 	p.tokAliasChain = append(p.tokAliasChain[:0], p.aliasChain...)
 	if p.aliasBlankNext {
+		prefixSep := p.tokSeparator
 		if p.expandCommandAlias() {
 			// Continue expanding recursively so nested aliases
 			// (e.g. FOR2→FOR1→for) are fully resolved.
@@ -268,7 +270,8 @@ func (p *Parser) nextKeepSpaces() {
 			// The trailing-blank that triggered this expansion is a
 			// word boundary; restore p.spaced which expandCommandAlias
 			// resets via its internal p.next() call.
-			p.spaced = true
+			p.tokSeparator = combineCallExprSeparators(prefixSep, p.tokSeparator)
+			p.spaced = p.tokSeparator.IsValid()
 			return
 		}
 		// A trailing-blank alias only grants one more token the chance to
@@ -284,15 +287,19 @@ func (p *Parser) next() {
 	if p.r == utf8.RuneSelf {
 		p.tok = _EOF
 		p.tokAliasChain = p.tokAliasChain[:0]
+		p.tokSeparator = CallExprSeparator{}
 		return
 	}
 	p.spaced = false
+	p.tokSeparator = CallExprSeparator{}
 	if p.quote&allKeepSpaces != 0 {
 		p.nextKeepSpaces()
 		return
 	}
 	r := p.r
 	for r == escNewl {
+		p.tokSeparator.valid = true
+		p.tokSeparator.newline = true
 		r = p.rune()
 	}
 skipSpace:
@@ -305,19 +312,33 @@ skipSpace:
 			}
 			p.tok = _EOF
 			p.tokAliasChain = p.tokAliasChain[:0]
+			p.tokSeparator = CallExprSeparator{}
 			return
 		case escNewl:
+			p.tokSeparator.valid = true
+			p.tokSeparator.newline = true
 			r = p.rune()
-		case ' ', '\t':
+		case ' ':
 			p.spaced = true
+			p.tokSeparator.valid = true
+			p.tokSeparator.spaces++
+			r = p.rune()
+		case '\t':
+			p.spaced = true
+			p.tokSeparator.valid = true
+			p.tokSeparator.tabs++
 			r = p.rune()
 		case '\n':
 			if p.tok == _Newl {
 				// merge consecutive newline tokens
+				p.tokSeparator.valid = true
+				p.tokSeparator.newline = true
 				r = p.rune()
 				continue
 			}
 			p.spaced = true
+			p.tokSeparator.valid = true
+			p.tokSeparator.newline = true
 			p.tok = _Newl
 			if p.quote != hdocWord && len(p.heredocs) > p.buriedHdocs {
 				p.doHeredocs()
@@ -442,11 +463,13 @@ skipSpace:
 	}
 	p.tokAliasChain = append(p.tokAliasChain[:0], p.aliasChain...)
 	if p.aliasBlankNext {
+		prefixSep := p.tokSeparator
 		if p.expandCommandAlias() {
 			for p.expandCommandAlias() {
 			}
 			p.aliasBlankNext = false
-			p.spaced = true
+			p.tokSeparator = combineCallExprSeparators(prefixSep, p.tokSeparator)
+			p.spaced = p.tokSeparator.IsValid()
 			return
 		}
 		// A trailing-blank alias only grants one more token the chance to
