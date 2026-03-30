@@ -6032,12 +6032,12 @@ func ifMissingThenBoundary(src string) bool {
 }
 
 func (p *Parser) ifClause(s *Stmt) {
-	rootIf := &IfClause{Position: p.pos}
+	rootIf := &IfClause{Position: p.pos, Kind: IfClauseIf}
 	p.next()
 	rootIf.Cond, rootIf.CondLast, rootIf.ThenPos, rootIf.Then, rootIf.ThenLast = p.ifClauseHead(rootIf.Position, "if", "if <cond>")
 	curIf := rootIf
 	for p.atRsrv(rsrvElif) {
-		elf := &IfClause{Position: p.pos}
+		elf := &IfClause{Position: p.pos, Kind: IfClauseElif}
 		curIf.Last = p.accComs
 		p.accComs = nil
 		p.next()
@@ -6048,7 +6048,7 @@ func (p *Parser) ifClause(s *Stmt) {
 	if elsePos, ok := p.gotRsrv(rsrvElse); ok {
 		curIf.Last = p.accComs
 		p.accComs = nil
-		els := &IfClause{Position: elsePos}
+		els := &IfClause{Position: elsePos, Kind: IfClauseElse}
 		els.Then, els.ThenLast = p.followStmts("else", els.Position, rsrvFi)
 		curIf.Else = els
 		curIf = els

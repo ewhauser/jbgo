@@ -219,6 +219,35 @@ func TestEncodeArrayModes(t *testing.T) {
 	qt.Assert(t, qt.Equals(arr.Elems[0].Index.Mode, syntax.SubscriptAssociative))
 }
 
+func TestEncodeIfClauseKind(t *testing.T) {
+	t.Parallel()
+
+	node := &syntax.IfClause{
+		Kind: syntax.IfClauseIf,
+		Else: &syntax.IfClause{
+			Kind: syntax.IfClauseElif,
+			Else: &syntax.IfClause{
+				Kind: syntax.IfClauseElse,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := typedjson.Encode(&buf, node)
+	qt.Assert(t, qt.IsNil(err))
+
+	decoded, err := typedjson.Decode(bytes.NewReader(buf.Bytes()))
+	qt.Assert(t, qt.IsNil(err))
+
+	ifClause, ok := decoded.(*syntax.IfClause)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.Equals(ifClause.Kind, syntax.IfClauseIf))
+	qt.Assert(t, qt.IsNotNil(ifClause.Else))
+	qt.Assert(t, qt.Equals(ifClause.Else.Kind, syntax.IfClauseElif))
+	qt.Assert(t, qt.IsNotNil(ifClause.Else.Else))
+	qt.Assert(t, qt.Equals(ifClause.Else.Else.Kind, syntax.IfClauseElse))
+}
+
 func TestEncodePatternGroup(t *testing.T) {
 	t.Parallel()
 

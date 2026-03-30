@@ -351,6 +351,12 @@ func decodeValue(val reflect.Value, enc any) error {
 		// TODO: reject invalid operators.
 		u := uint64(enc)
 		val.SetUint(u)
+	case string:
+		if val.Kind() == reflect.String {
+			val.SetString(enc)
+		} else {
+			val.Set(reflect.ValueOf(enc))
+		}
 	default:
 		if enc != nil {
 			val.Set(reflect.ValueOf(enc))

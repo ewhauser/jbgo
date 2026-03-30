@@ -68,6 +68,54 @@ func TestPublicSyntaxParseAndTypedJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPublicIfClauseKindMetadata(t *testing.T) {
+	t.Parallel()
+
+	src := "if cond; then body; elif fallback; then alt; else final; fi\n"
+	file := parseFile(t, src)
+	if got, want := len(file.Stmts), 1; got != want {
+		t.Fatalf("len(Stmts) = %d, want %d", got, want)
+	}
+
+	root, ok := file.Stmts[0].Cmd.(*syntax.IfClause)
+	if !ok {
+		t.Fatalf("Cmd = %T, want *syntax.IfClause", file.Stmts[0].Cmd)
+	}
+	if got, want := root.Kind, syntax.IfClauseIf; got != want {
+		t.Fatalf("root.Kind = %q, want %q", got, want)
+	}
+	if root.Else == nil {
+		t.Fatal("root.Else = nil, want elif branch")
+	}
+	if got, want := root.Else.Kind, syntax.IfClauseElif; got != want {
+		t.Fatalf("root.Else.Kind = %q, want %q", got, want)
+	}
+	if root.Else.Else == nil {
+		t.Fatal("root.Else.Else = nil, want else branch")
+	}
+	if got, want := root.Else.Else.Kind, syntax.IfClauseElse; got != want {
+		t.Fatalf("root.Else.Else.Kind = %q, want %q", got, want)
+	}
+
+	decoded := encodeDecodeFile(t, file)
+	roundtrip, ok := decoded.Stmts[0].Cmd.(*syntax.IfClause)
+	if !ok {
+		t.Fatalf("decoded Cmd = %T, want *syntax.IfClause", decoded.Stmts[0].Cmd)
+	}
+	if got, want := roundtrip.Kind, syntax.IfClauseIf; got != want {
+		t.Fatalf("roundtrip.Kind = %q, want %q", got, want)
+	}
+	if roundtrip.Else == nil || roundtrip.Else.Else == nil {
+		t.Fatalf("roundtrip else chain missing: %#v", roundtrip.Else)
+	}
+	if got, want := roundtrip.Else.Kind, syntax.IfClauseElif; got != want {
+		t.Fatalf("roundtrip.Else.Kind = %q, want %q", got, want)
+	}
+	if got, want := roundtrip.Else.Else.Kind, syntax.IfClauseElse; got != want {
+		t.Fatalf("roundtrip.Else.Else.Kind = %q, want %q", got, want)
+	}
+}
+
 func TestPublicSyntaxParseErrorMetadata(t *testing.T) {
 	t.Parallel()
 
