@@ -353,6 +353,34 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 	}
 }
 
+func TestParseLangErrorFeatureMetadataDoesNotDrainReader(t *testing.T) {
+	t.Parallel()
+
+	reader := &scriptedChunkReader{chunks: []string{
+		"echo ${(",
+		"f)foo}",
+		"echo should remain unread\n",
+	}}
+	_, err := NewParser(Variant(LangBash)).Parse(reader, "")
+	if err == nil {
+		t.Fatal("Parse error = nil, want LangError")
+	}
+
+	var langErr LangError
+	if !errors.As(err, &langErr) {
+		t.Fatalf("Parse error = %T, want LangError", err)
+	}
+	if got, want := langErr.FeatureID, FeatureParameterExpansionFlags; got != want {
+		t.Fatalf("FeatureID = %v, want %v", got, want)
+	}
+	if got, want := langErr.FeatureDetail, "f"; got != want {
+		t.Fatalf("FeatureDetail = %q, want %q", got, want)
+	}
+	if got, want := reader.index, 2; got != want {
+		t.Fatalf("reader consumed %d chunks, want %d", got, want)
+	}
+}
+
 func TestParseLangErrorParameterExpansionSpans(t *testing.T) {
 	t.Parallel()
 
@@ -3843,6 +3871,11 @@ type chunkReader struct {
 	maxChunk int
 }
 
+type scriptedChunkReader struct {
+	chunks []string
+	index  int
+}
+
 func newStrictReader(s string) *strictStringReader {
 	return &strictStringReader{Reader: strings.NewReader(s)}
 }
@@ -3867,6 +3900,18 @@ func (r *chunkReader) Read(p []byte) (int, error) {
 		p = p[:r.maxChunk]
 	}
 	return r.Reader.Read(p)
+}
+
+func (r *scriptedChunkReader) Read(p []byte) (int, error) {
+	if r.index >= len(r.chunks) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.chunks[r.index])
+	r.chunks[r.index] = r.chunks[r.index][n:]
+	if r.chunks[r.index] == "" {
+		r.index++
+	}
+	return n, nil
 }
 
 func TestParseStmtsSeq(t *testing.T) {

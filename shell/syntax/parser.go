@@ -2532,8 +2532,14 @@ func (p *Parser) currentRuneSource() string {
 }
 
 func (p *Parser) bufferedSourceTail() string {
-	tail, _ := p.currentSourceTail()
-	return string(tail)
+	var b strings.Builder
+	if src := p.currentRuneSource(); src != "" {
+		b.WriteString(src)
+	}
+	if idx := int(p.bsp); idx >= 0 && idx <= len(p.bs) {
+		b.Write(p.bs[idx:])
+	}
+	return b.String()
 }
 
 func (p *Parser) sourceFromPos(pos Pos) string {
@@ -2658,6 +2664,59 @@ func (p *Parser) currentSourceTail() ([]byte, error) {
 	rest, err := p.unreadSourceTail()
 	tail = append(tail, rest...)
 	return tail, err
+}
+
+func (p *Parser) lookaheadSourceTail(limit int, done func([]byte) bool) string {
+	tail := make([]byte, 0, limit)
+	if src := p.currentRuneSource(); src != "" {
+		tail = append(tail, src...)
+	}
+	if idx := int(p.bsp); idx >= 0 && idx <= len(p.bs) {
+		tail = append(tail, p.bs[idx:]...)
+	}
+	if limit <= 0 || len(tail) >= limit || done(tail) || p.src == nil || p.readEOF || p.readErr != nil {
+		return string(tail)
+	}
+
+	reader := p.src
+	extra := make([]byte, 0, limit-len(tail))
+	buf := make([]byte, min(64, limit-len(tail)))
+	for len(tail) < limit && !done(tail) {
+		n, err := reader.Read(buf[:min(len(buf), limit-len(tail))])
+		if n > 0 {
+			extra = append(extra, buf[:n]...)
+			tail = append(tail, buf[:n]...)
+		}
+		if err != nil || n == 0 {
+			break
+		}
+	}
+	if len(extra) > 0 {
+		p.src = io.MultiReader(bytes.NewReader(extra), reader)
+	}
+	return string(tail)
+}
+
+func paramExpFlagsMetadataTailDone(tail []byte) bool {
+	if len(tail) == 0 || tail[0] != '(' {
+		return true
+	}
+	return bytes.IndexByte(tail[1:], ')') >= 0
+}
+
+func paramExpIndexMetadataTailDone(tail []byte) bool {
+	if len(tail) == 0 || tail[0] != '[' {
+		return true
+	}
+	for _, b := range tail[1:] {
+		switch b {
+		case ' ', '\t', '\r', '\n':
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Parser) unreadSourceTail() ([]byte, error) {
@@ -4507,7 +4566,7 @@ func (p *Parser) paramExp() *ParamExp {
 }
 
 func (p *Parser) paramExpFlagsFeatureMetadata() (FeatureSubtype, string) {
-	tail := p.bufferedSourceTail()
+	tail := p.lookaheadSourceTail(256, paramExpFlagsMetadataTailDone)
 	if !strings.HasPrefix(tail, "(") {
 		return FeatureSubtypeParameterExpansionFlag, ""
 	}
@@ -4603,7 +4662,7 @@ func paramExpFlagsContainTildeFlag(flags string) bool {
 }
 
 func (p *Parser) paramExpIndexFeatureMetadata() (FeatureSubtype, string) {
-	tail := p.bufferedSourceTail()
+	tail := p.lookaheadSourceTail(64, paramExpIndexMetadataTailDone)
 	if !strings.HasPrefix(tail, "[") {
 		return FeatureSubtypeUnknown, ""
 	}
