@@ -259,20 +259,26 @@ func shiftChunkError(err error, offsetBase, lineBase uint) error {
 	if err == nil || (offsetBase == 0 && lineBase <= 1) {
 		return err
 	}
-	var parseErr syntax.ParseError
-	if !errors.As(err, &parseErr) || !parseErr.Pos.IsValid() {
-		return err
-	}
 	shiftPos := func(pos syntax.Pos) syntax.Pos {
 		if !pos.IsValid() {
 			return pos
 		}
 		return syntax.NewPos(pos.Offset()+offsetBase, pos.Line()+lineBase-1, pos.Col())
 	}
-	parseErr.Pos = shiftPos(parseErr.Pos)
-	parseErr.SecondaryPos = shiftPos(parseErr.SecondaryPos)
-	parseErr.SourceLinePos = shiftPos(parseErr.SourceLinePos)
-	return parseErr
+	var parseErr syntax.ParseError
+	if errors.As(err, &parseErr) && parseErr.Pos.IsValid() {
+		parseErr.Pos = shiftPos(parseErr.Pos)
+		parseErr.SecondaryPos = shiftPos(parseErr.SecondaryPos)
+		parseErr.SourceLinePos = shiftPos(parseErr.SourceLinePos)
+		return parseErr
+	}
+	var langErr syntax.LangError
+	if !errors.As(err, &langErr) || !langErr.Pos.IsValid() {
+		return err
+	}
+	langErr.Pos = shiftPos(langErr.Pos)
+	langErr.End = shiftPos(langErr.End)
+	return langErr
 }
 
 func lineContinues(line string) bool {

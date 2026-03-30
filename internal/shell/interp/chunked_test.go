@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -148,5 +149,32 @@ func TestShiftChunkPositionsDoesNotShiftSharedAliasExpansionTwice(t *testing.T) 
 	want := syntax.NewPos(orig.Offset()+10, orig.Line()+2, orig.Col())
 	if got := shared.Pos; got != want {
 		t.Fatalf("shared alias position = %v, want %v", got, want)
+	}
+}
+
+func TestShiftChunkErrorShiftsLangErrorSpan(t *testing.T) {
+	t.Parallel()
+
+	err := syntax.LangError{
+		Pos:           syntax.NewPos(5, 1, 6),
+		End:           syntax.NewPos(8, 1, 9),
+		FeatureID:     syntax.FeatureParameterExpansionFlags,
+		FeatureDetail: "",
+		Langs:         []syntax.LangVariant{syntax.LangZsh},
+		LangUsed:      syntax.LangBash,
+	}
+
+	shifted := shiftChunkError(err, 10, 3)
+
+	var got syntax.LangError
+	if !errors.As(shifted, &got) {
+		t.Fatalf("shiftChunkError() = %T, want syntax.LangError", shifted)
+	}
+
+	if want := syntax.NewPos(15, 3, 6); got.Pos != want {
+		t.Fatalf("Pos = %v, want %v", got.Pos, want)
+	}
+	if want := syntax.NewPos(18, 3, 9); got.End != want {
+		t.Fatalf("End = %v, want %v", got.End, want)
 	}
 }
