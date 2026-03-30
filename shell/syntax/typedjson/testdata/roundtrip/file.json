@@ -1466,6 +1466,7 @@
 					"Line": 11,
 					"Col": 1
 				},
+				"Kind": "if",
 				"ThenPos": {
 					"Offset": 113,
 					"Line": 11,

@@ -567,11 +567,22 @@ type Block struct {
 func (b *Block) Pos() Pos { return b.Lbrace }
 func (b *Block) End() Pos { return posAddCol(b.Rbrace, 1) }
 
+// IfClauseKind identifies which reserved word introduced an [IfClause] node.
+type IfClauseKind string
+
+const (
+	IfClauseUnknown IfClauseKind = ""
+	IfClauseIf      IfClauseKind = "if"
+	IfClauseElif    IfClauseKind = "elif"
+	IfClauseElse    IfClauseKind = "else"
+)
+
 // IfClause represents an if statement.
 type IfClause struct {
-	Position Pos // position of the starting "if", "elif", or "else" token
-	ThenPos  Pos // position of "then", recovered if missing, empty only for an "else"
-	FiPos    Pos // position of "fi", shared with .Else if non-nil
+	Position Pos          // position of the starting "if", "elif", or "else" token
+	Kind     IfClauseKind // branch token kind; empty on synthetic trees that omit branch metadata
+	ThenPos  Pos          // position of "then", recovered if missing, empty only for an "else"
+	FiPos    Pos          // position of "fi", shared with .Else if non-nil
 
 	Cond     []*Stmt
 	CondLast []Comment

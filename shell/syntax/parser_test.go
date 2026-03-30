@@ -2044,6 +2044,7 @@ func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
 
 var cmpOpt = cmp.Options{
 	cmp.FilterValues(func(p1, p2 Pos) bool { return true }, cmp.Ignore()),
+	cmpopts.IgnoreFields(IfClause{}, "Kind"),
 	cmpopts.IgnoreFields(ArithmExp{}, "Source"),
 	cmpopts.IgnoreFields(ArithmCmd{}, "Source"),
 	cmpopts.IgnoreUnexported(Assign{}, Subscript{}, VarRef{}, Word{}, Pattern{}, ParseError{}),
@@ -4621,6 +4622,7 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 			if !ok {
 				t.Fatalf("root command = %T, want *IfClause", f.Stmts[0].Cmd)
 			}
+			qt.Check(t, qt.Equals(root.Kind, IfClauseIf))
 			qt.Assert(t, qt.IsTrue(root.hasThen()))
 			qt.Assert(t, qt.IsTrue(root.ThenPos.IsRecovered()))
 			qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Cond), tc.wantCond))
@@ -4636,9 +4638,11 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 				qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Else.Cond), tc.wantElseCond))
 				qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Else.Then), tc.wantElseThen))
 				if len(tc.wantElseCond) > 0 {
+					qt.Check(t, qt.Equals(root.Else.Kind, IfClauseElif))
 					qt.Check(t, qt.IsTrue(root.Else.hasThen()))
 					qt.Check(t, qt.IsTrue(root.Else.ThenPos.IsRecovered()))
 				} else {
+					qt.Check(t, qt.Equals(root.Else.Kind, IfClauseElse))
 					qt.Check(t, qt.IsFalse(root.Else.hasThen()))
 				}
 			}

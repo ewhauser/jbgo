@@ -5826,11 +5826,14 @@ func (c sanityChecker) visit(node Node) bool {
 		c.checkPos(node, node.Lbrace, "{")
 		c.checkPos(node, node.Rbrace, "}")
 	case *IfClause:
-		if node.hasThen() {
-			c.checkPos(node, node.Position, "if", "elif")
+		switch node.Kind {
+		case IfClauseIf, IfClauseElif:
+			c.checkPos(node, node.Position, string(node.Kind))
 			c.checkPos(node, node.ThenPos, "then")
-		} else {
+		case IfClauseElse:
 			c.checkPos(node, node.Position, "else")
+		default:
+			c.tb.Errorf("Unexpected IfClause.Kind %q in %q", node.Kind, c.src)
 		}
 		c.checkPos(node, node.FiPos, "fi")
 	case *WhileClause:
