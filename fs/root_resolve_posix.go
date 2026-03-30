@@ -133,7 +133,7 @@ func resolveWithinRootDepth(root *os.Root, rootPath, canonicalRoot, rel string, 
 }
 
 func cleanRootRelative(rel string) string {
-	rel = filepath.ToSlash(filepath.Clean("/" + strings.TrimSpace(rel)))
+	rel = filepath.ToSlash(filepath.Clean("/" + rel))
 	rel = strings.TrimPrefix(rel, "/")
 	if rel == "." {
 		return ""
