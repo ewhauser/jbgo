@@ -376,8 +376,41 @@ func TestParseLangErrorFeatureMetadataDoesNotDrainReader(t *testing.T) {
 	if got, want := langErr.FeatureDetail, "f"; got != want {
 		t.Fatalf("FeatureDetail = %q, want %q", got, want)
 	}
-	if got, want := reader.index, 2; got != want {
+	if got, want := reader.index, 1; got != want {
 		t.Fatalf("reader consumed %d chunks, want %d", got, want)
+	}
+	if got, want := reader.chunks[1], "foo}"; got != want {
+		t.Fatalf("remaining chunk = %q, want %q", got, want)
+	}
+}
+
+func TestParseLangErrorFeatureMetadataDoesNotOverreadDelimiterChunk(t *testing.T) {
+	t.Parallel()
+
+	reader := &scriptedChunkReader{chunks: []string{
+		"echo ${(",
+		"f)foo}echo should remain unread\n",
+	}}
+	_, err := NewParser(Variant(LangBash)).Parse(reader, "")
+	if err == nil {
+		t.Fatal("Parse error = nil, want LangError")
+	}
+
+	var langErr LangError
+	if !errors.As(err, &langErr) {
+		t.Fatalf("Parse error = %T, want LangError", err)
+	}
+	if got, want := langErr.FeatureID, FeatureParameterExpansionFlags; got != want {
+		t.Fatalf("FeatureID = %v, want %v", got, want)
+	}
+	if got, want := langErr.FeatureDetail, "f"; got != want {
+		t.Fatalf("FeatureDetail = %q, want %q", got, want)
+	}
+	if got, want := reader.index, 1; got != want {
+		t.Fatalf("reader consumed %d chunks, want %d", got, want)
+	}
+	if got, want := reader.chunks[1], "foo}echo should remain unread\n"; got != want {
+		t.Fatalf("remaining chunk = %q, want %q", got, want)
 	}
 }
 

@@ -2680,12 +2680,12 @@ func (p *Parser) lookaheadSourceTail(limit int, done func([]byte) bool) string {
 
 	reader := p.src
 	extra := make([]byte, 0, limit-len(tail))
-	buf := make([]byte, min(64, limit-len(tail)))
+	var one [1]byte
 	for len(tail) < limit && !done(tail) {
-		n, err := reader.Read(buf[:min(len(buf), limit-len(tail))])
+		n, err := reader.Read(one[:])
 		if n > 0 {
-			extra = append(extra, buf[:n]...)
-			tail = append(tail, buf[:n]...)
+			extra = append(extra, one[:n]...)
+			tail = append(tail, one[:n]...)
 		}
 		if err != nil || n == 0 {
 			break
