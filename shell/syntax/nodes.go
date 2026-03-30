@@ -741,6 +741,33 @@ func (w *Word) WasQuoted() bool {
 	return quoted
 }
 
+// TestLikeSplit describes a recovered comparison-like operator embedded inside
+// a single parsed word, such as "foo=bar" or "\"QT6=${QT6:-no}\"".
+//
+// The split is advisory metadata only. It does not change the underlying parse
+// shape: for example, [[ foo=bar ]] still parses as [*CondWord], and [ or test
+// arguments remain ordinary [*CallExpr] words.
+type TestLikeSplit struct {
+	Left        *Word
+	Operator    string
+	OperatorPos Pos
+	OperatorEnd Pos
+	Right       *Word
+}
+
+// TestLikeSplit recovers a glued comparison-like operator embedded inside a
+// single parsed word.
+//
+// The helper derives the split from the parsed word-part tree, including
+// nested quoted literal content, without reparsing the surrounding shell
+// syntax. It ignores operator-looking text inside expansions, substitutions,
+// and similar nested syntax. Synthetic or typedjson-decoded trees still expose
+// the split, but only words built directly by [Parse] preserve exact fragment
+// [RawText].
+func (w *Word) TestLikeSplit() *TestLikeSplit {
+	return wordTestLikeSplit(w)
+}
+
 // AliasExpansion records one alias expansion applied while parsing.
 type AliasExpansion struct {
 	Name  string

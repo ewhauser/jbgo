@@ -286,6 +286,131 @@ func TestPublicTypedJSONDecodedQuoteFidelity(t *testing.T) {
 	}
 }
 
+func TestPublicWordTestLikeSplit(t *testing.T) {
+	t.Parallel()
+
+	src := "[[ foo=bar ]]\n[ \"QT6=${QT6:-no}\" = \"yes\" ]\n"
+	file := parseFileVariant(t, syntax.LangBash, src)
+
+	testClause, ok := file.Stmts[0].Cmd.(*syntax.TestClause)
+	if !ok {
+		t.Fatalf("stmt[0].Cmd = %T, want *syntax.TestClause", file.Stmts[0].Cmd)
+	}
+	condWord, ok := testClause.X.(*syntax.CondWord)
+	if !ok {
+		t.Fatalf("stmt[0].X = %T, want *syntax.CondWord", testClause.X)
+	}
+	split := condWord.Word.TestLikeSplit()
+	if split == nil {
+		t.Fatal("stmt[0] TestLikeSplit() = nil, want split")
+	}
+	if got, want := split.Left.UnquotedText(), "foo"; got != want {
+		t.Fatalf("stmt[0] Left.UnquotedText() = %q, want %q", got, want)
+	}
+	if got, want := split.Operator, "="; got != want {
+		t.Fatalf("stmt[0] Operator = %q, want %q", got, want)
+	}
+	if got, want := split.OperatorPos.Col(), uint(7); got != want {
+		t.Fatalf("stmt[0] OperatorPos.Col() = %d, want %d", got, want)
+	}
+	if got, want := split.Right.UnquotedText(), "bar"; got != want {
+		t.Fatalf("stmt[0] Right.UnquotedText() = %q, want %q", got, want)
+	}
+
+	call, ok := file.Stmts[1].Cmd.(*syntax.CallExpr)
+	if !ok {
+		t.Fatalf("stmt[1].Cmd = %T, want *syntax.CallExpr", file.Stmts[1].Cmd)
+	}
+	callSplit := call.Args[1].TestLikeSplit()
+	if callSplit == nil {
+		t.Fatal("stmt[1] arg TestLikeSplit() = nil, want split")
+	}
+	if got, want := callSplit.Left.UnquotedText(), "QT6"; got != want {
+		t.Fatalf("stmt[1] Left.UnquotedText() = %q, want %q", got, want)
+	}
+	if got, want := callSplit.Operator, "="; got != want {
+		t.Fatalf("stmt[1] Operator = %q, want %q", got, want)
+	}
+	if got, want := callSplit.Right.UnquotedText(), "${QT6:-no}"; got != want {
+		t.Fatalf("stmt[1] Right.UnquotedText() = %q, want %q", got, want)
+	}
+}
+
+func TestPublicTypedJSONDecodedTestLikeSplit(t *testing.T) {
+	t.Parallel()
+
+	src := "[[ foo=bar ]]\n[ \"QT6=${QT6:-no}\" = \"yes\" ]\n"
+	decoded := encodeDecodeFile(t, parseFileVariant(t, syntax.LangBash, src))
+
+	testClause := decoded.Stmts[0].Cmd.(*syntax.TestClause)
+	condWord := testClause.X.(*syntax.CondWord)
+	split := condWord.Word.TestLikeSplit()
+	if split == nil {
+		t.Fatal("decoded stmt[0] TestLikeSplit() = nil, want split")
+	}
+	if got := split.Left.RawText(); got != "" {
+		t.Fatalf("decoded stmt[0] Left.RawText() = %q, want empty", got)
+	}
+	if got, want := split.Left.UnquotedText(), "foo"; got != want {
+		t.Fatalf("decoded stmt[0] Left.UnquotedText() = %q, want %q", got, want)
+	}
+	if got, want := split.Operator, "="; got != want {
+		t.Fatalf("decoded stmt[0] Operator = %q, want %q", got, want)
+	}
+	if got, want := split.Right.UnquotedText(), "bar"; got != want {
+		t.Fatalf("decoded stmt[0] Right.UnquotedText() = %q, want %q", got, want)
+	}
+
+	call := decoded.Stmts[1].Cmd.(*syntax.CallExpr)
+	callSplit := call.Args[1].TestLikeSplit()
+	if callSplit == nil {
+		t.Fatal("decoded stmt[1] arg TestLikeSplit() = nil, want split")
+	}
+	if got := callSplit.Left.RawText(); got != "" {
+		t.Fatalf("decoded stmt[1] Left.RawText() = %q, want empty", got)
+	}
+	if got, want := callSplit.Left.UnquotedText(), "QT6"; got != want {
+		t.Fatalf("decoded stmt[1] Left.UnquotedText() = %q, want %q", got, want)
+	}
+	if got, want := callSplit.Right.UnquotedText(), "${QT6:-no}"; got != want {
+		t.Fatalf("decoded stmt[1] Right.UnquotedText() = %q, want %q", got, want)
+	}
+}
+
+func TestPublicTypedJSONDecodedTestLikeSplitPreservesMultilineDollarQuoteOffsets(t *testing.T) {
+	t.Parallel()
+
+	decoded := encodeDecodeFile(t, parseFileVariant(t, syntax.LangBash, "[[ $'foo\n=bar' ]]\n"))
+
+	testClause := decoded.Stmts[0].Cmd.(*syntax.TestClause)
+	condWord := testClause.X.(*syntax.CondWord)
+	split := condWord.Word.TestLikeSplit()
+	if split == nil {
+		t.Fatal("decoded stmt[0] TestLikeSplit() = nil, want split")
+	}
+	if got := split.Left.RawText(); got != "" {
+		t.Fatalf("decoded stmt[0] Left.RawText() = %q, want empty", got)
+	}
+	if got, want := split.Left.UnquotedText(), "foo\n"; got != want {
+		t.Fatalf("decoded stmt[0] Left.UnquotedText() = %q, want %q", got, want)
+	}
+	if got, want := split.OperatorPos.Line(), uint(2); got != want {
+		t.Fatalf("decoded stmt[0] OperatorPos.Line() = %d, want %d", got, want)
+	}
+	if got, want := split.OperatorPos.Col(), uint(1); got != want {
+		t.Fatalf("decoded stmt[0] OperatorPos.Col() = %d, want %d", got, want)
+	}
+	if got, want := split.OperatorEnd.Line(), uint(2); got != want {
+		t.Fatalf("decoded stmt[0] OperatorEnd.Line() = %d, want %d", got, want)
+	}
+	if got, want := split.OperatorEnd.Col(), uint(2); got != want {
+		t.Fatalf("decoded stmt[0] OperatorEnd.Col() = %d, want %d", got, want)
+	}
+	if got, want := split.Right.UnquotedText(), "bar"; got != want {
+		t.Fatalf("decoded stmt[0] Right.UnquotedText() = %q, want %q", got, want)
+	}
+}
+
 func TestPublicPatternGroupRoundTrip(t *testing.T) {
 	t.Parallel()
 
