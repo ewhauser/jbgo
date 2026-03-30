@@ -101,49 +101,50 @@ func (h *HostFS) OpenFile(_ context.Context, name string, flag int, perm stdfs.F
 		return nil, h.readOnlyError("open", abs)
 	}
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathMounted:
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), true, false)
+		if err != nil {
+			return nil, h.pathError("open", abs, err)
+		}
+		defer func() { _ = root.Close() }()
+
+		file, err := root.OpenFile(rootRelativeOpenPath(resolved.rel), flag, perm)
+		if err != nil {
+			return nil, h.pathError("open", abs, err)
+		}
+
+		info, err := file.Stat()
+		if err != nil {
+			_ = file.Close()
+			return nil, h.pathError("open", abs, err)
+		}
+		if err := h.checkFileSize(info); err != nil {
+			_ = file.Close()
+			return nil, h.pathError("open", abs, err)
+		}
+		return file, nil
 	case hostPathAncestor:
 		return nil, h.pathError("open", abs, stdfs.ErrInvalid)
 	default:
 		return nil, h.pathError("open", abs, stdfs.ErrNotExist)
 	}
-
-	canonical, err := h.resolveMountedCanonical(abs)
-	if err != nil {
-		return nil, h.pathError("open", abs, err)
-	}
-
-	file, err := os.OpenFile(canonical, flag, perm)
-	if err != nil {
-		return nil, h.pathError("open", abs, err)
-	}
-
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return nil, h.pathError("open", abs, err)
-	}
-	if err := h.checkFileSize(info); err != nil {
-		_ = file.Close()
-		return nil, h.pathError("open", abs, err)
-	}
-
-	return file, nil
 }
 
 func (h *HostFS) Stat(_ context.Context, name string) (stdfs.FileInfo, error) {
 	abs := h.resolve(name)
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathAncestor:
 		return h.syntheticDirInfo(abs), nil
 	case hostPathMounted:
-		canonical, err := h.resolveMountedCanonical(abs)
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), true, false)
 		if err != nil {
 			return nil, h.pathError("stat", abs, err)
 		}
-		info, err := os.Stat(canonical)
+		defer func() { _ = root.Close() }()
+
+		info, err := root.Stat(rootRelativeOpenPath(resolved.rel))
 		if err != nil {
 			return nil, h.pathError("stat", abs, err)
 		}
@@ -156,26 +157,19 @@ func (h *HostFS) Stat(_ context.Context, name string) (stdfs.FileInfo, error) {
 func (h *HostFS) Lstat(_ context.Context, name string) (stdfs.FileInfo, error) {
 	abs := h.resolve(name)
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathAncestor:
 		return h.syntheticDirInfo(abs), nil
 	case hostPathMounted:
-		if abs == h.virtualRoot {
-			info, err := os.Stat(h.canonicalRoot)
-			if err != nil {
-				return nil, h.pathError("lstat", abs, err)
-			}
-			return namedFileInfo{name: path.Base(abs), info: info}, nil
-		}
-		leaf, err := h.resolveMountedLeaf(abs)
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), false, false)
 		if err != nil {
 			return nil, h.pathError("lstat", abs, err)
 		}
-		info, err := os.Lstat(leaf)
-		if err != nil {
-			return nil, h.pathError("lstat", abs, err)
+		defer func() { _ = root.Close() }()
+		if resolved.info == nil {
+			return nil, h.pathError("lstat", abs, stdfs.ErrNotExist)
 		}
-		return namedFileInfo{name: path.Base(abs), info: info}, nil
+		return namedFileInfo{name: path.Base(abs), info: resolved.info}, nil
 	default:
 		return nil, h.pathError("lstat", abs, stdfs.ErrNotExist)
 	}
@@ -184,7 +178,7 @@ func (h *HostFS) Lstat(_ context.Context, name string) (stdfs.FileInfo, error) {
 func (h *HostFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, error) {
 	abs := h.resolve(name)
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathAncestor:
 		child, ok := h.syntheticChild(abs)
 		if !ok {
@@ -197,11 +191,19 @@ func (h *HostFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, erro
 		})
 		return []stdfs.DirEntry{entry}, nil
 	case hostPathMounted:
-		target, err := h.resolveMountedReadDirTarget(abs)
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), true, false)
 		if err != nil {
 			return nil, h.pathError("readdir", abs, err)
 		}
-		entries, err := os.ReadDir(target)
+		defer func() { _ = root.Close() }()
+
+		file, err := root.Open(rootRelativeOpenPath(resolved.rel))
+		if err != nil {
+			return nil, h.pathError("readdir", abs, err)
+		}
+		defer func() { _ = file.Close() }()
+
+		entries, err := file.ReadDir(-1)
 		if err != nil {
 			return nil, h.pathError("readdir", abs, err)
 		}
@@ -214,16 +216,21 @@ func (h *HostFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, erro
 func (h *HostFS) Readlink(_ context.Context, name string) (string, error) {
 	abs := h.resolve(name)
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathMounted:
 		if abs == h.virtualRoot {
 			return "", h.pathError("readlink", abs, stdfs.ErrInvalid)
 		}
-		leaf, err := h.resolveMountedLeaf(abs)
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), false, false)
 		if err != nil {
 			return "", h.pathError("readlink", abs, err)
 		}
-		target, err := os.Readlink(leaf)
+		defer func() { _ = root.Close() }()
+		if resolved.info == nil || resolved.info.Mode()&stdfs.ModeSymlink == 0 {
+			return "", h.pathError("readlink", abs, stdfs.ErrInvalid)
+		}
+
+		target, err := root.Readlink(rootRelativeOpenPath(resolved.rel))
 		if err != nil {
 			return "", h.pathError("readlink", abs, err)
 		}
@@ -245,15 +252,16 @@ func (h *HostFS) Readlink(_ context.Context, name string) (string, error) {
 func (h *HostFS) Realpath(_ context.Context, name string) (string, error) {
 	abs := h.resolve(name)
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathAncestor:
 		return abs, nil
 	case hostPathMounted:
-		canonical, err := h.resolveMountedCanonical(abs)
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), true, false)
 		if err != nil {
 			return "", h.pathError("realpath", abs, err)
 		}
-		return h.virtualFromCanonical(canonical), nil
+		_ = root.Close()
+		return h.virtualFromCanonical(hostPathFromRootRelative(h.canonicalRoot, resolved.rel)), nil
 	default:
 		return "", h.pathError("realpath", abs, stdfs.ErrNotExist)
 	}
@@ -304,22 +312,19 @@ func (h *HostFS) Getwd() string {
 func (h *HostFS) Chdir(name string) error {
 	abs := h.resolve(name)
 
-	switch kind, _ := h.classify(abs); kind {
+	switch kind, rel := h.classify(abs); kind {
 	case hostPathAncestor:
 		h.mu.Lock()
 		h.cwd = abs
 		h.mu.Unlock()
 		return nil
 	case hostPathMounted:
-		canonical, err := h.resolveMountedCanonical(abs)
+		root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(rel, "/"), true, false)
 		if err != nil {
 			return h.pathError("chdir", abs, err)
 		}
-		info, err := os.Stat(canonical)
-		if err != nil {
-			return h.pathError("chdir", abs, err)
-		}
-		if !info.IsDir() {
+		defer func() { _ = root.Close() }()
+		if resolved.info == nil || !resolved.info.IsDir() {
 			return h.pathError("chdir", abs, stdfs.ErrInvalid)
 		}
 		h.mu.Lock()
@@ -380,81 +385,6 @@ func (h *HostFS) syntheticDirInfo(abs string) stdfs.FileInfo {
 		mode:    stdfs.ModeDir | 0o755,
 		modTime: time.Time{},
 	}
-}
-
-func (h *HostFS) resolveMountedCanonical(abs string) (string, error) {
-	switch kind, rel := h.classify(abs); kind {
-	case hostPathMounted:
-		if rel == "/" {
-			return h.canonicalRoot, nil
-		}
-		lexical := h.lexicalPath(rel)
-		canonical, err := filepath.EvalSymlinks(lexical)
-		if err != nil {
-			return "", err
-		}
-		canonical = filepath.Clean(canonical)
-		if !withinHostRoot(canonical, h.canonicalRoot) {
-			return "", stdfs.ErrPermission
-		}
-		return canonical, nil
-	default:
-		return "", stdfs.ErrNotExist
-	}
-}
-
-func (h *HostFS) resolveMountedLeaf(abs string) (string, error) {
-	switch kind, rel := h.classify(abs); kind {
-	case hostPathMounted:
-		if rel == "/" {
-			return h.canonicalRoot, nil
-		}
-		lexical := h.lexicalPath(rel)
-		parent := filepath.Dir(lexical)
-		canonicalParent, err := filepath.EvalSymlinks(parent)
-		if err != nil {
-			return "", err
-		}
-		canonicalParent = filepath.Clean(canonicalParent)
-		if !withinHostRoot(canonicalParent, h.canonicalRoot) {
-			return "", stdfs.ErrPermission
-		}
-		return filepath.Join(canonicalParent, filepath.Base(lexical)), nil
-	default:
-		return "", stdfs.ErrNotExist
-	}
-}
-
-func (h *HostFS) resolveMountedReadDirTarget(abs string) (string, error) {
-	switch kind, rel := h.classify(abs); kind {
-	case hostPathMounted:
-		if rel == "/" {
-			return h.canonicalRoot, nil
-		}
-
-		leaf, err := h.resolveMountedLeaf(abs)
-		if err != nil {
-			return "", err
-		}
-		info, err := os.Lstat(leaf)
-		switch {
-		case err == nil && info.Mode()&stdfs.ModeSymlink == 0:
-			return leaf, nil
-		case err == nil:
-			return h.resolveMountedCanonical(abs)
-		default:
-			return "", err
-		}
-	default:
-		return "", stdfs.ErrNotExist
-	}
-}
-
-func (h *HostFS) lexicalPath(rel string) string {
-	if rel == "/" {
-		return h.root
-	}
-	return filepath.Clean(filepath.Join(h.root, filepath.FromSlash(strings.TrimPrefix(rel, "/"))))
 }
 
 func (h *HostFS) virtualFromCanonical(canonical string) string {
