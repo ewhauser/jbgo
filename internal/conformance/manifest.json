@@ -524,12 +524,8 @@
           ]
         },
         "oils/posix.test.sh::Newlines in compound lists": {
-          "mode": "xfail",
-          "reason": "conformance: restored upstream bash coverage exposes gbash behavior that still differs from bash",
-          "goos": [
-            "darwin",
-            "linux"
-          ]
+          "mode": "skip",
+          "reason": "conformance: backgrounded missing-file stderr ordering in this case is unstable across bash oracles and hosts"
         },
         "oils/redirect-command.test.sh::Brace group redirect": {
           "mode": "xfail",

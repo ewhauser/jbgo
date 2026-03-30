@@ -4280,6 +4280,107 @@ func TestParseRecoverErrors(t *testing.T) {
 	}
 }
 
+func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		src          string
+		wantCond     []string
+		wantThen     []string
+		wantElseCond []string
+		wantElseThen []string
+		wantPrinted  string
+	}{
+		{
+			name:        "body before fi",
+			src:         "if foo\nbar\nfi\n",
+			wantCond:    []string{"foo"},
+			wantThen:    []string{"bar"},
+			wantPrinted: "if foo; then",
+		},
+		{
+			name:         "body before else",
+			src:          "if foo\nbar\nelse\nbaz\nfi\n",
+			wantCond:     []string{"foo"},
+			wantThen:     []string{"bar"},
+			wantElseThen: []string{"baz"},
+			wantPrinted:  "else",
+		},
+		{
+			name:         "recovered elif",
+			src:          "if foo\nbar\nelif baz\nqux\nfi\n",
+			wantCond:     []string{"foo"},
+			wantThen:     []string{"bar"},
+			wantElseCond: []string{"baz"},
+			wantElseThen: []string{"qux"},
+			wantPrinted:  "elif baz; then",
+		},
+		{
+			name:     "single line keeps condition together",
+			src:      "if foo; bar; fi\n",
+			wantCond: []string{"foo", "bar"},
+			wantThen: []string{""},
+		},
+		{
+			name:     "line continuation keeps condition together",
+			src:      "if foo;\\\nbar; fi\n",
+			wantCond: []string{"foo", "bar"},
+			wantThen: []string{""},
+		},
+		{
+			name:     "comment newline still splits body",
+			src:      "if foo; #\\\\\nbar\nfi\n",
+			wantCond: []string{"foo"},
+			wantThen: []string{"bar"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parser := NewParser(RecoverErrors(4))
+			f, err := parser.Parse(strings.NewReader(tc.src), "")
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.HasLen(f.Stmts, 1))
+
+			root, ok := f.Stmts[0].Cmd.(*IfClause)
+			if !ok {
+				t.Fatalf("root command = %T, want *IfClause", f.Stmts[0].Cmd)
+			}
+			qt.Assert(t, qt.IsTrue(root.hasThen()))
+			qt.Assert(t, qt.IsTrue(root.ThenPos.IsRecovered()))
+			qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Cond), tc.wantCond))
+			qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Then), tc.wantThen))
+			if len(tc.wantThen) == 1 && tc.wantThen[0] == "" {
+				qt.Check(t, qt.IsTrue(root.Then[0].Pos().IsRecovered()))
+			}
+
+			if len(tc.wantElseCond) == 0 && len(tc.wantElseThen) == 0 {
+				qt.Check(t, qt.IsNil(root.Else))
+			} else {
+				qt.Assert(t, qt.IsNotNil(root.Else))
+				qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Else.Cond), tc.wantElseCond))
+				qt.Check(t, qt.DeepEquals(stmtCommandNames(root.Else.Then), tc.wantElseThen))
+				if len(tc.wantElseCond) > 0 {
+					qt.Check(t, qt.IsTrue(root.Else.hasThen()))
+					qt.Check(t, qt.IsTrue(root.Else.ThenPos.IsRecovered()))
+				} else {
+					qt.Check(t, qt.IsFalse(root.Else.hasThen()))
+				}
+			}
+
+			var printed strings.Builder
+			err = NewPrinter().Print(&printed, f)
+			qt.Assert(t, qt.IsNil(err))
+			if tc.wantPrinted != "" && !strings.Contains(printed.String(), tc.wantPrinted) {
+				t.Fatalf("printed form %q does not contain %q", printed.String(), tc.wantPrinted)
+			}
+		})
+	}
+}
+
 func countRecoveredPositions(x reflect.Value) int {
 	switch x.Kind() {
 	case reflect.Interface:
@@ -4308,4 +4409,20 @@ func countRecoveredPositions(x reflect.Value) int {
 		return n
 	}
 	return 0
+}
+
+func stmtCommandNames(stmts []*Stmt) []string {
+	if len(stmts) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(stmts))
+	for _, stmt := range stmts {
+		call, ok := stmt.Cmd.(*CallExpr)
+		if !ok || len(call.Args) == 0 {
+			names = append(names, "")
+			continue
+		}
+		names = append(names, call.Args[0].Lit())
+	}
+	return names
 }

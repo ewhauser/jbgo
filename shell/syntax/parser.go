@@ -5660,21 +5660,86 @@ func (p *Parser) block(s *Stmt) {
 	s.Cmd = b
 }
 
+func (p *Parser) ifClauseHead(pos Pos, listStart, condLabel string) ([]*Stmt, []Comment, Pos, []*Stmt, []Comment) {
+	cond, condLast := p.followStmts(listStart, pos, rsrvThen, rsrvFi, rsrvElif, rsrvElse)
+	if p.atRsrv(rsrvFi, rsrvElif, rsrvElse) {
+		if p.recoverError() {
+			thenPos := recoveredPos
+			if len(cond) > 1 {
+				if split := p.ifMissingThenSplit(cond); split >= 0 {
+					then, thenLast := cond[split:], condLast
+					return cond[:split], nil, thenPos, then, thenLast
+				}
+			}
+			return cond, condLast, thenPos, []*Stmt{{Position: recoveredPos}}, nil
+		}
+		p.followErr(pos, condLabel, rsrvThen)
+		return cond, condLast, Pos{}, nil, nil
+	}
+	thenPos := p.followRsrv(pos, condLabel, rsrvThen)
+	then, thenLast := p.followStmts("then", thenPos, rsrvFi, rsrvElif, rsrvElse)
+	return cond, condLast, thenPos, then, thenLast
+}
+
+func (p *Parser) ifMissingThenSplit(stmts []*Stmt) int {
+	if len(stmts) < 2 {
+		return -1
+	}
+	for i := 1; i < len(stmts); i++ {
+		if ifMissingThenBoundary(p.sourceBetween(stmts[i-1].End(), stmts[i].Pos())) {
+			return i
+		}
+	}
+	return -1
+}
+
+func ifMissingThenBoundary(src string) bool {
+	backslashes := 0
+	inComment := false
+	for i := 0; i < len(src); i++ {
+		switch src[i] {
+		case '#':
+			if !inComment {
+				inComment = true
+			}
+			backslashes = 0
+		case '\\':
+			if !inComment {
+				backslashes++
+			}
+		case '\r':
+			if !inComment {
+				continue
+			}
+		case '\n':
+			if inComment || backslashes%2 == 0 {
+				return true
+			}
+			backslashes = 0
+		case ' ', '\t':
+			if !inComment {
+				backslashes = 0
+			}
+		default:
+			if !inComment {
+				backslashes = 0
+			}
+		}
+	}
+	return false
+}
+
 func (p *Parser) ifClause(s *Stmt) {
 	rootIf := &IfClause{Position: p.pos}
 	p.next()
-	rootIf.Cond, rootIf.CondLast = p.followStmts("if", rootIf.Position, rsrvThen)
-	rootIf.ThenPos = p.followRsrv(rootIf.Position, "if <cond>", rsrvThen)
-	rootIf.Then, rootIf.ThenLast = p.followStmts("then", rootIf.ThenPos, rsrvFi, rsrvElif, rsrvElse)
+	rootIf.Cond, rootIf.CondLast, rootIf.ThenPos, rootIf.Then, rootIf.ThenLast = p.ifClauseHead(rootIf.Position, "if", "if <cond>")
 	curIf := rootIf
 	for p.atRsrv(rsrvElif) {
 		elf := &IfClause{Position: p.pos}
 		curIf.Last = p.accComs
 		p.accComs = nil
 		p.next()
-		elf.Cond, elf.CondLast = p.followStmts("elif", elf.Position, rsrvThen)
-		elf.ThenPos = p.followRsrv(elf.Position, "elif <cond>", rsrvThen)
-		elf.Then, elf.ThenLast = p.followStmts("then", elf.ThenPos, rsrvFi, rsrvElif, rsrvElse)
+		elf.Cond, elf.CondLast, elf.ThenPos, elf.Then, elf.ThenLast = p.ifClauseHead(elf.Position, "elif", "elif <cond>")
 		curIf.Else = elf
 		curIf = elf
 	}

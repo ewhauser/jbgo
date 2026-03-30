@@ -5801,7 +5801,7 @@ func (c sanityChecker) visit(node Node) bool {
 		c.checkPos(node, node.Lbrace, "{")
 		c.checkPos(node, node.Rbrace, "}")
 	case *IfClause:
-		if node.ThenPos.IsValid() {
+		if node.hasThen() {
 			c.checkPos(node, node.Position, "if", "elif")
 			c.checkPos(node, node.ThenPos, "then")
 		} else {

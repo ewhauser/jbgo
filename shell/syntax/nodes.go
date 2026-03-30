@@ -570,7 +570,7 @@ func (b *Block) End() Pos { return posAddCol(b.Rbrace, 1) }
 // IfClause represents an if statement.
 type IfClause struct {
 	Position Pos // position of the starting "if", "elif", or "else" token
-	ThenPos  Pos // position of "then", empty if this is an "else"
+	ThenPos  Pos // position of "then", recovered if missing, empty only for an "else"
 	FiPos    Pos // position of "fi", shared with .Else if non-nil
 
 	Cond     []*Stmt
@@ -585,6 +585,10 @@ type IfClause struct {
 
 func (c *IfClause) Pos() Pos { return c.Position }
 func (c *IfClause) End() Pos { return posAddCol(c.FiPos, 2) }
+
+func (c *IfClause) hasThen() bool {
+	return c != nil && (c.ThenPos.IsValid() || c.ThenPos.IsRecovered())
+}
 
 // WhileClause represents a while or an until clause.
 type WhileClause struct {

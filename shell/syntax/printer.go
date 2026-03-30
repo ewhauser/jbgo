@@ -1596,7 +1596,7 @@ func (p *Printer) ifClause(ic *IfClause, elif bool) {
 	}
 	p.nestedStmts(ic.Then, ic.ThenLast, thenEnd)
 
-	if el != nil && el.ThenPos.IsValid() {
+	if el != nil && el.hasThen() {
 		p.comments(ic.Last...)
 		p.semiRsrv("elif", el.Position)
 		p.ifClause(el, true)
