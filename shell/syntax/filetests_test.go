@@ -169,13 +169,16 @@ func sglQuoted(s string) *SglQuoted        { return &SglQuoted{Value: s} }
 func sglDQuoted(s string) *SglQuoted       { return &SglQuoted{Dollar: true, Value: s} }
 func dblQuoted(ps ...WordPart) *DblQuoted  { return &DblQuoted{Parts: ps} }
 func dblDQuoted(ps ...WordPart) *DblQuoted { return &DblQuoted{Dollar: true, Parts: ps} }
-func block(sts ...*Stmt) *Block            { return &Block{Stmts: sts} }
-func subshell(sts ...*Stmt) *Subshell      { return &Subshell{Stmts: sts} }
-func arithmExp(e ArithmExpr) *ArithmExp    { return &ArithmExp{X: e} }
-func arithmExpBr(e ArithmExpr) *ArithmExp  { return &ArithmExp{Bracket: true, X: e} }
-func arithmCmd(e ArithmExpr) *ArithmCmd    { return &ArithmCmd{X: e} }
-func parenArit(e ArithmExpr) *ParenArithm  { return &ParenArithm{X: e} }
-func parenTest(e TestExpr) *ParenTest      { return &ParenTest{X: e} }
+func patternGroup(pats ...*Pattern) *PatternGroup {
+	return &PatternGroup{Patterns: pats}
+}
+func block(sts ...*Stmt) *Block           { return &Block{Stmts: sts} }
+func subshell(sts ...*Stmt) *Subshell     { return &Subshell{Stmts: sts} }
+func arithmExp(e ArithmExpr) *ArithmExp   { return &ArithmExp{X: e} }
+func arithmExpBr(e ArithmExpr) *ArithmExp { return &ArithmExp{Bracket: true, X: e} }
+func arithmCmd(e ArithmExpr) *ArithmCmd   { return &ArithmCmd{X: e} }
+func parenArit(e ArithmExpr) *ParenArithm { return &ParenArithm{X: e} }
+func parenTest(e TestExpr) *ParenTest     { return &ParenTest{X: e} }
 func extglob(op GlobOperator, pats ...*Pattern) *ExtGlob {
 	return &ExtGlob{Op: op, Patterns: pats}
 }
@@ -4389,15 +4392,30 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{`[[ a == (b|c)* ]]`},
 		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), condPattern(
-			lit("(b|c)"),
+			patternGroup(litPattern("b"), litPattern("c")),
 			&PatternAny{},
 		))}, LangZsh),
 	),
 	fileTest(
+		[]string{`case $i in (b|c)*) foo ;; esac`},
+		langFile(&CaseClause{
+			Word: word(litParamExp("i")),
+			Items: []*CaseItem{{
+				Op: Break,
+				Patterns: []*Pattern{
+					pattern(
+						patternGroup(litPattern("b"), litPattern("c")),
+						&PatternAny{},
+					),
+				},
+				Stmts: litStmts("foo"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{`[[ a == (#i)bar ]]`},
 		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), condPattern(
-			lit("(#i)"),
-			lit("bar"),
+			lit("(#i)bar"),
 		))}, LangZsh),
 	),
 	fileTest(
@@ -5876,6 +5894,9 @@ func (c sanityChecker) visit(node Node) bool {
 	case *PatternCharClass:
 		c.checkPos(node, node.ValuePos, node.Value)
 		c.checkPos(node, node.ValueEnd)
+	case *PatternGroup:
+		c.checkPos(node, node.Lparen, "(")
+		c.checkPos(node, node.Rparen, ")")
 	case *CondUnary:
 		strs := []string{node.Op.String()}
 		switch node.Op {

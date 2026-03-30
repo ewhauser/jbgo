@@ -20,6 +20,16 @@ func parseFile(t *testing.T, src string) *syntax.File {
 	return file
 }
 
+func parseFileVariant(t *testing.T, variant syntax.LangVariant, src string) *syntax.File {
+	t.Helper()
+
+	file, err := syntax.NewParser(syntax.Variant(variant)).Parse(strings.NewReader(src), "public.sh")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	return file
+}
+
 func encodeDecodeFile(t *testing.T, file *syntax.File) *syntax.File {
 	t.Helper()
 
@@ -80,6 +90,28 @@ func TestPublicSyntaxParseErrorMetadata(t *testing.T) {
 	}
 	if got, want := parseErr.Expected, []syntax.ParseErrorSymbol{syntax.ParseErrorSymbolThen}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("Expected = %v, want %v", got, want)
+	}
+}
+
+func TestPublicSyntaxPatternParseErrorMetadata(t *testing.T) {
+	t.Parallel()
+
+	_, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader("[[ x == (foo|bar)* ]]\n"), "public.sh")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want parse error")
+	}
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want syntax.ParseError", err)
+	}
+	if got, want := parseErr.Kind, syntax.ParseErrorKindUnexpected; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Construct, syntax.ParseErrorSymbolPattern; got != want {
+		t.Fatalf("Construct = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, syntax.ParseErrorSymbolLeftParen; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
 	}
 }
 
@@ -181,6 +213,33 @@ func TestPublicTypedJSONDecodedQuoteFidelity(t *testing.T) {
 	}
 	if !word.WasQuoted() {
 		t.Fatalf("decoded word WasQuoted() = false, want true")
+	}
+}
+
+func TestPublicPatternGroupRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	src := "[[ a == (b|c)* ]]\n"
+	file := parseFileVariant(t, syntax.LangZsh, src)
+	decoded := encodeDecodeFile(t, file)
+
+	testClause := decoded.Stmts[0].Cmd.(*syntax.TestClause)
+	cond := testClause.X.(*syntax.CondBinary)
+	pat := cond.Y.(*syntax.CondPattern).Pattern
+	group, ok := pat.Parts[0].(*syntax.PatternGroup)
+	if !ok {
+		t.Fatalf("pat.Parts[0] = %T, want *syntax.PatternGroup", pat.Parts[0])
+	}
+	if got, want := len(group.Patterns), 2; got != want {
+		t.Fatalf("len(group.Patterns) = %d, want %d", got, want)
+	}
+
+	var printed bytes.Buffer
+	if err := syntax.NewPrinter().Print(&printed, decoded); err != nil {
+		t.Fatalf("Print() error = %v", err)
+	}
+	if got, want := printed.String(), src; got != want {
+		t.Fatalf("printed source = %q, want %q", got, want)
 	}
 }
 

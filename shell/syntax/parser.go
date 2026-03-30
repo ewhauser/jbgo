@@ -2201,6 +2201,13 @@ func (p *Parser) posErrSecondary(pos Pos, secondary, format string, args ...any)
 	p.errPass(pe)
 }
 
+func (p *Parser) posErrSecondaryWithMetadata(pos Pos, meta parseErrorMetadata, secondary, format string, args ...any) {
+	pe := p.newParseError(pos, fmt.Sprintf(format, args...), meta)
+	pe.SecondaryText = secondary
+	pe.SecondaryPos = pos
+	p.errPass(pe)
+}
+
 func (p *Parser) posErrSecondaryDetailed(pos, secondaryPos, sourceLinePos Pos, sourceLine, secondary, format string, args ...any) {
 	pe := p.newParseError(pos, fmt.Sprintf(format, args...), parseErrorMetadata{})
 	pe.SecondaryText = secondary
@@ -3537,13 +3544,9 @@ func (r rawPatternParser) parseList(raw string, base Pos) []*Pattern {
 	patterns := make([]*Pattern, 0, 1)
 	start := 0
 	for {
-		parts, end, delim := r.parseParts(raw, base, start, true)
-		patterns = append(patterns, &Pattern{
-			Start:  posAddCol(base, start),
-			EndPos: posAddCol(base, end),
-			Parts:  parts,
-			raw:    raw[start:end],
-		})
+		end, delim := r.findPatternListSplit(raw, base, start)
+		partStart, partEnd := trimPatternRawSegment(raw, start, end)
+		patterns = append(patterns, r.parse(raw[partStart:partEnd], posAddCol(base, partStart)))
 		if delim != '|' {
 			return patterns
 		}
@@ -3554,6 +3557,9 @@ func (r rawPatternParser) parseList(raw string, base Pos) []*Pattern {
 func (r rawPatternParser) parseParts(raw string, base Pos, start int, splitOnBar bool) ([]PatternPart, int, byte) {
 	var parts []PatternPart
 	flushLit := func(from, to int) {
+		if from >= to {
+			return
+		}
 		parts = append(parts, splitPatternLit(&Lit{
 			ValuePos: posAddCol(base, from),
 			ValueEnd: posAddCol(base, to),
@@ -3597,6 +3603,17 @@ func (r rawPatternParser) parseParts(raw string, base Pos, start int, splitOnBar
 					continue
 				}
 			}
+		case '(':
+			group, end, ok := r.parsePatternGroup(raw, base, i)
+			if end > i {
+				if ok {
+					flushLit(partStart, i)
+					parts = append(parts, group)
+					partStart = end
+				}
+				i = end
+				continue
+			}
 		case '?', '*', '+', '@', '!':
 			if i+1 < len(raw) && raw[i+1] == '(' {
 				flushLit(partStart, i)
@@ -3636,6 +3653,257 @@ func (r rawPatternParser) parseParts(raw string, base Pos, start int, splitOnBar
 	}
 	flushLit(partStart, len(raw))
 	return parts, len(raw), 0
+}
+
+func trimPatternRawSegment(raw string, start, end int) (int, int) {
+	for start < end {
+		if raw[start] == '\\' && start+1 < end && raw[start+1] == '\n' {
+			start += 2
+			for start < end && (raw[start] == ' ' || raw[start] == '\t') {
+				start++
+			}
+			continue
+		}
+		switch raw[start] {
+		case ' ', '\t', '\n', '\r':
+			start++
+		default:
+			goto trimRight
+		}
+	}
+trimRight:
+	for end > start {
+		switch raw[end-1] {
+		case ' ', '\t', '\n', '\r':
+			end--
+		default:
+			return start, end
+		}
+	}
+	return start, end
+}
+
+func (r rawPatternParser) findInvalidCasePatternOperator(raw string, base Pos) (int, byte) {
+	for i := 0; i < len(raw); {
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				if raw[i+1] == '\n' {
+					i += 2
+					for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t') {
+						i++
+					}
+				} else {
+					i += 2
+				}
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+			if ok {
+				i += consumed
+				continue
+			}
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+				if ok {
+					i += consumed
+					continue
+				}
+			}
+		case '[':
+			i = patternCharClassEnd(raw, i)
+			continue
+		case '(':
+			_, end, _ := r.parsePatternGroup(raw, base, i)
+			if end > i {
+				i = end
+				continue
+			}
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, end := r.parseExtGlob(raw, base, i)
+				i = end
+				continue
+			}
+		case '&':
+			return i, '&'
+		}
+		i++
+	}
+	return 0, 0
+}
+
+func (r rawPatternParser) findPatternListSplit(raw string, base Pos, start int) (int, byte) {
+	for i := start; i < len(raw); {
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+			if ok {
+				i += consumed
+				continue
+			}
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+				if ok {
+					i += consumed
+					continue
+				}
+			}
+		case '[':
+			i = patternCharClassEnd(raw, i)
+			continue
+		case '(':
+			_, end, _ := r.parsePatternGroup(raw, base, i)
+			if end > i {
+				i = end
+				continue
+			}
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, end := r.parseExtGlob(raw, base, i)
+				i = end
+				continue
+			}
+		case '|':
+			return i, '|'
+		}
+		i++
+	}
+	return len(raw), 0
+}
+
+func (r rawPatternParser) hasTopLevelWhitespace(raw string, base Pos) bool {
+	for i := 0; i < len(raw); {
+		switch raw[i] {
+		case ' ', '\t', '\n', '\r':
+			return true
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+			if ok {
+				i += consumed
+				continue
+			}
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+				if ok {
+					i += consumed
+					continue
+				}
+			}
+		case '[':
+			i = patternCharClassEnd(raw, i)
+			continue
+		case '(':
+			_, end, _ := r.parsePatternGroup(raw, base, i)
+			if end > i {
+				i = end
+				continue
+			}
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, end := r.parseExtGlob(raw, base, i)
+				i = end
+				continue
+			}
+		}
+		i++
+	}
+	return false
+}
+
+func (r rawPatternParser) parsePatternGroup(raw string, base Pos, start int) (*PatternGroup, int, bool) {
+	group := &PatternGroup{Lparen: posAddCol(base, start)}
+	innerStart := start + 1
+	i := innerStart
+	armStart := innerStart
+	depth := 1
+	hasTopLevelBar := false
+	appendArm := func(end int) {
+		group.Patterns = append(group.Patterns, r.parse(raw[armStart:end], posAddCol(base, armStart)))
+	}
+	for i <= len(raw) {
+		if i >= len(raw) {
+			return nil, len(raw), false
+		}
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case '\'', '"', '`', '$':
+			_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+			if ok {
+				i += consumed
+				continue
+			}
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, consumed, ok := r.parseShellPart(raw[i:], posAddCol(base, i))
+				if ok {
+					i += consumed
+					continue
+				}
+			}
+		case '[':
+			i = patternCharClassEnd(raw, i)
+			continue
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				_, end := r.parseExtGlob(raw, base, i)
+				i = end
+				continue
+			}
+		case '(':
+			depth++
+			i++
+			continue
+		case '|':
+			if depth == 1 {
+				appendArm(i)
+				armStart = i + 1
+				hasTopLevelBar = true
+			}
+			i++
+			continue
+		case ')':
+			depth--
+			if depth == 0 {
+				if !hasTopLevelBar {
+					return nil, i + 1, false
+				}
+				appendArm(i)
+				group.Rparen = posAddCol(base, i)
+				return group, i + 1, true
+			}
+			i++
+			continue
+		}
+		i++
+	}
+	return nil, len(raw), false
 }
 
 func (r rawPatternParser) parseExtGlob(raw string, base Pos, start int) (*ExtGlob, int) {
@@ -3741,6 +4009,41 @@ func parseRawWordPart(raw string, base Pos, lang LangVariant) (WordPart, int, bo
 		}
 	}
 	return part, consumed, true
+}
+
+func firstPatternGroup(pat *Pattern) *PatternGroup {
+	if pat == nil {
+		return nil
+	}
+	for _, part := range pat.Parts {
+		if group := firstPatternGroupPart(part); group != nil {
+			return group
+		}
+	}
+	return nil
+}
+
+func firstPatternGroupPart(part PatternPart) *PatternGroup {
+	switch part := part.(type) {
+	case *PatternGroup:
+		return part
+	case *ExtGlob:
+		for _, pat := range part.Patterns {
+			if group := firstPatternGroup(pat); group != nil {
+				return group
+			}
+		}
+	}
+	return nil
+}
+
+func firstPatternGroupInList(patterns []*Pattern) *PatternGroup {
+	for _, pat := range patterns {
+		if group := firstPatternGroup(pat); group != nil {
+			return group
+		}
+	}
+	return nil
 }
 
 func (p *Parser) extGlob(op GlobOperator, opPos Pos) *ExtGlob {
@@ -5861,6 +6164,366 @@ func (p *Parser) selectClause(s *Stmt) {
 	s.Cmd = fc
 }
 
+type patternScanMode uint8
+
+const (
+	patternScanConditional patternScanMode = iota
+	patternScanCase
+)
+
+type scannedRawPattern struct {
+	start          Pos
+	raw            string
+	firstBareParen Pos
+}
+
+func (p *Parser) patternAllowsBareGroups() bool {
+	return p.lang.in(LangZsh)
+}
+
+func (p *Parser) scanRawPattern(mode patternScanMode) (*scannedRawPattern, bool) {
+scanLeading:
+	for {
+		switch p.r {
+		case escNewl:
+			p.rune()
+		case ' ', '\t', '\n':
+			if mode == patternScanConditional && p.r == '\n' {
+				break scanLeading
+			}
+			p.rune()
+		default:
+			break scanLeading
+		}
+	}
+
+	start := p.nextPos()
+	if p.patternScanBoundary(mode, 0) {
+		p.next()
+		return &scannedRawPattern{start: start}, true
+	}
+	p.newLit(p.r)
+	scanned := &scannedRawPattern{start: start}
+	if !p.scanPatternRaw(start, mode, scanned) {
+		p.litBs = nil
+		return nil, false
+	}
+	scanned.raw = p.endLit()
+	p.next()
+	return scanned, true
+}
+
+func (p *Parser) patternScanBoundary(mode patternScanMode, parenDepth int) bool {
+	switch p.r {
+	case utf8.RuneSelf:
+		return true
+	case ';', '&':
+		return mode == patternScanConditional && parenDepth == 0
+	case '\n', ' ', '\t':
+		return mode == patternScanConditional && parenDepth == 0
+	case ']':
+		return mode == patternScanConditional && parenDepth == 0 && p.peek() == ']'
+	case '|':
+		return mode == patternScanConditional && parenDepth == 0 && p.peek() == '|'
+	case ')':
+		return parenDepth == 0
+	default:
+		return false
+	}
+}
+
+func (p *Parser) scanPatternRaw(start Pos, mode patternScanMode, scanned *scannedRawPattern) bool {
+	parenDepth := 0
+	for {
+		if p.patternScanBoundary(mode, parenDepth) {
+			return true
+		}
+		switch p.r {
+		case escNewl:
+			p.rune()
+		case '<', '>':
+			if p.peek() == '(' {
+				if !p.scanCondRegexProcSubst(start, tokenFromProcSubst(p.r)) {
+					return false
+				}
+				continue
+			}
+			p.rune()
+		case '?', '*', '+', '@', '!':
+			if p.peek() == '(' {
+				p.rune()
+				parenDepth++
+				p.rune()
+				continue
+			}
+			p.rune()
+		case '(':
+			if !scanned.firstBareParen.IsValid() {
+				scanned.firstBareParen = p.nextPos()
+			}
+			parenDepth++
+			p.rune()
+		case ')':
+			if parenDepth > 0 {
+				parenDepth--
+				p.rune()
+				continue
+			}
+			return true
+		case '[':
+			p.scanPatternCharClass()
+		case '\'':
+			if !p.scanCondRegexSingleQuoted(start, sglQuote, false) {
+				return false
+			}
+		case '"':
+			if !p.scanCondRegexDoubleQuoted(start, dblQuote) {
+				return false
+			}
+		case '`':
+			if !p.scanCondRegexBackquote(start) {
+				return false
+			}
+		case '$':
+			if !p.scanCondRegexDollar(start, true) {
+				return false
+			}
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return true
+			}
+			p.rune()
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) scanPatternCharClass() {
+	p.rune()
+	if p.r == '!' || p.r == '^' {
+		p.rune()
+	}
+	if p.r == ']' {
+		p.rune()
+	}
+	for {
+		switch p.r {
+		case utf8.RuneSelf:
+			return
+		case '\\':
+			if p.rune() == utf8.RuneSelf {
+				return
+			}
+			p.rune()
+		case ']':
+			p.rune()
+			return
+		default:
+			p.rune()
+		}
+	}
+}
+
+func (p *Parser) invalidCasePatternParen(pos Pos) {
+	p.posErrWithMetadata(pos, parseErrorMetadata{
+		kind:       ParseErrorKindUnexpected,
+		construct:  ParseErrorSymbolPattern,
+		unexpected: ParseErrorSymbolLeftParen,
+	}, "syntax error near unexpected token %s", bashQuoteString("("))
+}
+
+func patternNearFragment(raw string, pos int) string {
+	if pos < 0 || pos >= len(raw) {
+		return ""
+	}
+	start := pos
+	for start > 0 {
+		switch raw[start-1] {
+		case ' ', '\t', '\n', ';', '&', '|', ')':
+			goto extendRight
+		default:
+			start--
+		}
+	}
+extendRight:
+	end := pos + 1
+	for end < len(raw) {
+		switch raw[end] {
+		case ' ', '\t', '\n', ';', '&', '|', ')', '\\':
+			return raw[start:end]
+		default:
+			end++
+		}
+	}
+	return raw[start:end]
+}
+
+func (p *Parser) invalidCondPatternParen(pos Pos, raw string, start Pos) {
+	near := "("
+	if pos.IsValid() && start.IsValid() {
+		offset := int(pos.Offset() - start.Offset())
+		if frag := patternNearFragment(raw, offset); frag != "" {
+			near = frag
+		}
+	}
+	p.posErrSecondaryWithMetadata(pos, parseErrorMetadata{
+		kind:       ParseErrorKindUnexpected,
+		construct:  ParseErrorSymbolPattern,
+		unexpected: ParseErrorSymbolLeftParen,
+	}, fmt.Sprintf("syntax error near %s", bashQuoteString(near)),
+		"syntax error in conditional expression: unexpected token %s",
+		bashQuoteString("("),
+	)
+}
+
+func (p *Parser) bufferUnreadSource() error {
+	if p.readEOF || p.src == nil {
+		return nil
+	}
+	rest, err := p.unreadSourceTail()
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		p.bs = append(p.bs, rest...)
+	}
+	p.readEOF = true
+	p.readErr = io.EOF
+	return nil
+}
+
+func (p *Parser) casePatternUsesOptionalOpener() bool {
+	if p.tok != leftParen {
+		return false
+	}
+	if err := p.bufferUnreadSource(); err != nil {
+		return true
+	}
+	tail := p.sourceFromPos(p.pos)
+	if tail == "" || tail[0] != '(' {
+		return true
+	}
+	_, groupEnd, grouped := (rawPatternParser{lang: p.lang}).parsePatternGroup(tail, p.pos, 0)
+	if !grouped {
+		return true
+	}
+	_, end := scanPatternText(tail, p.pos, patternScanCase, p.lang)
+	return end <= groupEnd || end >= len(tail) || tail[end] != ')'
+}
+
+func patternTextBoundary(raw string, i int, mode patternScanMode, parenDepth int) bool {
+	if i >= len(raw) {
+		return true
+	}
+	switch raw[i] {
+	case ';', '&':
+		return mode == patternScanConditional && parenDepth == 0
+	case '\n', ' ', '\t':
+		return mode == patternScanConditional && parenDepth == 0
+	case ']':
+		return mode == patternScanConditional && parenDepth == 0 &&
+			i+1 < len(raw) && raw[i+1] == ']'
+	case '|':
+		return mode == patternScanConditional && parenDepth == 0 &&
+			i+1 < len(raw) && raw[i+1] == '|'
+	case ')':
+		return parenDepth == 0
+	default:
+		return false
+	}
+}
+
+func scanPatternText(raw string, base Pos, mode patternScanMode, lang LangVariant) (*scannedRawPattern, int) {
+	start := 0
+	for start < len(raw) {
+		switch raw[start] {
+		case ' ', '\t':
+			start++
+		case '\n':
+			if mode == patternScanConditional {
+				goto scan
+			}
+			start++
+		default:
+			goto scan
+		}
+	}
+scan:
+	scanned := &scannedRawPattern{start: advancePosBytes(base, []byte(raw[:start]))}
+	parenDepth := 0
+	rawParser := rawPatternParser{lang: lang}
+	for i := start; ; {
+		if patternTextBoundary(raw, i, mode, parenDepth) {
+			return scanned, i
+		}
+		switch raw[i] {
+		case '\\':
+			if i+1 < len(raw) {
+				i += 2
+			} else {
+				i++
+			}
+		case '<', '>':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				if _, consumed, ok := rawParser.parseShellPart(raw[i:], posAddCol(base, i)); ok {
+					i += consumed
+					continue
+				}
+			}
+			i++
+		case '?', '*', '+', '@', '!':
+			if i+1 < len(raw) && raw[i+1] == '(' {
+				parenDepth++
+				i += 2
+				continue
+			}
+			i++
+		case '(':
+			if !scanned.firstBareParen.IsValid() {
+				scanned.firstBareParen = posAddCol(base, i)
+			}
+			parenDepth++
+			i++
+		case ')':
+			if parenDepth > 0 {
+				parenDepth--
+				i++
+				continue
+			}
+			return scanned, i
+		case '[':
+			i = patternCharClassEnd(raw, i)
+		case '\'', '"', '`', '$':
+			if _, consumed, ok := rawParser.parseShellPart(raw[i:], posAddCol(base, i)); ok {
+				i += consumed
+				continue
+			}
+			i++
+		default:
+			i++
+		}
+	}
+}
+
+func (p *Parser) scanRawPatternSource(start Pos, mode patternScanMode) (*scannedRawPattern, bool) {
+	if err := p.bufferUnreadSource(); err != nil {
+		p.errPass(err)
+		return nil, false
+	}
+	raw := p.sourceFromPos(start)
+	scanned, end := scanPatternText(raw, start, mode, p.lang)
+	scanned.raw = raw[int(scanned.start.Offset()-start.Offset()):end]
+	boundaryPos := posAddCol(start, end)
+	for p.tok != _EOF && p.pos.Offset() < boundaryPos.Offset() {
+		p.next()
+	}
+	if p.pos.Offset() != boundaryPos.Offset() {
+		p.next()
+	}
+	return scanned, true
+}
+
 func (p *Parser) caseClause(s *Stmt) {
 	cc := &CaseClause{Case: p.pos}
 	p.next()
@@ -5895,19 +6558,54 @@ func (p *Parser) caseItems(stop reservedWord) (items []*CaseItem) {
 	for p.tok != _EOF && !p.atRsrv(stop) {
 		ci := &CaseItem{}
 		ci.Comments, p.accComs = p.accComs, nil
-		p.got(leftParen)
-		for p.tok != _EOF {
-			if pat := p.getPattern(or, rightParen); pat == nil {
-				p.curErr("case patterns must consist of words")
+		if p.casePatternUsesOptionalOpener() {
+			p.next()
+		}
+		scanned, ok := p.scanRawPatternSource(p.pos, patternScanCase)
+		if !ok {
+			return items
+		}
+		rawParser := rawPatternParser{lang: p.lang}
+		if idx, op := rawParser.findInvalidCasePatternOperator(scanned.raw, scanned.start); op != 0 {
+			pos := posAddCol(scanned.start, idx)
+			if idx == 0 {
+				p.posErr(pos, "case patterns must consist of words")
 			} else {
-				ci.Patterns = append(ci.Patterns, pat)
+				p.posErr(pos, "case patterns must be separated with %#q", or)
 			}
-			if p.tok == rightParen {
+			return items
+		}
+		start := 0
+		validPatterns := true
+		for {
+			end, delim := rawParser.findPatternListSplit(scanned.raw, scanned.start, start)
+			partStart, partEnd := trimPatternRawSegment(scanned.raw, start, end)
+			partRaw := scanned.raw[partStart:partEnd]
+			partBase := advancePosBytes(scanned.start, []byte(scanned.raw[:partStart]))
+			switch {
+			case partRaw == "":
+				validPatterns = false
+			case rawParser.hasTopLevelWhitespace(partRaw, partBase):
+				validPatterns = false
+			default:
+				ci.Patterns = append(ci.Patterns, rawParser.parse(partRaw, partBase))
+			}
+			if delim != '|' {
 				break
 			}
-			if !p.got(or) {
-				p.curErr("case patterns must be separated with %#q", or)
+			start = end + 1
+		}
+		if group := firstPatternGroupInList(ci.Patterns); group != nil && !p.patternAllowsBareGroups() {
+			if !p.recoverError() {
+				p.invalidCasePatternParen(group.Pos())
+				return items
 			}
+		} else if group == nil && scanned.firstBareParen.IsValid() && !p.patternAllowsBareGroups() {
+			p.invalidCasePatternParen(scanned.firstBareParen)
+			return items
+		}
+		if !validPatterns && len(ci.Patterns) > 0 {
+			p.curErr("case patterns must consist of words")
 		}
 		if len(ci.Patterns) == 0 {
 			if p.recoverError() {
@@ -6085,10 +6783,22 @@ func (p *Parser) followCondVarRefOrWord(tok token, pos Pos, context VarRefContex
 }
 
 func (p *Parser) followCondPattern(tok token, pos Pos) *CondPattern {
-	p.next()
-	pat := p.getPattern()
-	if pat == nil {
+	scanned, ok := p.scanRawPattern(patternScanConditional)
+	if !ok {
+		return nil
+	}
+	if scanned.raw == "" {
 		p.followErr(pos, tok, noQuote("a word"))
+		return nil
+	}
+	pat := rawPatternParser{lang: p.lang}.parse(scanned.raw, scanned.start)
+	if group := firstPatternGroup(pat); group != nil && !p.patternAllowsBareGroups() {
+		if !p.recoverError() {
+			p.invalidCondPatternParen(group.Pos(), scanned.raw, scanned.start)
+			return nil
+		}
+	} else if group == nil && scanned.firstBareParen.IsValid() && !p.patternAllowsBareGroups() {
+		p.invalidCondPatternParen(scanned.firstBareParen, scanned.raw, scanned.start)
 		return nil
 	}
 	return &CondPattern{Pattern: pat}

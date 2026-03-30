@@ -257,6 +257,7 @@ var nodeByName = map[string]reflect.Type{
 	"PatternAny":       reflect.TypeFor[syntax.PatternAny](),
 	"PatternSingle":    reflect.TypeFor[syntax.PatternSingle](),
 	"PatternCharClass": reflect.TypeFor[syntax.PatternCharClass](),
+	"PatternGroup":     reflect.TypeFor[syntax.PatternGroup](),
 	"ExtGlob":          reflect.TypeFor[syntax.ExtGlob](),
 	"BraceExp":         reflect.TypeFor[syntax.BraceExp](),
 

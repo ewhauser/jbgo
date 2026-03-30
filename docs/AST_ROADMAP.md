@@ -316,8 +316,10 @@ The old `ExtGlob` shape (`Op + Pattern *Lit`) was not enough for nested, adjacen
   - `PatternAny`
   - `PatternSingle`
   - `PatternCharClass`
+  - `PatternGroup`
   - `ExtGlob`
 - `ExtGlob` now stores `Patterns []*Pattern`, which preserves nested and adjacent structure
+- `PatternGroup` models bare grouped alternation such as `(foo|bar)` in zsh pattern contexts and bash-style recovery parses
 - `CaseItem.Patterns` now uses `[]*Pattern`
 - `CondPattern` now wraps `Pattern *Pattern`
 - parameter pattern operators now use `Replace.Orig *Pattern` and `Expansion.Pattern *Pattern`
@@ -347,6 +349,7 @@ The landed pattern tree represents:
 - literals
 - wildcards
 - character classes
+- bare grouped alternation via `PatternGroup.Patterns`
 - extglob operators
 - extglob alternation via `ExtGlob.Patterns`
 - concatenation via `Pattern.Parts`

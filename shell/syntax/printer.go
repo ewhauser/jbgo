@@ -686,9 +686,22 @@ func (p *Printer) patternPart(part PatternPart) {
 		p.w.WriteByte('?')
 	case *PatternCharClass:
 		p.writeLit(part.Value)
+	case *PatternGroup:
+		p.patternGroup(part)
 	default:
 		p.wordPart(part.(WordPart), nil)
 	}
+}
+
+func (p *Printer) patternGroup(group *PatternGroup) {
+	p.w.WriteByte('(')
+	for i, pat := range group.Patterns {
+		if i > 0 {
+			p.w.WriteByte('|')
+		}
+		p.pattern(pat)
+	}
+	p.w.WriteByte(')')
 }
 
 func (p *Printer) wordPart(wp, next WordPart) {

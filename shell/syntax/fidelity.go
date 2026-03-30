@@ -129,6 +129,23 @@ func appendUnquotedPatternPart(buf []byte, part PatternPart, quotes bool, raw []
 		} else {
 			buf = append(buf, part.Value...)
 		}
+	case *PatternGroup:
+		buf = append(buf, '(')
+		for i, pat := range part.Patterns {
+			if i > 0 {
+				buf = append(buf, '|')
+			}
+			var patRaw []byte
+			if rawPart, ok := nodeRawBytes(raw, rawBase, pat); ok {
+				patRaw = rawPart
+			} else if pat != nil && pat.raw != "" {
+				patRaw = []byte(pat.raw)
+			}
+			patBuf, patQuoted := patternUnquotedBytesRaw(pat, patRaw)
+			buf = append(buf, patBuf...)
+			quoted = quoted || patQuoted
+		}
+		buf = append(buf, ')')
 	case *ExtGlob:
 		buf = append(buf, globOperatorText(part.Op), '(')
 		for i, pat := range part.Patterns {

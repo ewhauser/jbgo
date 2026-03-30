@@ -111,6 +111,8 @@ func Walk(node Node, f func(Node) bool) {
 	case *PatternAny:
 	case *PatternSingle:
 	case *PatternCharClass:
+	case *PatternGroup:
+		walkList(node.Patterns, f)
 	case *CmdSubst:
 		walkList(node.Stmts, f)
 		walkComments(node.Last, f)

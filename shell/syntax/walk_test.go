@@ -45,6 +45,7 @@ func TestWalk(t *testing.T) {
 		"*syntax.PatternAny":       false,
 		"*syntax.PatternSingle":    false,
 		"*syntax.PatternCharClass": false,
+		"*syntax.PatternGroup":     false,
 		"*syntax.ArithmExp":        false,
 		"*syntax.ArithmCmd":        false,
 		"*syntax.BinaryArithm":     false,
@@ -114,6 +115,18 @@ func TestWalk(t *testing.T) {
 				}
 				return true
 			})
+		})
+	}
+	if prog, err := NewParser(Variant(LangZsh)).Parse(strings.NewReader("[[ a == (b|c)* ]]\n"), ""); err == nil {
+		Walk(prog, func(node Node) bool {
+			if node == nil {
+				return false
+			}
+			tstr := reflect.TypeOf(node).String()
+			if _, ok := seen[tstr]; ok {
+				seen[tstr] = true
+			}
+			return true
 		})
 	}
 	// If we're running a subset of the tests,

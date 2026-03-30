@@ -829,6 +829,12 @@ func (cfg *Config) appendPatternPart(sb *strings.Builder, part syntax.PatternPar
 		sb.WriteByte('?')
 	case *syntax.PatternCharClass:
 		sb.WriteString(part.Value)
+	case *syntax.PatternGroup:
+		s, err := cfg.patternGroupString(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(s)
 	case *syntax.Lit:
 		s := part.Value
 		if leading {
@@ -909,6 +915,12 @@ func (cfg *Config) appendPatternLiteralPart(sb *strings.Builder, part syntax.Pat
 		sb.WriteByte('?')
 	case *syntax.PatternCharClass:
 		sb.WriteString(part.Value)
+	case *syntax.PatternGroup:
+		s, err := cfg.patternGroupLiteralString(part)
+		if err != nil {
+			return err
+		}
+		sb.WriteString(s)
 	case *syntax.Lit:
 		s := part.Value
 		s, _, _ = strings.Cut(s, "\x00")
@@ -985,10 +997,44 @@ func (cfg *Config) extGlobPatternString(eg *syntax.ExtGlob) (string, error) {
 	return sb.String(), nil
 }
 
+func (cfg *Config) patternGroupString(group *syntax.PatternGroup) (string, error) {
+	var sb strings.Builder
+	sb.WriteByte('(')
+	for i, pat := range group.Patterns {
+		if i > 0 {
+			sb.WriteByte('|')
+		}
+		str, err := cfg.patternString(pat, false)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(str)
+	}
+	sb.WriteByte(')')
+	return sb.String(), nil
+}
+
 func (cfg *Config) extGlobLiteralString(eg *syntax.ExtGlob) (string, error) {
 	var sb strings.Builder
 	sb.WriteString(eg.Op.String())
 	for i, pat := range eg.Patterns {
+		if i > 0 {
+			sb.WriteByte('|')
+		}
+		str, err := cfg.patternLiteralString(pat)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(str)
+	}
+	sb.WriteByte(')')
+	return sb.String(), nil
+}
+
+func (cfg *Config) patternGroupLiteralString(group *syntax.PatternGroup) (string, error) {
+	var sb strings.Builder
+	sb.WriteByte('(')
+	for i, pat := range group.Patterns {
 		if i > 0 {
 			sb.WriteByte('|')
 		}

@@ -218,3 +218,45 @@ func TestEncodeArrayModes(t *testing.T) {
 	qt.Assert(t, qt.Equals(arr.Elems[0].Kind, syntax.ArrayElemKeyedAppend))
 	qt.Assert(t, qt.Equals(arr.Elems[0].Index.Mode, syntax.SubscriptAssociative))
 }
+
+func TestEncodePatternGroup(t *testing.T) {
+	t.Parallel()
+
+	node := &syntax.Pattern{
+		Parts: []syntax.PatternPart{
+			&syntax.PatternGroup{
+				Patterns: []*syntax.Pattern{
+					{Parts: []syntax.PatternPart{&syntax.Lit{Value: "foo"}}},
+					{Parts: []syntax.PatternPart{&syntax.Lit{Value: "bar"}}},
+				},
+			},
+			&syntax.PatternAny{},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := typedjson.Encode(&buf, node)
+	qt.Assert(t, qt.IsNil(err))
+
+	decoded, err := typedjson.Decode(bytes.NewReader(buf.Bytes()))
+	qt.Assert(t, qt.IsNil(err))
+
+	pat, ok := decoded.(*syntax.Pattern)
+	qt.Assert(t, qt.IsTrue(ok))
+	group, ok := pat.Parts[0].(*syntax.PatternGroup)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.HasLen(group.Patterns, 2))
+
+	var printed bytes.Buffer
+	err = syntax.NewPrinter().Print(&printed, &syntax.File{Stmts: []*syntax.Stmt{{
+		Cmd: &syntax.TestClause{
+			X: &syntax.CondBinary{
+				Op: syntax.TsMatch,
+				X:  &syntax.CondWord{Word: &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "x"}}}},
+				Y:  &syntax.CondPattern{Pattern: pat},
+			},
+		},
+	}}})
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(printed.String(), "[[ x == (foo|bar)* ]]\n"))
+}

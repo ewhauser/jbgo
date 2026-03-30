@@ -832,7 +832,7 @@ func (p *Pattern) WasQuoted() bool {
 //
 // These are [*Lit], [*SglQuoted], [*DblQuoted], [*ParamExp], [*CmdSubst],
 // [*ArithmExp], [*ProcSubst], [*PatternAny], [*PatternSingle],
-// [*PatternCharClass], and [*ExtGlob].
+// [*PatternCharClass], [*PatternGroup], and [*ExtGlob].
 type PatternPart interface {
 	Node
 	patternPartNode()
@@ -848,6 +848,7 @@ func (*ProcSubst) patternPartNode()        {}
 func (*PatternAny) patternPartNode()       {}
 func (*PatternSingle) patternPartNode()    {}
 func (*PatternCharClass) patternPartNode() {}
+func (*PatternGroup) patternPartNode()     {}
 func (*ExtGlob) patternPartNode()          {}
 
 // Lit represents a string literal.
@@ -908,6 +909,20 @@ type PatternCharClass struct {
 
 func (p *PatternCharClass) Pos() Pos { return p.ValuePos }
 func (p *PatternCharClass) End() Pos { return p.ValueEnd }
+
+// PatternGroup represents a bare parenthesized grouped alternation such as
+// `(foo|bar)` in a shell pattern.
+//
+// This node appears for grouped alternation in zsh pattern contexts and in
+// bash-like recovery parses which materialize the surrounding AST without
+// treating the construct as valid syntax.
+type PatternGroup struct {
+	Lparen, Rparen Pos
+	Patterns       []*Pattern
+}
+
+func (p *PatternGroup) Pos() Pos { return p.Lparen }
+func (p *PatternGroup) End() Pos { return posAddCol(p.Rparen, 1) }
 
 // CmdSubst represents a command substitution.
 type CmdSubst struct {

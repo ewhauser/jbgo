@@ -1132,6 +1132,31 @@ func TestParseErrorMetadataArithmeticExpressionExpected(t *testing.T) {
 	}
 }
 
+func TestParseErrorMetadataPatternUnexpectedLeftParen(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewParser(Variant(LangBash)).Parse(strings.NewReader("[[ x == (foo|bar)* ]]\n"), "stdin")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want ParseError")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want ParseError", err)
+	}
+	if got, want := parseErr.Kind, ParseErrorKindUnexpected; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Construct, ParseErrorSymbolPattern; got != want {
+		t.Fatalf("Construct = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, ParseErrorSymbolLeftParen; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
+	}
+	if got := parseErr.Expected; len(got) != 0 {
+		t.Fatalf("Expected = %v, want nil", got)
+	}
+}
+
 func TestParseErrorBashCompatRequiresIncompleteForIfAndWhile(t *testing.T) {
 	t.Parallel()
 
@@ -3087,6 +3112,10 @@ var errorCases = []errorCase{
 		langErr("1:18: syntax error in conditional expression: unexpected token `('", LangBash),
 	),
 	errCase(
+		"case x in (a|b)*) echo hi ;; esac",
+		langErr("1:11: syntax error near unexpected token `('", LangBash|LangMirBSDKorn),
+	),
+	errCase(
 		"[[ a =~ [a b] ]]",
 		langErr("1:12: syntax error in conditional expression: unexpected token `b]'", LangBash),
 	),
@@ -4381,6 +4410,74 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 	}
 }
 
+func TestParseRecoverErrorsPatternGroupPreservesIfClause(t *testing.T) {
+	t.Parallel()
+
+	src := "if [[ x == (foo|bar)* ]]; then echo one; elif [[ y == z ]]; then echo two; fi\n"
+	file, err := NewParser(Variant(LangBash), RecoverErrors(4)).Parse(strings.NewReader(src), "")
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.HasLen(file.Stmts, 1))
+
+	ifClause, ok := file.Stmts[0].Cmd.(*IfClause)
+	if !ok {
+		t.Fatalf("Cmd = %T, want *IfClause", file.Stmts[0].Cmd)
+	}
+	qt.Assert(t, qt.HasLen(ifClause.Cond, 1))
+	testClause, ok := ifClause.Cond[0].Cmd.(*TestClause)
+	if !ok {
+		t.Fatalf("if cond = %T, want *TestClause", ifClause.Cond[0].Cmd)
+	}
+	bin, ok := testClause.X.(*CondBinary)
+	if !ok {
+		t.Fatalf("if cond expr = %T, want *CondBinary", testClause.X)
+	}
+	pat := bin.Y.(*CondPattern).Pattern
+	group, ok := pat.Parts[0].(*PatternGroup)
+	if !ok {
+		t.Fatalf("pat.Parts[0] = %T, want *PatternGroup", pat.Parts[0])
+	}
+	qt.Assert(t, qt.HasLen(group.Patterns, 2))
+	if ifClause.Else == nil {
+		t.Fatal("ifClause.Else = nil, want elif clause")
+	}
+	qt.Assert(t, qt.HasLen(ifClause.Else.Cond, 1))
+	elifTest, ok := ifClause.Else.Cond[0].Cmd.(*TestClause)
+	if !ok {
+		t.Fatalf("elif cond = %T, want *TestClause", ifClause.Else.Cond[0].Cmd)
+	}
+	elifBin, ok := elifTest.X.(*CondBinary)
+	if !ok {
+		t.Fatalf("elif cond expr = %T, want *CondBinary", elifTest.X)
+	}
+	elifPat := elifBin.Y.(*CondPattern).Pattern
+	if got := elifPat.UnquotedText(); got != "z" {
+		t.Fatalf("elif pattern = %q, want %q", got, "z")
+	}
+}
+
+func TestParseRecoverErrorsPatternGroupPreservesCaseClause(t *testing.T) {
+	t.Parallel()
+
+	src := "case $x in (foo|bar)*) echo one ;; baz) echo two ;; esac\n"
+	file, err := NewParser(Variant(LangBash), RecoverErrors(4)).Parse(strings.NewReader(src), "")
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.HasLen(file.Stmts, 1))
+
+	caseClause, ok := file.Stmts[0].Cmd.(*CaseClause)
+	if !ok {
+		t.Fatalf("Cmd = %T, want *CaseClause", file.Stmts[0].Cmd)
+	}
+	qt.Assert(t, qt.HasLen(caseClause.Items, 2))
+	groupPat := caseClause.Items[0].Patterns[0]
+	group, ok := groupPat.Parts[0].(*PatternGroup)
+	if !ok {
+		t.Fatalf("first case pattern part = %T, want *PatternGroup", groupPat.Parts[0])
+	}
+	qt.Assert(t, qt.HasLen(group.Patterns, 2))
+	if got := caseClause.Items[1].Patterns[0].UnquotedText(); got != "baz" {
+		t.Fatalf("second case pattern = %q, want %q", got, "baz")
+	}
+}
 func countRecoveredPositions(x reflect.Value) int {
 	switch x.Kind() {
 	case reflect.Interface:

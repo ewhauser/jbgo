@@ -26,6 +26,7 @@ const (
 	ParseErrorSymbolEOF           ParseErrorSymbol = "EOF"
 	ParseErrorSymbolNewline       ParseErrorSymbol = "newline"
 	ParseErrorSymbolWord          ParseErrorSymbol = "word"
+	ParseErrorSymbolPattern       ParseErrorSymbol = "pattern"
 	ParseErrorSymbolExpression    ParseErrorSymbol = "expression"
 	ParseErrorSymbolStatement     ParseErrorSymbol = "statement"
 	ParseErrorSymbolStatementList ParseErrorSymbol = "statement-list"
@@ -95,6 +96,8 @@ func parseErrorSymbolFromText(text string) ParseErrorSymbol {
 		return ""
 	case "a word", "word":
 		return ParseErrorSymbolWord
+	case "a pattern", "pattern":
+		return ParseErrorSymbolPattern
 	case "an expression", "expression":
 		return ParseErrorSymbolExpression
 	case "a statement", "statement":
