@@ -2199,6 +2199,9 @@ loop:
 		if !yield(s, p.err) {
 			break
 		}
+		if p.err != nil {
+			break
+		}
 		if !start.progressed(p) {
 			p.posRecoverableErr(start.pos, "internal parser error: no progress parsing statement")
 			break

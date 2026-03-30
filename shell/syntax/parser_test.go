@@ -3439,6 +3439,43 @@ func TestParseStmtsSeqError(t *testing.T) {
 	}
 }
 
+func TestParseStopsAfterHeredocBodyError(t *testing.T) {
+	t.Parallel()
+
+	src := "cat <<EOF\n${\nEOF\necho after\n"
+	file, err := NewParser().Parse(strings.NewReader(src), "stdin")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want ParseError")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want ParseError", err)
+	}
+	if got, want := len(file.Stmts), 1; got != want {
+		t.Fatalf("len(Stmts) = %d, want %d", got, want)
+	}
+	call, ok := file.Stmts[0].Cmd.(*CallExpr)
+	if !ok {
+		t.Fatalf("statement command = %T, want *CallExpr", file.Stmts[0].Cmd)
+	}
+	if got, want := call.Args[0].Lit(), "cat"; got != want {
+		t.Fatalf("command = %q, want %q", got, want)
+	}
+	if got, want := len(file.Stmts[0].Redirs), 1; got != want {
+		t.Fatalf("len(Redirs) = %d, want %d", got, want)
+	}
+	delim := file.Stmts[0].Redirs[0].HdocDelim
+	if delim == nil {
+		t.Fatal("HdocDelim = nil, want metadata")
+	}
+	if !delim.Matched {
+		t.Fatal("HdocDelim.Matched = false, want true")
+	}
+	if got, want := delim.CloseRaw, "EOF"; got != want {
+		t.Fatalf("HdocDelim.CloseRaw = %q, want %q", got, want)
+	}
+}
+
 func TestParseAliasExpansionChangesGrammar(t *testing.T) {
 	t.Parallel()
 
