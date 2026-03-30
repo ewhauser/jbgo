@@ -74,9 +74,14 @@ func encodeValue(val reflect.Value) (reflect.Value, string) {
 		// Construct a new struct with an optional Type, Pos and End,
 		// and then all the visible fields which aren't positions.
 		typ := val.Type()
+		explicitPos := hasExplicitPosField(typ, "Pos")
+		explicitEnd := hasExplicitPosField(typ, "End")
 		fields := []reflect.StructField{typeField, posField, endField}
 		for field := range typ.Fields() {
 			if !field.IsExported() {
+				continue
+			}
+			if field.Type == posType && ((field.Name == "Pos" && explicitPos) || (field.Name == "End" && explicitEnd)) {
 				continue
 			}
 			field := field
@@ -97,6 +102,13 @@ func encodeValue(val reflect.Value) (reflect.Value, string) {
 		if node, _ := val.Addr().Interface().(syntax.Node); node != nil {
 			encodePos(enc.Field(1), node.Pos()) // posField
 			encodePos(enc.Field(2), node.End()) // endField
+		} else {
+			if explicitPos {
+				encodePos(enc.Field(1), val.FieldByName("Pos").Interface().(syntax.Pos))
+			}
+			if explicitEnd {
+				encodePos(enc.Field(2), val.FieldByName("End").Interface().(syntax.Pos))
+			}
 		}
 		// Do the rest of the fields.
 		for i := 3; i < encTyp.NumField(); i++ {
@@ -301,12 +313,18 @@ func decodeValue(val reflect.Value, enc any) error {
 			val = val.Elem()
 		}
 		for name, fv := range enc {
-			fval := val.FieldByName(name)
 			switch name {
-			case "Type", "Pos", "End":
+			case "Type":
 				// Type is already used above. Pos and End came from method calls.
 				continue
+			case "Pos", "End":
+				fval := val.FieldByName(name)
+				if fval.IsValid() && fval.Type() == posType {
+					decodePos(fval, fv.(map[string]any))
+				}
+				continue
 			}
+			fval := val.FieldByName(name)
 			if !fval.IsValid() {
 				return fmt.Errorf("unknown field for %s: %q", val.Type(), name)
 			}
@@ -338,4 +356,9 @@ func decodeValue(val reflect.Value, enc any) error {
 		}
 	}
 	return nil
+}
+
+func hasExplicitPosField(typ reflect.Type, name string) bool {
+	field, ok := typ.FieldByName(name)
+	return ok && field.IsExported() && field.Type == posType
 }

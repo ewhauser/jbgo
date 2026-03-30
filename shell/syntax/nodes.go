@@ -475,6 +475,17 @@ const (
 	HeredocIndentStripTabs
 )
 
+// HeredocCloseCandidate records the raw token metadata for a line that looked
+// like a potential here-document closer.
+type HeredocCloseCandidate struct {
+	Pos, End Pos
+
+	Raw               string
+	DelimOffset       uint
+	LeadingWhitespace string
+	RawTokenMismatch  bool
+}
+
 // HeredocDelim represents a here-document delimiter together with the parser
 // metadata derived from both the opener and the final closer candidate line.
 type HeredocDelim struct {
@@ -486,6 +497,7 @@ type HeredocDelim struct {
 
 	ClosePos, CloseEnd Pos
 	CloseRaw           string
+	CloseCandidate     *HeredocCloseCandidate
 	Matched            bool
 	EOFTerminated      bool
 	TrailingText       string

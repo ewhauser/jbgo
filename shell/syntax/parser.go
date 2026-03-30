@@ -676,6 +676,7 @@ type heredocStop struct {
 type heredocCloseCapture struct {
 	pos, end      Pos
 	raw           string
+	candidate     *HeredocCloseCandidate
 	matched       bool
 	eofTerminated bool
 	trailingText  string
@@ -1058,6 +1059,7 @@ func (p *Parser) setHeredocCloseCapture(delim *HeredocDelim, capture heredocClos
 	delim.ClosePos = capture.pos
 	delim.CloseEnd = capture.end
 	delim.CloseRaw = capture.raw
+	delim.CloseCandidate = capture.candidate
 	delim.Matched = capture.matched
 	delim.EOFTerminated = capture.eofTerminated
 	delim.TrailingText = capture.trailingText
@@ -1093,20 +1095,125 @@ func (p *Parser) updateHeredocStop(stop *heredocStop, rawPos, end Pos, rawLine, 
 	}
 	prefix := bytes.HasPrefix(normalized, stop.word)
 	matched := bytes.Equal(normalized, stop.word)
-	if !prefix {
-		stop.close = heredocCloseCapture{eofTerminated: eof}
+	var candidate *HeredocCloseCandidate
+	if prefix || heredocCloseCandidateMayMatch(rawLine, stop.word) {
+		candidate = newHeredocCloseCandidate(rawPos, rawLine, stop.word, p.lang, p.parseExtGlob, p.legacyBashCompat)
+	}
+	if prefix || candidate != nil {
+		close := heredocCloseCapture{
+			pos:           rawPos,
+			end:           end,
+			raw:           raw,
+			candidate:     candidate,
+			matched:       matched,
+			eofTerminated: eof && !matched,
+			indentTabs:    indentTabs,
+		}
+		if prefix {
+			close.trailingText = string(normalized[len(stop.word):])
+		}
+		stop.close = close
 		return
 	}
-	trailing := string(normalized[len(stop.word):])
-	stop.close = heredocCloseCapture{
-		pos:           rawPos,
-		end:           end,
-		raw:           raw,
-		matched:       matched,
-		eofTerminated: eof && !matched,
-		trailingText:  trailing,
-		indentTabs:    indentTabs,
+	if eof {
+		stop.close.eofTerminated = true
 	}
+}
+
+func heredocCloseCandidateMayMatch(rawLine, delim []byte) bool {
+	if len(rawLine) == 0 || len(delim) == 0 {
+		return false
+	}
+	if bytes.Contains(rawLine, delim) {
+		return true
+	}
+	if bytes.IndexByte(rawLine, delim[0]) < 0 {
+		return false
+	}
+	if len(delim) > 1 && bytes.IndexByte(rawLine, delim[len(delim)-1]) < 0 {
+		return false
+	}
+	return bytes.IndexAny(rawLine, "'\"\\$`") >= 0
+}
+
+func heredocCloseCandidateWordStart(tok token) bool {
+	switch tok {
+	case _Lit, _LitWord,
+		sglQuote, dollSglQuote, dblQuote, dollDblQuote, bckQuote,
+		dollar, dollBrace, dollBrack, dollParen, dollDblParen,
+		cmdIn, assgnParen, cmdOut:
+		return true
+	default:
+		return false
+	}
+}
+
+func newHeredocCloseCandidate(rawPos Pos, rawLine, delim []byte, lang LangVariant, parseExtGlob, legacyBashCompat bool) *HeredocCloseCandidate {
+	if len(rawLine) == 0 || len(delim) == 0 {
+		return nil
+	}
+	candidateParser := NewParser(
+		Variant(lang),
+		ParseExtGlob(parseExtGlob),
+		LegacyBashCompat(legacyBashCompat),
+	)
+	candidateParser.reset()
+	candidateParser.f = &File{}
+	candidateParser.loadReplay(rawPos, rawLine, io.EOF)
+	candidateParser.next()
+	for candidateParser.tok != _EOF {
+		if candidateParser.err != nil {
+			return nil
+		}
+		if !heredocCloseCandidateWordStart(candidateParser.tok) {
+			candidateParser.next()
+			continue
+		}
+		word, raw := candidateParser.getWordRaw()
+		if candidateParser.err != nil {
+			return nil
+		}
+		if word == nil || raw == "" {
+			continue
+		}
+		rawBytes := []byte(raw)
+		rawMismatch := !bytes.Equal(rawBytes, delim)
+		if rawMismatch {
+			unquoted, _ := wordUnquotedBytesRaw(word, rawBytes)
+			if !bytes.Equal(unquoted, delim) {
+				continue
+			}
+		}
+		offset := int(word.Pos().Offset()) - int(rawPos.Offset())
+		if offset < 0 || offset > len(rawLine) {
+			return nil
+		}
+		leadingStart := offset
+		for leadingStart > 0 {
+			switch rawLine[leadingStart-1] {
+			case ' ', '\t':
+				leadingStart--
+			default:
+				return &HeredocCloseCandidate{
+					Pos:               word.Pos(),
+					End:               word.End(),
+					Raw:               raw,
+					DelimOffset:       uint(offset),
+					LeadingWhitespace: string(rawLine[leadingStart:offset]),
+					RawTokenMismatch:  rawMismatch,
+				}
+			}
+		}
+		return &HeredocCloseCandidate{
+			Pos:               word.Pos(),
+			End:               word.End(),
+			Raw:               raw,
+			DelimOffset:       uint(offset),
+			LeadingWhitespace: string(rawLine[leadingStart:offset]),
+			RawTokenMismatch:  rawMismatch,
+		}
+	}
+	return nil
 }
 
 func (p *Parser) doHeredocs() {
@@ -5126,6 +5233,7 @@ func stmtHasHeredocMetadata(s *Stmt) bool {
 		if d := r.HdocDelim; d != nil && (d.ClosePos.IsValid() ||
 			d.CloseEnd.IsValid() ||
 			d.CloseRaw != "" ||
+			d.CloseCandidate != nil ||
 			d.Matched ||
 			d.EOFTerminated ||
 			d.TrailingText != "" ||

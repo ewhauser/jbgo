@@ -44,6 +44,9 @@ func litPatterns(strs ...string) []*Pattern {
 }
 func word(ps ...WordPart) *Word { return &Word{Parts: ps} }
 func litWord(s string) *Word    { return word(lit(s)) }
+func heredocCloseCandidateForTest(raw, value string) *HeredocCloseCandidate {
+	return newHeredocCloseCandidate(NewPos(0, 1, 1), []byte(raw), []byte(value), LangBash, true, false)
+}
 func heredocDelim(ps ...WordPart) *HeredocDelim {
 	w := word(ps...)
 	value, quoted := wordUnquotedBytes(w)
@@ -53,7 +56,11 @@ func heredocDelim(ps ...WordPart) *HeredocDelim {
 		Quoted:      quoted,
 		BodyExpands: !quoted,
 		CloseRaw:    string(value),
-		Matched:     true,
+		CloseCandidate: heredocCloseCandidateForTest(
+			string(value),
+			string(value),
+		),
+		Matched: true,
 	}
 }
 func litHeredocDelim(s string) *HeredocDelim { return heredocDelim(lit(s)) }
@@ -65,6 +72,7 @@ func dashHeredocDelim(ps ...WordPart) *HeredocDelim {
 func dashHeredocDelimRaw(raw string, indentTabs uint16, ps ...WordPart) *HeredocDelim {
 	d := dashHeredocDelim(ps...)
 	d.CloseRaw = raw
+	d.CloseCandidate = heredocCloseCandidateForTest(raw, d.Value)
 	d.IndentTabs = indentTabs
 	return d
 }

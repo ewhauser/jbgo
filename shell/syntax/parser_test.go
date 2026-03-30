@@ -1331,6 +1331,24 @@ func assertHeredocCloseSpan(t *testing.T, src string, delim *HeredocDelim, wantV
 	qt.Assert(t, qt.Equals(src[start:end], delim.CloseRaw))
 }
 
+func assertHeredocCloseCandidate(t *testing.T, src string, delim *HeredocDelim, wantRaw string, wantOffset uint, wantLeading string, wantMismatch bool) {
+	t.Helper()
+	if wantRaw == "" {
+		qt.Assert(t, qt.IsNil(delim.CloseCandidate))
+		return
+	}
+	qt.Assert(t, qt.IsTrue(delim.CloseCandidate != nil))
+	start, end := int(delim.CloseCandidate.Pos.Offset()), int(delim.CloseCandidate.End.Offset())
+	qt.Assert(t, qt.IsTrue(start >= 0))
+	qt.Assert(t, qt.IsTrue(end >= start))
+	qt.Assert(t, qt.IsTrue(end <= len(src)))
+	qt.Assert(t, qt.Equals(src[start:end], delim.CloseCandidate.Raw))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.Raw, wantRaw))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.DelimOffset, wantOffset))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.LeadingWhitespace, wantLeading))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.RawTokenMismatch, wantMismatch))
+}
+
 func TestParseHeredocCloserMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -1338,6 +1356,10 @@ func TestParseHeredocCloserMetadata(t *testing.T) {
 		name           string
 		src            string
 		wantRaw        string
+		wantCandidate  string
+		wantOffset     uint
+		wantLeading    string
+		wantMismatch   bool
 		wantIndentMode HeredocIndentMode
 		wantIndentTabs uint16
 	}{
@@ -1345,18 +1367,23 @@ func TestParseHeredocCloserMetadata(t *testing.T) {
 			name:           "plain closer",
 			src:            "cat <<EOF\nbody\nEOF\n",
 			wantRaw:        "EOF",
+			wantCandidate:  "EOF",
 			wantIndentMode: HeredocIndentNone,
 		},
 		{
 			name:           "quoted opener",
 			src:            "cat <<'EOF'\nbody\nEOF\n",
 			wantRaw:        "EOF",
+			wantCandidate:  "EOF",
 			wantIndentMode: HeredocIndentNone,
 		},
 		{
 			name:           "dash heredoc tab closer",
 			src:            "cat <<-EOF\nbody\n\tEOF\n",
 			wantRaw:        "\tEOF",
+			wantCandidate:  "EOF",
+			wantOffset:     1,
+			wantLeading:    "\t",
 			wantIndentMode: HeredocIndentStripTabs,
 			wantIndentTabs: 1,
 		},
@@ -1364,6 +1391,7 @@ func TestParseHeredocCloserMetadata(t *testing.T) {
 			name:           "closer at eof",
 			src:            "cat <<EOF\nbody\nEOF",
 			wantRaw:        "EOF",
+			wantCandidate:  "EOF",
 			wantIndentMode: HeredocIndentNone,
 		},
 	}
@@ -1383,6 +1411,7 @@ func TestParseHeredocCloserMetadata(t *testing.T) {
 			qt.Assert(t, qt.Equals(delim.IndentMode, tc.wantIndentMode))
 			qt.Assert(t, qt.Equals(delim.IndentTabs, tc.wantIndentTabs))
 			assertHeredocCloseSpan(t, tc.src, delim, true)
+			assertHeredocCloseCandidate(t, tc.src, delim, tc.wantCandidate, tc.wantOffset, tc.wantLeading, tc.wantMismatch)
 		})
 	}
 }
@@ -1395,6 +1424,10 @@ func TestParseHeredocCloserMetadataOnEOF(t *testing.T) {
 		src            string
 		wantRaw        string
 		wantTrailing   string
+		wantCandidate  string
+		wantOffset     uint
+		wantLeading    string
+		wantMismatch   bool
 		wantSpan       bool
 		wantIndentMode HeredocIndentMode
 		wantIndentTabs uint16
@@ -1409,6 +1442,7 @@ func TestParseHeredocCloserMetadataOnEOF(t *testing.T) {
 			src:            "cat <<EOF\nbody\nEOF ",
 			wantRaw:        "EOF ",
 			wantTrailing:   " ",
+			wantCandidate:  "EOF",
 			wantSpan:       true,
 			wantIndentMode: HeredocIndentNone,
 		},
@@ -1417,6 +1451,7 @@ func TestParseHeredocCloserMetadataOnEOF(t *testing.T) {
 			src:            "cat <<EOF\nbody\nEOF \n",
 			wantRaw:        "EOF ",
 			wantTrailing:   " ",
+			wantCandidate:  "EOF",
 			wantSpan:       true,
 			wantIndentMode: HeredocIndentNone,
 		},
@@ -1428,6 +1463,35 @@ func TestParseHeredocCloserMetadataOnEOF(t *testing.T) {
 			wantSpan:       true,
 			wantIndentMode: HeredocIndentStripTabs,
 			wantIndentTabs: 1,
+		},
+		{
+			name:           "indented closer candidate",
+			src:            "cat <<EOF\nbody\n EOF",
+			wantRaw:        " EOF",
+			wantCandidate:  "EOF",
+			wantOffset:     1,
+			wantLeading:    " ",
+			wantSpan:       true,
+			wantIndentMode: HeredocIndentNone,
+		},
+		{
+			name:           "later in line closer candidate",
+			src:            "cat <<EOF\nbody\nx EOF",
+			wantRaw:        "x EOF",
+			wantCandidate:  "EOF",
+			wantOffset:     2,
+			wantLeading:    " ",
+			wantSpan:       true,
+			wantIndentMode: HeredocIndentNone,
+		},
+		{
+			name:           "raw token mismatch closer candidate",
+			src:            "cat <<BLOCK\nbody\n'BLOCK'",
+			wantRaw:        "'BLOCK'",
+			wantCandidate:  "'BLOCK'",
+			wantMismatch:   true,
+			wantSpan:       true,
+			wantIndentMode: HeredocIndentNone,
 		},
 	}
 
@@ -1446,6 +1510,7 @@ func TestParseHeredocCloserMetadataOnEOF(t *testing.T) {
 			qt.Assert(t, qt.Equals(delim.IndentMode, tc.wantIndentMode))
 			qt.Assert(t, qt.Equals(delim.IndentTabs, tc.wantIndentTabs))
 			assertHeredocCloseSpan(t, tc.src, delim, tc.wantSpan)
+			assertHeredocCloseCandidate(t, tc.src, delim, tc.wantCandidate, tc.wantOffset, tc.wantLeading, tc.wantMismatch)
 		})
 	}
 }

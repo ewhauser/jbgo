@@ -143,12 +143,19 @@ func TestEncodeHeredocDelimiter(t *testing.T) {
 			}},
 			&syntax.Lit{Value: "2"},
 		},
-		Value:        "EOF2",
-		Quoted:       true,
-		BodyExpands:  false,
-		ClosePos:     syntax.NewPos(10, 3, 1),
-		CloseEnd:     syntax.NewPos(15, 3, 6),
-		CloseRaw:     "\tEOF2",
+		Value:       "EOF2",
+		Quoted:      true,
+		BodyExpands: false,
+		ClosePos:    syntax.NewPos(10, 3, 1),
+		CloseEnd:    syntax.NewPos(15, 3, 6),
+		CloseRaw:    "\tEOF2",
+		CloseCandidate: &syntax.HeredocCloseCandidate{
+			Pos:               syntax.NewPos(11, 3, 2),
+			End:               syntax.NewPos(15, 3, 6),
+			Raw:               "EOF2",
+			DelimOffset:       1,
+			LeadingWhitespace: "\t",
+		},
 		Matched:      true,
 		TrailingText: "",
 		IndentMode:   syntax.HeredocIndentStripTabs,
@@ -171,6 +178,13 @@ func TestEncodeHeredocDelimiter(t *testing.T) {
 	qt.Assert(t, qt.Equals(delim.ClosePos, syntax.NewPos(10, 3, 1)))
 	qt.Assert(t, qt.Equals(delim.CloseEnd, syntax.NewPos(15, 3, 6)))
 	qt.Assert(t, qt.Equals(delim.CloseRaw, "\tEOF2"))
+	qt.Assert(t, qt.IsTrue(delim.CloseCandidate != nil))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.Pos, syntax.NewPos(11, 3, 2)))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.End, syntax.NewPos(15, 3, 6)))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.Raw, "EOF2"))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.DelimOffset, uint(1)))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.LeadingWhitespace, "\t"))
+	qt.Assert(t, qt.Equals(delim.CloseCandidate.RawTokenMismatch, false))
 	qt.Assert(t, qt.Equals(delim.Matched, true))
 	qt.Assert(t, qt.Equals(delim.EOFTerminated, false))
 	qt.Assert(t, qt.Equals(delim.IndentMode, syntax.HeredocIndentStripTabs))
