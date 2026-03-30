@@ -4710,6 +4710,23 @@ var fileTests = []fileTestCase{
 		}, LangBash),
 	),
 	fileTest(
+		[]string{"local a=loc $var c=loc"},
+		langFile(&DeclClause{
+			Variant: lit("local"),
+			Operands: declOperands(
+				declAssign(&Assign{
+					Ref:   litRef("a"),
+					Value: litWord("loc"),
+				}),
+				declDynamicWord(word(litParamExp("var"))),
+				declAssign(&Assign{
+					Ref:   litRef("c"),
+					Value: litWord("loc"),
+				}),
+			),
+		}, LangBash),
+	),
+	fileTest(
 		[]string{"declare -A foo=([a]=b)"},
 		langFile(&DeclClause{
 			Variant: lit("declare"),

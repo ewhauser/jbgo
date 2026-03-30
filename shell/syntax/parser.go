@@ -5435,6 +5435,9 @@ func (p *Parser) scalarAssignMode(eqIndex int, appendScalarWord bool) *Assign {
 }
 
 func (p *Parser) validEqlOffs() int {
+	if p.tok != _Lit && p.tok != _LitWord {
+		return -1
+	}
 	if p.eqlOffs <= 0 || p.eqlOffs >= len(p.val) {
 		return -1
 	}
