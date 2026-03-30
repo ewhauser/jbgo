@@ -3575,6 +3575,51 @@ func TestParseStmtsSeq(t *testing.T) {
 	}
 }
 
+func TestParseStmtsSeqLongCasePatternDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	p := NewParser()
+	inReader, inWriter := io.Pipe()
+	stmtc := make(chan *Stmt, 1)
+	errc := make(chan error, 1)
+	go func() {
+		var firstErr error
+		for stmt, err := range p.StmtsSeq(inReader) {
+			if firstErr == nil && err != nil {
+				firstErr = err
+			}
+			if err == nil {
+				stmtc <- stmt
+			}
+		}
+		errc <- firstErr
+	}()
+
+	pattern := strings.Repeat("a", bufSize+32)
+	_, err := io.WriteString(inWriter, "case x in "+pattern+") echo hi ;; esac\n")
+	qt.Assert(t, qt.IsNil(err))
+
+	select {
+	case stmt := <-stmtc:
+		caseClause, ok := stmt.Cmd.(*CaseClause)
+		if !ok {
+			t.Fatalf("stmt.Cmd = %T, want *CaseClause", stmt.Cmd)
+		}
+		qt.Assert(t, qt.HasLen(caseClause.Items, 1))
+		qt.Assert(t, qt.HasLen(caseClause.Items[0].Patterns, 1))
+		if got := caseClause.Items[0].Patterns[0].UnquotedText(); got != pattern {
+			t.Fatalf("case pattern = %q, want %q", got, pattern)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StmtsSeq blocked on a complete case clause until EOF")
+	}
+
+	qt.Assert(t, qt.IsNil(inWriter.Close()))
+	if err := <-errc; err != nil {
+		t.Fatalf("Expected no error: %v", err)
+	}
+}
+
 func TestParseStmtsSeqStopEarly(t *testing.T) {
 	t.Parallel()
 	p := NewParser()

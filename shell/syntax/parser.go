@@ -6376,28 +6376,9 @@ func (p *Parser) invalidCondPatternParen(pos Pos, raw string, start Pos) {
 	)
 }
 
-func (p *Parser) bufferUnreadSource() error {
-	if p.readEOF || p.src == nil {
-		return nil
-	}
-	rest, err := p.unreadSourceTail()
-	if err != nil {
-		return err
-	}
-	if len(rest) > 0 {
-		p.bs = append(p.bs, rest...)
-	}
-	p.readEOF = true
-	p.readErr = io.EOF
-	return nil
-}
-
 func (p *Parser) casePatternUsesOptionalOpener() bool {
 	if p.tok != leftParen {
 		return false
-	}
-	if err := p.bufferUnreadSource(); err != nil {
-		return true
 	}
 	tail := p.sourceFromPos(p.pos)
 	if tail == "" || tail[0] != '(' {
@@ -6408,6 +6389,9 @@ func (p *Parser) casePatternUsesOptionalOpener() bool {
 		return true
 	}
 	_, end := scanPatternText(tail, p.pos, patternScanCase, p.lang)
+	if !p.readEOF && end == len(tail) {
+		return true
+	}
 	return end <= groupEnd || end >= len(tail) || tail[end] != ')'
 }
 
@@ -6509,12 +6493,11 @@ scan:
 }
 
 func (p *Parser) scanRawPatternSource(start Pos, mode patternScanMode) (*scannedRawPattern, bool) {
-	if err := p.bufferUnreadSource(); err != nil {
-		p.errPass(err)
-		return nil, false
-	}
 	raw := p.sourceFromPos(start)
 	scanned, end := scanPatternText(raw, start, mode, p.lang)
+	if mode == patternScanCase && !p.readEOF && end == len(raw) {
+		return nil, false
+	}
 	scanned.raw = raw[int(scanned.start.Offset()-start.Offset()):end]
 	boundaryPos := posAddCol(start, end)
 	for p.tok != _EOF && p.pos.Offset() < boundaryPos.Offset() {
@@ -6563,55 +6546,67 @@ func (p *Parser) caseItems(stop reservedWord) (items []*CaseItem) {
 		if p.casePatternUsesOptionalOpener() {
 			p.next()
 		}
-		scanned, ok := p.scanRawPatternSource(p.pos, patternScanCase)
-		if !ok {
-			return items
-		}
-		rawParser := rawPatternParser{lang: p.lang}
-		if idx, op := rawParser.findInvalidCasePatternOperator(scanned.raw, scanned.start); op != 0 {
-			pos := posAddCol(scanned.start, idx)
-			if idx == 0 {
-				p.posErr(pos, "case patterns must consist of words")
-			} else {
-				p.posErr(pos, "case patterns must be separated with %#q", or)
-			}
-			return items
-		}
-		start := 0
-		validPatterns := true
-		for {
-			end, delim := rawParser.findPatternListSplit(scanned.raw, scanned.start, start)
-			partStart, partEnd := trimPatternRawSegment(scanned.raw, start, end)
-			partRaw := scanned.raw[partStart:partEnd]
-			partBase := advancePosBytes(scanned.start, []byte(scanned.raw[:partStart]))
-			switch {
-			case partRaw == "":
-				validPatterns = false
-			case rawParser.hasTopLevelWhitespace(partRaw, partBase):
-				validPatterns = false
-			default:
-				ci.Patterns = append(ci.Patterns, rawParser.parse(partRaw, partBase))
-			}
-			if delim != '|' {
-				break
-			}
-			start = end + 1
-		}
-		if group := firstPatternGroupInList(ci.Patterns); group != nil && !p.patternAllowsBareGroups() {
-			if !p.recoverError() {
-				p.invalidCasePatternParen(group.Pos())
+		if scanned, ok := p.scanRawPatternSource(p.pos, patternScanCase); ok {
+			rawParser := rawPatternParser{lang: p.lang}
+			if idx, op := rawParser.findInvalidCasePatternOperator(scanned.raw, scanned.start); op != 0 {
+				pos := posAddCol(scanned.start, idx)
+				if idx == 0 {
+					p.posErr(pos, "case patterns must consist of words")
+				} else {
+					p.posErr(pos, "case patterns must be separated with %#q", or)
+				}
 				return items
 			}
-		} else if group == nil && scanned.firstBareParen.IsValid() && !p.patternAllowsBareGroups() {
-			p.invalidCasePatternParen(scanned.firstBareParen)
-			return items
-		}
-		if p.tok != rightParen && p.tok != _EOF {
-			p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
-			return items
-		}
-		if !validPatterns && len(ci.Patterns) > 0 {
-			p.curErr("case patterns must consist of words")
+			start := 0
+			validPatterns := true
+			for {
+				end, delim := rawParser.findPatternListSplit(scanned.raw, scanned.start, start)
+				partStart, partEnd := trimPatternRawSegment(scanned.raw, start, end)
+				partRaw := scanned.raw[partStart:partEnd]
+				partBase := advancePosBytes(scanned.start, []byte(scanned.raw[:partStart]))
+				switch {
+				case partRaw == "":
+					validPatterns = false
+				case rawParser.hasTopLevelWhitespace(partRaw, partBase):
+					validPatterns = false
+				default:
+					ci.Patterns = append(ci.Patterns, rawParser.parse(partRaw, partBase))
+				}
+				if delim != '|' {
+					break
+				}
+				start = end + 1
+			}
+			if group := firstPatternGroupInList(ci.Patterns); group != nil && !p.patternAllowsBareGroups() {
+				if !p.recoverError() {
+					p.invalidCasePatternParen(group.Pos())
+					return items
+				}
+			} else if group == nil && scanned.firstBareParen.IsValid() && !p.patternAllowsBareGroups() {
+				p.invalidCasePatternParen(scanned.firstBareParen)
+				return items
+			}
+			if p.tok != rightParen && p.tok != _EOF {
+				p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
+				return items
+			}
+			if !validPatterns && len(ci.Patterns) > 0 {
+				p.curErr("case patterns must consist of words")
+			}
+		} else {
+			for p.tok != _EOF {
+				if pat := p.getPattern(or, rightParen); pat == nil {
+					p.curErr("case patterns must consist of words")
+				} else {
+					ci.Patterns = append(ci.Patterns, pat)
+				}
+				if p.tok == rightParen {
+					break
+				}
+				if !p.got(or) {
+					p.curErr("case patterns must be separated with %#q", or)
+				}
+			}
 		}
 		if len(ci.Patterns) == 0 {
 			if p.recoverError() {
