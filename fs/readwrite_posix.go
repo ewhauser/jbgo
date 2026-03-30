@@ -90,13 +90,13 @@ func (h *ReadWriteFS) Open(ctx context.Context, name string) (File, error) {
 
 func (h *ReadWriteFS) OpenFile(_ context.Context, name string, flag int, perm stdfs.FileMode) (File, error) {
 	abs := h.resolve(name)
-
-	target, err := h.resolveOpenTarget(abs, flag)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, true)
 	if err != nil {
 		return nil, h.pathError("open", abs, err)
 	}
+	defer func() { _ = root.Close() }()
 
-	file, err := os.OpenFile(target, flag, perm)
+	file, err := root.OpenFile(rootRelativeOpenPath(resolved.rel), flag, perm)
 	if err != nil {
 		return nil, h.pathError("open", abs, err)
 	}
@@ -116,53 +116,53 @@ func (h *ReadWriteFS) OpenFile(_ context.Context, name string, flag int, perm st
 	return &readWriteFile{
 		file:      file,
 		name:      path.Base(abs),
-		ownership: h.lookupOwnership(target),
+		ownership: h.lookupOwnership(hostPathFromRootRelative(h.canonicalRoot, resolved.rel)),
 	}, nil
 }
 
 func (h *ReadWriteFS) Stat(_ context.Context, name string) (stdfs.FileInfo, error) {
 	abs := h.resolve(name)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, false)
+	if err != nil {
+		return nil, h.pathError("stat", abs, err)
+	}
+	defer func() { _ = root.Close() }()
 
-	canonical, err := h.resolveCanonical(abs)
+	info, err := root.Stat(rootRelativeOpenPath(resolved.rel))
 	if err != nil {
 		return nil, h.pathError("stat", abs, err)
 	}
-	info, err := os.Stat(canonical)
-	if err != nil {
-		return nil, h.pathError("stat", abs, err)
-	}
-	return namedFileInfo{name: path.Base(abs), info: info, ownership: h.lookupOwnership(canonical)}, nil
+	return namedFileInfo{name: path.Base(abs), info: info, ownership: h.lookupOwnership(hostPathFromRootRelative(h.canonicalRoot, resolved.rel))}, nil
 }
 
 func (h *ReadWriteFS) Lstat(_ context.Context, name string) (stdfs.FileInfo, error) {
 	abs := h.resolve(name)
-
-	leaf, err := h.resolveLeaf(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), false, false)
 	if err != nil {
 		return nil, h.pathError("lstat", abs, err)
 	}
-	info, err := os.Lstat(leaf)
-	if err != nil {
-		return nil, h.pathError("lstat", abs, err)
+	defer func() { _ = root.Close() }()
+	if resolved.info == nil {
+		return nil, h.pathError("lstat", abs, stdfs.ErrNotExist)
 	}
-	return namedFileInfo{name: path.Base(abs), info: info, ownership: h.lookupOwnership(leaf)}, nil
+	return namedFileInfo{name: path.Base(abs), info: resolved.info, ownership: h.lookupOwnership(hostPathFromRootRelative(h.canonicalRoot, resolved.rel))}, nil
 }
 
 func (h *ReadWriteFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry, error) {
 	abs := h.resolve(name)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, false)
+	if err != nil {
+		return nil, h.pathError("readdir", abs, err)
+	}
+	defer func() { _ = root.Close() }()
 
-	canonical, err := h.resolveCanonical(abs)
+	file, err := root.Open(rootRelativeOpenPath(resolved.rel))
 	if err != nil {
 		return nil, h.pathError("readdir", abs, err)
 	}
-	info, err := os.Stat(canonical)
-	if err != nil {
-		return nil, h.pathError("readdir", abs, err)
-	}
-	if !info.IsDir() {
-		return nil, h.pathError("readdir", abs, stdfs.ErrInvalid)
-	}
-	entries, err := os.ReadDir(canonical)
+	defer func() { _ = file.Close() }()
+
+	entries, err := file.ReadDir(-1)
 	if err != nil {
 		return nil, h.pathError("readdir", abs, err)
 	}
@@ -171,12 +171,16 @@ func (h *ReadWriteFS) ReadDir(_ context.Context, name string) ([]stdfs.DirEntry,
 
 func (h *ReadWriteFS) Readlink(_ context.Context, name string) (string, error) {
 	abs := h.resolve(name)
-
-	leaf, err := h.resolveLeaf(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), false, false)
 	if err != nil {
 		return "", h.pathError("readlink", abs, err)
 	}
-	target, err := os.Readlink(leaf)
+	defer func() { _ = root.Close() }()
+	if resolved.info == nil || resolved.info.Mode()&stdfs.ModeSymlink == 0 {
+		return "", h.pathError("readlink", abs, stdfs.ErrInvalid)
+	}
+
+	target, err := root.Readlink(rootRelativeOpenPath(resolved.rel))
 	if err != nil {
 		return "", h.pathError("readlink", abs, err)
 	}
@@ -205,22 +209,23 @@ func (h *ReadWriteFS) Readlink(_ context.Context, name string) (string, error) {
 
 func (h *ReadWriteFS) Realpath(_ context.Context, name string) (string, error) {
 	abs := h.resolve(name)
-
-	canonical, err := h.resolveCanonical(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, false)
 	if err != nil {
 		return "", h.pathError("realpath", abs, err)
 	}
-	return h.virtualFromCanonical(canonical), nil
+	_ = root.Close()
+	return h.virtualFromCanonical(hostPathFromRootRelative(h.canonicalRoot, resolved.rel)), nil
 }
 
 func (h *ReadWriteFS) Symlink(_ context.Context, target, linkName string) error {
 	abs := h.resolve(linkName)
-
-	linkLeaf, err := h.resolveLeaf(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), false, true)
 	if err != nil {
 		return h.pathError("symlink", abs, err)
 	}
-	if err := os.Symlink(h.sanitizeSymlinkTarget(target), linkLeaf); err != nil {
+	defer func() { _ = root.Close() }()
+
+	if err := root.Symlink(h.sanitizeSymlinkTarget(target), rootRelativeOpenPath(resolved.rel)); err != nil {
 		return h.pathError("symlink", abs, err)
 	}
 	return nil
@@ -229,16 +234,17 @@ func (h *ReadWriteFS) Symlink(_ context.Context, target, linkName string) error 
 func (h *ReadWriteFS) Link(_ context.Context, oldName, newName string) error {
 	oldAbs := h.resolve(oldName)
 	newAbs := h.resolve(newName)
-
-	oldCanonical, err := h.resolveCanonical(oldAbs)
+	root, oldResolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(oldAbs, "/"), true, false)
 	if err != nil {
 		return h.pathError("link", oldAbs, err)
 	}
-	newLeaf, err := h.resolveLeaf(newAbs)
+	defer func() { _ = root.Close() }()
+
+	newResolved, err := resolveWithinRoot(root, h.root, h.canonicalRoot, strings.TrimPrefix(newAbs, "/"), false, true)
 	if err != nil {
 		return h.pathError("link", newAbs, err)
 	}
-	if err := os.Link(oldCanonical, newLeaf); err != nil {
+	if err := root.Link(rootRelativeOpenPath(oldResolved.rel), rootRelativeOpenPath(newResolved.rel)); err != nil {
 		return h.pathError("link", oldAbs, err)
 	}
 	return nil
@@ -246,35 +252,26 @@ func (h *ReadWriteFS) Link(_ context.Context, oldName, newName string) error {
 
 func (h *ReadWriteFS) Chown(_ context.Context, name string, uid, gid uint32, follow bool) error {
 	abs := h.resolve(name)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), follow, false)
+	if err != nil {
+		return h.pathError("chown", abs, err)
+	}
+	defer func() { _ = root.Close() }()
 
-	target, err := h.resolveLeaf(abs)
-	if follow {
-		target, err = h.resolveCanonical(abs)
-	}
-	if err != nil {
-		return h.pathError("chown", abs, err)
-	}
-	info, err := os.Lstat(target)
-	if err != nil {
-		return h.pathError("chown", abs, err)
-	}
+	target := hostPathFromRootRelative(h.canonicalRoot, resolved.rel)
 	h.recordOwnership(target, FileOwnership{UID: uid, GID: gid})
-	if info.Mode()&stdfs.ModeSymlink == 0 {
-		if canonical, canonErr := filepath.EvalSymlinks(target); canonErr == nil {
-			h.recordOwnership(filepath.Clean(canonical), FileOwnership{UID: uid, GID: gid})
-		}
-	}
 	return nil
 }
 
 func (h *ReadWriteFS) Chmod(_ context.Context, name string, mode stdfs.FileMode) error {
 	abs := h.resolve(name)
-
-	target, err := h.resolveCanonical(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, false)
 	if err != nil {
 		return h.pathError("chmod", abs, err)
 	}
-	if err := os.Chmod(target, mode); err != nil {
+	defer func() { _ = root.Close() }()
+
+	if err := root.Chmod(rootRelativeOpenPath(resolved.rel), mode); err != nil {
 		return h.pathError("chmod", abs, err)
 	}
 	return nil
@@ -282,12 +279,13 @@ func (h *ReadWriteFS) Chmod(_ context.Context, name string, mode stdfs.FileMode)
 
 func (h *ReadWriteFS) Chtimes(_ context.Context, name string, atime, mtime time.Time) error {
 	abs := h.resolve(name)
-
-	target, err := h.resolveCanonical(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, false)
 	if err != nil {
 		return h.pathError("chtimes", abs, err)
 	}
-	if err := os.Chtimes(target, atime, mtime); err != nil {
+	defer func() { _ = root.Close() }()
+
+	if err := root.Chtimes(rootRelativeOpenPath(resolved.rel), atime, mtime); err != nil {
 		return h.pathError("chtimes", abs, err)
 	}
 	return nil
@@ -295,16 +293,23 @@ func (h *ReadWriteFS) Chtimes(_ context.Context, name string, atime, mtime time.
 
 func (h *ReadWriteFS) Lchtimes(_ context.Context, name string, atime, mtime time.Time) error {
 	abs := h.resolve(name)
-
-	target, err := h.resolveLeaf(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), false, false)
 	if err != nil {
 		return h.pathError("lchtimes", abs, err)
 	}
+	defer func() { _ = root.Close() }()
+
+	parent, base, err := openResolvedParentFile(root, resolved.rel)
+	if err != nil {
+		return h.pathError("lchtimes", abs, err)
+	}
+	defer func() { _ = parent.Close() }()
+
 	times := []unix.Timespec{
 		unix.NsecToTimespec(atime.UnixNano()),
 		unix.NsecToTimespec(mtime.UnixNano()),
 	}
-	if err := unix.UtimesNanoAt(unix.AT_FDCWD, target, times, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	if err := unix.UtimesNanoAt(int(parent.Fd()), base, times, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return h.pathError("lchtimes", abs, err)
 	}
 	return nil
@@ -315,12 +320,13 @@ func (h *ReadWriteFS) MkdirAll(_ context.Context, name string, perm stdfs.FileMo
 	if abs == "/" {
 		return nil
 	}
-
-	target, err := h.resolveLeaf(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), false, true)
 	if err != nil {
 		return h.pathError("mkdir", abs, err)
 	}
-	if err := os.MkdirAll(target, perm); err != nil {
+	defer func() { _ = root.Close() }()
+
+	if err := root.MkdirAll(rootRelativeOpenPath(resolved.rel), perm); err != nil {
 		return h.pathError("mkdir", abs, err)
 	}
 	return nil
@@ -332,6 +338,7 @@ func (h *ReadWriteFS) Mkfifo(_ context.Context, name string, perm stdfs.FileMode
 	if err != nil {
 		return h.pathError("mkfifo", abs, err)
 	}
+
 	if perm == 0 {
 		perm = 0o666
 	}
@@ -346,19 +353,21 @@ func (h *ReadWriteFS) Remove(_ context.Context, name string, recursive bool) err
 	if abs == "/" {
 		return h.pathError("remove", abs, stdfs.ErrPermission)
 	}
-
-	target, err := h.resolveLeaf(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), false, false)
 	if err != nil {
 		return h.pathError("remove", abs, err)
 	}
+	defer func() { _ = root.Close() }()
+
+	target := hostPathFromRootRelative(h.canonicalRoot, resolved.rel)
 	if recursive {
-		if err := os.RemoveAll(target); err != nil {
+		if err := root.RemoveAll(rootRelativeOpenPath(resolved.rel)); err != nil {
 			return h.pathError("remove", abs, err)
 		}
 		h.clearOwnershipSubtree(target)
 		return nil
 	}
-	if err := os.Remove(target); err != nil {
+	if err := root.Remove(rootRelativeOpenPath(resolved.rel)); err != nil {
 		return h.pathError("remove", abs, err)
 	}
 	h.clearOwnershipTarget(target)
@@ -371,16 +380,19 @@ func (h *ReadWriteFS) Rename(_ context.Context, oldName, newName string) error {
 	if oldAbs == "/" || newAbs == "/" {
 		return h.pathError("rename", oldAbs, stdfs.ErrPermission)
 	}
-
-	oldTarget, err := h.resolveLeaf(oldAbs)
+	root, oldResolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(oldAbs, "/"), false, false)
 	if err != nil {
 		return h.pathError("rename", oldAbs, err)
 	}
-	newTarget, err := h.resolveLeaf(newAbs)
+	defer func() { _ = root.Close() }()
+
+	newResolved, err := resolveWithinRoot(root, h.root, h.canonicalRoot, strings.TrimPrefix(newAbs, "/"), false, true)
 	if err != nil {
 		return h.pathError("rename", newAbs, err)
 	}
-	if err := os.Rename(oldTarget, newTarget); err != nil {
+	oldTarget := hostPathFromRootRelative(h.canonicalRoot, oldResolved.rel)
+	newTarget := hostPathFromRootRelative(h.canonicalRoot, newResolved.rel)
+	if err := root.Rename(rootRelativeOpenPath(oldResolved.rel), rootRelativeOpenPath(newResolved.rel)); err != nil {
 		return h.pathError("rename", oldAbs, err)
 	}
 	h.moveOwnership(oldTarget, newTarget)
@@ -399,7 +411,7 @@ func (h *ReadWriteFS) Chdir(name string) error {
 		return nil
 	}
 
-	canonical, err := h.resolveCanonical(abs)
+	root, resolved, err := openResolvedRoot(h.root, h.canonicalRoot, strings.TrimPrefix(abs, "/"), true, false)
 	if err != nil {
 		if h.canAssumeCurrentProcessDir(abs, err) {
 			h.mu.Lock()
@@ -409,11 +421,8 @@ func (h *ReadWriteFS) Chdir(name string) error {
 		}
 		return h.pathError("chdir", abs, err)
 	}
-	info, err := os.Stat(canonical)
-	if err != nil {
-		return h.pathError("chdir", abs, err)
-	}
-	if !info.IsDir() {
+	defer func() { _ = root.Close() }()
+	if resolved.info == nil || !resolved.info.IsDir() {
 		return h.pathError("chdir", abs, stdfs.ErrInvalid)
 	}
 	h.mu.Lock()
@@ -491,54 +500,6 @@ func (h *ReadWriteFS) resolve(name string) string {
 	return Resolve(h.Getwd(), name)
 }
 
-func (h *ReadWriteFS) resolveOpenTarget(abs string, flag int) (string, error) {
-	if !hasWriteIntent(flag) {
-		return h.resolveCanonical(abs)
-	}
-	return h.resolveWriteTarget(abs)
-}
-
-func (h *ReadWriteFS) resolveWriteTarget(abs string) (string, error) {
-	leaf, err := h.resolveLeaf(abs)
-	if err != nil {
-		return "", err
-	}
-
-	info, err := os.Lstat(leaf)
-	switch {
-	case err == nil:
-		if info.Mode()&stdfs.ModeSymlink != 0 {
-			return h.resolveCanonical(abs)
-		}
-		return leaf, nil
-	case os.IsNotExist(err):
-		return leaf, nil
-	default:
-		return "", err
-	}
-}
-
-func (h *ReadWriteFS) resolveCanonical(abs string) (string, error) {
-	abs = Clean(abs)
-	if abs == "/" {
-		return h.canonicalRoot, nil
-	}
-
-	lexical := h.lexicalPath(abs)
-	canonical, err := filepath.EvalSymlinks(lexical)
-	if err != nil {
-		if fallback, ok := h.currentLongPathFallback(lexical, err); ok {
-			return fallback, nil
-		}
-		return "", err
-	}
-	canonical = filepath.Clean(canonical)
-	if !withinHostRoot(canonical, h.canonicalRoot) {
-		return "", stdfs.ErrPermission
-	}
-	return canonical, nil
-}
-
 func (h *ReadWriteFS) resolveLeaf(abs string) (string, error) {
 	abs = Clean(abs)
 	if abs == "/" {
@@ -588,23 +549,6 @@ func (h *ReadWriteFS) lexicalPath(abs string) string {
 		return h.root
 	}
 	return filepath.Clean(filepath.Join(h.root, filepath.FromSlash(strings.TrimPrefix(abs, "/"))))
-}
-
-func (h *ReadWriteFS) currentLongPathFallback(lexical string, err error) (string, bool) {
-	if !errors.Is(err, syscall.ENAMETOOLONG) || h.root != h.canonicalRoot {
-		return "", false
-	}
-	if filepath.Clean(lexical) != h.currentLexicalCwd() {
-		return "", false
-	}
-	return filepath.Clean(lexical), true
-}
-
-func (h *ReadWriteFS) currentLexicalCwd() string {
-	h.mu.RLock()
-	cwd := h.cwd
-	h.mu.RUnlock()
-	return h.lexicalPath(Clean(cwd))
 }
 
 func (h *ReadWriteFS) canAssumeCurrentProcessDir(abs string, err error) bool {
