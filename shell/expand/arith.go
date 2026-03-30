@@ -819,13 +819,15 @@ func arithParseErrorToken(source string, pos syntax.Pos) string {
 }
 
 func arithParseOperandExpectedToken(source string, parseErr syntax.ParseError) (string, bool) {
-	switch {
-	case strings.Contains(parseErr.Text, "must be followed by an expression"),
-		strings.Contains(parseErr.Text, "must follow an expression"):
-		return arithParseErrorToken(source, parseErr.Pos), true
-	default:
+	if parseErr.Kind != syntax.ParseErrorKindMissing {
 		return "", false
 	}
+	for _, expected := range parseErr.Expected {
+		if expected == syntax.ParseErrorSymbolExpression {
+			return arithParseErrorToken(source, parseErr.Pos), true
+		}
+	}
+	return "", false
 }
 
 func arithRuntimeErrorToken(source string, parseErr syntax.ParseError) string {

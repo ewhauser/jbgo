@@ -145,16 +145,17 @@ func (r *Runner) expandDeferredBackquote(ctx context.Context, w io.Writer, cs *s
 }
 
 func nestedBackquoteParseErrorMessage(parseErr syntax.ParseError) string {
-	switch parseErr.Text {
-	case "reached EOF without closing quote `\"`",
-		"reached \"`\" without closing quote `\"`":
-		return "unexpected EOF while looking for matching `\"'"
-	case "reached EOF without closing quote `'`",
-		"reached \"`\" without closing quote `'`":
-		return "unexpected EOF while looking for matching `''"
-	default:
-		return stripNestedBackquoteParsePrefix(parseErr.BashError())
+	if parseErr.Kind == syntax.ParseErrorKindUnclosed &&
+		(parseErr.Unexpected == syntax.ParseErrorSymbolEOF || parseErr.Unexpected == syntax.ParseErrorSymbolBackquote) &&
+		len(parseErr.Expected) == 1 {
+		switch parseErr.Expected[0] {
+		case syntax.ParseErrorSymbolDoubleQuote:
+			return "unexpected EOF while looking for matching `\"'"
+		case syntax.ParseErrorSymbolSingleQuote:
+			return "unexpected EOF while looking for matching `''"
+		}
 	}
+	return stripNestedBackquoteParsePrefix(parseErr.BashError())
 }
 
 func stripNestedBackquoteParsePrefix(msg string) string {

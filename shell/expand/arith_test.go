@@ -38,6 +38,22 @@ func parseArithmExpansion(t *testing.T, src string) *syntax.ArithmExp {
 	return part
 }
 
+func TestArithParseOperandExpectedTokenUsesParseErrorMetadata(t *testing.T) {
+	t.Parallel()
+
+	parseErr := syntax.ParseError{
+		Text:       "ignore legacy text",
+		Pos:        syntax.NewPos(1, 1, 2),
+		Kind:       syntax.ParseErrorKindMissing,
+		Construct:  syntax.ParseErrorSymbol("+"),
+		Unexpected: syntax.ParseErrorSymbolEOF,
+		Expected:   []syntax.ParseErrorSymbol{syntax.ParseErrorSymbolExpression},
+	}
+	if got, ok := arithParseOperandExpectedToken("1+", parseErr); !ok || got != "+" {
+		t.Fatalf("arithParseOperandExpectedToken() = (%q, %v), want (%q, true)", got, ok, "+")
+	}
+}
+
 func parseArithmExpansionScript(t *testing.T, script string) *syntax.ArithmExp {
 	t.Helper()
 	p := syntax.NewParser()

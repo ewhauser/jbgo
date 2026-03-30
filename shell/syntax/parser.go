@@ -1166,7 +1166,12 @@ func (p *Parser) doHeredocs() {
 					p.pendingHeredocWarningPos = r.Pos()
 					p.pendingHeredocWarningWanted = r.HdocDelim.Value
 				} else {
-					p.posErr(r.Pos(), "unclosed here-document %#q", r.HdocDelim.Value)
+					p.posErrWithMetadata(r.Pos(), parseErrorMetadata{
+						kind:       ParseErrorKindUnclosed,
+						construct:  ParseErrorSymbolHereDocument,
+						unexpected: ParseErrorSymbolEOF,
+						expected:   []ParseErrorSymbol{ParseErrorSymbol(r.HdocDelim.Value)},
+					}, "unclosed here-document %#q", r.HdocDelim.Value)
 				}
 			}
 		}
@@ -1351,12 +1356,29 @@ func (t token) Format(f fmt.State, verb rune) {
 	}
 }
 
+func (p *Parser) unexpectedTokenErr(pos Pos, unexpected ParseErrorSymbol, quoted string) {
+	p.posErrWithMetadata(pos, parseErrorMetadata{
+		kind:       ParseErrorKindUnexpected,
+		unexpected: unexpected,
+	}, "syntax error near unexpected token %s", quoted)
+}
+
 func (p *Parser) followErr(pos Pos, left, right any) {
-	p.posErr(pos, "%#q must be followed by %#q", left, right)
+	p.posErrWithMetadata(pos, parseErrorMetadata{
+		kind:       ParseErrorKindMissing,
+		construct:  parseErrorSymbolFromAny(left),
+		unexpected: p.currentUnexpectedTokenSymbol(),
+		expected:   parseErrorSymbols(right),
+	}, "%#q must be followed by %#q", left, right)
 }
 
 func (p *Parser) followErrExp(pos Pos, left any) {
-	p.followErr(pos, left, noQuote("an expression"))
+	p.posErrWithMetadata(pos, parseErrorMetadata{
+		kind:       ParseErrorKindMissing,
+		construct:  parseErrorSymbolFromAny(left),
+		unexpected: p.currentUnexpectedTokenSymbol(),
+		expected:   []ParseErrorSymbol{ParseErrorSymbolExpression},
+	}, "%#q must be followed by %#q", left, noQuote("an expression"))
 }
 
 func (p *Parser) follow(lpos Pos, left string, tok token) {
@@ -1401,7 +1423,8 @@ func (p *Parser) followStmts(left string, lpos Pos, stops ...reservedWord) ([]*S
 			return []*Stmt{{Position: recoveredPos}}, nil
 		}
 		if p.lang.in(LangBash|LangBats) && p.atRsrv(rsrvFi, rsrvDone) {
-			p.curErr("syntax error near unexpected token %s", p.currentUnexpectedTokenQuote())
+			unexpected, quoted := p.currentUnexpectedTokenDiagnostic()
+			p.unexpectedTokenErr(p.pos, unexpected, quoted)
 			return nil, nil
 		}
 		p.followErr(lpos, left, noQuote("a statement list"))
@@ -1437,17 +1460,33 @@ func (p *Parser) stmtEnd(n Node, start string, end reservedWord) Pos {
 		if p.recoverError() {
 			return recoveredPos
 		}
-		p.posErr(n.Pos(), "%#q statement must end with %#q", start, end)
+		p.posErrWithMetadata(n.Pos(), parseErrorMetadata{
+			kind:       ParseErrorKindMissing,
+			construct:  parseErrorSymbolFromText(start),
+			unexpected: p.currentUnexpectedTokenSymbol(),
+			expected:   []ParseErrorSymbol{parseErrorSymbolFromReserved(end)},
+		}, "%#q statement must end with %#q", start, end)
 	}
 	return pos
 }
 
 func (p *Parser) quoteErr(lpos Pos, quote token) {
-	p.posErr(lpos, "reached %#q without closing quote %#q", p.tok, quote)
+	p.posErrWithMetadata(lpos, parseErrorMetadata{
+		kind:       ParseErrorKindUnclosed,
+		construct:  parseErrorSymbolFromToken(quote),
+		unexpected: p.currentUnexpectedTokenSymbol(),
+		expected:   []ParseErrorSymbol{parseErrorSymbolFromToken(quote)},
+	}, "reached %#q without closing quote %#q", p.tok, quote)
 }
 
 func (p *Parser) matchingErr(lpos Pos, left, right token) {
-	p.posErr(lpos, "reached %#q without matching %#q with %#q", p.tok, left, right)
+	unexpected := p.currentUnexpectedTokenSymbol()
+	p.posErrWithMetadata(lpos, parseErrorMetadata{
+		kind:       missingCloseKind(unexpected),
+		construct:  parseErrorSymbolFromToken(left),
+		unexpected: unexpected,
+		expected:   []ParseErrorSymbol{parseErrorSymbolFromToken(right)},
+	}, "reached %#q without matching %#q with %#q", p.tok, left, right)
 }
 
 func (p *Parser) matched(lpos Pos, left, right token) Pos {
@@ -1536,6 +1575,12 @@ type ParseError struct {
 	Pos      Pos
 	Text     string
 
+	Kind          ParseErrorKind
+	Construct     ParseErrorSymbol
+	Unexpected    ParseErrorSymbol
+	Expected      []ParseErrorSymbol
+	IsRecoverable bool
+
 	Incomplete bool
 
 	// SecondaryText is an optional second diagnostic line that BashError emits
@@ -1557,7 +1602,6 @@ type ParseError struct {
 	bashPrefix               string
 	bashPrefixNoLine         bool
 	noSourceLine             bool
-	recoverable              bool
 }
 
 func (e ParseError) Error() string {
@@ -1859,7 +1903,7 @@ func (e ParseError) WantsSourceLine() bool {
 }
 
 func (e ParseError) Recoverable() bool {
-	return e.recoverable
+	return e.IsRecoverable
 }
 
 func (e ParseError) WithInteractiveCommandStringPrefix(name string) ParseError {
@@ -1926,18 +1970,14 @@ func (e LangError) Error() string {
 	return sb.String()
 }
 
-func (p *Parser) posErr(pos Pos, format string, args ...any) {
-	// for i, arg := range args {
-	// 	if arg, ok := arg.(fmt.Stringer); ok && arg != _EOF {
-	// 		args[i] = quotedToken(arg)
-	// 	}
-	// }
+func (p *Parser) newParseError(pos Pos, text string, meta parseErrorMetadata) ParseError {
 	pe := ParseError{
 		Filename:   p.f.Name,
 		Pos:        pos,
-		Text:       fmt.Sprintf(format, args...),
+		Text:       text,
 		Incomplete: p.tok == _EOF && p.Incomplete(),
 	}
+	meta.apply(&pe)
 	// When a syntax error occurs during alias expansion, use the
 	// expanded alias text as the source line so the error message
 	// shows the problematic expansion rather than the original alias
@@ -1945,41 +1985,35 @@ func (p *Parser) posErr(pos Pos, format string, args ...any) {
 	if p.aliasSource != nil {
 		pe.SourceLine = p.aliasSource.Value
 	}
-	p.errPass(pe)
+	return pe
+}
+
+func (p *Parser) posErrWithMetadata(pos Pos, meta parseErrorMetadata, format string, args ...any) {
+	p.errPass(p.newParseError(pos, fmt.Sprintf(format, args...), meta))
+}
+
+func (p *Parser) posErr(pos Pos, format string, args ...any) {
+	p.posErrWithMetadata(pos, parseErrorMetadata{}, format, args...)
 }
 
 func (p *Parser) posErrSecondary(pos Pos, secondary, format string, args ...any) {
-	p.errPass(ParseError{
-		Filename:      p.f.Name,
-		Pos:           pos,
-		Text:          fmt.Sprintf(format, args...),
-		Incomplete:    p.tok == _EOF && p.Incomplete(),
-		SecondaryText: secondary,
-		SecondaryPos:  pos,
-	})
+	pe := p.newParseError(pos, fmt.Sprintf(format, args...), parseErrorMetadata{})
+	pe.SecondaryText = secondary
+	pe.SecondaryPos = pos
+	p.errPass(pe)
 }
 
 func (p *Parser) posErrSecondaryDetailed(pos, secondaryPos, sourceLinePos Pos, sourceLine, secondary, format string, args ...any) {
-	p.errPass(ParseError{
-		Filename:      p.f.Name,
-		Pos:           pos,
-		Text:          fmt.Sprintf(format, args...),
-		Incomplete:    p.tok == _EOF && p.Incomplete(),
-		SecondaryText: secondary,
-		SecondaryPos:  secondaryPos,
-		SourceLine:    sourceLine,
-		SourceLinePos: sourceLinePos,
-	})
+	pe := p.newParseError(pos, fmt.Sprintf(format, args...), parseErrorMetadata{})
+	pe.SecondaryText = secondary
+	pe.SecondaryPos = secondaryPos
+	pe.SourceLine = sourceLine
+	pe.SourceLinePos = sourceLinePos
+	p.errPass(pe)
 }
 
 func (p *Parser) posRecoverableErr(pos Pos, format string, args ...any) {
-	p.errPass(ParseError{
-		Filename:    p.f.Name,
-		Pos:         pos,
-		Text:        fmt.Sprintf(format, args...),
-		Incomplete:  p.tok == _EOF && p.Incomplete(),
-		recoverable: true,
-	})
+	p.posErrWithMetadata(pos, parseErrorMetadata{isRecoverable: true}, format, args...)
 }
 
 func (p *Parser) curErr(format string, args ...any) {
@@ -2025,6 +2059,16 @@ func (p *Parser) currentUnexpectedTokenQuote() string {
 		}
 	}
 	return p.tok.bashQuote()
+}
+
+func (p *Parser) posCurrentUnexpectedErr(pos Pos) {
+	unexpected := p.currentUnexpectedTokenSymbol()
+	quoted := p.currentUnexpectedTokenQuote()
+	p.unexpectedTokenErr(pos, unexpected, quoted)
+}
+
+func (p *Parser) curUnexpectedErr() {
+	p.posCurrentUnexpectedErr(p.pos)
 }
 
 func (p *Parser) stmts(yield func(*Stmt, error) bool, stops ...reservedWord) {
@@ -2114,7 +2158,7 @@ func (p *Parser) stmtList(stops ...reservedWord) ([]*Stmt, []Comment) {
 }
 
 func (p *Parser) invalidStmtStart() {
-	p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
+	p.curUnexpectedErr()
 }
 
 func (p *Parser) getWord() *Word {
@@ -2366,14 +2410,15 @@ func (p *Parser) loadReplay(pos Pos, src []byte, readErr error) {
 }
 
 func parseErrRecoverableInBackquotes(err ParseError) bool {
-	switch err.Text {
-	case "reached EOF without closing quote `\"`",
-		"reached EOF without closing quote `'`",
-		"reached \"`\" without closing quote `\"`",
-		"reached \"`\" without closing quote `'`",
-		"reached EOF without matching `{` with `}`",
-		"reached \"`\" without matching `{` with `}`":
-		return true
+	if err.Unexpected != ParseErrorSymbolEOF && err.Unexpected != ParseErrorSymbolBackquote {
+		return false
+	}
+	switch err.Kind {
+	case ParseErrorKindUnclosed:
+		return len(err.Expected) == 1 &&
+			(err.Expected[0] == ParseErrorSymbolSingleQuote || err.Expected[0] == ParseErrorSymbolDoubleQuote)
+	case ParseErrorKindUnmatched:
+		return len(err.Expected) == 1 && err.Expected[0] == ParseErrorSymbolRightBrace && err.Construct == ParseErrorSymbolLeftBrace
 	default:
 		return false
 	}
@@ -4468,12 +4513,20 @@ func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 				}
 				switch p.tok {
 				case assgnParen, leftParen:
-					p.posRecoverableErr(p.pos, "syntax error near unexpected token %s", leftParen.bashQuote())
+					p.posErrWithMetadata(p.pos, parseErrorMetadata{
+						kind:          ParseErrorKindUnexpected,
+						unexpected:    ParseErrorSymbolLeftParen,
+						isRecoverable: true,
+					}, "syntax error near unexpected token %s", leftParen.bashQuote())
 					return nil
 				case _Newl, rightParen, leftBrack:
 					// TODO: support [index]=[
 				case and:
-					p.posRecoverableErr(p.pos, "syntax error near unexpected token %s", p.tok.bashQuote())
+					p.posErrWithMetadata(p.pos, parseErrorMetadata{
+						kind:          ParseErrorKindUnexpected,
+						unexpected:    parseErrorSymbolFromToken(p.tok),
+						isRecoverable: true,
+					}, "syntax error near unexpected token %s", p.tok.bashQuote())
 					return nil
 				default:
 					p.curErr("array element values must be words")
@@ -4960,31 +5013,31 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				p.curErr(`%#q can only be used to close a block`, rightBrace)
 			case rsrvThen, rsrvElif:
 				if p.lang.in(LangBash | LangBats) {
-					p.curErr("syntax error near unexpected token %s", bashQuoteString(p.val))
+					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
 					break
 				}
 				p.curErr("%#q can only be used in an `if`", p.val)
 			case rsrvFi:
 				if p.lang.in(LangBash | LangBats) {
-					p.curErr("syntax error near unexpected token %s", bashQuoteString(p.val))
+					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
 					break
 				}
 				p.curErr("%#q can only be used to end an `if`", p.val)
 			case rsrvDo:
 				if p.lang.in(LangBash | LangBats) {
-					p.curErr("syntax error near unexpected token %s", bashQuoteString(p.val))
+					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
 					break
 				}
 				p.curErr(`%#q can only be used in a loop`, p.val)
 			case rsrvDone:
 				if p.lang.in(LangBash | LangBats) {
-					p.curErr("syntax error near unexpected token %s", bashQuoteString(p.val))
+					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
 					break
 				}
 				p.curErr(`%#q can only be used to end a loop`, p.val)
 			case rsrvEsac:
 				if p.lang.in(LangBash | LangBats) {
-					p.curErr("syntax error near unexpected token %s", bashQuoteString(p.val))
+					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
 					break
 				}
 				p.curErr("%#q can only be used to end a `case`", p.val)
@@ -5072,7 +5125,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 					break
 				}
 				p.next()
-				p.posErr(p.pos, "syntax error near unexpected token %s", p.currentUnexpectedTokenQuote())
+				p.posCurrentUnexpectedErr(p.pos)
 				break
 			}
 			p.callExpr(s, w, false)
@@ -5123,7 +5176,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				break
 			}
 			p.next()
-			p.posErr(p.pos, "syntax error near unexpected token %s", p.currentUnexpectedTokenQuote())
+			p.posCurrentUnexpectedErr(p.pos)
 			break
 		}
 		if p.got(leftParen) {
@@ -6775,12 +6828,8 @@ func (p *Parser) testDecl(s *Stmt) {
 }
 
 func (p *Parser) funcBodyUnexpectedToken() {
-	quote := p.tok.bashQuote()
-	switch p.tok {
-	case _Lit, _LitWord:
-		quote = bashQuoteString(p.val)
-	}
-	p.curErr("syntax error near unexpected token %s", quote)
+	unexpected, quoted := p.currentUnexpectedTokenDiagnostic()
+	p.unexpectedTokenErr(p.pos, unexpected, quoted)
 }
 
 func (p *Parser) funcBodyStmt() *Stmt {
@@ -6815,7 +6864,7 @@ func (p *Parser) funcBodyStmt() *Stmt {
 		}
 	case leftParen:
 		if p.r == ')' {
-			p.curErr("syntax error near unexpected token %s", rightParen.bashQuote())
+			p.unexpectedTokenErr(p.pos, ParseErrorSymbolRightParen, rightParen.bashQuote())
 			return nil
 		}
 		p.subshell(s)
@@ -6940,7 +6989,7 @@ loop:
 					p.checkLang(p.pos, langBashLike, FeatureBuiltinKeywordLike, fmt.Sprintf("%#q", cmd))
 				}
 			}
-			p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
+			p.curUnexpectedErr()
 		}
 	}
 	if len(ce.Args) == 0 {

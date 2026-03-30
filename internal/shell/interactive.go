@@ -161,7 +161,9 @@ func interactiveParseIncomplete(err error, parser *syntax.Parser) bool {
 		return true
 	}
 	var parseErr syntax.ParseError
-	return errors.As(err, &parseErr) && strings.HasPrefix(parseErr.Text, "unclosed here-document")
+	return errors.As(err, &parseErr) &&
+		parseErr.Kind == syntax.ParseErrorKindUnclosed &&
+		parseErr.Construct == syntax.ParseErrorSymbolHereDocument
 }
 
 func interactiveEnv(exec *Execution, runner *interp.Runner) map[string]string {

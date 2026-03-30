@@ -49,7 +49,12 @@ func (p *Parser) arithmExprTernary(compact bool) ArithmExpr {
 	}
 
 	if value == nil {
-		p.curErr("%#q must follow an expression", p.tok)
+		p.posErrWithMetadata(p.pos, parseErrorMetadata{
+			kind:       ParseErrorKindMissing,
+			construct:  parseErrorSymbolFromToken(p.tok),
+			unexpected: parseErrorSymbolFromToken(p.tok),
+			expected:   []ParseErrorSymbol{ParseErrorSymbolExpression},
+		}, "%#q must follow an expression", p.tok)
 	}
 	questPos := p.pos
 	p.nextArithOp(compact)
@@ -130,7 +135,12 @@ func (p *Parser) arithmExprPower(compact bool) ArithmExpr {
 	}
 
 	if value == nil {
-		p.curErr("%#q must follow an expression", p.tok)
+		p.posErrWithMetadata(p.pos, parseErrorMetadata{
+			kind:       ParseErrorKindMissing,
+			construct:  parseErrorSymbolFromToken(p.tok),
+			unexpected: parseErrorSymbolFromToken(p.tok),
+			expected:   []ParseErrorSymbol{ParseErrorSymbolExpression},
+		}, "%#q must follow an expression", p.tok)
 	}
 
 	op := p.tok
@@ -422,7 +432,12 @@ func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, op
 		}
 
 		if value == nil {
-			p.curErr("%#q must follow an expression", p.tok)
+			p.posErrWithMetadata(p.pos, parseErrorMetadata{
+				kind:       ParseErrorKindMissing,
+				construct:  parseErrorSymbolFromToken(p.tok),
+				unexpected: parseErrorSymbolFromToken(p.tok),
+				expected:   []ParseErrorSymbol{ParseErrorSymbolExpression},
+			}, "%#q must follow an expression", p.tok)
 		}
 
 		pos := p.pos

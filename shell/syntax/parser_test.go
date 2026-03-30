@@ -789,10 +789,50 @@ func TestParseErrorRecoverableNestedArrayLiteral(t *testing.T) {
 	if !parseErr.Recoverable() {
 		t.Fatal("Recoverable() = false, want true")
 	}
+	if got, want := parseErr.Kind, ParseErrorKindUnexpected; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, ParseErrorSymbolLeftParen; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
+	}
+	if !parseErr.IsRecoverable {
+		t.Fatal("IsRecoverable = false, want true")
+	}
+	if got, want := parseErr.Error(), "stdin:1:12: syntax error near unexpected token `('"; got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
 	if parseErr.SourceLine == "" {
 		parseErr.SourceLine = sourceLineForTest("a=( inside=() )\n", parseErr.Pos.Line())
 	}
 	const want = "stdin: line 1: syntax error near unexpected token `('\nstdin: line 1: `a=( inside=() )'"
+	if got := parseErr.BashError(); got != want {
+		t.Fatalf("BashError() = %q, want %q", got, want)
+	}
+}
+
+func TestParseErrorBashCompatFunctionNameUnexpectedQuotedWord(t *testing.T) {
+	t.Parallel()
+
+	parser := NewParser(Variant(LangBash))
+	src := "foo$identity('z')\n"
+	_, err := parser.Parse(strings.NewReader(src), "stdin")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want parse error")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want ParseError", err)
+	}
+	if got, want := parseErr.Kind, ParseErrorKindUnexpected; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, ParseErrorSymbolSingleQuote; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
+	}
+	if parseErr.SourceLine == "" {
+		parseErr.SourceLine = sourceLineForTest(src, parseErr.Pos.Line())
+	}
+	const want = "stdin: line 1: syntax error near unexpected token `'z''\nstdin: line 1: `foo$identity('z')'"
 	if got := parseErr.BashError(); got != want {
 		t.Fatalf("BashError() = %q, want %q", got, want)
 	}
@@ -831,6 +871,19 @@ func TestParseErrorBashCompatEmptyThenAndDoBodies(t *testing.T) {
 			if !errors.As(err, &parseErr) {
 				t.Fatalf("Parse() error = %T, want ParseError", err)
 			}
+			wantUnexpected := ParseErrorSymbolFi
+			if tc.name == "empty do body" {
+				wantUnexpected = ParseErrorSymbolDone
+			}
+			if got, want := parseErr.Kind, ParseErrorKindUnexpected; got != want {
+				t.Fatalf("Kind = %q, want %q", got, want)
+			}
+			if got, want := parseErr.Unexpected, wantUnexpected; got != want {
+				t.Fatalf("Unexpected = %q, want %q", got, want)
+			}
+			if got := parseErr.Expected; len(got) != 0 {
+				t.Fatalf("Expected = %v, want nil", got)
+			}
 			if parseErr.SourceLine == "" {
 				parseErr.SourceLine = sourceLineForTest(tc.src, parseErr.Pos.Line())
 			}
@@ -838,6 +891,149 @@ func TestParseErrorBashCompatEmptyThenAndDoBodies(t *testing.T) {
 				t.Fatalf("BashError() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestParseErrorMetadataCompoundRecovery(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		src        string
+		kind       ParseErrorKind
+		construct  ParseErrorSymbol
+		unexpected ParseErrorSymbol
+		expected   []ParseErrorSymbol
+	}{
+		{
+			name:       "missing then",
+			src:        "if foo\n",
+			kind:       ParseErrorKindMissing,
+			construct:  ParseErrorSymbol("if <cond>"),
+			unexpected: ParseErrorSymbolEOF,
+			expected:   []ParseErrorSymbol{ParseErrorSymbolThen},
+		},
+		{
+			name:       "missing do",
+			src:        "while false\n",
+			kind:       ParseErrorKindMissing,
+			construct:  ParseErrorSymbol("while <cond>"),
+			unexpected: ParseErrorSymbolEOF,
+			expected:   []ParseErrorSymbol{ParseErrorSymbolDo},
+		},
+		{
+			name:       "missing fi",
+			src:        "if foo; then echo hi\n",
+			kind:       ParseErrorKindMissing,
+			construct:  ParseErrorSymbol("if"),
+			unexpected: ParseErrorSymbolEOF,
+			expected:   []ParseErrorSymbol{ParseErrorSymbolFi},
+		},
+		{
+			name:       "missing done",
+			src:        "while false; do echo hi\n",
+			kind:       ParseErrorKindMissing,
+			construct:  ParseErrorSymbol("while"),
+			unexpected: ParseErrorSymbolEOF,
+			expected:   []ParseErrorSymbol{ParseErrorSymbolDone},
+		},
+		{
+			name:       "missing esac",
+			src:        "case x in x) echo hi;;\n",
+			kind:       ParseErrorKindMissing,
+			construct:  ParseErrorSymbol("case"),
+			unexpected: ParseErrorSymbolEOF,
+			expected:   []ParseErrorSymbol{ParseErrorSymbolEsac},
+		},
+		{
+			name:       "missing right brace",
+			src:        "{ echo hi\n",
+			kind:       ParseErrorKindUnclosed,
+			construct:  ParseErrorSymbolLeftBrace,
+			unexpected: ParseErrorSymbolEOF,
+			expected:   []ParseErrorSymbol{ParseErrorSymbolRightBrace},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewParser(Variant(LangBash)).Parse(strings.NewReader(tc.src), "stdin")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want ParseError")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if got, want := parseErr.Kind, tc.kind; got != want {
+				t.Fatalf("Kind = %q, want %q", got, want)
+			}
+			if got, want := parseErr.Construct, tc.construct; got != want {
+				t.Fatalf("Construct = %q, want %q", got, want)
+			}
+			if got, want := parseErr.Unexpected, tc.unexpected; got != want {
+				t.Fatalf("Unexpected = %q, want %q", got, want)
+			}
+			if !slices.Equal(parseErr.Expected, tc.expected) {
+				t.Fatalf("Expected = %v, want %v", parseErr.Expected, tc.expected)
+			}
+			if parseErr.IsRecoverable {
+				t.Fatal("IsRecoverable = true, want false")
+			}
+		})
+	}
+}
+
+func TestParseErrorMetadataUnclosedHeredoc(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewParser(Variant(LangBash)).Parse(strings.NewReader("<<EOF\n"), "stdin")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want ParseError")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want ParseError", err)
+	}
+	if got, want := parseErr.Kind, ParseErrorKindUnclosed; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Construct, ParseErrorSymbolHereDocument; got != want {
+		t.Fatalf("Construct = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, ParseErrorSymbolEOF; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Expected, []ParseErrorSymbol{ParseErrorSymbol("EOF")}; !slices.Equal(got, want) {
+		t.Fatalf("Expected = %v, want %v", got, want)
+	}
+}
+
+func TestParseErrorMetadataArithmeticExpressionExpected(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewParser(Variant(LangBash)).Arithmetic(strings.NewReader("1+"))
+	if err == nil {
+		t.Fatal("Arithmetic() error = nil, want ParseError")
+	}
+	var parseErr ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Arithmetic() error = %T, want ParseError", err)
+	}
+	if got, want := parseErr.Kind, ParseErrorKindMissing; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Construct, ParseErrorSymbol("+"); got != want {
+		t.Fatalf("Construct = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, ParseErrorSymbolEOF; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Expected, []ParseErrorSymbol{ParseErrorSymbolExpression}; !slices.Equal(got, want) {
+		t.Fatalf("Expected = %v, want %v", got, want)
 	}
 }
 

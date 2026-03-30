@@ -225,7 +225,9 @@ func chunkParseIncomplete(err error, parser *syntax.Parser) bool {
 		return true
 	}
 	var parseErr syntax.ParseError
-	return errors.As(err, &parseErr) && strings.HasPrefix(parseErr.Text, "unclosed here-document")
+	return errors.As(err, &parseErr) &&
+		parseErr.Kind == syntax.ParseErrorKindUnclosed &&
+		parseErr.Construct == syntax.ParseErrorSymbolHereDocument
 }
 
 func attachChunkParseErrorSourceLine(err error, script string) error {
