@@ -2143,7 +2143,7 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, featureID FeatureID, de
 
 func (p *Parser) currentUnexpectedTokenQuote() string {
 	switch p.tok {
-	case _Lit, _LitWord:
+	case _Lit, _LitWord, _LitRedir:
 		return bashQuoteString(p.val)
 	case sglQuote, dollSglQuote, dblQuote, dollDblQuote, bckQuote, dollar, dollBrace,
 		dollDblParen, dollParen, dollBrack, cmdIn, assgnParen, cmdOut:
@@ -2158,7 +2158,7 @@ func (p *Parser) currentUnexpectedFuncOpenToken() string {
 	switch p.tok {
 	case _EOF, _Newl:
 		return "newline"
-	case _Lit, _LitWord:
+	case _Lit, _LitWord, _LitRedir:
 		return p.val
 	case sglQuote, dollSglQuote, dblQuote, dollDblQuote, bckQuote, dollar, dollBrace,
 		dollDblParen, dollParen, dollBrack, cmdIn, assgnParen, cmdOut:

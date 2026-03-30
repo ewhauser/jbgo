@@ -663,6 +663,11 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			want: "stdin: line 1: syntax error near unexpected token `newline'\nstdin: line 1: `$(echo x)('",
 		},
 		{
+			name: "function-like open paren with redirection literal token",
+			src:  "foo(2>err\n",
+			want: "stdin: line 1: syntax error near unexpected token `2'\nstdin: line 1: `foo(2>err'",
+		},
+		{
 			name: "incomplete if",
 			src:  "echo hi; if\n",
 			want: "stdin: line 1: syntax error: unexpected end of file from `if' command on line 1",
@@ -799,6 +804,12 @@ func TestParseErrorTypedContext(t *testing.T) {
 			src:       "$(echo x)(",
 			wantKind:  parseErrorContextFuncOpen,
 			wantToken: "newline",
+		},
+		{
+			name:      "func name preserves redirection literal token",
+			src:       "foo(2>err",
+			wantKind:  parseErrorContextFuncOpen,
+			wantToken: "2",
 		},
 		{
 			name:      "stray test closer",

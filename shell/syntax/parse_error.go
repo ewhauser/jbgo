@@ -143,7 +143,7 @@ func parseErrorSymbols(values ...any) []ParseErrorSymbol {
 
 func (p *Parser) currentUnexpectedTokenSymbol() ParseErrorSymbol {
 	switch p.tok {
-	case _Lit, _LitWord:
+	case _Lit, _LitWord, _LitRedir:
 		return parseErrorSymbolFromText(p.val)
 	default:
 		return parseErrorSymbolFromToken(p.tok)
