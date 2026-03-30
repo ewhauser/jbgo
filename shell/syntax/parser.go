@@ -1883,7 +1883,14 @@ type LangError struct {
 	// TODO: consider replacing the Langs slice with a bitset.
 
 	// Feature briefly describes which language feature caused the error.
+	// This compatibility text remains populated for callers matching the old
+	// free-form surface. New code should prefer FeatureID.
 	Feature string
+	// FeatureID identifies the stable variant-gated syntax family.
+	FeatureID FeatureID
+	// FeatureDetail carries any operator or spelling-specific detail used when
+	// rendering Feature.
+	FeatureDetail string
 	// Langs lists some of the language variants which support the feature.
 	Langs []LangVariant
 	// LangUsed is the language variant used which led to the error.
@@ -1891,6 +1898,10 @@ type LangError struct {
 }
 
 func (e LangError) Error() string {
+	feature := e.Feature
+	if feature == "" {
+		feature = e.FeatureID.Format(e.FeatureDetail)
+	}
 	var sb strings.Builder
 	if e.Filename != "" {
 		sb.WriteString(e.Filename)
@@ -1898,8 +1909,8 @@ func (e LangError) Error() string {
 	}
 	sb.WriteString(e.Pos.String())
 	sb.WriteString(": ")
-	sb.WriteString(e.Feature)
-	if strings.HasSuffix(e.Feature, "s") {
+	sb.WriteString(feature)
+	if strings.HasSuffix(feature, "s") {
 		sb.WriteString(" are a ")
 	} else {
 		sb.WriteString(" is a ")
@@ -1979,7 +1990,7 @@ func (p *Parser) curErrSecondary(secondary, format string, args ...any) {
 	p.posErrSecondary(p.pos, secondary, format, args...)
 }
 
-func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any) {
+func (p *Parser) checkLang(pos Pos, langSet LangVariant, featureID FeatureID, detail ...string) {
 	if p.lang.in(langSet) {
 		return
 	}
@@ -1988,12 +1999,18 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
 		// just mention "bash" rather than "bash/bats" for the sake of clarity.
 		langSet &^= LangBats
 	}
+	featureDetail := ""
+	if len(detail) > 0 {
+		featureDetail = detail[0]
+	}
 	p.errPass(LangError{
-		Filename: p.f.Name,
-		Pos:      pos,
-		Feature:  fmt.Sprintf(format, a...),
-		Langs:    slices.Collect(langSet.bits()),
-		LangUsed: p.lang,
+		Filename:      p.f.Name,
+		Pos:           pos,
+		Feature:       featureID.Format(featureDetail),
+		FeatureID:     featureID,
+		FeatureDetail: featureDetail,
+		Langs:         slices.Collect(langSet.bits()),
+		LangUsed:      p.lang,
 	})
 }
 
@@ -2778,7 +2795,7 @@ func (p *Parser) arithmWordPartTo(salvageTail bool, tailEnd Pos) *ArithmExp {
 	old := p.preNested(arithmExpr)
 	p.next()
 	if p.got(hash) {
-		p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
+		p.checkLang(ar.Pos(), LangMirBSDKorn, FeatureArithmeticUnsignedExpr)
 		ar.Unsigned = true
 	}
 	ar.X = p.followArithm(left, ar.Left)
@@ -2883,10 +2900,10 @@ func (p *Parser) wordPart() WordPart {
 		p.ensureNoNested(p.pos)
 		switch p.r {
 		case '|':
-			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${|stmts;}`")
+			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, FeatureSubstitutionReplyVarCmdSubst)
 			fallthrough
 		case ' ', '\t', '\n':
-			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${ stmts;}`")
+			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, FeatureSubstitutionTempFileCmdSubst)
 			cs := &CmdSubst{
 				Left:     p.pos,
 				TempFile: p.r != '|',
@@ -2928,7 +2945,7 @@ func (p *Parser) wordPart() WordPart {
 		p.ensureNoNested(pe.Dollar)
 		return pe
 	case assgnParen:
-		p.checkLang(p.pos, LangZsh, `%#q process substitutions`, p.tok)
+		p.checkLang(p.pos, LangZsh, FeatureSubstitutionProcess, fmt.Sprintf("%#q", p.tok))
 		fallthrough
 	case cmdIn, cmdOut:
 		p.ensureNoNested(p.pos)
@@ -3042,7 +3059,7 @@ func (p *Parser) wordPart() WordPart {
 		}
 		return nil
 	case globQuest, globStar, globPlus, globAt, globExcl:
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "extended globs")
+		p.checkLang(p.pos, langBashLike|LangMirBSDKorn, FeaturePatternExtendedGlob)
 		return p.extGlob(GlobOperator(p.tok), p.pos)
 	default:
 		return nil
@@ -3596,7 +3613,7 @@ func (p *Parser) paramExp() *ParamExp {
 		Short:  p.tok == dollar,
 	}
 	if !pe.Short && p.r == '(' {
-		p.checkLang(pe.Pos(), LangZsh, `parameter expansion flags`)
+		p.checkLang(pe.Pos(), LangZsh, FeatureParameterExpansionFlags)
 		// For now, for simplicity, we parse flags as just a literal.
 		// In the future, parsing as a word is better for cases like
 		// `${(ps.$sep.)val}`.
@@ -3624,19 +3641,19 @@ func (p *Parser) paramExp() *ParamExp {
 			}
 		case '%':
 			if r := p.peek(); r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
-				p.checkLang(pe.Pos(), LangMirBSDKorn, "`${%%foo}`")
+				p.checkLang(pe.Pos(), LangMirBSDKorn, FeatureParameterExpansionWidthPrefix)
 				pe.Width = true
 				p.rune()
 			}
 		case '!':
 			if r := p.peek(); r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
-				p.checkLang(pe.Pos(), langBashLike|LangMirBSDKorn, "`${!foo}`")
+				p.checkLang(pe.Pos(), langBashLike|LangMirBSDKorn, FeatureParameterExpansionIndirectPrefix)
 				pe.Excl = true
 				p.rune()
 			}
 		case '+':
 			if r := p.peek(); r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
-				p.checkLang(pe.Pos(), LangZsh, "`${+foo}`")
+				p.checkLang(pe.Pos(), LangZsh, FeatureParameterExpansionIsSetPrefix)
 				pe.IsSet = true
 				p.rune()
 			}
@@ -3666,7 +3683,7 @@ func (p *Parser) paramExp() *ParamExp {
 	// Index expressions like ${foo[1]}. Note that expansion suffixes can be combined,
 	// like ${foo[@]//replace/with}.
 	if p.r == '[' {
-		p.checkLang(p.nextPos(), langBashLike|LangMirBSDKorn|LangZsh, "arrays")
+		p.checkLang(p.nextPos(), langBashLike|LangMirBSDKorn|LangZsh, FeatureArraySyntax)
 		if pe.Param != nil && !ValidName(pe.Param.Value) {
 			p.posErr(p.nextPos(), "cannot index a special parameter name")
 		}
@@ -3701,7 +3718,7 @@ func (p *Parser) paramExp() *ParamExp {
 	}
 	switch p.tok {
 	case slash, dblSlash: // pattern search and replace
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
+		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, FeatureParameterExpansionSearchReplace)
 		pe.Repl = &Replace{All: p.tok == dblSlash}
 		p.quote = paramExpRepl
 		if p.tok == slash {
@@ -3750,7 +3767,7 @@ func (p *Parser) paramExp() *ParamExp {
 			p.next()
 			return pe
 		}
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "slicing")
+		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, FeatureParameterExpansionSlice)
 		pe.Slice = &Slice{}
 		colonPos := p.pos
 		p.quote = paramExpArithm
@@ -3772,18 +3789,18 @@ func (p *Parser) paramExp() *ParamExp {
 		p.matchedArithm(pe.Dollar, dollBrace, rightBrace)
 		return pe
 	case caret, dblCaret, comma, dblComma: // upper/lower case
-		p.checkLang(p.pos, langBashLike, "this expansion operator")
+		p.checkLang(p.pos, langBashLike, FeatureParameterExpansionCaseOperator)
 		pe.Exp = p.paramExpExp()
 	case at, star:
 		switch {
 		case p.tok == star && !pe.Excl:
 			p.curErr("not a valid parameter expansion operator: %#q", p.tok)
 		case pe.Excl && p.r == '}':
-			p.checkLang(pe.Pos(), langBashLike, "`${!foo%s}`", p.tok)
+			p.checkLang(pe.Pos(), langBashLike, FeatureParameterExpansionNameOperator, p.tok.String())
 			pe.Names = ParNamesOperator(p.tok)
 			p.next()
 		case p.tok == at:
-			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "this expansion operator")
+			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, FeatureParameterExpansionNameOperator)
 			fallthrough
 		default:
 			pe.Exp = p.paramExpExp()
@@ -3858,7 +3875,7 @@ func (p *Parser) nestedParameterStart(pe *ParamExp) (left token, quotePos Pos) {
 	switch p1 := p.peek(); p1 {
 	case '{', '(':
 		p.pos = p.nextPos()
-		p.checkLang(p.pos, LangZsh, "nested parameter expansions")
+		p.checkLang(p.pos, LangZsh, FeatureParameterExpansionNested)
 		if p.err != nil {
 			return illegalTok, Pos{} // xxx given that we overwrite p.tok below
 		}
@@ -3968,7 +3985,7 @@ func (p *Parser) paramExpExp() *Expansion {
 	op := ParExpOperator(p.tok)
 	switch op {
 	case MatchEmpty, ArrayExclude, ArrayIntersect:
-		p.checkLang(p.pos, LangZsh, "${name%sarg}", op)
+		p.checkLang(p.pos, LangZsh, FeatureParameterExpansionMatchOperator, op.String())
 	}
 	p.quote = paramExpExp
 	p.next()
@@ -3980,9 +3997,9 @@ func (p *Parser) paramExpExp() *Expansion {
 		}
 		switch p.val {
 		case "a", "k", "u", "A", "E", "K", "L", "P", "U":
-			p.checkLang(p.pos, langBashLike, "this expansion operator")
+			p.checkLang(p.pos, langBashLike, FeatureParameterExpansionCaseOperator)
 		case "#":
-			p.checkLang(p.pos, LangMirBSDKorn, "this expansion operator")
+			p.checkLang(p.pos, LangMirBSDKorn, FeatureParameterExpansionMatchOperator)
 		case "Q":
 		default:
 			p.curErr("invalid @ expansion operator %#q", p.val)
@@ -4396,7 +4413,7 @@ func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 		return as
 	}
 	if as.Value == nil && p.tok == leftParen {
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "arrays")
+		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, FeatureArraySyntax)
 		as.Array = &ArrayExpr{Lparen: p.pos, Mode: ArrayExprInherit}
 		newQuote := p.quote
 		if p.lang.in(langBashLike | LangZsh) {
@@ -4790,14 +4807,14 @@ func (p *Parser) doRedirect(s *Stmt) {
 	}
 	r.N = p.getLit()
 	if r.N != nil && r.N.Value[0] == '{' {
-		p.checkLang(r.N.Pos(), langBashLike, "`{varname}` redirects")
+		p.checkLang(r.N.Pos(), langBashLike, FeatureRedirectionNamedFileDescriptor)
 	}
 	r.Op, r.OpPos = RedirOperator(p.tok), p.pos
 	switch r.Op {
 	case RdrAll, AppAll:
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "%#q redirects", r.Op)
+		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, FeatureRedirectionOperator, fmt.Sprintf("%#q", r.Op))
 	case AppClob, RdrAllClob, AppAllClob:
-		p.checkLang(p.pos, LangZsh, "%#q redirects", r.Op)
+		p.checkLang(p.pos, LangZsh, FeatureRedirectionOperator, fmt.Sprintf("%#q", r.Op))
 	}
 	p.next()
 	switch r.Op {
@@ -4819,7 +4836,7 @@ func (p *Parser) doRedirect(s *Stmt) {
 			p.doHeredocs()
 		}
 	case WordHdoc:
-		p.checkLang(r.OpPos, langBashLike|LangMirBSDKorn|LangZsh, "herestrings")
+		p.checkLang(r.OpPos, langBashLike|LangMirBSDKorn|LangZsh, FeatureRedirectionHereString)
 		fallthrough
 	default:
 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
@@ -5119,7 +5136,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			fpos := p.pos
 			p.next()
 			if p.atRsrv(rsrvLeftBrace) {
-				p.checkLang(fpos, LangZsh, "anonymous functions")
+				p.checkLang(fpos, LangZsh, FeatureFunctionAnonymous)
 			}
 			p.funcDecl(s, fpos, false, true)
 			break
@@ -5133,7 +5150,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 	}
 	if redirsStart > 0 && s.Cmd != nil {
 		if _, ok := s.Cmd.(*CallExpr); !ok {
-			p.checkLang(s.Pos(), LangZsh, "redirects before compound commands")
+			p.checkLang(s.Pos(), LangZsh, FeatureRedirectionBeforeCompound)
 		}
 	}
 	for p.peekRedir() {
@@ -5187,7 +5204,7 @@ func (p *Parser) arithmExpCmdWithTailTo(s *Stmt, salvageTail bool, tailEnd Pos) 
 	old := p.preNested(arithmExprCmd)
 	p.next()
 	if p.got(hash) {
-		p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
+		p.checkLang(ar.Pos(), LangMirBSDKorn, FeatureArithmeticUnsignedExpr)
 		ar.Unsigned = true
 	}
 	ar.X = p.followArithm(dblLeftParen, ar.Left)
@@ -5374,7 +5391,7 @@ func (p *Parser) forClause(s *Stmt) {
 
 	start, end := rsrvDo, rsrvDone
 	if pos, ok := p.gotRsrv(rsrvLeftBrace); ok {
-		p.checkLang(pos, langBashLike|LangMirBSDKorn, "for loops with braces")
+		p.checkLang(pos, langBashLike|LangMirBSDKorn, FeatureLoopBraceFor)
 		fc.DoPos = pos
 		fc.Braces = true
 		start, end = rsrvLeftBrace, rsrvRightBrace
@@ -5392,7 +5409,7 @@ func (p *Parser) forClause(s *Stmt) {
 func (p *Parser) loop(fpos Pos) Loop {
 	switch p.tok {
 	case leftParen, dblLeftParen:
-		p.checkLang(p.pos, langBashLike|LangZsh, "c-style fors")
+		p.checkLang(p.pos, langBashLike|LangZsh, FeatureLoopCStyleFor)
 	}
 	if p.tok == dblLeftParen {
 		cl := &CStyleLoop{Lparen: p.pos}
@@ -5469,7 +5486,7 @@ func (p *Parser) caseClause(s *Stmt) {
 	if pos, ok := p.gotRsrv(rsrvLeftBrace); ok {
 		cc.In = pos
 		cc.Braces = true
-		p.checkLang(cc.Pos(), LangMirBSDKorn, "`case i {`")
+		p.checkLang(cc.Pos(), LangMirBSDKorn, FeatureCaseKornForm)
 		end = rsrvRightBrace
 	} else {
 		cc.In = p.followRsrv(cc.Case, "case x", rsrvIn)
@@ -6389,7 +6406,7 @@ func (p *Parser) condExprBinary(pastAndOr bool) CondExpr {
 			p.followErrExp(b.OpPos, b.Op)
 		}
 	case TsReMatch:
-		p.checkLang(p.pos, langBashLike|LangZsh, "regex tests")
+		p.checkLang(p.pos, langBashLike|LangZsh, FeatureConditionalRegexTest)
 		if b.Y = p.followCondRegex(token(b.Op), b.OpPos); b.Y == nil {
 			return nil
 		}
@@ -6729,7 +6746,7 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
 	switch len(names) {
 	case 0:
 		if hasParens || p.atRsrv(rsrvLeftBrace) {
-			p.checkLang(fpos, LangZsh, "anonymous functions")
+			p.checkLang(fpos, LangZsh, FeatureFunctionAnonymous)
 		} else if !p.lang.in(LangZsh) {
 			p.followErr(fpos, "function", noQuote("a name"))
 		}
@@ -6737,7 +6754,7 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
 	case 1:
 		// allowed in all variants
 	default:
-		p.checkLang(fpos, LangZsh, "multi-name functions")
+		p.checkLang(fpos, LangZsh, FeatureFunctionMultiName)
 	}
 	if hasParens {
 		p.follow(fpos, "function foo(", rightParen)
@@ -6867,7 +6884,7 @@ loop:
 			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
 			if p.atRsrv(rsrvLeftBrace) && w != nil && w.Lit() == "function" {
-				p.checkLang(p.pos, langBashLike, `the "function" builtin`)
+				p.checkLang(p.pos, langBashLike, FeatureBuiltinFunctionKeyword)
 			}
 			// Zsh does not require a semicolon to close a block.
 			if p.lang.in(LangZsh) && p.atRsrv(rsrvRightBrace) {
@@ -6920,7 +6937,7 @@ loop:
 			// Note that we'll only keep the first error that happens.
 			if len(ce.Args) > 0 {
 				if cmd := ce.Args[0].Lit(); isBashCompoundCommand(_LitWord, cmd) {
-					p.checkLang(p.pos, langBashLike, "the %#q builtin", cmd)
+					p.checkLang(p.pos, langBashLike, FeatureBuiltinKeywordLike, fmt.Sprintf("%#q", cmd))
 				}
 			}
 			p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())

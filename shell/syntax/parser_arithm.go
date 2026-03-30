@@ -188,7 +188,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 		pe.X = p.followArithm(leftParen, pe.Lparen)
 		pe.Rparen = p.matched(pe.Lparen, leftParen, rightParen)
 		if p.quote == paramExpArithm && p.tok == _LitWord {
-			p.checkLang(pe.Lparen, LangZsh, "subscript flags")
+			p.checkLang(pe.Lparen, LangZsh, FeatureArithmeticSubscriptFlags)
 		}
 		x = pe
 	case leftBrack:
@@ -475,7 +475,7 @@ func (p *Parser) arithmMatchingErr(pos Pos, left, right token) {
 	case rightParen, _EOF:
 		p.matchingErr(pos, left, right)
 	case period:
-		p.checkLang(p.pos, LangZsh, `floating point arithmetic`)
+		p.checkLang(p.pos, LangZsh, FeatureArithmeticFloatingPoint)
 	default:
 		if p.quote&allArithmExpr != 0 {
 			p.curErr("not a valid arithmetic operator: %#q", p.tok)

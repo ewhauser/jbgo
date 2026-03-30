@@ -88,6 +88,182 @@ func TestParseErr(t *testing.T) {
 	}
 }
 
+func TestParseLangErrorFeatureMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		lang          LangVariant
+		src           string
+		wantID        FeatureID
+		wantIDString  string
+		wantCategory  FeatureCategory
+		wantDetail    string
+		wantFeature   string
+		wantErrorText string
+	}{
+		{
+			name:          "extended glob",
+			lang:          LangPOSIX,
+			src:           "echo @(foo)",
+			wantID:        FeaturePatternExtendedGlob,
+			wantIDString:  "pattern_extended_glob",
+			wantCategory:  FeatureCategoryPattern,
+			wantFeature:   "extended globs",
+			wantErrorText: "1:6: extended globs are a bash/mksh feature; tried parsing as posix",
+		},
+		{
+			name:          "parameter expansion flags",
+			lang:          LangBash,
+			src:           "echo ${(f)foo}",
+			wantID:        FeatureParameterExpansionFlags,
+			wantIDString:  "parameter_expansion_flags",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantFeature:   "parameter expansion flags",
+			wantErrorText: "1:6: parameter expansion flags are a zsh feature; tried parsing as bash",
+		},
+		{
+			name:          "nested parameter expansion",
+			lang:          LangBash,
+			src:           "echo ${${nested}}",
+			wantID:        FeatureParameterExpansionNested,
+			wantIDString:  "parameter_expansion_nested",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantFeature:   "nested parameter expansions",
+			wantErrorText: "1:8: nested parameter expansions are a zsh feature; tried parsing as bash",
+		},
+		{
+			name:          "array syntax",
+			lang:          LangPOSIX,
+			src:           "echo ${foo[1]}",
+			wantID:        FeatureArraySyntax,
+			wantIDString:  "array_syntax",
+			wantCategory:  FeatureCategoryArray,
+			wantFeature:   "arrays",
+			wantErrorText: "1:11: arrays are a bash/mksh/zsh feature; tried parsing as posix",
+		},
+		{
+			name:          "regex tests",
+			lang:          LangMirBSDKorn,
+			src:           "[[ foo =~ bar ]]",
+			wantID:        FeatureConditionalRegexTest,
+			wantIDString:  "conditional_regex_test",
+			wantCategory:  FeatureCategoryConditional,
+			wantFeature:   "regex tests",
+			wantErrorText: "1:8: regex tests are a bash/zsh feature; tried parsing as mksh",
+		},
+		{
+			name:          "redirect operator",
+			lang:          LangPOSIX,
+			src:           "echo hi &>out",
+			wantID:        FeatureRedirectionOperator,
+			wantIDString:  "redirection_operator",
+			wantCategory:  FeatureCategoryRedirection,
+			wantDetail:    "`&>`",
+			wantFeature:   "`&>` redirects",
+			wantErrorText: "1:9: `&>` redirects are a bash/mksh/zsh feature; tried parsing as posix",
+		},
+		{
+			name:          "process substitution family",
+			lang:          LangBash,
+			src:           "echo =(foo)",
+			wantID:        FeatureSubstitutionProcess,
+			wantIDString:  "substitution_process",
+			wantCategory:  FeatureCategorySubstitution,
+			wantDetail:    "`=(`",
+			wantFeature:   "`=(` process substitutions",
+			wantErrorText: "1:6: `=(` process substitutions are a zsh feature; tried parsing as bash",
+		},
+		{
+			name:          "builtin keyword-like family",
+			lang:          LangPOSIX,
+			src:           "let )",
+			wantID:        FeatureBuiltinKeywordLike,
+			wantIDString:  "builtin_keyword_like",
+			wantCategory:  FeatureCategoryBuiltin,
+			wantDetail:    "`let`",
+			wantFeature:   "the `let` builtin",
+			wantErrorText: "1:5: the `let` builtin is a bash feature; tried parsing as posix",
+		},
+		{
+			name:          "parameter expansion name operator family",
+			lang:          LangMirBSDKorn,
+			src:           "echo ${!foo@}",
+			wantID:        FeatureParameterExpansionNameOperator,
+			wantIDString:  "parameter_expansion_name_operator",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantDetail:    "@",
+			wantFeature:   "`${!foo@}`",
+			wantErrorText: "1:6: `${!foo@}` is a bash feature; tried parsing as mksh",
+		},
+		{
+			name:          "parameter expansion case operator family",
+			lang:          LangMirBSDKorn,
+			src:           "echo ${foo^^}",
+			wantID:        FeatureParameterExpansionCaseOperator,
+			wantIDString:  "parameter_expansion_case_operator",
+			wantCategory:  FeatureCategoryParameterExpansion,
+			wantFeature:   "this expansion operator",
+			wantErrorText: "1:11: this expansion operator is a bash feature; tried parsing as mksh",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewParser(Variant(tt.lang)).Parse(strings.NewReader(tt.src), "")
+			if err == nil {
+				t.Fatalf("Parse(%q) error = nil, want LangError", tt.src)
+			}
+
+			var langErr LangError
+			if !errors.As(err, &langErr) {
+				t.Fatalf("Parse(%q) error = %T, want LangError", tt.src, err)
+			}
+
+			if got := langErr.FeatureID; got != tt.wantID {
+				t.Fatalf("FeatureID = %v, want %v", got, tt.wantID)
+			}
+			if got := langErr.FeatureID.String(); got != tt.wantIDString {
+				t.Fatalf("FeatureID.String() = %q, want %q", got, tt.wantIDString)
+			}
+			if got := langErr.FeatureID.Category(); got != tt.wantCategory {
+				t.Fatalf("FeatureID.Category() = %v, want %v", got, tt.wantCategory)
+			}
+			if got := langErr.FeatureDetail; got != tt.wantDetail {
+				t.Fatalf("FeatureDetail = %q, want %q", got, tt.wantDetail)
+			}
+			if got := langErr.Feature; got != tt.wantFeature {
+				t.Fatalf("Feature = %q, want %q", got, tt.wantFeature)
+			}
+			if got := langErr.FeatureID.Format(langErr.FeatureDetail); got != tt.wantFeature {
+				t.Fatalf("FeatureID.Format(FeatureDetail) = %q, want %q", got, tt.wantFeature)
+			}
+			if got := err.Error(); got != tt.wantErrorText {
+				t.Fatalf("Error mismatch\nwant: %s\ngot:  %s", tt.wantErrorText, got)
+			}
+		})
+	}
+}
+
+func TestLangErrorFeatureFallback(t *testing.T) {
+	t.Parallel()
+
+	err := LangError{
+		Pos:           NewPos(0, 1, 6),
+		FeatureID:     FeaturePatternExtendedGlob,
+		FeatureDetail: "",
+		Langs:         []LangVariant{LangBash, LangMirBSDKorn},
+		LangUsed:      LangPOSIX,
+	}
+
+	const want = "1:6: extended globs are a bash/mksh feature; tried parsing as posix"
+	if got := err.Error(); got != want {
+		t.Fatalf("LangError.Error() = %q, want %q", got, want)
+	}
+}
+
 func TestParseParenAmbiguityFallback(t *testing.T) {
 	t.Parallel()
 

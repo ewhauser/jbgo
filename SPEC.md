@@ -75,6 +75,8 @@ The supported public shell semantics packages are `shell/syntax`, `shell/syntax/
 
 `shell/syntax` and `shell/expand` are supported for external consumers that need the parser, AST, typed JSON encoding, expansion rules, or expansion-visible value types. `shell/analysis` is the supported read-only analysis hook surface for external analysis and static-tooling consumers. It delivers immutable semantic events for run/file boundaries, statements, commands, scope changes, variable reads and writes, unsets, and selected option changes.
 
+The public `shell/syntax` parse-diagnostic surface includes structured metadata for variant-gated syntax rejections. `syntax.LangError.FeatureID`, `FeatureDetail`, and `FeatureID.Category()` are the stable machine-readable surface for analyzers and lint tools; the legacy free-form `Feature` text remains for compatibility and should not be used as the primary matching key.
+
 `shell/analysis` is intentionally read-only. It does not expose interpreter mutation primitives, completion backends, host execution internals, or other unrelated runtime concerns. Helper packages such as `shell/internal/pattern`, the interpreter, and shell file utilities remain internal implementation detail rather than supported public API.
 
 The shell core also owns shell-variant-aware stack introspection state. Bash namespaced state such as `BASH_SOURCE`, `BASH_LINENO`, `BASH_EXECUTION_STRING`, `FUNCNAME`, `caller`, sourced-file provenance, and top-level file-backed `$0` semantics are tracked inside the in-tree interpreter rather than synthesized in a shell prelude. That namespace is part of the resolved shell profile: it is exposed for `bash` and `bats`, and stays unset for `sh`, `mksh`, and `zsh`.
