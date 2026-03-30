@@ -708,6 +708,16 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			want: "stdin: line 1: unexpected token `||' in conditional command\nstdin: line 1: syntax error near `|'\nstdin: line 1: `[[ || true ]]'",
 		},
 		{
+			name: "stray test closer",
+			src:  "]] )\n",
+			want: "stdin: line 1: syntax error near unexpected token `]]'\nstdin: line 1: `]] )'",
+		},
+		{
+			name: "empty conditional expression",
+			src:  "[[ ]]\n",
+			want: "stdin: line 1: syntax error near `]]'\nstdin: line 1: `[[ ]]'",
+		},
+		{
 			name: "array literal in case clause",
 			src:  "case a=() in\n",
 			want: "stdin: line 1: syntax error near unexpected token `('\nstdin: line 1: `case a=() in'",
@@ -747,6 +757,66 @@ func TestParseErrorBashErrorParseCompatibility(t *testing.T) {
 			}
 			if got := parseErr.BashError(); got != tc.want {
 				t.Fatalf("BashError() mismatch\nwant: %s\ngot:  %s", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestParseErrorTypedContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		src       string
+		wantKind  parseErrorContextKind
+		wantToken string
+	}{
+		{
+			name:     "foo open at eof",
+			src:      "foo(",
+			wantKind: parseErrorContextFuncOpen,
+		},
+		{
+			name:     "foo open with literal token",
+			src:      "foo(bar",
+			wantKind: parseErrorContextFuncOpen,
+		},
+		{
+			name:     "function foo open at eof",
+			src:      "function foo(",
+			wantKind: parseErrorContextFuncOpen,
+		},
+		{
+			name:      "stray test closer",
+			src:       "]] )",
+			wantKind:  parseErrorContextUnexpectedToken,
+			wantToken: "]]",
+		},
+		{
+			name:      "empty conditional expression",
+			src:       "[[ ]]",
+			wantKind:  parseErrorContextNearToken,
+			wantToken: "]]",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewParser(Variant(LangBash)).Parse(strings.NewReader(tc.src), "stdin")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want parse error")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if got := parseErr.typedContext.kind; got != tc.wantKind {
+				t.Fatalf("typedContext.kind = %v, want %v", got, tc.wantKind)
+			}
+			if got := parseErr.typedContext.token; got != tc.wantToken {
+				t.Fatalf("typedContext.token = %q, want %q", got, tc.wantToken)
 			}
 		})
 	}

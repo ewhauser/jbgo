@@ -1364,12 +1364,17 @@ func (p *Parser) unexpectedTokenErr(pos Pos, unexpected ParseErrorSymbol, quoted
 }
 
 func (p *Parser) followErr(pos Pos, left, right any) {
-	p.posErrWithMetadata(pos, parseErrorMetadata{
+	meta := parseErrorMetadata{
 		kind:       ParseErrorKindMissing,
 		construct:  parseErrorSymbolFromAny(left),
 		unexpected: p.currentUnexpectedTokenSymbol(),
 		expected:   parseErrorSymbols(right),
-	}, "%#q must be followed by %#q", left, right)
+	}
+	if ctx, ok := parseErrorFollowContext(left, right); ok {
+		p.posErrWithMetadataContext(pos, meta, ctx, "%#q must be followed by %#q", left, right)
+		return
+	}
+	p.posErrWithMetadata(pos, meta, "%#q must be followed by %#q", left, right)
 }
 
 func (p *Parser) followErrExp(pos Pos, left any) {
@@ -1384,6 +1389,23 @@ func (p *Parser) followErrExp(pos Pos, left any) {
 func (p *Parser) follow(lpos Pos, left string, tok token) {
 	if !p.got(tok) {
 		p.followErr(lpos, left, tok)
+	}
+}
+
+func parseErrorFollowContext(left, right any) (parseErrorContext, bool) {
+	leftText, ok := left.(string)
+	if !ok {
+		return parseErrorContext{}, false
+	}
+	tok, ok := right.(token)
+	if !ok || tok != rightParen {
+		return parseErrorContext{}, false
+	}
+	switch leftText {
+	case "foo(", "function foo(":
+		return parseErrorContext{kind: parseErrorContextFuncOpen}, true
+	default:
+		return parseErrorContext{}, false
 	}
 }
 
@@ -1570,6 +1592,20 @@ func IsKeyword(word string) bool {
 
 // ParseError represents an error found when parsing a source file, from which
 // the parser cannot recover.
+type parseErrorContextKind uint8
+
+const (
+	parseErrorContextNone parseErrorContextKind = iota
+	parseErrorContextFuncOpen
+	parseErrorContextUnexpectedToken
+	parseErrorContextNearToken
+)
+
+type parseErrorContext struct {
+	kind  parseErrorContextKind
+	token string
+}
+
 type ParseError struct {
 	Filename string
 	Pos      Pos
@@ -1602,6 +1638,7 @@ type ParseError struct {
 	bashPrefix               string
 	bashPrefixNoLine         bool
 	noSourceLine             bool
+	typedContext             parseErrorContext
 }
 
 func (e ParseError) Error() string {
@@ -1623,15 +1660,19 @@ func (e ParseError) bashCompat() ParseError {
 		e.noSourceLine = true
 		return e
 	}
+	if bashText, ok := bashCompatTypedContextText(e, sourceLine); ok {
+		e.bashText = bashText
+		return e
+	}
 	switch {
 	case e.Text == "`for` must be followed by a literal" && strings.HasSuffix(sourceLine, "for"):
-		e.bashText = "syntax error near unexpected token `newline'"
+		e.bashText = bashCompatUnexpectedTokenText("newline")
 	case e.Text == "`case` must be followed by a word" && strings.HasSuffix(sourceLine, "case"):
-		e.bashText = "syntax error near unexpected token `newline'"
+		e.bashText = bashCompatUnexpectedTokenText("newline")
 	case e.Text == "`<` must be followed by a word" && strings.HasSuffix(sourceLine, "<"):
-		e.bashText = "syntax error near unexpected token `newline'"
+		e.bashText = bashCompatUnexpectedTokenText("newline")
 	case e.Text == "`>` must be followed by a word" && strings.HasSuffix(sourceLine, ">"):
-		e.bashText = "syntax error near unexpected token `newline'"
+		e.bashText = bashCompatUnexpectedTokenText("newline")
 	case e.Text == "reached EOF without matching `$(` with `)`":
 		e.bashText = "unexpected EOF while looking for matching `)'"
 		e.SourceLine = ""
@@ -1659,19 +1700,11 @@ func (e ParseError) bashCompat() ParseError {
 		e.bashText = "syntax error near unexpected token `('"
 	case bashCompatUnexpectedFollowError(e.Text):
 		if token, ok := bashCompatUnexpectedTokenAtPos(e); ok {
-			if token == "newline" {
-				e.bashText = "syntax error near unexpected token `newline'"
-			} else {
-				e.bashText = fmt.Sprintf("syntax error near unexpected token %s", bashQuoteString(token))
-			}
+			e.bashText = bashCompatUnexpectedTokenText(token)
 		}
 	case bashCompatFuncOpenError(e.Text):
 		if token, ok := bashCompatFuncOpenToken(sourceLine); ok {
-			if token == "newline" {
-				e.bashText = "syntax error near unexpected token `newline'"
-			} else {
-				e.bashText = fmt.Sprintf("syntax error near unexpected token %s", bashQuoteString(token))
-			}
+			e.bashText = bashCompatUnexpectedTokenText(token)
 		}
 	}
 	return e
@@ -1706,6 +1739,37 @@ func bashCompatUnexpectedEOFText(e ParseError) (string, bool) {
 	}
 	return fmt.Sprintf("syntax error: unexpected end of file from `%s' command on line %d", token, e.Pos.Line()), true
 }
+
+func bashCompatTypedContextText(e ParseError, sourceLine string) (string, bool) {
+	switch e.typedContext.kind {
+	case parseErrorContextFuncOpen:
+		token, ok := bashCompatFuncOpenToken(sourceLine)
+		if !ok {
+			return "", false
+		}
+		return bashCompatUnexpectedTokenText(token), true
+	case parseErrorContextUnexpectedToken:
+		if e.typedContext.token == "" {
+			return "", false
+		}
+		return bashCompatUnexpectedTokenText(e.typedContext.token), true
+	case parseErrorContextNearToken:
+		if e.typedContext.token == "" {
+			return "", false
+		}
+		return fmt.Sprintf("syntax error near %s", bashQuoteString(e.typedContext.token)), true
+	default:
+		return "", false
+	}
+}
+
+func bashCompatUnexpectedTokenText(token string) string {
+	if token == "newline" {
+		return "syntax error near unexpected token `newline'"
+	}
+	return fmt.Sprintf("syntax error near unexpected token %s", bashQuoteString(token))
+}
+
 func bashCompatFuncOpenError(text string) bool {
 	switch text {
 	case "`foo(` must be followed by `)`", "`function foo(` must be followed by `)`":
@@ -1992,8 +2056,18 @@ func (p *Parser) posErrWithMetadata(pos Pos, meta parseErrorMetadata, format str
 	p.errPass(p.newParseError(pos, fmt.Sprintf(format, args...), meta))
 }
 
+func (p *Parser) posErrWithMetadataContext(pos Pos, meta parseErrorMetadata, ctx parseErrorContext, format string, args ...any) {
+	pe := p.newParseError(pos, fmt.Sprintf(format, args...), meta)
+	pe.typedContext = ctx
+	p.errPass(pe)
+}
+
 func (p *Parser) posErr(pos Pos, format string, args ...any) {
 	p.posErrWithMetadata(pos, parseErrorMetadata{}, format, args...)
+}
+
+func (p *Parser) posErrContext(pos Pos, ctx parseErrorContext, format string, args ...any) {
+	p.posErrWithMetadataContext(pos, parseErrorMetadata{}, ctx, format, args...)
 }
 
 func (p *Parser) posErrSecondary(pos Pos, secondary, format string, args ...any) {
@@ -2018,6 +2092,10 @@ func (p *Parser) posRecoverableErr(pos Pos, format string, args ...any) {
 
 func (p *Parser) curErr(format string, args ...any) {
 	p.posErr(p.pos, format, args...)
+}
+
+func (p *Parser) curErrContext(ctx parseErrorContext, format string, args ...any) {
+	p.posErrContext(p.pos, ctx, format, args...)
 }
 
 func (p *Parser) curErrSecondary(secondary, format string, args ...any) {
@@ -2062,9 +2140,16 @@ func (p *Parser) currentUnexpectedTokenQuote() string {
 }
 
 func (p *Parser) posCurrentUnexpectedErr(pos Pos) {
-	unexpected := p.currentUnexpectedTokenSymbol()
-	quoted := p.currentUnexpectedTokenQuote()
+	unexpected, quoted := p.currentUnexpectedTokenDiagnostic()
 	p.unexpectedTokenErr(pos, unexpected, quoted)
+}
+
+func (p *Parser) posCurrentUnexpectedErrContext(pos Pos, ctx parseErrorContext) {
+	unexpected, quoted := p.currentUnexpectedTokenDiagnostic()
+	p.posErrWithMetadataContext(pos, parseErrorMetadata{
+		kind:       ParseErrorKindUnexpected,
+		unexpected: unexpected,
+	}, ctx, "syntax error near unexpected token %s", quoted)
 }
 
 func (p *Parser) curUnexpectedErr() {
@@ -5052,7 +5137,16 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				}
 			case "]]":
 				if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
-					p.curErr(`%#q can only be used to close a test`, dblRightBrack)
+					p.posErrWithMetadataContext(
+						p.pos,
+						parseErrorMetadata{
+							kind:       ParseErrorKindUnexpected,
+							unexpected: p.currentUnexpectedTokenSymbol(),
+						},
+						parseErrorContext{kind: parseErrorContextUnexpectedToken, token: dblRightBrack.String()},
+						`%#q can only be used to close a test`,
+						dblRightBrack,
+					)
 				}
 			case "let":
 				if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
@@ -5125,7 +5219,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 					break
 				}
 				p.next()
-				p.posCurrentUnexpectedErr(p.pos)
+				p.posCurrentUnexpectedErrContext(p.pos, parseErrorContext{kind: parseErrorContextFuncOpen})
 				break
 			}
 			p.callExpr(s, w, false)
@@ -5176,7 +5270,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				break
 			}
 			p.next()
-			p.posCurrentUnexpectedErr(p.pos)
+			p.posCurrentUnexpectedErrContext(p.pos, parseErrorContext{kind: parseErrorContextFuncOpen})
 			break
 		}
 		if p.got(leftParen) {
@@ -5627,7 +5721,16 @@ func (p *Parser) testClause(s *Stmt) {
 	p.next()
 	if tc.X = p.condExprBinary(false); tc.X == nil {
 		if p.isCondClosingTok() {
-			p.posErr(p.pos, "syntax error near %s", bashQuoteString(dblRightBrack.String()))
+			p.posErrWithMetadataContext(
+				p.pos,
+				parseErrorMetadata{
+					kind:       ParseErrorKindUnexpected,
+					unexpected: p.currentUnexpectedTokenSymbol(),
+				},
+				parseErrorContext{kind: parseErrorContextNearToken, token: dblRightBrack.String()},
+				"syntax error near %s",
+				bashQuoteString(dblRightBrack.String()),
+			)
 		} else if p.tok == rightParen {
 			p.curErrSecondary(
 				fmt.Sprintf("syntax error near %s", p.tok.bashQuote()),
