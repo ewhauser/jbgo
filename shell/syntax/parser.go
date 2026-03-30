@@ -3545,8 +3545,7 @@ func (r rawPatternParser) parseList(raw string, base Pos) []*Pattern {
 	start := 0
 	for {
 		end, delim := r.findPatternListSplit(raw, base, start)
-		partStart, partEnd := trimPatternRawSegment(raw, start, end)
-		patterns = append(patterns, r.parse(raw[partStart:partEnd], posAddCol(base, partStart)))
+		patterns = append(patterns, r.parse(raw[start:end], posAddCol(base, start)))
 		if delim != '|' {
 			return patterns
 		}
@@ -6418,7 +6417,10 @@ func patternTextBoundary(raw string, i int, mode patternScanMode, parenDepth int
 	}
 	switch raw[i] {
 	case ';', '&':
-		return mode == patternScanConditional && parenDepth == 0
+		if parenDepth != 0 {
+			return false
+		}
+		return mode == patternScanConditional || (mode == patternScanCase && raw[i] == ';')
 	case '\n', ' ', '\t':
 		return mode == patternScanConditional && parenDepth == 0
 	case ']':
@@ -6602,6 +6604,10 @@ func (p *Parser) caseItems(stop reservedWord) (items []*CaseItem) {
 			}
 		} else if group == nil && scanned.firstBareParen.IsValid() && !p.patternAllowsBareGroups() {
 			p.invalidCasePatternParen(scanned.firstBareParen)
+			return items
+		}
+		if p.tok != rightParen && p.tok != _EOF {
+			p.curErr("syntax error near unexpected token %s", p.tok.bashQuote())
 			return items
 		}
 		if !validPatterns && len(ci.Patterns) > 0 {

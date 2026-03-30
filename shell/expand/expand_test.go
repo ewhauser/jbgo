@@ -864,6 +864,19 @@ func TestPatternASTExpansionDoesNotTildeExpandExtglobArms(t *testing.T) {
 	}
 }
 
+func TestPatternASTExpansionPreservesExtglobArmWhitespace(t *testing.T) {
+	t.Parallel()
+
+	pat := parseCondPattern(t, `@( a)`)
+	got, err := Pattern(&Config{Env: testEnv{}}, pat)
+	if err != nil {
+		t.Fatalf("did not want error, got %v", err)
+	}
+	if got != `@( a)` {
+		t.Fatalf("wanted %q, got %q", `@( a)`, got)
+	}
+}
+
 func TestPatternASTExpansionStringifiesSyntheticPatternGroup(t *testing.T) {
 	t.Parallel()
 

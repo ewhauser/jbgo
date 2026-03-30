@@ -4390,6 +4390,13 @@ var fileTests = []fileTestCase{
 		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), litCondPattern("-n"))}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
+		[]string{`[[ " a" == @( a) ]]`},
+		langFile(&TestClause{X: condBinary(TsMatch,
+			condWord(dblQuoted(lit(" a"))),
+			condPattern(extglob(GlobOne, litPattern(" a"))),
+		)}, LangBash|LangMirBSDKorn),
+	),
+	fileTest(
 		[]string{`[[ a == (b|c)* ]]`},
 		langFile(&TestClause{X: condBinary(TsMatch, litCondWord("a"), condPattern(
 			patternGroup(litPattern("b"), litPattern("c")),

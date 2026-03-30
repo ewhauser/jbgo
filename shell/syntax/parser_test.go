@@ -2856,6 +2856,10 @@ var errorCases = []errorCase{
 		langErr("1:12: case patterns must consist of words"),
 	),
 	errCase(
+		"case x in a;) echo hi ;; esac",
+		langErr("1:12: syntax error near unexpected token `;'"),
+	),
+	errCase(
 		"case i {",
 		langErr("1:1: `case i {` is a mksh feature; tried parsing as LANG"),
 		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn),
