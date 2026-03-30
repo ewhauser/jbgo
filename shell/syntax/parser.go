@@ -1030,87 +1030,6 @@ func (p *Parser) expandCommandAlias() bool {
 	return true
 }
 
-func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
-	return p.unquotedWordBytesRaw(w, nil)
-}
-
-func (p *Parser) unquotedWordBytesRaw(w *Word, raw []byte) ([]byte, bool) {
-	buf := make([]byte, 0, 4)
-	didUnquote := false
-	var rawBase uint
-	if w != nil {
-		rawBase = w.Pos().Offset()
-	}
-	for _, wp := range w.Parts {
-		var quoted bool
-		buf, quoted = p.unquotedWordPartRaw(buf, wp, false, raw, rawBase)
-		didUnquote = didUnquote || quoted
-	}
-	return buf, didUnquote
-}
-
-func (p *Parser) unquotedWordPart(buf []byte, wp WordPart, quotes bool) (_ []byte, quoted bool) {
-	return p.unquotedWordPartRaw(buf, wp, quotes, nil, 0)
-}
-
-func (p *Parser) unquotedWordPartRaw(buf []byte, wp WordPart, quotes bool, raw []byte, rawBase uint) (_ []byte, quoted bool) {
-	switch wp := wp.(type) {
-	case *Lit:
-		for i := 0; i < len(wp.Value); i++ {
-			if b := wp.Value[i]; b == '\\' && !quotes {
-				if i++; i < len(wp.Value) {
-					buf = append(buf, wp.Value[i])
-				}
-				quoted = true
-			} else {
-				buf = append(buf, b)
-			}
-		}
-	case *SglQuoted:
-		buf = append(buf, []byte(wp.Value)...)
-		quoted = true
-	case *DblQuoted:
-		for _, wp2 := range wp.Parts {
-			buf, _ = p.unquotedWordPartRaw(buf, wp2, true, raw, rawBase)
-		}
-		quoted = true
-	case *BraceExp:
-		buf = append(buf, '{')
-		for i, elem := range wp.Elems {
-			if i > 0 {
-				if wp.Sequence {
-					buf = append(buf, '.', '.')
-				} else {
-					buf = append(buf, ',')
-				}
-			}
-			for _, elemPart := range elem.Parts {
-				buf, _ = p.unquotedWordPartRaw(buf, elemPart, quotes, raw, rawBase)
-			}
-		}
-		buf = append(buf, '}')
-	default:
-		if partRaw, ok := wordPartRawBytes(raw, rawBase, wp); ok {
-			buf = append(buf, partRaw...)
-		} else {
-			buf = append(buf, wordPartString(wp)...)
-		}
-	}
-	return buf, quoted
-}
-
-func wordPartRawBytes(raw []byte, rawBase uint, wp WordPart) ([]byte, bool) {
-	if len(raw) == 0 || wp == nil || !wp.Pos().IsValid() || !wp.End().IsValid() {
-		return nil, false
-	}
-	start := int(wp.Pos().Offset() - rawBase)
-	end := int(wp.End().Offset() - rawBase)
-	if start < 0 || end < start || end > len(raw) {
-		return nil, false
-	}
-	return raw[start:end], true
-}
-
 func heredocIndentMode(op RedirOperator) HeredocIndentMode {
 	if op == DashHdoc {
 		return HeredocIndentStripTabs
@@ -1122,7 +1041,7 @@ func (p *Parser) heredocDelimFromWord(w *Word, raw string, op RedirOperator) *He
 	if w == nil {
 		return nil
 	}
-	value, quoted := p.unquotedWordBytesRaw(w, []byte(raw))
+	value, quoted := wordUnquotedBytesRaw(w, []byte(raw))
 	return &HeredocDelim{
 		Parts:       w.Parts,
 		Value:       string(value),
@@ -2265,6 +2184,9 @@ func (p *Parser) getWordRaw() (*Word, string) {
 	}
 	raw := string(p.wordRawBs[:span])
 	p.wordRawBs = p.wordRawBs[:0]
+	if w.raw == "" {
+		w.raw = raw
+	}
 	return w, raw
 }
 
@@ -2865,6 +2787,9 @@ func (p *Parser) finishWord(w *Word) *Word {
 	if w == nil || len(w.Parts) == 0 {
 		return w
 	}
+	if w.raw == "" {
+		w.raw = p.sourceRange(w.Pos(), w.End())
+	}
 	if p.braceWordPartsAllowed() {
 		w.Parts = splitBraceWordParts(w.Parts)
 	}
@@ -3374,7 +3299,12 @@ func (r rawWordPartParser) parse(raw string, base Pos) []WordPart {
 
 func (r rawPatternParser) parse(raw string, base Pos) *Pattern {
 	parts, end, _ := r.parseParts(raw, base, 0, false)
-	return &Pattern{Start: base, EndPos: posAddCol(base, end), Parts: parts}
+	return &Pattern{
+		Start:  base,
+		EndPos: posAddCol(base, end),
+		Parts:  parts,
+		raw:    raw[:end],
+	}
 }
 
 func (r rawPatternParser) parseList(raw string, base Pos) []*Pattern {
@@ -3386,6 +3316,7 @@ func (r rawPatternParser) parseList(raw string, base Pos) []*Pattern {
 			Start:  posAddCol(base, start),
 			EndPos: posAddCol(base, end),
 			Parts:  parts,
+			raw:    raw[start:end],
 		})
 		if delim != '|' {
 			return patterns
@@ -3621,6 +3552,7 @@ func (p *Parser) getPattern(stops ...token) *Pattern {
 	if pat := (&Pattern{Parts: p.patternParts(nil, stops...)}); len(pat.Parts) > 0 {
 		pat.Start = pat.Parts[0].Pos()
 		pat.EndPos = pat.Parts[len(pat.Parts)-1].End()
+		pat.raw = p.sourceRange(pat.Pos(), pat.End())
 		return pat
 	}
 	return nil
@@ -3641,6 +3573,7 @@ func (p *Parser) getPatternWithLiteralLeadingSlash(stops ...token) *Pattern {
 		Start:  parts[0].Pos(),
 		EndPos: parts[len(parts)-1].End(),
 		Parts:  parts,
+		raw:    p.sourceRange(parts[0].Pos(), parts[len(parts)-1].End()),
 	}
 }
 

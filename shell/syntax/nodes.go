@@ -680,10 +680,39 @@ type Word struct {
 	// word, if any. The chain is ordered from the outermost alias expansion to
 	// the innermost recursive expansion.
 	AliasExpansions []*AliasExpansion
+
+	raw string
 }
 
 func (w *Word) Pos() Pos { return w.Parts[0].Pos() } //nolint:nilaway // callers ensure w and w.Parts are non-nil; Word always has at least one part
 func (w *Word) End() Pos { return w.Parts[len(w.Parts)-1].End() }
+
+// RawText returns the exact source text captured for the parsed word.
+//
+// Raw text is only preserved for words built directly by [Parse]. Synthetic
+// words, such as manually constructed nodes or typedjson-decoded trees, return
+// an empty string.
+func (w *Word) RawText() string {
+	if w == nil {
+		return ""
+	}
+	return w.raw
+}
+
+// UnquotedText returns the word after shell quote removal.
+//
+// The returned string preserves expansion and other shell syntax text while
+// removing quotes and backslash escapes that affected parsing.
+func (w *Word) UnquotedText() string {
+	buf, _ := wordUnquotedBytes(w)
+	return string(buf)
+}
+
+// WasQuoted reports whether quote removal changed how the word was parsed.
+func (w *Word) WasQuoted() bool {
+	_, quoted := wordUnquotedBytes(w)
+	return quoted
+}
 
 // AliasExpansion records one alias expansion applied while parsing.
 type AliasExpansion struct {
@@ -738,6 +767,8 @@ func (*BraceExp) wordPartNode()  {}
 type Pattern struct {
 	Start, EndPos Pos
 	Parts         []PatternPart
+
+	raw string
 }
 
 func (p *Pattern) Pos() Pos {
@@ -752,6 +783,33 @@ func (p *Pattern) End() Pos {
 		return p.Parts[len(p.Parts)-1].End()
 	}
 	return p.EndPos
+}
+
+// RawText returns the exact source text captured for the parsed pattern.
+//
+// Raw text is only preserved for patterns built directly by [Parse]. Synthetic
+// patterns, such as manually constructed nodes or typedjson-decoded trees,
+// return an empty string.
+func (p *Pattern) RawText() string {
+	if p == nil {
+		return ""
+	}
+	return p.raw
+}
+
+// UnquotedText returns the pattern after shell quote removal.
+//
+// The returned string preserves pattern syntax and expansions while removing
+// quotes and backslash escapes that affected parsing.
+func (p *Pattern) UnquotedText() string {
+	buf, _ := patternUnquotedBytes(p)
+	return string(buf)
+}
+
+// WasQuoted reports whether quote removal changed how the pattern was parsed.
+func (p *Pattern) WasQuoted() bool {
+	_, quoted := patternUnquotedBytes(p)
+	return quoted
 }
 
 // PatternPart represents all nodes that can form part of a shell pattern.
