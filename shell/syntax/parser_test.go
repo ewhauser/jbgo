@@ -1762,7 +1762,7 @@ var cmpOpt = cmp.Options{
 	cmp.FilterValues(func(p1, p2 Pos) bool { return true }, cmp.Ignore()),
 	cmpopts.IgnoreFields(ArithmExp{}, "Source"),
 	cmpopts.IgnoreFields(ArithmCmd{}, "Source"),
-	cmpopts.IgnoreUnexported(Assign{}, Subscript{}, VarRef{}, ParseError{}),
+	cmpopts.IgnoreUnexported(Assign{}, Subscript{}, VarRef{}, Word{}, Pattern{}, ParseError{}),
 }
 
 func sourceLineForTest(src string, lineNum uint) string {

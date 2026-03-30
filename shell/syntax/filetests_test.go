@@ -46,7 +46,7 @@ func word(ps ...WordPart) *Word { return &Word{Parts: ps} }
 func litWord(s string) *Word    { return word(lit(s)) }
 func heredocDelim(ps ...WordPart) *HeredocDelim {
 	w := word(ps...)
-	value, quoted := new(Parser).unquotedWordBytes(w)
+	value, quoted := wordUnquotedBytes(w)
 	return &HeredocDelim{
 		Parts:       ps,
 		Value:       string(value),

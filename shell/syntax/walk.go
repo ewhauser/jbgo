@@ -337,12 +337,22 @@ func (p *debugPrinter) print(x reflect.Value) {
 		}
 		t := x.Type()
 		p.printf("%s {", t)
+		exported := make([]int, 0, t.NumField())
+		for i := range t.NumField() {
+			if t.Field(i).IsExported() {
+				exported = append(exported, i)
+			}
+		}
+		if len(exported) == 0 {
+			p.printf("}")
+			return
+		}
 		p.level++
 		p.newline()
-		for i := range t.NumField() {
-			p.printf("%s: ", t.Field(i).Name)
-			p.print(x.Field(i))
-			if i == x.NumField()-1 {
+		for i, fieldIndex := range exported {
+			p.printf("%s: ", t.Field(fieldIndex).Name)
+			p.print(x.Field(fieldIndex))
+			if i == len(exported)-1 {
 				p.level--
 			}
 			p.newline()
