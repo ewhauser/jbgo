@@ -4226,6 +4226,12 @@ func TestParseRecoverErrorsIfClauseMissingThenBodies(t *testing.T) {
 			wantCond: []string{"foo", "bar"},
 			wantThen: []string{""},
 		},
+		{
+			name:     "comment newline still splits body",
+			src:      "if foo; #\\\\\nbar\nfi\n",
+			wantCond: []string{"foo"},
+			wantThen: []string{"bar"},
+		},
 	}
 
 	for _, tc := range tests {

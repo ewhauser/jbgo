@@ -5583,9 +5583,39 @@ func (p *Parser) ifMissingThenSplit(stmts []*Stmt) int {
 }
 
 func ifMissingThenBoundary(src string) bool {
-	src = strings.ReplaceAll(src, "\\\r\n", "")
-	src = strings.ReplaceAll(src, "\\\n", "")
-	return strings.ContainsRune(src, '\n')
+	backslashes := 0
+	inComment := false
+	for i := 0; i < len(src); i++ {
+		switch src[i] {
+		case '#':
+			if !inComment {
+				inComment = true
+			}
+			backslashes = 0
+		case '\\':
+			if !inComment {
+				backslashes++
+			}
+		case '\r':
+			if !inComment {
+				continue
+			}
+		case '\n':
+			if inComment || backslashes%2 == 0 {
+				return true
+			}
+			backslashes = 0
+		case ' ', '\t':
+			if !inComment {
+				backslashes = 0
+			}
+		default:
+			if !inComment {
+				backslashes = 0
+			}
+		}
+	}
+	return false
 }
 
 func (p *Parser) ifClause(s *Stmt) {
