@@ -174,3 +174,61 @@ func TestParseMalformedBackquoteRecoveryKeepsUnreadTail(t *testing.T) {
 		t.Fatalf("second stmt arg = %q, want %q", got, "after")
 	}
 }
+
+func TestParseErrRecoverableInBackquotes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  ParseError
+		want bool
+	}{
+		{
+			name: "unclosed single quote at eof",
+			err: ParseError{
+				Kind:       ParseErrorKindUnclosed,
+				Unexpected: ParseErrorSymbolEOF,
+				Expected:   []ParseErrorSymbol{ParseErrorSymbolSingleQuote},
+			},
+			want: true,
+		},
+		{
+			name: "unclosed brace at eof",
+			err: ParseError{
+				Kind:       ParseErrorKindUnclosed,
+				Construct:  ParseErrorSymbolLeftBrace,
+				Unexpected: ParseErrorSymbolEOF,
+				Expected:   []ParseErrorSymbol{ParseErrorSymbolRightBrace},
+			},
+			want: true,
+		},
+		{
+			name: "unmatched brace at backquote",
+			err: ParseError{
+				Kind:       ParseErrorKindUnmatched,
+				Construct:  ParseErrorSymbolLeftBrace,
+				Unexpected: ParseErrorSymbolBackquote,
+				Expected:   []ParseErrorSymbol{ParseErrorSymbolRightBrace},
+			},
+			want: true,
+		},
+		{
+			name: "missing fi at backquote",
+			err: ParseError{
+				Kind:       ParseErrorKindMissing,
+				Construct:  ParseErrorSymbol("if"),
+				Unexpected: ParseErrorSymbolBackquote,
+				Expected:   []ParseErrorSymbol{ParseErrorSymbolFi},
+			},
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseErrRecoverableInBackquotes(tc.err); got != tc.want {
+				t.Fatalf("parseErrRecoverableInBackquotes(%+v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

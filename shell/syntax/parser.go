@@ -2415,8 +2415,8 @@ func parseErrRecoverableInBackquotes(err ParseError) bool {
 	}
 	switch err.Kind {
 	case ParseErrorKindUnclosed:
-		return len(err.Expected) == 1 &&
-			(err.Expected[0] == ParseErrorSymbolSingleQuote || err.Expected[0] == ParseErrorSymbolDoubleQuote)
+		return len(err.Expected) == 1 && ((err.Expected[0] == ParseErrorSymbolSingleQuote || err.Expected[0] == ParseErrorSymbolDoubleQuote) ||
+			(err.Expected[0] == ParseErrorSymbolRightBrace && err.Construct == ParseErrorSymbolLeftBrace))
 	case ParseErrorKindUnmatched:
 		return len(err.Expected) == 1 && err.Expected[0] == ParseErrorSymbolRightBrace && err.Construct == ParseErrorSymbolLeftBrace
 	default:
