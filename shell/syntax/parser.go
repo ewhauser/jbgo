@@ -2140,6 +2140,9 @@ func (e ParseError) WithInteractiveCommandStringPrefix(name string) ParseError {
 type LangError struct {
 	Filename string
 	Pos      Pos
+	// End is the optional exclusive end position of the exact token sequence
+	// that triggered the variant-gated syntax diagnostic.
+	End Pos
 
 	// TODO: consider replacing the Langs slice with a bitset.
 
@@ -2263,6 +2266,10 @@ func (p *Parser) curErrSecondary(secondary, format string, args ...any) {
 }
 
 func (p *Parser) checkLang(pos Pos, langSet LangVariant, featureID FeatureID, detail ...string) {
+	p.checkLangSpan(pos, Pos{}, langSet, featureID, detail...)
+}
+
+func (p *Parser) checkLangSpan(pos, end Pos, langSet LangVariant, featureID FeatureID, detail ...string) {
 	if p.lang.in(langSet) {
 		return
 	}
@@ -2278,6 +2285,7 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, featureID FeatureID, de
 	p.errPass(LangError{
 		Filename:      p.f.Name,
 		Pos:           pos,
+		End:           end,
 		Feature:       featureID.Format(featureDetail),
 		FeatureID:     featureID,
 		FeatureDetail: featureDetail,
@@ -4244,7 +4252,7 @@ func (p *Parser) paramExp() *ParamExp {
 		Short:  p.tok == dollar,
 	}
 	if !pe.Short && p.r == '(' {
-		p.checkLang(pe.Pos(), LangZsh, FeatureParameterExpansionFlags)
+		p.checkLangSpan(pe.Pos(), posAddCol(p.nextPos(), 1), LangZsh, FeatureParameterExpansionFlags)
 		// For now, for simplicity, we parse flags as just a literal.
 		// In the future, parsing as a word is better for cases like
 		// `${(ps.$sep.)val}`.
@@ -4272,19 +4280,19 @@ func (p *Parser) paramExp() *ParamExp {
 			}
 		case '%':
 			if r := p.peek(); r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
-				p.checkLang(pe.Pos(), LangMirBSDKorn, FeatureParameterExpansionWidthPrefix)
+				p.checkLangSpan(pe.Pos(), posAddCol(p.nextPos(), 1), LangMirBSDKorn, FeatureParameterExpansionWidthPrefix)
 				pe.Width = true
 				p.rune()
 			}
 		case '!':
 			if r := p.peek(); r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
-				p.checkLang(pe.Pos(), langBashLike|LangMirBSDKorn, FeatureParameterExpansionIndirectPrefix)
+				p.checkLangSpan(pe.Pos(), posAddCol(p.nextPos(), 1), langBashLike|LangMirBSDKorn, FeatureParameterExpansionIndirectPrefix)
 				pe.Excl = true
 				p.rune()
 			}
 		case '+':
 			if r := p.peek(); r == utf8.RuneSelf || singleRuneParam(r) || paramNameRune(r) || r == '"' {
-				p.checkLang(pe.Pos(), LangZsh, FeatureParameterExpansionIsSetPrefix)
+				p.checkLangSpan(pe.Pos(), posAddCol(p.nextPos(), 1), LangZsh, FeatureParameterExpansionIsSetPrefix)
 				pe.IsSet = true
 				p.rune()
 			}
@@ -4506,7 +4514,11 @@ func (p *Parser) nestedParameterStart(pe *ParamExp) (left token, quotePos Pos) {
 	switch p1 := p.peek(); p1 {
 	case '{', '(':
 		p.pos = p.nextPos()
-		p.checkLang(p.pos, LangZsh, FeatureParameterExpansionNested)
+		spanEnd := posAddCol(pe.Pos(), 2)
+		if quotePos.IsValid() {
+			spanEnd = posAddCol(quotePos, 1)
+		}
+		p.checkLangSpan(pe.Pos(), spanEnd, LangZsh, FeatureParameterExpansionNested)
 		if p.err != nil {
 			return illegalTok, Pos{} // xxx given that we overwrite p.tok below
 		}

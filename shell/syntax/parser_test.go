@@ -130,7 +130,7 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 			wantIDString:  "parameter_expansion_nested",
 			wantCategory:  FeatureCategoryParameterExpansion,
 			wantFeature:   "nested parameter expansions",
-			wantErrorText: "1:8: nested parameter expansions are a zsh feature; tried parsing as bash",
+			wantErrorText: "1:6: nested parameter expansions are a zsh feature; tried parsing as bash",
 		},
 		{
 			name:          "array syntax",
@@ -242,6 +242,104 @@ func TestParseLangErrorFeatureMetadata(t *testing.T) {
 			}
 			if got := err.Error(); got != tt.wantErrorText {
 				t.Fatalf("Error mismatch\nwant: %s\ngot:  %s", tt.wantErrorText, got)
+			}
+		})
+	}
+}
+
+func TestParseLangErrorParameterExpansionSpans(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		lang     LangVariant
+		src      string
+		wantID   FeatureID
+		wantPos  string
+		wantEnd  string
+		wantSpan string
+	}{
+		{
+			name:     "flags",
+			lang:     LangBash,
+			src:      "echo ${(f)foo}",
+			wantID:   FeatureParameterExpansionFlags,
+			wantPos:  "1:6",
+			wantEnd:  "1:9",
+			wantSpan: "${(",
+		},
+		{
+			name:     "width prefix",
+			lang:     LangBash,
+			src:      "echo ${%foo}",
+			wantID:   FeatureParameterExpansionWidthPrefix,
+			wantPos:  "1:6",
+			wantEnd:  "1:9",
+			wantSpan: "${%",
+		},
+		{
+			name:     "indirect prefix",
+			lang:     LangPOSIX,
+			src:      "echo ${!foo}",
+			wantID:   FeatureParameterExpansionIndirectPrefix,
+			wantPos:  "1:6",
+			wantEnd:  "1:9",
+			wantSpan: "${!",
+		},
+		{
+			name:     "is-set prefix",
+			lang:     LangBash,
+			src:      "echo ${+foo}",
+			wantID:   FeatureParameterExpansionIsSetPrefix,
+			wantPos:  "1:6",
+			wantEnd:  "1:9",
+			wantSpan: "${+",
+		},
+		{
+			name:     "nested parameter expansion",
+			lang:     LangBash,
+			src:      "echo ${${nested}}",
+			wantID:   FeatureParameterExpansionNested,
+			wantPos:  "1:6",
+			wantEnd:  "1:8",
+			wantSpan: "${",
+		},
+		{
+			name:     "quoted nested parameter expansion",
+			lang:     LangBash,
+			src:      `echo ${"${nested}"}`,
+			wantID:   FeatureParameterExpansionNested,
+			wantPos:  "1:6",
+			wantEnd:  "1:9",
+			wantSpan: `${"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewParser(Variant(tt.lang)).Parse(strings.NewReader(tt.src), "")
+			if err == nil {
+				t.Fatalf("Parse(%q) error = nil, want LangError", tt.src)
+			}
+
+			var langErr LangError
+			if !errors.As(err, &langErr) {
+				t.Fatalf("Parse(%q) error = %T, want LangError", tt.src, err)
+			}
+			if got := langErr.FeatureID; got != tt.wantID {
+				t.Fatalf("FeatureID = %v, want %v", got, tt.wantID)
+			}
+			if got := langErr.Pos.String(); got != tt.wantPos {
+				t.Fatalf("Pos = %q, want %q", got, tt.wantPos)
+			}
+			if got := langErr.End.String(); got != tt.wantEnd {
+				t.Fatalf("End = %q, want %q", got, tt.wantEnd)
+			}
+			start, end := int(langErr.Pos.Offset()), int(langErr.End.Offset())
+			if got := tt.src[start:end]; got != tt.wantSpan {
+				t.Fatalf("span = %q, want %q", got, tt.wantSpan)
 			}
 		})
 	}
@@ -2794,12 +2892,12 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ${#${",
-		langErr("1:9: nested parameter expansions are a zsh feature; tried parsing as LANG"),
+		langErr("1:6: nested parameter expansions are a zsh feature; tried parsing as LANG"),
 		langErr("1:11: invalid parameter name", LangZsh),
 	),
 	errCase(
 		"echo ${#$(",
-		langErr("1:9: nested parameter expansions are a zsh feature; tried parsing as LANG"),
+		langErr("1:6: nested parameter expansions are a zsh feature; tried parsing as LANG"),
 		langErr("1:9: reached EOF without matching `$(` with `)`", LangZsh),
 	),
 	errCase(
