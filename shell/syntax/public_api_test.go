@@ -48,6 +48,20 @@ func encodeDecodeFile(t *testing.T, file *syntax.File) *syntax.File {
 	return decoded
 }
 
+func sourceSpan(src string, start, end syntax.Pos) string {
+	if !start.IsValid() || !end.IsValid() {
+		return ""
+	}
+	return src[int(start.Offset()):int(end.Offset())]
+}
+
+func sourceTail(src string, pos syntax.Pos) string {
+	if !pos.IsValid() {
+		return ""
+	}
+	return src[int(pos.Offset()):]
+}
+
 func TestPublicSyntaxParseAndTypedJSONRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -217,6 +231,118 @@ func TestPublicWordQuoteFidelity(t *testing.T) {
 		}
 		if got := tc.word.WasQuoted(); got != tc.wantQuoted {
 			t.Fatalf("arg[%d].WasQuoted() = %v, want %v", i+1, got, tc.wantQuoted)
+		}
+	}
+}
+
+func TestPublicWordLeadingEscapeMetadata(t *testing.T) {
+	t.Parallel()
+
+	src := "echo \\command\n"
+	file := parseFile(t, src)
+	call, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		t.Fatalf("Cmd = %T, want *syntax.CallExpr", file.Stmts[0].Cmd)
+	}
+
+	word := call.Args[1]
+	if word.LeadingEscape == nil {
+		t.Fatal("arg[1].LeadingEscape = nil, want metadata")
+	}
+	if got := sourceSpan(src, word.LeadingEscape.Pos, word.LeadingEscape.End); got != `\` {
+		t.Fatalf("arg[1] leading escape span = %q, want %q", got, `\`)
+	}
+
+	decoded := encodeDecodeFile(t, file)
+	call, ok = decoded.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		t.Fatalf("decoded Cmd = %T, want *syntax.CallExpr", decoded.Stmts[0].Cmd)
+	}
+	word = call.Args[1]
+	if got := word.RawText(); got != "" {
+		t.Fatalf("decoded arg[1].RawText() = %q, want empty", got)
+	}
+	if word.LeadingEscape == nil {
+		t.Fatal("decoded arg[1].LeadingEscape = nil, want metadata")
+	}
+	if got := sourceSpan(src, word.LeadingEscape.Pos, word.LeadingEscape.End); got != `\` {
+		t.Fatalf("decoded arg[1] leading escape span = %q, want %q", got, `\`)
+	}
+}
+
+func TestPublicWordLeadingEscapeMetadataPastLexerWindow(t *testing.T) {
+	t.Parallel()
+
+	src := "echo \\" + strings.Repeat("x", 2048) + "\n"
+	file := parseFileVariant(t, syntax.LangBash, src)
+	call, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		t.Fatalf("Cmd = %T, want *syntax.CallExpr", file.Stmts[0].Cmd)
+	}
+	word := call.Args[1]
+	if got := word.RawText(); got != "" {
+		t.Fatalf("arg[1].RawText() = %q, want empty for long word", got)
+	}
+	if word.LeadingEscape == nil {
+		t.Fatal("arg[1].LeadingEscape = nil, want metadata")
+	}
+	if got := sourceSpan(src, word.LeadingEscape.Pos, word.LeadingEscape.End); got != `\` {
+		t.Fatalf("arg[1] leading escape span = %q, want %q", got, `\`)
+	}
+}
+
+func TestPublicAssignSurfaceMetadata(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Join([]string{
+		"IFS== env",
+		"IFS==",
+		"a+=b",
+		"a=",
+		"a=$x",
+		"a=(1 2)",
+		"a[k]=v",
+	}, "\n") + "\n"
+	file := parseFileVariant(t, syntax.LangBash, src)
+
+	tests := []struct {
+		stmt             int
+		wantOp           string
+		wantValuePrefix  string
+		wantValueAtOpEnd bool
+	}{
+		{stmt: 0, wantOp: "=", wantValuePrefix: "="},
+		{stmt: 1, wantOp: "=", wantValuePrefix: "="},
+		{stmt: 2, wantOp: "+=", wantValuePrefix: "b"},
+		{stmt: 3, wantOp: "=", wantValueAtOpEnd: true},
+		{stmt: 4, wantOp: "=", wantValuePrefix: "$x"},
+		{stmt: 5, wantOp: "=", wantValuePrefix: "("},
+		{stmt: 6, wantOp: "=", wantValuePrefix: "v"},
+	}
+
+	for _, tc := range tests {
+		call, ok := file.Stmts[tc.stmt].Cmd.(*syntax.CallExpr)
+		if !ok {
+			t.Fatalf("stmt[%d].Cmd = %T, want *syntax.CallExpr", tc.stmt, file.Stmts[tc.stmt].Cmd)
+		}
+		if len(call.Assigns) != 1 {
+			t.Fatalf("stmt[%d] len(Assigns) = %d, want 1", tc.stmt, len(call.Assigns))
+		}
+		as := call.Assigns[0]
+		if as.Surface == nil {
+			t.Fatalf("stmt[%d] Assign.Surface = nil, want metadata", tc.stmt)
+		}
+		if got := sourceSpan(src, as.Surface.OperatorPos, as.Surface.OperatorEnd); got != tc.wantOp {
+			t.Fatalf("stmt[%d] operator span = %q, want %q", tc.stmt, got, tc.wantOp)
+		}
+		if tc.wantValueAtOpEnd {
+			if got, want := as.Surface.ValuePos, as.Surface.OperatorEnd; got != want {
+				t.Fatalf("stmt[%d] ValuePos = %v, want %v", tc.stmt, got, want)
+			}
+			continue
+		}
+		if got := sourceTail(src, as.Surface.ValuePos); !strings.HasPrefix(got, tc.wantValuePrefix) {
+			t.Fatalf("stmt[%d] value tail = %q, want prefix %q", tc.stmt, got, tc.wantValuePrefix)
 		}
 	}
 }

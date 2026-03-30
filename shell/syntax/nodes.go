@@ -410,6 +410,7 @@ type Assign struct {
 	Ref          *VarRef
 	Value        *Word      // =val
 	Array        *ArrayExpr // =(arr)
+	Surface      *AssignSurfaceForm
 	literalValue bool
 }
 
@@ -432,6 +433,14 @@ func (a *Assign) End() Pos {
 		return a.Array.End()
 	}
 	return posAddCol(a.Ref.End(), 1)
+}
+
+// AssignSurfaceForm records the exact assignment operator span together with
+// the first value byte after that operator.
+type AssignSurfaceForm struct {
+	OperatorPos Pos
+	OperatorEnd Pos
+	ValuePos    Pos
 }
 
 // Redirect represents an input/output redirection.
@@ -703,6 +712,10 @@ func (f *FuncDecl) End() Pos { return f.Body.End() }
 type Word struct {
 	Parts []WordPart
 
+	// LeadingEscape records a leading unquoted backslash escape at the start of
+	// the word, such as the leading "\" in "\command".
+	LeadingEscape *WordLeadingEscape
+
 	// AliasExpansions preserves the alias-expansion chain that produced this
 	// word, if any. The chain is ordered from the outermost alias expansion to
 	// the innermost recursive expansion.
@@ -766,6 +779,12 @@ type TestLikeSplit struct {
 // [RawText].
 func (w *Word) TestLikeSplit() *TestLikeSplit {
 	return wordTestLikeSplit(w)
+}
+
+// WordLeadingEscape records the source span of a leading unquoted backslash
+// escape at the start of a parsed word.
+type WordLeadingEscape struct {
+	Pos, End Pos
 }
 
 // AliasExpansion records one alias expansion applied while parsing.
@@ -969,13 +988,22 @@ type CmdSubst struct {
 	Stmts []*Stmt
 	Last  []Comment
 
-	Backquotes bool // deprecated `foo`
-	TempFile   bool // mksh's ${ foo;}
-	ReplyVar   bool // mksh's ${|foo;}
+	Backquotes     bool // deprecated `foo`
+	BackquoteClose *BackquoteCloseTrivia
+	TempFile       bool // mksh's ${ foo;}
+	ReplyVar       bool // mksh's ${|foo;}
 }
 
 func (c *CmdSubst) Pos() Pos { return c.Left }
 func (c *CmdSubst) End() Pos { return posAddCol(c.Right, 1) }
+
+// BackquoteCloseTrivia records the contiguous run of backslashes immediately
+// before a closing backquote.
+type BackquoteCloseTrivia struct {
+	BackslashPos   Pos
+	BackslashEnd   Pos
+	BackslashCount uint16
+}
 
 // ParamExp represents a parameter expansion.
 type ParamExp struct {

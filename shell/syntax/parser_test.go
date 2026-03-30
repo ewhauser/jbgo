@@ -2214,6 +2214,9 @@ var cmpOpt = cmp.Options{
 	cmpopts.IgnoreFields(IfClause{}, "Kind"),
 	cmpopts.IgnoreFields(ArithmExp{}, "Source"),
 	cmpopts.IgnoreFields(ArithmCmd{}, "Source"),
+	cmpopts.IgnoreFields(Assign{}, "Surface"),
+	cmpopts.IgnoreFields(CmdSubst{}, "BackquoteClose"),
+	cmpopts.IgnoreFields(Word{}, "LeadingEscape"),
 	cmpopts.IgnoreUnexported(Assign{}, Subscript{}, VarRef{}, Word{}, Pattern{}, ParseError{}),
 }
 

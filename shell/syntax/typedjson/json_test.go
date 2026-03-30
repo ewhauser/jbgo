@@ -133,6 +133,88 @@ func TestEncodeVarRefContext(t *testing.T) {
 	qt.Assert(t, qt.Equals(ref.Index.Mode, syntax.SubscriptAssociative))
 }
 
+func TestEncodeStructuredSurfaceTrivia(t *testing.T) {
+	t.Parallel()
+
+	node := &syntax.CallExpr{
+		Assigns: []*syntax.Assign{{
+			Ref: &syntax.VarRef{
+				Name: &syntax.Lit{
+					ValuePos: syntax.NewPos(0, 1, 1),
+					ValueEnd: syntax.NewPos(3, 1, 4),
+					Value:    "IFS",
+				},
+			},
+			Value: &syntax.Word{
+				Parts: []syntax.WordPart{
+					&syntax.Lit{
+						ValuePos: syntax.NewPos(4, 1, 5),
+						ValueEnd: syntax.NewPos(5, 1, 6),
+						Value:    "=",
+					},
+				},
+			},
+			Surface: &syntax.AssignSurfaceForm{
+				OperatorPos: syntax.NewPos(3, 1, 4),
+				OperatorEnd: syntax.NewPos(4, 1, 5),
+				ValuePos:    syntax.NewPos(4, 1, 5),
+			},
+		}},
+		Args: []*syntax.Word{
+			{
+				LeadingEscape: &syntax.WordLeadingEscape{
+					Pos: syntax.NewPos(6, 1, 7),
+					End: syntax.NewPos(7, 1, 8),
+				},
+				Parts: []syntax.WordPart{
+					&syntax.Lit{
+						ValuePos: syntax.NewPos(6, 1, 7),
+						ValueEnd: syntax.NewPos(15, 1, 16),
+						Value:    `\command`,
+					},
+				},
+			},
+			{
+				Parts: []syntax.WordPart{
+					&syntax.CmdSubst{
+						Left:       syntax.NewPos(16, 1, 17),
+						Right:      syntax.NewPos(26, 1, 27),
+						Backquotes: true,
+						BackquoteClose: &syntax.BackquoteCloseTrivia{
+							BackslashPos:   syntax.NewPos(24, 1, 25),
+							BackslashEnd:   syntax.NewPos(26, 1, 27),
+							BackslashCount: 2,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := typedjson.Encode(&buf, node)
+	qt.Assert(t, qt.IsNil(err))
+
+	decoded, err := typedjson.Decode(bytes.NewReader(buf.Bytes()))
+	qt.Assert(t, qt.IsNil(err))
+
+	call, ok := decoded.(*syntax.CallExpr)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.Equals(call.Assigns[0].Surface.OperatorPos, syntax.NewPos(3, 1, 4)))
+	qt.Assert(t, qt.Equals(call.Assigns[0].Surface.OperatorEnd, syntax.NewPos(4, 1, 5)))
+	qt.Assert(t, qt.Equals(call.Assigns[0].Surface.ValuePos, syntax.NewPos(4, 1, 5)))
+	qt.Assert(t, qt.Equals(call.Args[0].RawText(), ""))
+	qt.Assert(t, qt.IsNotNil(call.Args[0].LeadingEscape))
+	qt.Assert(t, qt.Equals(call.Args[0].LeadingEscape.Pos, syntax.NewPos(6, 1, 7)))
+	qt.Assert(t, qt.Equals(call.Args[0].LeadingEscape.End, syntax.NewPos(7, 1, 8)))
+	cs, ok := call.Args[1].Parts[0].(*syntax.CmdSubst)
+	qt.Assert(t, qt.IsTrue(ok))
+	qt.Assert(t, qt.IsNotNil(cs.BackquoteClose))
+	qt.Assert(t, qt.Equals(cs.BackquoteClose.BackslashPos, syntax.NewPos(24, 1, 25)))
+	qt.Assert(t, qt.Equals(cs.BackquoteClose.BackslashEnd, syntax.NewPos(26, 1, 27)))
+	qt.Assert(t, qt.Equals(cs.BackquoteClose.BackslashCount, uint16(2)))
+}
+
 func TestEncodeHeredocDelimiter(t *testing.T) {
 	t.Parallel()
 

@@ -644,6 +644,12 @@ type Parser struct {
 
 	// lastBquoteEsc is how many times the last backquote token was escaped
 	lastBquoteEsc int
+	// lastBquoteRawBackslashes is the contiguous raw backslash run immediately
+	// before the last backquote token.
+	lastBquoteRawBackslashes int
+	// rawBackslashRun tracks the contiguous raw backslash run immediately
+	// before the next unread source byte.
+	rawBackslashRun int
 
 	accComs []Comment
 	curComs *[]Comment
@@ -761,6 +767,9 @@ func (p *Parser) reset() {
 	p.parsingDoc = false
 	p.openBquotes = 0
 	p.openBquoteDquotes = 0
+	p.lastBquoteEsc = 0
+	p.lastBquoteRawBackslashes = 0
+	p.rawBackslashRun = 0
 	p.accComs = nil
 	p.accComs, p.curComs = nil, &p.accComs
 	p.litBatch = nil
@@ -2800,18 +2809,50 @@ func advancePosBytes(pos Pos, src []byte) Pos {
 	return pos
 }
 
-func findClosingBackquote(src []byte) int {
-	for i := 1; i < len(src); i++ {
-		switch src[i] {
-		case '\\':
-			if i+1 < len(src) {
-				i++
-			}
-		case '`':
-			return i
+func findClosingBackquoteTrivia(src []byte, inDoubleQuotes bool) (closeIndex int, backslashCount int) {
+	if len(src) == 0 || src[0] != '`' {
+		return -1, 0
+	}
+	var scan Parser
+	scan.reset()
+	scan.loadReplay(Pos{}, src, io.EOF)
+	scan.openBquotes = 1
+	if inDoubleQuotes {
+		scan.openBquoteDquotes = 1
+	}
+	for {
+		r := scan.rune()
+		if r == utf8.RuneSelf {
+			return -1, 0
+		}
+		if r == '`' {
+			return int(scan.bsp) - scan.w, scan.lastBquoteRawBackslashes
 		}
 	}
-	return -1
+}
+
+func newBackquoteCloseTrivia(close Pos, backslashCount int) *BackquoteCloseTrivia {
+	if !close.IsValid() || backslashCount < 0 {
+		return nil
+	}
+	trivia := &BackquoteCloseTrivia{
+		BackslashPos:   close,
+		BackslashEnd:   close,
+		BackslashCount: uint16(backslashCount),
+	}
+	if backslashCount > 0 {
+		trivia.BackslashPos = posSubCol(close, backslashCount)
+	}
+	return trivia
+}
+
+func backquoteCloseTriviaFromSource(left Pos, src []byte, inDoubleQuotes bool) (*BackquoteCloseTrivia, int) {
+	closeIndex, backslashCount := findClosingBackquoteTrivia(src, inDoubleQuotes)
+	if closeIndex < 0 {
+		return nil, -1
+	}
+	closePos := advancePosBytes(left, src[:closeIndex])
+	return newBackquoteCloseTrivia(closePos, backslashCount), closeIndex
 }
 
 func hasContinuedScriptAfterRecoveredBackquote(src []byte) bool {
@@ -2857,7 +2898,7 @@ func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, src []byt
 		copy(full[1:], src)
 		src = full
 	}
-	closeIndex := findClosingBackquote(src)
+	trivia, closeIndex := backquoteCloseTriviaFromSource(cs.Left, src, old.quote == dblQuotes)
 	if closeIndex < 0 {
 		return false
 	}
@@ -2875,6 +2916,7 @@ func (p *Parser) recoverBackquoteCmdSubst(cs *CmdSubst, old saveState, src []byt
 	cs.Stmts = nil
 	cs.Last = nil
 	cs.Right = advancePosBytes(cs.Left, src[:closeIndex])
+	cs.BackquoteClose = trivia
 	nextPos := advancePosBytes(cs.Left, src[:closeIndex+1])
 	p.loadReplay(nextPos, src[closeIndex+1:], readErr)
 	p.next()
@@ -3146,10 +3188,28 @@ func (p *Parser) finishWord(w *Word) *Word {
 	if w.raw == "" {
 		w.raw = p.sourceRange(w.Pos(), w.End())
 	}
+	w.LeadingEscape = leadingWordEscape(w)
 	if p.braceWordPartsAllowed() {
 		w.Parts = splitBraceWordParts(w.Parts)
 	}
 	return w
+}
+
+func leadingWordEscape(w *Word) *WordLeadingEscape {
+	if w == nil || len(w.Parts) == 0 {
+		return nil
+	}
+	lit, ok := w.Parts[0].(*Lit)
+	if !ok || lit == nil || !lit.ValuePos.IsValid() || lit.Value == "" || lit.Value[0] != '\\' || len(lit.Value) < 2 {
+		return nil
+	}
+	switch lit.Value[1] {
+	case '\n', '\r':
+		return nil
+	default:
+		pos := lit.ValuePos
+		return &WordLeadingEscape{Pos: pos, End: posAddCol(pos, 1)}
+	}
 }
 
 func (p *Parser) braceWordPartsAllowed() bool {
@@ -3436,7 +3496,8 @@ func (p *Parser) wordPart() WordPart {
 			p.openBquoteDquotes--
 		}
 		p.openBquotes--
-		cs.Right = p.pos
+		closePos := p.pos
+		closeTrivia := newBackquoteCloseTrivia(closePos, p.lastBquoteRawBackslashes)
 
 		// Like above, the lexer didn't call p.rune for us.
 		p.rune()
@@ -3446,7 +3507,11 @@ func (p *Parser) wordPart() WordPart {
 			} else {
 				p.quoteErr(cs.Pos(), bckQuote)
 			}
+			cs.BackquoteClose = nil
+			return cs
 		}
+		cs.Right = closePos
+		cs.BackquoteClose = closeTrivia
 		return cs
 	case leftParen:
 		if p.lang.in(LangZsh) && p.r != ')' {
@@ -5278,6 +5343,31 @@ func varRefRawFromCandidate(candidate string) string {
 	return candidate
 }
 
+func newAssignSurfaceForm(operatorPos Pos, operatorWidth int) *AssignSurfaceForm {
+	if !operatorPos.IsValid() || operatorWidth < 1 {
+		return nil
+	}
+	operatorEnd := posAddCol(operatorPos, operatorWidth)
+	return &AssignSurfaceForm{
+		OperatorPos: operatorPos,
+		OperatorEnd: operatorEnd,
+		ValuePos:    operatorEnd,
+	}
+}
+
+func finalizeAssignSurface(as *Assign) {
+	if as == nil || as.Surface == nil {
+		return
+	}
+	as.Surface.ValuePos = as.Surface.OperatorEnd
+	switch {
+	case as.Array != nil && as.Array.Lparen.IsValid():
+		as.Surface.ValuePos = as.Array.Pos()
+	case as.Value != nil && as.Value.Pos().IsValid():
+		as.Surface.ValuePos = as.Value.Pos()
+	}
+}
+
 func (p *Parser) bracketStartsWithSpace() bool {
 	if p.r != '[' || p.bsp >= uint(len(p.bs)) {
 		return false
@@ -5292,6 +5382,7 @@ func (p *Parser) bracketStartsWithSpace() bool {
 
 func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 	if p.spaced || p.stopToken() {
+		finalizeAssignSurface(as)
 		return as
 	}
 	if as.Value == nil && p.tok == leftParen {
@@ -5394,6 +5485,7 @@ func (p *Parser) finishAssign(as *Assign, appendScalarWord bool) *Assign {
 			p.finishWord(as.Value)
 		}
 	}
+	finalizeAssignSurface(as)
 	return as
 }
 
@@ -5404,14 +5496,18 @@ func (p *Parser) getAssignAfterRef(ref *VarRef) *Assign {
 func (p *Parser) getAssignAfterRefMode(ref *VarRef, appendScalarWord bool) *Assign {
 	as := &Assign{Ref: ref}
 	if p.tok == assgnParen {
+		as.Surface = newAssignSurfaceForm(p.pos, 1)
 		// assgnParen consumed both '=' and '(', so rewrite as leftParen for
 		// array parsing below. Bash still parses a[i]=(values...), then rejects
 		// it later during execution.
 		p.tok = leftParen
 		p.pos = posAddCol(p.pos, 1)
 	} else {
+		operatorPos := p.pos
+		operatorWidth := 1
 		if p.val != "" && p.val[0] == '+' {
 			as.Append = true
+			operatorWidth = 2
 			p.val = p.val[1:]
 			p.pos = posAddCol(p.pos, 1)
 		}
@@ -5423,6 +5519,7 @@ func (p *Parser) getAssignAfterRefMode(ref *VarRef, appendScalarWord bool) *Assi
 			}
 			return nil
 		}
+		as.Surface = newAssignSurfaceForm(operatorPos, operatorWidth)
 		p.pos = posAddCol(p.pos, 1)
 		p.val = p.val[1:]
 		if p.val == "" {
@@ -5435,17 +5532,22 @@ func (p *Parser) getAssignAfterRefMode(ref *VarRef, appendScalarWord bool) *Assi
 func (p *Parser) tryAssignAfterRef(ref *VarRef) (*Assign, bool) {
 	as := &Assign{Ref: ref}
 	if p.tok == assgnParen {
+		as.Surface = newAssignSurfaceForm(p.pos, 1)
 		p.tok = leftParen
 		p.pos = posAddCol(p.pos, 1)
 	} else {
+		operatorPos := p.pos
+		operatorWidth := 1
 		if p.val != "" && p.val[0] == '+' {
 			as.Append = true
+			operatorWidth = 2
 			p.val = p.val[1:]
 			p.pos = posAddCol(p.pos, 1)
 		}
 		if len(p.val) < 1 || p.val[0] != '=' {
 			return nil, false
 		}
+		as.Surface = newAssignSurfaceForm(operatorPos, operatorWidth)
 		p.pos = posAddCol(p.pos, 1)
 		p.val = p.val[1:]
 		if p.val == "" {
@@ -5538,12 +5640,17 @@ func (p *Parser) getAssignMode(appendScalarWord bool) *Assign {
 	as := &Assign{}
 	if eqIndex := p.validEqlOffs(); eqIndex > 0 { // foo=bar
 		nameEnd := eqIndex
+		operatorPos := posAddCol(p.pos, eqIndex)
+		operatorWidth := 1
 		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[eqIndex-1] == '+' {
 			// a+=b
 			as.Append = true
 			nameEnd--
+			operatorPos = posAddCol(p.pos, nameEnd)
+			operatorWidth = 2
 		}
 		as.Ref = &VarRef{Name: p.lit(p.pos, p.val[:nameEnd])}
+		as.Surface = newAssignSurfaceForm(operatorPos, operatorWidth)
 		// since we're not using the entire p.val
 		as.Ref.Name.ValueEnd = posAddCol(as.Ref.Name.ValuePos, nameEnd)
 		left := p.lit(posAddCol(p.pos, 1), p.val[eqIndex+1:])

@@ -175,6 +175,7 @@ func ExampleDebugPrint() {
 	// .  .  .  .  .  .  .  .  Value: "echo"
 	// .  .  .  .  .  .  .  }
 	// .  .  .  .  .  .  }
+	// .  .  .  .  .  .  LeadingEscape: nil
 	// .  .  .  .  .  .  AliasExpansions: []*syntax.AliasExpansion (len = 0) {}
 	// .  .  .  .  .  }
 	// .  .  .  .  .  1: *syntax.Word {
@@ -186,6 +187,7 @@ func ExampleDebugPrint() {
 	// .  .  .  .  .  .  .  .  Value: "foo"
 	// .  .  .  .  .  .  .  }
 	// .  .  .  .  .  .  }
+	// .  .  .  .  .  .  LeadingEscape: nil
 	// .  .  .  .  .  .  AliasExpansions: []*syntax.AliasExpansion (len = 0) {}
 	// .  .  .  .  .  }
 	// .  .  .  .  }
