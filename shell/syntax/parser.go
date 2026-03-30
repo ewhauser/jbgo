@@ -644,6 +644,12 @@ type Parser struct {
 
 	// lastBquoteEsc is how many times the last backquote token was escaped
 	lastBquoteEsc int
+	// lastBquoteRawBackslashes is the contiguous raw backslash run immediately
+	// before the last backquote token.
+	lastBquoteRawBackslashes int
+	// rawBackslashRun tracks the contiguous raw backslash run immediately
+	// before the next unread source byte.
+	rawBackslashRun int
 
 	accComs []Comment
 	curComs *[]Comment
@@ -761,6 +767,9 @@ func (p *Parser) reset() {
 	p.parsingDoc = false
 	p.openBquotes = 0
 	p.openBquoteDquotes = 0
+	p.lastBquoteEsc = 0
+	p.lastBquoteRawBackslashes = 0
+	p.rawBackslashRun = 0
 	p.accComs = nil
 	p.accComs, p.curComs = nil, &p.accComs
 	p.litBatch = nil
@@ -3479,9 +3488,7 @@ func (p *Parser) wordPart() WordPart {
 		}
 		p.openBquotes--
 		cs.Right = p.pos
-		if raw := p.sourceBetween(cs.Left, posAddCol(cs.Right, 1)); raw != "" {
-			cs.BackquoteClose, _ = backquoteCloseTriviaFromSource(cs.Left, []byte(raw))
-		}
+		cs.BackquoteClose = newBackquoteCloseTrivia(cs.Right, p.lastBquoteRawBackslashes)
 
 		// Like above, the lexer didn't call p.rune for us.
 		p.rune()

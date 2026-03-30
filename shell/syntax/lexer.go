@@ -78,6 +78,7 @@ retry:
 	}
 	if b := p.bs[p.bsp]; b < utf8.RuneSelf {
 		p.bsp++
+		backslashRunBefore := p.rawBackslashRun
 		if p.captureWordRaw {
 			p.wordRawBs = append(p.wordRawBs, b)
 		}
@@ -122,6 +123,12 @@ retry:
 		}
 		if b == '`' {
 			p.lastBquoteEsc = bquotes
+			p.lastBquoteRawBackslashes = backslashRunBefore
+		}
+		if b == '\\' {
+			p.rawBackslashRun = backslashRunBefore + 1
+		} else {
+			p.rawBackslashRun = 0
 		}
 		if p.litBs != nil {
 			p.litBs = append(p.litBs, b)
@@ -145,6 +152,7 @@ decodeRune:
 		p.wordRawBs = append(p.wordRawBs, p.bs[p.bsp:p.bsp+uint(w)]...)
 	}
 	p.bsp += uint(w)
+	p.rawBackslashRun = 0
 	if p.r == utf8.RuneError && w == 1 {
 		p.posErr(p.nextPos(), "invalid UTF-8 encoding")
 	}

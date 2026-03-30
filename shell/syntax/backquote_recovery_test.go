@@ -149,15 +149,39 @@ func TestParseBackquoteCloseTrivia(t *testing.T) {
 	if cs.BackquoteClose == nil {
 		t.Fatal("CmdSubst.BackquoteClose = nil, want trivia")
 	}
-	if got, want := cs.BackquoteClose.BackslashCount, uint16(4); got != want {
+	if got, want := cs.BackquoteClose.BackslashCount, uint16(2); got != want {
 		t.Fatalf("BackquoteClose.BackslashCount = %d, want %d", got, want)
 	}
 	if got, want := cs.BackquoteClose.BackslashEnd, cs.Right; got != want {
 		t.Fatalf("BackquoteClose.BackslashEnd = %v, want %v", got, want)
 	}
 	start, end := int(cs.BackquoteClose.BackslashPos.Offset()), int(cs.BackquoteClose.BackslashEnd.Offset())
-	if got := src[start:end]; got != `\\\\` {
-		t.Fatalf("backslash span = %q, want %q", got, `\\\\`)
+	if got := src[start:end]; got != `\\` {
+		t.Fatalf("backslash span = %q, want %q", got, `\\`)
+	}
+}
+
+func TestParseBackquoteCloseTriviaPastLexerWindow(t *testing.T) {
+	t.Parallel()
+
+	src := "echo `echo " + strings.Repeat("x", bufSize+64) + " \\\\\\\\`\n"
+	file, err := NewParser(Variant(LangBash)).Parse(strings.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Parse error = %v", err)
+	}
+	call := file.Stmts[0].Cmd.(*CallExpr)
+	cs, ok := call.Args[1].Parts[0].(*CmdSubst)
+	if !ok {
+		t.Fatalf("arg[1] part = %T, want *CmdSubst", call.Args[1].Parts[0])
+	}
+	if cs.BackquoteClose == nil {
+		t.Fatal("CmdSubst.BackquoteClose = nil, want trivia")
+	}
+	if got, want := cs.BackquoteClose.BackslashCount, uint16(2); got != want {
+		t.Fatalf("BackquoteClose.BackslashCount = %d, want %d", got, want)
+	}
+	if got, want := cs.BackquoteClose.BackslashEnd, cs.Right; got != want {
+		t.Fatalf("BackquoteClose.BackslashEnd = %v, want %v", got, want)
 	}
 }
 
