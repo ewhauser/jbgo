@@ -1472,6 +1472,35 @@ func (p *Parser) unexpectedTokenErr(pos Pos, unexpected ParseErrorSymbol, quoted
 	}, "syntax error near unexpected token %s", quoted)
 }
 
+func strayReservedWordMetadata(word reservedWord) (parseErrorMetadata, bool) {
+	meta := parseErrorMetadata{
+		kind:       ParseErrorKindUnexpected,
+		unexpected: parseErrorSymbolFromReserved(word),
+	}
+	switch word {
+	case rsrvThen, rsrvElif, rsrvFi:
+		meta.construct = ParseErrorSymbol("if")
+	case rsrvDo, rsrvDone:
+		meta.construct = ParseErrorSymbol("loop")
+	case rsrvEsac:
+		meta.construct = ParseErrorSymbol("case")
+	case rsrvRightBrace:
+		meta.construct = ParseErrorSymbolLeftBrace
+	default:
+		return parseErrorMetadata{}, false
+	}
+	return meta, true
+}
+
+func (p *Parser) strayReservedWordErr(pos Pos, word reservedWord, format string, args ...any) {
+	meta, ok := strayReservedWordMetadata(word)
+	if !ok {
+		p.posErr(pos, format, args...)
+		return
+	}
+	p.posErrWithMetadata(pos, meta, format, args...)
+}
+
 func (p *Parser) followErr(pos Pos, left, right any) {
 	meta := parseErrorMetadata{
 		kind:       ParseErrorKindMissing,
@@ -2314,7 +2343,7 @@ loop:
 				break loop
 			}
 			if p.atRsrv(rsrvRightBrace) {
-				p.curErr(`%#q can only be used to close a block`, rightBrace)
+				p.strayReservedWordErr(p.pos, rsrvRightBrace, `%#q can only be used to close a block`, rightBrace)
 			}
 		case rightParen:
 			if p.quote == subCmd {
@@ -5578,37 +5607,37 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				p.caseClause(s)
 			// TODO(zsh): { try-list } "always" { always-list }
 			case rsrvRightBrace:
-				p.curErr(`%#q can only be used to close a block`, rightBrace)
+				p.strayReservedWordErr(p.pos, rsrvRightBrace, `%#q can only be used to close a block`, rightBrace)
 			case rsrvThen, rsrvElif:
 				if p.lang.in(LangBash | LangBats) {
-					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
+					p.strayReservedWordErr(p.pos, rsrv, "syntax error near unexpected token %s", bashQuoteString(p.val))
 					break
 				}
-				p.curErr("%#q can only be used in an `if`", p.val)
+				p.strayReservedWordErr(p.pos, rsrv, "%#q can only be used in an `if`", p.val)
 			case rsrvFi:
 				if p.lang.in(LangBash | LangBats) {
-					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
+					p.strayReservedWordErr(p.pos, rsrv, "syntax error near unexpected token %s", bashQuoteString(p.val))
 					break
 				}
-				p.curErr("%#q can only be used to end an `if`", p.val)
+				p.strayReservedWordErr(p.pos, rsrv, "%#q can only be used to end an `if`", p.val)
 			case rsrvDo:
 				if p.lang.in(LangBash | LangBats) {
-					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
+					p.strayReservedWordErr(p.pos, rsrv, "syntax error near unexpected token %s", bashQuoteString(p.val))
 					break
 				}
-				p.curErr(`%#q can only be used in a loop`, p.val)
+				p.strayReservedWordErr(p.pos, rsrv, `%#q can only be used in a loop`, p.val)
 			case rsrvDone:
 				if p.lang.in(LangBash | LangBats) {
-					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
+					p.strayReservedWordErr(p.pos, rsrv, "syntax error near unexpected token %s", bashQuoteString(p.val))
 					break
 				}
-				p.curErr(`%#q can only be used to end a loop`, p.val)
+				p.strayReservedWordErr(p.pos, rsrv, `%#q can only be used to end a loop`, p.val)
 			case rsrvEsac:
 				if p.lang.in(LangBash | LangBats) {
-					p.unexpectedTokenErr(p.pos, parseErrorSymbolFromText(p.val), bashQuoteString(p.val))
+					p.strayReservedWordErr(p.pos, rsrv, "syntax error near unexpected token %s", bashQuoteString(p.val))
 					break
 				}
-				p.curErr("%#q can only be used to end a `case`", p.val)
+				p.strayReservedWordErr(p.pos, rsrv, "%#q can only be used to end a `case`", p.val)
 			case "!":
 				if !s.Negated {
 					p.curErr(`%#q can only be used in full statements`, exclMark)

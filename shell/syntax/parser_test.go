@@ -1082,6 +1082,102 @@ func TestParseErrorMetadataCompoundRecovery(t *testing.T) {
 	}
 }
 
+func TestParseErrorMetadataStrayClosingKeywords(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		src        string
+		variant    LangVariant
+		construct  ParseErrorSymbol
+		unexpected ParseErrorSymbol
+	}{
+		{
+			name:       "then posix",
+			src:        "then\n",
+			construct:  ParseErrorSymbol("if"),
+			unexpected: ParseErrorSymbolThen,
+		},
+		{
+			name:       "elif bash",
+			src:        "elif\n",
+			variant:    LangBash,
+			construct:  ParseErrorSymbol("if"),
+			unexpected: ParseErrorSymbol("elif"),
+		},
+		{
+			name:       "fi posix",
+			src:        "fi\n",
+			construct:  ParseErrorSymbol("if"),
+			unexpected: ParseErrorSymbolFi,
+		},
+		{
+			name:       "do bash",
+			src:        "do\n",
+			variant:    LangBash,
+			construct:  ParseErrorSymbol("loop"),
+			unexpected: ParseErrorSymbolDo,
+		},
+		{
+			name:       "done posix",
+			src:        "done\n",
+			construct:  ParseErrorSymbol("loop"),
+			unexpected: ParseErrorSymbolDone,
+		},
+		{
+			name:       "esac bash",
+			src:        "esac\n",
+			variant:    LangBash,
+			construct:  ParseErrorSymbol("case"),
+			unexpected: ParseErrorSymbolEsac,
+		},
+		{
+			name:       "right brace",
+			src:        "}\n",
+			construct:  ParseErrorSymbolLeftBrace,
+			unexpected: ParseErrorSymbolRightBrace,
+		},
+		{
+			name:       "right brace after pipe",
+			src:        "foo | }\n",
+			construct:  ParseErrorSymbolLeftBrace,
+			unexpected: ParseErrorSymbolRightBrace,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parser := NewParser()
+			if tc.variant != 0 {
+				parser = NewParser(Variant(tc.variant))
+			}
+			_, err := parser.Parse(strings.NewReader(tc.src), "stdin")
+			if err == nil {
+				t.Fatal("Parse() error = nil, want ParseError")
+			}
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			if got, want := parseErr.Kind, ParseErrorKindUnexpected; got != want {
+				t.Fatalf("Kind = %q, want %q", got, want)
+			}
+			if got, want := parseErr.Construct, tc.construct; got != want {
+				t.Fatalf("Construct = %q, want %q", got, want)
+			}
+			if got, want := parseErr.Unexpected, tc.unexpected; got != want {
+				t.Fatalf("Unexpected = %q, want %q", got, want)
+			}
+			if got := parseErr.Expected; len(got) != 0 {
+				t.Fatalf("Expected = %v, want nil", got)
+			}
+		})
+	}
+}
+
 func TestParseErrorMetadataUnclosedHeredoc(t *testing.T) {
 	t.Parallel()
 

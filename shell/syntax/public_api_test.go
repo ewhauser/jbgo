@@ -93,6 +93,28 @@ func TestPublicSyntaxParseErrorMetadata(t *testing.T) {
 	}
 }
 
+func TestPublicSyntaxStrayCloserParseErrorMetadata(t *testing.T) {
+	t.Parallel()
+
+	_, err := syntax.NewParser().Parse(strings.NewReader("fi\n"), "public.sh")
+	if err == nil {
+		t.Fatal("Parse() error = nil, want parse error")
+	}
+	var parseErr syntax.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("Parse() error = %T, want syntax.ParseError", err)
+	}
+	if got, want := parseErr.Kind, syntax.ParseErrorKindUnexpected; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Construct, syntax.ParseErrorSymbol("if"); got != want {
+		t.Fatalf("Construct = %q, want %q", got, want)
+	}
+	if got, want := parseErr.Unexpected, syntax.ParseErrorSymbolFi; got != want {
+		t.Fatalf("Unexpected = %q, want %q", got, want)
+	}
+}
+
 func TestPublicSyntaxPatternParseErrorMetadata(t *testing.T) {
 	t.Parallel()
 
