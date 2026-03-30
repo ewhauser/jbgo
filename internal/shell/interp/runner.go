@@ -1348,6 +1348,7 @@ func (r *Runner) newParser(opts ...syntax.ParserOption) *syntax.Parser {
 	}
 	if r != nil {
 		base = append(base, syntax.ParseExtGlob(r.opts[optExtGlob]))
+		base = append(base, syntax.ConditionalPatternExtGlob(true))
 	}
 	if r != nil && r.opts[optExpandAliases] {
 		base = append(base, syntax.ExpandAliases(r.aliasResolver))

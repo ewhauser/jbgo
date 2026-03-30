@@ -4930,6 +4930,75 @@ func TestParseRecoverErrorsPatternGroupPreservesCaseClause(t *testing.T) {
 	}
 }
 
+func TestParsePatternExtGlobDisabledInPatternContexts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "conditional pattern",
+			src:  "[[ x == @(foo|bar) ]]\n",
+		},
+		{
+			name: "case pattern",
+			src:  "case $x in @(foo|bar)) echo one ;; esac\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewParser(Variant(LangBash), ParseExtGlob(false)).Parse(strings.NewReader(tc.src), "")
+			qt.Assert(t, qt.Not(qt.IsNil(err)))
+
+			var parseErr ParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("Parse() error = %T, want ParseError", err)
+			}
+			qt.Check(t, qt.Equals(parseErr.Kind, ParseErrorKindUnexpected))
+			qt.Check(t, qt.Equals(parseErr.Construct, ParseErrorSymbolPattern))
+			qt.Check(t, qt.Equals(parseErr.Unexpected, ParseErrorSymbolLeftParen))
+		})
+	}
+}
+
+func TestParseRecoverErrorsInvalidBarePatternParenPreservesFollowingStmt(t *testing.T) {
+	t.Parallel()
+
+	src := "[[ x == (foo ]]\necho after\n"
+	file, err := NewParser(Variant(LangBash), RecoverErrors(4)).Parse(strings.NewReader(src), "")
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.HasLen(file.Stmts, 2))
+
+	testClause, ok := file.Stmts[0].Cmd.(*TestClause)
+	if !ok {
+		t.Fatalf("file.Stmts[0].Cmd = %T, want *TestClause", file.Stmts[0].Cmd)
+	}
+	bin, ok := testClause.X.(*CondBinary)
+	if !ok {
+		t.Fatalf("testClause.X = %T, want *CondBinary", testClause.X)
+	}
+	pat := bin.Y.(*CondPattern).Pattern
+	if got := pat.RawText(); got != "(foo" {
+		t.Fatalf("pattern.RawText() = %q, want %q", got, "(foo")
+	}
+
+	call, ok := file.Stmts[1].Cmd.(*CallExpr)
+	if !ok {
+		t.Fatalf("file.Stmts[1].Cmd = %T, want *CallExpr", file.Stmts[1].Cmd)
+	}
+	if got := stmtCommandNames([]*Stmt{file.Stmts[1]}); !slices.Equal(got, []string{"echo"}) {
+		t.Fatalf("second stmt command names = %v, want %v", got, []string{"echo"})
+	}
+	qt.Assert(t, qt.HasLen(call.Args, 2))
+	if got := call.Args[1].Lit(); got != "after" {
+		t.Fatalf("call.Args[1].Lit() = %q, want %q", got, "after")
+	}
+}
+
 func TestParseExtGlobArmKeepsLiteralParensInWords(t *testing.T) {
 	t.Parallel()
 

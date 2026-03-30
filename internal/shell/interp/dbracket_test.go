@@ -62,6 +62,26 @@ echo no_match=$?
 	}
 }
 
+func TestDbracketPatternExtglobWorksWithShellOptionOff(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr, err := runInterpScript(t, `
+shopt -u extglob
+[[ --verbose == --@(help|verbose) ]] && echo TRUE
+[[ --oops == --@(help|verbose) ]] || echo FALSE
+`)
+	if err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	const wantStdout = "TRUE\nFALSE\n"
+	if stdout != wantStdout {
+		t.Fatalf("stdout = %q, want %q", stdout, wantStdout)
+	}
+}
+
 func TestDbracketRegexBareStarReportsStatusTwo(t *testing.T) {
 	t.Parallel()
 
