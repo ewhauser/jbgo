@@ -1095,7 +1095,10 @@ func (p *Parser) updateHeredocStop(stop *heredocStop, rawPos, end Pos, rawLine, 
 	}
 	prefix := bytes.HasPrefix(normalized, stop.word)
 	matched := bytes.Equal(normalized, stop.word)
-	candidate := newHeredocCloseCandidate(rawPos, rawLine, stop.word, p.lang, p.parseExtGlob, p.legacyBashCompat)
+	var candidate *HeredocCloseCandidate
+	if prefix || heredocCloseCandidateMayMatch(rawLine, stop.word) {
+		candidate = newHeredocCloseCandidate(rawPos, rawLine, stop.word, p.lang, p.parseExtGlob, p.legacyBashCompat)
+	}
 	if prefix || candidate != nil {
 		close := heredocCloseCapture{
 			pos:           rawPos,
@@ -1115,6 +1118,22 @@ func (p *Parser) updateHeredocStop(stop *heredocStop, rawPos, end Pos, rawLine, 
 	if eof {
 		stop.close.eofTerminated = true
 	}
+}
+
+func heredocCloseCandidateMayMatch(rawLine, delim []byte) bool {
+	if len(rawLine) == 0 || len(delim) == 0 {
+		return false
+	}
+	if bytes.Contains(rawLine, delim) {
+		return true
+	}
+	if bytes.IndexByte(rawLine, delim[0]) < 0 {
+		return false
+	}
+	if len(delim) > 1 && bytes.IndexByte(rawLine, delim[len(delim)-1]) < 0 {
+		return false
+	}
+	return bytes.IndexAny(rawLine, "'\"\\$`") >= 0
 }
 
 func heredocCloseCandidateWordStart(tok token) bool {
