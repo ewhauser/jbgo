@@ -786,6 +786,7 @@ func (w *Word) TestLikeSplit() *TestLikeSplit {
 type WordLeadingEscape struct {
 	Pos, End Pos
 }
+
 // AliasExpansion records one alias expansion applied while parsing.
 type AliasExpansion struct {
 	Name  string
