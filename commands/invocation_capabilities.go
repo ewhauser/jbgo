@@ -138,7 +138,7 @@ func (fs *CommandFS) OpenFile(ctx context.Context, name string, flag int, perm s
 			return nil, err
 		}
 	}
-	if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+	if openFileHasWriteIntent(flag) {
 		if err := fs.check(ctx, policy.FileActionWrite, abs); err != nil {
 			return nil, err
 		}
@@ -148,6 +148,13 @@ func (fs *CommandFS) OpenFile(ctx context.Context, name string, flag int, perm s
 		return nil, wrapCommandError(err)
 	}
 	return file, nil
+}
+
+func openFileHasWriteIntent(flag int) bool {
+	if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+		return true
+	}
+	return flag&(os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0
 }
 
 // Stat returns file info for name after enforcing stat policy.

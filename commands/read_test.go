@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -75,5 +76,35 @@ func TestCommandFSReadFileEnforcesMaxFileBytes(t *testing.T) {
 	}
 	if got, ok := DiagnosticMessage(err); !ok || got != "input exceeds maximum file size of 3 bytes" {
 		t.Fatalf("DiagnosticMessage(err) = (%q, %v), want (%q, true)", got, ok, "input exceeds maximum file size of 3 bytes")
+	}
+}
+
+func TestCommandFSOpenFileCreateRequiresWritePolicy(t *testing.T) {
+	t.Parallel()
+
+	mem := gbfs.NewMemory()
+	inv := NewInvocation(&InvocationOptions{
+		FileSystem: mem,
+		Policy: policy.NewStatic(&policy.Config{
+			ReadRoots:  []string{"/"},
+			WriteRoots: []string{"/tmp"},
+		}),
+	})
+
+	_, err := inv.FS.OpenFile(context.Background(), "/escape.txt", os.O_CREATE|os.O_RDONLY, 0o644)
+	if err == nil {
+		t.Fatal("OpenFile() error = nil, want write policy denial")
+	}
+	if got := err.Error(); got != "write \"/escape.txt\" denied: outside allowed roots" {
+		t.Fatalf("OpenFile() error = %q, want %q", got, "write \"/escape.txt\" denied: outside allowed roots")
+	}
+	if code, ok := ExitCode(err); !ok || code != 126 {
+		t.Fatalf("ExitCode(err) = (%d, %v), want (126, true)", code, ok)
+	}
+	if !policy.IsDenied(err) {
+		t.Fatalf("policy.IsDenied(err) = false, want true")
+	}
+	if _, statErr := mem.Stat(context.Background(), "/escape.txt"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Stat(/escape.txt) error = %v, want not-exist", statErr)
 	}
 }
