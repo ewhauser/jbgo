@@ -15,7 +15,7 @@ import (
 // recursively for each of the non-nil children of node, followed by
 // f(nil).
 func Walk(node Node, f func(Node) bool) {
-	if !f(node) {
+	if node == nil || !f(node) {
 		return
 	}
 
