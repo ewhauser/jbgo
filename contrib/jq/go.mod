@@ -3,7 +3,7 @@ module github.com/ewhauser/gbash/contrib/jq
 go 1.26.0
 
 require (
-	github.com/ewhauser/gbash v0.0.36
+	github.com/ewhauser/gbash v0.0.37
 	github.com/itchyny/gojq v0.12.18
 	golang.org/x/term v0.40.0
 )
