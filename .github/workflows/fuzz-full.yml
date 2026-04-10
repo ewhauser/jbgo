@@ -5,14 +5,15 @@ on:
     - cron: "0 7 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   fuzz-full:
     name: Fuzz Full (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -69,6 +70,9 @@ jobs:
   fuzz-contrib:
     name: Fuzz Contrib (${{ matrix.name }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:

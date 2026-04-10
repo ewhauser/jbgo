@@ -36,7 +36,7 @@ jobs:
 
       - run: go mod download
 
-      - uses: cachix/install-nix-action@v30
+      - uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72 # v30
 
       - run: make test
 
@@ -51,7 +51,7 @@ jobs:
 
       - run: go mod download
 
-      - uses: cachix/install-nix-action@v30
+      - uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72 # v30
 
       - run: make bats-test
 
@@ -66,7 +66,7 @@ jobs:
 
       - run: go mod download
 
-      - uses: cachix/install-nix-action@v30
+      - uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72 # v30
 
       - run: make conformance-test
 
@@ -81,6 +81,6 @@ jobs:
 
       - run: go mod download
 
-      - uses: cachix/install-nix-action@v30
+      - uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72 # v30
 
       - run: make contrib-conformance-test

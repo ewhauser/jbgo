@@ -4,6 +4,9 @@
     "security:only-security-updates",
     "helpers:pinGitHubActionDigests"
   ],
+  // Avoid adopting compromised packages by waiting for a cooldown period
+  // after each release before updating.
+  "minimumReleaseAge": "3 days",
   "packageRules": [
     {
       "description": "Internal Go modules are released together from this repository.",

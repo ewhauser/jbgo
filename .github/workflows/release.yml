@@ -1,11 +1,8 @@
 name: Publish Release
 
 on:
-  pull_request_target:
-    types:
-      - closed
-    branches:
-      - main
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -18,18 +15,18 @@ on:
         default: main
         type: string
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
-  group: publish-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.event.pull_request.head.ref }}
+  group: publish-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.sha }}
   cancel-in-progress: false
 
 jobs:
   resolve:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       should_publish: ${{ steps.context.outputs.should_publish }}
       version: ${{ steps.context.outputs.version }}
@@ -41,13 +38,8 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_REF: ${{ inputs.ref }}
           REPOSITORY: ${{ github.repository }}
-          PR_MERGED: ${{ github.event.pull_request.merged }}
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          COMMIT_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           should_publish=false
@@ -58,16 +50,26 @@ jobs:
             should_publish=true
             version="${INPUT_VERSION}"
             ref="${INPUT_REF:-main}"
-          elif [[ "${PR_MERGED}" == "true" ]] \
-            && [[ "${PR_BASE_REF}" == "main" ]] \
-            && [[ "${PR_HEAD_REPO}" == "${REPOSITORY}" ]] \
-            && [[ "${PR_HEAD_REF}" == release/v* ]] \
-            && [[ ",${PR_LABELS}," == *",release,"* ]] \
-            && [[ "${PR_AUTHOR}" == "github-actions[bot]" ]] \
-            && [[ -n "${PR_MERGE_SHA}" ]]; then
-            should_publish=true
-            version="${PR_HEAD_REF#release/}"
-            ref="${PR_MERGE_SHA}"
+          elif [[ "${EVENT_NAME}" == "push" ]]; then
+            # Look up the merged PR associated with this push commit.
+            pr_json=$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/pulls" \
+              --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | .[0] // empty')
+
+            if [[ -n "${pr_json}" ]]; then
+              pr_head_repo=$(echo "${pr_json}" | jq -r '.head.repo.full_name')
+              pr_head_ref=$(echo "${pr_json}" | jq -r '.head.ref')
+              pr_labels=$(echo "${pr_json}" | jq -r '[.labels[].name] | join(",")')
+              pr_author=$(echo "${pr_json}" | jq -r '.user.login')
+
+              if [[ "${pr_head_repo}" == "${REPOSITORY}" ]] \
+                && [[ "${pr_head_ref}" == release/v* ]] \
+                && [[ ",${pr_labels}," == *",release,"* ]] \
+                && [[ "${pr_author}" == "github-actions[bot]" ]]; then
+                should_publish=true
+                version="${pr_head_ref#release/}"
+                ref="${COMMIT_SHA}"
+              fi
+            fi
           fi
 
           if [[ "${should_publish}" == "true" ]] && [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -85,6 +87,10 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     outputs:
       pages_deployable: ${{ steps.pages_state.outputs.deployable }}
     steps:
@@ -97,13 +103,16 @@ jobs:
       - name: Fetch tags
         run: git fetch --force --tags origin
 
+      # Caching is intentionally disabled during releases to prevent cache
+      # poisoning from compromising shipped artifacts.
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version-file: go.mod
+          cache: false
 
       - run: go mod download
 
-      - uses: cachix/install-nix-action@v30
+      - uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72 # v30
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
@@ -111,7 +120,6 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          cache: pnpm
           node-version: "20"
 
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
@@ -310,6 +318,9 @@ jobs:
       - publish
     if: needs.resolve.outputs.should_publish == 'true' && needs.publish.outputs.pages_deployable == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     concurrency:
       group: github-pages
       cancel-in-progress: false
