@@ -21,6 +21,8 @@ type Node interface {
 }
 
 // File represents a shell source file.
+//
+// Bash reference: "3.10 Shell Grammar" and "3.2 Shell Commands".
 type File struct {
 	Name string
 
@@ -216,6 +218,8 @@ func (c *Comment) End() Pos { return posAddCol(c.Hash, 1+len(c.Text)) }
 // Stmt represents a statement, also known as a "complete command". It is
 // compromised of a command and other components that may come before or after
 // it.
+//
+// Bash reference: "3.2.4 Lists of Commands".
 type Stmt struct {
 	Comments   []Comment
 	Cmd        Command
@@ -444,6 +448,8 @@ type AssignSurfaceForm struct {
 }
 
 // Redirect represents an input/output redirection.
+//
+// Bash reference: "3.6 Redirections".
 type Redirect struct {
 	OpPos     Pos
 	Op        RedirOperator
@@ -497,6 +503,8 @@ type HeredocCloseCandidate struct {
 
 // HeredocDelim represents a here-document delimiter together with the parser
 // metadata derived from both the opener and the final closer candidate line.
+//
+// Bash reference: "3.6.6 Here Documents".
 type HeredocDelim struct {
 	Parts []WordPart
 
@@ -533,6 +541,8 @@ func (d *HeredocDelim) End() Pos {
 //
 // If Args is empty, Assigns apply to the shell environment. Otherwise, they are
 // variables that cannot be arrays and which only apply to the call.
+//
+// Bash reference: "3.2.2 Simple Commands".
 type CallExpr struct {
 	Assigns []*Assign // a=x b=y args
 	Args    []*Word
@@ -556,6 +566,8 @@ func (c *CallExpr) End() Pos {
 
 // Subshell represents a series of commands that should be executed in a nested
 // shell environment.
+//
+// Bash reference: "3.2.5.3 Grouping Commands" (parenthesized command list).
 type Subshell struct {
 	Lparen, Rparen Pos
 
@@ -568,6 +580,8 @@ func (s *Subshell) End() Pos { return posAddCol(s.Rparen, 1) }
 
 // Block represents a series of commands that should be executed in a nested
 // scope. It is essentially a list of statements within curly braces.
+//
+// Bash reference: "3.2.5.3 Grouping Commands" (brace group).
 type Block struct {
 	Lbrace, Rbrace Pos
 
@@ -589,6 +603,8 @@ const (
 )
 
 // IfClause represents an if statement.
+//
+// Bash reference: "3.2.5.2 Conditional Constructs" (if command).
 type IfClause struct {
 	Position Pos          // position of the starting "if", "elif", or "else" token
 	Kind     IfClauseKind // branch token kind; empty on synthetic trees that omit branch metadata
@@ -613,6 +629,8 @@ func (c *IfClause) hasThen() bool {
 }
 
 // WhileClause represents a while or an until clause.
+//
+// Bash reference: "3.2.5.1 Looping Constructs".
 type WhileClause struct {
 	WhilePos, DoPos, DonePos Pos
 	Until                    bool
@@ -628,6 +646,8 @@ func (w *WhileClause) End() Pos { return posAddCol(w.DonePos, 4) }
 
 // ForClause represents a for or a select clause. The latter is only present in
 // Bash.
+//
+// Bash reference: "3.2.5.1 Looping Constructs" and "3.2.5.2 Conditional Constructs" (select).
 type ForClause struct {
 	ForPos, DoPos, DonePos Pos
 	Select                 bool
@@ -681,6 +701,8 @@ func (c *CStyleLoop) Pos() Pos { return c.Lparen }
 func (c *CStyleLoop) End() Pos { return posAddCol(c.Rparen, 2) }
 
 // BinaryCmd represents a binary expression between two statements.
+//
+// Bash reference: "3.2.3 Pipelines" and "3.2.4 Lists of Commands".
 type BinaryCmd struct {
 	OpPos Pos
 	Op    BinCmdOperator
@@ -691,6 +713,8 @@ func (b *BinaryCmd) Pos() Pos { return b.X.Pos() }
 func (b *BinaryCmd) End() Pos { return b.Y.End() }
 
 // FuncDecl represents the declaration of a function.
+//
+// Bash reference: "3.3 Shell Functions".
 type FuncDecl struct {
 	Position Pos
 	RsrvWord bool // non-posix "function f" style
@@ -711,6 +735,8 @@ func (f *FuncDecl) End() Pos { return f.Body.End() }
 // Word represents a shell word, containing one or more word parts contiguous to
 // each other. The word is delimited by word boundaries, such as spaces,
 // newlines, semicolons, or parentheses.
+//
+// Bash reference: "3.1.1 Shell Operation", "3.1.2 Quoting", and "3.5 Shell Expansions".
 type Word struct {
 	Parts []WordPart
 
@@ -984,6 +1010,8 @@ func (p *PatternGroup) Pos() Pos { return p.Lparen }
 func (p *PatternGroup) End() Pos { return posAddCol(p.Rparen, 1) }
 
 // CmdSubst represents a command substitution.
+//
+// Bash reference: "3.5.4 Command Substitution".
 type CmdSubst struct {
 	Left, Right Pos
 
@@ -1009,6 +1037,8 @@ type BackquoteCloseTrivia struct {
 }
 
 // ParamExp represents a parameter expansion.
+//
+// Bash reference: "3.5.3 Shell Parameter Expansion".
 type ParamExp struct {
 	Dollar, Rbrace Pos
 
@@ -1123,6 +1153,8 @@ type Expansion struct {
 }
 
 // ArithmExp represents an arithmetic expansion.
+//
+// Bash reference: "3.5.5 Arithmetic Expansion".
 type ArithmExp struct {
 	Left, Right Pos
 	Bracket     bool // deprecated $[expr] form
@@ -1141,6 +1173,8 @@ func (a *ArithmExp) End() Pos {
 }
 
 // ArithmCmd represents an arithmetic command.
+//
+// Bash reference: "6.5 Shell Arithmetic" (`((expression))` command form).
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
 type ArithmCmd struct {
@@ -1303,6 +1337,8 @@ func (z *FlagsArithm) End() Pos {
 }
 
 // CaseClause represents a case (switch) clause.
+//
+// Bash reference: "3.2.5.2 Conditional Constructs" (case).
 type CaseClause struct {
 	Case, In, Esac Pos
 	Braces         bool // deprecated mksh form with braces instead of in/esac
@@ -1349,6 +1385,9 @@ func (c *CaseItem) End() Pos {
 }
 
 // TestClause represents a Bash extended test clause.
+//
+// Bash reference: "3.2.5.2 Conditional Constructs" and
+// "6.4 Bash Conditional Expressions".
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
 type TestClause struct {
@@ -1486,6 +1525,9 @@ func (p *ParenTest) Pos() Pos { return p.Lparen }
 func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
 
 // DeclClause represents a Bash-style declaration clause.
+//
+// Bash reference: "4.2 Bash Builtin Commands"
+// (declare/local/export/readonly/typeset).
 type DeclClause struct {
 	// Variant is one of "declare", "local", "export", "readonly",
 	// "typeset", or "nameref".
@@ -1564,6 +1606,8 @@ const (
 
 // ArrayExpr represents a Bash array expression.
 //
+// Bash reference: "6.7 Arrays" (compound assignment syntax).
+//
 // This node will only appear with [LangBash].
 type ArrayExpr struct {
 	Lparen, Rparen Pos
@@ -1618,6 +1662,8 @@ func (a *ArrayElem) End() Pos {
 
 // ExtGlob represents a Bash extended globbing expression.
 //
+// Bash reference: "3.5.8.1 Pattern Matching" (extglob).
+//
 // Whether these nodes are recognized is controlled by the parser's
 // [ParseExtGlob] option. The gbash interpreter reparses input incrementally so
 // `shopt -s extglob` can affect later chunks in the same script.
@@ -1634,6 +1680,8 @@ func (e *ExtGlob) End() Pos { return posAddCol(e.Rparen, 1) }
 
 // ProcSubst represents a Bash process substitution.
 //
+// Bash reference: "3.5.6 Process Substitution".
+//
 // This node will only appear with [LangBash].
 type ProcSubst struct {
 	OpPos, Rparen Pos
@@ -1648,6 +1696,8 @@ func (s *ProcSubst) End() Pos { return posAddCol(s.Rparen, 1) }
 
 // TimeClause represents a Bash time clause. PosixFormat corresponds to the -p
 // flag.
+//
+// Bash reference: "3.2.3 Pipelines" (`time` reserved word form).
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
 type TimeClause struct {
@@ -1666,6 +1716,8 @@ func (c *TimeClause) End() Pos {
 
 // CoprocClause represents a Bash coproc clause.
 //
+// Bash reference: "3.2.6 Coprocesses".
+//
 // This node will only appear with [LangBash].
 type CoprocClause struct {
 	Coproc Pos
@@ -1677,6 +1729,8 @@ func (c *CoprocClause) Pos() Pos { return c.Coproc }
 func (c *CoprocClause) End() Pos { return c.Stmt.End() }
 
 // LetClause represents a Bash let clause.
+//
+// Bash reference: "4.2 Bash Builtin Commands" (`let`).
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
 type LetClause struct {
